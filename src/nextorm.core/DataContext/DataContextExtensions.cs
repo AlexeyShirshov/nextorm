@@ -960,6 +960,37 @@ public static class DataContextExtensions
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
 
     /// <summary>
+    /// Starts a query over a lazy temporary table created by
+    /// <see cref="TempTableExtensions.AsTempTable{TResult}(QueryCommand{TResult}, CreateTableOptions?)"/>.
+    /// Executing the returned query runs one batch on a single session — it drops and re-creates the
+    /// temporary table from the source query, then reads it — so the table is always freshly
+    /// materialised and the read never depends on connection pinning. Columns are read through
+    /// <see cref="TableAlias"/> accessors (<c>t.GetInt32("id")</c>).
+    /// <para>
+    /// The form is available on PostgreSQL, SQLite, MySQL and MariaDB, the providers whose dialect can
+    /// express a temporary <c>CREATE TABLE ... AS SELECT</c>. SQL Server, ClickHouse and the in-memory
+    /// context reject it when the query renders.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TResult">The source query's projected row type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="tempTable">The lazy source to materialise and read.</param>
+    /// <returns>A builder for composing the query over the temporary table.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="tempTable"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The context cannot execute a batch and therefore cannot materialise a temporary table (the in-memory provider).</exception>
+    public static EntityBuilder<TableAlias> From<TResult>(this IDataContext dataContext, TempTableSource<TResult> tempTable)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(tempTable);
+
+        if (dataContext is not IBatchExecutor)
+            throw new NotSupportedException(
+                $"{dataContext.GetType().Name} cannot materialise a temporary table; use a database-backed context (PostgreSQL, SQLite, MySQL or MariaDB).");
+
+        return new EntityBuilder<TableAlias>(dataContext) { Logger = dataContext.CommandLogger, SourceFrom = new FromExpression(tempTable) };
+    }
+
+    /// <summary>
     /// Starts a new query builder that shares the source and definition of an existing builder.
     /// </summary>
     /// <typeparam name="TResult">The projected element type.</typeparam>

@@ -34,19 +34,21 @@
 | Провайдер | Эксклюзивные конструкции |
 |---|---|
 | [ClickHouse](clickhouse.md) | Массивы и `ARRAY JOIN`, `LIMIT n BY expr`, `GROUP BY ... WITH TOTALS`, `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`, строгость соединений и `GLOBAL JOIN`, `GLOBAL IN`, агрегаты `uniq`/`quantile`/`any`/`argMin`/`argMax`, комбинаторы `-If`, словари, строковый JSON `JSONExtract`, табличные функции `numbers`/`zeros` |
+| [MySQL и MariaDB](mysql.md) | Нативные строковые/условные идиомы (`FIND_IN_SET`/`FIELD`/`ELT`/`SUBSTRING_INDEX`/`FORMAT`), преобразование дат по `%`-шаблонам и функции Unix-эпохи (`STR_TO_DATE`/`DATE_FORMAT`/`FROM_UNIXTIME`/`UNIX_TIMESTAMP`), шестнадцатеричные хеши (`MD5`/`SHA1`/`SHA2`), преобразование IPv4 (`INET_ATON`/`INET_NTOA`), семейство мутации JSON и `UUID_TO_BIN`/`BIN_TO_UUID` (только MySQL) |
 | [PostgreSQL](postgresql.md) | Нативные массивы и операторы, нативные `json`/`jsonb`, упорядоченные агрегаты (`percentile_* ... WITHIN GROUP`), регрессионные/logical/bit-агрегаты, расширенные скаляры и regexp, `DISTINCT ON`, `unnest` |
 | [SQL Server](sqlserver.md) | `CHOOSE`, табличные хинты и `OPTION (...)`, `FOR JSON`/`FOR XML`, `string_split`/`openjson` |
 
 ## Провайдеры без эксклюзивной поверхности
 
-У MySQL, MariaDB и SQLite **нет** эксклюзивных конструкций: каждый включаемый ими флаг возможности
-включён и хотя бы одним другим диалектом. Поэтому их страницы описывают только подключение и
-ограничения, а общие реализуемые ими конструкции находятся на тематических страницах:
+У SQLite **нет** эксклюзивных конструкций: каждый включаемый им флаг возможности включён и хотя бы одним
+другим диалектом. Поэтому его страница описывает только подключение и ограничения, а общие реализуемые
+им конструкции находятся на тематических страницах:
 
-* [MySQL](../../providers/mysql.md) и [MariaDB](../../providers/mariadb.md) — JSON-как-текст,
-  полнотекстовый `MATCH ... AGAINST`, `ANY_VALUE`, `PERCENTILE_CONT`/`MEDIAN`, `UUID_v4()`/`UUID_v7()`;
-* [SQLite](../../providers/sqlite.md) — скалярные `max`/`min`, части даты через `strftime`, JSON1,
+* [SQLite](../../providers/sqlite.md) — скалярные `max`/`min`, части дат `strftime`, JSON1,
   зарегистрированные агрегаты `stdev`/`var`.
+
+Страница MySQL/MariaDB описывает также общие конструкции семейства MySQL: JSON-как-текст,
+полнотекстовый `MATCH ... AGAINST`, `ANY_VALUE`, `PERCENTILE_CONT`/`MEDIAN` и `UUID_v4()`/`UUID_v7()`.
 
 ## Модель переносимости
 

@@ -51,6 +51,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.DefaultOnNull != y.DefaultOnNull) return false;
 
+        if (x.DurationUnit != y.DurationUnit) return false;
+
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.Expression, y.Expression))
             return false;
@@ -76,6 +78,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             hash.Add(obj.PropertyName);
 
             hash.Add(obj.DefaultOnNull);
+
+            hash.Add(obj.DurationUnit);
 
             //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
             hash.Add(obj.Expression, _queryProvider.GetExpressionPlanEqualityComparer());

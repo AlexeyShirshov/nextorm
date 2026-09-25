@@ -227,3 +227,18 @@ Gating: `Storage.Native` требует `ISqlDialect.SupportsJson` (иначе �
   опционально `Visitors/SqlOperandTranslator.cs`/`BaseExpressionVisitor.cs` (фаза 2).
 - Документация: `docs/guide/18-json.md` (раздел «mapping a JSON column to a CLR property», +RU),
   `docs/advanced/api-reference.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **1 блокер (in-memory семантика)**, остальное — правки плана до старта; нужен пересмотр фазы 1.
+
+- **[LSP] 🔴** План утверждает «в in-memory конвертер всё равно применяется» (`:146,161`), но in-memory читает CLR-модель напрямую (нет provider-представления): `InMemoryDataContext.cs:255-260` строит `MapColumn` из `column.Expression`, а `InMemoryRowMaterializer.cs:35` возвращает identity при `resultType == TEntity`; `ConvertFromProvider` над CLR-значением — mismatch. Fix: зафиксировать, что in-memory конвертер не применяет (CLR↔CLR), либо конвертировать на входе insert.
+- **[DRY] 🟡** Seam объявлен дважды и фазы противоречат: `:74-80,163-164` («общий слой — в G1») vs `:182` (вводит `IValueConverter`/`ValueConverter<,>` здесь же); `todo_value_converters.md:52-65` объявляет тот же интерфейс своим. Fix: единственный владелец seam'а — G1, JSON-план добавляет только `JsonConverter<,>`; порядок G1→G2.
+- **[TYPE] 🟡** `JsonConverter<,>` (`:76`) конфликтует с BCL `System.Text.Json.Serialization.JsonConverter<T>`; `IValueConverter` повторяет `System.Windows.Data.IValueConverter` (политика P0, `API-NAMING-REVIEW.md:2545-2559`). Fix: `JsonColumnConverter<,>`/`IPropertyValueConverter`.
+- **[TYPE] 🟡** Мутабельный `JsonSerializerOptions` как метаданные и ключ кэша (`:89,114-115,208`): `converter.GetType()`/`ConvertFromProvider.Method` дадут одну запись кэша двум конвертерам одного типа с разными `Options`. Fix: ключевать по инстансу/immutable-дескриптору/`JsonTypeInfo<T>`.
+- **[TYPE]/[DRY] 🟡** Две модели опций, одна не объявлена: атрибут несёт `Storage`/`Options` (`:88-89`), fluent — `Action<JsonColumnOptions>` (`:95`), тип `JsonColumnOptions` (`:154`) нигде не определён. Fix: один общий options-тип либо убрать из эскиза.
+- **[TYPE] 🟡** Read-путь недоспецифицирован под provider-тип (`:108-111`): не назван новый член `SelectExpression`; `SelectExpression.cs:55-71` выводит `Nullable`/`_realType` из `PropertyType`, `GetDataRecordMethod` ветвится по `_realType` (`:91-177`), `RowMapperFactory.cs:34-81` предполагает `getter.Type == PropertyType`. Fix: дописать `Type ProviderType` + `IValueConverter? Converter` и порядок `ConvertFromProvider → Convert`.
+- **[PERF]/[DRY] 🟡** Write-конвертация названа по устаревшей строке (`:119,184`, `SqlMutationBuilder.cs:801` — теперь `AppendMergeAssignments`); фактические точки: `SqlMutationBuilder.cs:285,369,880`, `SqlSourceRenderer.cs:795`, `QueryPlanner.cs:261`, общий `DurationStorage.ToParameterValue` (`DurationStorage.cs:57`, также `BulkInsertBuilder.cs:206`). Fix: композировать внутри `DurationStorage.ToParameterValue`, иначе ключи UPDATE/DELETE и SET не конвертируются.
+- **[TYPE] ℹ️** AOT-хвост (`:151-156,165`): `JsonTypeInfo<T>`/source-gen в фазе 3; триггер — требование AOT/trimming.
+- **ℹ️** Устаревшие якоря `:30-32`: `SelectExpression.cs:78-151` → `:91-177`; `DateTimeOffset` уже поддержан (`:115-118`).

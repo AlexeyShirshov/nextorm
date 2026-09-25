@@ -42,6 +42,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server has a native bulk path (<c>SqlBulkCopy</c>).</summary>
     public override bool SupportsBulkCopy => true;
 
+    /// <summary>SQL Server batches through <c>SqlBatch</c>.</summary>
+    public override bool SupportsBatch => true;
+
+    /// <summary><c>SqlBatch</c> runs each command in its own scope, so a <c>#temp</c> created by one command is not visible to the next; the joined command keeps them in one batch scope.</summary>
+    public override bool BatchUsesJoinedCommand => true;
+
     /// <summary>SQL Server writes explicit identity values only inside <c>SET IDENTITY_INSERT ... ON/OFF</c>.</summary>
     public override bool RequiresIdentityInsertToggle => true;
 
@@ -294,6 +300,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         _ when type == typeof(float) => "real",
         _ when type == typeof(double) => "float",
         _ when type == typeof(decimal) => "decimal(38, 10)",
+        _ when type == typeof(DateTimeOffset) => "datetimeoffset",
         _ => base.MakeTypeName(type)
     };
 
@@ -314,6 +321,26 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>Renders <c>reverse(value)</c>.</summary>
     protected override string MakeStringReverse(string value) => $"reverse({value})";
+
+    /// <summary>SQL Server renders CLR format specifiers through <c>FORMAT</c> (a .NET formatter).</summary>
+    public override IStringFormatFunctions? StringFormats => SqlServerStringFormats.Instance;
+
+    /// <summary>SQL Server supports a per-expression <c>COLLATE</c> clause.</summary>
+    public override bool SupportsCollation => true;
+
+    /// <inheritdoc/>
+    public override string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + collation;
+
+    /// <summary>SQL Server can express ordinal comparison through the <c>Latin1_General_100_BIN2</c> collation.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase)
+    {
+        const string Binary = "Latin1_General_100_BIN2";
+        return ignoreCase ? $"lower({value}) collate {Binary}" : $"{value} collate {Binary}";
+    }
 
     /// <summary>Renders <c>stuff(value, start + 1, count, newValue)</c>, or the truncated prefix when the count is <c>null</c>.</summary>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
@@ -393,18 +420,27 @@ public sealed class SqlServerDialect : SqlDialectBase
     }
 
     /// <summary>Renders <c>datediff(part, start, end)</c> with the singular T-SQL part names.</summary>
-    public override string MakeDateDiff(string field, string start, string end)
-    {
-        // T-SQL datediff uses the singular part names; plural ANSI parts map onto them.
-        var part = field switch
-        {
-            "microseconds" => "microsecond",
-            "milliseconds" => "millisecond",
-            _ => field
-        };
+    public override string MakeDateDiff(string field, string start, string end) =>
+        $"datediff({TSqlDatePart(field)}, {start}, {end})";
 
-        return $"datediff({part}, {start}, {end})";
-    }
+    /// <summary>Renders the 64-bit <c>datediff_big(part, start, end)</c> with the singular T-SQL part names.</summary>
+    public override string MakeDateDiffBig(string field, string start, string end) =>
+        $"datediff_big({TSqlDatePart(field)}, {start}, {end})";
+
+    // T-SQL datediff uses the singular part names; plural ANSI parts map onto them.
+    private static string TSqlDatePart(string field) => field switch
+    {
+        "microseconds" => "microsecond",
+        "milliseconds" => "millisecond",
+        _ => field
+    };
+
+    /// <summary>
+    /// T-SQL <c>dateadd</c> on a <c>date</c> operand for a sub-day part drops the time of day (and
+    /// <c>datediff</c> cannot see it), so a sub-day operand is promoted to <c>datetime2</c>.
+    /// </summary>
+    public override string PromoteDateOperand(string field, string value) =>
+        IsSubDayField(field) ? $"cast({value} as datetime2)" : value;
 
     /// <summary>Renders <c>eomonth(value)</c>.</summary>
     public override string MakeEndOfMonth(string value) => $"eomonth({value})";
@@ -423,6 +459,8 @@ public sealed class SqlServerDialect : SqlDialectBase
     {
         ("trunc", 1) => $"round({args[0]}, 0, 1)",
         ("round", 1) => $"round({args[0]}, 0)",
+        // T-SQL has no POW; Math.Pow must render as POWER.
+        ("pow", 2) => $"power({args[0]}, {args[1]})",
         _ => base.MakeMathFunction(name, args)
     };
 
@@ -547,6 +585,12 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>SQL Server can generate a random UUID through <c>newid()</c>; it has no v7 generator.</summary>
     public override IUuidGenerators UuidGenerators => SqlServerUuidGenerators.Instance;
+
+    /// <summary>SQL Server renders every cross-provider scalar function (<c>lpad</c>/<c>rpad</c> through <c>replicate</c>).</summary>
+    public override IScalarFunctions ScalarFunctions => SqlServerScalarFunctions.Instance;
+
+    /// <summary>SQL Server renders the T-SQL-only scalar functions (<c>patindex</c>, <c>quotename</c>, the trigonometric functions, the SQL/JSON constructors and aggregates, …).</summary>
+    public override ISqlServerFunctions? SqlServerFunctions => SqlServerSpecificFunctions.Instance;
 
     /// <summary>Appends the hints as an <c>option (...)</c> clause, folding an existing <c>maxrecursion</c> option into it.</summary>
     public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
@@ -700,5 +744,165 @@ internal sealed class SqlServerIndexHintRenderer : IIndexHintRenderer
             throw new NotSupportedException("SQL Server index hints require at least one index name.");
 
         return SqlKeywords.Of(keywordCase, "index(") + string.Join(", ", indexes) + ")";
+    }
+}
+
+/// <summary>
+/// SQL Server rendering of the culture-invariant CLR format specifiers through the CLR-based
+/// <c>FORMAT</c> function, which accepts the same <c>N</c>/<c>F</c>/<c>D</c>/<c>X</c> specifiers and
+/// custom date/time format strings. The current language is assumed to be invariant (see the
+/// limitations guide); only the portable token subset is validated.
+/// </summary>
+internal sealed class SqlServerStringFormats : IStringFormatFunctions
+{
+    internal static readonly SqlServerStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'N' or 'F' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision)
+    {
+        var clr = precision < 0 ? specifier.ToString() : $"{specifier}{precision}";
+        return $"format({value}, '{clr}')";
+    }
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var native)
+            ? $"format({value}, '{native}')"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by SQL Server.");
+
+    private static bool TryMapDate(string format, out string native)
+    {
+        var sb = new StringBuilder(format.Length);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("yyyy"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("yy"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("MM"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("dd"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("HH"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("mm"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("ss"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { native = string.Empty; return false; }
+        }
+
+        native = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on SQL Server. The
+/// string functions are native (<c>LEFT</c>/<c>RIGHT</c>, <c>REPLICATE</c>, <c>REVERSE</c>,
+/// <c>CONCAT_WS</c>, <c>TRANSLATE</c>, <c>ASCII</c>, <c>CHAR</c>, <c>SPACE</c>); <c>lpad</c>/<c>rpad</c>
+/// are emulated because T-SQL has no such functions.
+/// </summary>
+internal sealed class SqlServerScalarFunctions : IScalarFunctions
+{
+    internal static readonly SqlServerScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
+        "concat_ws" or "translate" or "ascii" or "char";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "left" => $"left({args[0]}, {args[1]})",
+        "right" => $"right({args[0]}, {args[1]})",
+
+        // T-SQL has no lpad/rpad: replicate the fill to the requested length, concatenate on the padded
+        // side and take that many characters. `right` also truncates an over-long value, matching lpad.
+        "lpad" => $"right(replicate({Pad(args)}, {args[1]}) + {args[0]}, {args[1]})",
+        "rpad" => $"left({args[0]} + replicate({Pad(args)}, {args[1]}), {args[1]})",
+        "repeat" => $"replicate({args[0]}, {args[1]})",
+        "reverse" => $"reverse({args[0]})",
+        "space" => $"space({args[0]})",
+        "concat_ws" => $"concat_ws({string.Join(", ", args)})",
+        "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
+        "ascii" => $"ascii({args[0]})",
+        "char" => $"char({args[0]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
+    };
+
+    private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
+}
+
+/// <summary>
+/// Renders the SQL Server-only T-SQL scalar functions of <see cref="SqlServerFunctions"/>: the string
+/// functions (<c>PATINDEX</c>, <c>QUOTENAME</c>, <c>SOUNDEX</c>, <c>DIFFERENCE</c>,
+/// <c>STRING_ESCAPE</c>, <c>UNICODE</c>, <c>NCHAR</c>, <c>FORMAT</c>), the trigonometric functions,
+/// the date functions (<c>DATENAME</c>, <c>DATE_BUCKET</c>), the binary/system functions
+/// (<c>HASHBYTES</c>, <c>NEWSEQUENTIALID</c>) and the SQL/JSON constructors, aggregates and
+/// predicates. The date part names are emitted unquoted (the T-SQL convention), the alternating
+/// <c>json_object</c>/<c>json_objectagg</c> arguments are joined with the <c>:</c> key separator.
+/// </summary>
+internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
+{
+    internal static readonly SqlServerSpecificFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
+        "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or "cot" or "degrees" or
+        "radians" or "pi" or "square" or "datename" or "date_bucket" or "hashbytes" or
+        "newsequentialid" or "json_array" or "json_object" or "json_arrayagg" or "json_objectagg" or
+        "json_contains" or "json_path_exists";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "patindex" => $"patindex({args[0]}, {args[1]})",
+        "quotename" => args.Count == 2 ? $"quotename({args[0]}, {args[1]})" : $"quotename({args[0]})",
+        "soundex" => $"soundex({args[0]})",
+        "difference" => $"difference({args[0]}, {args[1]})",
+        "string_escape" => $"string_escape({args[0]}, {args[1]})",
+        "unicode" => $"unicode({args[0]})",
+        "nchar" => $"nchar({args[0]})",
+        "format" => args.Count == 3
+            ? $"format({args[0]}, {args[1]}, {args[2]})"
+            : $"format({args[0]}, {args[1]})",
+        "acos" or "asin" or "atan" or "cot" or "degrees" or "radians" or "square" =>
+            $"{name}({args[0]})",
+        "atn2" => $"atn2({args[0]}, {args[1]})",
+        "pi" => "pi()",
+        "datename" => $"datename({DatePart(args[0])}, {args[1]})",
+        "date_bucket" => args.Count == 4
+            ? $"date_bucket({DatePart(args[0])}, {args[1]}, {args[2]}, {args[3]})"
+            : $"date_bucket({DatePart(args[0])}, {args[1]}, {args[2]})",
+        "hashbytes" => $"hashbytes({args[0]}, {args[1]})",
+        "newsequentialid" => "newsequentialid()",
+        "json_array" => $"json_array({string.Join(", ", args)})",
+        "json_object" => $"json_object({JsonPairs(args)})",
+        "json_arrayagg" => $"json_arrayagg({args[0]})",
+        "json_objectagg" => $"json_objectagg({args[0]} : {args[1]})",
+        "json_contains" => $"json_contains({args[0]}, {args[1]}, {args[2]})",
+        "json_path_exists" => $"json_path_exists({args[0]}, {args[1]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
+    };
+
+    /// <summary>Strips the surrounding single quotes a constant date-part string is rendered with.</summary>
+    private static string DatePart(string value) =>
+        value.Length >= 2 && value[0] == '\'' && value[^1] == '\'' ? value[1..^1] : value;
+
+    /// <summary>Renders the alternating key/value arguments of <c>JSON_OBJECT</c> as <c>key : value</c> pairs.</summary>
+    private static string JsonPairs(IReadOnlyList<string> args)
+    {
+        if (args.Count % 2 != 0)
+            throw new NotSupportedException("json_object requires an even number of key/value arguments.");
+
+        var parts = new string[args.Count / 2];
+        for (var i = 0; i < parts.Length; i++)
+            parts[i] = $"{args[i * 2]} : {args[(i * 2) + 1]}";
+
+        return string.Join(", ", parts);
     }
 }

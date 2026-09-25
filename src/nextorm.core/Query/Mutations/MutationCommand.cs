@@ -23,6 +23,8 @@ internal enum SqlStatementType
     Truncate,
     /// <summary>A <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> statement.</summary>
     CreateTableAsSelect,
+    /// <summary>A <c>DROP TABLE IF EXISTS</c> statement.</summary>
+    DropTable,
 }
 
 /// <summary>

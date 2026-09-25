@@ -57,3 +57,19 @@
 - `Directory.Packages.props`, `Directory.Build.props`, библиотечные `src/nextorm.*/*.csproj`,
   новые `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt`, `.github/workflows/dotnet.yml`.
 - Документация: `docs/specs/design/API-NAMING-REVIEW.md` (IF6/DC3/DC8 → закрыто).
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр шагов 2/4 — 2 блокера**; механика заморозки не согласована с build-дисциплиной.
+
+- **[SRP] 🔴** Hard-gate конфликтует с alpha-политикой и build-дисциплиной: `TreatWarningsAsErrors=true` (`Directory.Build.props:40`) делает RS0016/RS0017/RS0025 ошибками сборки, а критерий `:18-20` хочет падения только на «незаявленном» изменении; это противоречит принятому «alpha допускает слом» (`docs/specs/design/code-smells-review.md:3125`). Fix: зафиксировать политику (правка `PublicAPI.*.txt` — часть каждого API-изменения) либо до заморозки держать анализатор warning-only.
+- **[DRY] 🔴** Генерация `Shipped` в один проход (`:38`) благословляет всю поверхность как shipped и обходит курированный перечень «Что вносить» (`:22-32`, исключающий 41 удалённый член); RS0017 не сработает — предыдущего файла нет. Fix: генерировать в `PublicAPI.Unshipped.txt`, сверить diff с IF6/DC3/DC8, затем промоутировать.
+- **[TYPE]/[ISP] 🟡** Путь `ApiCompat` неверен (`:41`): `Microsoft.DotNet.ApiCompat` — не `PackageReference`; штатно `EnablePackageValidation` + `PackageValidationBaselineVersion` (или таск `Microsoft.DotNet.ApiCompat.Task`). Baseline не решён (`:49`), текущая версия `Directory.Build.props:56` = `1.0.5-alpha`. Fix.
+- **[TYPE] 🟡** Место подключения анализатора (`:57`, `Directory.Build.props`) применится к `nextorm.core.sourcegenerator` (`netstandard2.0`, `IsPackable=false`) и ко всем `tests/**`/`benchmarks/**` → поток RS0016. Fix: `src/Directory.Build.props` под `IsPackable` либо 7 библиотечных `.csproj`.
+- **[DRY] 🟡** Перечень 16+16 интерфейсов/свойств дублирует `API-NAMING-REVIEW.md` (IF6/DC3/DC8); источники разъедутся. Fix: реестр — единственный источник, план — ссылка.
+- **[BUILD] 🟡** CRLF сгенерированных `PublicAPI.*.txt` ничем не гейтится: нет `.gitattributes` и `end_of_line` в `.editorconfig`. Fix: добавить и нормализовать.
+- **[SRP] ℹ️** В критерии `:18` команда `nextorm.sln` — в репозитории `nextorm.slnx`. Fix.
+- **[SRP] ℹ️** Шаг 4 (`:41,49-50`) не выполним без решения: кто/где заводит baseline/approval. Fix: выбрать (рекомендуется approval-тест по snapshot `PublicAPI.*.txt`).
+- **[ISP]/[TYPE] ℹ️** Трекируемая поверхность `ISqlDialect` — принятый долг F12 (`:24-29`). Не переоткрывать; поставить ссылку на F12.
+- **[DRY] ℹ️** 16 capability-типов (`Supports`+`Render`) — кандидат на обобщение, но унификация конфликтует с ISP. Deferred.

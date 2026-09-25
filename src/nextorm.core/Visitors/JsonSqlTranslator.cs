@@ -5,8 +5,10 @@ namespace NextORM.Core;
 /// <summary>
 /// Translates the PostgreSQL JSON/JSONB surface written through <see cref="CommonFunctions"/>: the
 /// <c>json_agg</c>/<c>jsonb_agg</c> aggregates, the construction and conversion functions
-/// (<c>json_build_object</c>, <c>to_jsonb</c>, ...) and the access/containment operators
-/// (<c>-&gt;</c>, <c>-&gt;&gt;</c>, <c>#&gt;</c>, <c>@&gt;</c>, <c>?</c>, ...).
+/// (<c>json_build_object</c>, <c>json_array</c>/<c>jsonb_array</c>, <c>to_jsonb</c>, ...), the
+/// SQL/JSON query functions (<c>json_value</c>/<c>json_query</c>/<c>json_exists</c>) and the
+/// access/containment operators (<c>-&gt;</c>, <c>-&gt;&gt;</c>, <c>#&gt;</c>, <c>@&gt;</c>,
+/// <c>?</c>, ...).
 /// <para>
 /// A JSON operand is expected to be a <c>json</c>/<c>jsonb</c> expression: a mapped column, another
 /// JSON function or a parameter whose runtime value is a <c>JsonDocument</c>/<c>JsonElement</c>/
@@ -62,6 +64,12 @@ internal static class JsonSqlTranslator
                 return true;
             case nameof(PostgresFunctions.jsonb_build_array):
                 EmitVariadic(visitor, "jsonb_build_array", args);
+                return true;
+            case nameof(PostgresFunctions.json_array):
+                EmitVariadic(visitor, "json_array", args);
+                return true;
+            case nameof(PostgresFunctions.jsonb_array):
+                EmitJsonbArray(visitor, args);
                 return true;
             case nameof(PostgresFunctions.to_json) when args.Count == 1:
                 EmitFunction(visitor, "to_json", args);
@@ -156,6 +164,17 @@ internal static class JsonSqlTranslator
                 EmitJsonPathCast(visitor, args[0]);
                 return true;
 
+            // SQL/JSON query functions: the path operand has to be rendered as jsonpath.
+            case nameof(PostgresFunctions.json_value) when args.Count == 2:
+                EmitJsonPathFunction(visitor, "json_value", args);
+                return true;
+            case nameof(PostgresFunctions.json_query) when args.Count == 2:
+                EmitJsonPathFunction(visitor, "json_query", args);
+                return true;
+            case nameof(PostgresFunctions.json_exists) when args.Count == 3:
+                EmitJsonPathFunction(visitor, "json_exists", [args[0], args[1]]);
+                return true;
+
             default:
                 return false;
         }
@@ -187,6 +206,39 @@ internal static class JsonSqlTranslator
             : args;
 
         SqlOperandTranslator.EmitFunction(visitor, sqlName, items);
+    }
+
+    /// <summary>
+    /// Renders the SQL/JSON JSONB array constructor. PostgreSQL has no <c>jsonb_array</c> function, so
+    /// the <c>json_array(... returning jsonb)</c> form is emitted.
+    /// </summary>
+    private static void EmitJsonbArray(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        RequireJsonSupport(visitor);
+
+        IReadOnlyList<Expression> items = args.Count == 1 && args[0] is NewArrayExpression { Expressions: var expressions }
+            ? expressions
+            : args;
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, items.Count); i < cnt; i++)
+                visitor.Visit(items[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append("json_array(");
+
+        for (var (i, cnt) = (0, items.Count); i < cnt; i++)
+        {
+            if (i > 0) builder.Append(", ");
+            SqlOperandTranslator.AppendArgument(visitor, items[i]);
+        }
+
+        builder.Append(visitor.Kw(" returning jsonb)"));
     }
 
     /// <summary>

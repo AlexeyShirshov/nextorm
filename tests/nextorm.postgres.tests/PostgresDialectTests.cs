@@ -16,6 +16,16 @@ public class PostgresDialectTests
     private static readonly ISqlDialect Dialect = PostgresDialect.Instance;
 
     [Fact]
+    public void DurationHooks_ShouldUseNativeInterval()
+    {
+        Dialect.SupportsNativeDuration.Should().BeTrue();
+        Dialect.MakeDurationType(null).Should().Be("interval");
+        Dialect.MakeDurationType(DurationUnit.Seconds, 3).Should().Be("interval(3)");
+        Dialect.MakeNullableDurationType(DurationUnit.Seconds, 3).Should().Be("interval(3)");
+        Dialect.MakeTypeName(typeof(TimeSpan)).Should().Be("interval");
+    }
+
+    [Fact]
     public void MergeHooks_ShouldMatchPostgres()
     {
         Dialect.SupportsMergeStatement.Should().BeTrue();
@@ -140,7 +150,7 @@ public class PostgresDialectTests
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsArrays.Should().BeTrue();
         Dialect.SupportsJson.Should().BeTrue();
-        Dialect.SupportsFilter.Should().BeTrue();
+        Dialect.AggregateFilterStyle.Should().Be(AggregateFilterStyle.AnsiFilter);
         Dialect.SupportsGreatestLeast.Should().BeTrue();
         Dialect.SupportsDateTrunc.Should().BeTrue();
         Dialect.SupportsDateArithmetic.Should().BeTrue();
@@ -182,6 +192,9 @@ public class PostgresDialectTests
         Dialect.MakeDateTrunc("month", "x").Should().Be("date_trunc('month', x)");
         Dialect.MakeDateAdd("day", "n", "x").Should().Be("x + (n * interval '1 day')");
         Dialect.MakeDateDiff("day", "a", "b").Should().Be("(cast(b as date) - cast(a as date))");
+        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("cast(trunc(extract(epoch from (b - a)) * 1000) as integer)");
+        Dialect.MakeDateDiffBig("milliseconds", "a", "b").Should().Be("cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)");
+        Dialect.PromoteDateOperand("milliseconds", "x").Should().Be("x");
         Dialect.MakeEndOfMonth("x").Should().Be("(date_trunc('month', x) + interval '1 month - 1 day')");
         Dialect.MakeDateFromParts("y", "m", "d").Should().Be("make_date(y, m, d)");
         Dialect.MakeStringAgg("x", "','").Should().Be("string_agg(x, ',')");

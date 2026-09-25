@@ -44,6 +44,9 @@ public class MySqlDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsBulkCopy => false;
 
+    /// <summary>MySQL/MariaDB batches through <c>MySqlBatch</c>.</summary>
+    public override bool SupportsBatch => true;
+
     /// <summary>MySQL skips conflicting rows with the <c>INSERT IGNORE</c> head.</summary>
     public override bool SupportsInsertIgnore => true;
 
@@ -186,6 +189,12 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL/MariaDB render the whole session/information family.</summary>
     public override ISessionInfoFunctions SessionInfoFunctions => MySqlSessionInfoFunctions.Instance;
 
+    /// <summary>MySQL/MariaDB render the cross-provider scalar functions except <c>translate</c>, which neither has.</summary>
+    public override IScalarFunctions ScalarFunctions => MySqlScalarFunctions.Instance;
+
+    /// <summary>MySQL and MariaDB (through the inherited dialect) render the native MySQL function surface.</summary>
+    public override IMySqlFunctions MySqlFunctions => MySqlNativeFunctions.Instance;
+
     /// <inheritdoc/>
     public override string MakeTextJsonFunction(string name, IReadOnlyList<string> args) => name switch
     {
@@ -312,8 +321,17 @@ public class MySqlDialect : SqlDialectBase
         _ when type == typeof(string) => "char",
         _ when type == typeof(bool) => "signed",
         _ when type == typeof(DateTime) => "datetime",
+        _ when type == typeof(DateTimeOffset) => "datetime",
+        _ when type == typeof(TimeSpan) => "time",
         _ => type.Name
     };
+
+    /// <summary>MySQL has a native duration/time-of-day type (<c>TIME</c>), so a <see cref="TimeSpan"/> is stored natively.</summary>
+    public override bool SupportsNativeDuration => true;
+
+    /// <summary>MySQL's native duration type is <c>TIME</c>, optionally with fractional-second precision.</summary>
+    public override string MakeDurationType(DurationUnit? unit, int precision = 0)
+        => precision > 0 ? $"time({precision})" : "time";
 
     /// <inheritdoc/>
     public override string MakeParam(string name) => $"@{name}";
@@ -358,6 +376,37 @@ public class MySqlDialect : SqlDialectBase
 
     /// <inheritdoc/>
     protected override string MakeStringReverse(string value) => $"reverse({value})";
+
+    /// <summary>MySQL/MariaDB render CLR format specifiers through <c>FORMAT</c>/<c>DATE_FORMAT</c>.</summary>
+    public override IStringFormatFunctions? StringFormats => MySqlStringFormats.Instance;
+
+    /// <summary>MySQL/MariaDB support a per-expression <c>COLLATE</c> clause.</summary>
+    public override bool SupportsCollation => true;
+
+    /// <inheritdoc/>
+    public override string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + collation;
+
+    /// <summary>MySQL/MariaDB can express ordinal comparison through the <c>utf8mb4_bin</c> collation.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase)
+    {
+        const string Binary = "utf8mb4_bin";
+        return ignoreCase ? $"lower({value}) collate {Binary}" : $"{value} collate {Binary}";
+    }
+
+    /// <summary>MySQL 8.0.4+ matches with <c>REGEXP_LIKE</c> and replaces with <c>REGEXP_REPLACE</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"regexp_like({value}, {QuoteStringLiteral(pattern, escapeBackslash: true)}, {(ignoreCase ? "'i'" : "'c'")})";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral(pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)}, 1, 0, {(ignoreCase ? "'i'" : "'c'")})";
 
     /// <inheritdoc/>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
@@ -500,3 +549,149 @@ internal sealed class MySqlIndexHintRenderer : IIndexHintRenderer
         }) + string.Join(", ", indexes) + ")";
     }
 }
+
+/// <summary>
+/// MySQL/MariaDB rendering of the culture-invariant CLR format specifiers: <c>N</c> through
+/// <c>format</c> (grouping with the invariant <c>,</c>/<c>.</c> separators), <c>D</c>/<c>X</c> through
+/// <c>lpad</c>/<c>hex</c>, and date/time through <c>date_format</c>. The fixed-point <c>F</c> is not
+/// offered because MySQL's <c>format</c> always inserts group separators.
+/// </summary>
+internal sealed class MySqlStringFormats : IStringFormatFunctions
+{
+    internal static readonly MySqlStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'N' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision) => specifier switch
+    {
+        'N' => $"format({value}, {Math.Max(precision, 0)})",
+        'D' => precision <= 0 ? $"cast({value} as char)" : $"lpad({value}, {precision}, '0')",
+        'X' => precision <= 0 ? $"hex({value})" : $"lpad(hex({value}), {precision}, '0')",
+        _ => throw new NotSupportedException($"The numeric format specifier '{specifier}' is not supported by MySQL/MariaDB.")
+    };
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var native)
+            ? $"date_format({value}, '{native}')"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by MySQL/MariaDB.");
+
+    private static bool TryMapDate(string format, out string native)
+    {
+        var sb = new StringBuilder(format.Length + 6);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("%Y"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("%y"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("%m"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("%d"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("%H"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("%i"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("%S"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { native = string.Empty; return false; }
+        }
+
+        native = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on MySQL/MariaDB. The
+/// string functions are native (<c>LEFT</c>/<c>RIGHT</c>, <c>LPAD</c>/<c>RPAD</c>, <c>REPEAT</c>,
+/// <c>REVERSE</c>, <c>SPACE</c>, <c>CONCAT_WS</c>, <c>ASCII</c>, <c>CHAR</c>); <c>translate</c> is
+/// deliberately unsupported because neither provider has it.
+/// </summary>
+internal sealed class MySqlScalarFunctions : IScalarFunctions
+{
+    internal static readonly MySqlScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
+        "concat_ws" or "ascii" or "char";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "left" => $"left({args[0]}, {args[1]})",
+        "right" => $"right({args[0]}, {args[1]})",
+        "lpad" => $"lpad({args[0]}, {args[1]}, {Pad(args)})",
+        "rpad" => $"rpad({args[0]}, {args[1]}, {Pad(args)})",
+        "repeat" => $"repeat({args[0]}, {args[1]})",
+        "reverse" => $"reverse({args[0]})",
+        "space" => $"space({args[0]})",
+        "concat_ws" => $"concat_ws({string.Join(", ", args)})",
+        "ascii" => $"ascii({args[0]})",
+
+        // MySQL's CHAR() returns a binary string (VARBINARY), which the driver exposes as byte[];
+        // the cast makes it the text value the CLR string return type expects.
+        "char" => $"cast(char({args[0]}) as char)",
+        _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
+    };
+
+    private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
+}
+
+/// <summary>
+/// Renders the MySQL/MariaDB-only functions of <see cref="MySqlFunctions"/> natively. Every member of
+/// the surface maps to a full-name swap (MySQL and MariaDB share the spellings), so the renderer reports
+/// the whole family and fails for anything else. Declared non-sealed so that
+/// <c>NextORM.MariaDb</c> can derive its renderer and add the MariaDB-only names.
+/// </summary>
+internal class MySqlNativeFunctions : IMySqlFunctions
+{
+    internal static readonly MySqlNativeFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "find_in_set" or "field" or "elt" or "substring_index" or "format" or
+        "str_to_date" or "date_format" or "from_unixtime" or "unix_timestamp" or
+        "md5" or "sha1" or "sha2" or "inet_aton" or "inet_ntoa" or
+        "json_set" or "json_insert" or "json_replace" or "json_remove" or
+        "json_merge_patch" or "json_merge_preserve" or "json_array_append" or "json_array_insert" or
+        "json_depth" or "json_keys" or "json_length" or "json_type" or
+        "uuid_to_bin" or "bin_to_uuid";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "find_in_set" => $"find_in_set({args[0]}, {args[1]})",
+        "field" => $"field({string.Join(", ", args)})",
+        "elt" => $"elt({string.Join(", ", args)})",
+        "substring_index" => $"substring_index({args[0]}, {args[1]}, {args[2]})",
+        "format" => $"format({args[0]}, {args[1]})",
+        "str_to_date" => $"str_to_date({args[0]}, {args[1]})",
+        "date_format" => $"date_format({args[0]}, {args[1]})",
+        "from_unixtime" => $"from_unixtime({args[0]})",
+        "unix_timestamp" => $"unix_timestamp({args[0]})",
+        "md5" => $"md5({args[0]})",
+        "sha1" => $"sha1({args[0]})",
+        "sha2" => $"sha2({args[0]}, {args[1]})",
+        "inet_aton" => $"inet_aton({args[0]})",
+        "inet_ntoa" => $"inet_ntoa({args[0]})",
+        "json_set" => $"json_set({args[0]}, {args[1]}, {args[2]})",
+        "json_insert" => $"json_insert({args[0]}, {args[1]}, {args[2]})",
+        "json_replace" => $"json_replace({args[0]}, {args[1]}, {args[2]})",
+        "json_remove" => $"json_remove({args[0]}, {args[1]})",
+        "json_merge_patch" => $"json_merge_patch({args[0]}, {args[1]})",
+        "json_merge_preserve" => $"json_merge_preserve({args[0]}, {args[1]})",
+        "json_array_append" => $"json_array_append({args[0]}, {args[1]}, {args[2]})",
+        "json_array_insert" => $"json_array_insert({args[0]}, {args[1]}, {args[2]})",
+        "json_depth" => $"json_depth({args[0]})",
+        "json_keys" => $"json_keys({args[0]})",
+        "json_length" => $"json_length({args[0]})",
+        "json_type" => $"json_type({args[0]})",
+        "uuid_to_bin" => $"uuid_to_bin({args[0]})",
+        "bin_to_uuid" => $"bin_to_uuid({args[0]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
+    };
+}
+

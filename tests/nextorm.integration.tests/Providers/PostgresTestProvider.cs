@@ -41,7 +41,9 @@ internal sealed class PostgresTestProvider : ITestProvider
     public bool SupportsDeleteJoin => true;
     public bool SupportsCreateTableAsSelect => true;
     public bool SupportsTemporaryCreateTableAsSelect => true;
+    public bool SupportsBatch => true;
     public bool SupportsTransactions => true;
+    public bool SupportsRegex => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.";
 
     public string SkipReason => PostgresContainer.Failure ?? "PostgreSQL is not available.";

@@ -1,4 +1,5 @@
 # TODO: Потоковая выдача JSON в `Stream` (`WriteJson` / `WriteJsonAsync`)
+> Tracking issue: [#39](https://github.com/AlexeyShirshov/nextorm/issues/39).
 
 > Рабочий план (design RFC). Источник: обсуждение потоковой выдачи результата `Select` в виде
 > JSON. **Не путать** с [`todo_streaming_lob.md`](todo_streaming_lob.md) (issue #27): там речь о
@@ -235,3 +236,18 @@ naming policy). Компиляция один раз на форму.
   clickhouse}.tests/` (SQL-gen), `tests/nextorm.integration.tests/CommonTestSuite.JsonStream.cs`.
 - Документация: `docs/advanced/api-reference.md` (+RU), `docs/guide/` (раздел потоковой выдачи,
   +RU), `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр — корректностный блокер J1** + обязательные правки J2/J3/J4.
+
+- **[DRY]/[PERF] 🟡** J1 (корректность) — таблица writer'а (`:96-104`) использует `GetDataRecordMethod()`/типизированные геттеры, обходя провайдерскую политику чтения: SQL Server для чисел читает через `GetValue`+`Convert.ChangeType` (`src/nextorm.sqlserver/SqlServerDataContext.cs:72-104`), а `TimeSpan` без нативного типа требует `DurationStorage.FromStorage` (`RowMapperFactory.cs:39-46`) → `InvalidCastException`/неверные значения. Fix: строить JSON-геттер из того же `mapColumn`/`MapColumnExpression`, что и маппер.
+- **[DIP]/[ISP] 🟡** J2 — `IJsonStreamWriter`/`JsonRowWriter` заявлены публичными (`:134-140,89-90`), тогда как `IMutationExecutor`/`IBatchExecutor` — **internal** (`Roles/IMutationExecutor.cs:9`, `Roles/IBatchExecutor.cs:15`); сигнатура отдаёт `JsonRowWriter`, собираемый только из внутреннего `SelectList`. Fix: сделать оба `internal`; публичными — при 2-м внешнем потребителе.
+- **[DRY] 🟡** J3 — параллельный static `ConcurrentDictionary<MapperCacheKey, JsonRowWriter>` (`:150-153`) дублирует ключ и ограничение `MaxEntries` (`MapperCache.cs:15,29-40`); незабондированный второй кэш — утечка. Fix: один bounded-кэш/ключ.
+- **[contract] 🟡** J4 — роль объявлена только async (`:134-140`), а публичный терминал sync+async (`:59-62`); путь для `WriteJson` не определён (иначе блокировка). Fix: sync-метод роли либо убрать `WriteJson` из фазы 1.
+- **[PERF]/[SRP] 🟡** J5 — подготовка компилирует неиспользуемый `Func<IDataRecord,TResult>` (`QueryPlanner.cs:401-403`), если команда не в no-mapper режиме. Fix: тот же no-mapper флаг, что L4.
+- **[OCP] ℹ️** J6 — `WriteJson` сосуществует с существующим `ForJson` (SQL Server `FOR JSON`, `QueryCommand.TResult.cs:678`); зафиксировать в `API-NAMING-REVIEW`.
+- **[PERF] ℹ️** J7 — fallback `JsonSerializer.Serialize(writer, value)` боксит; держать только для массивов/`Tuple`/`Map`, вне горячего плоского пути. Deferred.
+- **ℹ️** Устаревшие якоря: `RowMapperFactory.cs:24,63,120` → `:34,87,116`; `MapperCache.cs:26` → `:15,31`.
+- **[OCP] ℹ️** J9 — как L8: JSON-стрим-путь должен поднимать interceptor-события, иначе потоковая выдача молча выпадает из наблюдаемости.

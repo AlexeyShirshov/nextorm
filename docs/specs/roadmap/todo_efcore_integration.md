@@ -1,4 +1,5 @@
 # TODO: Интеграция с EF Core (`nextorm.entityframeworkcore`)
+> Tracking issue: [#61](https://github.com/AlexeyShirshov/nextorm/issues/61).
 
 > Рабочий план (design RFC). Источник: [`comparison/linq2db-comparison.md:83`](../comparison/linq2db-comparison.md) —
 > в linq2db есть пакет `linq2db.EntityFrameworkCore`, у nextorm интеграции нет. Дополняет
@@ -277,3 +278,17 @@ public static class NextOrmQueryableExtensions
 - [nextorm vs linq2db: functionality comparison](../comparison/linq2db-comparison.md)
 - [Transactions (enlistment, общая транзакция с EF Core / Dapper)](../../guide/25-transactions.md)
 - [Capability matrix: nextorm vs EF Core и linq2db](../comparison/capability-matrix.md)
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **пересмотр — 1 архитектурное противоречие (E2)** + обязательные E1/E3; E4 — осознанно отложено.
+
+- **[DRY]/[KISS] 🟡** E1 — «Core-шов» (`:126-131`) не нужен: `IEntityMetadata`/`IPropertyMetadata` публичны (`DataContext/Meta/IEntityMetadata.cs:10`, `IPropertyMetadata.cs:12`), а `DataContextCache.Metadata` — публично-записываемый `IDictionary<Type,IEntityMetadata>` (`DataContext/DataContextCache.cs:22,30`); интеграция может реализовать публичные интерфейсы и зарегистрировать маппинг напрямую, не добавляя второй (не-генерик) публичный билдер в core. Fix: убрать core-шов из плана.
+- **[DIP]/[OCP] 🟡** E2 — история авто-регистрации противоречива: пакет «не ссылается на провайдерные `nextorm.*`» (`:93`), но тогда провайдерные пакеты не могут наполнить `NextOrmProviderRegistry` без ссылки на `nextorm.entityframeworkcore` (тянет EF Relational в каждый провайдер), а интеграция без ссылки на провайдеры не может вызвать `UsePostgres(connection)`. Fix: выбрать одно — интеграция ссылается на провайдеры, либо glue-пакеты `nextorm.<provider>.entityframeworkcore`, либо явный `configure` в MVP (открытый вопрос #4).
+- **[contract] 🟡** E3 — `NextOrmProviderRegistry` — process-global мутабельный static без семантики (`:140-145`): нет ответа про повторную регистрацию (throw vs last-wins), потокобезопасность, lifetime/purge. Fix: зафиксировать контракт.
+- **[SRP] 🟡** E4 — предзаполнение глобального `DataContextCache.Metadata` (ключ только `Type`, `:133-136`) — process-wide side effect, не откатываемый при `Dispose`; результат кэшируется ещё в `QueryPlanner._fromCache` (`QueryPlanner.cs:509`) и `MemberInfoExtensions._columnNames` (`MemberInfoExtensions.cs:15`), поэтому второй `DbContext` с иной моделью того же CLR-типа молча получит первый маппинг. Deferred с триггером (multi-model потребитель → per-context `IEntityMetadataResolver`).
+- **[LSP] ℹ️** E5 — владение соединением уже верное: caller-supplied connection не диспозится (`DataContext/DbConnectionManager.cs:247-252,304-315`), требование `:110-113` выполняется. Fix: закрепить acceptance-тестом «`Dispose` nextorm-контекста не закрывает EF-соединение» и что `EnsureConnectionOpen` под активной EF-транзакцией идёт через EF.
+- **ℹ️** E6 — публичные типы расширений `static` (ок); вопрос имени `nextorm.entityframeworkcore` vs `nextorm.efcore` — на заморозку.
+- **ℹ️** E7 — фаза 3 (`IQueryable`→nextorm) — это LINQ-provider; не начинать до шипа фазы 1, границы фиксировать тестами.
+- **ℹ️** E8 — schema/TPH/owned/value-converters не покрываются `IModel`; зафиксировать в `limitations` (план делает).

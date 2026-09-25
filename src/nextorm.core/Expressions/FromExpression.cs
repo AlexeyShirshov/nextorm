@@ -38,6 +38,13 @@ public sealed class FromExpression
           Table = table;
           ColumnShape = columnShape;
      }
+     /// <summary>Creates a source from a lazy temporary-table materialisation.</summary>
+     /// <param name="tempTable">The temporary table to materialise and read.</param>
+     internal FromExpression(ITempTableSource tempTable)
+     {
+          TempTable = tempTable;
+          Table = tempTable.Name;
+     }
      /// <summary>Creates a source from a table-valued function.</summary>
      /// <param name="tableFunction">The table function call.</param>
      public FromExpression(TableFunctionExpression tableFunction)
@@ -74,6 +81,14 @@ public sealed class FromExpression
      public readonly bool SourceIsInterface;
      /// <summary>The derived-table subquery, or <c>null</c> when the source is not a subquery.</summary>
      public readonly QueryCommand? SubQuery;
+     /// <summary>
+     /// Set when the source is a lazy temporary table (see
+     /// <see cref="TempTableExtensions.AsTempTable{TResult}(QueryCommand{TResult}, CreateTableOptions?)"/>).
+     /// The physical <see cref="Table"/> name is the generated temporary-table name; the marker makes
+     /// the context materialise the table in the same batch as the read. Mutually exclusive with the
+     /// other source kinds.
+     /// </summary>
+     internal readonly ITempTableSource? TempTable;
      /// <summary>The entity type, used when the source is a mapped CLR type rather than a table name.</summary>
      public readonly Type? SourceType;
      /// <summary>
@@ -82,7 +97,8 @@ public sealed class FromExpression
      /// <see cref="QueryCommand.ResultType"/> and <see cref="QueryCommand.SelectList"/> to the column
      /// provider so member access resolves against the returned columns.
      /// </summary>
-     internal readonly QueryCommand? ColumnShape;     /// <summary>
+     internal readonly QueryCommand? ColumnShape;
+     /// <summary>
      /// Set when the source is a table-valued function. Mutually exclusive with <see cref="Table"/>
      /// and <see cref="SubQuery"/>.
      /// </summary>

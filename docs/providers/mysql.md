@@ -107,6 +107,7 @@ MySQL 8.0.31 and later support `INTERSECT`/`EXCEPT`; the dialect rejects the `*A
 ## See also
 
 - [Provider overview](overview.md)
+- [MySQL and MariaDB-specific SQL](../guide/provider-specific/mysql.md)
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)

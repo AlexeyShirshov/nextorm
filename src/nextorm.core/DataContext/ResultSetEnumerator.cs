@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -23,6 +24,8 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     private IConnectionManager? _connectionManager;
     private Func<string, object?, DbParameter>? _createParam;
     private Func<DbTransaction?>? _currentTransaction;
+    private InterceptorHooks? _interceptors;
+    private IDataContext? _context;
     private readonly DbPreparedQueryCommand<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
     private object[]? _params;
@@ -185,14 +188,71 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
-    internal void InitEnumerator(IConnectionManager connectionManager, Func<string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction)
+    internal void InitEnumerator(IConnectionManager connectionManager, Func<string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
         _connectionManager = connectionManager;
         _createParam = createParam;
         _currentTransaction = currentTransaction;
+        _interceptors = interceptors;
+        _context = context;
         _conn = connectionManager.GetConnection();
+    }
+
+    // Raises CommandExecuting/CommandExecuted/CommandFailed around the reader creation. With no
+    // interceptor registered the execute call is made directly, so the streaming hot path is
+    // unchanged (no event data, timestamp or async state machine).
+    private DbDataReader ExecuteReader(DbCommand command)
+    {
+        var interceptors = _interceptors!.QueryInterceptors;
+        if (interceptors.Length == 0)
+            return command.ExecuteReader(_compiledQuery.Behavior);
+
+        return ExecuteReaderCore(command, interceptors);
+    }
+
+    private DbDataReader ExecuteReaderCore(DbCommand command, IQueryInterceptor[] interceptors)
+    {
+        InterceptorHooks.RaiseCommandExecuting(interceptors, _context!, command);
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            var reader = command.ExecuteReader(_compiledQuery.Behavior);
+            InterceptorHooks.RaiseCommandExecuted(interceptors, _context!, command, Stopwatch.GetElapsedTime(started));
+            return reader;
+        }
+        catch (Exception exception)
+        {
+            InterceptorHooks.RaiseCommandFailed(interceptors, _context!, command, exception);
+            throw;
+        }
+    }
+
+    private Task<DbDataReader> ExecuteReaderAsync(DbCommand command, CancellationToken cancellationToken)
+    {
+        var interceptors = _interceptors!.QueryInterceptors;
+        if (interceptors.Length == 0)
+            return command.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken);
+
+        return ExecuteReaderCoreAsync(command, cancellationToken, interceptors);
+    }
+
+    private async Task<DbDataReader> ExecuteReaderCoreAsync(DbCommand command, CancellationToken cancellationToken, IQueryInterceptor[] interceptors)
+    {
+        InterceptorHooks.RaiseCommandExecuting(interceptors, _context!, command);
+        var started = Stopwatch.GetTimestamp();
+        try
+        {
+            var reader = await command.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+            InterceptorHooks.RaiseCommandExecuted(interceptors, _context!, command, Stopwatch.GetElapsedTime(started));
+            return reader;
+        }
+        catch (Exception exception)
+        {
+            InterceptorHooks.RaiseCommandFailed(interceptors, _context!, command, exception);
+            throw;
+        }
     }
     /// <summary>
     /// Opens the connection and executes the command synchronously, creating the data reader. Does
@@ -214,7 +274,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         if (_logDebug) LogCommand(sqlCommand);
 
-        _reader = sqlCommand.ExecuteReader(_compiledQuery.Behavior);
+        _reader = ExecuteReader(sqlCommand);
     }
     /// <summary>
     /// Asynchronously opens the connection and executes the command, creating the data reader. Does
@@ -236,7 +296,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         if (_logDebug) LogCommand(sqlCommand);
 
-        _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        _reader = await ExecuteReaderAsync(sqlCommand, cancellationToken).ConfigureAwait(false);
     }
     private void LogCommand(DbCommand sqlCommand)
     {

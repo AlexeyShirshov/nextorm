@@ -54,7 +54,7 @@ public sealed class SqliteDialect : SqlDialectBase
 
     // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
     /// <inheritdoc/>
-    public override bool SupportsFilter => true;
+    public override AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.AnsiFilter;
 
     // SQLite 3.33+ accepts the ANSI GROUP BY ROLLUP (...)/CUBE (...) form.
     /// <inheritdoc/>
@@ -74,6 +74,15 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite exposes only the library version from the session/information family.</summary>
     public override ISessionInfoFunctions SessionInfoFunctions => SqliteSessionInfoFunctions.Instance;
+
+    /// <summary>SQLite renders <c>left</c>/<c>right</c> through <c>substr</c>, <c>ascii</c> through <c>unicode</c> and gates the functions it lacks.</summary>
+    public override IScalarFunctions ScalarFunctions => SqliteScalarFunctions.Instance;
+
+    /// <summary>SQLite exposes its core scalars, JSON1, date helpers and math-extension functions through <see cref="SqliteFunctions"/>.</summary>
+    public override ISqliteFunctions SqliteFunctions => SqliteFunctionRenderer.Instance;
+
+    /// <summary>SQLite's built-in JSON table-valued functions <c>json_each</c>/<c>json_tree</c>.</summary>
+    public override bool SupportsTableFunction(string name) => name is "json_each" or "json_tree";
 
     /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
@@ -115,6 +124,39 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeRepeat(string value, string count) =>
         $"replace(hex(zeroblob({count})), '00', {value})";
+
+    /// <summary>SQLite renders CLR format specifiers through <c>printf</c>/<c>strftime</c>.</summary>
+    public override IStringFormatFunctions? StringFormats => SqliteStringFormats.Instance;
+
+    /// <summary>SQLite supports a per-expression <c>COLLATE</c> clause (built-in collations only).</summary>
+    public override bool SupportsCollation => true;
+
+    /// <inheritdoc/>
+    public override string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + collation;
+
+    /// <summary>SQLite can express ordinal comparison through the built-in <c>BINARY</c> collation.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    // SQLite's LIKE is case-insensitive for ASCII no matter the operand's COLLATE, so a byte-order
+    // LIKE cannot be expressed; the case-sensitive ordinal Contains/StartsWith/EndsWith are rejected.
+    /// <summary>SQLite's <c>LIKE</c> cannot be made byte-wise.</summary>
+    public override bool SupportsOrdinalLike => false;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase) =>
+        ignoreCase ? $"lower({value}) collate binary" : $"{value} collate binary";
+
+    /// <summary>SQLite expresses a match with the registered <c>regexp</c> function (the <c>REGEXP</c> operator) and a registered <c>regexp_replace</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"{value} regexp {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern)}";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern)}, {QuoteStringLiteral(replacement)})";
 
     // SQLite has no dateadd/datediff; it adjusts a date through a modifier string and measures
     // differences in seconds (or months for calendar parts).
@@ -251,6 +293,9 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite accepts <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelectIfNotExists => true;
+
+    /// <summary>SQLite has no <c>DbBatch</c>; the statements are joined with <c>;</c> into one command.</summary>
+    public override bool SupportsBatch => true;
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer
@@ -289,4 +334,85 @@ internal sealed class SqliteIndexHintRenderer : IIndexHintRenderer
 
         return SqlKeywords.Of(keywordCase, " indexed by ") + indexes[0];
     }
+}
+
+/// <summary>
+/// SQLite rendering of the culture-invariant CLR format specifiers: <c>F</c>/<c>D</c>/<c>X</c> through
+/// <c>printf</c> and date/time through <c>strftime</c>. The group separator (<c>N</c>) is not offered
+/// because <c>printf</c> has no portable thousands grouping.
+/// </summary>
+internal sealed class SqliteStringFormats : IStringFormatFunctions
+{
+    internal static readonly SqliteStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'F' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision) => specifier switch
+    {
+        'F' => $"printf('%.{Math.Max(precision, 0)}f', {value})",
+        'D' => precision <= 0 ? $"printf('%d', {value})" : $"printf('%0{precision}d', {value})",
+        'X' => precision <= 0 ? $"printf('%x', {value})" : $"printf('%0{precision}x', {value})",
+        _ => throw new NotSupportedException($"The numeric format specifier '{specifier}' is not supported by SQLite.")
+    };
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var native)
+            ? $"strftime('{native}', {value})"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by SQLite.");
+
+    private static bool TryMapDate(string format, out string native)
+    {
+        var sb = new StringBuilder(format.Length + 6);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("%Y"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("%y"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("%m"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("%d"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("%H"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("%M"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("%S"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { native = string.Empty; return false; }
+        }
+
+        native = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on SQLite. SQLite has
+/// no <c>lpad</c>/<c>rpad</c>, <c>repeat</c>, <c>reverse</c>, <c>space</c> or <c>translate</c>, so
+/// those are unsupported; <c>left</c>/<c>right</c> are emulated with <c>substr</c> and <c>ascii</c>
+/// maps to <c>unicode</c>.
+/// </summary>
+internal sealed class SqliteScalarFunctions : IScalarFunctions
+{
+    internal static readonly SqliteScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "concat_ws" or "ascii" or "char";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        // substr(X, 1, n) keeps the first n characters. For right, a start of length - n + 1 goes
+        // negative once n exceeds the value, and SQLite reads a negative start from the end, so the
+        // in-range case is guarded and the whole value is returned instead.
+        "left" => $"substr({args[0]}, 1, {args[1]})",
+        "right" => $"case when ({args[1]}) >= length({args[0]}) then {args[0]} else substr({args[0]}, length({args[0]}) - ({args[1]}) + 1, {args[1]}) end",
+        "concat_ws" => $"concat_ws({string.Join(", ", args)})",
+        "ascii" => $"unicode({args[0]})",
+        "char" => $"char({args[0]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by SQLite.")
+    };
 }

@@ -15,7 +15,7 @@ namespace NextORM.Core;
 /// <see cref="ISqlDialect.SupportsChoose"/>, <see cref="ISqlDialect.MultiIf"/>,
 /// <see cref="ISqlDialect.SupportsDateTrunc"/>,
 /// <see cref="ISqlDialect.SupportsDateArithmetic"/>, <see cref="ISqlDialect.SupportsFullText"/>,
-/// <see cref="ISqlDialect.SupportsStringArrayAggregates"/>, <see cref="ISqlDialect.SupportsFilter"/>)
+/// <see cref="ISqlDialect.SupportsStringArrayAggregates"/>, <see cref="ISqlDialect.AggregateFilterStyle"/>)
 /// so a provider that cannot express the construct fails with a clear message instead of emitting
 /// invalid SQL.
 /// </para>
@@ -25,6 +25,9 @@ internal static class BuiltinFunctionTranslator
     /// <summary>Translates a built-in call; returns <c>false</c> when the call is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        if (CrossProviderScalarTranslator.TryTranslate(visitor, node))
+            return true;
+
         switch (node.Method.Name)
         {
             case nameof(CommonFunctions.nullif) when node.Arguments.Count == 2:
@@ -56,6 +59,9 @@ internal static class BuiltinFunctionTranslator
                 return true;
             case nameof(CommonFunctions.date_diff) when node.Arguments.Count == 3:
                 EmitDateDiff(visitor, node.Arguments);
+                return true;
+            case nameof(CommonFunctions.date_diff_big) when node.Arguments.Count == 3:
+                EmitDateDiff(visitor, node.Arguments, big: true);
                 return true;
             case nameof(CommonFunctions.end_of_month) when node.Arguments.Count == 1:
                 EmitEndOfMonth(visitor, node.Arguments);
@@ -305,11 +311,11 @@ internal static class BuiltinFunctionTranslator
         visitor.Builder!.Append(visitor.Dialect.MakeDateAdd(
             field,
             visitor.VisitToString(args[1]),
-            visitor.VisitToString(args[2])));
+            visitor.Dialect.PromoteDateOperand(field, visitor.VisitToString(args[2]))));
     }
 
     /// <summary><c>date_diff(field, start, end)</c> with a validated constant date-part name.</summary>
-    private static void EmitDateDiff(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    private static void EmitDateDiff(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args, bool big = false)
     {
         if (!visitor.Dialect.SupportsDateArithmetic)
             throw new NotSupportedException("The date arithmetic functions are not supported by this provider.");
@@ -329,10 +335,11 @@ internal static class BuiltinFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeDateDiff(
-            field,
-            visitor.VisitToString(args[1]),
-            visitor.VisitToString(args[2])));
+        var start = visitor.VisitToString(args[1]);
+        var end = visitor.VisitToString(args[2]);
+        visitor.Builder!.Append(big
+            ? visitor.Dialect.MakeDateDiffBig(field, start, end)
+            : visitor.Dialect.MakeDateDiff(field, start, end));
     }
 
     /// <summary><c>end_of_month(value)</c>.</summary>
@@ -435,7 +442,7 @@ internal static class BuiltinFunctionTranslator
             throw new NotSupportedException("The string_agg/array_agg aggregates are not supported by this provider.");
 
         var filter = args.Count == 3 ? args[2] : null;
-        RequireFilterSupport(visitor, filter);
+        AggregateFilter.RequireSupport(visitor, filter);
 
         if (visitor.IsParamMode)
         {
@@ -446,7 +453,19 @@ internal static class BuiltinFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeStringAgg(visitor.VisitToString(args[0]), visitor.VisitToString(args[1])));
+        var value = visitor.VisitToString(args[0]);
+        var delimiter = visitor.VisitToString(args[1]);
+
+        // ClickHouse has no ANSI FILTER clause: its filtered string_agg is
+        // arrayStringConcat(groupArrayIf(value, predicate), delimiter).
+        if (filter is not null && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
+        {
+            var predicate = AggregateFilter.RenderPredicate(visitor, filter);
+            visitor.Builder!.Append(visitor.Dialect.MakeFilteredStringAgg(value, delimiter, predicate));
+            return;
+        }
+
+        visitor.Builder!.Append(visitor.Dialect.MakeStringAgg(value, delimiter));
 
         if (filter is not null) AggregateFilter.Append(visitor, filter);
     }
@@ -457,7 +476,7 @@ internal static class BuiltinFunctionTranslator
             throw new NotSupportedException("The string_agg/array_agg aggregates are not supported by this provider.");
 
         var filter = args.Count == 2 ? args[1] : null;
-        RequireFilterSupport(visitor, filter);
+        AggregateFilter.RequireSupport(visitor, filter);
 
         if (visitor.IsParamMode)
         {
@@ -470,12 +489,6 @@ internal static class BuiltinFunctionTranslator
         visitor.Builder!.Append(visitor.Dialect.MakeArrayAgg(visitor.VisitToString(args[0])));
 
         if (filter is not null) AggregateFilter.Append(visitor, filter);
-    }
-
-    private static void RequireFilterSupport(BaseExpressionVisitor visitor, Expression? filter)
-    {
-        if (filter is not null && !visitor.Dialect.SupportsFilter)
-            throw new NotSupportedException("The FILTER clause is not supported by this provider.");
     }
 
     /// <summary>

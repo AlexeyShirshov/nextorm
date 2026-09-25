@@ -203,6 +203,7 @@ select jsonb_build_object('id', id, 'name', somestring) as "V" from complex_enti
 |---|---|
 | `SqlFunctions.Postgres.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.jsonb_build_array(x, y)` | `jsonb_build_array(x, y)` |
+| `SqlFunctions.Postgres.json_array(x, y)` / `jsonb_array(x, y)` | `json_array(x, y)` / `json_array(x, y returning jsonb)` |
 | `SqlFunctions.Postgres.to_jsonb(x)` | `to_jsonb(x)` |
 
 ### Свернуть набор строк в один документ (аналог `FOR JSON`)
@@ -277,6 +278,39 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 select id from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key')
 ```
+
+### SQL/JSON-функции запроса
+
+SQL/JSON-функции запроса принимают `jsonpath` (приводится из строки `path`) и выбирают значение, а не
+ключ:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_value(json, path)` | `json_value(json, cast(path as jsonpath))` (возвращает `text`) |
+| `SqlFunctions.Postgres.json_query(json, path)` | `json_query(json, cast(path as jsonpath))` (возвращает `jsonb`) |
+| `SqlFunctions.Postgres.json_exists(json, path, fromJsonPath)` | `json_exists(json, cast(path as jsonpath))` (возвращает `boolean`) |
+
+```csharp
+var json = SqlFunctions.Postgres.jsonb_build_object("a", 1);
+
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Value = SqlFunctions.Postgres.json_value(json, "$.a"),
+        Exists = SqlFunctions.Postgres.json_exists(json, "$.a", true)
+    })
+    .ToList();
+```
+
+```sql
+select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value",
+       json_exists(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Exists"
+from complex_entity
+```
+
+У `json_exists` две формы: двухаргументный `json_exists(json, "key")` — это оператор `?` верхнего
+уровня, а трёхаргументный `json_exists(json, path, fromJsonPath)` — SQL/JSON-функция пути (третий
+аргумент — дискриминатор, в SQL не рендерится).
 
 Функции конструирования и агрегации возвращают `string?`; десериализуйте через
 `JsonSerializer.Deserialize<T>(...)`, когда нужен объект .NET.

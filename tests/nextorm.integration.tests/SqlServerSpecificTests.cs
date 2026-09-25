@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -390,5 +392,166 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         }
 
         ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().BeEmpty();
+    }
+
+    [SqlTable("collation_probe")]
+    internal interface ICollationProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("name")]
+        [Collation("Latin1_General_100_BIN2")]
+        string? Name { get; set; }
+    }
+
+    [Fact]
+    public void ColumnCollation_ShouldApplyDeclaredBinaryCollation()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists collation_probe");
+        Execute(ctx, "create table collation_probe (id bigint, name varchar(50))");
+
+        try
+        {
+            Execute(ctx, "insert into collation_probe (id, name) values (1, 'abc')");
+            Execute(ctx, "insert into collation_probe (id, name) values (2, 'ABC')");
+
+            ctx.From<ICollationProbe>().Where(x => x.Name == "abc").Select(x => x.Id).ToList()
+                .Should().Equal(1L);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists collation_probe");
+        }
+    }
+
+    [Fact]
+    public void Batch_CreateTableAs_WithTempTableName_ShouldReadTheTableInTheSameBatch()
+    {
+        var name = "#batch_" + Guid.NewGuid().ToString("N");
+        var ctx = _sut.DataProvider;
+
+        var rows = ctx.Batch()
+            .CreateTable(name, _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { x.Id }))
+            .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
+            .ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(1);
+    }
+
+    [Fact]
+    public void SqlServerStringFunctions_ShouldCompute()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Pat = SqlFunctions.SqlServer.patindex("%b%", "abc"),
+                Quo = SqlFunctions.SqlServer.quotename("abc"),
+                Snd = SqlFunctions.SqlServer.soundex("Robert"),
+                Dif = SqlFunctions.SqlServer.difference("Robert", "Rupert"),
+                Esc = SqlFunctions.SqlServer.string_escape("a\nb", "json"),
+                Uni = SqlFunctions.SqlServer.unicode("A"),
+                Nch = SqlFunctions.SqlServer.nchar(65),
+                Fmt = SqlFunctions.SqlServer.format(42, "D6")
+            })
+            .First();
+
+        r.Pat.Should().Be(2);
+        r.Quo.Should().Be("[abc]");
+        r.Snd.Should().Be("R163");
+        r.Dif.Should().Be(4);
+        r.Esc.Should().Be("a\\nb");
+        r.Uni.Should().Be(65);
+        r.Nch.Should().Be("A");
+        r.Fmt.Should().Be("000042");
+    }
+
+    [Fact]
+    public void SqlServerTrigFunctions_ShouldCompute()
+    {
+        // The operand is a float column cast so T-SQL does not evaluate an integer literal (DEGREES(1)
+        // truncates to 57); the seed makes Id == 1, so the angle is 0.5.
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Aco = SqlFunctions.SqlServer.acos((double)x.Id / 2),
+                Asi = SqlFunctions.SqlServer.asin((double)x.Id / 2),
+                Ata = SqlFunctions.SqlServer.atan((double)x.Id / 2),
+                Atn = SqlFunctions.SqlServer.atn2((double)x.Id, 2.0),
+                Cot = SqlFunctions.SqlServer.cot((double)x.Id / 2),
+                Deg = SqlFunctions.SqlServer.degrees((double)x.Id),
+                Rad = SqlFunctions.SqlServer.radians((double)x.Id * 180),
+                Pi = SqlFunctions.SqlServer.pi(),
+                Squ = SqlFunctions.SqlServer.square((double)x.Id * 4)
+            })
+            .First();
+
+        r.Aco.Should().BeApproximately(Math.Acos(0.5), 1e-12);
+        r.Asi.Should().BeApproximately(Math.Asin(0.5), 1e-12);
+        r.Ata.Should().BeApproximately(Math.Atan(0.5), 1e-12);
+        r.Atn.Should().BeApproximately(Math.Atan2(1.0, 2.0), 1e-12);
+        r.Cot.Should().BeApproximately(1.0 / Math.Tan(0.5), 1e-12);
+        r.Deg.Should().BeApproximately(180.0 / Math.PI, 1e-12);
+        r.Rad.Should().BeApproximately(Math.PI, 1e-12);
+        r.Pi.Should().BeApproximately(Math.PI, 1e-12);
+        r.Squ.Should().Be(16.0);
+    }
+
+    [Fact]
+    public void SqlServerDateFunctions_ShouldCompute()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Name = SqlFunctions.SqlServer.datename("year", x.Datetime),
+                Bucket = SqlFunctions.SqlServer.date_bucket("day", 1, x.Datetime)
+            })
+            .First();
+
+        r.Name.Should().Be("2023");
+        r.Bucket.Should().Be(new DateTime(2023, 1, 1));
+    }
+
+    [Fact]
+    public void SqlServerHashBytes_ShouldReturnDigest()
+    {
+        var data = Encoding.UTF8.GetBytes("abc");
+
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.hashbytes("SHA2_256", data))
+            .First();
+
+        r.Should().Equal(SHA256.HashData(data));
+    }
+
+    [Fact]
+    public void SqlServerJsonConstructors_ShouldBuildJson()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Arr = SqlFunctions.SqlServer.json_array("a", 1, "b"),
+                Obj = SqlFunctions.SqlServer.json_object("k", 1),
+                Exists = SqlFunctions.SqlServer.json_path_exists("{\"k\":1}", "$.k")
+            })
+            .First();
+
+        r.Arr.Should().Be("[\"a\",1,\"b\"]");
+        r.Obj.Should().Be("{\"k\":1}");
+        r.Exists.Should().BeTrue();
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        ((DataContext)ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)ctx).CreateCommand(sql);
+        cmd.ExecuteNonQuery();
     }
 }

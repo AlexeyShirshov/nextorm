@@ -558,7 +558,7 @@ internal static class SqlSourceRenderer
                 if (IsVerbatimArgument(function, i))
                     continue;
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase });
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase, ParameterNamePrefix = ctx.ParameterNamePrefix });
                 visitor.Visit(arguments[i]);
             }
 
@@ -581,7 +581,7 @@ internal static class SqlSourceRenderer
                     continue;
                 }
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase });
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase, ParameterNamePrefix = ctx.ParameterNamePrefix });
                 visitor.Visit(arguments[i]);
                 sqlBuilder.Append(visitor.ToString());
             }
@@ -792,7 +792,7 @@ internal static class SqlSourceRenderer
                 if (assignment.Kind == UpdateValueKind.Constant)
                 {
                     var name = ctx.ParameterProvider.GetParamName();
-                    ctx.Params.Add(new Parameter(name, assignment.Constant));
+                    ctx.Params.Add(new Parameter(name, DurationStorage.ToParameterValue(assignment.Constant, ResolveTargetProperty(entityType, assignment.Target), ctx.Dialect)));
                     builder.Append(ctx.Dialect.MakeParam(name));
                 }
                 else
@@ -809,6 +809,18 @@ internal static class SqlSourceRenderer
         {
             StringBuilderPool.Shared.Return(builder);
         }
+    }
+
+    // Resolves the mapped property written by an update-by-join assignment, so its duration storage
+    // unit can be applied to a captured constant. The target member may sit behind a projection member
+    // (p.Item1.Name), but the final MemberExpression's PropertyInfo belongs to the target entity type.
+    private static IPropertyMetadata? ResolveTargetProperty(Type entityType, Expression target)
+    {
+        if (target is MemberExpression { Member: PropertyInfo pi }
+            && DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+            return metadata.Properties.FirstOrDefault(p => p.PropertyInfo == pi);
+
+        return null;
     }
 
     internal static string MakeSort(in SqlBuildContext ctx, Type entityType, Expression sorting, int dim)

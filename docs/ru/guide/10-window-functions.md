@@ -14,35 +14,6 @@
 значения/агрегатов). Типы маркеров и их методы интерпретируются исключительно посетителем выражений —
 они никогда не выполняются.
 
-```csharp
-public static class SqlFunctions
-{
-    public static CommonFunctions SQL { get; }
-}
-
-public sealed class WindowFunction<T>
-{
-    // partition-only / partition+order+frame; every argument is optional
-    public T Over(Expression<Func<object?>>? partitionBy = null,
-                  Expression<Func<object?>>? orderBy = null,
-                  WindowFrame? frame = null);
-
-    // order-only or a single ordered key
-    public T Over(WindowOrder orderBy, WindowFrame? frame = null);
-
-    // several ordered keys
-    public T Over(WindowOrder[] orderBy, WindowFrame? frame = null);
-
-    // several partitions plus ordered keys (mixed asc/desc)
-    public T Over(Expression<Func<object?>>[]? partitionBy,
-                  WindowOrder[]? orderBy = null,
-                  WindowFrame? frame = null);
-
-    // reference a named window declared on the query (see "Named windows")
-    public T Over(string windowName);
-}
-```
-
 [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) без аргументов рендерит пустую спецификацию (`over ()`). Поскольку деревья выражений C# отклоняют
 именованные аргументы, пропускающие предшествующий параметр со значением по умолчанию, спецификация
 **только с сортировкой** должна использовать перегрузку [`WindowOrder`](xref:NextORM.Core.WindowOrder) — `Over(SqlFunctions.Sql.asc(() => e.Id))` —

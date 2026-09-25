@@ -75,10 +75,12 @@ MariaDB отличается от [MySQL](mysql.md) возможностью о�
 | Произвольное значение | не поддерживается (в 10.4–12.x нет `ANY_VALUE`; ожидается MDEV-10426, ориентир — 13.2) |
 | Условная функция | наследуется от MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
 | Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (MariaDB 10.3+) |
+| Нативные функции | поверхность `SqlFunctions.MySql`, унаследованная от MySQL, **минус** `uuid_to_bin`/`bin_to_uuid`, **плюс** имена MariaDB (расширенный regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, доступ к последовательностям) |
 
 ## См. также
 
 - [Обзор провайдеров](overview.md)
+- [Специфичный для MySQL и MariaDB SQL](../guide/provider-specific/mysql.md)
 - [MySQL](mysql.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq.Expressions;
 
 namespace NextORM.Core;
@@ -26,11 +27,18 @@ internal static class StringFunctionTranslator
         {
             switch (methodName)
             {
-                // Only the culture-less overloads are portable; the CultureInfo overloads are not.
+                // Only the culture-less overloads are portable. ToUpperInvariant/ToLowerInvariant map to
+                // the same upper/lower (they differ only for non-ASCII, which is documented); a
+                // CultureInfo argument is rejected below.
                 case nameof(string.ToUpper) when node.Arguments.Count == 0:
+                case nameof(string.ToUpperInvariant) when node.Arguments.Count == 0:
                     return EmitStringFunction(visitor, node.Object, v => visitor.Dialect.MakeUpper(v));
                 case nameof(string.ToLower) when node.Arguments.Count == 0:
+                case nameof(string.ToLowerInvariant) when node.Arguments.Count == 0:
                     return EmitStringFunction(visitor, node.Object, v => visitor.Dialect.MakeLower(v));
+                case nameof(string.ToUpper):
+                case nameof(string.ToLower):
+                    return TryTranslateCultureCase(visitor, node);
                 // Trim/TrimStart/TrimEnd also have a (char)/params char[] overload that is not a
                 // whitespace trim, so only the parameterless form is translated.
                 case nameof(string.Trim) when node.Arguments.Count == 0:
@@ -39,6 +47,10 @@ internal static class StringFunctionTranslator
                     return EmitStringFunction(visitor, node.Object, v => visitor.Dialect.MakeTrim(v, StringTrimKind.Start));
                 case nameof(string.TrimEnd) when node.Arguments.Count == 0:
                     return EmitStringFunction(visitor, node.Object, v => visitor.Dialect.MakeTrim(v, StringTrimKind.End));
+                case nameof(string.Trim):
+                case nameof(string.TrimStart):
+                case nameof(string.TrimEnd):
+                    throw new NotSupportedException($"string.{methodName} with a character argument is not supported: SQL trims whitespace only.");
                 case nameof(string.Substring):
                     return TryTranslateSubstring(visitor, node);
                 case nameof(string.Replace):
@@ -63,6 +75,8 @@ internal static class StringFunctionTranslator
                     return TryTranslateStringLike(visitor, node, LikePosition.EndsWith);
                 case nameof(string.Split):
                     return TryTranslateSplit(visitor, node);
+                case nameof(string.Equals):
+                    return TryTranslateEquals(visitor, node);
             }
 
             return false;
@@ -74,6 +88,12 @@ internal static class StringFunctionTranslator
 
         if (node.Object is null && methodName == nameof(string.Join))
             return TryTranslateJoin(visitor, node);
+
+        if (node.Object is null && methodName == nameof(string.Equals))
+            return TryTranslateEquals(visitor, node);
+
+        if (node.Object is null && methodName is nameof(string.Compare) or nameof(string.CompareOrdinal))
+            return TryTranslateCompare(visitor, node);
 
         return false;
     }
@@ -118,6 +138,153 @@ internal static class StringFunctionTranslator
         visitor.Builder!.Append(render(visitor.VisitToString(operand)));
         return true;
     }
+
+    /// <summary>
+    /// Translates <c>string.ToUpper(CultureInfo)</c>/<c>string.ToLower(CultureInfo)</c>. Only
+    /// <see cref="CultureInfo.InvariantCulture"/> has a portable SQL form; any other culture is
+    /// rejected instead of silently using the database locale.
+    /// </summary>
+    private static bool TryTranslateCultureCase(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (node.Arguments is [ConstantExpression { Value: CultureInfo culture }] && ReferenceEquals(culture, CultureInfo.InvariantCulture))
+        {
+            var upper = node.Method.Name == nameof(string.ToUpper);
+            return EmitStringFunction(visitor, node.Object!, v => upper ? visitor.Dialect.MakeUpper(v) : visitor.Dialect.MakeLower(v));
+        }
+
+        throw new NotSupportedException($"string.{node.Method.Name}(CultureInfo) is only supported with CultureInfo.InvariantCulture; other cultures have no portable SQL form.");
+    }
+
+    /// <summary>
+    /// Translates <c>string.Equals</c> (static and instance) into ordinal equality. <c>string.Equals</c>
+    /// is ordinal in C#, so the operands are normalised with <see cref="ISqlDialect.MakeOrdinal"/>; the
+    /// plain <c>==</c> operator keeps the provider's own collation and is documented separately.
+    /// </summary>
+    private static bool TryTranslateEquals(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        Expression left;
+        Expression right;
+        Expression? comparison = null;
+
+        if (node.Object is null)
+        {
+            if (args.Count is < 2 or > 3 || args[0].Type != typeof(string) || args[1].Type != typeof(string))
+                return false;
+
+            left = args[0];
+            right = args[1];
+            if (args.Count == 3) comparison = args[2];
+        }
+        else
+        {
+            if (args.Count is < 1 or > 2)
+                return false;
+
+            right = UnwrapConvert(args[0]);
+            if (right.Type != typeof(string))
+                return false;
+
+            left = node.Object;
+            if (args.Count == 2) comparison = args[1];
+        }
+
+        var ignoreCase = ResolveOrdinal(comparison);
+        RequireOrdinalComparison(visitor);
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(left);
+            visitor.Visit(right);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var leftSql = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(left), ignoreCase);
+        var rightSql = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(right), ignoreCase);
+        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"({leftSql} = {rightSql})", visitor.IsPredicateContext));
+        return true;
+    }
+
+    /// <summary>
+    /// Translates <c>string.Compare</c>/<c>string.CompareOrdinal</c> with an ordinal
+    /// <see cref="StringComparison"/> into a signed <c>CASE</c> expression, so an enclosing comparison
+    /// (<c>Compare(a, b, StringComparison.Ordinal) &gt; 0</c>) keeps its SQL operator. The
+    /// culture-sensitive overloads are rejected.
+    /// </summary>
+    private static bool TryTranslateCompare(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (args.Count is < 2 or > 3 || args[0].Type != typeof(string) || args[1].Type != typeof(string))
+            return false;
+
+        Expression? comparison = null;
+
+        if (node.Method.Name == nameof(string.CompareOrdinal))
+        {
+            if (args.Count != 2)
+                return false;
+        }
+        else if (args.Count == 2)
+        {
+            throw new NotSupportedException("string.Compare without a StringComparison is culture-sensitive; use string.Compare(a, b, StringComparison.Ordinal).");
+        }
+        else if (args[2].Type == typeof(bool))
+        {
+            throw new NotSupportedException("string.Compare(a, b, bool) is culture-sensitive; use string.Compare(a, b, StringComparison.Ordinal).");
+        }
+        else
+        {
+            comparison = args[2];
+        }
+
+        var ignoreCase = ResolveOrdinal(comparison);
+        RequireOrdinalComparison(visitor);
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[0]);
+            visitor.Visit(args[1]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var left = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(args[0]), ignoreCase);
+        var right = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(args[1]), ignoreCase);
+        visitor.Builder!.Append($"case when {left} < {right} then -1 when {left} > {right} then 1 else 0 end");
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves an ordinal <see cref="StringComparison"/> constant to its case-sensitivity. The
+    /// culture-sensitive and invariant-culture variants have no portable SQL form and are rejected.
+    /// </summary>
+    private static bool ResolveOrdinal(Expression? comparison)
+    {
+        if (comparison is null)
+            return false;
+
+        if (comparison is not ConstantExpression { Value: StringComparison value })
+            throw new NotSupportedException("The StringComparison argument of a string method must be a constant.");
+
+        return value switch
+        {
+            StringComparison.Ordinal => false,
+            StringComparison.OrdinalIgnoreCase => true,
+            _ => throw new NotSupportedException($"StringComparison.{value} is not supported; only Ordinal and OrdinalIgnoreCase have a portable SQL form.")
+        };
+    }
+
+    private static void RequireOrdinalComparison(BaseExpressionVisitor visitor)
+    {
+        if (!visitor.Dialect.SupportsOrdinalComparison)
+            throw new NotSupportedException("Ordinal string comparison (StringComparison.Ordinal/OrdinalIgnoreCase) is not supported by this provider.");
+    }
+
+    private static Expression UnwrapConvert(Expression expression) =>
+        expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
+            ? unary.Operand
+            : expression;
 
     private static bool TryTranslateSubstring(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
@@ -224,26 +391,63 @@ internal static class StringFunctionTranslator
     private static bool TryTranslateIndexOf(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         var args = node.Arguments;
-        if (node.Object is null || args.Count is < 1 or > 2)
+        if (node.Object is null || args.Count is < 1 or > 3 || args[0].Type != typeof(string))
             return false;
 
-        // IndexOf(string) and IndexOf(string, int); the char and StringComparison overloads have no
-        // portable SQL form.
-        if (args[0].Type != typeof(string) || (args.Count == 2 && args[1].Type != typeof(int)))
-            return false;
+        // IndexOf(string[, int][, StringComparison]). The char overload has no portable SQL form.
+        var startIndex = -1;
+        var comparisonIndex = -1;
+
+        for (var i = 1; i < args.Count; i++)
+        {
+            if (args[i].Type == typeof(int))
+            {
+                // IndexOf(string, int start, int count) has two int arguments; the count overload has
+                // no portable SQL form and must not be mistaken for a start index.
+                if (startIndex >= 0)
+                    return false;
+
+                startIndex = i;
+            }
+            else if (args[i].Type == typeof(StringComparison))
+            {
+                if (comparisonIndex >= 0)
+                    return false;
+
+                comparisonIndex = i;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        var ignoreCase = comparisonIndex >= 0 && ResolveOrdinal(args[comparisonIndex]);
+        if (comparisonIndex >= 0)
+            RequireOrdinalComparison(visitor);
 
         if (visitor.IsParamMode)
         {
             visitor.Visit(node.Object);
             visitor.Visit(args[0]);
-            if (args.Count == 2) visitor.Visit(args[1]);
+            if (startIndex >= 0)
+                visitor.Visit(args[startIndex]);
+
             return true;
         }
 
         visitor.NeedAliasForColumn = true;
-        var value = visitor.VisitToString(node.Object);
-        var substring = visitor.VisitToString(args[0]);
-        var start = args.Count == 2 ? visitor.VisitToString(args[1]) : null;
+        var ordinal = comparisonIndex >= 0;
+        var value = ordinal ? visitor.VisitToStringSuppressingColumnCollation(node.Object) : visitor.VisitToString(node.Object);
+        var substring = ordinal ? visitor.VisitToStringSuppressingColumnCollation(args[0]) : visitor.VisitToString(args[0]);
+
+        if (ordinal)
+        {
+            value = visitor.Dialect.MakeOrdinal(value, ignoreCase);
+            substring = visitor.Dialect.MakeOrdinal(substring, ignoreCase);
+        }
+
+        var start = startIndex >= 0 ? visitor.VisitToString(args[startIndex]) : null;
         visitor.Builder!.Append(visitor.Dialect.MakeStringIndexOf(value, substring, start));
         return true;
     }
@@ -251,8 +455,16 @@ internal static class StringFunctionTranslator
     private static bool TryTranslateLastIndexOf(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         var args = node.Arguments;
-        if (node.Object is null || args.Count != 1 || args[0].Type != typeof(string))
+        if (node.Object is null || args.Count is < 1 or > 2 || args[0].Type != typeof(string))
             return false;
+
+        // LastIndexOf(string[, StringComparison]); the int-start overload has no primitive here.
+        if (args.Count == 2 && args[1].Type != typeof(StringComparison))
+            return false;
+
+        var ignoreCase = args.Count == 2 && ResolveOrdinal(args[1]);
+        if (args.Count == 2)
+            RequireOrdinalComparison(visitor);
 
         if (visitor.IsParamMode)
         {
@@ -262,8 +474,16 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var value = visitor.VisitToString(node.Object);
-        var substring = visitor.VisitToString(args[0]);
+        var ordinal = args.Count == 2;
+        var value = ordinal ? visitor.VisitToStringSuppressingColumnCollation(node.Object) : visitor.VisitToString(node.Object);
+        var substring = ordinal ? visitor.VisitToStringSuppressingColumnCollation(args[0]) : visitor.VisitToString(args[0]);
+
+        if (ordinal)
+        {
+            value = visitor.Dialect.MakeOrdinal(value, ignoreCase);
+            substring = visitor.Dialect.MakeOrdinal(substring, ignoreCase);
+        }
+
         visitor.Builder!.Append(visitor.Dialect.MakeStringLastIndexOf(value, substring));
         return true;
     }
@@ -364,8 +584,16 @@ internal static class StringFunctionTranslator
     private static bool TryTranslateStringLike(BaseExpressionVisitor visitor, MethodCallExpression node, LikePosition position)
     {
         var args = node.Arguments;
-        if (node.Object is null || args.Count != 1 || args[0].Type != typeof(string))
+        if (node.Object is null || args.Count is < 1 or > 2 || args[0].Type != typeof(string))
             return false;
+
+        if (args.Count == 2 && args[1].Type != typeof(StringComparison))
+            return false;
+
+        var hasComparison = args.Count == 2;
+        var ignoreCase = hasComparison && ResolveOrdinal(args[1]);
+        if (hasComparison)
+            RequireOrdinalComparison(visitor);
 
         if (visitor.IsParamMode)
         {
@@ -375,8 +603,23 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var value = visitor.VisitToString(node.Object);
+        var value = hasComparison
+            ? visitor.VisitToStringSuppressingColumnCollation(node.Object)
+            : visitor.VisitToString(node.Object);
         var pattern = BuildLikePattern(visitor, args[0], position, out var escaped);
+
+        if (hasComparison)
+        {
+            if (!ignoreCase && !visitor.Dialect.SupportsOrdinalLike)
+                throw new NotSupportedException("A case-sensitive ordinal Contains/StartsWith/EndsWith cannot be expressed by this provider; use the collation-based overload or StringComparison.OrdinalIgnoreCase.");
+
+            // The left operand's collation governs the LIKE comparison; for a case-insensitive ordinal
+            // match both sides are case-folded instead.
+            value = visitor.Dialect.MakeOrdinal(value, ignoreCase);
+            if (ignoreCase)
+                pattern = $"lower({pattern})";
+        }
+
         var predicate = escaped
             ? $"{value} {visitor.Kw("like")} {pattern}{visitor.Dialect.MakeLikeEscape("\\", visitor.KeywordCase)}"
             : $"{value} {visitor.Kw("like")} {pattern}";

@@ -14,6 +14,9 @@ public class EntityPropertyBuilder<T>
     private bool _isKey;
     private bool _isIdentity;
     private bool _isComputed;
+    private DurationUnit? _durationUnit;
+    private int _durationPrecision;
+    private string? _collation;
 
     /// <summary>
     /// Creates a builder for the property selected by <paramref name="propertySelector"/>.
@@ -69,6 +72,35 @@ public class EntityPropertyBuilder<T>
     }
 
     /// <summary>
+    /// Declares the unit in which a <see cref="System.TimeSpan"/> property is stored on a provider
+    /// without a native duration type. Providers with a native type (PostgreSQL <c>interval</c>,
+    /// MySQL/MariaDB <c>TIME</c>) ignore the unit.
+    /// </summary>
+    /// <param name="unit">The storage unit of the integer value.</param>
+    /// <param name="precision">The fractional-second precision of the native type; zero for the provider default.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> Duration(DurationUnit unit, int precision = 0)
+    {
+        _durationUnit = unit;
+        _durationPrecision = precision;
+        return this;
+    }
+
+    /// <summary>
+    /// Declares the provider-native collation of the selected property's column. It is applied to the
+    /// column in collation-sensitive query operations (comparison, <c>LIKE</c>, <c>ORDER BY</c>,
+    /// <c>GROUP BY</c>) on a provider that supports a per-expression <c>COLLATE</c> clause
+    /// (<see cref="ISqlDialect.SupportsCollation"/>).
+    /// </summary>
+    /// <param name="collation">The provider-native collation name.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> Collation(string collation)
+    {
+        _collation = collation;
+        return this;
+    }
+
+    /// <summary>
     /// Resolves the selected property's <see cref="PropertyInfo"/> and produces its mapping metadata.
     /// </summary>
     /// <returns>The property's mapping metadata.</returns>
@@ -78,7 +110,7 @@ public class EntityPropertyBuilder<T>
         var miVisitor = new MemberExpressionVisitor();
         miVisitor.Visit(_propertySelector);
         var pi = (PropertyInfo)miVisitor.MemberInfo! ?? throw new InvalidOperationException($"Expression {_propertySelector} does not produce PropertyInfo");
-        var r = new PropertyMetadata() { ColumnName = _columnName!, PropertyInfo = pi, IsColumnNameAuto = false, IsKey = _isKey, IsIdentity = _isIdentity, IsComputed = _isComputed };
+        var r = new PropertyMetadata() { ColumnName = _columnName!, PropertyInfo = pi, IsColumnNameAuto = false, IsKey = _isKey, IsIdentity = _isIdentity, IsComputed = _isComputed, DurationUnit = _durationUnit, DurationPrecision = _durationPrecision, Collation = _collation };
         return r;
     }
 }

@@ -128,3 +128,18 @@ Task<ProcedureResult> ExecuteProcedureAsync(string name, object?[] parameters, C
 - Доки: `docs/advanced/limitations.md` (+RU — убрать/сузить пункт), `docs/guide/` новая страница
   «Stored procedures» (+RU + `toc.yml`), `docs/advanced/api-reference.md` (+RU),
   `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр — 1 блокер** (владение reader'ом/`IDisposable`).
+
+- **[TYPE] 🔴** `ProcedureResult` (`:69-75`) отдаёт `IAsyncEnumerable<T>`/`IReadOnlyList<T>` над открытым reader'ом, но не `IDisposable`/`IAsyncDisposable` и не говорит, кто закрывает reader/команду; текущий reader освобождает `ResultSetEnumerator<TResult>` (`src/nextorm.core/DataContext/ResultSetEnumerator.cs:96-115`). Fix: `ProcedureResult : IAsyncDisposable` (или eager-материализация) + описать владение в XML-doc.
+- **[DIP/ISP] 🟡** `OutputParameters : IReadOnlyList<DbParameter>` (`:71`) протаскивает ADO.NET-тип и mutable-элемент в публичную поверхность. Fix: immutable `readonly record struct ProcedureOutputParameter(string Name, object? Value, ParameterDirection Direction)`, `DbParameter` — internal.
+- **[SRP/ISP] 🟡** Новый метод/роль на `IDataContext` (`:77-79,122-123`): после F2 `IDataContext` — пустой композит ролей (`src/nextorm.core/DataContext/IDataContext.cs:17-24`); SP-роль вернёт gate-off члены, от которых F2 избавлялся. Fix: extension над `IDataContext`, реализация на `DataContext`/`InMemoryQueryExecutor` с DIM; не расширять композит.
+- **[TYPE] 🟡** `Read<T>()`/`ReadAsync<T>()` без индекса набора (`:73-74`) против «по индексу набора» (`:85`); повторный вызов не определён. Fix: `Read<T>(int resultSetIndex = 0)` + `ResultSetCount` либо forward-`NextResult`-итератор.
+- **[DRY/TYPE] 🟡** Две несовместимые формы параметров: `ExecuteProcedure(string, object?[])` (`:78`) и `ExecuteRaw` «text + параметры + Direction» (`:89-90`). Fix: одна descriptor-форма, переиспользуемая обоими.
+- **[OCP] 🟡** §4/§6 вводят гейт `SupportsStoredProcedures` и PG-режим Function/Procedure (`:54-56,86-88`), но не называют член диалекта; `ISqlDialect` уже 97 членов и не дробится (F12). Fix: DIM `SupportsStoredProcedures` + `MakeProcedureCall` по образцу `DialectCapabilities.cs`.
+- **[PERF/SRP] 🟡** Путь материализации не определён: `RowMapperFactory.GetOrBuild<TResult>(sql, …, selectList, …)` (`:83-84`) требует `SelectExpression[]`, которого у произвольного `T` нет; наличный per-type источник — `DataContextCache.SelectListCache` (`src/nextorm.core/DataContext/DataContextCache.cs:23`), план его не называет. Fix: зафиксировать деривацию select-list.
+- **[PERF] ℹ️** `RowMapperFactory` кэширует mapper по SQL-тексту (`:123`), а `ExecuteRaw` допускает произвольный SQL → miss и рост `MapperCache`. Deferred (метрика `MapperCache`).
+- **[DRY] 🟡** Устаревшие §3-якоря: `DataContext.cs:184` → `src/nextorm.core/DataContext/DataContext.cs:235` и `QueryExecutor.cs:273`; `ResultSetEnumerator.cs:215,237` → `ExecuteReaderCore`/`ExecuteReaderAsync`, а `ExecuteScalar`/`ExecuteNonQuery` — `QueryExecutor.cs:292,315`; `limitations.md:42` → `docs/advanced/limitations.md:46`. Fix.

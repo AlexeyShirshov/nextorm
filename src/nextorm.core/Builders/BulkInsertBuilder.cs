@@ -197,12 +197,13 @@ public sealed class BulkInsertBuilder<TEntity>
     /// <summary>Projects one entity to the ordinal value array written for a row.</summary>
     /// <param name="entity">The entity to project.</param>
     /// <param name="columns">The written columns, in order.</param>
+    /// <param name="dialect">The active dialect; used to convert a duration to its stored integer form.</param>
     /// <returns>The values, one per written column.</returns>
-    internal static object?[] ToRow(TEntity entity, IReadOnlyList<IPropertyMetadata> columns)
+    internal static object?[] ToRow(TEntity entity, IReadOnlyList<IPropertyMetadata> columns, ISqlDialect dialect)
     {
         var row = new object?[columns.Count];
         for (var i = 0; i < columns.Count; i++)
-            row[i] = columns[i].PropertyInfo.GetValue(entity);
+            row[i] = DurationStorage.ToParameterValue(columns[i].PropertyInfo.GetValue(entity), columns[i], dialect);
 
         return row;
     }
@@ -289,15 +290,17 @@ public sealed class BulkInsertBuilder<TEntity>
     private IEnumerable<object?[]> ProjectSync(IEnumerable<TEntity> source)
     {
         var columns = WritableColumns();
+        var dialect = ((DataContext)_dataContext).Dialect;
         foreach (var entity in source)
-            yield return ToRow(entity, columns);
+            yield return ToRow(entity, columns, dialect);
     }
 
     private async IAsyncEnumerable<object?[]> ProjectAsync(IAsyncEnumerable<TEntity> source, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var columns = WritableColumns();
+        var dialect = ((DataContext)_dataContext).Dialect;
         await foreach (var entity in source.WithCancellation(cancellationToken).ConfigureAwait(false))
-            yield return ToRow(entity, columns);
+            yield return ToRow(entity, columns, dialect);
     }
 
     private Action<int>? CreateProgressCallback()

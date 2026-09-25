@@ -67,6 +67,30 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <summary>The name of the column currently being rendered, if any.</summary>
     public string? ColumnName { get => _colName; internal set => _colName = value; }
     /// <summary>
+    /// The storage unit of the duration column currently being rendered on a provider without a native
+    /// duration type, or <c>null</c> for a native/absent duration. A <see cref="TimeSpan"/> value that is
+    /// folded into a parameter while this is set is converted to the unit, so a comparison against a
+    /// duration column keeps matching the stored integer form.
+    /// </summary>
+    internal DurationUnit? DurationUnitContext { get; set; }
+
+    /// <summary>
+    /// When set, a mapped column's declared collation (see <see cref="CollationAttribute"/>) is not
+    /// applied while the expression is rendered. Used by operators that impose their own collation
+    /// (ordinal comparison, the explicit <c>collate</c> function), so the column's collation is not
+    /// emitted twice.
+    /// </summary>
+    internal bool SuppressColumnCollation { get; set; }
+
+    /// <summary>
+    /// Converts a <see cref="TimeSpan"/> parameter value to the storage unit of the duration column
+    /// currently being rendered; every other value passes through.
+    /// </summary>
+    internal object? NormalizeDurationValue(object? value)
+        => value is TimeSpan duration && DurationUnitContext is { } unit
+            ? DurationStorage.ToStorage(duration, unit)
+            : value;
+    /// <summary>
     /// True when the built expression is used as a condition (WHERE/HAVING) instead of a value.
     /// </summary>
     protected virtual bool AsPredicate => false;
@@ -327,7 +351,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             value = ((Func<object>)d)();
 
         var paramName = _parameterProvider.GetParamName();
-        var p = new Parameter(paramName, value) { Stable = InValues.IsStableValueExpression(node) };
+        var p = new Parameter(paramName, NormalizeDurationValue(value)) { Stable = InValues.IsStableValueExpression(node) };
         _params.Add(p);
 
         if (!_paramMode)
@@ -356,6 +380,18 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal string VisitToString(Expression expression)
     {
         using var visitor = Clone();
+        visitor.Visit(expression);
+        return visitor.ToString();
+    }
+
+    /// <summary>
+    /// Renders <paramref name="expression"/> like <see cref="VisitToString"/> but with the declared
+    /// column collation suppressed, for operators that impose their own collation.
+    /// </summary>
+    internal string VisitToStringSuppressingColumnCollation(Expression expression)
+    {
+        using var visitor = Clone();
+        visitor.SuppressColumnCollation = true;
         visitor.Visit(expression);
         return visitor.ToString();
     }
@@ -440,6 +476,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 // has to be listed explicitly or its literal would be dropped from the SQL.
                 _builder!.Append(Convert.ToString(v, CultureInfo.InvariantCulture));
         }
+        else if (t == typeof(TimeSpan) && v is TimeSpan duration)
+        {
+            // A duration literal: on a provider without a native type it is the stored integer in the
+            // current duration context; a native provider (or a context-free duration) binds it as a
+            // parameter so the driver maps it to its native type.
+            if (DurationUnitContext is { } unit)
+                _builder!.Append(DurationStorage.ToStorage(duration, unit).ToString(CultureInfo.InvariantCulture));
+            else
+            {
+                var paramName = _parameterProvider.GetParamName();
+                _params.Add(new Parameter(paramName, duration));
+                _builder!.Append(_dialect.MakeParam(paramName));
+            }
+        }
         else
             return false;
 
@@ -493,7 +543,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
 
-        return new BaseExpressionVisitor(_options);
+        return new BaseExpressionVisitor(_options) { SuppressColumnCollation = SuppressColumnCollation };
     }
 
     /// <summary>

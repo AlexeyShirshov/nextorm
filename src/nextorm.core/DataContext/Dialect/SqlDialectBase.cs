@@ -69,6 +69,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsArrayJoin => false;
     /// <inheritdoc/>
     public virtual IStringSplitRenderer? StringSplit => null;
+    /// <inheritdoc/>
+    public virtual ISqliteFunctions? SqliteFunctions => null;
 
     /// <inheritdoc/>
     public virtual bool SupportsJson => false;
@@ -80,7 +82,7 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsFullText => false;
     /// <inheritdoc/>
-    public virtual bool SupportsFilter => false;
+    public virtual AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.None;
     /// <inheritdoc/>
     public virtual bool SupportsGreatestLeast => false;
     /// <inheritdoc/>
@@ -101,6 +103,14 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsDateTrunc => false;
     /// <inheritdoc/>
     public virtual bool SupportsDateArithmetic => false;
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL and MariaDB opt into a native duration type.</summary>
+    public virtual bool SupportsNativeDuration => false;
+    /// <summary>Non-native providers store a duration in a <c>bigint</c>; a native provider overrides this with its interval/time type.</summary>
+    public virtual string MakeDurationType(DurationUnit? unit, int precision = 0) => "bigint";
+
+    /// <inheritdoc/>
+    public virtual string MakeNullableDurationType(DurationUnit? unit, int precision = 0) =>
+        MakeDurationType(unit, precision);
     /// <inheritdoc/>
     public virtual IDateConversionRenderer? DateConversion => null;
 
@@ -127,6 +137,14 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; a provider with native UUID generators exposes its renderer.</summary>
     public virtual IUuidGenerators? UuidGenerators => null;
 
+    /// <summary>Defaults to <c>null</c>; every SQL provider exposes its cross-provider scalar-function renderer.</summary>
+    public virtual IScalarFunctions? ScalarFunctions => null;
+
+    /// <summary>Defaults to <c>null</c>; MySQL/MariaDB expose their native-function renderer.</summary>
+    public virtual IMySqlFunctions? MySqlFunctions => null;
+    /// <summary>Defaults to <c>null</c>; only SQL Server exposes the T-SQL-only scalar-function renderer.</summary>
+    public virtual ISqlServerFunctions? SqlServerFunctions => null;
+
     /// <inheritdoc/>
     public virtual bool SupportsBooleanAggregates => false;
     /// <inheritdoc/>
@@ -137,8 +155,6 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsRegressionAggregates => false;
     /// <inheritdoc/>
     public virtual bool SupportsArgMinMax => false;
-    /// <inheritdoc/>
-    public virtual bool SupportsIfAggregates => false;
     /// <inheritdoc/>
     public virtual IUniqAggregateRenderer? UniqAggregates => null;
 
@@ -366,6 +382,8 @@ public abstract class SqlDialectBase : ISqlDialect
         _ when type == typeof(float) => "real",
         _ when type == typeof(double) => "double precision",
         _ when type == typeof(decimal) => "numeric",
+        _ when type == typeof(TimeSpan) => "bigint",
+        _ when type == typeof(DateTimeOffset) => "timestamp with time zone",
         _ => type.Name
     };
 
@@ -441,8 +459,25 @@ public abstract class SqlDialectBase : ISqlDialect
 
         // position is the one-based end of the last match in the reversed value, so the zero-based
         // start of the matching occurrence is valueLength - position - substringLength + 1.
-        return $"case when ({position}) = 0 then -1 else {valueLength} - ({position}) - {substringLength} + 1 end";
+        return $"case when ({position}) = 0 then -1 else {valueLength} - ({position}) - ({substringLength}) + 1 end";
     }
+    /// <inheritdoc/>
+    public virtual bool SupportsRegex => false;
+    // Reached only through a dialect that set SupportsRegex; there is no ANSI spelling of a regular
+    // expression, so every capable provider overrides both hooks with its native operator/function.
+    /// <inheritdoc/>
+    public virtual string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        throw new NotSupportedException("Regular-expression matching is not supported by this provider.");
+    /// <inheritdoc/>
+    public virtual string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        throw new NotSupportedException("Regular-expression replacement is not supported by this provider.");
+    /// <summary>
+    /// Quotes <paramref name="value"/> as a SQL string literal. <paramref name="escapeBackslash"/> selects
+    /// the dialects whose string syntax treats a backslash as an escape (MySQL/MariaDB, ClickHouse) and so
+    /// has to double it; PostgreSQL (with <c>standard_conforming_strings</c>) and SQLite leave it as-is.
+    /// </summary>
+    protected static string QuoteStringLiteral(string value, bool escapeBackslash = false) =>
+        "'" + (escapeBackslash ? value.Replace("\\", "\\\\") : value).Replace("'", "''") + "'";
     /// <inheritdoc/>
     public virtual string MakeStuff(string value, string start, string? count, string newValue)
     {
@@ -481,6 +516,27 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Renders a character-wise reversal of <paramref name="value"/>.</summary>
     protected virtual string MakeStringReverse(string value) =>
         throw new NotSupportedException("String reversal is not supported by this provider.");
+
+    // Reached only through a dialect that opts into formatting; a provider that cannot render CLR
+    // format specifiers returns null and the translator rejects the call before this is asked.
+    /// <inheritdoc/>
+    public virtual IStringFormatFunctions? StringFormats => null;
+    /// <inheritdoc/>
+    public virtual bool SupportsCollation => false;
+    // Reached only through a dialect that set SupportsCollation; the ANSI form is `value collate name`,
+    // which the capable providers either reuse or override to quote the name (PostgreSQL).
+    /// <inheritdoc/>
+    public virtual string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + collation;
+    /// <inheritdoc/>
+    public virtual bool SupportsOrdinalComparison => false;
+    // Reached only through a dialect that set SupportsOrdinalComparison; a dialect that opts in
+    // overrides this with its binary-collation rendering.
+    /// <inheritdoc/>
+    public virtual string MakeOrdinal(string value, bool ignoreCase) =>
+        throw new NotSupportedException("Ordinal string comparison is not supported by this provider.");
+    /// <inheritdoc/>
+    public virtual bool SupportsOrdinalLike => SupportsOrdinalComparison;
     /// <inheritdoc/>
     public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " escape ") + SqlLiteral.ToSqlStringLiteral(escapeChar);
     /// <inheritdoc/>
@@ -546,24 +602,45 @@ public abstract class SqlDialectBase : ISqlDialect
 
         return $"{value} + ({amount} * interval '{unit}')";
     }
-    // ANSI/PostgreSQL difference. Date parts count boundaries (like T-SQL); time parts count whole
-    // units from the epoch, which can differ from T-SQL near a boundary. A dialect with a native
-    // datediff overrides this (SQL Server renders datediff(field, start, end)).
     /// <inheritdoc/>
-    public virtual string MakeDateDiff(string field, string start, string end) => field switch
+    public virtual string MakeDateDiff(string field, string start, string end) =>
+        MakeDateDiffCore(field, start, end, big: false);
+
+    /// <inheritdoc/>
+    public virtual string MakeDateDiffBig(string field, string start, string end) =>
+        MakeDateDiff(field, start, end);
+
+    // The ANSI/PostgreSQL difference. Date parts count boundaries (like T-SQL); time parts count whole
+    // units from the epoch. `big` widens the sub-day cast so date_diff_big does not overflow the 32-bit
+    // date_diff; a dialect that composes on MakeDateDiff reaches this through PostgresDialect's override.
+    /// <summary>Renders the ANSI/PostgreSQL difference, widening the sub-day result when <paramref name="big"/>.</summary>
+    protected string MakeDateDiffCore(string field, string start, string end, bool big)
     {
-        "year" => $"(extract(year from {end}) - extract(year from {start}))",
-        "quarter" => $"((extract(year from {end}) * 4 + extract(quarter from {end})) - (extract(year from {start}) * 4 + extract(quarter from {start})))",
-        "month" => $"((extract(year from {end}) * 12 + extract(month from {end})) - (extract(year from {start}) * 12 + extract(month from {start})))",
-        "day" => $"(cast({end} as date) - cast({start} as date))",
-        "week" => $"cast(trunc((cast({end} as date) - cast({start} as date)) / 7) as integer)",
-        "hour" => $"cast(trunc(extract(epoch from ({end} - {start})) / 3600) as integer)",
-        "minute" => $"cast(trunc(extract(epoch from ({end} - {start})) / 60) as integer)",
-        "second" => $"cast(trunc(extract(epoch from ({end} - {start}))) as integer)",
-        "milliseconds" => $"cast(trunc(extract(epoch from ({end} - {start})) * 1000) as integer)",
-        "microseconds" => $"cast(trunc(extract(epoch from ({end} - {start})) * 1000000) as integer)",
-        _ => throw new NotSupportedException($"'{field}' is not a supported date_diff field.")
-    };
+        var castType = big ? "bigint" : "integer";
+        return field switch
+        {
+            "year" => $"(extract(year from {end}) - extract(year from {start}))",
+            "quarter" => $"((extract(year from {end}) * 4 + extract(quarter from {end})) - (extract(year from {start}) * 4 + extract(quarter from {start})))",
+            "month" => $"((extract(year from {end}) * 12 + extract(month from {end})) - (extract(year from {start}) * 12 + extract(month from {start})))",
+            "day" => $"(cast({end} as date) - cast({start} as date))",
+            "week" => $"cast(trunc((cast({end} as date) - cast({start} as date)) / 7) as {castType})",
+            "hour" => $"cast(trunc(extract(epoch from ({end} - {start})) / 3600) as {castType})",
+            "minute" => $"cast(trunc(extract(epoch from ({end} - {start})) / 60) as {castType})",
+            "second" => $"cast(trunc(extract(epoch from ({end} - {start}))) as {castType})",
+            "milliseconds" => $"cast(trunc(extract(epoch from ({end} - {start})) * 1000) as {castType})",
+            "microseconds" => $"cast(trunc(extract(epoch from ({end} - {start})) * 1000000) as {castType})",
+            _ => throw new NotSupportedException($"'{field}' is not a supported date_diff field.")
+        };
+    }
+
+
+    /// <summary>True for the date parts below a day, which need a fractional timestamp operand.</summary>
+    protected static bool IsSubDayField(string field) =>
+        field is "hour" or "minute" or "second" or "milliseconds" or "microseconds";
+
+    /// <inheritdoc/>
+    public virtual string PromoteDateOperand(string field, string value) => value;
+
     /// <inheritdoc/>
     public virtual string MakeEndOfMonth(string value) =>
         $"(date_trunc('month', {value}) + interval '1 month - 1 day')";
@@ -599,6 +676,9 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <inheritdoc/>
     public virtual string MakeStringAgg(string value, string delimiter) => $"string_agg({value}, {delimiter})";
+    /// <inheritdoc/>
+    public virtual string MakeFilteredStringAgg(string value, string delimiter, string predicate) =>
+        throw new NotSupportedException("The filtered string_agg is not supported by this SQL dialect.");
     /// <inheritdoc/>
     public virtual string MakeArrayAgg(string value) => $"array_agg({value})";
     /// <inheritdoc/>
@@ -714,6 +794,10 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB and ClickHouse opt into a native bulk API.</summary>
     public virtual bool SupportsBulkCopy => false;
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB and SQLite opt into one-round-trip batches.</summary>
+    public virtual bool SupportsBatch => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server sends the batch as one <c>;</c>-joined command so a <c>#temp</c> survives across statements.</summary>
+    public virtual bool BatchUsesJoinedCommand => false;
     /// <summary>Defaults to <c>false</c>; SQLite, MySQL, MariaDB and ClickHouse opt into an <c>INSERT ... IGNORE</c> head.</summary>
     public virtual bool SupportsInsertIgnore => false;
     /// <summary>Renders the <c>INSERT</c> head that skips conflicting rows; MySQL/MariaDB override it with <c>insert ignore into </c>.</summary>

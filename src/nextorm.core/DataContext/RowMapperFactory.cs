@@ -15,19 +15,43 @@ namespace NextORM.Core;
 internal static class RowMapperFactory
 {
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+    private static readonly MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
+    private static readonly MethodInfo ToInt64MI = typeof(Convert).GetMethod(nameof(Convert.ToInt64), [typeof(object)])!;
+    private static readonly MethodInfo FromStorageMI = typeof(DurationStorage).GetMethod(nameof(DurationStorage.FromStorage), BindingFlags.NonPublic | BindingFlags.Static)!;
 
     /// <summary>
     /// Default column accessor: typed getters only (no <c>GetValue</c>/boxing), with the ordinal baked
     /// in as a constant. Providers whose reader does not widen CLR types (SqlClient throws when a typed
     /// getter does not match the field type) substitute their own.
     /// </summary>
-    public static Expression MapColumn(SelectExpression column, Expression param)
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="param">The data-reader expression the accessor is built from.</param>
+    /// <param name="supportsNativeDuration">
+    /// When <see langword="false"/>, a <see cref="TimeSpan"/> column is read as its stored integer and
+    /// converted with the column's <see cref="DurationUnit"/> (default <see cref="DurationUnit.Ticks"/>);
+    /// when <see langword="true"/> the driver exposes the native duration type directly.
+    /// </param>
+    public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true)
     {
-        var method = column.GetDataRecordMethod();
-        var accessor = method.DeclaringType == typeof(IDataRecord)
-            ? param
-            : Expression.Convert(param, method.DeclaringType!);
-        var getter = Expression.Call(accessor, method, Expression.Constant(column.Index));
+        var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+
+        Expression getter;
+        if (realType == typeof(TimeSpan) && !supportsNativeDuration)
+        {
+            // The provider keeps the duration in an integer column: read the boxed value, widen it to
+            // long and reinterpret it in the declared unit.
+            var unit = column.DurationUnit ?? DurationUnit.Ticks;
+            var raw = Expression.Call(param, GetValueMI, Expression.Constant(column.Index));
+            getter = Expression.Call(FromStorageMI, Expression.Call(ToInt64MI, raw), Expression.Constant(unit));
+        }
+        else
+        {
+            var method = column.GetDataRecordMethod();
+            var accessor = method.DeclaringType == typeof(IDataRecord)
+                ? param
+                : Expression.Convert(param, method.DeclaringType!);
+            getter = Expression.Call(accessor, method, Expression.Constant(column.Index));
+        }
 
         if (column.Nullable)
         {
@@ -188,6 +212,7 @@ internal static class RowMapperFactory
                     signature = signature * 31 + (column.Nullable ? 1 : 0);
                     signature = signature * 31 + (column.DefaultOnNull ? 1 : 0);
                     signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
+                    signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
                 }
             }
         }

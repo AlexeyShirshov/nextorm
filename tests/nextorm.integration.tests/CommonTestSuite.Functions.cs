@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Text.RegularExpressions;
 
 namespace NextORM.Integration.Tests;
 
@@ -207,6 +208,41 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void DateAddHour_ShouldKeepTimeOfDay()
+    {
+        var r = _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => SqlFunctions.Sql.date_add("hour", 2, e.Datetime))
+            .First();
+
+        // row 1 is 2023-01-01 10:00; a sub-day part must not collapse the time on a date-only column.
+        r.Should().Be(new DateTime(2023, 1, 1, 12, 0, 0));
+    }
+
+    [Fact]
+    public void AddHours_ShouldKeepTimeOfDay()
+    {
+        var r = _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.Datetime!.Value.AddHours(2))
+            .First();
+
+        r.Should().Be(new DateTime(2023, 1, 1, 12, 0, 0));
+    }
+
+    [Fact]
+    public void DateDiffBig_ShouldReturn64BitSpan()
+    {
+        var r = _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => SqlFunctions.Sql.date_diff_big("milliseconds", new DateTime(1970, 1, 1), e.Datetime))
+            .First();
+
+        // ~53 years of milliseconds exceed the 32-bit date_diff.
+        r.Should().BeGreaterThan((long)int.MaxValue);
+    }
+
+    [Fact]
     public void Extract_ShouldReturnNormalisedDateParts()
     {
         var rows = _sut.ComplexEntity
@@ -258,5 +294,44 @@ public abstract partial class CommonTestSuite
             .ToList();
 
         ids.Should().Equal(1L);
+    }
+
+    [Fact]
+    public void RegexIsMatch_ShouldFilterByPattern()
+    {
+        Assert.SkipUnless(Provider.SupportsRegex, "This provider has no native regular-expression support.");
+
+        var ids = _sut.ComplexEntity
+            .Where(e => Regex.IsMatch(e.String!, "^d"))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(1L);
+    }
+
+    [Fact]
+    public void RegexIsMatchIgnoreCase_ShouldFilterByPattern()
+    {
+        Assert.SkipUnless(Provider.SupportsRegex, "This provider has no native regular-expression support.");
+
+        var ids = _sut.ComplexEntity
+            .Where(e => Regex.IsMatch(e.String!, "^X", RegexOptions.IgnoreCase))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(2L);
+    }
+
+    [Fact]
+    public void RegexReplace_ShouldReplaceAllMatches()
+    {
+        Assert.SkipUnless(Provider.SupportsRegex, "This provider has no native regular-expression support.");
+
+        var value = _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => Regex.Replace(e.String!, "a", "#"))
+            .First();
+
+        value.Should().Be("d#df#sd");
     }
 }

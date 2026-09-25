@@ -439,7 +439,7 @@ internal sealed class HigherOrderLambdaVisitor : BaseExpressionVisitor
     public override BaseExpressionVisitor Clone()
         => IsParamMode
             ? throw new NotSupportedException("Cannot clone in param mode")
-            : new HigherOrderLambdaVisitor(Options, _parameters);
+            : new HigherOrderLambdaVisitor(Options, _parameters) { SuppressColumnCollation = SuppressColumnCollation };
 
     protected override Expression VisitParameter(ParameterExpression node)
     {

@@ -29,6 +29,8 @@ internal static class InMemoryConditionFactory
         if (InMemoryCorrelatedSubqueryRewriter.IsNeeded(query))
             condition = (Expression<Func<TEntity, bool>>)new InMemoryCorrelatedSubqueryRewriter(context, query).Rewrite(condition);
 
+        condition = (Expression<Func<TEntity, bool>>)InMemoryScalarFunctionRewriter.Rewrite(condition);
+
         var key = new ExpressionKey(condition, query);
         if (conditionFactoryCache.TryGetValue(key, out var f))
             return ((Func<object[]?, Func<TEntity, bool>>)f, null);

@@ -1,8 +1,11 @@
 # SQL Server-specific SQL
 
-> SQL Server contributes the `CHOOSE` conditional function, statement/table hints and the `FOR JSON`/
-> `FOR XML` result shape, the XML data-type methods (`value`/`query`/`exist` and the `nodes` rowset),
-> the native `PIVOT`/`UNPIVOT` source constructs, plus `string_split`/`openjson` table functions.
+> SQL Server contributes the `CHOOSE` conditional function, the T-SQL-only scalar library
+> (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `UNICODE`, `NCHAR`, `FORMAT`, the
+> trigonometric functions, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID` and the SQL/JSON
+> constructors/aggregates), statement/table hints and the `FOR JSON`/`FOR XML` result shape, the XML
+> data-type methods (`value`/`query`/`exist` and the `nodes` rowset), the native `PIVOT`/`UNPIVOT`
+> source constructs, plus `string_split`/`openjson` table functions.
 
 **Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [SQL Server provider](../../providers/sqlserver.md)
 
@@ -228,6 +231,76 @@ The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`F
 `SqlFunctions.SqlServer.containstable`/`freetexttable` expose the matched key and `RANK` score through
 `SqlFunctions.IKeyRankRow<TKey>`; see
 [Table-valued functions](../13-table-valued-functions.md#built-in-table-functions).
+
+## T-SQL scalar functions
+
+`SqlFunctions.SqlServer` exposes the T-SQL-only scalar functions through
+[`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions)
+([`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions)); SQL Server is the only provider that
+implements it, so every other provider throws `NotSupportedException` for these members. The members
+have no portable equivalent: the cross-provider `ascii`/`char`/`translate` live on
+[`SqlFunctions.Sql`](../11-scalar-functions.md#cross-provider-scalar-functions) instead, and
+`Math.Log10` already renders T-SQL `LOG10`.
+
+The functions are usable as ordinary values (and as predicates where the T-SQL form is a condition):
+
+```csharp
+var data = System.Text.Encoding.UTF8.GetBytes("abc");
+
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Pos = SqlFunctions.SqlServer.patindex("%a%", e.String),
+        Bracketed = SqlFunctions.SqlServer.quotename(e.String),
+        Code = SqlFunctions.SqlServer.soundex(e.String),
+        Similar = SqlFunctions.SqlServer.difference(e.String, "abc"),
+        Escaped = SqlFunctions.SqlServer.string_escape(e.String, "json"),
+        CodePoint = SqlFunctions.SqlServer.unicode(e.String),
+        Letter = SqlFunctions.SqlServer.nchar(65),
+        Number = SqlFunctions.SqlServer.format(e.Id, "D6"),
+        Angle = SqlFunctions.SqlServer.acos(0.5),
+        Bucket = SqlFunctions.SqlServer.date_bucket("day", 1, e.Datetime),
+        Month = SqlFunctions.SqlServer.datename("month", e.Datetime),
+        Digest = SqlFunctions.SqlServer.hashbytes("SHA2_256", data),
+        Arr = SqlFunctions.SqlServer.json_array("a", e.Id, "b"),
+        Obj = SqlFunctions.SqlServer.json_object("id", e.Id),
+        HasId = SqlFunctions.SqlServer.json_path_exists(e.String, "$.id")
+    })
+    .ToList();
+```
+
+```sql
+select patindex('%a%', somestring) as [Pos],
+       quotename(somestring) as [Bracketed],
+       soundex(somestring) as [Code],
+       difference(somestring, 'abc') as [Similar],
+       string_escape(somestring, 'json') as [Escaped],
+       unicode(somestring) as [CodePoint],
+       nchar(65) as [Letter],
+       format(id, 'D6') as [Number],
+       acos(0.5) as [Angle],
+       date_bucket(day, 1, dt) as [Bucket],
+       datename(month, dt) as [Month],
+       hashbytes('SHA2_256', @p0) as [Digest],
+       json_array('a', id, 'b') as [Arr],
+       json_object('id' : id) as [Obj],
+       cast(case when json_path_exists(somestring, '$.id') = 1 then 1 else 0 end as bit) as [HasId]
+from complex_entity
+```
+
+* **String:** `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`,
+  `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
+  `nchar(code)`, `format(value, format)` / `format(value, format, culture)`. `format` is the native
+  T-SQL `FORMAT`, distinct from the CLR `string.Format` translation.
+* **Numeric:** `acos`, `asin`, `atan`, `atn2(y, x)`, `cot`, `degrees`, `radians`, `pi()`, `square`.
+* **Date/time:** `datename(datepart, date)` (the part is a constant) and
+  `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+).
+* **Binary/system:** `hashbytes(algorithm, data)` (the algorithm is a constant such as `SHA2_256`) and
+  `newsequentialid()`; the latter is valid only as a column `DEFAULT`, not in an ordinary `SELECT`.
+* **JSON:** `json_array(value, ...)` and `json_object(key, value, ...)` (SQL Server 2022+),
+  `json_objectagg(key, value)` and `json_arrayagg(value)` (SQL Server 2025+),
+  `json_path_exists(json, path)` (SQL Server 2022+) and `json_contains(json, searchValue, path)`
+  (SQL Server 2025+). The two predicates are materialised as `bit` values, mirroring `isjson`.
 
 ## Not yet supported
 

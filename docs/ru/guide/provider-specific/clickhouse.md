@@ -155,8 +155,12 @@ select id from simple_entity where global in (@p0, @p1)
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
 * возвращающие массивы агрегаты `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, материализуются как CLR `T[]`; `groupArray` над array-колонкой даёт вложенный `T[][]`);
 * агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, проецируется напрямую);
-* комбинаторы `-If`: `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
-* `arg_min`/`arg_max`.
+* общий API фильтрации агрегатов, рендерящий комбинаторы `-If`: `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
+* `arg_min`/`arg_max`;
+* битмап-агрегаты `group_bitmap`/`group_bitmap_and`/`group_bitmap_or`/`group_bitmap_xor`
+  (`groupBitmap`/`groupBitmapAnd`/`groupBitmapOr`/`groupBitmapXor`; непрозрачное состояние `UInt64`) и
+  агрегаты по ключам `sum_map`/`sum_map_filtered` (`sumMap`/`sumMapFiltered(keys)(key, value)`,
+  проецируется как `Map`).
 
 Переносимые агрегаты — в том числе `count`, произвольное значение `any_agg` (рендерится `ANY_VALUE` в
 MySQL и MariaDB) и `corr`/`covar*` — документированы на тематической странице. Обычная колонка `UInt64`
@@ -165,6 +169,46 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 выше.
 
 См. [Группировка и агрегаты](../04-grouping-and-aggregates.md).
+
+## Нативные скалярные функции, Map и хэши
+
+Помимо кросс-провайдерной скалярной поверхности, `ClickHouseFunctions` предоставляет нативные функции
+ClickHouse, у которых нет переносимого написания. Они рендерят точное camel-case-имя и отклоняются
+всеми остальными диалектами:
+
+* UTF-8-регистр, trim и regexp/поиск по строкам: `lower_utf8`/`upper_utf8` (`lowerUTF8`/`upperUTF8`),
+  `trim_left`/`trim_right`/`trim_both` (`trimLeft`/`trimRight`/`trimBoth`, с необязательным набором
+  символов), `replace_regexp_one`/`replace_regexp_all`, `match`, `extract`, `extract_all` (проецируется
+  как `string[]`) и `split_by_string`/`split_by_regexp`/`split_by_whitespace`;
+* дата и время: `format_date_time` (`formatDateTime`, необязательный часовой пояс),
+  `parse_date_time`/`parse_date_time_best_effort` (`parseDateTime`/`parseDateTimeBestEffort`) и
+  текущая дата `now`/`today`/`yesterday`;
+* операции над множествами массивов: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, в
+  обёртке `toInt64`), `array_intersect`, `array_union`, `array_except`, `array_symmetric_difference`;
+* семейство `Map`: конструктор `map` (inline-пары `Tuple.Create`), `map_keys`/`map_values`,
+  `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, двухпараметрические лямбды
+  `map_filter`/`map_apply`/`map_all`/`map_exists` и `map_sort`;
+* хэши: `md5`/`sha1`/`sha256`/`sha512` (`MD5`/`SHA1`/`SHA256`/`SHA512`, fixed binary strings),
+  `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64`/`sip_hash128` и
+  `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`/`murmur_hash3_128`;
+* `generate_ulid` (`generateULID`).
+
+Результат `Map` представлен как `IDictionary<TKey, TValue>`; при проецировании комбинируйте его с
+`map_keys`/`map_values` или одним из предикатов `map_contains_*`, потому что построитель строк не
+материализует «голую» колонку `IDictionary`.
+
+```csharp
+var rows = dataContext.From<Event>()
+    .Select(e => new
+    {
+        HasMatch = SqlFunctions.ClickHouse.match(e.Name, "error"),
+        Keys = SqlFunctions.ClickHouse.map_keys(SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
+        NewId = SqlFunctions.ClickHouse.generate_ulid()
+    })
+    .ToList();
+```
+
+См. [Скалярные функции](../11-scalar-functions.md).
 
 ## JSON, словари и функции массивов
 

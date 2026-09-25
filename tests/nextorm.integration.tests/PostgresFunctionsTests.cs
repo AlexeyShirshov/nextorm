@@ -1,5 +1,7 @@
+using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
+using Npgsql;
 
 namespace NextORM.Integration.Tests;
 
@@ -430,14 +432,12 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         var r = _sut.ComplexEntity.Where(x => x.Id == 1)
             .Select(x => new
             {
-                Mod = SqlFunctions.Postgres.mod(x.Id, 3L),
                 Gcd = SqlFunctions.Postgres.gcd(12L, 18L),
                 Lcm = SqlFunctions.Postgres.lcm(4L, 6L),
                 Factorial = SqlFunctions.Postgres.factorial(5)
             })
             .First();
 
-        r.Mod.Should().Be(1L);
         r.Gcd.Should().Be(6L);
         r.Lcm.Should().Be(12L);
         r.Factorial.Should().Be(120);
@@ -456,6 +456,31 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
 
         r.Today.Should().NotBeNull();
         r.LocalTimestamp.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void IntervalFunctions_ShouldMaterialiseTimeSpan()
+    {
+        // `current_time()` is deliberately absent: PostgreSQL returns `time with time zone`, which the
+        // Npgsql driver cannot read as a TimeSpan (its declared return type). See the work plan §10.
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Built = SqlFunctions.Postgres.make_interval(0, 0, 1, 2, 3, 4.0),
+                JustifiedHours = SqlFunctions.Postgres.justify_hours(
+                    SqlFunctions.Postgres.make_interval(0, 0, 0, 30, 0, 0.0)),
+                JustifiedDays = SqlFunctions.Postgres.justify_days(
+                    SqlFunctions.Postgres.make_interval(0, 0, 20, 0, 0, 0.0)),
+                Time = SqlFunctions.Postgres.localtime()
+            })
+            .First();
+
+        // A PostgreSQL interval materialises through the TimeSpan read path.
+        r.Built.Should().Be(new TimeSpan(1, 2, 3, 4));
+        // justify_hours/justify_days only re-format the interval, so the duration is unchanged.
+        r.JustifiedHours.Should().Be(TimeSpan.FromHours(30));
+        r.JustifiedDays.Should().Be(TimeSpan.FromDays(20));
+        r.Time.Should().NotBeNull();
     }
 
     [Fact]
@@ -547,5 +572,133 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
             r.Pct.Should().BeGreaterThan(0);
             r.Mode.Should().BeGreaterThan(0);
         }
+    }
+
+    [Fact]
+    public void Sha224_384_512_ShouldReturnKnownDigests()
+    {
+        var data = new byte[] { 0x61, 0x62, 0x63 };
+
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.sha224(SqlFunctions.Parameter<byte[]>(0)),
+                B = SqlFunctions.Postgres.sha384(SqlFunctions.Parameter<byte[]>(0)),
+                C = SqlFunctions.Postgres.sha512(SqlFunctions.Parameter<byte[]>(0))
+            })
+            .First(data);
+
+        r.A.Should().Equal(Convert.FromHexString("23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7"));
+        r.B.Should().Equal(Convert.FromHexString("cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"));
+        r.C.Should().Equal(Convert.FromHexString("ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"));
+    }
+
+    [Fact]
+    public void RegexpSubstrShouldReturnMatch()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Missing = SqlFunctions.Postgres.regexp_substr(x.String, "[0-9]"),
+                Digits = SqlFunctions.Postgres.regexp_substr("a1b2", "[0-9]+")
+            })
+            .First();
+
+        r.Missing.Should().BeNull();
+        r.Digits.Should().Be("1");
+    }
+
+    [Fact]
+    public void MakeTimeAndTimestamp_ShouldConstruct()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                T = SqlFunctions.Postgres.make_time(12, 30, 15.0),
+                S = SqlFunctions.Postgres.make_timestamp(2020, 1, 2, 3, 4, 5.0)
+            })
+            .First();
+
+        r.T.Should().Be(new TimeSpan(12, 30, 15));
+        r.S.Should().Be(new DateTime(2020, 1, 2, 3, 4, 5));
+    }
+
+    [Fact]
+    public void AgeAndDateBin_ShouldCompute()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Age = SqlFunctions.Postgres.age(x.Datetime, SqlFunctions.Postgres.make_timestamp(2023, 1, 1, 0, 0, 0.0)),
+                Binned = SqlFunctions.Postgres.date_bin("1 hour", x.Datetime, x.Datetime)
+            })
+            .First();
+
+        r.Age.Should().Be(TimeSpan.FromHours(10));
+        r.Binned.Should().Be(new DateTime(2023, 1, 1, 10, 0, 0));
+    }
+
+    [Fact]
+    public void CurrentSettingAndSetConfig_ShouldReadAndWrite()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Server = SqlFunctions.Postgres.current_setting("server_version"),
+                Missing = SqlFunctions.Postgres.current_setting("nextorm.missing", true),
+                Set = SqlFunctions.Postgres.set_config("nextorm.test", "42", false)
+            })
+            .First();
+
+        r.Server.Should().NotBeNullOrEmpty();
+        r.Missing.Should().BeNull();
+        r.Set.Should().Be("42");
+    }
+
+    [Fact]
+    public async Task SequenceFunctions_ShouldAdvanceAndSet()
+    {
+        await using (var connection = new NpgsqlConnection(PostgresContainer.ConnectionString))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await using var command = new NpgsqlCommand("create sequence if not exists nextorm_test_seq start 1", connection);
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Next = SqlFunctions.Postgres.nextval("nextorm_test_seq"),
+                Set = SqlFunctions.Postgres.setval("nextorm_test_seq", 100L)
+            })
+            .First();
+
+        r.Next.Should().BeGreaterThanOrEqualTo(1);
+        r.Set.Should().Be(100);
+    }
+
+    [Fact]
+    public void SqlJsonConstructorsAndQueryFunctions_ShouldWork()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Arr = SqlFunctions.Postgres.json_array(1, 2, 3),
+                BArr = SqlFunctions.Postgres.jsonb_array(1, 2, 3),
+                Val = SqlFunctions.Postgres.json_value(SqlFunctions.Postgres.jsonb_build_object("a", 1), "$.a"),
+                Query = SqlFunctions.Postgres.json_query(SqlFunctions.Postgres.jsonb_build_object("a", 1), "$.a"),
+                Exists = SqlFunctions.Postgres.json_exists(SqlFunctions.Postgres.jsonb_build_object("a", 1), "$.a", true)
+            })
+            .First();
+
+        using (var arr = JsonDocument.Parse(r.Arr))
+            arr.RootElement.GetArrayLength().Should().Be(3);
+
+        using (var arr = JsonDocument.Parse(r.BArr))
+            arr.RootElement.GetArrayLength().Should().Be(3);
+
+        r.Val.Should().Be("1");
+        r.Query.Should().Be("1");
+        r.Exists.Should().BeTrue();
     }
 }

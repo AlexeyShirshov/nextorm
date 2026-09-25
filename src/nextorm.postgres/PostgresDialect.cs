@@ -30,6 +30,9 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL has a native bulk path (<c>COPY ... FROM STDIN (FORMAT BINARY)</c>).</summary>
     public override bool SupportsBulkCopy => true;
 
+    /// <summary>PostgreSQL batches through <c>NpgsqlBatch</c>, which wraps the commands in an implicit transaction so they share one backend.</summary>
+    public override bool SupportsBatch => true;
+
     /// <summary>PostgreSQL skips conflicting rows with a trailing <c>ON CONFLICT DO NOTHING</c>.</summary>
     public override bool SupportsOnConflictDoNothing => true;
 
@@ -118,7 +121,19 @@ public sealed class PostgresDialect : SqlDialectBase
     public override string MakeBool(bool v) => v ? "true" : "false";
 
     /// <summary>PostgreSQL's text type is <c>text</c> (the base maps <see cref="string"/> to the CLR name).</summary>
-    public override string MakeTypeName(Type type) => type == typeof(string) ? "text" : base.MakeTypeName(type);
+    public override string MakeTypeName(Type type) => type switch
+    {
+        _ when type == typeof(string) => "text",
+        _ when type == typeof(TimeSpan) => "interval",
+        _ => base.MakeTypeName(type)
+    };
+
+    /// <summary>PostgreSQL has a native duration type (<c>interval</c>), so a <see cref="TimeSpan"/> is stored natively.</summary>
+    public override bool SupportsNativeDuration => true;
+
+    /// <summary>PostgreSQL's native duration type is <c>interval</c>, optionally with fractional-second precision.</summary>
+    public override string MakeDurationType(DurationUnit? unit, int precision = 0)
+        => precision > 0 ? $"interval({precision})" : "interval";
 
     // PostgreSQL only accepts double-quoted identifiers; single-quoted aliases are a syntax error.
     /// <inheritdoc/>
@@ -238,7 +253,7 @@ public sealed class PostgresDialect : SqlDialectBase
     // PostgreSQL accepts the FILTER (WHERE ...) aggregate clause, greatest/least, date_trunc and the
     // string_agg/array_agg aggregate surface.
     /// <inheritdoc/>
-    public override bool SupportsFilter => true;
+    public override AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.AnsiFilter;
     /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
 
@@ -273,6 +288,13 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL's <c>extract(epoch ...)</c> returns numeric, so it is cast to double precision.</summary>
     public override string MakeDatePart(string part, string value) =>
         part == "epoch" ? $"cast(extract(epoch from {value}) as double precision)" : base.MakeDatePart(part, value);
+
+    /// <summary>
+    /// The ANSI <c>date_diff</c> casts a sub-day span to <c>integer</c>; the 64-bit variant widens that
+    /// cast to <c>bigint</c> so milliseconds/microseconds over a long range do not overflow.
+    /// </summary>
+    public override string MakeDateDiffBig(string field, string start, string end) =>
+        MakeDateDiffCore(field, start, end, big: true);
 
     // PostgreSQL full-text search matches a tsvector against a tsquery; contains/freetext differ in
     // how the search string is parsed (plain terms vs. web-search syntax).
@@ -310,6 +332,9 @@ public sealed class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL renders both UUID generators through the core functions.</summary>
     public override IUuidGenerators UuidGenerators => PostgresUuidGenerators.Instance;
+
+    /// <summary>PostgreSQL renders every cross-provider scalar function natively (<c>space</c> as <c>repeat(' ', n)</c>).</summary>
+    public override IScalarFunctions ScalarFunctions => PostgresScalarFunctions.Instance;
 
     /// <inheritdoc/>
     public override bool SupportsBooleanAggregates => true;
@@ -369,6 +394,34 @@ public sealed class PostgresDialect : SqlDialectBase
         count is null
             ? MakeSubstring(value, "0", start)
             : $"overlay({value} placing {newValue} from {start} + 1 for {count})";
+
+    /// <summary>PostgreSQL renders CLR format specifiers through <c>to_char</c>/<c>to_hex</c>.</summary>
+    public override IStringFormatFunctions? StringFormats => PostgresStringFormats.Instance;
+
+    /// <summary>PostgreSQL supports a per-expression <c>COLLATE</c> clause.</summary>
+    public override bool SupportsCollation => true;
+
+    /// <inheritdoc/>
+    public override string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + QuoteIdentifier(collation);
+
+    /// <summary>PostgreSQL can express ordinal comparison through the <c>"C"</c> collation.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase) =>
+        MakeCollate(ignoreCase ? $"lower({value})" : value, "C");
+
+    /// <summary>PostgreSQL matches with the <c>~</c>/<c>~*</c> operators and replaces with <c>regexp_replace</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"{value} {(ignoreCase ? "~*" : "~")} {QuoteStringLiteral(pattern)}";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral(pattern)}, {QuoteStringLiteral(replacement)}, {(ignoreCase ? "'gi'" : "'g'")})";
 
     /// <inheritdoc/>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
@@ -527,4 +580,98 @@ internal sealed class PostgresTupleRenderer : ITupleRenderer
     public string RenderConstructor(IReadOnlyList<string> fields) => "ROW(" + string.Join(", ", fields) + ")";
 
     public string? RenderElement(string row, int oneBasedIndex) => "(" + row + ").f" + oneBasedIndex;
+}
+
+/// <summary>
+/// PostgreSQL rendering of the culture-invariant CLR format specifiers: numbers through
+/// <c>to_char</c> masks (and <c>to_hex</c> for <c>X</c>), date/time through a <c>to_char</c> mask.
+/// The group separator (<c>N</c>) is not offered because PostgreSQL's <c>to_char</c> grouping is
+/// locale-dependent.
+/// </summary>
+internal sealed class PostgresStringFormats : IStringFormatFunctions
+{
+    internal static readonly PostgresStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'F' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision) => specifier switch
+    {
+        'F' => precision <= 0
+            ? $"to_char({value}, 'FM9999999999999990')"
+            : $"to_char({value}, 'FM9999999999999990.' || repeat('0', {precision}))",
+        'D' => precision <= 0
+            ? $"to_char({value}, 'FM9999999999999990')"
+            : $"to_char({value}, 'FM' || repeat('0', {precision}))",
+        'X' => precision <= 0
+            ? $"upper(to_hex({value}))"
+            : $"lpad(upper(to_hex({value})), {precision}, '0')",
+        _ => throw new NotSupportedException($"The numeric format specifier '{specifier}' is not supported by PostgreSQL.")
+    };
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var mask)
+            ? $"to_char({value}, '{mask}')"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by PostgreSQL.");
+
+    private static bool TryMapDate(string format, out string mask)
+    {
+        var sb = new StringBuilder(format.Length + 4);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("YYYY"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("YY"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("MM"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("DD"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("HH24"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("MI"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("SS"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { mask = string.Empty; return false; }
+        }
+
+        mask = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on PostgreSQL, where
+/// every name has a native spelling (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>, <c>repeat</c>/
+/// <c>reverse</c>, <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>, <c>chr</c>). <c>space</c> has no
+/// native function and is rendered as <c>repeat(' ', n)</c>.
+/// </summary>
+internal sealed class PostgresScalarFunctions : IScalarFunctions
+{
+    internal static readonly PostgresScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
+        "concat_ws" or "translate" or "ascii" or "char";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "left" => $"left({args[0]}, {args[1]})",
+        "right" => $"right({args[0]}, {args[1]})",
+        "lpad" => $"lpad({args[0]}, {args[1]}, {Pad(args)})",
+        "rpad" => $"rpad({args[0]}, {args[1]}, {Pad(args)})",
+        "repeat" => $"repeat({args[0]}, {args[1]})",
+        "reverse" => $"reverse({args[0]})",
+        "space" => $"repeat(' ', {args[0]})",
+        "concat_ws" => $"concat_ws({string.Join(", ", args)})",
+        "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
+        "ascii" => $"ascii({args[0]})",
+        "char" => $"chr({args[0]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
+    };
+
+    private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
 }

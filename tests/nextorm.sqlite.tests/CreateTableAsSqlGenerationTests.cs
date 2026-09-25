@@ -26,7 +26,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { Columns = ["a"] });
+            .ToTempTableSql("recent_ids", new CreateTableOptions { Columns = ["a"] });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*column list*");
     }
@@ -37,7 +37,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { OnCommit = TempTableOnCommit.Drop });
+            .ToTempTableSql("recent_ids", new CreateTableOptions { OnCommit = TempTableOnCommit.Drop });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*ON COMMIT*");
     }
@@ -48,7 +48,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { WithData = false });
+            .ToTempTableSql("recent_ids", new CreateTableOptions { WithData = false });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*WITH NO DATA*");
     }
@@ -64,6 +64,61 @@ public class CreateTableAsSqlGenerationTests
             .ToTempTableSql("recent_ids");
 
         sql.Should().Contain("$min");
+    }
+
+    [Fact]
+    public void Table_DropExisting_ShouldRenderDropThenCreate()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.From<ISimpleEntity>()
+            .ToTableSql("archive", new CreateTableOptions { DropExisting = true });
+
+        sql.Should().Be("drop table if exists archive; create table archive as select id from simple_entity");
+    }
+
+    [Fact]
+    public void TempTable_DropExisting_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.From<ISimpleEntity>()
+            .ToTempTableSql("recent_ids", new CreateTableOptions { DropExisting = true });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*persistent*");
+    }
+
+    [Fact]
+    public void Table_DropExistingWithIfNotExists_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.From<ISimpleEntity>()
+            .ToTableSql("archive", new CreateTableOptions { DropExisting = true, IfNotExists = true });
+
+        act.Should().Throw<ArgumentException>().WithMessage("*mutually exclusive*");
+    }
+
+    [Fact]
+    public void Table_DropExistingViaBuilder_ShouldRenderDropThenCreate()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.From<ISimpleEntity>()
+            .ToTableSql("archive", o => o.DropExisting());
+
+        sql.Should().Be("drop table if exists archive; create table archive as select id from simple_entity");
+    }
+
+    [Fact]
+    public void TempTable_OnCommitViaBuilder_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.From<ISimpleEntity>()
+            .ToTempTableSql("recent_ids", o => o.OnCommit(TempTableOnCommit.Drop));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ON COMMIT*");
     }
 
     [Fact]

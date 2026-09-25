@@ -35,7 +35,9 @@ internal sealed class SqliteTestProvider : ITestProvider
     public bool SupportsDeleteJoin => false;
     public bool SupportsCreateTableAsSelect => true;
     public bool SupportsTemporaryCreateTableAsSelect => true;
+    public bool SupportsBatch => true;
     public bool SupportsTransactions => true;
+    public bool SupportsRegex => true;
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 

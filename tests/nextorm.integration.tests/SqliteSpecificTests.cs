@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
@@ -232,5 +234,184 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
             .ToList();
 
         rows.Select(r => r.n).OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [SqlTable("collation_probe")]
+    internal interface ICollationProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("name")]
+        [Collation("binary")]
+        string? Name { get; set; }
+    }
+
+    [Fact]
+    public void ColumnCollation_ShouldApplyDeclaredBinaryCollation()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists collation_probe");
+        Execute(ctx, "create table collation_probe (id bigint, name varchar(50))");
+
+        try
+        {
+            Execute(ctx, "insert into collation_probe (id, name) values (1, 'abc')");
+            Execute(ctx, "insert into collation_probe (id, name) values (2, 'ABC')");
+
+            ctx.From<ICollationProbe>().Where(x => x.Name == "abc").Select(x => x.Id).ToList()
+                .Should().Equal(1L);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists collation_probe");
+        }
+    }
+
+    [Fact]
+    public void SqlitePrintfAndHex_ShouldReturnValues()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                P = SqlFunctions.Sqlite.printf("%d-%s", 7, "x"),
+                F = SqlFunctions.Sqlite.format("%d", 42),
+                H = SqlFunctions.Sqlite.hex("AB"),
+                O = SqlFunctions.Sqlite.octet_length("AB"),
+                U = SqlFunctions.Sqlite.unicode("A"),
+                C = SqlFunctions.Sqlite.@char(65, 66),
+                T = SqlFunctions.Sqlite.@typeof(1)
+            })
+            .First();
+
+        r.P.Should().Be("7-x");
+        r.F.Should().Be("42");
+        r.H.Should().Be("4142");
+        r.O.Should().Be(2);
+        r.U.Should().Be(65);
+        r.C.Should().Be("AB");
+        r.T.Should().Be("integer");
+    }
+
+    [Fact]
+    public void SqliteUnhex_ShouldDecodeBytes()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Sqlite.unhex("4142"))
+            .First();
+
+        r.Should().Equal(0x41, 0x42);
+    }
+
+    [Fact]
+    public void SqliteJsonScalars_ShouldRoundTrip()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Ex = SqlFunctions.Sqlite.json_extract<string>("{\"a\":\"hello\"}", "$.a"),
+                Gt = SqlFunctions.Sqlite.json_get_text("{\"a\":\"hello\"}", "$.a"),
+                G = SqlFunctions.Sqlite.json_get("{\"a\":\"hello\"}", "$.a"),
+                Set = SqlFunctions.Sqlite.json_set("{\"a\":1}", "$.b", 2),
+                Ar = SqlFunctions.Sqlite.json_array(1, 2),
+                Ob = SqlFunctions.Sqlite.json_object("a", 1),
+                Pa = SqlFunctions.Sqlite.json_patch("{\"a\":1}", "{\"b\":2}"),
+                Va = SqlFunctions.Sqlite.json_valid("{\"a\":1}"),
+                Ty = SqlFunctions.Sqlite.json_type("{\"a\":1}", "$.a")
+            })
+            .First();
+
+        r.Ex.Should().Be("hello");
+        r.Gt.Should().Be("hello");
+        r.G.Should().Be("\"hello\"");
+        r.Set.Should().Be("{\"a\":1,\"b\":2}");
+        r.Ar.Should().Be("[1,2]");
+        r.Ob.Should().Be("{\"a\":1}");
+        r.Pa.Should().Be("{\"a\":1,\"b\":2}");
+        r.Va.Should().BeTrue();
+        r.Ty.Should().Be("integer");
+    }
+
+    [Fact]
+    public void SqliteJsonGroupArray_ShouldAggregate()
+    {
+        var r = _sut.SimpleEntity
+            .Select(x => SqlFunctions.Sqlite.json_group_array("v"))
+            .First();
+
+        r.Should().StartWith("[").And.EndWith("]").And.Contain("\"v\"");
+    }
+
+    [Fact]
+    public void SqliteDateFunctions_ShouldReturnValues()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                U = SqlFunctions.Sqlite.unixepoch(new DateTime(1970, 1, 1, 0, 0, 10, DateTimeKind.Utc)),
+                J = SqlFunctions.Sqlite.julianday(new DateTime(2000, 1, 1, 12, 0, 0, DateTimeKind.Utc)),
+                T = SqlFunctions.Sqlite.timediff(new DateTime(2023, 1, 2, 0, 0, 0, DateTimeKind.Utc), new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Utc))
+            })
+            .First();
+
+        r.U.Should().Be(10);
+        r.J.Should().BeApproximately(2451545.0, 1e-6);
+        r.T.Should().Be("+0000-00-01 00:00:00.000");
+    }
+
+    [Fact]
+    public void SqliteMathFunctions_ShouldReturnValues()
+    {
+        var r = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A = SqlFunctions.Sqlite.acos(1.0),
+                D = SqlFunctions.Sqlite.degrees(SqlFunctions.Sqlite.pi()),
+                L2 = SqlFunctions.Sqlite.log2(8.0),
+                M = SqlFunctions.Sqlite.mod(5.0, 2.0),
+                R = SqlFunctions.Sqlite.radians(180.0)
+            })
+            .First();
+
+        r.A.Should().BeApproximately(0.0, 1e-9);
+        r.D.Should().BeApproximately(180.0, 1e-9);
+        r.L2.Should().BeApproximately(3.0, 1e-9);
+        r.M.Should().BeApproximately(1.0, 1e-9);
+        r.R.Should().BeApproximately(Math.PI, 1e-9);
+    }
+
+    [Fact]
+    public void SqliteJsonEachTableFunction_ShouldReturnRows()
+    {
+        var values = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Sqlite.json_each("[\"a\",\"b\",\"c\"]"))
+            .Select(r => r.Value)
+            .ToList();
+
+        values.Should().BeEquivalentTo(new[] { "a", "b", "c" });
+    }
+
+    [Fact]
+    public void SqliteJsonTreeTableFunction_ShouldReturnRows()
+    {
+        var count = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Sqlite.json_tree("{\"a\":{\"b\":1}}"))
+            .Select(r => r.FullKey)
+            .ToList();
+
+        count.Should().Contain("$.a");
+        count.Should().Contain("$.a.b");
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        ((DataContext)ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)ctx).CreateCommand(sql);
+        cmd.ExecuteNonQuery();
     }
 }

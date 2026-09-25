@@ -88,6 +88,8 @@ internal static class ReturningProjection
                 Index = i,
                 PropertyName = target.Name,
                 PropertyInfo = target,
+                DurationUnit = column.DurationUnit,
+                DurationPrecision = column.DurationPrecision,
             };
         }
 

@@ -165,3 +165,17 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
   (+RU), `docs/advanced/limitations.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/providers/overview.md` (+RU), `comparison/linq2db-comparison.md` (EN+RU),
   `comparison/linq2db-backlog-gap-analysis.md`, `specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр — 3 блокера** (атрибут, интерфейс, привязка контекстных значений); сам план-кэш/plan-identity проработан на уровне RFC.
+
+- **[TYPE] 🔴** Атрибутная форма невыразима: `FilterLambda`/`FilterFunc` объявлены как `LambdaExpression?` (`:75-76`), но named-аргумент атрибута не может быть лямбдой (`[QueryFilter(FilterLambda = x => …)]` не компилируется) — linq2db хранит **строку** имени. Fix: `string? FilterLambda/FilterFunc` (имя метода/свойства) либо атрибут в Фазу 2 (инвариант 5).
+- **[ISP] 🔴** Ломается публичный `IEntityMetadata`: новый `IReadOnlyList<IQueryFilterMetadata> Filters` без дефолта source-breaking для внешних реализаторов, хотя рядом принят DIM-паттерн `bool IsTableNameAuto => false` (`src/nextorm.core/DataContext/Meta/IEntityMetadata.cs:27`; план `:90`). Fix: DIM `=> Array.Empty<IQueryFilterMetadata>()` **или** хранить фильтры во внутреннем реестре (`DataContextCache`), не трогая интерфейс (инварианты 5/7).
+- **[DIP] 🔴** Нет механизма «контекстное значение → runtime-параметр»: план требует «`dc.TenantId` параметром, не константой» (`:105-107`) и перевод `(entity, IDataContext)` (`:92-93`), но `IDataContext` — пустой композит (F2), tenant живёт только в `IContextEnvironment.Properties` (`DataContext/Roles/IContextEnvironment.cs:26`), а существующий рантайм-параметр — `SqlFunctions.Parameter<T>` (`Query/SqlFunctions.cs:72`) + `NormParam` (`DataContext/NormParam.cs:12-22`), которые план не называет. Fix: явно зафиксировать монтирование чтений фильтра в `SqlFunctions.Parameter`-слоты на этапе планирования, иначе значения запекаются в кэшированный SQL (инвариант 3).
+- **[DRY] 🟡** Метаданные кэшируются на процесс и `configEntity` выполняется один раз (`DataContext/DataContextExtensions.cs:178-189`, `DataContextCache.cs:22,30`) ⇒ фильтр, объявленный вторым `From<T>(...)`, молча теряется (Q6, `:150-151`). Deferred с триггером: второй конфиг фильтра на тот же тип; тогда ключевать по (type, config identity).
+- **[LSP] 🟡** Односторонний `IgnoreFilters`: только на `EntityBuilder<T>` (`:85-88`), join/подзапросы и lower-level `QueryCommand` отключить не могут; `IgnoreFilters(params Type[])` требует per-source состояния, которого у `FromExpression` нет (`Expressions/FromExpression.cs:7-114` — sealed/immutable). Deferred: MVP — единый all-or-nothing `IgnoreFilters()`; per-type/keyed — по 2-му потребителю (инвариант 1).
+- **[TYPE] 🟡** Расширяются незапечатанные публичные типы: `EntityMetadataBuilder<T>` (`DataContext/Meta/EntityMetadataBuilder.cs:12`) и `EntityBuilder<T>` (`Builders/EntityBuilder.cs:21`) — `public class` без документированной точки наследования. Fix: запечатать (или задокументировать extension point). Verify-the-Inverse: 6 unsealed в зоне против 8 sealed.
+- **[DIP] ℹ️** `IgnoreFilters(IEnumerable<string>, params Type[])` (`:87`) — `params` после не-`params`. Fix: `IEnumerable<Type>?` с дефолтом.
+- **[DRY] ℹ️** Устаревшие указатели §10: `Meta/IEntityMetadata.cs` → `DataContext/Meta/…`; `Builders/EntityBuilder.cs:1764` (это `WithKeywordCase`) → `Where` на `:295`/`:1721`.

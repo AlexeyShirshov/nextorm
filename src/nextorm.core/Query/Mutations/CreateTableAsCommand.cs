@@ -14,7 +14,7 @@ internal sealed class CreateTableAsCommand : MutationCommand
     /// <param name="temporary">Whether the target is a temporary table.</param>
     /// <param name="source">The query whose rows materialise the table.</param>
     /// <param name="options">The statement options.</param>
-    public CreateTableAsCommand(Type resultType, string targetName, bool temporary, QueryCommand source, CreateTableAsOptions options)
+    public CreateTableAsCommand(Type resultType, string targetName, bool temporary, QueryCommand source, CreateTableOptions options)
         : base(SqlStatementType.CreateTableAsSelect, resultType)
     {
         TargetName = targetName;
@@ -33,5 +33,5 @@ internal sealed class CreateTableAsCommand : MutationCommand
     public QueryCommand Source { get; }
 
     /// <summary>The statement options.</summary>
-    public CreateTableAsOptions Options { get; }
+    public CreateTableOptions Options { get; }
 }

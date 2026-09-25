@@ -74,8 +74,17 @@ var rows = dataContext.From<IComplexEntity>()
 | `s.StartsWith(x)` | `s like 'x%'` | |
 | `s.EndsWith(x)` | `s like '%x'` | |
 | `string.IsNullOrEmpty(s)` | `(s is null or s = '')` | |
+| `s.ToUpperInvariant()` / `s.ToLowerInvariant()` | `upper(s)` / `lower(s)` | Same as `ToUpper`/`ToLower`; see the invariant note below. |
+| `s.ToUpper(CultureInfo.InvariantCulture)` | `upper(s)` | Any other `CultureInfo` is rejected. |
+| `s.Equals(t)` / `string.Equals(s, t)` | `s collate <binary> = t collate <binary>` | `string.Equals` is ordinal in C#. |
+| `s.Equals(t, StringComparison.OrdinalIgnoreCase)` | case-folded ordinal equality | See [Ordinal comparison and collation](#ordinal-comparison-and-collation). |
+| `string.CompareOrdinal(s, t)` / `string.Compare(s, t, StringComparison.Ordinal)` | a signed `CASE` returning `-1`/`0`/`1` | Keeps the enclosing `< 0` / `> 0` comparison. |
+| `s.Contains(x, comparison)` / `StartsWith` / `EndsWith` | collation/case-folded `LIKE` | |
+| `s.IndexOf(x, comparison)` / `LastIndexOf(x, comparison)` | collation/case-folded position | |
 | `SqlFunctions.Sql.like(s, pattern)` | `s like pattern` | Explicit `LIKE`. |
 | `SqlFunctions.Sql.like(s, pattern, escape)` | `s like pattern escape escape` | |
+| `SqlFunctions.Sql.collate(s, name)` | `s collate name` | Per-expression collation. |
+| `[Collation("name")]` / `.Collation("name")` | `s collate name` | Column-level collation; see [Column collation](#column-collation). |
 
 `SqlFunctions.Sql.like` is the escape hatch when the pattern is not a simple `Contains`/`StartsWith`/`EndsWith`:
 
@@ -110,37 +119,219 @@ select id from complex_entity where somestring like '%'||$needle||'%'
 > `Select(e => e.String!.Contains("df"))`) is materialised with a `CASE`:
 > `cast(case when somestring like '%df%' then 1 else 0 end as bit)`.
 
+### Ordinal comparison and collation
+
+C# `string` comparisons are **ordinal** (byte order), while a SQL `=`/`LIKE` uses the column's database
+collation — on SQL Server the default is case-insensitive. nextorm makes the ordinal overloads explicit
+and honest: `string.Equals`, `string.Compare`/`CompareOrdinal`, `Contains`/`StartsWith`/`EndsWith` and
+`IndexOf`/`LastIndexOf` accept a constant `StringComparison`, and only `Ordinal` and `OrdinalIgnoreCase`
+have a portable SQL form. `Ordinal` uses the provider's binary collation, `OrdinalIgnoreCase` additionally
+case-folds both operands; `InvariantCulture`/`CurrentCulture` (and the culture-sensitive
+`string.Compare(s, t)` overload without a comparison) throw `NotSupportedException`
+([`SupportsOrdinalComparison`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalComparison)).
+
+```csharp
+var strict = dataContext.From<IComplexEntity>()
+    .Where(e => e.String!.Contains("X", StringComparison.Ordinal))       // case-sensitive
+    .Select(e => new { e.Id })
+    .ToList();
+
+var loose = dataContext.From<IComplexEntity>()
+    .Where(e => e.String!.StartsWith("x", StringComparison.OrdinalIgnoreCase))
+    .Select(e => new { e.Id })
+    .ToList();
+```
+
+| Provider | `Ordinal` | `OrdinalIgnoreCase` |
+|---|---|---|
+| PostgreSQL | `s collate "C"` | `lower(s) collate "C"` |
+| SQL Server | `s collate Latin1_General_100_BIN2` | `lower(s) collate Latin1_General_100_BIN2` |
+| MySQL/MariaDB | `s collate utf8mb4_bin` | `lower(s) collate utf8mb4_bin` |
+| SQLite | `s collate binary` | `lower(s) collate binary` |
+| ClickHouse | `s` (native byte order) | `lower(s)` |
+
+The plain `==` operator is intentionally left as the provider's `=`; it follows the database collation,
+not C#. Use `string.Equals`/`string.CompareOrdinal` when byte order is required.
+
+SQLite's `LIKE` is always case-insensitive for ASCII regardless of the operand's collation, so the
+**case-sensitive** ordinal `Contains`/`StartsWith`/`EndsWith` are rejected there
+([`SupportsOrdinalLike`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalLike)); `CompareOrdinal`,
+`Equals` and `OrdinalIgnoreCase` work.
+
+Apply any provider collation explicitly with `SqlFunctions.Sql.collate` (requires
+[`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation), so every SQL provider except
+ClickHouse):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Where(e => SqlFunctions.Sql.collate(e.String, "C") == SqlFunctions.Sql.collate("x", "C"))
+    .Select(e => new { e.Id })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from complex_entity where somestring collate "C" = 'x' collate "C"
+```
+
+`collate` takes the provider-native collation name; it must be a constant. The in-memory provider has no
+collations and treats the call as the ordinal identity.
+
+#### Column collation
+
+Instead of wrapping every expression, a collation can be declared on a mapped property with
+[`CollationAttribute`](xref:NextORM.Core.CollationAttribute) or the fluent
+[`EntityPropertyBuilder<T>.Collation`](xref:NextORM.Core.EntityPropertyBuilder`1.Collation(System.String)). It is then applied to the column in
+every collation-sensitive operation (comparison, `LIKE`, `ORDER BY`, `GROUP BY`), so the column follows
+the declared collation instead of the database default:
+
+```csharp
+[SqlTable("complex_entity")]
+public interface IComplexEntity
+{
+    [Column("somestring")]
+    [Collation("C")]
+    string? String { get; set; }
+}
+
+// equivalent fluent mapping
+var e = dataContext.From<IComplexEntity>(b => b.Property(x => x.String!).Collation("C"));
+
+var rows = e
+    .Where(x => x.String == "x")   // somestring collate "C" = 'x'
+    .OrderBy(x => x.String)        // order by somestring collate "C"
+    .Select(x => new { x.String })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select somestring collate "C" as "String" from complex_entity
+ where somestring collate "C" = 'x' order by somestring collate "C"
+```
+
+The declared collation is the provider-native name (quoted where the provider requires it, see
+[`MakeCollate`](xref:NextORM.Core.ISqlDialect.MakeCollate(System.String,System.String,NextORM.Core.KeywordCase))) and the provider must
+support per-expression collation ([`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation)):
+PostgreSQL, SQL Server, MySQL/MariaDB and SQLite do, ClickHouse has no `COLLATE` and rejects a collated
+column with `NotSupportedException`. The explicit ordinal overloads (`string.Equals`,
+`string.CompareOrdinal`, a `StringComparison`) still override the column's collation with the binary
+one. nextorm does not generate DDL, so the declaration describes an **existing** column's collation
+rather than creating it; the in-memory provider ignores it (its comparisons are already ordinal).
+
+### Regular expressions
+
+`Regex.IsMatch(value, pattern[, options])` and `Regex.Replace(value, pattern, replacement[, options])`
+translate into the provider's native regular expression. The instance forms `regex.IsMatch(value)` and
+`regex.Replace(value, replacement)` read the pattern and options from a constant `Regex` (a literal, a
+`new Regex(...)`, or a captured local). The provider gate is
+[`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex).
+
+```csharp
+using System.Text.RegularExpressions;
+
+var rows = dataContext.From<IComplexEntity>()
+    .Where(e => Regex.IsMatch(e.String!, "^d"))
+    .Select(e => new { e.Id, Cleaned = Regex.Replace(e.String!, "[0-9]+", "#") })
+    .ToList();
+```
+
+The pattern, the replacement and the options must be **compile-time constants**; a runtime pattern cannot
+be compiled by the CLR into the provider's own regex dialect and throws `NotSupportedException`. Only
+`RegexOptions.IgnoreCase` changes the SQL; `RegexOptions.Compiled` and `RegexOptions.CultureInvariant` are
+accepted as no-ops, and any other option (for example `Multiline`) is rejected. `Regex.Replace` replaces
+every match, like the CLR method.
+
+| Provider | `Regex.IsMatch` | `Regex.Replace` | `RegexOptions.IgnoreCase` |
+|---|---|---|---|
+| PostgreSQL | `s ~ 'p'` | `regexp_replace(s, 'p', 'r', 'g')` | `s ~* 'p'` / `'gi'` |
+| MySQL | `regexp_like(s, 'p', 'c')` | `regexp_replace(s, 'p', 'r', 1, 0, 'c')` | the `'i'` match type |
+| MariaDB | `s regexp '(?-i)p'` | `regexp_replace(s, '(?-i)p', 'r')` | the `(?i)` flag |
+| ClickHouse | `match(s, 'p')` | `replaceRegexpAll(s, 'p', 'r')` | the `(?i)` flag |
+| SQLite | `s regexp 'p'` | `regexp_replace(s, 'p', 'r')` | the `(?i)` flag |
+| SQL Server | `NotSupportedException` | `NotSupportedException` | — |
+
+Like the CLR method, a match is a search anywhere in the value, so `^`/`$` anchor the whole value and the
+pattern is not implicitly anchored. The pattern follows the provider's **own** engine (POSIX/ARE on
+PostgreSQL, ICU on MySQL, PCRE on MariaDB, RE2 on ClickHouse, .NET on SQLite), so a complex pattern —
+lookaround, backreferences, named groups — is not portable in general; the C# and SQL escaping rules and
+the replacement group syntax (C# `$1` versus SQL `\1`) also differ. SQLite matches through a CLR-backed
+`regexp`/`regexp_replace` function registered on every connection, so it keeps the .NET syntax. On SQL
+Server there is no regular-expression engine, so the call is rejected: use
+[`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)) for simple
+patterns. The in-memory provider runs `System.Text.RegularExpressions` natively.
+
+## Cross-provider scalar functions
+
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes a small library of string and number
+functions that render natively on every provider that can express them. Each call is gated **per
+function** through [`ISqlDialect.ScalarFunctions`](xref:NextORM.Core.ISqlDialect.ScalarFunctions) and
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)): a provider without a native
+form rejects the call with a clear `NotSupportedException` instead of emitting SQL it cannot run.
+
+| C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
+|---|---|---|---|---|---|
+| `SqlFunctions.Sql.left(s, n)` | `left` | `LEFT` | `LEFT` | `leftUTF8` | `substr(s, 1, n)` |
+| `SqlFunctions.Sql.right(s, n)` | `right` | `RIGHT` | `RIGHT` | `rightUTF8` | `substr` (guarded) |
+| `SqlFunctions.Sql.lpad(s, n, pad)` | `lpad` | `RIGHT(REPLICATE(...))` | `LPAD` | `leftPadUTF8` | — |
+| `SqlFunctions.Sql.rpad(s, n, pad)` | `rpad` | `LEFT(s + REPLICATE(...))` | `RPAD` | `rightPadUTF8` | — |
+| `SqlFunctions.Sql.repeat(s, n)` | `repeat` | `REPLICATE` | `REPEAT` | `repeat` | — |
+| `SqlFunctions.Sql.reverse(s)` | `reverse` | `REVERSE` | `REVERSE` | `reverseUTF8` | — |
+| `SqlFunctions.Sql.space(n)` | `repeat(' ', n)` | `SPACE` | `SPACE` | `space` | — |
+| `SqlFunctions.Sql.concat_ws(sep, ...)` | `concat_ws` | `CONCAT_WS` | `CONCAT_WS` | `concatWithSeparator` | `concat_ws` |
+| `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
+| `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
+| `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
+
+- `left`/`right`/`lpad`/`rpad` count **characters**, not bytes (ClickHouse uses its `*UTF8` variants).
+  A negative `n` is provider-specific: PostgreSQL reads it as "all but the last |n|", the others do not.
+- `concat_ws` skips NULL arguments on every provider except ClickHouse, whose `concatWithSeparator`
+  returns NULL when any argument is NULL.
+- `lpad`/`rpad` truncate a value that is already longer than the target length, matching the SQL
+  `lpad`/`rpad` family (this is why they are not the same as `string.PadLeft`/`PadRight`).
+- MySQL and MariaDB have no `translate`; SQLite has no `lpad`, `rpad`, `repeat`, `reverse`, `space` or
+  `translate`. Those calls are rejected on the respective provider.
+- Remainder, base-10 logarithm and power stay on the portable CLR methods (`%`, `Math.Log10`,
+  `Math.Pow`), which already translate per provider — there is no `SqlFunctions.Sql` spelling for them.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Prefix = SqlFunctions.Sql.left(e.String, 3),
+        Padded = SqlFunctions.Sql.lpad(e.String, 8, "0"),
+        Joined = SqlFunctions.Sql.concat_ws("-", e.String, "x")
+    })
+    .ToList();
+```
+
+The in-memory provider evaluates the same calls through their CLR equivalents, so the same query runs
+without a database.
+
 ## String and regular-expression extensions (PostgreSQL)
 
-Besides the portable `string` methods above, [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) exposes the common PostgreSQL string functions
-and the POSIX regular-expression functions. They are part of the extended scalar library
-([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only):
-
-> Prefer the portable built-in forms where they exist, because they render on every provider while the
-> [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) forms below are PostgreSQL only: `s.Substring(0, n)` / `s.Substring(s.Length - n)` instead
-> of `left`/`right`, and `s.PadLeft(n, c)` / `s.PadRight(n, c)` instead of `lpad`/`rpad`.
+Besides the portable `string` and [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) methods
+above, [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) exposes the PostgreSQL-only remainder of
+the string library and the POSIX regular-expression functions. They are part of the extended scalar
+library ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only):
 
 | C# | SQL |
 |---|---|
 | `SqlFunctions.Postgres.split_part(s, delim, n)` | `split_part(s, delim, n)` |
 | `SqlFunctions.Postgres.strpos(s, sub)` | `strpos(s, sub)` |
-| `SqlFunctions.Postgres.left(s, n)` / `SqlFunctions.Postgres.right(s, n)` | `left(s, n)` / `right(s, n)` |
-| `SqlFunctions.Postgres.lpad(s, n, fill)` / `SqlFunctions.Postgres.rpad(s, n, fill)` | `lpad(s, n, fill)` / `rpad(s, n, fill)` |
-| `SqlFunctions.Postgres.repeat(s, n)` | `repeat(s, n)` |
-| `SqlFunctions.Postgres.reverse(s)` | `reverse(s)` |
 | `SqlFunctions.Postgres.initcap(s)` | `initcap(s)` |
-| `SqlFunctions.Postgres.translate(s, from, to)` | `translate(s, from, to)` |
 | `SqlFunctions.Postgres.overlay(s, placing, from, count)` | `overlay(s, placing, from, count)` |
-| `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
 | `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
 | `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
 | `SqlFunctions.Postgres.digest(s\|bytes, type)` | `digest(data, type)` (requires the `pgcrypto` extension) |
+| `SqlFunctions.Postgres.sha224(bytes)` / `sha384(bytes)` / `sha512(bytes)` | `sha224(bytes)` / `sha384(bytes)` / `sha512(bytes)` |
 | `SqlFunctions.Postgres.sha256(bytes)` | `sha256(bytes)` |
 | `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
 | `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
 | `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
 | `SqlFunctions.Postgres.regexp_count(s, pattern)` | `regexp_count(s, pattern)` |
 | `SqlFunctions.Postgres.regexp_instr(s, pattern)` | `regexp_instr(s, pattern)` |
+| `SqlFunctions.Postgres.regexp_substr(s, pattern[, flags])` | `regexp_substr(...)` |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -161,6 +352,7 @@ var rows = dataContext.From<IComplexEntity>()
 | `Math.Round(x, digits)` | `round(x, digits)` | PostgreSQL casts a `double`/`float` first argument to `numeric` (`round((x)::numeric, digits)`), because it has no `round(double precision, integer)`. |
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | SQL Server has no `trunc`. |
 | `Math.Log(x)` | natural logarithm: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Single-argument form only. |
+| `Math.Log10(x)` | `log10(x)` | |
 
 ```csharp
 var values = dataContext.From<IComplexEntity>()
@@ -198,7 +390,7 @@ The remaining math functions are part of the extended scalar library
 | `SqlFunctions.Postgres.degrees(x)` / `SqlFunctions.Postgres.radians(x)` | `degrees(x)` / `radians(x)` |
 | `SqlFunctions.Postgres.pi()` / `SqlFunctions.Postgres.random()` | `pi()` / `random()` |
 | `SqlFunctions.Postgres.log(base, x)` | `log(base, x)` |
-| `SqlFunctions.Postgres.mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` | `mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` |
+| `SqlFunctions.Postgres.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` |
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
@@ -268,7 +460,10 @@ PostgreSQL only):
 
 | C# | SQL |
 |---|---|
-| `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, d, h, mi, s)` |
+| `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (PostgreSQL's `weeks` is pinned to `0`) |
+| `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; a whole-month part is read back as 30 days) |
+| `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
 | `SqlFunctions.Postgres.to_date(text, format)` | `to_date(text, format)` |
@@ -278,21 +473,79 @@ PostgreSQL only):
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | the same key words |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
-Date construction and arithmetic use the portable surface instead: `date_from_parts`, `date_add`,
-`date_diff`, `date_trunc` and the `DateTime` members (see [Date arithmetic](#date-arithmetic) below).
-`make_date`, `age` and `date_bin` are no longer exposed separately.
+Date construction and arithmetic otherwise use the portable surface: `date_from_parts` (which renders
+PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` and the `DateTime` members (see
+[Date arithmetic](#date-arithmetic) below).
+
+### Runtime settings and sequences (PostgreSQL)
+
+Also part of the extended scalar library
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
+PostgreSQL only). The sequence name is cast to `regclass`:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
+| `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
+| `SqlFunctions.Postgres.nextval(sequence)` | `nextval(cast(sequence as regclass))` |
+| `SqlFunctions.Postgres.setval(sequence, value)` | `setval(cast(sequence as regclass), value)` |
+| `SqlFunctions.Postgres.currval(sequence)` | `currval(cast(sequence as regclass))` |
+| `SqlFunctions.Postgres.lastval()` | `lastval()` |
+
+```csharp
+var next = dataContext.From<IComplexEntity>()
+    .Select(e => SqlFunctions.Postgres.nextval("order_id_seq"))
+    .First();
+```
+
+`currval`/`lastval` are session-scoped in PostgreSQL and therefore require the same connection that
+last advanced the sequence.
 
 ### Formatting dates and numbers to strings
 
-nextorm deliberately does **not** add a cross-provider `format_date`/`FORMAT` method. The template
-languages are mutually incompatible: SQL Server `FORMAT(value, format)` follows the .NET custom format
-strings (`'yyyy-MM-dd'`) and depends on the CLR (available on SQL Server 2012+), PostgreSQL
-`to_char(value, format)` follows its own PG patterns (`'YYYY-MM-DD'`), and MySQL/MariaDB `DATE_FORMAT`,
-SQLite `strftime` and ClickHouse `formatDateTime` each use their own `%`-patterns (they also disagree on
-`%y`/minute/second tokens). A single `template` argument would therefore silently produce different —
-and mostly wrong — SQL on each provider.
+nextorm translates the culture-invariant subset of the CLR formatting API — `string.Format`,
+interpolated strings with a format specifier (`$"{e.Created:yyyy-MM-dd}"`) and
+`value.ToString(format)` — into the provider's native formatting function. Because the template
+languages are mutually incompatible (SQL Server `FORMAT` follows .NET custom format strings,
+PostgreSQL `to_char`, and the `%`-style `DATE_FORMAT`/`strftime`/`formatDateTime`), nextorm accepts only
+a documented portable subset and rejects anything else instead of emitting SQL that formats differently:
 
-Format through a provider-specific user-defined function instead. On SQL Server declare a `format` UDF:
+* **Numbers** — the standard specifiers `N`, `F`, `D` and `X` with an optional precision
+  (`$"{amount:N2}"`, `value.ToString("D8")`). A provider that cannot render a specifier exactly
+  (MySQL/MariaDB have no grouping-free `F`; SQLite and ClickHouse have no invariant `N`) throws
+  `NotSupportedException`.
+* **Dates** — the custom tokens `yyyy`, `yy`, `MM`, `dd`, `HH`, `mm`, `ss` with the separators `-`, `/`,
+  `.`, `:`, `T` and space (`$"{e.Created:yyyy-MM-dd}"`). Everything else is rejected.
+* **Culture** — invariant only: `string.Format` with no provider or with
+  `CultureInfo.InvariantCulture`. Any other `IFormatProvider` throws.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        Total = string.Format("Total: {0:N2}", e.Numeric),
+        Month = e.Datetime!.Value.ToString("yyyy-MM")
+    })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id, ('Total: '||to_char(m, 'FM9999999999999990.' || repeat('0', 2))) as total, to_char(dt, 'YYYY-MM') as month
+from complex_entity
+```
+
+| C# | PostgreSQL | SQL Server | MySQL/MariaDB | SQLite | ClickHouse |
+|---|---|---|---|---|---|
+| `N{p}` | — | `format(v, 'N{p}')` | `format(v, p)` | — | — |
+| `F{p}` | `to_char(v, 'FM…0.{p}')` | `format(v, 'F{p}')` | — | `printf('%.{p}f', v)` | `format('{:.{p}f}', v)` |
+| `D{p}` | `to_char(v, 'FM' \|\| repeat('0', {p}))` | `format(v, 'D{p}')` | `lpad(v, {p}, '0')` | `printf('%0{p}d', v)` | `leftPad(toString(v), {p}, '0')` |
+| `X{p}` | `to_hex(v)` | `format(v, 'X{p}')` | `hex(v)` | `printf('%0{p}x', v)` | `hex(v)` |
+| `yyyy-MM-dd` | `to_char(v, 'YYYY-MM-DD')` | `format(v, 'yyyy-MM-dd')` | `date_format(v, '%Y-%m-%d')` | `strftime('%Y-%m-%d', v)` | `formatDateTime(v, '%Y-%m-%d')` |
+
+For a format outside this subset, declare a provider-specific user-defined function instead. On SQL
+Server, a `format` UDF, for example:
 
 ```csharp
 public static class DemoUdf
@@ -302,16 +555,8 @@ public static class DemoUdf
 }
 ```
 
-```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .Select(e => new { e.Id, Month = DemoUdf.Format(e.Datetime, "yyyy-MM") });
-// select id as [Id], format(dt, 'yyyy-MM') as [Month] from complex_entity
-```
-
 On PostgreSQL the same job is done by `SqlFunctions.Postgres.to_char(value, 'YYYY-MM')`
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
-The `%`-style providers (`DATE_FORMAT`, `strftime`, `formatDateTime`) are declared the same way through
-`[SqlFunction]`; there is no built-in surface for them either.
 
 ### Session and server information
 
@@ -659,6 +904,7 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 | `SqlFunctions.Postgres.json_build_object("a", x, ...)` | `json_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.json_build_array(x, y)` / `jsonb_build_array(x, y)` | `json_build_array(x, y)` / `jsonb_build_array(x, y)` |
+| `SqlFunctions.Postgres.json_array(x, y)` / `jsonb_array(x, y)` | `json_array(x, y)` / `json_array(x, y returning jsonb)` |
 | `SqlFunctions.Postgres.to_json(x)` / `to_jsonb(x)` | `to_json(x)` / `to_jsonb(x)` |
 | `SqlFunctions.Postgres.json_cast(x)` | `cast(x as jsonb)` |
 | `SqlFunctions.Postgres.json_get(json, "key")` / `json_get(json, 0)` | `json -> key` / `json -> 0` |
@@ -681,6 +927,8 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 | `SqlFunctions.Postgres.jsonb_path_match(json, path)` | `jsonb_path_match(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` | `jsonb_path_query_first(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.jsonb_path_query_array(json, path)` | `jsonb_path_query_array(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.json_value(json, path)` / `json_query(json, path)` | `json_value(json, cast(path as jsonpath))` / `json_query(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.json_exists(json, path, fromJsonPath)` | `json_exists(json, cast(path as jsonpath))` |
 
 A `path`/`keys` operand is a `string[]` and is bound as a **single array parameter** (see
 [Arrays](#arrays-postgresql)), so `SqlFunctions.Postgres.json_get_path(json, new[] { "a", "b" })` renders
@@ -878,6 +1126,10 @@ large parts onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/Maria
 modifier string. `SqlFunctions.Sql.date_diff(field, start, end)` returns the number of `<field>` boundaries
 between two timestamps (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`);
 the PostgreSQL and SQLite fallbacks count date parts as boundaries and time parts as whole units.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` is the 64-bit variant (SQL Server `datediff_big`; the
+others widen the result) for a `millisecond`/`microsecond` span that would overflow the 32-bit `date_diff`.
+A sub-day `date_add`/`DateTime.Add*` promotes a `date`-only operand to a fractional timestamp (SQL Server
+`datetime2`, ClickHouse `DateTime`/`DateTime64`) so the time of day is not lost.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` builds a date. `DateTime.AddDays`/`AddMonths`/… inside a
 projection or predicate go through the same hook:
 
@@ -910,6 +1162,7 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 | `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
 | `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
 | `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
+| `SqlFunctions.Sql.date_diff_big("milliseconds", a, b)` | `datediff_big(millisecond, a, b)` | `cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)` | `dateDiff('millisecond', a, b)` | `cast((timestampdiff(microsecond, a, b) / 1000) as signed)` | `((strftime('%s', b) - strftime('%s', a)) * 1000)` |
 | `SqlFunctions.Sql.date_from_parts(y, m, d)` | `datefromparts(y, m, d)` | `make_date(y, m, d)` | `makeDate(y, m, d)` | `str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')` | `date(printf('%04d-%02d-%02d', y, m, d))` |
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
@@ -977,9 +1230,11 @@ select group_concat(somestring, ',') from complex_entity
 ## Aggregate FILTER
 
 `count`/`count_big`/`min`/`max`/`avg`/`sum` and the string/array aggregates accept an extra
-`Expression<Func<bool>>` argument that renders a `filter (where ...)` clause. The filter predicate is a
-full query predicate and may reference columns and parameters. The clause is gated by
-[`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter) (PostgreSQL and SQLite opt in):
+`Expression<Func<bool>>` argument that filters the rows the aggregate sees. The filter predicate is a
+full query predicate and may reference columns and parameters. The spelling is selected by
+[`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) — PostgreSQL and SQLite
+render the ANSI `filter (where ...)` clause, ClickHouse renders its `-If` combinator
+(`countIf`/`sumIf`/...) and MySQL/MariaDB and SQL Server reject the call:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -997,6 +1252,8 @@ var rows = dataContext.From<IComplexEntity>()
 select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (where (b = true)) as "Total"
 from complex_entity group by nullableint
 ```
+
+On ClickHouse the same query renders `toInt32(countIf((id > 10)))` and `sumIf(id, (b = true))`.
 
 ## Set-returning helpers (PostgreSQL)
 
@@ -1029,6 +1286,11 @@ var elements = dataContext
 | `Replace` | `replace` | `replace` | `replace` |
 | `Contains` / `StartsWith` / `EndsWith` / `like` | `like` (escape `\`) | `like` (escape `\`) | `like` (escape `\`) |
 | `string.IsNullOrEmpty` | `(x is null or x = '')` | `(x is null or x = '')` | `(x is null or x = '')` |
+| `string.Format` / `ToString(format)` | `printf` / `strftime` | `format` | `to_char` |
+| Ordinal `Equals` / `CompareOrdinal` | `collate binary` | `collate Latin1_General_100_BIN2` | `collate "C"` |
+| `collate(s, name)` | `s collate name` | `s collate name` | `s collate "name"` |
+| `[Collation]` column | `s collate name` | `s collate name` | `s collate "name"` |
+| Regex (`IsMatch` / `Replace`) | `s regexp ...` / `regexp_replace(...)` | `NotSupportedException` | `s ~ ...` / `regexp_replace(...)` |
 | `Abs` | `abs` | `abs` | `abs` |
 | `Round` | `round(x)` | `round(x, 0)` | `round(x)` |
 | `Truncate` | `trunc` | `round(x, 0, 1)` | `trunc` |
@@ -1079,6 +1341,20 @@ These throw `NotSupportedException` rather than emitting SQL with different sema
   as `SqlFunctions.Postgres.log(base, x)` in the extended scalar library instead.
 * `Math.Round` overloads that take a `MidpointRounding` (more than two arguments) - not portable.
 * `string.Substring(Range)` - no SQL equivalent.
+* `string.Trim(c)`/`TrimStart(c)`/`TrimEnd(c)` - SQL trims whitespace only, not an arbitrary character
+  set.
+* `string.ToUpper(CultureInfo)`/`ToLower(CultureInfo)` with a culture other than
+  `CultureInfo.InvariantCulture` - only the invariant upper/lower has a portable form.
+* `string.Compare(a, b)` and `string.Compare(a, b, bool)` without a `StringComparison` - culture-sensitive;
+  use `string.Compare(a, b, StringComparison.Ordinal)` or `CompareOrdinal`.
+* `StringComparison.InvariantCulture`/`CurrentCulture` (with or without `IgnoreCase`) - no portable form.
+* `string.Format`/`ToString(format)` specifiers outside the documented subset in
+  [Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings) - never dropped.
+* `Regex` on SQL Server - there is no regular-expression engine; use `SqlFunctions.Sql.like` for simple
+  patterns (see [Regular expressions](#regular-expressions)).
+* A `Regex` pattern, replacement or `RegexOptions` that is not a compile-time constant, a `RegexOptions`
+  other than `IgnoreCase` (with `Compiled`/`CultureInvariant` as no-ops), and the `Regex` members other
+  than `IsMatch`/`Replace` (for example `Match`, `Split`, capture groups).
 
 ## See also
 

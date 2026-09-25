@@ -54,6 +54,22 @@ public sealed class NoKeyEntity
     public string? Name { get; set; }
 }
 
+public sealed class AttributedDurationEntity
+{
+    public int Id { get; set; }
+
+    [Duration(DurationUnit.Seconds, Precision = 3)]
+    public TimeSpan Span { get; set; }
+
+    public TimeSpan Untuned { get; set; }
+}
+
+public sealed class FluentDurationEntity
+{
+    public int Id { get; set; }
+    public TimeSpan Span { get; set; }
+}
+
 /// <summary>
 /// Unit tests for the DML metadata flags (<see cref="IPropertyMetadata.IsKey"/>/<c>IsIdentity</c>/
 /// <c>IsComputed</c>), their attribute/fluent/convention sources, and the in-memory rejection of
@@ -128,8 +144,36 @@ public class InsertMetadataTests
     }
 
     [Fact]
-    public void InMemoryContext_ShouldRejectInsert()
+    public void DurationAttribute_ShouldSetUnitAndPrecision()
     {
+        var metadata = new EntityMetadataBuilder<AttributedDurationEntity>().Build();
+
+        var span = metadata.Properties.Single(p => p.PropertyInfo.Name == nameof(AttributedDurationEntity.Span));
+        var untuned = metadata.Properties.Single(p => p.PropertyInfo.Name == nameof(AttributedDurationEntity.Untuned));
+
+        span.DurationUnit.Should().Be(DurationUnit.Seconds);
+        span.DurationPrecision.Should().Be(3);
+
+        // A TimeSpan property without the attribute keeps a null unit: the provider then decides
+        // (native type, or ticks for an integer-stored duration).
+        untuned.DurationUnit.Should().BeNull();
+        untuned.DurationPrecision.Should().Be(0);
+    }
+
+    [Fact]
+    public void FluentDuration_ShouldSetUnitAndPrecision()
+    {
+        var builder = new EntityMetadataBuilder<FluentDurationEntity>();
+        _ = builder.Property(x => x.Span).Duration(DurationUnit.Milliseconds, 2).HasColumnName("span");
+        var metadata = builder.Build();
+
+        var span = metadata.Properties.Single();
+        span.DurationUnit.Should().Be(DurationUnit.Milliseconds);
+        span.DurationPrecision.Should().Be(2);
+    }
+
+    [Fact]
+    public void InMemoryContext_ShouldRejectInsert()    {
         using var ctx = new InMemoryDataContext();
 
         var builder = ctx.InsertInto<ConventionalEntity>().Value(x => x.Name, "a");

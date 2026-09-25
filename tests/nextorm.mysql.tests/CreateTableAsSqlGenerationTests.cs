@@ -25,7 +25,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = MySqlTestContext.Create();
 
         ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { IfNotExists = true, Columns = ["a", "b"] })
+            .ToTempTableSql("recent_ids", new CreateTableOptions { IfNotExists = true, Columns = ["a", "b"] })
             .Should().Be("create temporary table if not exists recent_ids (a, b) as select id from simple_entity");
     }
 
@@ -35,7 +35,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = MySqlTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { OnCommit = TempTableOnCommit.Drop });
+            .ToTempTableSql("recent_ids", new CreateTableOptions { OnCommit = TempTableOnCommit.Drop });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*ON COMMIT*");
     }
@@ -46,7 +46,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = MySqlTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { WithData = false });
+            .ToTempTableSql("recent_ids", new CreateTableOptions { WithData = false });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*WITH NO DATA*");
     }

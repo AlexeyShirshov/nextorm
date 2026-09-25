@@ -22,6 +22,19 @@ internal static class ScalarFunctionTranslator
     {
         var declaringType = node.Method.DeclaringType;
 
+        // string.Format and a numeric/date ToString(format) are handled before the string and
+        // Math/DateTime dispatch: the first belongs to string but with a format argument, the second
+        // is declared on the value type (int/decimal/DateTime) and would otherwise fall through to a
+        // silent render (for a value type) or an opaque error (for string/DateTime).
+        if (declaringType == typeof(string) && node.Object is null && node.Method.Name == nameof(string.Format))
+            return StringFormatTranslator.TryTranslateFormat(visitor, node);
+
+        if (node.Object is not null
+            && node.Method.Name == nameof(ToString)
+            && node.Arguments.Count == 1
+            && node.Arguments[0].Type == typeof(string))
+            return StringFormatTranslator.TryTranslateToString(visitor, node);
+
         if (declaringType == typeof(string))
             return StringFunctionTranslator.TryTranslate(visitor, node);
 
@@ -31,8 +44,14 @@ internal static class ScalarFunctionTranslator
         if (declaringType == typeof(DateTime))
             return DateTimeFunctionTranslator.TryTranslate(visitor, node);
 
+        if (declaringType == typeof(System.Text.RegularExpressions.Regex))
+            return RegexSqlTranslator.TryTranslate(visitor, node);
+
         if (declaringType == typeof(CommonFunctions) && node.Method.Name == nameof(CommonFunctions.like))
             return TryTranslateLikeFunction(visitor, node);
+
+        if (declaringType == typeof(CommonFunctions) && node.Method.Name == nameof(CommonFunctions.collate))
+            return TryTranslateCollateFunction(visitor, node);
 
         return false;
     }
@@ -85,6 +104,34 @@ internal static class ScalarFunctionTranslator
         }
 
         visitor.Builder!.Append(')');
+        return true;
+    }
+
+    /// <summary>
+    /// Translates <c>SqlFunctions.Sql.collate(value, collation)</c> into <c>value COLLATE collation</c>.
+    /// The collation name must be a compile-time constant; a provider without a per-expression
+    /// <c>COLLATE</c> clause (ClickHouse) rejects the call.
+    /// </summary>
+    private static bool TryTranslateCollateFunction(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (args.Count != 2)
+            return false;
+
+        if (!SqlLiteral.TryGetConstantString(args[1], out var collation))
+            throw new NotSupportedException("The SqlFunctions.Sql.collate collation name must be a constant string.");
+
+        if (!visitor.Dialect.SupportsCollation)
+            throw new NotSupportedException("Per-expression collation (SqlFunctions.Sql.collate) is not supported by this provider.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[0]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeCollate(visitor.VisitToStringSuppressingColumnCollation(args[0]), collation, visitor.KeywordCase));
         return true;
     }
 

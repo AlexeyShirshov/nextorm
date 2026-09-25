@@ -11,7 +11,7 @@ namespace NextORM.Core;
 /// commands. Providers derive from it and supply the SQL dialect, the connection factory and
 /// parameter creation.
 /// </summary>
-public abstract class DataContext : IDataContext, IConnectionManager, ITransactionManager, IMutationExecutor, IBulkInsertExecutor
+public abstract class DataContext : IDataContext, IConnectionManager, ITransactionManager, IMutationExecutor, IBulkInsertExecutor, IBatchExecutor
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
@@ -19,6 +19,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly DbConnectionManager _connectionManager;
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
+    private readonly InterceptorHooks _interceptors;
 
     /// <summary>
     /// Creates a context from builder options (logger factory, mapping mode, naming convention and
@@ -51,9 +52,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.ShouldLogSensitiveData,
             optionsBuilder.QuoteIdentifiers,
             optionsBuilder.NamingConvention,
-            optionsBuilder.KeywordCase);
+            optionsBuilder.KeywordCase,
+            optionsBuilder.MultilineBatchSql);
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
+
+        // Interceptors are created once and shared with every axis, so a per-instance
+        // AddInterceptor is visible to the connection, planning and execution paths alike.
+        _interceptors = new InterceptorHooks(optionsBuilder.QueryInterceptors, optionsBuilder.ConnectionInterceptors);
 
         // The connection axis owns the connection state machine; the provider keeps its two hooks on
         // the context and they are passed in as delegates (bound here, never invoked during
@@ -65,7 +71,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             connectionString,
             providedConnection,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData),
-            () => Dialect.SupportsTransactions);
+            () => Dialect.SupportsTransactions,
+            _interceptors);
 
         // Bound once: parameter creation is handed to the execution/planning layers as a delegate
         // instead of passing the context itself, so they no longer depend on the concrete DataContext
@@ -76,19 +83,23 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // The execution axis receives everything through its constructor (connection role, parameter
         // factory, logging config, disposal state) so it never sees the concrete context.
         _executor = new QueryExecutor(
+            this,
             _connectionManager,
             _createParam,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
             () => _disposed,
-            () => _connectionManager.CurrentTransaction);
+            () => _connectionManager.CurrentTransaction,
+            _interceptors);
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.
         _planner = new QueryPlanner(
+            this,
             GetDialect,
             GetType(),
             new ProviderHooks(MapColumn, _createParam, CreateCommand),
-            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData));
+            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData),
+            _interceptors);
     }
 
     private readonly Func<string, object?, DbParameter> _createParam;
@@ -128,6 +139,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <c>WithKeywordCase</c>.
     /// </summary>
     public KeywordCase KeywordCase => _environment.KeywordCase;
+    /// <summary>
+    /// Whether rendered batch SQL places each statement on its own line (set with
+    /// <c>DataContextBuilder.UseMultilineBatchSql</c>). Defaults to <see langword="false"/>
+    /// (statements joined on one line with <c>"; "</c>).
+    /// </summary>
+    public bool MultilineBatchSql => _environment.MultilineBatchSql;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>
@@ -150,6 +167,30 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>Raised after the context has released its connection during disposal.</summary>
     public event EventHandler? Disposed;
+
+    /// <summary>
+    /// Registers a query interceptor on this context instance, after the ones configured on the
+    /// builder. See <see cref="IQueryInterceptor"/> for the lifecycle it observes.
+    /// </summary>
+    /// <param name="interceptor">The interceptor to register; must not be <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="interceptor"/> is <see langword="null"/>.</exception>
+    public void AddInterceptor(IQueryInterceptor interceptor)
+    {
+        ArgumentNullException.ThrowIfNull(interceptor);
+        _interceptors.Add(interceptor);
+    }
+
+    /// <summary>
+    /// Registers a connection interceptor on this context instance, after the ones configured on the
+    /// builder. See <see cref="IConnectionInterceptor"/> for the lifecycle it observes.
+    /// </summary>
+    /// <param name="interceptor">The interceptor to register; must not be <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="interceptor"/> is <see langword="null"/>.</exception>
+    public void AddInterceptor(IConnectionInterceptor interceptor)
+    {
+        ArgumentNullException.ThrowIfNull(interceptor);
+        _interceptors.Add(interceptor);
+    }
 
     /// <summary>Opens the connection if it is not already open.</summary>
     public void EnsureConnectionOpen() => _connectionManager.EnsureConnectionOpen();
@@ -219,7 +260,76 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cancellationToken);
+    {
+        // The check is allocation-free and false for every ordinary query, so the common preparation
+        // path only pays a few branches.
+        if (queryCommand.HasTemporaryTableSource())
+        {
+            var tempTables = new List<ITempTableSource>();
+            queryCommand.CollectTempTableSources(tempTables);
+            return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
+        }
+
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cancellationToken);
+    }
+
+    // A query that reads a lazy temporary table is not a single statement: the table must be created on
+    // the same session as the read. The command is prepared normally (for its mapper and result shape)
+    // and a batch plan is attached, so the execution terminals run DROP + CREATE TEMPORARY TABLE + read
+    // in one round trip. The plan is rebuilt on every preparation because the source query's captured
+    // parameters may differ between executions; the read command is therefore never cached.
+    private IPreparedQueryCommand<TResult> GetPreparedTemporaryTableCommand<TResult>(
+        QueryCommand<TResult> queryCommand,
+        List<ITempTableSource> tempTables,
+        bool createEnumerator,
+        CancellationToken cancellationToken)
+    {
+        // storeInCache: false is what keeps the read plan out of the plan cache (the source query's
+        // captured parameters must be re-rendered on every execution). Setting Cache = false here
+        // would leak: for `Any` the command is the context-shared AnyCommand, so it would disable
+        // plan caching for every later query on that context.
+        var prepared = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, createEnumerator, false, cancellationToken);
+
+        prepared.PendingBatch = BuildTemporaryTableBatch(queryCommand, tempTables);
+        return prepared;
+    }
+
+    BatchPlan IBatchExecutor.RenderTemporaryTableBatch(QueryCommand command)
+    {
+        var tempTables = new List<ITempTableSource>();
+        command.CollectTempTableSources(tempTables);
+
+        if (tempTables.Count == 0)
+            throw new InvalidOperationException("The command does not read a temporary table; the batch form is only available for a source created with AsTempTable.");
+
+        return BuildTemporaryTableBatch(command, tempTables);
+    }
+
+    private BatchPlan BuildTemporaryTableBatch(QueryCommand command, List<ITempTableSource> tempTables)
+    {
+        // The command's resolved quoting/case flags are set during preparation; ToBatchSql may be the
+        // first to look at them, so prepare the command before rendering the DROP.
+        if (!command.IsPrepared)
+            command.PrepareCommand(false, CancellationToken.None);
+
+        var steps = new BatchStepSpec[tempTables.Count * 2 + 1];
+        var index = 0;
+        foreach (var tempTable in tempTables)
+        {
+            steps[index++] = BatchStepSpec.ForRaw(RenderDropTemporaryTable(command, tempTable.Name));
+            steps[index++] = BatchStepSpec.ForCreateTableAs(
+                new CreateTableAsCommand(tempTable.Source.ResultType ?? typeof(object), tempTable.Name, temporary: true, tempTable.Source, tempTable.Options));
+        }
+
+        steps[index] = BatchStepSpec.ForResult(command);
+        return ((IBatchExecutor)this).RenderBatch(steps);
+    }
+
+    private string RenderDropTemporaryTable(QueryCommand command, string name)
+    {
+        var quoted = command.ResolvedQuoteIdentifiers ? Dialect.QuoteIdentifier(name) : name;
+        return SqlKeywords.Of(command.ResolvedKeywordCase, "drop table if exists ") + quoted;
+    }
 
     /// <summary>Creates a provider-specific parameter with the given name and value.</summary>
     /// <param name="name">The parameter name, without the provider's prefix.</param>
@@ -232,7 +342,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// types (SqlClient throws when a typed getter does not match the field type, for example an
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
-    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param);
+    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration);
 
     /// <summary>Resets the cached execution plan of <paramref name="queryCommand"/> so it is rebuilt on next use.</summary>
     /// <param name="queryCommand">The command whose plan should be discarded.</param>
@@ -442,18 +552,24 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         };
 
     private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command)
+        => BuildInsertSql(command, new DefaultParameterProvider(), string.Empty);
+
+    private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command, IParameterProvider parameterProvider, string parameterNamePrefix)
     {
         if (command.Source is null)
-            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase);
+            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, parameterProvider: parameterProvider);
 
-        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source);
-        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters);
+        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source, parameterProvider, null, null, parameterNamePrefix);
+        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters, parameterProvider);
 
         // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT.
         return (withSql is null ? insertSql : withSql + insertSql, parameters);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command)
+        => BuildUpdateSql(command, new DefaultParameterProvider(), new List<Parameter>(), string.Empty);
+
+    private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command, IParameterProvider provider, List<Parameter> parameters, string parameterNamePrefix)
     {
         if (!Dialect.SupportsUpdate)
             throw new NotSupportedException(
@@ -461,15 +577,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         // One parameter provider for the whole statement: the SET list, the predicate and the key
         // values must not restart parameter numbering, or their names would collide.
-        var provider = new DefaultParameterProvider();
-        var parameters = new List<Parameter>();
-
-        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters);
+        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters, parameterNamePrefix);
 
         string? whereSql = null;
         if (command.Keys is not { Count: > 0 })
         {
-            var (rendered, _) = _planner.RenderPredicate(command.Source, provider, parameters);
+            var (rendered, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix);
             whereSql = rendered;
         }
 
@@ -487,6 +600,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
             TruncateCommand truncate => BuildTruncateSql(truncate),
             CreateTableAsCommand createTableAs => BuildCreateTableAsSql(createTableAs),
+            DropTableCommand dropTable => BuildDropTableSql(dropTable),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
         };
 
@@ -560,18 +674,156 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
     }
 
+    private (string Sql, List<Parameter> Parameters) BuildDropTableSql(DropTableCommand command)
+        => (SqlMutationBuilder.MakeDropTableIfExists(Dialect, command.QuoteIdentifiers ?? QuoteIdentifiers, command.TargetName, command.KeywordCase ?? KeywordCase), []);
+
+    // A per-statement placeholder prefix for captured members: the shared parameter provider already
+    // keeps inline values unique, but a member (closure variable) is named after the member, so two
+    // statements capturing the same variable would otherwise collide in the ;-joined fallback.
+    private static string BatchParameterPrefix(int index)
+        => "b" + index.ToString(System.Globalization.CultureInfo.InvariantCulture) + "_";
+
+    // Batch execution (IBatchExecutor). Rendering shares one parameter provider across every step so
+    // placeholder names never collide, which is what makes both the ;-joined SQLite fallback and the
+    // per-command DbBatch parameters correct. The execution primitive lives on QueryExecutor.
+    BatchPlan IBatchExecutor.RenderBatch(IReadOnlyList<BatchStepSpec> steps)
+    {
+        if (!Dialect.SupportsBatch)
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot execute a batch: the provider has no single-round-trip batch form. "
+                + "Run the statements separately, or use a provider whose dialect sets ISqlDialect.SupportsBatch.");
+
+        if (steps.Count == 0 || steps[^1].Query is not { } resultQuery)
+            throw new InvalidOperationException("A batch must end with a result-bearing query.");
+
+        var provider = new DefaultParameterProvider();
+        var accumulator = new List<Parameter>();
+        var statements = new List<BatchStatement>(steps.Count);
+        string? resultSql = null;
+
+        for (var i = 0; i < steps.Count; i++)
+        {
+            var step = steps[i];
+            var start = accumulator.Count;
+            string sql;
+
+            if (step.RawSql is { } rawSql)
+            {
+                sql = rawSql;
+            }
+            else if (step.CreateTableAs is { } createTableAs)
+            {
+                var quoteIdentifiers = createTableAs.Source.QuoteIdentifiers ?? QuoteIdentifiers;
+                var keywordCase = createTableAs.Source.KeywordCase ?? KeywordCase;
+                if (createTableAs.Options.DropExisting)
+                    statements.Add(new BatchStatement(
+                        SqlMutationBuilder.MakeDropTableIfExists(Dialect, quoteIdentifiers, createTableAs.TargetName, keywordCase),
+                        Array.Empty<Parameter>()));
+
+                var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, createTableAs, keywordCase);
+                var (withSql, sourceSql, _) = _planner.RenderSource(createTableAs.Source, provider, accumulator, selectInto, BatchParameterPrefix(i));
+                (sql, _) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, accumulator, createTableAs, keywordCase);
+            }
+            else if (step.Mutation is { } mutation)
+            {
+                (sql, var mutationParameters) = BuildBatchMutationSql(mutation, provider, BatchParameterPrefix(i));
+                accumulator.AddRange(mutationParameters);
+            }
+            else
+            {
+                var (withSql, sourceSql, _) = _planner.RenderSource(step.Query!, provider, accumulator, null, BatchParameterPrefix(i));
+                sql = withSql is null ? sourceSql : withSql + sourceSql;
+
+                if (i == steps.Count - 1)
+                    resultSql = sql;
+            }
+
+            var count = accumulator.Count - start;
+            statements.Add(new BatchStatement(sql, SliceStatementParameters(accumulator, start, count)));
+        }
+
+        return new BatchPlan(statements, resultQuery, resultSql!, Dialect.BatchUsesJoinedCommand, MultilineBatchSql);
+    }
+
+    // A statement's parameters are the accumulator slice it produced. A captured member referenced more
+    // than once in the same statement is visited once per reference, so its (member-named) parameter is
+    // added repeatedly with the same name; keeping the first is enough for the SQL, which references the
+    // one name, and providers such as SQLite/MySQL reject a duplicate parameter name.
+    private static IReadOnlyList<Parameter> SliceStatementParameters(List<Parameter> accumulator, int start, int count)
+    {
+        if (count == 0)
+            return Array.Empty<Parameter>();
+
+        if (count == 1)
+            return new[] { accumulator[start] };
+
+        var parameters = new List<Parameter>(count);
+        for (var i = start; i < start + count; i++)
+        {
+            var candidate = accumulator[i];
+            var duplicate = false;
+            for (var j = 0; j < parameters.Count; j++)
+            {
+                if (parameters[j].Name == candidate.Name)
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+
+            if (!duplicate)
+                parameters.Add(candidate);
+        }
+
+        return parameters;
+    }
+
+    Func<IDataRecord, TResult> IBatchExecutor.BuildBatchMapper<TResult>(BatchPlan plan)
+    {
+        if (plan.ResultQuery is not QueryCommand<TResult> query)
+            throw new InvalidOperationException("The batch has no result-bearing query to materialize.");
+
+        return RowMapperFactory.GetOrBuild(query, plan.ResultSql, GetType(), Logger, MapColumnExpression);
+    }
+
+    List<TResult> IBatchExecutor.ExecuteBatch<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper)
+        => _executor.RunBatch(plan, mapper);
+
+    Task<List<TResult>> IBatchExecutor.ExecuteBatchAsync<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
+        => _executor.RunBatchAsync(plan, mapper, cancellationToken);
+
+    IAsyncEnumerable<TResult> IBatchExecutor.StreamBatch<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
+        => _executor.RunBatchStream(plan, mapper, cancellationToken);
+
     private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command)
+        => BuildDeleteSql(command, new DefaultParameterProvider(), string.Empty);
+
+    private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command, IParameterProvider provider, string parameterNamePrefix)
     {
         if (!Dialect.SupportsDelete)
             throw new NotSupportedException(
                 $"{GetType().Name} does not support DELETE: the provider has no synchronous single-statement DELETE form (use its ALTER TABLE ... DELETE mutation directly).");
 
         if (command.Condition is null)
-            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase);
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase, provider);
 
-        var (whereSql, parameters) = _planner.RenderPredicate(command.Condition);
-        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase);
+        var parameters = new List<Parameter>();
+        var (whereSql, _) = _planner.RenderPredicate(command.Condition, provider, parameters, parameterNamePrefix);
+        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase, provider);
     }
+
+    // Renders a side-effecting DML step of a batch with the batch's shared parameter provider, so its
+    // placeholder names continue the batch-wide sequence and cannot collide with the other steps'. The
+    // captured-member prefix keeps two DML steps that capture the same variable from colliding.
+    private (string Sql, List<Parameter> Parameters) BuildBatchMutationSql(MutationCommand command, IParameterProvider provider, string parameterNamePrefix)
+        => command switch
+        {
+            InsertCommand insert => BuildInsertSql(insert, provider, parameterNamePrefix),
+            UpdateCommand update => BuildUpdateSql(update, provider, new List<Parameter>(), parameterNamePrefix),
+            DeleteCommand delete => BuildDeleteSql(delete, provider, parameterNamePrefix),
+            TruncateCommand truncate => BuildTruncateSql(truncate),
+            _ => throw new NotSupportedException($"The mutation {command.GetType().Name} cannot be added to a batch."),
+        };
 
     private (string Sql, List<Parameter> Parameters) BuildDeleteJoinSql(DeleteJoinCommand command)
     {

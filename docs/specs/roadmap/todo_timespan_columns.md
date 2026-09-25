@@ -9,6 +9,17 @@
 > date-функции над date-only операндами), `#5914` (`DateTimeOffset`). Публичный API → обновить
 > `docs/specs/design/API-NAMING-REVIEW.md`.
 
+> **Статус (1.0.6-alpha):** этапы 1–4 реализованы. Сквозной duration-round-trip проверен на
+> PostgreSQL/MySQL/SQLServer/SQLite (`CommonTestSuite.Duration.cs`) и ClickHouse
+> (`ClickHouseIntegrationTests.DurationColumns`, nullable-колонка через `MakeNullableDurationType`);
+> MariaDB покрыт диалектными/SQL-gen тестами (в integration-матрице провайдера нет). Смежные фиксы:
+> `DateTimeOffset` read; sub-day promotion (`date_add`/`DateTime.Add*`); `date_diff_big` (`long?`);
+> PG `make_interval` (сдвиг `weeks`) + интеграционный тест interval-функций. Известный дефект:
+> PG `current_time()` (см. §8.7). Публичная документация — `docs/guide/26-duration-columns.md` (+RU)
+> и `docs/guide/11-scalar-functions.md` (+RU).
+> Отклонение от матрицы §4: ClickHouse хранит целочисленный `Int64`+unit, а не `Interval*`
+> (драйвер не отдаёт `Interval` как `TimeSpan`; см. §9.3).
+
 ## 1. Пункт и цель
 
 - **Ядро (G9):** дать `TimeSpan`-свойству сущности смысл «длительность с объявленной единицей»:
@@ -123,16 +134,26 @@ nextorm не хранит SQL-тип/точность колонки и не п�
 `dateadd(millisecond, n, value)`, `ClickHouseDialect.cs:531` → `addMilliseconds(value, n)`). На SQL Server
 `date`-колонка даёт 9810, на ClickHouse `Date` sub-day часть, вероятно, молча теряется (класс
 `#5955`/`#5959`). PG/MySQL/SQLite через interval/`datetime()` безопасны. `DateTime.Millisecond` вообще
-не маппится. Фикс в духе linq2db — продвинуть операнд к дробному timestamp (`datetime2`/`toDateTime64`)
-перед sub-day функцией; требует precision-метаданных (§8.5).
+не маппится.
+**✅ Реализовано 24.09.2026 (без новых метаданных).** Добавлен хук
+`ISqlDialect.PromoteDateOperand(field, value)` (DIM) + `SqlDialectBase` virtual: для sub-day полей
+(`hour`/`minute`/`second`/`milliseconds`/`microseconds`) операнд `date_add`/`DateTime.Add*` продвигается
+перед вызовом хука — SQL Server `cast(value as datetime2)`, ClickHouse `toDateTime` (hour..second) и
+`toDateTime64(value, 3|6)` (milliseconds/microseconds); PG/MySQL/SQLite возвращают значение как есть.
+Полноценные precision-метаданные (§8.5) остаются открытыми для отдельного прохода.
 
 ### 8.3. Ширина `date_diff` (G20, из `#5961`)
 `CommonFunctions.date_diff` объявлен `int?` (`Query/SqlFunctions.cs:525`), но ClickHouse
 `dateDiff('unit', …)` → Int64 (`ClickHouseDialect.cs:556`), а `SelectExpression.GetDataRecordMethod`
 читает `GetInt32` → переполнение на `milliseconds` (>~24.8 дн) / `microseconds` (>~35.8 мин). SQL
-Server/PG base отдают `int` (PG кастит явно) — расхождения нет; MySQL/MariaDB `timestampdiff` — тот же
-класс. Решение: расширить до `long?` (публичный API) либо явно ограничить поля/сузить вывод; нужен
-ClickHouse-тест `date_diff` (сейчас отсутствует).
+Server/PG base отдают `int` (PG кастит явно) — расхождения нет; MySQL/MariaDB `timestampdiff` — тот
+же класс. Решение (аддитивное, не ломает API):
+**✅ Реализовано 24.09.2026.** Добавлен `SqlFunctions.Sql.date_diff_big(field, start, end) → long?` с
+хуком `ISqlDialect.MakeDateDiffBig` (DIM → `MakeDateDiff`): SQL Server рендерит `datediff_big`, PG
+расширяет под-дневной cast до `bigint` (`PostgresDialect.MakeDateDiffBig` → `MakeDateDiffCore(..., big:true)`),
+остальные делегируют `MakeDateDiff` (ClickHouse/MySQL уже Int64). Старый `date_diff` остаётся `int?` —
+задокументированное ограничение, для широких диапазонов использовать `date_diff_big`. Добавлены
+SQL-gen/диалектные/интеграционные тесты (ClickHouse `date_diff`/`date_diff_big`, common suite `date_diff_big`).
 
 ### 8.4. `DateTimeOffset` не поддержан (`linq2db#5914`)
 `DateTimeOffset` в `src/` не встречается; свойство упадёт в `GetDataRecordMethod`. Расхождение
@@ -145,27 +166,87 @@ datetime-ветки, либо `value.Date` — как `DateTimeOffset.Date` в C
 `DataType`/`Precision`/unit на `IPropertyMetadata`. Ввести их одним расширением (совместимо с G1
 value-converters) и переиспользовать.
 
+### 8.6. PG `make_interval` — сдвиг параметров (найдено при тесте материализации)
+**✅ Исправлено 24.09.2026.** C#-поверхность `SqlFunctions.Postgres.make_interval(years, months, days,
+hours, minutes, seconds)` не содержит PostgreSQL-параметр `weeks`, а ранжирование шло «как есть»,
+из-за чего 3-й аргумент попадал в `weeks`, и интервал получался другим (напр. `make_interval(0,0,20,…)`
+трактовался как 20 недель → 4 месяца 20 дней). `ExtendedScalarFunctionTranslator.EmitMakeInterval`
+теперь рендерит `make_interval(y, mo, 0, d, h, mi, s)`; сигнатура не менялась (не breaking).
+
+### 8.7. PG `current_time()` не материализуется (известный дефект)
+`SqlFunctions.Postgres.current_time()` объявлен `TimeSpan?`, но PostgreSQL возвращает `time with time
+zone`, который Npgsql не читает как `TimeSpan` (`InvalidCastException: ... DataTypeName 'time with time
+zone'`). `localtime()` (тип `time`) материализуется корректно и в тесте покрыт. Исправление потребует
+смены типа возврата на `DateTimeOffset?` (breaking) либо отдельного метода — вынесено отдельно; пока
+задокументировано и исключено из теста.
+
 ## 9. Этапы внедрения
 
-1. **Read-путь `TimeSpan`** (разблокирует PG-функции): ветка в `GetDataRecordMethod` +
-   `TimeSpan.From*`/`GetFieldValue<TimeSpan>`; SQL-ген и integration-тесты; `InMemory` не трогаем.
-2. **Метаданные unit/precision**: `DurationAttribute` + `EntityPropertyBuilder.Duration` +
-   `IPropertyMetadata.DurationUnit/Precision` + `MakeDurationType` (default integer) и gate.
-3. **Native-диалекты**: PG `interval`, MySQL/MariaDB `TIME`, ClickHouse `Interval*`; declared-unit
-   fallback для SQL Server/SQLite; сравнения/арифметика.
-4. **Смежные фиксы:** sub-day operand promotion (§8.2), ширина `date_diff` (§8.3), решение по
-   `DateTimeOffset` (§8.4) — по мере готовности precision-метаданных.
+1. **Read-путь `TimeSpan`** — ✅ реализовано. Ветка `TimeSpan` в `GetDataRecordMethod`
+   (`GetFieldValue<TimeSpan>`) + integer-путь в `RowMapperFactory.MapColumn`
+   (`supportsNativeDuration == false`): `GetValue` → `long` → `DurationStorage.FromStorage`.
+   `DateTimeOffset` тоже получил read-ветку (`GetFieldValue<DateTimeOffset>`).
+2. **Метаданные unit/precision** — ✅ реализовано. `DurationUnit`, `DurationAttribute`
+   (`Unit`/`Precision`), `EntityPropertyBuilder<T>.Duration(unit, precision)`,
+   `IPropertyMetadata.DurationUnit/DurationPrecision` (DIM-дефолты),
+   `EntityMetadataBuilder` (атрибут + interface-fallback), `MakeDurationType` + gate
+   `SupportsNativeDuration`. `MakeDurationType`/`Precision` — публичная поверхность для
+   генераторов DDL (в самом движке DDL не генерируется).
+3. **Native-диалекты** — ✅ реализовано. PG `interval`(`p`), MySQL/MariaDB `TIME`(`p`);
+   SQL Server/SQLite/ClickHouse — целочисленная колонка (тики по умолчанию). Запись
+   нормализуется в `SqlMutationBuilder`/`QueryPlanner`/`SqlSourceRenderer`/bulk-пути;
+   сравнения конвертируют `TimeSpan`-константу через `DurationUnitContext` (с восстановлением
+   контекста, чтобы единица не «протекала»). Сквозной round-trip проверен на
+   PostgreSQL/MySQL/SQLServer/SQLite (`CommonTestSuite.Duration.cs`, который наследуют эти четыре
+   провайдера) и ClickHouse (`ClickHouseIntegrationTests.DurationColumns_ShouldRoundTrip` через общий
+   `CommonTestSuite.DurationRoundTrip`; nullable-колонка создаётся как `Nullable(Int64)` через новый
+   `MakeNullableDurationType`, иначе ClickHouse-`Int64` хранит NULL как 0). MariaDB покрыт
+   диалектными и SQL-gen тестами: в integration-матрице провайдера нет (нет контейнера/провайдера),
+   но `MariaDbDialect : MySqlDialect`, поэтому SQL идентичен MySQL.
+4. **Смежные фиксы — ✅ реализовано.**
+   - **8.4 `DateTimeOffset`** — ✅ read-путь закрыт (`GetFieldValue<DateTimeOffset>`),
+     type-name на PG/MySQL/SQL Server/ClickHouse; конвенция по дате не навязывается.
+   - **8.2 sub-day operand promotion** — ✅ sub-day-операнд (`hour`/`minute`/`second`/`milliseconds`/
+     `microseconds`) `date_add`/`DateTime.Add*` продвигается хуком `ISqlDialect.PromoteDateOperand`:
+     SQL Server `cast(value as datetime2)`, ClickHouse `toDateTime`/`toDateTime64(value, 3|6)`;
+     PG/MySQL/SQLite не меняются. Precision-метаданные (§8.5) — отдельный проход.
+   - **8.3 ширина `date_diff`** — ✅ аддитивно: `date_diff_big(field, start, end) → long?` +
+     `ISqlDialect.MakeDateDiffBig` (SQL Server `datediff_big`, PG `bigint` через `MakeDateDiffCore`,
+     остальные делегируют `MakeDateDiff`); `date_diff` остаётся `int?`. Тесты ClickHouse
+     `date_diff`/`date_diff_big` + common integration.
+
+5. **PG interval-поверхность и nullable-тип — ✅ реализовано.**
+   - **8.6 `make_interval`** — ✅ исправлен сдвиг параметров: C#-сигнатура без `weeks`, рендер
+     вставляет литерал `0` в позицию PostgreSQL-`weeks` (`EmitMakeInterval`).
+   - **Nullable duration DDL** — ✅ `ISqlDialect.MakeNullableDurationType` (DIM → `MakeDurationType`),
+     ClickHouse → `Nullable(Int64)`.
+   - **Интеграционный тест** `PostgresFunctionsTests.IntervalFunctions_ShouldMaterialiseTimeSpan`:
+     `make_interval`/`justify_hours`/`justify_days`/`localtime` материализуются в `TimeSpan?`.
+   - **8.7 `current_time()`** — ⚠ известный дефект (не исправлен): PG `timetz` не читается Npgsql как
+     `TimeSpan`; в тесте исключён, см. §8.7.
+
+### Прочее
+
+- Известные ограничения после аудита: unit не несёт вычисляемая проекция длительности
+  (читается как тики) — задокументировано в guide; non-native чтение использует
+  `GetValue`+`Convert.ToInt64` (бокс на строку×колонку) — под будущий замер.
 
 ## 10. План тестов и покрытие
 
 - SQL-gen (`tests/nextorm.<provider>.tests/SqlGenerationTests.cs`): `[Duration]`-свойство в
   проекции/INSERT/UPDATE; native форма на PG/MySQL/MariaDB/ClickHouse, integer — SQL Server/SQLite.
 - Диалектные хуки: `<Provider>DialectTests.cs` — `MakeDurationType`/gate.
+- Sub-day/ширина: SQL-gen `date_add`/`AddMilliseconds` (promotion-каст), `date_diff_big`; диалектные
+  `PromoteDateOperand`/`MakeDateDiffBig`; common integration `date_add("hour",…)`/`AddHours`/
+  `date_diff_big("milliseconds", 1970, …)` + ClickHouse-специфичные.
 - Интеграция: `tests/nextorm.integration.tests/CommonTestSuite.Duration.cs` — round-trip `TimeSpan`,
   сравнение, арифметика, `null`, отрицательные значения, precision; `*SpecificTests.cs` для
-  native-отличий.
+  native-отличий; `ClickHouseIntegrationTests.DurationColumns_ShouldRoundTrip` — ClickHouse через общий
+  `DurationRoundTrip` (`Nullable(Int64)` для nullable-колонки).
 - Core/in-memory: `tests/nextorm.core.tests/InMemoryTests.cs`.
-- Mixed: PG `make_interval`/`justify_*`/`current_time` материализуются (сейчас только SQL-gen).
+- Mixed: PG `make_interval`/`justify_hours`/`justify_days`/`localtime` материализуются
+  (`PostgresFunctionsTests.IntervalFunctions_ShouldMaterialiseTimeSpan`); `current_time()` — известный
+  дефект (§8.7), из теста исключён.
 - Покрытие: `coverage.settings.xml` включает только `nextorm.{core,sqlite,postgres,sqlserver}` — шаг 1
   и PG-часть двигают число, ClickHouse/MySQL/MariaDB-часть — **нет** (зафиксировать явно).
 
@@ -176,7 +257,7 @@ value-converters) и переиспользовать.
 3. ClickHouse: `Interval*`-колонка (unsigned, фиксированный unit) или `Int64` + unit?
 4. PG `interval` хранит месяцы, которых нет в `TimeSpan` — отклонять/документировать?
 5. Имя атрибута: `[Duration]` (как linq2db) vs `[TimeSpanColumn]`/`[IntervalColumn]`; единицы enum.
-6. `date_diff`: `long?` (breaking public API → API-NAMING-REVIEW) или сузить SQL на ClickHouse/MySQL?
+6. `date_diff`: ✅ решено аддитивно — `date_diff` остаётся `int?`, добавлен `date_diff_big → long?` (см. §8.3).
 7. Нужен ли `DateTimeOffset` вообще; если да — какая конвенция Date vs DateTime64.
 8. Сводить ли всё в один PR или разбить: read-путь / metadata / диалекты / смежные фиксы.
 
@@ -195,3 +276,14 @@ value-converters) и переиспользовать.
 - Доки: `docs/guide/11-scalar-functions.md` (+RU), `docs/providers/overview.md` (+RU),
   `docs/advanced/api-reference.md` (+RU), `docs/advanced/limitations.md` (+RU),
   `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **0 блокеров**; 1 открытая реализованная деградация (бокс) с триггером; нужна ресинхронизация §5/§7 плана с кодом.
+
+- **[PERF] 🟡** Non-native чтение duration боксует на каждой строке×колонке: `RowMapperFactory.cs:44-45` `GetValueMI` → `object`, затем `Convert.ToInt64(object)`. Для non-native провайдеров колонка всегда целочисленная (`SqlDialectBase.cs:107` → `bigint`; ClickHouse `Int64`), доступен типизированный `GetInt64`. Deferred с триггером (замер аллокаций материализации, `:231-232`): эмитить `GetInt64(index)` + `DurationStorage.FromStorage`.
+- **[DRY]/[TYPE] ℹ️** План рассинхронизирован с реализованным API (§5 `:82-90`, §7 `:112-121`): обещаны `SupportsDurationColumns` + `SupportsDurationUnit(unit)` + `MakeDurationLiteral(...)`, фактически `SupportsNativeDuration` (один bool) + `MakeDurationType`/`MakeNullableDurationType` (`ISqlDialect.cs:314-338`, `SqlDialectBase.cs:105-111`); per-unit гейта и literal-хука нет, промис про `NotSupportedException` для неподдержанных комбинаций не реализован (напр. PG `interval` с месяцами). Fix: привести §5/§7 к фактическому API.
+- **[TYPE]/[SRP] ℹ️** `DurationUnitContext` — скрытое изменяемое состояние визитора (`BaseExpressionVisitor.cs:75`; save/restore вручную `PredicateTranslator.cs:349-422`); unit «протекает» при любом новом пути, забывшем восстановить контекст. Deferred с триггером (новый путь, эмитящий `TimeSpan`-константу): передавать unit явно либо добавить assert/регресс.
+- **[ISP] ℹ️** `IPropertyMetadata` — 9 ортогональных опциональных капабилити (`IPropertyMetadata.cs:17-85`; план добавил `DurationUnit`/`DurationPrecision`). DIM-дефолты сохраняют source-compat; дробление по F7/F12 не оправдано (единый потребитель) — не переоткрывать. Fix: сохранить DIM-паттерн для будущего `Converter`.
+- **ℹ️** Позитив: `DurationAttribute` — `sealed` (`DurationAttribute.cs:16`), `DurationUnit` — enum, `DurationStorage` — `internal static` (`DurationStorage.cs:9`); `MakeNullableDurationType` — DIM → `MakeDurationType`, без роста числа capability-интерфейсов.

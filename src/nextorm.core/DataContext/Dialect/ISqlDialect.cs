@@ -202,6 +202,12 @@ public interface ISqlDialect
     /// </summary>
     IStringSplitRenderer? StringSplit => null;
     /// <summary>
+    /// The provider's renderer for the SQLite-only surface (<see cref="SqlFunctions.Sqlite"/> and
+    /// <see cref="SqliteFunctions"/>), or <see langword="null"/> when the provider is not SQLite.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    ISqliteFunctions? SqliteFunctions => null;
+    /// <summary>
     /// True when the provider can render <c>arrayJoin(array)</c>, which expands one row per array
     /// element. The safe default is <c>false</c>; only ClickHouse opts in today. See
     /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/>.
@@ -227,11 +233,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsFullText { get; }
     /// <summary>
-    /// True when the provider can attach an aggregate filter (<c>FILTER (WHERE ...)</c>). The safe
-    /// default is <c>false</c>; the standard clause is rendered by the expression translators and is
-    /// accepted by PostgreSQL and SQLite, but not by MySQL/MariaDB or SQL Server.
+    /// How the provider attaches a filter to an aggregate. The safe default is
+    /// <see cref="AggregateFilterStyle.None"/>, which rejects the filtering overloads; PostgreSQL and
+    /// SQLite return <see cref="AggregateFilterStyle.AnsiFilter"/> and ClickHouse returns
+    /// <see cref="AggregateFilterStyle.IfCombinator"/>. Declared as a default interface method so that
+    /// existing external implementations keep compiling.
     /// </summary>
-    bool SupportsFilter { get; }
+    AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.None;
     /// <summary>
     /// True when the provider can render <c>greatest(...)</c>/<c>least(...)</c>. The safe default is
     /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse, SQL Server 2022+ and SQLite (through the
@@ -300,6 +308,40 @@ public interface ISqlDialect
     /// SQL Server and ClickHouse opt in today.
     /// </summary>
     bool SupportsDateArithmetic { get; }
+
+    /// <summary>
+    /// True when the provider has a native duration/time-of-day type that the driver exposes as
+    /// <see cref="System.TimeSpan"/> (PostgreSQL <c>interval</c>, MySQL/MariaDB <c>TIME</c>). When
+    /// <see langword="false"/>, a <see cref="System.TimeSpan"/> column is stored in an integer column
+    /// in the unit declared by <see cref="DurationAttribute"/> (<see cref="DurationUnit.Ticks"/> by
+    /// default) and read back through a conversion. Declared as a default interface method so that
+    /// existing external implementations keep compiling and keep their previous (native) behaviour.
+    /// </summary>
+    bool SupportsNativeDuration => false;
+
+    /// <summary>
+    /// Renders the column type of a <see cref="System.TimeSpan"/> property: the native type when
+    /// <see cref="SupportsNativeDuration"/> is true, otherwise an integer type wide enough for
+    /// <paramref name="unit"/>. <paramref name="unit"/> is <c>null</c> when the property does not
+    /// declare one. Declared as a default interface method so that existing external implementations
+    /// keep compiling.
+    /// </summary>
+    /// <param name="unit">The declared storage unit, or <c>null</c>.</param>
+    /// <param name="precision">The fractional-second precision of the native type; zero for the provider default.</param>
+    /// <returns>The SQL type name.</returns>
+    string MakeDurationType(DurationUnit? unit, int precision = 0) => "bigint";
+
+    /// <summary>
+    /// Renders the column type of a <em>nullable</em> <see cref="System.TimeSpan"/> property. The
+    /// default returns <see cref="MakeDurationType(DurationUnit?, int)"/> because the native types and
+    /// the integer columns of most providers already admit SQL NULL; ClickHouse, whose <c>Int64</c> is
+    /// not nullable, overrides it with <c>Nullable(...)</c>. Declared as a default interface method so
+    /// that existing external implementations keep compiling.
+    /// </summary>
+    /// <param name="unit">The declared storage unit, or <c>null</c>.</param>
+    /// <param name="precision">The fractional-second precision of the native type; zero for the provider default.</param>
+    /// <returns>The SQL type name.</returns>
+    string MakeNullableDurationType(DurationUnit? unit, int precision = 0) => MakeDurationType(unit, precision);
 
     /// <summary>
     /// The provider's renderer for the ClickHouse date-conversion surface; <c>null</c> means the provider
@@ -378,6 +420,36 @@ public interface ISqlDialect
     IUuidGenerators? UuidGenerators => null;
 
     /// <summary>
+    /// The provider's renderer for the cross-provider scalar functions of <see cref="CommonFunctions"/>
+    /// (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>, <c>repeat</c>/<c>reverse</c>/<c>space</c>,
+    /// <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>/<c>char</c>, <c>mod</c>, <c>log10</c>,
+    /// <c>power</c>). <c>null</c> means the provider cannot express the family; the object itself
+    /// answers per name because the providers can express different subsets. Declared as a default
+    /// interface method so that existing external implementations keep compiling.
+    /// </summary>
+    IScalarFunctions? ScalarFunctions => null;
+
+    /// <summary>
+    /// The provider's renderer for the MySQL/MariaDB-only functions of <see cref="MySqlFunctions"/>
+    /// (<c>find_in_set</c>/<c>field</c>/<c>elt</c>, <c>substring_index</c>, <c>format</c>,
+    /// <c>str_to_date</c>/<c>date_format</c>, <c>from_unixtime</c>/<c>unix_timestamp</c>, <c>md5</c>/
+    /// <c>sha1</c>/<c>sha2</c>, <c>inet_aton</c>/<c>inet_ntoa</c>, the JSON mutation family and
+    /// <c>uuid_to_bin</c>/<c>bin_to_uuid</c>). <c>null</c> means the provider cannot express the family;
+    /// the object itself answers per name because MySQL and MariaDB can express different subsets.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    IMySqlFunctions? MySqlFunctions => null;
+
+    /// <summary>
+    /// The provider's renderer for the SQL Server-only T-SQL scalar functions of
+    /// <see cref="SqlServerFunctions"/> (<c>patindex</c>, <c>quotename</c>, the trigonometric functions,
+    /// <c>datename</c>/<c>date_bucket</c>, <c>hashbytes</c>, the SQL/JSON constructors and aggregates, …).
+    /// <c>null</c> means the provider cannot express the family; the object itself answers per name.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    ISqlServerFunctions? SqlServerFunctions => null;
+
+    /// <summary>
     /// True when the provider can render the boolean aggregates <c>bool_and</c>, <c>bool_or</c> and
     /// <c>every</c>. The safe default is <c>false</c>; only PostgreSQL opts in today.
     /// </summary>
@@ -406,12 +478,6 @@ public interface ISqlDialect
     /// aggregates. The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsArgMinMax { get; }
-    /// <summary>
-    /// True when the provider renders a filtered aggregate as the ClickHouse combinator
-    /// <c>countIf</c>/<c>sumIf</c>/<c>avgIf</c>/<c>minIf</c>/<c>maxIf</c> instead of the ANSI
-    /// <c>FILTER (WHERE ...)</c> clause. The safe default is <c>false</c>; ClickHouse opts in today.
-    /// </summary>
-    bool SupportsIfAggregates { get; }
 
     /// <summary>
     /// The provider's renderer for the ClickHouse distinct-count family; <c>null</c> means the provider
@@ -739,6 +805,87 @@ public interface ISqlDialect
     /// </summary>
     string MakeStringLastIndexOf(string value, string substring);
     /// <summary>
+    /// True when the provider can translate a <see cref="System.Text.RegularExpressions.Regex"/> call with
+    /// a constant pattern into native SQL (<c>Regex.IsMatch</c>/<c>Regex.Replace</c>). The safe default is
+    /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse and SQLite opt in while SQL Server has no
+    /// regular-expression engine and stays off. Declared as a default interface method so that existing
+    /// external implementations keep compiling.
+    /// <para>
+    /// The compiled pattern follows the provider's own engine (RE2 on ClickHouse, POSIX/ARE on
+    /// PostgreSQL, ICU on MySQL, PCRE on MariaDB, .NET on SQLite), so a pattern is not portable in
+    /// general: lookaround and backreferences are rejected by RE2, and the C# and SQL escaping rules
+    /// differ. The CLR syntactic knowledge is not translated, only the operator/function choice.
+    /// </para>
+    /// </summary>
+    bool SupportsRegex => false;
+    /// <summary>
+    /// Renders a regular-expression match predicate over the already-rendered <paramref name="value"/>.
+    /// <paramref name="pattern"/> is the raw pattern text (the dialect renders and escapes the string
+    /// literal itself) and <paramref name="ignoreCase"/> selects
+    /// <see cref="System.Text.RegularExpressions.RegexOptions.IgnoreCase"/>. Reached only when
+    /// <see cref="SupportsRegex"/> is <c>true</c>.
+    /// </summary>
+    string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        throw new NotSupportedException("Regular-expression matching is not supported by this SQL dialect.");
+    /// <summary>
+    /// Renders a regular-expression replace over the already-rendered <paramref name="value"/>,
+    /// replacing every match as <see cref="System.Text.RegularExpressions.Regex.Replace(string, string, string)"/>
+    /// does. <paramref name="pattern"/> and <paramref name="replacement"/> are raw text (the dialect renders
+    /// and escapes the literals). Reached only when <see cref="SupportsRegex"/> is <c>true</c>.
+    /// <para>
+    /// A replacement backreference uses the provider's group syntax (C# <c>$1</c>, SQL <c>\1</c>); it is
+    /// not rewritten, so a replacement with a group reference is not portable as written.
+    /// </para>
+    /// </summary>
+    string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        throw new NotSupportedException("Regular-expression replacement is not supported by this SQL dialect.");
+    /// <summary>
+    /// The provider's formatting surface for the culture-invariant CLR format specifiers of
+    /// <c>string.Format</c>/<c>ToString(format)</c>; <c>null</c> means the provider cannot render them.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    IStringFormatFunctions? StringFormats => null;
+    /// <summary>
+    /// True when the provider can attach a per-expression <c>COLLATE</c> clause
+    /// (<see cref="CommonFunctions.collate"/>). The safe default is <c>false</c>; SQL Server,
+    /// PostgreSQL, MySQL/MariaDB and SQLite opt in, while ClickHouse has no <c>COLLATE</c>.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsCollation => false;
+    /// <summary>
+    /// Renders <c>value COLLATE collation</c> over the already-rendered <paramref name="value"/>.
+    /// <paramref name="collation"/> is the provider-native collation name, quoted where the provider
+    /// requires it (PostgreSQL). Only called when <see cref="SupportsCollation"/> is <c>true</c>.
+    /// </summary>
+    string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        throw new NotSupportedException("Per-expression collation is not supported by this SQL dialect.");
+    /// <summary>
+    /// True when the provider can express an ordinal (byte-order/binary) string comparison. The safe
+    /// default is <c>false</c>; SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse opt in.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsOrdinalComparison => false;
+    /// <summary>
+    /// Renders a string operand normalised for ordinal comparison. A provider with a per-expression
+    /// binary collation emits <c>value COLLATE &lt;binary&gt;</c>; a provider whose native <c>String</c>
+    /// order is already ordinal (ClickHouse) returns the value unchanged. <paramref name="ignoreCase"/>
+    /// additionally case-folds the operand. Only called when <see cref="SupportsOrdinalComparison"/> is
+    /// <c>true</c>.
+    /// </summary>
+    string MakeOrdinal(string value, bool ignoreCase) =>
+        throw new NotSupportedException("Ordinal string comparison is not supported by this SQL dialect.");
+    /// <summary>
+    /// True when the provider can make the case-sensitive ordinal overloads of the LIKE-family string
+    /// methods (<c>Contains</c>/<c>StartsWith</c>/<c>EndsWith</c> with
+    /// <see cref="System.StringComparison.Ordinal"/>) behave byte-wise. It defaults to
+    /// <see cref="SupportsOrdinalComparison"/>; SQLite overrides it to <c>false</c> because its
+    /// <c>LIKE</c> is always case-insensitive for ASCII regardless of the operand's collation, so a
+    /// byte-order match cannot be expressed there and the call is rejected instead of being silently
+    /// case-insensitive. The <c>OrdinalIgnoreCase</c> overloads are unaffected (they case-fold both
+    /// operands).
+    /// </summary>
+    bool SupportsOrdinalLike => SupportsOrdinalComparison;
+    /// <summary>
     /// Renders <see cref="string.Remove(int)"/>/<see cref="string.Remove(int, int)"/> and
     /// <see cref="string.Insert(int, string)"/> as one <c>stuff</c>/<c>overlay</c>-style expression over
     /// the already-rendered zero-based <paramref name="start"/>. A <paramref name="count"/> of null
@@ -814,6 +961,23 @@ public interface ISqlDialect
     /// <paramref name="field"/> is a validated date-part name.
     /// </summary>
     string MakeDateDiff(string field, string start, string end);
+    /// <summary>
+    /// Renders the same difference as <see cref="MakeDateDiff(string, string, string)"/> through a
+    /// 64-bit result, so a <c>millisecond</c>/<c>microsecond</c> span does not overflow (the
+    /// <c>date_diff_big</c> function). The default delegates to
+    /// <see cref="MakeDateDiff(string, string, string)"/>, whose result is already 64-bit on most
+    /// providers; SQL Server overrides it with <c>datediff_big</c>.
+    /// </summary>
+    string MakeDateDiffBig(string field, string start, string end) => MakeDateDiff(field, start, end);
+    /// <summary>
+    /// Promotes the already-rendered <paramref name="value"/> operand of a sub-day date function so its
+    /// time-of-day part is representable. A provider that applies <c>date_add</c> to a <c>date</c>-only
+    /// operand can otherwise truncate or reject <c>hour</c>/<c>minute</c>/<c>second</c>/<c>millisecond</c>/
+    /// <c>microsecond</c> arithmetic (SQL Server <c>dateadd</c> on a <c>date</c>, ClickHouse <c>add*</c>
+    /// on a <c>Date</c>). The default returns <paramref name="value"/> unchanged, so providers with full
+    /// timestamps or interval arithmetic are unaffected. <paramref name="field"/> is a validated part name.
+    /// </summary>
+    string PromoteDateOperand(string field, string value) => value;
     /// <summary>Renders the last day of the month of the already-rendered <paramref name="value"/>.</summary>
     string MakeEndOfMonth(string value);
     /// <summary>
@@ -830,6 +994,14 @@ public interface ISqlDialect
     bool SupportsDateDiffField(string field);
     /// <summary>Renders the <c>string_agg(value, delimiter)</c> aggregate over the already-rendered arguments.</summary>
     string MakeStringAgg(string value, string delimiter);
+    /// <summary>
+    /// Renders a filtered <c>string_agg</c> for a dialect whose <see cref="AggregateFilterStyle"/> is
+    /// <see cref="AggregateFilterStyle.IfCombinator"/>, composing the already-rendered
+    /// <paramref name="predicate"/> into the aggregate. The default throws; a dialect that expresses
+    /// the ANSI clause handles the filter through the shared filter helper instead.
+    /// </summary>
+    string MakeFilteredStringAgg(string value, string delimiter, string predicate) =>
+        throw new NotSupportedException("The filtered string_agg is not supported by this SQL dialect.");
     /// <summary>Renders the <c>array_agg(value)</c> aggregate over the already-rendered argument.</summary>
     string MakeArrayAgg(string value);
     /// <summary>
@@ -1119,6 +1291,28 @@ public interface ISqlDialect
     /// compiling; a dialect that opts in is paired with a context overriding the native bulk hook.
     /// </summary>
     bool SupportsBulkCopy => false;
+
+    /// <summary>
+    /// Whether the provider can execute several statements as one batch (see
+    /// <c>BatchExtensions.Batch</c>): each provider that opts in runs the whole set in a single
+    /// protocol exchange on the current connection, so the statements share one server session/backend
+    /// — the guarantee a session-scoped temporary table needs under a transaction-mode connection
+    /// pooler. PostgreSQL, SQL Server and MySQL/MariaDB use the driver's <see cref="System.Data.Common.DbBatch"/>;
+    /// SQLite joins the statements with <c>;</c> into one command. Declared as a default interface
+    /// method returning <c>false</c> so existing external implementations keep compiling; ClickHouse
+    /// (no multi-statement guarantee) leaves it off.
+    /// </summary>
+    bool SupportsBatch => false;
+
+    /// <summary>
+    /// True when a batch must be sent as one <c>;</c>-joined command even though the connection exposes
+    /// a <see cref="System.Data.Common.DbBatch"/>. SQL Server is the case: <c>SqlBatch</c> runs every
+    /// command in its own scope, so a session-local <c>#temp</c> table created by one command is not
+    /// visible to the next, while the statements of one <c>SqlCommand</c> share a batch scope. Only
+    /// meaningful when <see cref="SupportsBatch"/> is <c>true</c>. Declared as a default interface
+    /// method returning <c>false</c>.
+    /// </summary>
+    bool BatchUsesJoinedCommand => false;
 
     /// <summary>
     /// Whether the dialect can skip conflicting rows with its <c>INSERT OR IGNORE</c>/<c>INSERT IGNORE</c>

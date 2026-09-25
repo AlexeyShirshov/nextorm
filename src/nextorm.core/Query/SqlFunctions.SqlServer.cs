@@ -5,11 +5,12 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Text-JSON surface (SQL Server and MySQL/MariaDB), the SQL Server-only <c>choose</c> conditional
-/// function (the portable <c>iif</c> lives on <see cref="CommonFunctions"/>), the SQL Server postfix
-/// XML data-type methods (<c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c> and the
-/// <c>xml_nodes</c> rowset) and the SQL Server table functions. Exposed through
-/// <see cref="SqlFunctions.SqlServer"/>; every member is gated by a capability flag and rejected by
-/// providers that do not opt in.
+/// function (the portable <c>iif</c> lives on <see cref="CommonFunctions"/>), the SQL Server
+/// T-SQL-only scalar library (the string, trigonometric, date, binary/system and SQL/JSON functions
+/// gated per name by <see cref="ISqlServerFunctions"/>), the SQL Server postfix XML data-type methods
+/// (<c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c> and the <c>xml_nodes</c> rowset) and the SQL
+/// Server table functions. Exposed through <see cref="SqlFunctions.SqlServer"/>; every member is gated
+/// by a capability flag and rejected by providers that do not opt in.
 /// </summary>
     public class SqlServerFunctions : CommonFunctions
     {
@@ -133,4 +134,219 @@ namespace NextORM.Core;
         /// <see cref="ISqlDialect.SupportsChoose"/>; SQL Server).
         /// </summary>
         public TResult? choose<TResult>(int index, params TResult?[] values) => default!;
+
+        /// <summary>
+        /// <c>patindex('%pattern%', expression)</c>: the 1-based position of the first occurrence of
+        /// <paramref name="pattern"/> in <paramref name="expression"/> (0 when absent), where <c>%</c> and
+        /// <c>_</c> are wildcards. Not a regular-expression match. Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? patindex(string? pattern, string? expression) => default!;
+
+        /// <summary>
+        /// <c>quotename(value)</c>: brackets <paramref name="value"/> as a delimited identifier
+        /// (NULL when <paramref name="value"/> is longer than 128 characters). Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? quotename(string? value) => default!;
+
+        /// <summary>
+        /// <c>quotename(value, quote)</c>: delimits <paramref name="value"/> with the single
+        /// <paramref name="quote"/> character (for example <c>"["</c>, <c>"'"</c>, <c>"`"</c>).
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server).
+        /// </summary>
+        public string? quotename(string? value, string? quote) => default!;
+
+        /// <summary>
+        /// <c>soundex(value)</c>: the four-character Soundex code of <paramref name="value"/>.
+        /// The result is collation-sensitive. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? soundex(string? value) => default!;
+
+        /// <summary>
+        /// <c>difference(first, second)</c>: how similar the Soundex codes of the two strings are, as a
+        /// value from 0 (not similar) to 4 (very similar). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? difference(string? first, string? second) => default!;
+
+        /// <summary>
+        /// <c>string_escape(value, type)</c>: escapes the characters of <paramref name="value"/> that are
+        /// special in the target format named by <paramref name="type"/> (for example <c>"json"</c> or
+        /// <c>"xml"</c>; both must be literals). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? string_escape(string? value, string? type) => default!;
+
+        /// <summary>
+        /// <c>unicode(value)</c>: the UTF-16 code unit of the first character of <paramref name="value"/>.
+        /// The Unicode counterpart of <see cref="CommonFunctions.ascii"/>. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? unicode(string? value) => default!;
+
+        /// <summary>
+        /// <c>nchar(code)</c>: the Unicode character with the given UTF-16 code unit. The Unicode
+        /// counterpart of <see cref="CommonFunctions.@char"/>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? nchar(int code) => default!;
+
+        /// <summary>
+        /// <c>format(value, format)</c>: formats <paramref name="value"/> with a CLR standard or custom
+        /// format string (the .NET formatting rules). Distinct from the CLR
+        /// <see cref="string.Format(string, object?)"/> translation; this is the native T-SQL
+        /// <c>FORMAT</c>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? format(object? value, string? format) => default!;
+
+        /// <summary>
+        /// <c>format(value, format, culture)</c>: as <see cref="format(object?, string?)"/> with an
+        /// explicit <paramref name="culture"/> (for example <c>"en-US"</c>). Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? format(object? value, string? format, string? culture) => default!;
+
+        /// <summary>
+        /// <c>acos(value)</c>: the arc cosine, in radians. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? acos(double? value) => default!;
+
+        /// <summary>
+        /// <c>asin(value)</c>: the arc sine, in radians. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? asin(double? value) => default!;
+
+        /// <summary>
+        /// <c>atan(value)</c>: the arc tangent, in radians. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? atan(double? value) => default!;
+
+        /// <summary>
+        /// <c>atn2(y, x)</c>: the arc tangent of <paramref name="y"/> / <paramref name="x"/> (the T-SQL
+        /// spelling of two-argument arc tangent). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? atn2(double? y, double? x) => default!;
+
+        /// <summary>
+        /// <c>cot(value)</c>: the cotangent. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? cot(double? value) => default!;
+
+        /// <summary>
+        /// <c>degrees(value)</c>: converts radians to degrees. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? degrees(double? value) => default!;
+
+        /// <summary>
+        /// <c>radians(value)</c>: converts degrees to radians. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? radians(double? value) => default!;
+
+        /// <summary>
+        /// <c>pi()</c>: the constant π. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? pi() => default!;
+
+        /// <summary>
+        /// <c>square(value)</c>: the square of <paramref name="value"/>. The portable alternative is
+        /// <c>value * value</c> or <see cref="Math.Pow(double, double)"/>. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? square(double? value) => default!;
+
+        /// <summary>
+        /// <c>datename(datepart, date)</c>: the name of the requested <paramref name="datepart"/> (for
+        /// example the month or weekday name). <paramref name="datepart"/> must be a constant string.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server).
+        /// </summary>
+        public string? datename(string? datepart, DateTime? date) => default!;
+
+        /// <summary>
+        /// <c>date_bucket(datepart, width, date)</c>: the start of the <paramref name="width"/>-wide
+        /// bucket of <paramref name="datepart"/> units that contains <paramref name="date"/>, using the
+        /// default origin (1900-01-01). <paramref name="datepart"/> must be a constant string. Requires
+        /// a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server
+        /// 2022+).
+        /// </summary>
+        public DateTime? date_bucket(string? datepart, int width, DateTime? date) => default!;
+
+        /// <summary>
+        /// <c>date_bucket(datepart, width, date, origin)</c>: as
+        /// <see cref="date_bucket(string?, int, DateTime?)"/> measured from <paramref name="origin"/>.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server 2022+).
+        /// </summary>
+        public DateTime? date_bucket(string? datepart, int width, DateTime? date, DateTime? origin) => default!;
+
+        /// <summary>
+        /// <c>hashbytes(algorithm, data)</c>: the hash of <paramref name="data"/> using the named
+        /// algorithm (<c>MD5</c>, <c>SHA1</c>, <c>SHA2_256</c>, <c>SHA2_512</c>, <c>SHA3_256</c>, …;
+        /// the algorithm must be a constant string). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public byte[]? hashbytes(string? algorithm, byte[]? data) => default!;
+
+        /// <summary>
+        /// <c>newsequentialid()</c>: a sequentially increasing GUID. T-SQL accepts it only as the
+        /// <c>DEFAULT</c> of a <c>uniqueidentifier</c> column, not as a value in an ordinary
+        /// <c>SELECT</c> list (the server raises an error there). Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public Guid? newsequentialid() => default!;
+
+        /// <summary>
+        /// <c>json_array(value, ...)</c>: constructs a JSON array text from the arguments. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server
+        /// 2022+).
+        /// </summary>
+        public string? json_array(params object?[] values) => default!;
+
+        /// <summary>
+        /// <c>json_object(key, value, ...)</c>: constructs a JSON object text from the alternating key
+        /// and value arguments (keys must be string literals). Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server 2022+).
+        /// </summary>
+        public string? json_object(params object?[] keyValuePairs) => default!;
+
+        /// <summary>
+        /// <c>json_arrayagg(value)</c>: aggregates the values of a group into a JSON array. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server
+        /// 2025+).
+        /// </summary>
+        public string? json_arrayagg<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>json_objectagg(key, value)</c>: aggregates the key/value pairs of a group into a JSON
+        /// object. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server 2025+).
+        /// </summary>
+        public string? json_objectagg<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// <c>json_contains(json, searchValue, path)</c>: true when <paramref name="json"/> contains
+        /// <paramref name="searchValue"/> at <paramref name="path"/>. Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server 2025+). Distinct from the
+        /// PostgreSQL/MySQL containment operator, which is expressed as a JSON predicate.
+        /// </summary>
+        public bool json_contains(string? json, string? searchValue, string? path) => default!;
+
+        /// <summary>
+        /// <c>json_path_exists(json, path)</c>: true when <paramref name="path"/> selects a value in
+        /// <paramref name="json"/>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server 2022+).
+        /// </summary>
+        public bool json_path_exists(string? json, string? path) => default!;
     }

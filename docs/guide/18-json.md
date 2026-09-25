@@ -201,6 +201,7 @@ select jsonb_build_object('id', id, 'name', somestring) as "V" from complex_enti
 |---|---|
 | `SqlFunctions.Postgres.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.jsonb_build_array(x, y)` | `jsonb_build_array(x, y)` |
+| `SqlFunctions.Postgres.json_array(x, y)` / `jsonb_array(x, y)` | `json_array(x, y)` / `json_array(x, y returning jsonb)` |
 | `SqlFunctions.Postgres.to_jsonb(x)` | `to_jsonb(x)` |
 
 ### Collapse a result set into one document (the `FOR JSON` analogue)
@@ -275,6 +276,39 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 select id from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key')
 ```
+
+### SQL/JSON query functions
+
+The SQL/JSON query functions take a `jsonpath` (cast from the `path` string) and select a value rather
+than a key:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.json_value(json, path)` | `json_value(json, cast(path as jsonpath))` (returns `text`) |
+| `SqlFunctions.Postgres.json_query(json, path)` | `json_query(json, cast(path as jsonpath))` (returns `jsonb`) |
+| `SqlFunctions.Postgres.json_exists(json, path, fromJsonPath)` | `json_exists(json, cast(path as jsonpath))` (returns `boolean`) |
+
+```csharp
+var json = SqlFunctions.Postgres.jsonb_build_object("a", 1);
+
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Value = SqlFunctions.Postgres.json_value(json, "$.a"),
+        Exists = SqlFunctions.Postgres.json_exists(json, "$.a", true)
+    })
+    .ToList();
+```
+
+```sql
+select json_value(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Value",
+       json_exists(jsonb_build_object('a', 1), cast('$.a' as jsonpath)) as "Exists"
+from complex_entity
+```
+
+`json_exists` has two forms: the two-argument `json_exists(json, "key")` is the top-level `?` operator,
+while the three-argument `json_exists(json, path, fromJsonPath)` is the SQL/JSON path function (the
+third argument is a discriminator and is not rendered into SQL).
 
 The construction and aggregation functions return `string?`; deserialize with
 `JsonSerializer.Deserialize<T>(...)` when you need a .NET object.

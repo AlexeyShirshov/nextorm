@@ -18,7 +18,11 @@ namespace NextORM.Core;
 /// </remarks>
 public static partial class SqlFunctions
 {
-    /// <summary>Cross-provider SQL function surface.</summary>
+    /// <summary>
+    /// Cross-provider SQL function surface. The reference is only a marker inside a query expression:
+    /// the SQL providers translate the call, and the in-memory provider rewrites the few members it
+    /// can evaluate (<see cref="CommonFunctions.collate"/>) before compiling the expression.
+    /// </summary>
     public static CommonFunctions Sql => default!;
 
     /// <summary>
@@ -53,10 +57,18 @@ public static partial class SqlFunctions
     /// <c>arrayStringConcat</c>, <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>,
     /// <c>arrayDistinct</c>). Every member is
     /// gated by a capability flag
-    /// (<see cref="ISqlDialect.SupportsArgMinMax"/>, <see cref="ISqlDialect.SupportsIfAggregates"/>, …);
+    /// (<see cref="ISqlDialect.SupportsArgMinMax"/>, <see cref="ISqlDialect.AggregateFilterStyle"/>, …);
     /// other providers reject it with a clear message.
     /// </summary>
     public static ClickHouseFunctions ClickHouse => default!;
+
+    /// <summary>
+    /// Surface of the MySQL/MariaDB-only functions (the native string/conditional idioms, the
+    /// <c>%</c>-templated date conversion and Unix-epoch functions, the hexadecimal hashes, the IPv4
+    /// conversion pair, the JSON mutation family and the binary UUID pair). Every member is gated per
+    /// name by <see cref="ISqlDialect.MySqlFunctions"/>; other providers reject it with a clear message.
+    /// </summary>
+    public static MySqlFunctions MySql => default!;
 
     /// <summary>
     /// References the <paramref name="idx"/>-th positional parameter of the command (for example
@@ -296,8 +308,9 @@ public static partial class SqlFunctions
 }
 
 /// <summary>
-/// Surface of SQL functions and predicates that can be used inside query expressions. The members
-    /// are only ever evaluated by the expression translator, never at runtime.
+    /// Surface of SQL functions and predicates that can be used inside query expressions. The SQL
+    /// providers evaluate the members through the expression translator; the in-memory provider
+    /// rewrites the small subset that has a native CLR equivalent.
     /// </summary>
     /// <remarks>
     /// Renamed from <c>NORM_SQL</c>. The <see cref="System.Reflection.MethodInfo"/> fields and
@@ -370,6 +383,22 @@ public static partial class SqlFunctions
         /// <param name="pattern">The pattern to match against.</param>
         /// <param name="escapeChar">The character that escapes a literal <c>%</c> or <c>_</c>.</param>
         public bool like(string? column, string? pattern, string? escapeChar) => default!;
+
+        /// <summary>
+        /// <c>value collate collation</c>: applies a provider-native collation to a string operand,
+        /// which determines how it compares and orders. <paramref name="collation"/> must be a constant
+        /// string naming a collation the provider understands (for example <c>"C"</c> on PostgreSQL,
+        /// <c>"Latin1_General_100_BIN2"</c> on SQL Server). Requires a provider that supports
+        /// per-expression collation (see <see cref="ISqlDialect.SupportsCollation"/>); ClickHouse has no
+        /// <c>COLLATE</c> clause.
+        /// </summary>
+        /// <param name="value">The string operand to collate.</param>
+        /// <param name="collation">The provider-native collation name (a constant).</param>
+        /// <remarks>
+        /// The in-memory provider executes the call natively and returns the value unchanged, because
+        /// its comparisons are already ordinal (the <c>collation</c> argument is ignored).
+        /// </remarks>
+        public string? collate(string? value, string? collation) => value;
 
         /// <summary>
         /// <c>contains(column, search)</c>: true when the full-text-indexed <paramref name="column"/>
@@ -500,6 +529,95 @@ public static partial class SqlFunctions
         public T? least<T>(params T?[] values) => default!;
 
         /// <summary>
+        /// <c>left(value, n)</c>: the first <paramref name="n"/> characters of <paramref name="value"/>.
+        /// PostgreSQL treats a negative <paramref name="n"/> as "all but the last |n| characters"; the
+        /// other providers do not, so use a non-negative <paramref name="n"/> for portable queries.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? left(string? value, int n) => default!;
+
+        /// <summary>
+        /// <c>right(value, n)</c>: the last <paramref name="n"/> characters of <paramref name="value"/>.
+        /// PostgreSQL treats a negative <paramref name="n"/> as "all but the first |n| characters"; the
+        /// other providers do not, so use a non-negative <paramref name="n"/> for portable queries.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? right(string? value, int n) => default!;
+
+        /// <summary>
+        /// <c>lpad(value, length, pad)</c>: left-pads <paramref name="value"/> with
+        /// <paramref name="pad"/> (default a single space) to <paramref name="length"/> characters,
+        /// truncating a longer value. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? lpad(string? value, int length, string? pad = " ") => default!;
+
+        /// <summary>
+        /// <c>rpad(value, length, pad)</c>: right-pads <paramref name="value"/> with
+        /// <paramref name="pad"/> (default a single space) to <paramref name="length"/> characters,
+        /// truncating a longer value. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? rpad(string? value, int length, string? pad = " ") => default!;
+
+        /// <summary>
+        /// <c>repeat(value, count)</c>: <paramref name="value"/> repeated <paramref name="count"/>
+        /// times. Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/>
+        /// and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? repeat(string? value, int count) => default!;
+
+        /// <summary>
+        /// <c>reverse(value)</c>: the characters of <paramref name="value"/> in reverse order. Requires
+        /// a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? reverse(string? value) => default!;
+
+        /// <summary>
+        /// <c>space(count)</c>: a string of <paramref name="count"/> spaces. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? space(int count) => default!;
+
+        /// <summary>
+        /// <c>concat_ws(separator, ...)</c>: joins the values with <paramref name="separator"/>. Null
+        /// arguments are skipped on PostgreSQL, SQL Server, MySQL/MariaDB and SQLite; ClickHouse's
+        /// <c>concatWithSeparator</c> returns NULL when any argument is NULL.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? concat_ws(string? separator, params object?[] values) => default!;
+
+        /// <summary>
+        /// <c>translate(value, from, to)</c>: replaces every character of <paramref name="from"/> in
+        /// <paramref name="value"/> with the character at the same position of <paramref name="to"/>;
+        /// a character of <paramref name="from"/> beyond the length of <paramref name="to"/> is
+        /// deleted. Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/>
+        /// and <see cref="IScalarFunctions.Supports"/>); MySQL and MariaDB have no
+        /// <c>translate</c> and reject it.
+        /// </summary>
+        public string? translate(string? value, string? from, string? to) => default!;
+
+        /// <summary>
+        /// <c>ascii(value)</c>: the code point of the first character of <paramref name="value"/> (0 for
+        /// an empty string). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public int? ascii(string? value) => default!;
+
+        /// <summary>
+        /// <c>char(code)</c>: the character with the given code point (the SQL <c>char</c>/<c>chr</c>,
+        /// declared as <c>@char</c> because <c>char</c> is a C# keyword). Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? @char(int code) => default!;
+
+        /// <summary>
         /// <c>date_trunc(field, value)</c>: truncates a timestamp to <paramref name="field"/>
         /// (for example <c>"month"</c>). Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SupportsDateTrunc"/>).
@@ -523,6 +641,14 @@ public static partial class SqlFunctions
         /// <see cref="ISqlDialect.SupportsDateArithmetic"/>).
         /// </summary>
         public int? date_diff(string field, DateTime? start, DateTime? end) => default!;
+
+        /// <summary>
+        /// <c>datediff_big(field, start, end)</c>: like <see cref="date_diff"/>, but the difference is
+        /// returned as a 64-bit value so a <c>millisecond</c>/<c>microsecond</c> span over a long range
+        /// does not overflow the 32-bit <c>date_diff</c>. The field must be a constant string. Requires
+        /// a provider that supports it (see <see cref="ISqlDialect.SupportsDateArithmetic"/>).
+        /// </summary>
+        public long? date_diff_big(string field, DateTime? start, DateTime? end) => default!;
 
         /// <summary>
         /// <c>eomonth(value)</c>: the last day of the month of <paramref name="value"/>. Requires a
@@ -671,24 +797,26 @@ public static partial class SqlFunctions
         public T? any_agg<T>(T? property) => default!;
 
         /// <summary>
-        /// Filtered <c>count(*) filter (where ...)</c>. Requires a provider that supports the FILTER
-        /// clause (see <see cref="ISqlDialect.SupportsFilter"/>).
+        /// Filtered <c>count(*)</c>. Requires a provider that can filter an aggregate (see
+        /// <see cref="ISqlDialect.AggregateFilterStyle"/>): the ANSI <c>filter (where ...)</c> clause or,
+        /// on ClickHouse, the <c>-If</c> combinator (<c>countIf(...)</c>). PostgreSQL, SQLite and
+        /// ClickHouse opt in.
         /// </summary>
         public int count(Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered 64-bit <c>count(*) filter (where ...)</c>.</summary>
+        /// <summary>Filtered 64-bit <c>count(*)</c> (<c>count_big ... filter (where ...)</c>, or the ClickHouse <c>countIf</c>).</summary>
         public long count_big(Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>min(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>min(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>minIf</c>).</summary>
         public T? min<T>(T? property, Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>max(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>max(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>maxIf</c>).</summary>
         public T? max<T>(T? property, Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>avg(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>avg(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>).</summary>
         public T? avg<T>(T? property, Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>sum(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>sum(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>sumIf</c>).</summary>
         public T? sum<T>(T? property, Expression<Func<bool>> filter) => default!;
 
         /// <summary><c>corr(Y, X)</c>: the correlation coefficient of a set of (Y, X) pairs.</summary>

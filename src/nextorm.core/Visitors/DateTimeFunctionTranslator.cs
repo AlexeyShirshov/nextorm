@@ -44,7 +44,7 @@ internal static class DateTimeFunctionTranslator
         visitor.Builder!.Append(visitor.Dialect.MakeDateAdd(
             field,
             visitor.VisitToString(node.Arguments[0]),
-            visitor.VisitToString(node.Object)));
+            visitor.Dialect.PromoteDateOperand(field, visitor.VisitToString(node.Object))));
         return true;
     }
 }

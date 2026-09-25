@@ -226,8 +226,8 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsStatisticalAggregates => true;
     /// <summary>ClickHouse implements the <c>argMin</c>/<c>argMax</c> aggregates.</summary>
     public override bool SupportsArgMinMax => true;
-    /// <summary>ClickHouse implements the filtered <c>-If</c> aggregate combinators.</summary>
-    public override bool SupportsIfAggregates => true;
+    /// <summary>ClickHouse renders an aggregate filter as the <c>-If</c> combinator (<c>sumIf</c>, <c>countIf</c>).</summary>
+    public override AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.IfCombinator;
     /// <summary>ClickHouse implements the distinct-count <c>uniq*</c> aggregates.</summary>
     public override IUniqAggregateRenderer UniqAggregates => _uniqAggregates;
 
@@ -313,6 +313,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     /// <summary>ClickHouse renders both UUID generators.</summary>
     public override IUuidGenerators UuidGenerators => ClickHouseUuidGenerators.Instance;
+
+    /// <summary>ClickHouse renders every cross-provider scalar function (UTF-8 character-wise where it matters).</summary>
+    public override IScalarFunctions ScalarFunctions => ClickHouseScalarFunctions.Instance;
 
     /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>.</summary>
     public override bool SupportsDictionaries => true;
@@ -478,6 +481,30 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _ => $"trimBoth({value})"
     };
 
+    /// <summary>ClickHouse renders CLR format specifiers through <c>format</c>/<c>formatDateTime</c>.</summary>
+    public override IStringFormatFunctions? StringFormats => ClickHouseStringFormats.Instance;
+
+    // ClickHouse has no COLLATE clause; the native String order is already byte-order.
+    /// <summary>ClickHouse has no <c>COLLATE</c> clause.</summary>
+    public override bool SupportsCollation => false;
+
+    /// <summary>ClickHouse's native <c>String</c> order is byte-order, so ordinal comparison is native.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase) => ignoreCase ? $"lower({value})" : value;
+
+    /// <summary>ClickHouse matches with the RE2-based <c>match</c> and replaces with <c>replaceRegexpAll</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"match({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)})";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"replaceRegexpAll({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
+
     // now() uses the server time zone; the optional argument selects a zone.
     /// <summary>Renders <c>now('UTC')</c> for UTC or the server-timezone <c>now()</c> for local time.</summary>
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
@@ -535,11 +562,6 @@ public sealed class ClickHouseDialect : SqlDialectBase
         "any_last" => "anyLast",
         "group_array" => "groupArray",
         "group_uniq_array" => "groupUniqArray",
-        "count_if" => "countIf",
-        "sum_if" => "sumIf",
-        "avg_if" => "avgIf",
-        "min_if" => "minIf",
-        "max_if" => "maxIf",
         _ => name
     };
 
@@ -603,6 +625,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
         return $"dateDiff('{unit}', {start}, {end})";
     }
 
+    /// <summary>
+    /// ClickHouse <c>add*</c> on a <c>Date</c> operand truncates the time of day, so a sub-day operand is
+    /// promoted to <c>DateTime</c> (or <c>DateTime64</c> for the sub-second parts).
+    /// </summary>
+    public override string PromoteDateOperand(string field, string value) => field switch
+    {
+        "milliseconds" => $"toDateTime64({value}, 3)",
+        "microseconds" => $"toDateTime64({value}, 6)",
+        "hour" or "minute" or "second" => $"toDateTime({value})",
+        _ => value
+    };
+
     /// <summary>Renders <c>toLastDayOfMonth(value)</c>.</summary>
     public override string MakeEndOfMonth(string value) => $"toLastDayOfMonth({value})";
 
@@ -614,6 +648,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override string MakeStringAgg(string value, string delimiter) =>
         $"arrayStringConcat(groupArray({value}), {delimiter})";
 
+    /// <summary>Renders the filtered <c>string_agg</c> as <c>arrayStringConcat(groupArrayIf(value, predicate), delimiter)</c>.</summary>
+    public override string MakeFilteredStringAgg(string value, string delimiter, string predicate) =>
+        $"arrayStringConcat(groupArrayIf({value}, {predicate}), {delimiter})";
+
     /// <summary>Maps the CLR type to its ClickHouse type name (<c>UInt8</c>, <c>Int16</c>, <c>Int32</c>, <c>Int64</c>, <c>Float32</c>, <c>Float64</c>, <c>Decimal</c>).</summary>
     public override string MakeTypeName(Type type) => type switch
     {
@@ -624,8 +662,17 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _ when type == typeof(float) => "Float32",
         _ when type == typeof(double) => "Float64",
         _ when type == typeof(decimal) => "Decimal(38, 10)",
+        _ when type == typeof(TimeSpan) => "Int64",
+        _ when type == typeof(DateTimeOffset) => "DateTime64(6)",
         _ => base.MakeTypeName(type)
     };
+
+    /// <summary>ClickHouse has no native duration type read back as <see cref="TimeSpan"/>; the value is stored in an <c>Int64</c>.</summary>
+    public override string MakeDurationType(DurationUnit? unit, int precision = 0) => "Int64";
+
+    /// <summary>ClickHouse's <c>Int64</c> is not nullable, so a nullable duration column uses <c>Nullable(Int64)</c>.</summary>
+    public override string MakeNullableDurationType(DurationUnit? unit, int precision = 0) =>
+        $"Nullable({MakeDurationType(unit, precision)})";
 
     // ClickHouse declares every CTE with `with`; there is no RECURSIVE keyword.
     /// <summary>ClickHouse declares every CTE with <c>with</c>; there is no <c>RECURSIVE</c> keyword.</summary>
@@ -826,4 +873,172 @@ internal sealed class ClickHouseTupleRenderer : ITupleRenderer
     public string RenderConstructor(IReadOnlyList<string> fields) => "tuple(" + string.Join(", ", fields) + ")";
 
     public string? RenderElement(string row, int oneBasedIndex) => "tupleElement(" + row + ", " + oneBasedIndex + ")";
+}
+
+/// <summary>
+/// ClickHouse rendering of the culture-invariant CLR format specifiers: <c>F</c> through <c>format</c>,
+/// <c>D</c>/<c>X</c> through <c>toString</c>/<c>leftPad</c>/<c>hex</c>, and date/time through
+/// <c>formatDateTime</c>. The group separator (<c>N</c>) is not offered because ClickHouse's
+/// <c>format</c> grouping is not the invariant one.
+/// </summary>
+internal sealed class ClickHouseStringFormats : IStringFormatFunctions
+{
+    internal static readonly ClickHouseStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'F' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision) => specifier switch
+    {
+        'F' => precision <= 0 ? $"format('{{:.0f}}', {value})" : $"format('{{:.{precision}f}}', {value})",
+        'D' => precision <= 0 ? $"toString({value})" : $"leftPad(toString({value}), {precision}, '0')",
+        'X' => precision <= 0 ? $"hex({value})" : $"leftPad(hex({value}), {precision}, '0')",
+        _ => throw new NotSupportedException($"The numeric format specifier '{specifier}' is not supported by ClickHouse.")
+    };
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var native)
+            ? $"formatDateTime({value}, '{native}')"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by ClickHouse.");
+
+    private static bool TryMapDate(string format, out string native)
+    {
+        var sb = new StringBuilder(format.Length + 6);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("%Y"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("%y"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("%m"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("%d"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("%H"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("%M"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("%S"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { native = string.Empty; return false; }
+        }
+
+        native = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on ClickHouse:
+/// <c>left</c>/<c>right</c>, <c>leftPad</c>/<c>rightPad</c>, <c>repeat</c>, <c>reverseUTF8</c>,
+/// <c>space</c>, <c>concatWithSeparator</c>, <c>translate</c>, <c>ascii</c> and <c>char</c>.
+/// Note that ClickHouse's <c>concatWithSeparator</c> returns NULL when any argument is NULL,
+/// whereas the other providers skip null arguments.
+/// </summary>
+internal sealed class ClickHouseScalarFunctions : IScalarFunctions
+{
+    internal static readonly ClickHouseScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
+        "concat_ws" or "translate" or "ascii" or "char" or
+        "lower_utf8" or "upper_utf8" or "trim_left" or "trim_right" or "trim_both" or
+        "replace_regexp_one" or "replace_regexp_all" or "match" or "extract" or "extract_all" or
+        "split_by_string" or "split_by_regexp" or "split_by_whitespace" or
+        "format_date_time" or "parse_date_time" or "parse_date_time_best_effort" or
+        "now" or "today" or "yesterday" or
+        "array_concat" or "array_flatten" or "array_uniq" or "array_intersect" or
+        "array_union" or "array_except" or "array_symmetric_difference" or
+        "map" or "map_keys" or "map_values" or "map_contains_key" or "map_contains_value" or
+        "map_add" or "map_concat" or "map_filter" or "map_apply" or "map_all" or "map_exists" or
+        "map_sort" or
+        "group_bitmap" or "group_bitmap_and" or "group_bitmap_or" or "group_bitmap_xor" or
+        "sum_map" or "sum_map_filtered" or
+        "md5" or "sha1" or "sha256" or "sha512" or
+        "xx_hash32" or "xx_hash64" or "xxh3" or "city_hash64" or
+        "sip_hash64" or "sip_hash128" or
+        "murmur_hash2_32" or "murmur_hash2_64" or "murmur_hash3_32" or "murmur_hash3_64" or
+        "murmur_hash3_128" or "generate_ulid";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        // The UTF8 variants count characters, matching the CLR string semantics and the other
+        // providers; the plain left/right/leftPad/rightPad count bytes.
+        "left" => $"leftUTF8({args[0]}, {args[1]})",
+        "right" => $"rightUTF8({args[0]}, {args[1]})",
+        "lpad" => $"leftPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
+        "rpad" => $"rightPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
+        "repeat" => $"repeat({args[0]}, {args[1]})",
+        "reverse" => $"reverseUTF8({args[0]})",
+        "space" => $"space({args[0]})",
+        "concat_ws" => $"concatWithSeparator({string.Join(", ", args)})",
+        "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
+        "ascii" => $"ascii({args[0]})",
+        "char" => $"char({args[0]})",
+        "lower_utf8" => $"lowerUTF8({args[0]})",
+        "upper_utf8" => $"upperUTF8({args[0]})",
+        "trim_left" => $"trimLeft({string.Join(", ", args)})",
+        "trim_right" => $"trimRight({string.Join(", ", args)})",
+        "trim_both" => $"trimBoth({string.Join(", ", args)})",
+        "replace_regexp_one" => $"replaceRegexpOne({args[0]}, {args[1]}, {args[2]})",
+        "replace_regexp_all" => $"replaceRegexpAll({args[0]}, {args[1]}, {args[2]})",
+        "match" => $"match({args[0]}, {args[1]})",
+        "extract" => $"extract({args[0]}, {args[1]})",
+        "extract_all" => $"extractAll({args[0]}, {args[1]})",
+        "split_by_string" => $"splitByString({args[0]}, {args[1]})",
+        "split_by_regexp" => $"splitByRegexp({args[0]}, {args[1]})",
+        "split_by_whitespace" => $"splitByWhitespace({args[0]})",
+        "format_date_time" => $"formatDateTime({string.Join(", ", args)})",
+        "parse_date_time" => $"parseDateTime({args[0]}, {args[1]})",
+        "parse_date_time_best_effort" => $"parseDateTimeBestEffort({string.Join(", ", args)})",
+        "now" => "now()",
+        "today" => "today()",
+        "yesterday" => "yesterday()",
+        "array_concat" => $"arrayConcat({string.Join(", ", args)})",
+        "array_flatten" => $"arrayFlatten({args[0]})",
+        "array_uniq" => $"toInt64(arrayUniq({args[0]}))",
+        "array_intersect" => $"arrayIntersect({string.Join(", ", args)})",
+        "array_union" => $"arrayUnion({string.Join(", ", args)})",
+        "array_except" => $"arrayExcept({string.Join(", ", args)})",
+        "array_symmetric_difference" => $"arraySymmetricDifference({string.Join(", ", args)})",
+        "map" => $"map({string.Join(", ", args)})",
+        "map_keys" => $"mapKeys({args[0]})",
+        "map_values" => $"mapValues({args[0]})",
+        "map_contains_key" => $"mapContainsKey({args[0]}, {args[1]})",
+        "map_contains_value" => $"mapContainsValue({args[0]}, {args[1]})",
+        "map_add" => $"mapAdd({args[0]}, {args[1]})",
+        "map_concat" => $"mapConcat({string.Join(", ", args)})",
+        "map_filter" => $"mapFilter({args[0]}, {args[1]})",
+        "map_apply" => $"mapApply({args[0]}, {args[1]})",
+        "map_all" => $"mapAll({args[0]}, {args[1]})",
+        "map_exists" => $"mapExists({args[0]}, {args[1]})",
+        "map_sort" => $"mapSort({args[0]})",
+        "group_bitmap" => $"groupBitmap({args[0]})",
+        "group_bitmap_and" => $"groupBitmapAnd({args[0]})",
+        "group_bitmap_or" => $"groupBitmapOr({args[0]})",
+        "group_bitmap_xor" => $"groupBitmapXor({args[0]})",
+        "sum_map" => $"sumMap({args[0]}, {args[1]})",
+        "sum_map_filtered" => $"sumMapFiltered({args[0]})({args[1]}, {args[2]})",
+        "md5" => $"MD5({args[0]})",
+        "sha1" => $"SHA1({args[0]})",
+        "sha256" => $"SHA256({args[0]})",
+        "sha512" => $"SHA512({args[0]})",
+        "xx_hash32" => $"toInt32(xxHash32({args[0]}))",
+        "xx_hash64" => $"toInt64(xxHash64({args[0]}))",
+        "xxh3" => $"toInt64(xxh3({args[0]}))",
+        "city_hash64" => $"toInt64(cityHash64({args[0]}))",
+        "sip_hash64" => $"toInt64(sipHash64({args[0]}))",
+        "sip_hash128" => $"sipHash128({args[0]})",
+        "murmur_hash2_32" => $"toInt32(murmurHash2_32({args[0]}))",
+        "murmur_hash2_64" => $"toInt64(murmurHash2_64({args[0]}))",
+        "murmur_hash3_32" => $"toInt32(murmurHash3_32({args[0]}))",
+        "murmur_hash3_64" => $"toInt64(murmurHash3_64({args[0]}))",
+        "murmur_hash3_128" => $"murmurHash3_128({args[0]})",
+        "generate_ulid" => "generateULID()",
+        _ => throw new NotSupportedException($"The {name} function is not supported by ClickHouse.")
+    };
+
+    private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
 }

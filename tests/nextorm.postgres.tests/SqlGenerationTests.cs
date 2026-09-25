@@ -2698,7 +2698,6 @@ public class SqlGenerationTests
             E = SqlFunctions.Postgres.degrees(x.Int),
             F = SqlFunctions.Postgres.pi(),
             G = SqlFunctions.Postgres.random(),
-            H = SqlFunctions.Postgres.mod(x.Id, 2L),
             I = SqlFunctions.Postgres.gcd(x.Id, 2L),
             J = SqlFunctions.Postgres.lcm(x.Id, 2L),
             K = SqlFunctions.Postgres.factorial(x.Id),
@@ -2712,7 +2711,6 @@ public class SqlGenerationTests
         sql.Should().Contain("degrees(");
         sql.Should().Contain("pi()");
         sql.Should().Contain("random()");
-        sql.Should().Contain("mod(id, 2)");
         sql.Should().Contain("gcd(id, 2)");
         sql.Should().Contain("lcm(id, 2)");
         sql.Should().Contain("factorial(id)");
@@ -2864,8 +2862,146 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.justify_hours(SqlFunctions.Parameter<TimeSpan>(1)) != null)
             .Select(x => new { x.Id }));
 
-        sql.Should().Contain("make_interval(0, 1, 2, 3, 4, 5)");
+        sql.Should().Contain("make_interval(0, 1, 0, 2, 3, 4, 5)");
         sql.Should().Contain("justify_hours(@norm_p1)");
+    }
+
+    [Fact]
+    public void Sha224_384_512_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.sha224(SqlFunctions.Parameter<byte[]>(0)),
+            B = SqlFunctions.Postgres.sha384(SqlFunctions.Parameter<byte[]>(1)),
+            C = SqlFunctions.Postgres.sha512(SqlFunctions.Parameter<byte[]>(2))
+        }));
+
+        sql.Should().Contain("sha224(@norm_p0)");
+        sql.Should().Contain("sha384(@norm_p1)");
+        sql.Should().Contain("sha512(@norm_p2)");
+    }
+
+    [Fact]
+    public void RegexpSubstr_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.regexp_substr(x.String, "\\d+"),
+            B = SqlFunctions.Postgres.regexp_substr(x.String, "\\d+", "i")
+        }));
+
+        sql.Should().Contain("regexp_substr(somestring, '\\d+')");
+        sql.Should().Contain("regexp_substr(somestring, '\\d+', 'i')");
+    }
+
+    [Fact]
+    public void MakeTimeAndTimestamp_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.Postgres.make_time(12, 30, 15.0),
+            S = SqlFunctions.Postgres.make_timestamp(2020, 1, 2, 3, 4, 5.0)
+        }));
+
+        sql.Should().Contain("make_time(12, 30, 15)");
+        sql.Should().Contain("make_timestamp(2020, 1, 2, 3, 4, 5)");
+    }
+
+    [Fact]
+    public void AgeAndDateBin_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.age(x.Datetime, x.Datetime),
+            B = SqlFunctions.Postgres.date_bin("1 hour", x.Datetime, x.Datetime)
+        }));
+
+        sql.Should().Contain("age(dt, dt)");
+        sql.Should().Contain("date_bin(cast('1 hour' as interval), dt, dt)");
+    }
+
+    [Fact]
+    public void CurrentSettingAndSetConfig_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.current_setting("app.name"),
+            B = SqlFunctions.Postgres.current_setting("app.name", true),
+            C = SqlFunctions.Postgres.set_config("app.name", "1", false)
+        }));
+
+        sql.Should().Contain("current_setting('app.name')");
+        sql.Should().Contain("current_setting('app.name', true)");
+        sql.Should().Contain("set_config('app.name', '1', false)");
+    }
+
+    [Fact]
+    public void SequenceFunctions_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.nextval("my_seq"),
+            B = SqlFunctions.Postgres.setval("my_seq", 5L),
+            C = SqlFunctions.Postgres.currval("my_seq"),
+            D = SqlFunctions.Postgres.lastval()
+        }));
+
+        sql.Should().Contain("nextval(cast('my_seq' as regclass))");
+        sql.Should().Contain("setval(cast('my_seq' as regclass), 5)");
+        sql.Should().Contain("currval(cast('my_seq' as regclass))");
+        sql.Should().Contain("lastval()");
+    }
+
+    [Fact]
+    public void SqlJsonArrayConstructors_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.json_array(1, true, "x"),
+            B = SqlFunctions.Postgres.jsonb_array(1, 2)
+        }));
+
+        sql.Should().Contain("json_array(1, true, 'x')");
+        sql.Should().Contain("json_array(1, 2 returning jsonb)");
+    }
+
+    [Fact]
+    public void SqlJsonQueryFunctions_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.json_value(SqlFunctions.Parameter<JsonDocument>(0), "$.a"),
+            B = SqlFunctions.Postgres.json_query(SqlFunctions.Parameter<JsonDocument>(1), "$.b"),
+            C = SqlFunctions.Postgres.json_exists(SqlFunctions.Parameter<JsonDocument>(2), "$.c", true)
+        }));
+
+        sql.Should().Contain("json_value(@norm_p0, cast('$.a' as jsonpath))");
+        sql.Should().Contain("json_query(@norm_p1, cast('$.b' as jsonpath))");
+        sql.Should().Contain("json_exists(@norm_p2, cast('$.c' as jsonpath))");
     }
 
     [Fact]
@@ -3037,7 +3173,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
             .Should().Contain("strpos(substring(somestring, 1 + 1, length(somestring) - (1)), 'b')");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("case when (strpos(reverse(somestring), reverse('b'))) = 0 then -1 else length(somestring) - (strpos(reverse(somestring), reverse('b'))) - length('b') + 1 end");
+            .Should().Contain("case when (strpos(reverse(somestring), reverse('b'))) = 0 then -1 else length(somestring) - (strpos(reverse(somestring), reverse('b'))) - (length('b')) + 1 end");
     }
 
     [Fact]

@@ -38,9 +38,13 @@ internal static class TypeFacts
             return call.Method.Name is nameof(string.Contains) or nameof(string.StartsWith)
                 or nameof(string.EndsWith) or nameof(string.IsNullOrEmpty);
 
+        if (call.Method.DeclaringType == typeof(System.Text.RegularExpressions.Regex))
+            return call.Method.Name is nameof(System.Text.RegularExpressions.Regex.IsMatch);
+
         return call.Method.Name is "exists" or "any" or "all" or "Contains"
             or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
-            or nameof(SqlServerFunctions.isjson);
+            or nameof(SqlServerFunctions.isjson)
+            or nameof(SqlServerFunctions.json_contains) or nameof(SqlServerFunctions.json_path_exists);
     }
 
     /// <summary>
@@ -54,6 +58,8 @@ internal static class TypeFacts
         type.IsPrimitive
         || type == typeof(string)
         || type == typeof(DateTime)
+        || type == typeof(DateTimeOffset)
+        || type == typeof(TimeSpan)
         || type == typeof(decimal)
         || type == typeof(Guid)
         || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))

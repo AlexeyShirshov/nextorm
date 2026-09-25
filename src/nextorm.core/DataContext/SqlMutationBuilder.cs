@@ -241,6 +241,7 @@ internal static class SqlMutationBuilder
     /// <param name="whereSql">The rendered condition of the predicate form, or <see langword="null"/>; its parameters are already in <paramref name="parameters"/>.</param>
     /// <param name="parameters">The parameters of <paramref name="whereSql"/>; key values are appended to it.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <param name="parameterProvider">The provider that names the key parameters, or <see langword="null"/> to start a fresh sequence. A batch passes the shared provider so its parameters do not collide with the other statements'.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     internal static (string Sql, List<Parameter> Parameters) MakeDelete(
         ISqlDialect dialect,
@@ -249,7 +250,8 @@ internal static class SqlMutationBuilder
         DeleteCommand command,
         string? whereSql,
         List<Parameter> parameters,
-        KeywordCase keywordCase = KeywordCase.Lower)
+        KeywordCase keywordCase = KeywordCase.Lower,
+        IParameterProvider? parameterProvider = null)
     {
         var writer = StringBuilderPool.Shared.Get();
 
@@ -270,7 +272,7 @@ internal static class SqlMutationBuilder
 
             if (command.Keys is { Count: > 0 } keys)
             {
-                var provider = new DefaultParameterProvider();
+                var provider = parameterProvider ?? new DefaultParameterProvider();
                 writer.Append(SqlKeywords.Of(keywordCase, " where "));
 
                 for (var i = 0; i < keys.Count; i++)
@@ -280,7 +282,7 @@ internal static class SqlMutationBuilder
 
                     var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
                     var name = provider.GetParamName();
-                    parameters.Add(new Parameter(name, keys[i].Value));
+                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
                     writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
                 }
             }
@@ -364,7 +366,7 @@ internal static class SqlMutationBuilder
 
                     var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
                     var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, keys[i].Value));
+                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
                     writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
                 }
             }
@@ -412,6 +414,25 @@ internal static class SqlMutationBuilder
             table = dialect.QuoteIdentifier(table);
 
         return dialect.MakeTruncate(table, keywordCase);
+    }
+
+    /// <summary>
+    /// Renders a <c>DROP TABLE IF EXISTS</c> statement over the raw, optionally quoted target table.
+    /// Emitted only as the first half of a materialisation whose <c>DropExisting</c> option is set.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether the target identifier must be quoted.</param>
+    /// <param name="name">The raw (unquoted) target table name.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered SQL text.</returns>
+    internal static string MakeDropTableIfExists(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        string name,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var table = quoteIdentifiers ? dialect.QuoteIdentifier(name) : name;
+        return SqlKeywords.Of(keywordCase, "drop table if exists ") + table;
     }
 
     /// <summary>
@@ -481,6 +502,7 @@ internal static class SqlMutationBuilder
                 $"{dialect.GetType().Name} cannot materialise a query into a table.");
 
         var options = command.Options;
+        options.Validate(command.Temporary);
         if (command.Temporary && !dialect.SupportsTemporaryCreateTableAsSelect)
             throw new NotSupportedException(
                 $"{dialect.GetType().Name} cannot materialise a query into a temporary table; only a persistent ToTable is supported.");
@@ -875,7 +897,7 @@ internal static class SqlMutationBuilder
                 else
                 {
                     var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, value.Constant));
+                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(value.Constant, columns[c].Property, dialect)));
                     writer.Append(dialect.MakeParam(name));
                 }
             }

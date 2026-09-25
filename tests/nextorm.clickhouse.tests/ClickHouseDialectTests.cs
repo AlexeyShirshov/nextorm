@@ -13,6 +13,15 @@ public class ClickHouseDialectTests
     private static readonly ISqlDialect Dialect = ClickHouseDialect.Instance;
 
     [Fact]
+    public void DurationHooks_ShouldUseIntegerStorage()
+    {
+        Dialect.SupportsNativeDuration.Should().BeFalse();
+        Dialect.MakeDurationType(DurationUnit.Milliseconds).Should().Be("Int64");
+        Dialect.MakeNullableDurationType(DurationUnit.Milliseconds).Should().Be("Nullable(Int64)");
+        Dialect.MakeTypeName(typeof(TimeSpan)).Should().Be("Int64");
+    }
+
+    [Fact]
     public void MakeConcat_ShouldUseConcatFunction()
     {
         Dialect.MakeConcat(["a", "b"]).Should().Be("concat(a, b)");
@@ -106,8 +115,6 @@ public class ClickHouseDialectTests
     [InlineData("top_k_weighted", "topKWeighted")]
     [InlineData("any_agg", "any")]
     [InlineData("any_last", "anyLast")]
-    [InlineData("count_if", "countIf")]
-    [InlineData("sum_if", "sumIf")]
     [InlineData("sum", "sum")]
     public void MakeAggregate_ShouldMapProviderNames(string name, string expected)
     {
@@ -290,6 +297,12 @@ public class ClickHouseDialectTests
         Dialect.MakeDateTrunc("milliseconds", "dt").Should().Be("dateTrunc('millisecond', dt)");
         Dialect.MakeDateAdd("day", "2", "dt").Should().Be("addDays(dt, 2)");
         Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(dt, (2) * 10)");
+        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
+        Dialect.MakeDateDiffBig("milliseconds", "a", "b").Should().Be("dateDiff('millisecond', a, b)");
+        Dialect.PromoteDateOperand("day", "dt").Should().Be("dt");
+        Dialect.PromoteDateOperand("second", "dt").Should().Be("toDateTime(dt)");
+        Dialect.PromoteDateOperand("milliseconds", "dt").Should().Be("toDateTime64(dt, 3)");
+        Dialect.PromoteDateOperand("microseconds", "dt").Should().Be("toDateTime64(dt, 6)");
         Dialect.MakeEndOfMonth("dt").Should().Be("toLastDayOfMonth(dt)");
         Dialect.MakeDatePart("year", "dt").Should().Be("toInt32(toYear(dt))");
         Dialect.MakeDatePart("month", "dt").Should().Be("toInt32(toMonth(dt))");
@@ -299,6 +312,7 @@ public class ClickHouseDialectTests
         Dialect.MakeDatePart("epoch", "dt").Should().Be("toFloat64(toUnixTimestamp(dt))");
         Dialect.MakeDatePart("doy", "dt").Should().Be("toInt32(toDayOfYear(dt))");
         Dialect.MakeStringAgg("somestring", "','").Should().Be("arrayStringConcat(groupArray(somestring), ',')");
+        Dialect.MakeFilteredStringAgg("somestring", "','", "(id > 0)").Should().Be("arrayStringConcat(groupArrayIf(somestring, (id > 0)), ',')");
     }
 
     [Fact]
@@ -376,7 +390,7 @@ public class ClickHouseDialectTests
         Dialect.SupportsStatisticalAggregates.Should().BeTrue();
         Dialect.SupportsRegressionAggregates.Should().BeFalse();
         Dialect.SupportsArgMinMax.Should().BeTrue();
-        Dialect.SupportsIfAggregates.Should().BeTrue();
+        Dialect.AggregateFilterStyle.Should().Be(AggregateFilterStyle.IfCombinator);
         Dialect.UniqAggregates.Should().NotBeNull();
         Dialect.QuantileAggregates.Should().NotBeNull();
         Dialect.SupportsAnyAggregates.Should().BeTrue();

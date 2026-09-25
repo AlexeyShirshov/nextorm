@@ -41,11 +41,11 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - `string_agg(x, delimiter)` как `arrayStringConcat(groupArray(x), delimiter)`;
 - `bit_and`/`bit_or`/`bit_xor` как `groupBitAnd`/`groupBitOr`/`groupBitXor`, `covar_pop`/`covar_samp`
   как `covarPop`/`covarSamp`, `corr` как `corr`, `arg_min`/`arg_max` как `argMin`/`argMax`, а
-  фильтрованные агрегаты `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` — как комбинаторы `-If`
-  `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`; агрегаты числа уникальных значений
+  фильтр агрегата — как комбинатор `-If` (`countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, генерируемый для
+  общего `SqlFunctions.Sql.count`/`sum`/`avg`/`min`/`max` при передаче предиката); агрегаты числа уникальных значений
   `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` — как `uniq`/`uniqExact`/`uniqCombined`/`uniqHLL12`,
   обёрнутые в `toInt64(...)` для нормализации нативного `UInt64` к объявленному CLR `long`; агрегаты
-  количества (`count`/`count_distinct`/`count_if` и
+  количества (`count`/`count_distinct` и фильтрованный `countIf`, а также
   `count_big`/`count_big_distinct`) приводятся так же — в `toInt32(...)` для возвращающих `int`
   вариантов и `toInt64(...)` для 64-битных; параметрические агрегаты квантилей `quantile(level)(value)`/`quantileExact`/
   `quantileTiming` и `median`, обёрнутые в `toFloat64(...)` (чтобы любой вариант материализовался как
@@ -173,7 +173,7 @@ select concat('id:', id) as `Label` from simple_entity
 | Битовые / статистические агрегаты | `groupBitAnd`/`groupBitOr`/`groupBitXor`; `corr`/`covarPop`/`covarSamp` |
 | Агрегаты регрессии | не поддерживаются (`regr_*` — только PostgreSQL) |
 | Логические агрегаты | не поддерживаются (`bool_and`/`bool_or`/`every` — только PostgreSQL) |
-| Фильтрованный агрегат | `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf` (без ANSI `filter (where ...)`) |
+| Фильтрованный агрегат | комбинатор `-If` `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, генерируемый из общего API фильтрации (без ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
 | quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`) |
 | any_agg (произвольное значение) | `any(x)` (кросс-провайдерно; `ANY_VALUE(x)` в MySQL) |

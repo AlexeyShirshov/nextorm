@@ -1,8 +1,11 @@
 # Специфичный для SQL Server SQL
 
-> SQL Server даёт условную функцию `CHOOSE`, хинты инструкции/таблицы и форму результата `FOR JSON`/
-> `FOR XML`, методы типа XML (`value`/`query`/`exist` и rowset `nodes`), нативные конструкции
-> источника `PIVOT`/`UNPIVOT`, а также табличные функции `string_split`/`openjson`.
+> SQL Server даёт условную функцию `CHOOSE`, библиотеку скаляров, специфичных для T-SQL
+> (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `UNICODE`, `NCHAR`, `FORMAT`,
+> тригонометрические функции, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID` и
+> конструкторы/агрегаты SQL/JSON), хинты инструкции/таблицы и форму результата `FOR JSON`/`FOR XML`,
+> методы типа XML (`value`/`query`/`exist` и rowset `nodes`), нативные конструкции источника
+> `PIVOT`/`UNPIVOT`, а также табличные функции `string_split`/`openjson`.
 
 **Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Провайдер SQL Server](../../providers/sqlserver.md)
 
@@ -229,6 +232,76 @@ SQL Server поддерживает только метод `System`
 ранжирования `SqlFunctions.SqlServer.containstable`/`freetexttable` отдают ключ совпавшей строки и
 оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
 [Табличные функции](../13-table-valued-functions.md#встроенные-табличные-функции).
+
+## Скаляры T-SQL
+
+`SqlFunctions.SqlServer` открывает скалярные функции, специфичные для T-SQL, через
+[`ISqlDialect.SqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions)
+([`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions)); SQL Server — единственный
+провайдер, который её реализует, поэтому все остальные провайдеры для этих членов бросают
+`NotSupportedException`. Переносимых аналогов у них нет: кросс-провайдерные `ascii`/`char`/`translate`
+живут в [`SqlFunctions.Sql`](../11-scalar-functions.md#кросс-провайдерные-скалярные-функции), а
+`Math.Log10` и так рендерит T-SQL `LOG10`.
+
+Функции можно использовать как обычные значения (и как предикаты там, где форма T-SQL — условие):
+
+```csharp
+var data = System.Text.Encoding.UTF8.GetBytes("abc");
+
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Pos = SqlFunctions.SqlServer.patindex("%a%", e.String),
+        Bracketed = SqlFunctions.SqlServer.quotename(e.String),
+        Code = SqlFunctions.SqlServer.soundex(e.String),
+        Similar = SqlFunctions.SqlServer.difference(e.String, "abc"),
+        Escaped = SqlFunctions.SqlServer.string_escape(e.String, "json"),
+        CodePoint = SqlFunctions.SqlServer.unicode(e.String),
+        Letter = SqlFunctions.SqlServer.nchar(65),
+        Number = SqlFunctions.SqlServer.format(e.Id, "D6"),
+        Angle = SqlFunctions.SqlServer.acos(0.5),
+        Bucket = SqlFunctions.SqlServer.date_bucket("day", 1, e.Datetime),
+        Month = SqlFunctions.SqlServer.datename("month", e.Datetime),
+        Digest = SqlFunctions.SqlServer.hashbytes("SHA2_256", data),
+        Arr = SqlFunctions.SqlServer.json_array("a", e.Id, "b"),
+        Obj = SqlFunctions.SqlServer.json_object("id", e.Id),
+        HasId = SqlFunctions.SqlServer.json_path_exists(e.String, "$.id")
+    })
+    .ToList();
+```
+
+```sql
+select patindex('%a%', somestring) as [Pos],
+       quotename(somestring) as [Bracketed],
+       soundex(somestring) as [Code],
+       difference(somestring, 'abc') as [Similar],
+       string_escape(somestring, 'json') as [Escaped],
+       unicode(somestring) as [CodePoint],
+       nchar(65) as [Letter],
+       format(id, 'D6') as [Number],
+       acos(0.5) as [Angle],
+       date_bucket(day, 1, dt) as [Bucket],
+       datename(month, dt) as [Month],
+       hashbytes('SHA2_256', @p0) as [Digest],
+       json_array('a', id, 'b') as [Arr],
+       json_object('id' : id) as [Obj],
+       cast(case when json_path_exists(somestring, '$.id') = 1 then 1 else 0 end as bit) as [HasId]
+from complex_entity
+```
+
+* **Строковые:** `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`,
+  `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
+  `nchar(code)`, `format(value, format)` / `format(value, format, culture)`. `format` — нативный
+  T-SQL `FORMAT`, не путать с трансляцией CLR `string.Format`.
+* **Числовые:** `acos`, `asin`, `atan`, `atn2(y, x)`, `cot`, `degrees`, `radians`, `pi()`, `square`.
+* **Дата/время:** `datename(datepart, date)` (часть — константа) и
+  `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+).
+* **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`) и
+  `newsequentialid()`; последний допустим только как `DEFAULT` столбца, но не в обычном `SELECT`.
+* **JSON:** `json_array(value, ...)` и `json_object(key, value, ...)` (SQL Server 2022+),
+  `json_objectagg(key, value)` и `json_arrayagg(value)` (SQL Server 2025+),
+  `json_path_exists(json, path)` (SQL Server 2022+) и `json_contains(json, searchValue, path)`
+  (SQL Server 2025+). Два предиката материализуются в `bit`, как `isjson`.
 
 ## Пока не поддерживается
 

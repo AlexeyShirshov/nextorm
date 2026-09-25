@@ -39,12 +39,13 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   and `to_unix_timestamp` as `toInt64(toUnixTimestamp(...))`;
 - `string_agg(x, delimiter)` as `arrayStringConcat(groupArray(x), delimiter)`;
 - `bit_and`/`bit_or`/`bit_xor` as `groupBitAnd`/`groupBitOr`/`groupBitXor`, `covar_pop`/`covar_samp` as
-  `covarPop`/`covarSamp`, `corr` as `corr`, `arg_min`/`arg_max` as `argMin`/`argMax`, and the filtered
-  aggregates `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` as the `-If` combinators
-  `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`; the distinct-count aggregates
+  `covarPop`/`covarSamp`, `corr` as `corr`, `arg_min`/`arg_max` as `argMin`/`argMax`, and an aggregate
+  filter as the `-If` combinator (`countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, emitted for the shared
+  `SqlFunctions.Sql.count`/`sum`/`avg`/`min`/`max` when they take a predicate); the distinct-count aggregates
   `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` as `uniq`/`uniqExact`/`uniqCombined`/`uniqHLL12` wrapped
   in `toInt64(...)` to normalise the native `UInt64` to the declared CLR `long`; the
-  count aggregates (`count`/`count_distinct`/`count_if`, and `count_big`/`count_big_distinct`) are cast
+  count aggregates (`count`/`count_distinct` and the filtered `countIf`, plus
+  `count_big`/`count_big_distinct`) are cast
   the same way — to `toInt32(...)` for the `int`-returning variants and `toInt64(...)` for the 64-bit
   ones; the
   parameterised quantile aggregates `quantile(level)(value)`/`quantileExact`/`quantileTiming` and
@@ -171,7 +172,7 @@ select concat('id:', id) as `Label` from simple_entity
 | Bit / statistical aggregates | `groupBitAnd`/`groupBitOr`/`groupBitXor`; `corr`/`covarPop`/`covarSamp` |
 | Regression aggregates | not supported (`regr_*` is PostgreSQL-only) |
 | Boolean aggregates | not supported (`bool_and`/`bool_or`/`every` are PostgreSQL-only) |
-| Filtered aggregate | `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf` (no ANSI `filter (where ...)`) |
+| Filtered aggregate | the `-If` combinator `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`, emitted from the shared filter API (no ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
 | quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`) |
 | any_agg (arbitrary value) | `any(x)` (cross-provider; `ANY_VALUE(x)` on MySQL) |

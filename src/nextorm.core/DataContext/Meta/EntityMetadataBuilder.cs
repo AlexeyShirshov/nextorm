@@ -62,6 +62,8 @@ public class EntityMetadataBuilder<T>
             var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true) ?? intProp?.GetCustomAttribute<ColumnAttribute>(true);
             var keyAttr = prop.GetCustomAttribute<KeyAttribute>(true) ?? intProp?.GetCustomAttribute<KeyAttribute>(true);
             var generatedAttr = prop.GetCustomAttribute<DatabaseGeneratedAttribute>(true) ?? intProp?.GetCustomAttribute<DatabaseGeneratedAttribute>(true);
+            var durationAttr = prop.GetCustomAttribute<DurationAttribute>(true) ?? intProp?.GetCustomAttribute<DurationAttribute>(true);
+            var collationAttr = prop.GetCustomAttribute<CollationAttribute>(true) ?? intProp?.GetCustomAttribute<CollationAttribute>(true);
             var generated = generatedAttr?.DatabaseGeneratedOption ?? DatabaseGeneratedOption.None;
 
             var columnName = !string.IsNullOrEmpty(colAttr?.Name) ? colAttr!.Name! : prop.Name;
@@ -73,6 +75,9 @@ public class EntityMetadataBuilder<T>
                 IsKey = keyAttr is not null,
                 IsIdentity = generated == DatabaseGeneratedOption.Identity,
                 IsComputed = generated == DatabaseGeneratedOption.Computed,
+                DurationUnit = durationAttr?.Unit,
+                DurationPrecision = durationAttr?.Precision ?? 0,
+                Collation = collationAttr?.Name,
             });
         }
 

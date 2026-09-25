@@ -12,6 +12,15 @@ public class SqliteDialectTests
 {
     private static readonly ISqlDialect Dialect = SqliteDialect.Instance;
 
+    [Fact]
+    public void DurationHooks_ShouldUseIntegerStorage()
+    {
+        Dialect.SupportsNativeDuration.Should().BeFalse();
+        Dialect.MakeDurationType(DurationUnit.Ticks).Should().Be("bigint");
+        Dialect.MakeNullableDurationType(DurationUnit.Ticks).Should().Be("bigint");
+        Dialect.MakeTypeName(typeof(TimeSpan)).Should().Be("bigint");
+    }
+
     [Theory]
     [InlineData("year", "cast(strftime('%Y', dt) as integer)")]
     [InlineData("month", "cast(strftime('%m', dt) as integer)")]
@@ -130,5 +139,30 @@ public class SqliteDialectTests
     public void UuidHooks_ShouldBeUnsupported()
     {
         Dialect.UuidGenerators.Should().BeNull();
+    }
+
+    [Fact]
+    public void SqliteFunctionHooks_ShouldExposeTheNativeSurface()
+    {
+        var functions = Dialect.SqliteFunctions;
+        functions.Should().NotBeNull();
+
+        functions!.Supports("printf").Should().BeTrue();
+        functions.Supports("json_extract").Should().BeTrue();
+        functions.Supports("acos").Should().BeTrue();
+        functions.Supports("timediff").Should().BeTrue();
+        functions.Supports("nonsense").Should().BeFalse();
+
+        functions.Render("json_get", ["a", "b"]).Should().Be("(a -> b)");
+        functions.Render("json_get_text", ["a", "b"]).Should().Be("(a ->> b)");
+        functions.Render("unhex", ["'41'"]).Should().Be("unhex('41')");
+    }
+
+    [Fact]
+    public void JsonTableFunctions_ShouldBeSupported()
+    {
+        Dialect.SupportsTableFunction("json_each").Should().BeTrue();
+        Dialect.SupportsTableFunction("json_tree").Should().BeTrue();
+        Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
     }
 }

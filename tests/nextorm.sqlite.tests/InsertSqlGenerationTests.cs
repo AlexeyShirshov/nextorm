@@ -71,6 +71,28 @@ public sealed class InsertSource
     public string? Extra { get; set; }
 }
 
+[SqlTable("timestamp_entity")]
+public interface ITimestampEntity
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    [Column("id")]
+    long Id { get; set; }
+    [Column("created_on")]
+    DateTime? CreatedOn { get; set; }
+}
+
+public sealed class TimestampEntity : ITimestampEntity
+{
+    public long Id { get; set; }
+    public DateTime? CreatedOn { get; set; }
+}
+
+internal sealed class TimestampHolder
+{
+    public DateTime? CreatedOn { get; set; }
+}
+
 /// <summary>
 /// SQL generation of the INSERT builder on SQLite (no database connection). SQLite uses
 /// <c>$name</c> parameters and the ANSI <c>RETURNING</c> clause for generated keys.
@@ -184,6 +206,51 @@ public class InsertSqlGenerationTests
             .Value(x => x.Name, x => x.Description)
             .ToSql()
             .Should().Be("insert into insert_entity (name) values (description)");
+    }
+
+    [Fact]
+    public void Value_StaticMember_ShouldBindParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        ctx.InsertInto<ITimestampEntity>()
+            .Value(x => x.CreatedOn, x => DateTime.Now)
+            .ToSql()
+            .Should().Be("insert into timestamp_entity (created_on) values ($p0)");
+    }
+
+    [Fact]
+    public void Value_CapturedMember_ShouldBindParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var holder = new TimestampHolder { CreatedOn = new DateTime(2024, 1, 2, 3, 4, 5) };
+
+        ctx.InsertInto<ITimestampEntity>()
+            .Value(x => x.CreatedOn, x => holder.CreatedOn)
+            .ToSql()
+            .Should().Be("insert into timestamp_entity (created_on) values ($p0)");
+    }
+
+    [Fact]
+    public void Value_SelfColumnReference_ShouldRenderColumn()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        ctx.InsertInto<ITimestampEntity>()
+            .Value(x => x.CreatedOn, x => x.CreatedOn)
+            .ToSql()
+            .Should().Be("insert into timestamp_entity (created_on) values (created_on)");
+    }
+
+    [Fact]
+    public void Value_EntityReferencingExpression_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.InsertInto<ITimestampEntity>()
+            .Value(x => x.CreatedOn, x => x.Id > 0 ? DateTime.Now : DateTime.MinValue);
+
+        act.Should().Throw<NotSupportedException>();
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -89,8 +90,57 @@ internal static class MemberTranslator
         return false;
     }
 
-    internal static Expression? VisitMember(BaseExpressionVisitor visitor, MemberExpression node)
+    // Resolves the effective duration storage unit of a member access mapped as an entity column:
+    // null for a native duration (or a non-duration member), otherwise the declared unit (ticks by
+    // default). Used so a TimeSpan parameter compared with a duration column is converted to the
+    // stored integer form.
+    internal static DurationUnit? ResolveDurationUnit(BaseExpressionVisitor visitor, Expression expression)
     {
+        if (expression is MemberExpression { Member: PropertyInfo pi }
+            && DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var metadata)
+            && metadata.Properties.FirstOrDefault(p => p.PropertyInfo == pi) is { } property)
+            return DurationStorage.ResolveStorageUnit(property, visitor.Dialect);
+
+        return null;
+    }
+
+    internal static string? ResolveCollation(BaseExpressionVisitor visitor, Type entityType, MemberInfo member)
+    {
+        if (member is not PropertyInfo pi
+            || !DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+            return null;
+
+        var props = metadata.Properties;
+        for (var i = 0; i < props.Count; i++)
+        {
+            if (props[i].PropertyInfo == pi)
+                return props[i].Collation is { Length: > 0 } collation ? collation : null;
+        }
+
+        return null;
+    }
+
+    internal static void AppendColumn(BaseExpressionVisitor visitor, string colName, string? collation)
+    {
+        if (string.IsNullOrEmpty(collation) || visitor.SuppressColumnCollation)
+        {
+            visitor.AppendIdentifier(colName);
+            return;
+        }
+
+        if (!visitor.Dialect.SupportsCollation)
+            throw new NotSupportedException($"The collation '{collation}' declared on the column cannot be expressed by this provider; it has no COLLATE clause.");
+
+        var builder = visitor.Builder!;
+        var start = builder.Length;
+        visitor.AppendIdentifier(colName);
+        var rendered = builder.ToString(start, builder.Length - start);
+        builder.Length = start;
+        builder.Append(visitor.Dialect.MakeCollate(rendered, collation, visitor.KeywordCase));
+        visitor.NeedAliasForColumn = true;
+    }
+
+    internal static Expression? VisitMember(BaseExpressionVisitor visitor, MemberExpression node)    {
         if (TryTranslate(visitor, node))
             return node;
 
@@ -146,7 +196,7 @@ internal static class MemberTranslator
                                 visitor.Builder!.Append(tableAliasForColumn).Append('.');
                         }
 
-                        visitor.AppendIdentifier(colName);
+                        AppendColumn(visitor, colName, ResolveCollation(visitor, visitor.EntityType, node.Member));
                         visitor.ColumnName = colName;
                         return node;
                     }
@@ -209,10 +259,11 @@ internal static class MemberTranslator
                 else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
             }
 
-            visitor.Params.Add(new Parameter(node.Member.Name, ((Func<object>)del)()));
+            var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
+            visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object>)del)())));
 
             if (!visitor.IsParamMode)
-                visitor.Builder!.Append(visitor.Dialect.MakeParam(node.Member.Name));
+                visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
 
             return node;
         }
@@ -237,9 +288,9 @@ internal static class MemberTranslator
                 var colName = memberAccessExp.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                 if (!string.IsNullOrEmpty(colName))
                 {
-                    visitor.AppendIdentifier(colName);
-                    visitor.ColumnName = colName;
-                    return node;
+                        visitor.AppendIdentifier(colName);
+                        visitor.ColumnName = colName;
+                        return node;
                 }
             }
         }
@@ -316,10 +367,11 @@ internal static class MemberTranslator
                         else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
                     }
                     // var value = 1;
-                    visitor.Params.Add(new Parameter(node.Member.Name, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value)));
+                    var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
+                    visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value))));
 
                     if (!visitor.IsParamMode)
-                        visitor.Builder!.Append(visitor.Dialect.MakeParam(node.Member.Name));
+                        visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
 
                     return node;
                 }
@@ -379,7 +431,10 @@ internal static class MemberTranslator
                         if (TryTranslateDerivedProjectionMember(visitor, node, lambdaParameter, hasTableAliasForColumn))
                             return node;
 
-                        visitor.AppendIdentifier(colName);
+                        var collation = lambdaParameter.Type!.IsAssignableTo(typeof(IProjection))
+                            ? null
+                            : ResolveCollation(visitor, lambdaParameter.Type, node.Member);
+                        AppendColumn(visitor, colName, collation);
                         visitor.ColumnName = colName;
                         return node;
                     }

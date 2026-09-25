@@ -1,6 +1,6 @@
 ---
 name: implementing-todo-features
-description: Close an unchecked backlog item (a per-feature docs/specs/roadmap/todo_*.md, indexed by docs/specs/roadmap/sql-capabilities-gap-analysis.md) end-to-end — save a work plan to docs/specs/roadmap/todo_<feature>.md first, map the function across every provider (mandatory provider x form matrix), pick the closest C# analog, add the SqlFunctions.Sql / provider *Functions surface, run nextorm-code-auditor, add tests, keep line coverage >= MIN_LINE_COVERAGE, and update docs EN+RU plus specs. Use when adding a missing SQL function/aggregate/operator or LINQ operator, when the user says "нереализованный функционал", "закрыть TODO", "добавить функцию", "SqlFunctions.Sql", "провайдерный пробел", "план фичи", or picks a blocked/`[ ]` item from todo_*.
+description: Close an unchecked backlog item (a per-feature docs/specs/roadmap/todo_*.md, indexed by docs/specs/roadmap/sql-capabilities-gap-analysis.md) end-to-end — save a work plan to docs/specs/roadmap/todo_<feature>.md first, map the function across every provider (mandatory provider x form matrix), pick the closest C# analog, add the SqlFunctions.Sql / provider *Functions surface, run nextorm-code-auditor and nextorm-design-engineer, add tests, keep line coverage >= MIN_LINE_COVERAGE, and update docs EN+RU plus specs. Use when adding a missing SQL function/aggregate/operator or LINQ operator, when the user says "нереализованный функционал", "закрыть TODO", "добавить функцию", "SqlFunctions.Sql", "провайдерный пробел", "план фичи", or picks a blocked/`[ ]` item from todo_*.
 ---
 
 # Implementing a TODO feature across providers
@@ -177,13 +177,19 @@ Must be 0 warnings / 0 errors before the audit.
 
 ## 6. Code audit (mandatory)
 
-Launch the `nextorm-code-auditor` subagent with the `task` tool. It is read-only for code and owns
-only `docs/specs/design/code-smells-review.md` and `docs/specs/design/API-NAMING-REVIEW.md`; it
-reports findings and updates those registers.
+Run **both** subagents over the feature diff, in this order:
 
-Then apply its findings:
-- Code / analyzer-policy fixes -> hand off to `nextorm-design-engineer` (subagent) or apply directly.
-- Hot-path measurement (if the auditor flags allocations) -> `nextorm-inmemory-perf-analyst` for
+1. `nextorm-code-auditor` (via `task`). Read-only for code; owns only
+   `docs/specs/design/code-smells-review.md` and `docs/specs/design/API-NAMING-REVIEW.md`; it reports
+   findings and updates those registers.
+2. `nextorm-design-engineer` (via `task`). Reviews the feature against SOLID/DRY, type design
+   (sealed / readonly struct / Span vs Memory / ValueTask / collection return types) and the
+   `analyzing-dotnet-performance` anti-patterns; it applies the agreed fixes, builds and tests them,
+   and updates `docs/specs/design/solid-review.md` / `code-smells-review.md`.
+
+Then apply the combined findings:
+- Code / analyzer-policy fixes -> applied by `nextorm-design-engineer` (or directly).
+- Hot-path measurement (if a reviewer flags allocations) -> `nextorm-inmemory-perf-analyst` for
   in-memory, `nextorm-db-perf-analyst` for SQL providers, `nextorm-performance-analyst` to triage.
 - Persist the register entries so the next audit does not re-report them.
 
@@ -259,7 +265,7 @@ SQL-generation tests.
 - [ ] Implementation tier chosen by the ladder (native CLR -> `CommonFunctions` -> `[SqlFunction]`),
       with the dialect hook wired in every case.
 - [ ] Public surface has XML docs; `dotnet build nextorm.slnx -c Release` is 0/0.
-- [ ] `nextorm-code-auditor` run; findings applied and persisted in the registers.
+- [ ] `nextorm-code-auditor` and `nextorm-design-engineer` run; findings applied and persisted in the registers.
 - [ ] SQL-generation tests + integration/core tests added and green.
 - [ ] Coverage before/after reported; line coverage did not drop below the previous value / 75.
 - [ ] Item status in its `docs/specs/roadmap/todo_*.md` / gap-analysis §4, docs EN+RU and specs updated: the new

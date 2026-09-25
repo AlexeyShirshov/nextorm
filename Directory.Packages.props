@@ -7,7 +7,7 @@
       projects) so they double as a real consumer of what ships on nuget.org. Bump this together with
       src/Directory.Build.props' <Version> when a release is published.
     -->
-    <NextOrmVersion>1.0.4-alpha</NextOrmVersion>
+    <NextOrmVersion>1.0.5-alpha</NextOrmVersion>
   </PropertyGroup>
 
   <ItemGroup>

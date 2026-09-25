@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
     <ProjectReference Include="..\..\src\nextorm.mysql\nextorm.mysql.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.mariadb\nextorm.mariadb.csproj" />
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
   </ItemGroup>
 

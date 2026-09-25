@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using System.Linq.Expressions;
+using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -1549,6 +1550,40 @@ public class SqlGenerationTests
         var act = () => SqlOf(ctx, e.Select(x => new { H = SqlFunctions.Postgres.digest("abc", "sha256") }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*digest/sha256*");
+
+        var sha512 = () => SqlOf(ctx, e.Select(x => new { H = SqlFunctions.Postgres.sha512(SqlFunctions.Parameter<byte[]>(0)) }));
+        sha512.Should().Throw<NotSupportedException>().WithMessage("*digest/sha256*");
+    }
+
+    [Fact]
+    public void PostgresFunctionGaps_ShouldThrowOnSqlite()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var regexp = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.regexp_substr(x.String, "a") }));
+        regexp.Should().Throw<NotSupportedException>().WithMessage("*extended scalar*");
+
+        var makeTime = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.make_time(1, 2, 3.0) }));
+        makeTime.Should().Throw<NotSupportedException>().WithMessage("*extended scalar*");
+
+        var age = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.age(x.Datetime, x.Datetime) }));
+        age.Should().Throw<NotSupportedException>().WithMessage("*extended scalar*");
+
+        var dateBin = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.date_bin("1 hour", x.Datetime, x.Datetime) }));
+        dateBin.Should().Throw<NotSupportedException>().WithMessage("*extended scalar*");
+
+        var setting = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.current_setting("app.x") }));
+        setting.Should().Throw<NotSupportedException>().WithMessage("*extended scalar*");
+
+        var nextval = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.nextval("s") }));
+        nextval.Should().Throw<NotSupportedException>().WithMessage("*extended scalar*");
+
+        var jsonArray = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_array(1, 2) }));
+        jsonArray.Should().Throw<NotSupportedException>().WithMessage("*JSON*");
+
+        var jsonValue = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.json_value(SqlFunctions.Parameter<JsonDocument>(0), "$.a") }));
+        jsonValue.Should().Throw<NotSupportedException>().WithMessage("*JSON*");
     }
 
     [Fact]

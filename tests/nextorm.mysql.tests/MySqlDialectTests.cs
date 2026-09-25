@@ -13,6 +13,16 @@ public class MySqlDialectTests
     private static readonly ISqlDialect Dialect = MySqlDialect.Instance;
 
     [Fact]
+    public void DurationHooks_ShouldUseNativeTime()
+    {
+        Dialect.SupportsNativeDuration.Should().BeTrue();
+        Dialect.MakeDurationType(null).Should().Be("time");
+        Dialect.MakeDurationType(DurationUnit.Seconds, 6).Should().Be("time(6)");
+        Dialect.MakeNullableDurationType(DurationUnit.Seconds, 6).Should().Be("time(6)");
+        Dialect.MakeTypeName(typeof(TimeSpan)).Should().Be("time");
+    }
+
+    [Fact]
     public void MakeConcat_ShouldUseConcatFunction()
     {
         Dialect.MakeConcat(["a", "b"]).Should().Be("concat(a, b)");
@@ -193,5 +203,29 @@ public class MySqlDialectTests
     {
         // MySQL has only UUID() (v1); a v4/v7 generator is not available.
         Dialect.UuidGenerators.Should().BeNull();
+    }
+
+    [Fact]
+    public void MySqlFunctionHooks_ShouldRenderTheNativeSurface()
+    {
+        Dialect.MySqlFunctions.Should().NotBeNull();
+        Dialect.MySqlFunctions!.Supports("find_in_set").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("json_set").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("sha2").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("uuid_to_bin").Should().BeTrue();
+        Dialect.MySqlFunctions!.Render("find_in_set", ["a", "'b,c'"]).Should().Be("find_in_set(a, 'b,c')");
+        Dialect.MySqlFunctions!.Render("field", ["a", "'b'", "'c'"]).Should().Be("field(a, 'b', 'c')");
+        Dialect.MySqlFunctions!.Render("json_set", ["j", "'$.a'", "'1'"]).Should().Be("json_set(j, '$.a', '1')");
+        Dialect.MySqlFunctions!.Render("uuid_to_bin", ["'x'"]).Should().Be("uuid_to_bin('x')");
+
+        // MariaDB-only names are rejected by the MySQL renderer (issue #79).
+        Dialect.MySqlFunctions!.Supports("nvl").Should().BeFalse();
+        Dialect.MySqlFunctions!.Supports("regexp_instr").Should().BeFalse();
+        Dialect.MySqlFunctions!.Supports("add_months").Should().BeFalse();
+        Dialect.MySqlFunctions!.Supports("kdf").Should().BeFalse();
+        Dialect.MySqlFunctions!.Supports("xxh3").Should().BeFalse();
+        Dialect.MySqlFunctions!.Supports("next_value_for").Should().BeFalse();
+        var act = () => Dialect.MySqlFunctions!.Render("nvl", ["a", "b"]);
+        act.Should().Throw<NotSupportedException>();
     }
 }

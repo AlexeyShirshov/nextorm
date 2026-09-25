@@ -256,3 +256,21 @@ public TBuilder WithScope(MappingScope scope);
   провайдеров, `tests/nextorm.integration.tests/CommonTestSuite.*.cs`.
 - Документация: `docs/getting-started/03-entities-and-metadata.md` (+RU), раздел по multi-tenancy,
   `docs/specs/design/API-NAMING-REVIEW.md`, `docs/specs/design/code-smells-review.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр до старта фазы 1 — 1 блокер + 8 🟡**.
+
+- **[TYPE] 🔴** `QueryPlanner._fromCache` не scope-aware: `QueryPlanner.cs:509-519` — process-wide `ConcurrentDictionary<Type, FromExpression>` по типу; при двух scope второй получит `FromExpression` default-scope (table/schema). В «Точках встраивания» (`:169-184`) и «Файлах» (`:242-254`) `_fromCache` отсутствует. Fix: ключ `(Type, MappingScope)` или перенос кэша в scoped-провайдер.
+- **[TYPE]/[DIP] 🟡** Scope не протянут через `SqlBuildContext`/`VisitorOptions`: `MemberInfoExtensions.cs:22-43` резолвит имя колонки из process-wide `DataContextCache.Metadata` без scope/provider; рендер получает параметры через `SqlBuildContext` (`SqlBuildContext.cs:44`) и `VisitorOptions` (`VisitorOptions.cs:67`), где scope нет. Fix: добавить `MappingScope`/scoped-resolver в эти два типа.
+- **[SRP]/[KISS] 🟡** Публичные seam'ы при одном потребителе (`:80-110,159-167`): `IEntityScopeResolver`/`IEntityMetadataProvider` имеют только default-реализацию, 2-й потребитель — нереализованный `todo_sharding.md:100-106`. Инвариант 1 запрещает `IX/X` «на будущее». Fix: оставить seam внутренним до шипнутого потребителя либо явно принять YAGNI-цену.
+- **[SRP] 🟡** Две из трёх перегрузок резолвера без call-site (`:80-90`): `Resolve(Type, object)` и `Resolve(Type, IReadOnlyList<object?>)`. Fix: в фазе 1 только `Resolve(Type)`.
+- **[TYPE] 🟡** Публичная форма кэшей ломается: `DataContextCache.Metadata`/`SelectListCache` — `public static IDictionary<Type, …>` (`DataContextCache.cs:30,35`); смена ключа на `(Type, MappingScope)` — бинарный public-API брейк, тогда как `:167,206` обещает сохранить словарь/ключ. Fix: `Type`-словарь fast-path для `Default` + отдельный scoped-кэш; брейк оформить осознанно через EN+RU (инвариант 5).
+- **[DRY] 🟡** `IEntityMetadataProvider.GetColumnName` дублирует знание о колонке (`:102-109` vs `IEntityMetadata.Properties[].ColumnName` и `MemberInfoExtensions._columnNames` `:15`) — три источника истины. Fix: имя колонки только через метаданные.
+- **[DRY] 🟡** Параллельный механизм префикса поверх существующего: уже есть `SqlBuildContext.ParameterNamePrefix` (`:44`) и `VisitorOptions.ParameterNamePrefix` (`:67`), протянутые через `RenderSource`/`RenderPredicate`/`RenderAssignments` (`QueryPlanner.cs:83,137,221`). Fix: расширить существующий prefix-путь либо обосновать wrapper.
+- **[TYPE]/[PERF] 🟡** `:69` `ParameterPrefix => Key + "_"` аллоцирует на каждое чтение; `:147-149` делает `NormParam` статическим по scope — process-wide `ParamNameCache` без эвикции (`ParamNameCache.cs:12-41`), при tenant/shard-ключах неограниченный рост. Fix: кэшировать префикс в структуре, norm-кэш — per-context/с ограничением.
+- **[TYPE]/[LSP] 🟡** `Schema` не доезжает до DML (`:115-123,128-135,177`): мутации несут лишь `TableName`/`IsTableNameAuto` (`MutationCommand.cs:147-150`, `InsertBuilder.cs:425`) и рендерятся через `SqlMutationBuilder.ResolveTableName` (`:888-891`) без схемы → `Schema("s")` молча не квалифицирует `INSERT/UPDATE/DELETE/MERGE/TRUNCATE`. Fix: добавить `Schema` в mutation-команды и `ResolveTableName`/`Make*Head`.
+- **[TYPE] ℹ️** `:244-247` `DefaultEntityScopeResolver`/`DefaultEntityMetadataProvider` без `sealed`; `:105` `in MappingScope` на 8-байтной структуре выгоды не даёт. Fix: `sealed`/`internal`, по значению.
+- **[SRP] ℹ️** Ambient scope и `Properties`: `IContextEnvironment.cs:26` — мутабельный `Dictionary<string,object>`; план оговаривает потокобезопасность (`:211-212`). Deferred: документировать «не менять во время запроса»/снапшот.
+- **ℹ️** `:184` ссылается на `DataContextDependencies.cs:21` как на регистрацию — фактически это внутренние хуки, регистрация в `DataContextBuilder.cs:68-140`. Fix.
