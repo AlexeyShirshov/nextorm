@@ -43,7 +43,8 @@ internal static class TypeFacts
 
         return call.Method.Name is "exists" or "any" or "all" or "Contains"
             or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
-            or nameof(SqlServerFunctions.isjson);
+            or nameof(SqlServerFunctions.isjson)
+            or nameof(SqlServerFunctions.json_contains) or nameof(SqlServerFunctions.json_path_exists);
     }
 
     /// <summary>

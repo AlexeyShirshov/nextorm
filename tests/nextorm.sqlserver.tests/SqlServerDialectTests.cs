@@ -88,6 +88,13 @@ public class SqlServerDialectTests
     }
 
     [Fact]
+    public void MakeMathFunction_ShouldMapPowToPower()
+    {
+        // T-SQL has no POW; Math.Pow must render as POWER.
+        Dialect.MakeMathFunction("pow", ["x", "y"]).Should().Be("power(x, y)");
+    }
+
+    [Fact]
     public void ScalarFunctionHooks_ShouldUseSqlServerForms()
     {
         Dialect.MakeStringLength("x").Should().Be("len(x)");
@@ -310,5 +317,46 @@ public class SqlServerDialectTests
         Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
         Dialect.UuidGenerators!.Supports("uuidv7").Should().BeFalse();
         Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("newid()");
+    }
+
+    [Fact]
+    public void SqlServerFunctionsHooks_ShouldRenderNativeForms()
+    {
+        var functions = Dialect.SqlServerFunctions;
+        functions.Should().NotBeNull();
+
+        functions!.Supports("patindex").Should().BeTrue();
+        functions.Supports("hashbytes").Should().BeTrue();
+        functions.Supports("json_object").Should().BeTrue();
+        functions.Supports("log10").Should().BeFalse();
+
+        functions.Render("patindex", ["'%a%'", "[s]"]).Should().Be("patindex('%a%', [s])");
+        functions.Render("quotename", ["[s]"]).Should().Be("quotename([s])");
+        functions.Render("quotename", ["[s]", "'['"]).Should().Be("quotename([s], '[')");
+        functions.Render("unicode", ["[s]"]).Should().Be("unicode([s])");
+        functions.Render("nchar", ["65"]).Should().Be("nchar(65)");
+        functions.Render("format", ["[v]", "'N'"]).Should().Be("format([v], 'N')");
+        functions.Render("format", ["[v]", "'N'", "'en-US'"]).Should().Be("format([v], 'N', 'en-US')");
+        functions.Render("atn2", ["[y]", "[x]"]).Should().Be("atn2([y], [x])");
+        functions.Render("pi", []).Should().Be("pi()");
+        functions.Render("square", ["[x]"]).Should().Be("square([x])");
+        functions.Render("datename", ["'month'", "[d]"]).Should().Be("datename(month, [d])");
+        functions.Render("date_bucket", ["'day'", "1", "[d]"]).Should().Be("date_bucket(day, 1, [d])");
+        functions.Render("date_bucket", ["'day'", "1", "[d]", "[o]"]).Should().Be("date_bucket(day, 1, [d], [o])");
+        functions.Render("hashbytes", ["'SHA2_256'", "[d]"]).Should().Be("hashbytes('SHA2_256', [d])");
+        functions.Render("newsequentialid", []).Should().Be("newsequentialid()");
+        functions.Render("json_array", ["'a'", "1"]).Should().Be("json_array('a', 1)");
+        functions.Render("json_array", []).Should().Be("json_array()");
+        functions.Render("json_object", ["'k'", "1", "'k2'", "'v'"]).Should().Be("json_object('k' : 1, 'k2' : 'v')");
+        functions.Render("json_arrayagg", ["[v]"]).Should().Be("json_arrayagg([v])");
+        functions.Render("json_objectagg", ["[k]", "[v]"]).Should().Be("json_objectagg([k] : [v])");
+        functions.Render("json_contains", ["[j]", "'a'", "'$.x'"]).Should().Be("json_contains([j], 'a', '$.x')");
+        functions.Render("json_path_exists", ["[j]", "'$.x'"]).Should().Be("json_path_exists([j], '$.x')");
+
+        var odd = () => functions.Render("json_object", ["'k'"]);
+        odd.Should().Throw<NotSupportedException>().WithMessage("*even*");
+
+        var unknown = () => functions.Render("unknown", ["[s]"]);
+        unknown.Should().Throw<NotSupportedException>().WithMessage("*unknown*not supported*");
     }
 }
