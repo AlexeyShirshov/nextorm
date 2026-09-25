@@ -44,7 +44,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
     public bool SupportsTemporaryCreateTableAsSelect => false;
     public bool SupportsBatch => true;
     public bool SupportsTransactions => true;
-    public bool SupportsRegex => false;
+    public bool SupportsRegex => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";

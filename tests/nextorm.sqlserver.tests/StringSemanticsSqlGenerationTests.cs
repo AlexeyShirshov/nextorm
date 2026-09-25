@@ -61,12 +61,42 @@ public class StringSemanticsSqlGenerationTests
     }
 
     [Fact]
-    public void RegexIsMatch_ShouldThrowBecauseNoRegexEngine()
+    public void RegexIsMatch_ShouldUseRegexpLikeWithCaseSensitiveFlag()
     {
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a")).Select(x => new { x.Id }));
-        act.Should().Throw<NotSupportedException>().WithMessage("*Regular expressions*");
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a")).Select(x => new { x.Id }))
+            .Should().Contain("regexp_like(somestring, '^a', 'c')");
+    }
+
+    [Fact]
+    public void RegexIsMatchIgnoreCase_ShouldUseRegexpLikeWithIgnoreCaseFlag()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a", RegexOptions.IgnoreCase)).Select(x => new { x.Id }))
+            .Should().Contain("regexp_like(somestring, '^a', 'i')");
+    }
+
+    [Fact]
+    public void RegexReplace_ShouldUseRegexpReplace()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "[0-9]+", "#") }))
+            .Should().Contain("regexp_replace(somestring, '[0-9]+', '#', 1, 0, 'c')");
+    }
+
+    [Fact]
+    public void RegexReplaceIgnoreCase_ShouldUseIgnoreCaseFlag()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "a", "#", RegexOptions.IgnoreCase) }))
+            .Should().Contain("regexp_replace(somestring, 'a', '#', 1, 0, 'i')");
     }
 }
