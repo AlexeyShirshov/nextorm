@@ -39,6 +39,8 @@
 - [Interceptors](guide/27-interceptors.md)
 - [Executing statements in one batch](guide/28-sql-batch.md)
 - [Optimistic concurrency and change tracking](guide/29-optimistic-concurrency.md)
+- [Value converters and JSON columns](guide/30-value-converters.md)
+- [Range columns (pair of scalar columns)](guide/31-range-columns.md)
 
 ### Scalar functions
 
@@ -89,7 +91,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.6-alpha) is a prof of concept.
+The current status (1.0.7-beta) is a prof of concept.
 
 ## Roadmap
 
@@ -98,7 +100,7 @@ The current status (1.0.6-alpha) is a prof of concept.
 - [1.0.4-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.4)
 - [1.0.5-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.5)
 - [1.0.6-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.6)
-- [1.0-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
+- [1.0.7-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
 - [1.0-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-rc.1)
 - [1.0](https://github.com/AlexeyShirshov/nextorm/milestones/1.0)
 - [1.1.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-a.1)
@@ -145,6 +147,21 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](guide/15-query-reuse.md).
 
 ## Releases
+
+### 1.0.7-beta
+
+- [`OUTPUT INTO`, несколько result-set'ов, upsert-with-output](https://github.com/AlexeyShirshov/nextorm/issues/15)
+- [Value converters — `EnumToStringConverter`, конвертеры в предикатах и проекциях](https://github.com/AlexeyShirshov/nextorm/issues/31)
+- [Динамическая схема результата (ClickHouse `values()`, PostgreSQL `jsonb_to_record(set)`)](https://github.com/AlexeyShirshov/nextorm/issues/63)
+- [JSON-колонка ↔ CLR-объект (авто-сериализация свойства)](https://github.com/AlexeyShirshov/nextorm/issues/64)
+- [PostgreSQL range-типы и `Overlaps` (`&&`)](https://github.com/AlexeyShirshov/nextorm/issues/66)
+- [SQL Server 2025 — `regexp_like` / `regexp_replace`](https://github.com/AlexeyShirshov/nextorm/issues/85)
+- [Портативный range как пара колонок — `[RangeColumns]`](https://github.com/AlexeyShirshov/nextorm/issues/86)
+- [Скалярные функции: кросс-провайдерный фасад `SqlFunctions.Sql` и пробелы по провайдерам](https://github.com/AlexeyShirshov/nextorm/issues/87)
+- [Value converters — фаза 2 и JSON-колонки](https://github.com/AlexeyShirshov/nextorm/issues/88)
+- [In-memory функции, структурный ключ плана запроса, dictionary lookup](https://github.com/AlexeyShirshov/nextorm/issues/89)
+- Новые главы руководства EN + RU: конвертеры значений и JSON-колонки, range-колонки
+- [Спеки, регистры аудита, документация EN + RU](https://github.com/AlexeyShirshov/nextorm/issues/90)
 
 ### 1.0.6-alpha
 

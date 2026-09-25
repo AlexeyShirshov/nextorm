@@ -216,7 +216,7 @@ PostgreSQL также включает `greatest`/`least`, `date_trunc`, агр�
 `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`,
 `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` и record-функции
 `jsonb_to_record`/`jsonb_to_recordset`
-([`SqlFunctions.Postgres.jsonb_to_record<TRow>(json)`](xref:NextORM.Core.SqlFunctions.PostgresFunctions), схема
+([`SqlFunctions.Postgres.jsonb_to_record<TRow>(json)`](xref:NextORM.Core.PostgresFunctions), схема
 результата которых рендерится как список определений колонок в псевдониме из `TRow` вызывающего под
 [`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))):
 

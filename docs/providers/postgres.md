@@ -215,7 +215,7 @@ the `percent_rank`/`cume_dist`/`nth_value` window functions and the built-in set
 functions `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`,
 `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`,
 `ts_stat` and the record functions `jsonb_to_record`/`jsonb_to_recordset`
-([`SqlFunctions.Postgres.jsonb_to_record<TRow>(json)`](xref:NextORM.Core.SqlFunctions.PostgresFunctions), whose
+([`SqlFunctions.Postgres.jsonb_to_record<TRow>(json)`](xref:NextORM.Core.PostgresFunctions), whose
 result schema is rendered as the alias column-definition list from the caller's `TRow` under
 [`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))):
 

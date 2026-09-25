@@ -106,7 +106,7 @@ The full comparison — capabilities and benchmarks, with methodology — is in 
 
 ## Status
 
-Alpha — the public API is still changing and backward compatibility is not preserved between
+Beta — the public API is still changing and backward compatibility is not preserved between
 prereleases. See the [roadmap](https://github.com/AlexeyShirshov/nextorm/milestones) and the
 [documentation](https://alexeyshirshov.github.io/nextorm/) for details.
 

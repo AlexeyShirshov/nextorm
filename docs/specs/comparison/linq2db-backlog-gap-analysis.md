@@ -338,6 +338,55 @@ integration-тест. Подробности — [Duration columns](../../guide/
 - **EF Core integration** — не out-of-scope, а `Planned` ([`todo_efcore_integration.md`](../roadmap/todo_efcore_integration.md));
   `linq2db#4044`, `#4611`, `#4666` закрываются ей.
 
+### Пропущенная ось: shipped-поверхность `LinqExtensions`
+
+Развёртка §1–§3 идёт по **открытым** issue/epic linq2db (`gh issue list`, срез 2026-09-25), поэтому
+выпущенные ядровые операторы и расширения `LinqExtensions`, которым не соответствует ни открытый issue,
+ни отдельная SQL-конструкция, в gap-анализ не попали. Их SQL-эквивалент у nextorm уже есть (или эти
+возможности сознательно не переносятся), поэтому статус — **By design**; исключения отмечены **Gap**.
+
+| Возможность linq2db (shipped) | Эквивалент в nextorm | Статус |
+|---|---|---|
+| `SelectMany` (flatten, `CROSS APPLY`) | [`CrossApply`](../../guide/03-joins.md) | **By design** — SQL-провайдеры бросают `NotSupportedException`, in-memory реализован ([Limitations](../../advanced/limitations.md)) |
+| `GroupJoin` (grouped inner, `LEFT JOIN`) | [`LeftJoin`](../../guide/03-joins.md) + `GROUP BY`/агрегат | **By design** |
+| `DefaultIfEmpty` (left-join-семантика `SelectMany`) | [`LeftJoin`](../../guide/03-joins.md) / `OuterApply` | **By design** |
+| `AsSubQuery` | `From(QueryCommand)` (производная таблица); `As` — workstream 38 | **By design / Planned** |
+| `TagQuery` (комментарий-метка в SQL) | нет | **Gap** → [`todo_query_tag.md`](../roadmap/todo_query_tag.md) |
+| `InlineParameters` (инлайн констант вместо параметров) | нет (всегда параметризация) | **By design** — расходится с дизайном план-кэша |
+| `RemoveOrderBy` | нет; билдер строится снизу вверх, порядок задаёт `OrderBy` | **N/A** (не нужно без `IQueryable`-композиции) |
+| `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | `QueryCommand.Hint` только statement-level; table hint (SQL Server), index hint | **Gap** → [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md) |
+| `WithTableExpression` / runtime-переопределение `TableName`/`SchemaName`/`ServerName` | `From("table")` + `TableAlias`; `BulkInsertOptions.TableName` (только bulk) | **Gap** → [`todo_source_override.md`](../roadmap/todo_source_override.md) |
+
+Источник списка — публичная поверхность `LinqExtensions` (`Source/LinqToDB/LinqExtensions.cs`); отсутствие
+в nextorm проверено по `src/**` (совпадений `TagQuery`/`InlineParameters`/`JoinHint`/`SubQueryHint`/
+`TablesInScopeHint`/`WithTableExpression` нет) и по `capability-matrix.md` (строки hints покрывают только
+statement/table/index).
+
+### Инфраструктура linq2db (Data Connection System / Mapping / Query Processing)
+
+Отдельная ось: не SQL-конструкции и не операторы, а «обвязка» linq2db. В §1–§3 не попадала по той же
+причине (issue-driven развёртка). Проверено по докам linq2db и nextorm (`src/**`, `docs/**`).
+
+| Возможность linq2db (infra) | nextorm | Статус |
+|---|---|---|
+| `DataConnection`/`DataContext`, владение соединением, повторное использование, dispose | `GetConnection`/`EnsureConnectionOpen`, owned/supplied connection ([Connections and logging](../../guide/16-connections-and-logging.md)) | **Паритет** |
+| Транзакции: `BeginTransaction`, commit/rollback, enlist во внешнюю | `ITransactionManager`, `UseTransaction` ([Transactions](../../guide/25-transactions.md)) | **Паритет**; savepoints/вложенность вне поверхности (у linq2db явного API тоже нет) |
+| Интерсепторы: command/connection, `BeforeExecute`/`AfterExecute`/`Error` | `IQueryInterceptor` (`CommandInitialized/Executing/Executed(elapsed)/Failed`), `IConnectionInterceptor` ([Interceptors](../../guide/27-interceptors.md)) | **Паритет**; трансляция исключений — By design (`try`/`catch`) |
+| Трассировка/лог: `OnTraceConnection`, `TraceInfo`, `TraceSwitch`, `ILogger` | `ILoggerFactory` + `LogSensitiveData` + интерсепторы ([Connections and logging](../../guide/16-connections-and-logging.md)) | **Паритет** |
+| Async (транзакции, команды, bulk) | async-терминалы/`EnsureConnectionOpenAsync`/`BeginTransactionAsync` | **Паритет** |
+| Compiled queries (`CompiledQuery.Compile`) | `Prepare()` + неявный план-кэш | **By design** |
+| `MappingSchema` (несколько/именованные схемы) | один `IEntityMetadata` на тип; scope-override | **Planned** ([`todo_mapping_scope.md`](../roadmap/todo_mapping_scope.md)) |
+| Value converters (`IValueConverter`/`SetConverter`) | `ValueConverter<,>`/`[ValueConverter]`/`HasConversion` ([Value converters](../../guide/30-value-converters.md)) | **Паритет** |
+| Command timeout (`UseCommandTimeout`/`WithCommandTimeout`) | только `BulkInsertOptions.TimeoutSeconds`; для запросов — через интерсептор | **Gap** → [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md) |
+| Dynamic columns (`DynamicColumnsStore`/`DynamicColumnAccessor`) | нет | **Gap** → [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md) |
+| `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions` без этих флагов | **Gap** → [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md) |
+| Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | per-command `Cache=false`; размер — хвост G10 | **Gap** → [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
+| Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
+| DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **Out-of-scope** (см. §4) |
+| Хранимые процедуры / сырой `Execute*` / несколько result-set | `WithSql` (только `SELECT`-источник) | **Planned** ([`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md), G4-хвост) |
+| Association/eager-load, inheritance/TPH | нет метаданных связей | **Out-of-scope** |
+| Testing framework, NuGet-упаковка, multi-targeting | собственные тесты/сборка | **N/A** |
+
 ## 5. Общие пробелы (нет и у nextorm, и у linq2db)
 
 - **~~Динамическая схема табличных источников~~ — <span style="color:green">Done в nextorm</span> (1.0-b.1).**
@@ -364,6 +413,8 @@ integration-тест. Подробности — [Duration columns](../../guide/
 | P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../guide/27-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); ~~G17~~ — **<span style="color:green">реализовано</span>** (интерфейсные коллекции + явный отказ от неподдерживаемого индексера → [Filtering](../../guide/02-filtering-where.md#captured-collection-lookup-dictcolumn)); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); G14 — проверить |
+| P2 | Слепое пятно shipped-`LinqExtensions` (§4): заведены [`todo_query_tag.md`](../roadmap/todo_query_tag.md), [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md), [`todo_source_override.md`](../roadmap/todo_source_override.md) |
+| P2 | Инфраструктурные Gap (§4): [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md), [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md), [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md), [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
 
 ## 7. Статус сравнения (обновлено `2026-09-25`)
@@ -404,6 +455,25 @@ captured-коллекции, включая интерфейсные типы; �
 отвергается явно ([Filtering](../../guide/02-filtering-where.md#captured-collection-lookup-dictcolumn)).
 Единственный общий с linq2db оставшийся пробел — ClickHouse `AggregateFunction`-state (§5), заблокирован
 драйвером.
+
+**Добавлено (25.09.2026):** в §4 заведена подсекция «Пропущенная ось: shipped-поверхность
+`LinqExtensions`» — закрывает слепое пятно issue-driven развёртки, из-за которого выпущенные операторы
+linq2db (`SelectMany`/`GroupJoin`/`DefaultIfEmpty`/`AsSubQuery`) и его hint/table-расширения не попадали
+ни в §1–§3, ни в `sql-capabilities-gap-analysis.md`. `SelectMany`/`GroupJoin` классифицированы **By design**
+(эквивалент — `CrossApply`/`OuterApply`/`LeftJoin`, SQL-провайдеры бросают `NotSupportedException`);
+новые **Gap**-пункты — `TagQuery`, `JoinHint`/`SubQueryHint`/`TablesInScopeHint` и per-query
+переопределение источника (`WithTableExpression`/`TableName`). По этим трём Gap-пунктам заведены
+рабочие планы [`todo_query_tag.md`](../roadmap/todo_query_tag.md),
+[`todo_hint_variants.md`](../roadmap/todo_hint_variants.md),
+[`todo_source_override.md`](../roadmap/todo_source_override.md).
+
+**Добавлено (25.09.2026, инфраструктура):** в §4 заведена вторая подсекция — сравнение инфраструктуры
+linq2db (Data Connection System / Mapping / Query Processing). Паритет подтверждён по соединениям,
+транзакциям, интерсепторам, трассировке/логированию, async, value converters и `Prepare()`. Найдены и
+заведены ещё четыре Gap: [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md),
+[`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md),
+[`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md),
+[`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md).
 
 ## See also
 
