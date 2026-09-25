@@ -261,37 +261,77 @@ Server there is no regular-expression engine, so the call is rejected: use
 [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)) for simple
 patterns. The in-memory provider runs `System.Text.RegularExpressions` natively.
 
+## Cross-provider scalar functions
+
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes a small library of string and number
+functions that render natively on every provider that can express them. Each call is gated **per
+function** through [`ISqlDialect.ScalarFunctions`](xref:NextORM.Core.ISqlDialect.ScalarFunctions) and
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports): a provider without a native
+form rejects the call with a clear `NotSupportedException` instead of emitting SQL it cannot run.
+
+| C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
+|---|---|---|---|---|---|
+| `SqlFunctions.Sql.left(s, n)` | `left` | `LEFT` | `LEFT` | `leftUTF8` | `substr(s, 1, n)` |
+| `SqlFunctions.Sql.right(s, n)` | `right` | `RIGHT` | `RIGHT` | `rightUTF8` | `substr` (guarded) |
+| `SqlFunctions.Sql.lpad(s, n, pad)` | `lpad` | `RIGHT(REPLICATE(...))` | `LPAD` | `leftPadUTF8` | — |
+| `SqlFunctions.Sql.rpad(s, n, pad)` | `rpad` | `LEFT(s + REPLICATE(...))` | `RPAD` | `rightPadUTF8` | — |
+| `SqlFunctions.Sql.repeat(s, n)` | `repeat` | `REPLICATE` | `REPEAT` | `repeat` | — |
+| `SqlFunctions.Sql.reverse(s)` | `reverse` | `REVERSE` | `REVERSE` | `reverseUTF8` | — |
+| `SqlFunctions.Sql.space(n)` | `repeat(' ', n)` | `SPACE` | `SPACE` | `space` | — |
+| `SqlFunctions.Sql.concat_ws(sep, ...)` | `concat_ws` | `CONCAT_WS` | `CONCAT_WS` | `concatWithSeparator` | `concat_ws` |
+| `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
+| `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
+| `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
+
+- `left`/`right`/`lpad`/`rpad` count **characters**, not bytes (ClickHouse uses its `*UTF8` variants).
+  A negative `n` is provider-specific: PostgreSQL reads it as "all but the last |n|", the others do not.
+- `concat_ws` skips NULL arguments on every provider except ClickHouse, whose `concatWithSeparator`
+  returns NULL when any argument is NULL.
+- `lpad`/`rpad` truncate a value that is already longer than the target length, matching the SQL
+  `lpad`/`rpad` family (this is why they are not the same as `string.PadLeft`/`PadRight`).
+- MySQL and MariaDB have no `translate`; SQLite has no `lpad`, `rpad`, `repeat`, `reverse`, `space` or
+  `translate`. Those calls are rejected on the respective provider.
+- Remainder, base-10 logarithm and power stay on the portable CLR methods (`%`, `Math.Log10`,
+  `Math.Pow`), which already translate per provider — there is no `SqlFunctions.Sql` spelling for them.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Prefix = SqlFunctions.Sql.left(e.String, 3),
+        Padded = SqlFunctions.Sql.lpad(e.String, 8, "0"),
+        Joined = SqlFunctions.Sql.concat_ws("-", e.String, "x")
+    })
+    .ToList();
+```
+
+The in-memory provider evaluates the same calls through their CLR equivalents, so the same query runs
+without a database.
+
 ## String and regular-expression extensions (PostgreSQL)
 
-Besides the portable `string` methods above, [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) exposes the common PostgreSQL string functions
-and the POSIX regular-expression functions. They are part of the extended scalar library
-([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only):
-
-> Prefer the portable built-in forms where they exist, because they render on every provider while the
-> [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) forms below are PostgreSQL only: `s.Substring(0, n)` / `s.Substring(s.Length - n)` instead
-> of `left`/`right`, and `s.PadLeft(n, c)` / `s.PadRight(n, c)` instead of `lpad`/`rpad`.
+Besides the portable `string` and [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) methods
+above, [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) exposes the PostgreSQL-only remainder of
+the string library and the POSIX regular-expression functions. They are part of the extended scalar
+library ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only):
 
 | C# | SQL |
 |---|---|
 | `SqlFunctions.Postgres.split_part(s, delim, n)` | `split_part(s, delim, n)` |
 | `SqlFunctions.Postgres.strpos(s, sub)` | `strpos(s, sub)` |
-| `SqlFunctions.Postgres.left(s, n)` / `SqlFunctions.Postgres.right(s, n)` | `left(s, n)` / `right(s, n)` |
-| `SqlFunctions.Postgres.lpad(s, n, fill)` / `SqlFunctions.Postgres.rpad(s, n, fill)` | `lpad(s, n, fill)` / `rpad(s, n, fill)` |
-| `SqlFunctions.Postgres.repeat(s, n)` | `repeat(s, n)` |
-| `SqlFunctions.Postgres.reverse(s)` | `reverse(s)` |
 | `SqlFunctions.Postgres.initcap(s)` | `initcap(s)` |
-| `SqlFunctions.Postgres.translate(s, from, to)` | `translate(s, from, to)` |
 | `SqlFunctions.Postgres.overlay(s, placing, from, count)` | `overlay(s, placing, from, count)` |
-| `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
 | `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
 | `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
 | `SqlFunctions.Postgres.digest(s\|bytes, type)` | `digest(data, type)` (requires the `pgcrypto` extension) |
+| `SqlFunctions.Postgres.sha224(bytes)` / `sha384(bytes)` / `sha512(bytes)` | `sha224(bytes)` / `sha384(bytes)` / `sha512(bytes)` |
 | `SqlFunctions.Postgres.sha256(bytes)` | `sha256(bytes)` |
 | `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
 | `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
 | `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
 | `SqlFunctions.Postgres.regexp_count(s, pattern)` | `regexp_count(s, pattern)` |
 | `SqlFunctions.Postgres.regexp_instr(s, pattern)` | `regexp_instr(s, pattern)` |
+| `SqlFunctions.Postgres.regexp_substr(s, pattern[, flags])` | `regexp_substr(...)` |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -312,6 +352,7 @@ var rows = dataContext.From<IComplexEntity>()
 | `Math.Round(x, digits)` | `round(x, digits)` | PostgreSQL casts a `double`/`float` first argument to `numeric` (`round((x)::numeric, digits)`), because it has no `round(double precision, integer)`. |
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | SQL Server has no `trunc`. |
 | `Math.Log(x)` | natural logarithm: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Single-argument form only. |
+| `Math.Log10(x)` | `log10(x)` | |
 
 ```csharp
 var values = dataContext.From<IComplexEntity>()
@@ -349,7 +390,7 @@ The remaining math functions are part of the extended scalar library
 | `SqlFunctions.Postgres.degrees(x)` / `SqlFunctions.Postgres.radians(x)` | `degrees(x)` / `radians(x)` |
 | `SqlFunctions.Postgres.pi()` / `SqlFunctions.Postgres.random()` | `pi()` / `random()` |
 | `SqlFunctions.Postgres.log(base, x)` | `log(base, x)` |
-| `SqlFunctions.Postgres.mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` | `mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` |
+| `SqlFunctions.Postgres.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` |
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
@@ -420,6 +461,9 @@ PostgreSQL only):
 | C# | SQL |
 |---|---|
 | `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (PostgreSQL's `weeks` is pinned to `0`) |
+| `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (the result is an `interval`; a whole-month part is read back as 30 days) |
+| `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
 | `SqlFunctions.Postgres.to_date(text, format)` | `to_date(text, format)` |
@@ -429,9 +473,33 @@ PostgreSQL only):
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | the same key words |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
-Date construction and arithmetic use the portable surface instead: `date_from_parts`, `date_add`,
-`date_diff`, `date_trunc` and the `DateTime` members (see [Date arithmetic](#date-arithmetic) below).
-`make_date`, `age` and `date_bin` are no longer exposed separately.
+Date construction and arithmetic otherwise use the portable surface: `date_from_parts` (which renders
+PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` and the `DateTime` members (see
+[Date arithmetic](#date-arithmetic) below).
+
+### Runtime settings and sequences (PostgreSQL)
+
+Also part of the extended scalar library
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
+PostgreSQL only). The sequence name is cast to `regclass`:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
+| `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
+| `SqlFunctions.Postgres.nextval(sequence)` | `nextval(cast(sequence as regclass))` |
+| `SqlFunctions.Postgres.setval(sequence, value)` | `setval(cast(sequence as regclass), value)` |
+| `SqlFunctions.Postgres.currval(sequence)` | `currval(cast(sequence as regclass))` |
+| `SqlFunctions.Postgres.lastval()` | `lastval()` |
+
+```csharp
+var next = dataContext.From<IComplexEntity>()
+    .Select(e => SqlFunctions.Postgres.nextval("order_id_seq"))
+    .First();
+```
+
+`currval`/`lastval` are session-scoped in PostgreSQL and therefore require the same connection that
+last advanced the sequence.
 
 ### Formatting dates and numbers to strings
 
@@ -836,6 +904,7 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 | `SqlFunctions.Postgres.json_build_object("a", x, ...)` | `json_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.json_build_array(x, y)` / `jsonb_build_array(x, y)` | `json_build_array(x, y)` / `jsonb_build_array(x, y)` |
+| `SqlFunctions.Postgres.json_array(x, y)` / `jsonb_array(x, y)` | `json_array(x, y)` / `json_array(x, y returning jsonb)` |
 | `SqlFunctions.Postgres.to_json(x)` / `to_jsonb(x)` | `to_json(x)` / `to_jsonb(x)` |
 | `SqlFunctions.Postgres.json_cast(x)` | `cast(x as jsonb)` |
 | `SqlFunctions.Postgres.json_get(json, "key")` / `json_get(json, 0)` | `json -> key` / `json -> 0` |
@@ -858,6 +927,8 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 | `SqlFunctions.Postgres.jsonb_path_match(json, path)` | `jsonb_path_match(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` | `jsonb_path_query_first(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.jsonb_path_query_array(json, path)` | `jsonb_path_query_array(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.json_value(json, path)` / `json_query(json, path)` | `json_value(json, cast(path as jsonpath))` / `json_query(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.json_exists(json, path, fromJsonPath)` | `json_exists(json, cast(path as jsonpath))` |
 
 A `path`/`keys` operand is a `string[]` and is bound as a **single array parameter** (see
 [Arrays](#arrays-postgresql)), so `SqlFunctions.Postgres.json_get_path(json, new[] { "a", "b" })` renders

@@ -266,38 +266,79 @@ ICU в MySQL, PCRE в MariaDB, RE2 в ClickHouse, .NET в SQLite), поэтом�
 используйте [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String))
 для простых шаблонов. In-memory провайдер выполняет `System.Text.RegularExpressions` нативно.
 
+## Кросс-провайдерные скалярные функции
+
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) предоставляет небольшой набор строковых и
+числовых функций, которые рендерятся нативно у каждого провайдера, умеющего их выразить. Каждый вызов
+гейтится **по функции** через [`ISqlDialect.ScalarFunctions`](xref:NextORM.Core.ISqlDialect.ScalarFunctions)
+и [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports): провайдер без нативной формы
+отклоняет вызов понятным `NotSupportedException`, а не рендерит SQL, который не сможет выполнить.
+
+| C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
+|---|---|---|---|---|---|
+| `SqlFunctions.Sql.left(s, n)` | `left` | `LEFT` | `LEFT` | `leftUTF8` | `substr(s, 1, n)` |
+| `SqlFunctions.Sql.right(s, n)` | `right` | `RIGHT` | `RIGHT` | `rightUTF8` | `substr` (с защитой) |
+| `SqlFunctions.Sql.lpad(s, n, pad)` | `lpad` | `RIGHT(REPLICATE(...))` | `LPAD` | `leftPadUTF8` | — |
+| `SqlFunctions.Sql.rpad(s, n, pad)` | `rpad` | `LEFT(s + REPLICATE(...))` | `RPAD` | `rightPadUTF8` | — |
+| `SqlFunctions.Sql.repeat(s, n)` | `repeat` | `REPLICATE` | `REPEAT` | `repeat` | — |
+| `SqlFunctions.Sql.reverse(s)` | `reverse` | `REVERSE` | `REVERSE` | `reverseUTF8` | — |
+| `SqlFunctions.Sql.space(n)` | `repeat(' ', n)` | `SPACE` | `SPACE` | `space` | — |
+| `SqlFunctions.Sql.concat_ws(sep, ...)` | `concat_ws` | `CONCAT_WS` | `CONCAT_WS` | `concatWithSeparator` | `concat_ws` |
+| `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
+| `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
+| `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
+
+- `left`/`right`/`lpad`/`rpad` считают **символы**, а не байты (ClickHouse использует варианты `*UTF8`).
+  Отрицательный `n` зависит от провайдера: PostgreSQL читает его как «всё, кроме последних |n|», остальные — нет.
+- `concat_ws` пропускает NULL-аргументы у всех провайдеров, кроме ClickHouse: его
+  `concatWithSeparator` возвращает NULL, если любой аргумент NULL.
+- `lpad`/`rpad` усекают значение, которое уже длиннее целевой длины, как и семейство SQL
+  `lpad`/`rpad` (поэтому они не совпадают с `string.PadLeft`/`PadRight`).
+- В MySQL и MariaDB нет `translate`; в SQLite нет `lpad`, `rpad`, `repeat`, `reverse`, `space` и
+  `translate`. Такие вызовы отклоняются у соответствующего провайдера.
+- Остаток, десятичный логарифм и возведение в степень остаются на переносимых CLR-методах (`%`,
+  `Math.Log10`, `Math.Pow`), которые уже транслируются у каждого провайдера — отдельной формы
+  `SqlFunctions.Sql` для них нет.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Prefix = SqlFunctions.Sql.left(e.String, 3),
+        Padded = SqlFunctions.Sql.lpad(e.String, 8, "0"),
+        Joined = SqlFunctions.Sql.concat_ws("-", e.String, "x")
+    })
+    .ToList();
+```
+
+In-memory провайдер вычисляет те же вызовы через их CLR-эквиваленты, поэтому тот же запрос выполняется
+без базы данных.
+
 ## Расширения строк и регулярных выражений (PostgreSQL)
 
-Помимо переносимых методов `string` выше, [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) предоставляет распространённые строковые функции
-PostgreSQL и функции POSIX-регулярных выражений. Они входят в расширенную библиотеку скалярных функций
+Помимо переносимых методов `string` и [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) выше,
+[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) предоставляет оставшуюся часть строковой
+библиотеки (только PostgreSQL) и функции POSIX-регулярных выражений. Они входят в расширенную
+библиотеку скалярных функций
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL):
-
-> Предпочитайте переносимые встроенные формы там, где они есть: они рендерятся всеми провайдерами, тогда
-> как формы [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) ниже доступны только в PostgreSQL. Используйте `s.Substring(0, n)` /
-> `s.Substring(s.Length - n)` вместо `left`/`right` и `s.PadLeft(n, c)` / `s.PadRight(n, c)` вместо
-> `lpad`/`rpad`.
 
 | C# | SQL |
 |---|---|
 | `SqlFunctions.Postgres.split_part(s, delim, n)` | `split_part(s, delim, n)` |
 | `SqlFunctions.Postgres.strpos(s, sub)` | `strpos(s, sub)` |
-| `SqlFunctions.Postgres.left(s, n)` / `SqlFunctions.Postgres.right(s, n)` | `left(s, n)` / `right(s, n)` |
-| `SqlFunctions.Postgres.lpad(s, n, fill)` / `SqlFunctions.Postgres.rpad(s, n, fill)` | `lpad(s, n, fill)` / `rpad(s, n, fill)` |
-| `SqlFunctions.Postgres.repeat(s, n)` | `repeat(s, n)` |
-| `SqlFunctions.Postgres.reverse(s)` | `reverse(s)` |
 | `SqlFunctions.Postgres.initcap(s)` | `initcap(s)` |
-| `SqlFunctions.Postgres.translate(s, from, to)` | `translate(s, from, to)` |
 | `SqlFunctions.Postgres.overlay(s, placing, from, count)` | `overlay(s, placing, from, count)` |
-| `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
 | `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
 | `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
 | `SqlFunctions.Postgres.digest(s\|bytes, type)` | `digest(data, type)` (требует расширения `pgcrypto`) |
+| `SqlFunctions.Postgres.sha224(bytes)` / `sha384(bytes)` / `sha512(bytes)` | `sha224(bytes)` / `sha384(bytes)` / `sha512(bytes)` |
 | `SqlFunctions.Postgres.sha256(bytes)` | `sha256(bytes)` |
 | `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
 | `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
 | `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
 | `SqlFunctions.Postgres.regexp_count(s, pattern)` | `regexp_count(s, pattern)` |
 | `SqlFunctions.Postgres.regexp_instr(s, pattern)` | `regexp_instr(s, pattern)` |
+| `SqlFunctions.Postgres.regexp_substr(s, pattern[, flags])` | `regexp_substr(...)` |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -318,6 +359,7 @@ var rows = dataContext.From<IComplexEntity>()
 | `Math.Round(x, digits)` | `round(x, digits)` | PostgreSQL приводит первый аргумент `double`/`float` к `numeric` (`round((x)::numeric, digits)`), так как в нём нет `round(double precision, integer)`. |
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | В SQL Server нет `trunc`. |
 | `Math.Log(x)` | натуральный логарифм: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Только одноаргументная форма. |
+| `Math.Log10(x)` | `log10(x)` | |
 
 ```csharp
 var values = dataContext.From<IComplexEntity>()
@@ -355,7 +397,7 @@ select abs((id - 5)) from complex_entity
 | `SqlFunctions.Postgres.degrees(x)` / `SqlFunctions.Postgres.radians(x)` | `degrees(x)` / `radians(x)` |
 | `SqlFunctions.Postgres.pi()` / `SqlFunctions.Postgres.random()` | `pi()` / `random()` |
 | `SqlFunctions.Postgres.log(base, x)` | `log(base, x)` |
-| `SqlFunctions.Postgres.mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` | `mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` |
+| `SqlFunctions.Postgres.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` |
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
@@ -427,6 +469,9 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 | C# | SQL |
 |---|---|
 | `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, 0, d, h, mi, s)` (параметр `weeks` у PostgreSQL зафиксирован в `0`) |
+| `SqlFunctions.Postgres.make_time(h, mi, sec)` / `make_timestamp(y, mo, d, h, mi, sec)` | `make_time(...)` / `make_timestamp(...)` |
+| `SqlFunctions.Postgres.age(a, b)` | `age(a, b)` (результат — `interval`; целая часть в месяцах читается как 30 дней) |
+| `SqlFunctions.Postgres.date_bin(stride, source, origin)` | `date_bin(cast(stride as interval), source, origin)` |
 | `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
 | `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
 | `SqlFunctions.Postgres.to_date(text, format)` | `to_date(text, format)` |
@@ -436,9 +481,33 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 | `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | те же ключевые слова |
 | `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
-Для построения дат и арифметики используется переносимый набор: `date_from_parts`, `date_add`,
-`date_diff`, `date_trunc` и члены `DateTime` (см. [Арифметику дат](#арифметика-дат) ниже).
-`make_date`, `age` и `date_bin` больше не предоставляются отдельно.
+Для построения дат и арифметики в остальном используется переносимый набор: `date_from_parts`
+(рендерит PostgreSQL `make_date`), `date_add`, `date_diff`, `date_trunc` и члены `DateTime` (см.
+[Арифметику дат](#арифметика-дат) ниже).
+
+### Runtime-настройки и последовательности (PostgreSQL)
+
+Также входят в расширенную скалярную библиотеку
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
+только PostgreSQL). Имя последовательности приводится к `regclass`:
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.Postgres.current_setting(name)` / `current_setting(name, missingOk)` | `current_setting(name[, missing_ok])` |
+| `SqlFunctions.Postgres.set_config(name, value, isLocal)` | `set_config(name, value, is_local)` |
+| `SqlFunctions.Postgres.nextval(sequence)` | `nextval(cast(sequence as regclass))` |
+| `SqlFunctions.Postgres.setval(sequence, value)` | `setval(cast(sequence as regclass), value)` |
+| `SqlFunctions.Postgres.currval(sequence)` | `currval(cast(sequence as regclass))` |
+| `SqlFunctions.Postgres.lastval()` | `lastval()` |
+
+```csharp
+var next = dataContext.From<IComplexEntity>()
+    .Select(e => SqlFunctions.Postgres.nextval("order_id_seq"))
+    .First();
+```
+
+`currval`/`lastval` в PostgreSQL привязаны к сессии и потому требуют того же соединения, которое
+последним продвинуло последовательность.
 
 ### Форматирование дат и чисел в строки
 
@@ -845,6 +914,7 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 | `SqlFunctions.Postgres.json_build_object("a", x, ...)` | `json_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
 | `SqlFunctions.Postgres.json_build_array(x, y)` / `jsonb_build_array(x, y)` | `json_build_array(x, y)` / `jsonb_build_array(x, y)` |
+| `SqlFunctions.Postgres.json_array(x, y)` / `jsonb_array(x, y)` | `json_array(x, y)` / `json_array(x, y returning jsonb)` |
 | `SqlFunctions.Postgres.to_json(x)` / `to_jsonb(x)` | `to_json(x)` / `to_jsonb(x)` |
 | `SqlFunctions.Postgres.json_cast(x)` | `cast(x as jsonb)` |
 | `SqlFunctions.Postgres.json_get(json, "key")` / `json_get(json, 0)` | `json -> key` / `json -> 0` |
@@ -867,6 +937,8 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 | `SqlFunctions.Postgres.jsonb_path_match(json, path)` | `jsonb_path_match(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` | `jsonb_path_query_first(json, cast(path as jsonpath))` |
 | `SqlFunctions.Postgres.jsonb_path_query_array(json, path)` | `jsonb_path_query_array(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.json_value(json, path)` / `json_query(json, path)` | `json_value(json, cast(path as jsonpath))` / `json_query(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.json_exists(json, path, fromJsonPath)` | `json_exists(json, cast(path as jsonpath))` |
 
 Операнд `path`/`keys` — это `string[]`, привязываемый как **один параметр-массив** (см.
 [Массивы](#массивы-postgresql)), поэтому `SqlFunctions.Postgres.json_get_path(json, new[] { "a", "b" })` отрисует

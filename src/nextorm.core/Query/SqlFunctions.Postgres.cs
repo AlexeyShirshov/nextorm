@@ -126,6 +126,15 @@ namespace NextORM.Core;
         /// <summary>Builds a JSONB array from the arguments (<c>jsonb_build_array</c>).</summary>
         public string jsonb_build_array(params object?[] args) => default!;
 
+        /// <summary>Builds a JSON array with the SQL/JSON constructor (<c>json_array</c>).</summary>
+        public string json_array(params object?[] values) => default!;
+
+        /// <summary>
+        /// Builds a JSONB array with the SQL/JSON constructor
+        /// (<c>json_array(... returning jsonb)</c>, exposed as <c>jsonb_array</c>).
+        /// </summary>
+        public string jsonb_array(params object?[] values) => default!;
+
         /// <summary>Converts a SQL value to <c>json</c> (<c>to_json</c>).</summary>
         public string to_json<T>(T? value) => default!;
 
@@ -236,6 +245,31 @@ namespace NextORM.Core;
         public string? jsonpath(string? path) => default!;
 
         /// <summary>
+        /// SQL/JSON <c>json_value(json, jsonpath)</c>: the scalar value selected by <paramref name="path"/>.
+        /// The path is cast to <c>jsonpath</c>. This is the SQL/JSON query function, not the
+        /// <c>-&gt;&gt;</c> operator (<see cref="json_get_text(object?, string?)"/>).
+        /// </summary>
+        public string? json_value(object? json, string? path) => default!;
+
+        /// <summary>
+        /// SQL/JSON <c>json_query(json, jsonpath)</c>: the JSON value selected by <paramref name="path"/>.
+        /// The path is cast to <c>jsonpath</c>. This is the SQL/JSON query function, not the
+        /// <c>-&gt;</c> operator (<see cref="json_get(object?, string?)"/>).
+        /// </summary>
+        public string? json_query(object? json, string? path) => default!;
+
+        /// <summary>
+        /// SQL/JSON <c>json_exists(json, jsonpath)</c>: true when <paramref name="path"/> yields at
+        /// least one item. The path is cast to <c>jsonpath</c>. The two-argument
+        /// <see cref="json_exists(object?, string?)"/> is the top-level <c>?</c> operator, so the
+        /// SQL/JSON overload carries an extra discriminator that is not rendered into SQL.
+        /// </summary>
+        /// <param name="json">The JSON document.</param>
+        /// <param name="path">The SQL/JSON path expression.</param>
+        /// <param name="fromJsonPath">Selects the SQL/JSON overload; it is not rendered into SQL.</param>
+        public bool json_exists(object? json, string? path, bool fromJsonPath) => default!;
+
+        /// <summary>
         /// <c>array_agg(value)</c>: aggregates the values of a group into an array. Requires a provider
         /// that supports it (see <see cref="ISqlDialect.SupportsStringArrayAggregates"/>).
         /// </summary>
@@ -301,9 +335,6 @@ namespace NextORM.Core;
         /// <summary>The logarithm of <paramref name="x"/> to the given base (two-argument <c>log</c>).</summary>
         public double? log(double? baseValue, double? x) => default!;
 
-        /// <summary>The remainder of <c>a / b</c>.</summary>
-        public T? mod<T>(T? a, T? b) => default!;
-
         /// <summary>The greatest common divisor.</summary>
         public T? gcd<T>(T? a, T? b) => default!;
 
@@ -322,35 +353,11 @@ namespace NextORM.Core;
         /// <summary>The 1-based position of <paramref name="substring"/> in <paramref name="value"/>.</summary>
         public int? strpos(string? value, string? substring) => default!;
 
-        /// <summary>The first <paramref name="n"/> characters of <paramref name="value"/>.</summary>
-        public string? left(string? value, int n) => default!;
-
-        /// <summary>The last <paramref name="n"/> characters of <paramref name="value"/>.</summary>
-        public string? right(string? value, int n) => default!;
-
-        /// <summary>Left-pads <paramref name="value"/> to <paramref name="length"/> with <paramref name="fill"/>.</summary>
-        public string? lpad(string? value, int length, string? fill) => default!;
-
-        /// <summary>Right-pads <paramref name="value"/> to <paramref name="length"/> with <paramref name="fill"/>.</summary>
-        public string? rpad(string? value, int length, string? fill) => default!;
-
-        /// <summary>Repeats <paramref name="value"/> <paramref name="n"/> times.</summary>
-        public string? repeat(string? value, int n) => default!;
-
-        /// <summary>Reverses the characters of <paramref name="value"/>.</summary>
-        public string? reverse(string? value) => default!;
-
         /// <summary>Capitalises the first letter of each word.</summary>
         public string? initcap(string? value) => default!;
 
-        /// <summary>Replaces every character of <paramref name="from"/> in <paramref name="value"/> with the matching character of <paramref name="to"/>.</summary>
-        public string? translate(string? value, string? from, string? to) => default!;
-
         /// <summary>Overlays <paramref name="value"/> with <paramref name="placing"/> starting at <paramref name="from"/> for <paramref name="count"/> characters.</summary>
         public string? overlay(string? value, string? placing, int from, int count) => default!;
-
-        /// <summary>Concatenates the values with <paramref name="separator"/>, skipping nulls.</summary>
-        public string? concat_ws(string? separator, params object?[] values) => default!;
 
         /// <summary>Formats the arguments with a printf-style format string.</summary>
         public string? format(string? formatString, params object?[] args) => default!;
@@ -382,6 +389,27 @@ namespace NextORM.Core;
         /// </summary>
         public byte[]? sha256(byte[]? data) => default!;
 
+        /// <summary>
+        /// The SHA-224 hash of <paramref name="data"/> as a <c>bytea</c> (<c>sha224</c>). Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SupportsCryptoFunctions"/>;
+        /// PostgreSQL, where this is a core binary-string function).
+        /// </summary>
+        public byte[]? sha224(byte[]? data) => default!;
+
+        /// <summary>
+        /// The SHA-384 hash of <paramref name="data"/> as a <c>bytea</c> (<c>sha384</c>). Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SupportsCryptoFunctions"/>;
+        /// PostgreSQL, where this is a core binary-string function).
+        /// </summary>
+        public byte[]? sha384(byte[]? data) => default!;
+
+        /// <summary>
+        /// The SHA-512 hash of <paramref name="data"/> as a <c>bytea</c> (<c>sha512</c>). Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SupportsCryptoFunctions"/>;
+        /// PostgreSQL, where this is a core binary-string function).
+        /// </summary>
+        public byte[]? sha512(byte[]? data) => default!;
+
         /// <summary>Replaces the matches of a POSIX regular expression.</summary>
         public string? regexp_replace(string? value, string? pattern, string? replacement) => default!;
 
@@ -403,14 +431,44 @@ namespace NextORM.Core;
         /// <summary>The 1-based position of the first match of a POSIX regular expression in <paramref name="value"/>.</summary>
         public int? regexp_instr(string? value, string? pattern) => default!;
 
+        /// <summary>The substring matched by the first POSIX regular expression match in <paramref name="value"/> (<c>regexp_substr</c>).</summary>
+        public string? regexp_substr(string? value, string? pattern) => default!;
+
+        /// <summary>The substring matched by the first POSIX regular expression match in <paramref name="value"/> with <paramref name="flags"/>.</summary>
+        public string? regexp_substr(string? value, string? pattern, string? flags) => default!;
+
         /// <summary>Builds an interval from its parts.</summary>
         public TimeSpan? make_interval(int years, int months, int days, int hours, int minutes, double seconds) => default!;
+
+        /// <summary>
+        /// Builds a <c>time</c> from its parts (<c>make_time</c>). Use the cross-provider
+        /// <see cref="CommonFunctions.date_from_parts"/> for <c>make_date</c>.
+        /// </summary>
+        public TimeSpan? make_time(int hour, int minute, double second) => default!;
+
+        /// <summary>Builds a timestamp from its parts (<c>make_timestamp</c>).</summary>
+        public DateTime? make_timestamp(int year, int month, int day, int hour, int minute, double second) => default!;
 
         /// <summary>Adjusts an interval so that 30-day units are represented as months.</summary>
         public TimeSpan? justify_days(TimeSpan? interval) => default!;
 
         /// <summary>Adjusts an interval so that 24-hour units are represented as days.</summary>
         public TimeSpan? justify_hours(TimeSpan? interval) => default!;
+
+        /// <summary>
+        /// The interval between two timestamps, subtracting <paramref name="b"/> from
+        /// <paramref name="a"/> (<c>age</c>). PostgreSQL's <c>age</c> returns an <c>interval</c> that can
+        /// carry whole months, which a <see cref="TimeSpan"/> cannot represent; PostgreSQL treats a
+        /// month as 30 days when the value is read back as a <see cref="TimeSpan"/>.
+        /// </summary>
+        public TimeSpan? age(DateTime? a, DateTime? b) => default!;
+
+        /// <summary>
+        /// Binaries <paramref name="source"/> into buckets of <paramref name="stride"/> aligned to
+        /// <paramref name="origin"/> (<c>date_bin</c>). The stride is an interval literal such as
+        /// <c>"15 minutes"</c>; it is cast to <c>interval</c> in SQL.
+        /// </summary>
+        public DateTime? date_bin(string? stride, DateTime? source, DateTime? origin) => default!;
 
         /// <summary>Formats a timestamp with a template.</summary>
         public string? to_char(DateTime? value, string? formatString) => default!;
@@ -447,6 +505,18 @@ namespace NextORM.Core;
 
         /// <summary>The type name of <paramref name="value"/> (<c>pg_typeof</c>).</summary>
         public string? pg_typeof(object? value) => default!;
+
+        /// <summary>The current value of the run-time setting <paramref name="name"/> (<c>current_setting</c>).</summary>
+        public string? current_setting(string? name) => default!;
+
+        /// <summary>
+        /// The current value of the run-time setting <paramref name="name"/>, or null when it does not
+        /// exist if <paramref name="missingOk"/> is true (<c>current_setting(name, missing_ok)</c>).
+        /// </summary>
+        public string? current_setting(string? name, bool missingOk) => default!;
+
+        /// <summary>Sets the run-time setting <paramref name="name"/> to <paramref name="value"/> (<c>set_config</c>).</summary>
+        public string? set_config(string? name, string? value, bool isLocal) => default!;
 
         /// <summary>The number of null arguments (<c>num_nulls</c>).</summary>
         public int num_nulls(params object?[] values) => default!;
@@ -550,6 +620,18 @@ namespace NextORM.Core;
 
         /// <summary><c>mode() within group (order by key)</c>: the most frequent value.</summary>
         public T? mode<T>(Expression<Func<T>> orderBy) => default!;
+
+        /// <summary>Advances <paramref name="sequence"/> and returns its next value (<c>nextval</c>).</summary>
+        public long? nextval(string? sequence) => default!;
+
+        /// <summary>Sets the current value of <paramref name="sequence"/> (<c>setval</c>).</summary>
+        public long? setval(string? sequence, long value) => default!;
+
+        /// <summary>The current value of <paramref name="sequence"/> for this session (<c>currval</c>).</summary>
+        public long? currval(string? sequence) => default!;
+
+        /// <summary>The value most recently returned by <c>nextval</c> in this session (<c>lastval</c>).</summary>
+        public long? lastval() => default!;
 
         /// <summary>
         /// <c>generate_series(start, stop)</c> as a FROM source; select
