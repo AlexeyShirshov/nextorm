@@ -86,4 +86,54 @@ public class MariaDbDialectTests
         Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("uuid_v4()");
         Dialect.UuidGenerators!.Render("uuidv7").Should().Be("uuid_v7()");
     }
+
+    [Fact]
+    public void MySqlFunctionHooks_ShouldBeInheritedFromMySql()
+    {
+        Dialect.MySqlFunctions.Should().NotBeNull();
+        Dialect.MySqlFunctions!.Supports("find_in_set").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("json_set").Should().BeTrue();
+        Dialect.MySqlFunctions!.Render("md5", ["x"]).Should().Be("md5(x)");
+        Dialect.MySqlFunctions!.Render("date_format", ["d", "'%Y'"]).Should().Be("date_format(d, '%Y')");
+
+        // MariaDB has no UUID_TO_BIN/BIN_TO_UUID; only MySQL supports them.
+        Dialect.MySqlFunctions!.Supports("uuid_to_bin").Should().BeFalse();
+        Dialect.MySqlFunctions!.Supports("bin_to_uuid").Should().BeFalse();
+        var act = () => Dialect.MySqlFunctions!.Render("uuid_to_bin", ["'x'"]);
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void MariaDbOnlyFunctionHooks_ShouldRenderTheNativeSurface()
+    {
+        Dialect.MySqlFunctions.Should().NotBeNull();
+
+        Dialect.MySqlFunctions!.Supports("regexp_instr").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("nvl").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("add_months").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("kdf").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("xxh3").Should().BeTrue();
+        Dialect.MySqlFunctions!.Supports("next_value_for").Should().BeTrue();
+
+        Dialect.MySqlFunctions!.Render("regexp_instr", ["a", "'b'"]).Should().Be("regexp_instr(a, 'b')");
+        Dialect.MySqlFunctions!.Render("regexp_substr", ["a", "'b'"]).Should().Be("regexp_substr(a, 'b')");
+        Dialect.MySqlFunctions!.Render("regexp_replace", ["a", "'b'", "'c'"]).Should().Be("regexp_replace(a, 'b', 'c')");
+        Dialect.MySqlFunctions!.Render("nvl", ["a", "b"]).Should().Be("nvl(a, b)");
+        Dialect.MySqlFunctions!.Render("nvl2", ["a", "b", "c"]).Should().Be("nvl2(a, b, c)");
+        Dialect.MySqlFunctions!.Render("add_months", ["d", "2"]).Should().Be("add_months(d, 2)");
+        Dialect.MySqlFunctions!.Render("months_between", ["a", "b"]).Should().Be("months_between(a, b)");
+        Dialect.MySqlFunctions!.Render("to_char", ["d", "'YYYY'"]).Should().Be("to_char(d, 'YYYY')");
+        Dialect.MySqlFunctions!.Render("to_date", ["'s'", "'YYYY'"]).Should().Be("to_date('s', 'YYYY')");
+        Dialect.MySqlFunctions!.Render("to_number", ["'1'", "'9'"]).Should().Be("to_number('1', '9')");
+        Dialect.MySqlFunctions!.Render("kdf", ["'p'", "'s'", "'i'", "'hkdf'"]).Should().Be("kdf('p', 's', 'i', 'hkdf')");
+        Dialect.MySqlFunctions!.Render("xxh3", ["x"]).Should().Be("xxh3(x)");
+        Dialect.MySqlFunctions!.Render("xxh32", ["x"]).Should().Be("xxh32(x)");
+        Dialect.MySqlFunctions!.Render("json_detailed", ["j"]).Should().Be("json_detailed(j)");
+        Dialect.MySqlFunctions!.Render("json_compact", ["j"]).Should().Be("json_compact(j)");
+
+        Dialect.MySqlFunctions!.Render("next_value_for", ["'s'"]).Should().Be("next value for s");
+        Dialect.MySqlFunctions!.Render("nextval", ["'s'"]).Should().Be("nextval(s)");
+        Dialect.MySqlFunctions!.Render("setval", ["'s'", "42"]).Should().Be("setval(s, 42)");
+        Dialect.MySqlFunctions!.Render("lastval", ["'s'"]).Should().Be("lastval(s)");
+    }
 }

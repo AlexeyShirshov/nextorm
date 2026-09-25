@@ -63,6 +63,14 @@ public static partial class SqlFunctions
     public static ClickHouseFunctions ClickHouse => default!;
 
     /// <summary>
+    /// Surface of the MySQL/MariaDB-only functions (the native string/conditional idioms, the
+    /// <c>%</c>-templated date conversion and Unix-epoch functions, the hexadecimal hashes, the IPv4
+    /// conversion pair, the JSON mutation family and the binary UUID pair). Every member is gated per
+    /// name by <see cref="ISqlDialect.MySqlFunctions"/>; other providers reject it with a clear message.
+    /// </summary>
+    public static MySqlFunctions MySql => default!;
+
+    /// <summary>
     /// References the <paramref name="idx"/>-th positional parameter of the command (for example
     /// <c>@p0</c>). Only valid inside a query expression.
     /// </summary>
@@ -519,6 +527,95 @@ public static partial class SqlFunctions
         /// Requires a provider that supports it (see <see cref="ISqlDialect.SupportsGreatestLeast"/>).
         /// </summary>
         public T? least<T>(params T?[] values) => default!;
+
+        /// <summary>
+        /// <c>left(value, n)</c>: the first <paramref name="n"/> characters of <paramref name="value"/>.
+        /// PostgreSQL treats a negative <paramref name="n"/> as "all but the last |n| characters"; the
+        /// other providers do not, so use a non-negative <paramref name="n"/> for portable queries.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? left(string? value, int n) => default!;
+
+        /// <summary>
+        /// <c>right(value, n)</c>: the last <paramref name="n"/> characters of <paramref name="value"/>.
+        /// PostgreSQL treats a negative <paramref name="n"/> as "all but the first |n| characters"; the
+        /// other providers do not, so use a non-negative <paramref name="n"/> for portable queries.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? right(string? value, int n) => default!;
+
+        /// <summary>
+        /// <c>lpad(value, length, pad)</c>: left-pads <paramref name="value"/> with
+        /// <paramref name="pad"/> (default a single space) to <paramref name="length"/> characters,
+        /// truncating a longer value. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? lpad(string? value, int length, string? pad = " ") => default!;
+
+        /// <summary>
+        /// <c>rpad(value, length, pad)</c>: right-pads <paramref name="value"/> with
+        /// <paramref name="pad"/> (default a single space) to <paramref name="length"/> characters,
+        /// truncating a longer value. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? rpad(string? value, int length, string? pad = " ") => default!;
+
+        /// <summary>
+        /// <c>repeat(value, count)</c>: <paramref name="value"/> repeated <paramref name="count"/>
+        /// times. Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/>
+        /// and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? repeat(string? value, int count) => default!;
+
+        /// <summary>
+        /// <c>reverse(value)</c>: the characters of <paramref name="value"/> in reverse order. Requires
+        /// a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? reverse(string? value) => default!;
+
+        /// <summary>
+        /// <c>space(count)</c>: a string of <paramref name="count"/> spaces. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? space(int count) => default!;
+
+        /// <summary>
+        /// <c>concat_ws(separator, ...)</c>: joins the values with <paramref name="separator"/>. Null
+        /// arguments are skipped on PostgreSQL, SQL Server, MySQL/MariaDB and SQLite; ClickHouse's
+        /// <c>concatWithSeparator</c> returns NULL when any argument is NULL.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? concat_ws(string? separator, params object?[] values) => default!;
+
+        /// <summary>
+        /// <c>translate(value, from, to)</c>: replaces every character of <paramref name="from"/> in
+        /// <paramref name="value"/> with the character at the same position of <paramref name="to"/>;
+        /// a character of <paramref name="from"/> beyond the length of <paramref name="to"/> is
+        /// deleted. Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/>
+        /// and <see cref="IScalarFunctions.Supports"/>); MySQL and MariaDB have no
+        /// <c>translate</c> and reject it.
+        /// </summary>
+        public string? translate(string? value, string? from, string? to) => default!;
+
+        /// <summary>
+        /// <c>ascii(value)</c>: the code point of the first character of <paramref name="value"/> (0 for
+        /// an empty string). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public int? ascii(string? value) => default!;
+
+        /// <summary>
+        /// <c>char(code)</c>: the character with the given code point (the SQL <c>char</c>/<c>chr</c>,
+        /// declared as <c>@char</c> because <c>char</c> is a C# keyword). Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public string? @char(int code) => default!;
 
         /// <summary>
         /// <c>date_trunc(field, value)</c>: truncates a timestamp to <paramref name="field"/>

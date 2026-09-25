@@ -324,6 +324,88 @@ public interface IIndexHintRenderer
 }
 
 /// <summary>
+/// A dialect's renderer for the cross-provider scalar string/number functions of
+/// <see cref="CommonFunctions"/> (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>,
+/// <c>repeat</c>/<c>reverse</c>/<c>space</c>, <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>/<c>char</c>,
+/// <c>mod</c>, <c>log10</c>, <c>power</c>). The predicate and the renderer live on one object, so a name
+/// the dialect reports as supported always has a rendering; a provider that can express only part of
+/// the family answers <see cref="Supports"/> per name, and a provider that can express none returns
+/// <see langword="null"/> from <see cref="ISqlDialect.ScalarFunctions"/>.
+/// </summary>
+/// <remarks>
+/// Unlike the stateless <see cref="IIifRenderer"/>/<see cref="ILimitByRenderer"/>, this object carries
+/// both the per-name predicate and the renderer, hence the plural capability-noun name rather than the
+/// <c>*Renderer</c> suffix.
+/// </remarks>
+public interface IScalarFunctions
+{
+    /// <summary>True when the scalar function <paramref name="name"/> can be rendered.</summary>
+    bool Supports(string name);
+
+    /// <summary>
+    /// Renders the scalar function <paramref name="name"/> over the already-rendered
+    /// <paramref name="args"/>. <paramref name="name"/> is the CLR method name of the
+    /// <see cref="CommonFunctions"/> member (for example <c>lpad</c>, <c>concat_ws</c>).
+    /// </summary>
+    string Render(string name, IReadOnlyList<string> args);
+}
+
+/// <summary>
+/// A dialect's renderer for the MySQL/MariaDB-only functions of <see cref="MySqlFunctions"/> (the
+/// native string/conditional idioms, the <c>%</c>-templated date conversion and Unix-epoch functions,
+/// the hexadecimal hashes, the IPv4 conversion pair, the JSON mutation family and the binary UUID
+/// pair). The predicate and the renderer live on one object, so a name the dialect reports as
+/// supported always has a rendering; a provider with only part of the family (MariaDB) answers
+/// <see cref="Supports"/> per name, and a provider with none returns <see langword="null"/> from
+/// <see cref="ISqlDialect.MySqlFunctions"/>.
+/// </summary>
+/// <remarks>
+/// Unlike the stateless <see cref="IIifRenderer"/>/<see cref="ILimitByRenderer"/>, this object carries
+/// both the per-name predicate and the renderer, hence the plural capability-noun name rather than the
+/// <c>*Renderer</c> suffix.
+/// </remarks>
+public interface IMySqlFunctions
+{
+    /// <summary>True when the MySQL/MariaDB function <paramref name="name"/> can be rendered.</summary>
+    bool Supports(string name);
+
+    /// <summary>
+    /// Renders the MySQL/MariaDB function <paramref name="name"/> over the already-rendered
+    /// <paramref name="args"/>. <paramref name="name"/> is the CLR method name of the
+    /// <see cref="MySqlFunctions"/> member (for example <c>find_in_set</c>, <c>json_set</c>).
+    /// </summary>
+    string Render(string name, IReadOnlyList<string> args);
+}
+
+/// <summary>
+/// A dialect's surface for the SQL Server-only T-SQL scalar functions that have no cross-provider
+/// analog (the string functions <c>PATINDEX</c>/<c>QUOTENAME</c>/<c>SOUNDEX</c>/<c>DIFFERENCE</c>/
+/// <c>STRING_ESCAPE</c>/<c>UNICODE</c>/<c>NCHAR</c>/<c>FORMAT</c>, the trigonometric functions, the
+/// date functions <c>DATENAME</c>/<c>DATE_BUCKET</c>, the binary/system functions
+/// <c>HASHBYTES</c>/<c>NEWSEQUENTIALID</c> and the SQL/JSON constructors/aggregates/predicates). The
+/// predicate and the renderer live on one object, so a name the dialect reports as supported always
+/// has a rendering; <see langword="null"/> is the capability being absent, which makes every other
+/// provider reject the members with a clear message.
+/// </summary>
+/// <remarks>
+/// Unlike <see cref="IScalarFunctions"/>, this object is provider-specific and is only reached from
+/// the <see cref="SqlServerFunctions"/> members; a name the provider cannot express is gated per
+/// function rather than by a family flag.
+/// </remarks>
+public interface ISqlServerFunctions
+{
+    /// <summary>True when the SQL Server-only function <paramref name="name"/> can be rendered.</summary>
+    bool Supports(string name);
+
+    /// <summary>
+    /// Renders the SQL Server-only function <paramref name="name"/> over the already-rendered
+    /// <paramref name="args"/>. <paramref name="name"/> is the CLR method name of the
+    /// <see cref="SqlServerFunctions"/> member (for example <c>patindex</c>, <c>json_object</c>).
+    /// </summary>
+    string Render(string name, IReadOnlyList<string> args);
+}
+
+/// <summary>
 /// A dialect's renderer for row values / composite tuples: the constructor
 /// (PostgreSQL <c>ROW(a, b)</c>, ClickHouse <c>tuple(a, b)</c>) and, when supported, positional element
 /// access on a server-side row (PostgreSQL <c>(row).fN</c>, ClickHouse <c>tupleElement(row, N)</c>).
@@ -341,4 +423,34 @@ public interface ITupleRenderer
     /// <see langword="null"/>, an inline constructor's element access is folded to the argument instead.
     /// </summary>
     string? RenderElement(string row, int oneBasedIndex);
+}
+
+/// <summary>
+/// A dialect's renderer for the SQLite-only SQL surface exposed through <see cref="SqlFunctions.Sqlite"/>
+/// (<see cref="SqliteFunctions"/>): the core scalars (<c>printf</c>/<c>format</c>, <c>hex</c>/<c>unhex</c>,
+/// <c>random</c>/<c>randomblob</c>, <c>quote</c>, <c>typeof</c>, <c>glob</c>, <c>unicode</c>/<c>char</c>,
+/// <c>soundex</c>, <c>octet_length</c>, <c>if</c>/<c>ifnull</c>), the JSON1 functions/operators/aggregates
+/// (<c>json_extract</c>, <c>-&gt;</c>/<c>-&gt;&gt;</c>, <c>json_set</c>, <c>json_group_array</c>, ...), the
+/// date functions (<c>timediff</c>, <c>unixepoch</c>, <c>julianday</c>) and the math-extension functions
+/// (<c>acos</c>, <c>degrees</c>, <c>log2</c>, <c>mod</c>, <c>pi</c>, ...). The predicate and the renderer
+/// live on one object, so a name the dialect reports as supported always has a rendering, and a provider
+/// that cannot express the surface returns <see langword="null"/> from
+/// <see cref="ISqlDialect.SqliteFunctions"/>.
+/// </summary>
+/// <remarks>
+/// Unlike the stateless renderers, this object carries both the per-name predicate and the renderer,
+/// hence the plural capability-noun name rather than the <c>*Renderer</c> suffix.
+/// </remarks>
+public interface ISqliteFunctions
+{
+    /// <summary>True when the SQLite function <paramref name="name"/> can be rendered.</summary>
+    bool Supports(string name);
+
+    /// <summary>
+    /// Renders the SQLite function <paramref name="name"/> over the already-rendered
+    /// <paramref name="args"/>. <paramref name="name"/> is the CLR method name of the
+    /// <see cref="SqliteFunctions"/> member (for example <c>printf</c>, <c>json_extract</c>,
+    /// <c>json_get</c>).
+    /// </summary>
+    string Render(string name, IReadOnlyList<string> args);
 }

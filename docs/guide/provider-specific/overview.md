@@ -32,19 +32,21 @@ defaults that throw. As a result:
 | Provider | Exclusive constructs |
 |---|---|
 | [ClickHouse](clickhouse.md) | Arrays and `ARRAY JOIN`, `LIMIT n BY expr`, `GROUP BY ... WITH TOTALS`, `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS`, join strictness and `GLOBAL JOIN`, `GLOBAL IN`, `uniq`/`quantile`/`any`/`argMin`/`argMax` aggregates, the `-If` combinators, dictionaries, string-JSON `JSONExtract`, the `numbers`/`zeros` table functions |
+| [MySQL and MariaDB](mysql.md) | Native string/conditional idioms (`FIND_IN_SET`/`FIELD`/`ELT`/`SUBSTRING_INDEX`/`FORMAT`), `%`-templated date conversion and Unix-epoch functions (`STR_TO_DATE`/`DATE_FORMAT`/`FROM_UNIXTIME`/`UNIX_TIMESTAMP`), hexadecimal hashes (`MD5`/`SHA1`/`SHA2`), IPv4 conversion (`INET_ATON`/`INET_NTOA`), the JSON mutation family and `UUID_TO_BIN`/`BIN_TO_UUID` (MySQL only) |
 | [PostgreSQL](postgresql.md) | Native array types and operators, native `json`/`jsonb`, ordered-set aggregates (`percentile_* ... WITHIN GROUP`), regression/boolean/bit aggregates, extended scalar and regexp helpers, `DISTINCT ON`, `unnest` |
 | [SQL Server](sqlserver.md) | `CHOOSE`, table hints and `OPTION (...)`, `FOR JSON`/`FOR XML`, `string_split`/`openjson` |
 
 ## Providers without an exclusive surface
 
-MySQL, MariaDB and SQLite have **no** provider-exclusive constructs: every capability flag they turn on
-is also set by at least one other dialect. Their pages therefore document connection setup and
-limitations only, and the shared constructs they do implement are described on the concept pages:
+SQLite has **no** provider-exclusive constructs: every capability flag it turns on is also set by at least
+one other dialect. Its page therefore documents connection setup and limitations only, and the shared
+constructs it implements are described on the concept pages:
 
-* [MySQL](../../providers/mysql.md) and [MariaDB](../../providers/mariadb.md) — text JSON, full-text
-  `MATCH ... AGAINST`, `ANY_VALUE`, `PERCENTILE_CONT`/`MEDIAN`, `UUID_v4()`/`UUID_v7()`;
 * [SQLite](../../providers/sqlite.md) — scalar `max`/`min`, `strftime` date parts, JSON1, registered
   `stdev`/`var` aggregates.
+
+The MySQL/MariaDB guide page also covers the shared constructs of the MySQL family: text JSON, full-text
+`MATCH ... AGAINST`, `ANY_VALUE`, `PERCENTILE_CONT`/`MEDIAN` and `UUID_v4()`/`UUID_v7()`.
 
 ## Portability model
 

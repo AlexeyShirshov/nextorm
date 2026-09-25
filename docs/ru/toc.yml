@@ -68,6 +68,10 @@
       href: guide/26-duration-columns.md
     - name: Интерцепторы
       href: guide/27-interceptors.md
+    - name: Выполнение утверждений одним батчем
+      href: guide/28-sql-batch.md
+    - name: Оптимистичная конкурентность и отслеживание изменений
+      href: guide/29-optimistic-concurrency.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор
@@ -78,6 +82,10 @@
           href: guide/provider-specific/postgresql.md
         - name: SQL Server
           href: guide/provider-specific/sqlserver.md
+        - name: MySQL и MariaDB
+          href: guide/provider-specific/mysql.md
+        - name: SQLite
+          href: guide/provider-specific/sqlite.md
 - name: Провайдеры
   items:
     - name: Обзор провайдеров

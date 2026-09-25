@@ -40,10 +40,23 @@ provider-vs-provider matrix): here the unit is the individual function.
 | **Cross-provider** | `left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `concat_ws`, `translate`, `ascii`/`char`, `mod`, `log10`, `power`, `format` (all exist on ≥3 providers, only PostgreSQL has wrappers) |
 | **PostgreSQL** | `sha224`/`sha384`/`sha512`, `regexp_substr`, `make_date`/`make_time`/`make_timestamp`, `age`, `date_bin`, `current_setting`, `nextval`/`setval`, `num_nulls` is present but `json_array`/SQL-JSON `json_value` absent |
 | **SQL Server** | `PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `TRANSLATE`, `FORMAT`, `ASCII`/`CHAR`/`UNICODE`, `ACOS`/`ASIN`/`ATAN`/`ATN2`/`COT`/`DEGREES`/`RADIANS`/`PI`/`LOG10`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_CONTAINS` |
-| **MySQL** | `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`, `LAST_DAY` (via `end_of_month`), `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the whole `JSON_*` mutation family, `UUID_TO_BIN`/`BIN_TO_UUID` |
-| **MariaDB** | everything MySQL lacks plus `REGEXP_INSTR`/`REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`, `JSON_DETAILED`/`JSON_COMPACT`, `NEXT VALUE FOR` sequences |
-| **SQLite** | the whole JSON1 family (`json_extract`, `->`, `json_set`, `json_group_array`, `json_each`, `json_tree`), `printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `timediff`, most `Math.*` |
+| **MySQL** | **Shipped ([#80](https://github.com/AlexeyShirshov/nextorm/issues/80)):** `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`, `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the `JSON_*` mutation family, `UUID_TO_BIN`/`BIN_TO_UUID` (MariaDB inherits all but the UUID pair); `LAST_DAY` via `end_of_month` |
+| **MariaDB** | **Shipped ([#79](https://github.com/AlexeyShirshov/nextorm/issues/79)):** everything MySQL lacks plus `REGEXP_INSTR`/`REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT`, `NEXT VALUE FOR`/`NEXTVAL`/`SETVAL`/`LASTVAL` sequences |
+| **SQLite** | ~~the whole JSON1 family …, `printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `timediff`, most `Math.*`~~ **Shipped** — `SqlFunctions.Sqlite`; remaining: `changes`, `last_insert_rowid`, `sqlite_source_id` and the aggregate percentiles |
 | **ClickHouse** | `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`, `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`groupBit*`/`sumMap` aggregates, hash functions, `generateULID` |
+
+Every row above is tracked as a work plan (design RFC with the provider × form matrix and the
+implementation tier):
+
+| Summary row | Work plan |
+|---|---|
+| Cross-provider | **Shipped** — [Scalar functions](../../guide/11-scalar-functions.md#cross-provider-scalar-functions) (gap-analysis §4.36; regex translation shipped earlier, §5.35) |
+| PostgreSQL | **Shipped** — [Scalar functions](../../guide/11-scalar-functions.md#string-and-regular-expression-extensions-postgresql) / [JSON and JSONB](../../guide/18-json.md) (gap-analysis §4.37; plan [`todo_postgres_function_gaps.md`](todo_postgres_function_gaps.md)) |
+| SQL Server | **Shipped** — [`todo_sqlserver_function_gaps.md`](todo_sqlserver_function_gaps.md) (gap-analysis §4.38); `ISqlServerFunctions` + `SqlServerFunctions` T-SQL scalar library |
+| MySQL | **Shipped** — [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md) (gap-analysis §4.39, #80); [`todo_mysql_function_gaps.md`](todo_mysql_function_gaps.md) (RFC) |
+| MariaDB | **Shipped** — [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb) (gap-analysis §4.40, #79); [`todo_mariadb_function_gaps.md`](todo_mariadb_function_gaps.md) (RFC) |
+| SQLite | **Shipped** — [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (gap-analysis §4.41) |
+| ClickHouse | [`todo_clickhouse_function_gaps.md`](todo_clickhouse_function_gaps.md) (gap-analysis §4.42) |
 
 ---
 
@@ -78,7 +91,7 @@ member today; the PostgreSQL provider exposes some of them, see below):
   `stddev`/`variance` family spellings beyond the curated set.
 
 > Adding portable wrappers here is the single highest-leverage change: one member lights up several
-> providers (see the string/regexp item 35 in [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md)).
+> providers (see the string/numeric wrappers item 36 in [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md)).
 
 ---
 
@@ -181,6 +194,17 @@ through `string_agg`; `last_day` through `end_of_month`; `date_add`/`date_diff`;
 `json_set`, `isjson` via `json_valid`); `current_user`/`session_user`/`schema`/`database`/`version`;
 `iif`→`if`; `greatest`/`least`/`nullif`/`coalesce`.
 
+**Native surface (shipped, [#80](https://github.com/AlexeyShirshov/nextorm/issues/80)):**
+`SqlFunctions.MySql` (`MySqlFunctions`, gated per name by `ISqlDialect.MySqlFunctions`) renders
+`FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`,
+`FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the JSON mutation family
+(`JSON_SET`/`JSON_INSERT`/`JSON_REPLACE`/`JSON_REMOVE`/`JSON_MERGE_PATCH`/`JSON_MERGE_PRESERVE`/
+`JSON_ARRAY_APPEND`/`JSON_ARRAY_INSERT`/`JSON_DEPTH`/`JSON_KEYS`/`JSON_LENGTH`/`JSON_TYPE`) and
+`UUID_TO_BIN`/`BIN_TO_UUID`. MariaDB inherits the surface except `UUID_TO_BIN`/`BIN_TO_UUID` (not
+implemented there). See [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md). The
+subsets below are the still-missing remainder of the full MySQL catalogue.
+
+
 **Missing:**
 
 * **String:** `BIN`, `BIT_LENGTH`, `CHAR`, `ELT`, `EXPORT_SET`, `FIELD`, `FIND_IN_SET`, `FORMAT`, `HEX`,
@@ -220,8 +244,13 @@ through `string_agg`; `last_day` through `end_of_month`; `date_add`/`date_diff`;
 ## MariaDB
 
 MariaDB is a superset of MySQL: **every MySQL gap above applies**, and the MySQL-compatible members
-(`JSON_VALUE`, `REGEXP_*`, `group_concat`, ..., where present) behave the same. The following
-MariaDB-specific additions are also missing:
+(`JSON_VALUE`, `REGEXP_*`, `group_concat`, ..., where present) behave the same. The MariaDB-specific
+additions below are **shipped ([#79](https://github.com/AlexeyShirshov/nextorm/issues/79))** on the
+shared `SqlFunctions.MySql` surface, gated per name so MySQL rejects them: `REGEXP_INSTR`/
+`REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`,
+`TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT` and the
+sequence functions `NEXT VALUE FOR`/`NEXTVAL`/`SETVAL`/`LASTVAL`. The remaining listed names are still
+missing:
 
 * **Regexp / string:** `REGEXP_INSTR`, `REGEXP_REPLACE`, `REGEXP_SUBSTR`, `SFORMAT`, `TRIM_ORACLE`,
   `NATURAL_SORT_KEY`, `LENGTHB`, `CHR`, `TO_CHAR`, `TO_DATE`, `TO_NUMBER`.
@@ -250,27 +279,22 @@ MariaDB-specific additions are also missing:
 `iif`/`nullif`/`max`/`min` (for `greatest`/`least`); `version`→`sqlite_version()`; date arithmetic and
 date-part extraction through `strftime`/`date`.
 
+**Shipped:** the SQLite-only surface `SqlFunctions.Sqlite` (`SqliteFunctions`, gated by
+`ISqlDialect.SqliteFunctions`; other providers reject) covers the core scalars
+(`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`,
+`soundex`, `octet_length`, `if`/`ifnull`); the JSON1 family (`json`/`jsonb`, `json_extract` and the
+`->`/`->>` operators, `json_array`/`json_array_insert`, `json_insert`/`json_replace`/`json_set`,
+`json_object`/`json_patch`/`json_pretty`/`json_quote`/`json_remove`/`json_type`/`json_valid`, the
+`json_group_array`/`json_group_object` aggregates and the `json_each`/`json_tree` table functions); the
+date helpers `timediff`/`unixepoch`/`julianday`; and the math-extension functions (`acos`…`tanh`,
+`degrees`, `log2`/`log10`, `mod`, `pi`, `radians`). Docs: [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (EN+RU).
+
 **Missing:**
 
-* **Core scalar:** `changes`, `concat`/`concat_ws`, `format`, `glob`, `hex`/`unhex`, `if`/`ifnull`
-  (`ifnull` ≈ `??`), `last_insert_rowid`, `likelihood`/`likely`, `load_extension`, `printf`, `quote`,
-  `random`/`randomblob`, `sqlite_compileoption_get`/`sqlite_compileoption_used`, `sqlite_offset`,
-  `sqlite_source_id`, `total_changes`, `typeof`, `unicode`, `unistr`/`unistr_quote`, `zeroblob`, `char`,
-  `soundex`, `octet_length`, `sign` (≈`Math.Sign`).
-* **String:** `substr`/`substring`/`trim`/`ltrim`/`rtrim`/`length`/`replace`/`upper`/`lower`/`instr` are
-  reachable through the CLR members (`≈`).
-* **Date/time:** `timediff`; `unixepoch` (≈`date_part("epoch", ...)`); `julianday`.
-* **Math:** `acos`, `acosh`, `asin`, `asinh`, `atan`, `atan2`, `atanh`, `cosh`, `degrees`, `log10`,
-  `log2`, `mod`, `pi`, `radians`, `sinh`, `tanh` (`abs`/`ceil`/`ceiling`/`floor`/`round`/`trunc`/`sqrt`/
-  `pow`/`power`/`exp`/`ln`/`sin`/`cos`/`tan` are reachable through `Math.*`).
-* **JSON (JSON1):** the entire family is missing: `json`/`jsonb`, `json_array`/`json_array_insert`,
-  `json_extract` and the `->`/`->>` operators, `json_insert`/`json_replace`/`json_set`,
-  `json_object`/`json_patch`/`json_pretty`/`json_quote`/`json_remove`/`json_type`/`json_valid`/
-  `json_error_position`, the `jsonb_*` variants, and the `json_group_array`/`json_group_object`
-  aggregates.
-* **Aggregate:** `median`, `percentile`/`percentile_cont`/`percentile_disc`, `total`, and (from JSON1)
-  `json_group_array`/`json_group_object`.
-* **Table-valued:** `json_each`/`jsonb_each`, `json_tree`/`jsonb_tree`.
+* **Core scalar (out of scope):** `changes`, `last_insert_rowid`, `likelihood`/`likely`, `load_extension`,
+  `sqlite_compileoption_get`/`sqlite_compileoption_used`, `sqlite_offset`, `sqlite_source_id`,
+  `total_changes`, `unistr`/`unistr_quote`, `zeroblob`, `json_error_position`.
+* **Aggregate:** `median`, `percentile`/`percentile_cont`/`percentile_disc`, `total`.
 
 ---
 

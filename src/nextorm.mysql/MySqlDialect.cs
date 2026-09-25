@@ -44,6 +44,9 @@ public class MySqlDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsBulkCopy => false;
 
+    /// <summary>MySQL/MariaDB batches through <c>MySqlBatch</c>.</summary>
+    public override bool SupportsBatch => true;
+
     /// <summary>MySQL skips conflicting rows with the <c>INSERT IGNORE</c> head.</summary>
     public override bool SupportsInsertIgnore => true;
 
@@ -185,6 +188,12 @@ public class MySqlDialect : SqlDialectBase
 
     /// <summary>MySQL/MariaDB render the whole session/information family.</summary>
     public override ISessionInfoFunctions SessionInfoFunctions => MySqlSessionInfoFunctions.Instance;
+
+    /// <summary>MySQL/MariaDB render the cross-provider scalar functions except <c>translate</c>, which neither has.</summary>
+    public override IScalarFunctions ScalarFunctions => MySqlScalarFunctions.Instance;
+
+    /// <summary>MySQL and MariaDB (through the inherited dialect) render the native MySQL function surface.</summary>
+    public override IMySqlFunctions MySqlFunctions => MySqlNativeFunctions.Instance;
 
     /// <inheritdoc/>
     public override string MakeTextJsonFunction(string name, IReadOnlyList<string> args) => name switch
@@ -593,3 +602,96 @@ internal sealed class MySqlStringFormats : IStringFormatFunctions
     private static bool Match(string value, int index, string token) =>
         index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
 }
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on MySQL/MariaDB. The
+/// string functions are native (<c>LEFT</c>/<c>RIGHT</c>, <c>LPAD</c>/<c>RPAD</c>, <c>REPEAT</c>,
+/// <c>REVERSE</c>, <c>SPACE</c>, <c>CONCAT_WS</c>, <c>ASCII</c>, <c>CHAR</c>); <c>translate</c> is
+/// deliberately unsupported because neither provider has it.
+/// </summary>
+internal sealed class MySqlScalarFunctions : IScalarFunctions
+{
+    internal static readonly MySqlScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
+        "concat_ws" or "ascii" or "char";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "left" => $"left({args[0]}, {args[1]})",
+        "right" => $"right({args[0]}, {args[1]})",
+        "lpad" => $"lpad({args[0]}, {args[1]}, {Pad(args)})",
+        "rpad" => $"rpad({args[0]}, {args[1]}, {Pad(args)})",
+        "repeat" => $"repeat({args[0]}, {args[1]})",
+        "reverse" => $"reverse({args[0]})",
+        "space" => $"space({args[0]})",
+        "concat_ws" => $"concat_ws({string.Join(", ", args)})",
+        "ascii" => $"ascii({args[0]})",
+
+        // MySQL's CHAR() returns a binary string (VARBINARY), which the driver exposes as byte[];
+        // the cast makes it the text value the CLR string return type expects.
+        "char" => $"cast(char({args[0]}) as char)",
+        _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
+    };
+
+    private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
+}
+
+/// <summary>
+/// Renders the MySQL/MariaDB-only functions of <see cref="MySqlFunctions"/> natively. Every member of
+/// the surface maps to a full-name swap (MySQL and MariaDB share the spellings), so the renderer reports
+/// the whole family and fails for anything else. Declared non-sealed so that
+/// <c>NextORM.MariaDb</c> can derive its renderer and add the MariaDB-only names.
+/// </summary>
+internal class MySqlNativeFunctions : IMySqlFunctions
+{
+    internal static readonly MySqlNativeFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "find_in_set" or "field" or "elt" or "substring_index" or "format" or
+        "str_to_date" or "date_format" or "from_unixtime" or "unix_timestamp" or
+        "md5" or "sha1" or "sha2" or "inet_aton" or "inet_ntoa" or
+        "json_set" or "json_insert" or "json_replace" or "json_remove" or
+        "json_merge_patch" or "json_merge_preserve" or "json_array_append" or "json_array_insert" or
+        "json_depth" or "json_keys" or "json_length" or "json_type" or
+        "uuid_to_bin" or "bin_to_uuid";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "find_in_set" => $"find_in_set({args[0]}, {args[1]})",
+        "field" => $"field({string.Join(", ", args)})",
+        "elt" => $"elt({string.Join(", ", args)})",
+        "substring_index" => $"substring_index({args[0]}, {args[1]}, {args[2]})",
+        "format" => $"format({args[0]}, {args[1]})",
+        "str_to_date" => $"str_to_date({args[0]}, {args[1]})",
+        "date_format" => $"date_format({args[0]}, {args[1]})",
+        "from_unixtime" => $"from_unixtime({args[0]})",
+        "unix_timestamp" => $"unix_timestamp({args[0]})",
+        "md5" => $"md5({args[0]})",
+        "sha1" => $"sha1({args[0]})",
+        "sha2" => $"sha2({args[0]}, {args[1]})",
+        "inet_aton" => $"inet_aton({args[0]})",
+        "inet_ntoa" => $"inet_ntoa({args[0]})",
+        "json_set" => $"json_set({args[0]}, {args[1]}, {args[2]})",
+        "json_insert" => $"json_insert({args[0]}, {args[1]}, {args[2]})",
+        "json_replace" => $"json_replace({args[0]}, {args[1]}, {args[2]})",
+        "json_remove" => $"json_remove({args[0]}, {args[1]})",
+        "json_merge_patch" => $"json_merge_patch({args[0]}, {args[1]})",
+        "json_merge_preserve" => $"json_merge_preserve({args[0]}, {args[1]})",
+        "json_array_append" => $"json_array_append({args[0]}, {args[1]}, {args[2]})",
+        "json_array_insert" => $"json_array_insert({args[0]}, {args[1]}, {args[2]})",
+        "json_depth" => $"json_depth({args[0]})",
+        "json_keys" => $"json_keys({args[0]})",
+        "json_length" => $"json_length({args[0]})",
+        "json_type" => $"json_type({args[0]})",
+        "uuid_to_bin" => $"uuid_to_bin({args[0]})",
+        "bin_to_uuid" => $"bin_to_uuid({args[0]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
+    };
+}
+

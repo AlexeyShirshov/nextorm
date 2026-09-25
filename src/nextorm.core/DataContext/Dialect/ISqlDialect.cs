@@ -202,6 +202,12 @@ public interface ISqlDialect
     /// </summary>
     IStringSplitRenderer? StringSplit => null;
     /// <summary>
+    /// The provider's renderer for the SQLite-only surface (<see cref="SqlFunctions.Sqlite"/> and
+    /// <see cref="SqliteFunctions"/>), or <see langword="null"/> when the provider is not SQLite.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    ISqliteFunctions? SqliteFunctions => null;
+    /// <summary>
     /// True when the provider can render <c>arrayJoin(array)</c>, which expands one row per array
     /// element. The safe default is <c>false</c>; only ClickHouse opts in today. See
     /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/>.
@@ -412,6 +418,36 @@ public interface ISqlDialect
     /// external implementations keep compiling.
     /// </summary>
     IUuidGenerators? UuidGenerators => null;
+
+    /// <summary>
+    /// The provider's renderer for the cross-provider scalar functions of <see cref="CommonFunctions"/>
+    /// (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>, <c>repeat</c>/<c>reverse</c>/<c>space</c>,
+    /// <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>/<c>char</c>, <c>mod</c>, <c>log10</c>,
+    /// <c>power</c>). <c>null</c> means the provider cannot express the family; the object itself
+    /// answers per name because the providers can express different subsets. Declared as a default
+    /// interface method so that existing external implementations keep compiling.
+    /// </summary>
+    IScalarFunctions? ScalarFunctions => null;
+
+    /// <summary>
+    /// The provider's renderer for the MySQL/MariaDB-only functions of <see cref="MySqlFunctions"/>
+    /// (<c>find_in_set</c>/<c>field</c>/<c>elt</c>, <c>substring_index</c>, <c>format</c>,
+    /// <c>str_to_date</c>/<c>date_format</c>, <c>from_unixtime</c>/<c>unix_timestamp</c>, <c>md5</c>/
+    /// <c>sha1</c>/<c>sha2</c>, <c>inet_aton</c>/<c>inet_ntoa</c>, the JSON mutation family and
+    /// <c>uuid_to_bin</c>/<c>bin_to_uuid</c>). <c>null</c> means the provider cannot express the family;
+    /// the object itself answers per name because MySQL and MariaDB can express different subsets.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    IMySqlFunctions? MySqlFunctions => null;
+
+    /// <summary>
+    /// The provider's renderer for the SQL Server-only T-SQL scalar functions of
+    /// <see cref="SqlServerFunctions"/> (<c>patindex</c>, <c>quotename</c>, the trigonometric functions,
+    /// <c>datename</c>/<c>date_bucket</c>, <c>hashbytes</c>, the SQL/JSON constructors and aggregates, …).
+    /// <c>null</c> means the provider cannot express the family; the object itself answers per name.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    ISqlServerFunctions? SqlServerFunctions => null;
 
     /// <summary>
     /// True when the provider can render the boolean aggregates <c>bool_and</c>, <c>bool_or</c> and
@@ -1255,6 +1291,28 @@ public interface ISqlDialect
     /// compiling; a dialect that opts in is paired with a context overriding the native bulk hook.
     /// </summary>
     bool SupportsBulkCopy => false;
+
+    /// <summary>
+    /// Whether the provider can execute several statements as one batch (see
+    /// <c>BatchExtensions.Batch</c>): each provider that opts in runs the whole set in a single
+    /// protocol exchange on the current connection, so the statements share one server session/backend
+    /// — the guarantee a session-scoped temporary table needs under a transaction-mode connection
+    /// pooler. PostgreSQL, SQL Server and MySQL/MariaDB use the driver's <see cref="System.Data.Common.DbBatch"/>;
+    /// SQLite joins the statements with <c>;</c> into one command. Declared as a default interface
+    /// method returning <c>false</c> so existing external implementations keep compiling; ClickHouse
+    /// (no multi-statement guarantee) leaves it off.
+    /// </summary>
+    bool SupportsBatch => false;
+
+    /// <summary>
+    /// True when a batch must be sent as one <c>;</c>-joined command even though the connection exposes
+    /// a <see cref="System.Data.Common.DbBatch"/>. SQL Server is the case: <c>SqlBatch</c> runs every
+    /// command in its own scope, so a session-local <c>#temp</c> table created by one command is not
+    /// visible to the next, while the statements of one <c>SqlCommand</c> share a batch scope. Only
+    /// meaningful when <see cref="SupportsBatch"/> is <c>true</c>. Declared as a default interface
+    /// method returning <c>false</c>.
+    /// </summary>
+    bool BatchUsesJoinedCommand => false;
 
     /// <summary>
     /// Whether the dialect can skip conflicting rows with its <c>INSERT OR IGNORE</c>/<c>INSERT IGNORE</c>

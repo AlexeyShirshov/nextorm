@@ -107,6 +107,7 @@ MySQL 8.0.31 и новее поддерживает `INTERSECT`/`EXCEPT`; диа
 ## См. также
 
 - [Обзор провайдеров](overview.md)
+- [Специфичный для MySQL и MariaDB SQL](../guide/provider-specific/mysql.md)
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)

@@ -57,6 +57,73 @@ public sealed class MariaDbDialect : MySqlDialect
     /// <c>NOWAIT</c>/<c>SKIP LOCKED</c> lock options, so the MySQL renderer is not reused.
     /// </summary>
     public override ILockRenderer Lock => MariaDbLockRenderer.Instance;
+
+    /// <summary>
+    /// MariaDB inherits the MySQL native-function surface except <c>UUID_TO_BIN</c>/<c>BIN_TO_UUID</c>,
+    /// which it does not implement (it converts through <c>CAST(... AS BINARY(16))</c>/<c>CAST(... AS UUID)</c>),
+    /// and adds the MariaDB-only names (extended regexp, <c>NVL</c>/<c>NVL2</c>, <c>ADD_MONTHS</c>,
+    /// <c>MONTHS_BETWEEN</c>, <c>TO_CHAR</c>/<c>TO_DATE</c>/<c>TO_NUMBER</c>, <c>KDF</c>,
+    /// <c>XXH3</c>/<c>XXH32</c>, <c>JSON_DETAILED</c>/<c>JSON_COMPACT</c> and sequence access).
+    /// </summary>
+    public override IMySqlFunctions MySqlFunctions => MariaDbNativeFunctions.Instance;
+}
+
+/// <summary>
+/// Decorates the MySQL native-function renderer for MariaDB: every MySQL name is inherited except
+/// <c>uuid_to_bin</c>/<c>bin_to_uuid</c>, which MariaDB has no function for (it uses
+/// <c>cast(... as binary(16))</c>/<c>cast(... as uuid)</c>), and the MariaDB-only names are added here
+/// (extended regexp, <c>nvl</c>/<c>nvl2</c>, the Oracle-compatible date/number conversions, <c>kdf</c>,
+/// <c>xxh3</c>/<c>xxh32</c>, <c>json_detailed</c>/<c>json_compact</c> and sequence access). MySQL's
+/// renderer does not report the MariaDB-only names, so MySQL rejects them.
+/// </summary>
+internal sealed class MariaDbNativeFunctions : IMySqlFunctions
+{
+    public static readonly MariaDbNativeFunctions Instance = new();
+
+    private static readonly IMySqlFunctions Inner = MySqlDialect.Instance.MySqlFunctions!;
+
+    private static bool IsMariaDbOnly(string name) => name is
+        "regexp_substr" or "regexp_instr" or "regexp_replace" or
+        "nvl" or "nvl2" or "add_months" or "months_between" or
+        "to_char" or "to_date" or "to_number" or "kdf" or
+        "xxh3" or "xxh32" or "json_detailed" or "json_compact" or
+        "next_value_for" or "nextval" or "setval" or "lastval";
+
+    /// <inheritdoc/>
+    public bool Supports(string name) =>
+        IsMariaDbOnly(name) || (name is not ("uuid_to_bin" or "bin_to_uuid") && Inner.Supports(name));
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "regexp_substr" => $"regexp_substr({args[0]}, {args[1]})",
+        "regexp_instr" => $"regexp_instr({args[0]}, {args[1]})",
+        "regexp_replace" => $"regexp_replace({args[0]}, {args[1]}, {args[2]})",
+        "nvl" => $"nvl({args[0]}, {args[1]})",
+        "nvl2" => $"nvl2({args[0]}, {args[1]}, {args[2]})",
+        "add_months" => $"add_months({args[0]}, {args[1]})",
+        "months_between" => $"months_between({args[0]}, {args[1]})",
+        "to_char" => $"to_char({args[0]}, {args[1]})",
+        "to_date" => $"to_date({args[0]}, {args[1]})",
+        "to_number" => $"to_number({args[0]}, {args[1]})",
+        "kdf" => $"kdf({args[0]}, {args[1]}, {args[2]}, {args[3]})",
+        "xxh3" => $"xxh3({args[0]})",
+        "xxh32" => $"xxh32({args[0]})",
+        "json_detailed" => $"json_detailed({args[0]})",
+        "json_compact" => $"json_compact({args[0]})",
+        "next_value_for" => "next value for " + SequenceName(args[0]),
+        "nextval" => $"nextval({SequenceName(args[0])})",
+        "setval" => $"setval({SequenceName(args[0])}, {args[1]})",
+        "lastval" => $"lastval({SequenceName(args[0])})",
+        _ => Supports(name)
+            ? Inner.Render(name, args)
+            : throw new NotSupportedException($"The {name} function is not supported by MariaDB.")
+    };
+
+    private static string SequenceName(string argument) =>
+        argument.Length >= 2 && argument[0] == '\'' && argument[^1] == '\''
+            ? argument[1..^1].Replace("''", "'")
+            : argument;
 }
 
 internal sealed class MariaDbLockRenderer : ILockRenderer

@@ -69,6 +69,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsArrayJoin => false;
     /// <inheritdoc/>
     public virtual IStringSplitRenderer? StringSplit => null;
+    /// <inheritdoc/>
+    public virtual ISqliteFunctions? SqliteFunctions => null;
 
     /// <inheritdoc/>
     public virtual bool SupportsJson => false;
@@ -134,6 +136,14 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>null</c>; a provider with native UUID generators exposes its renderer.</summary>
     public virtual IUuidGenerators? UuidGenerators => null;
+
+    /// <summary>Defaults to <c>null</c>; every SQL provider exposes its cross-provider scalar-function renderer.</summary>
+    public virtual IScalarFunctions? ScalarFunctions => null;
+
+    /// <summary>Defaults to <c>null</c>; MySQL/MariaDB expose their native-function renderer.</summary>
+    public virtual IMySqlFunctions? MySqlFunctions => null;
+    /// <summary>Defaults to <c>null</c>; only SQL Server exposes the T-SQL-only scalar-function renderer.</summary>
+    public virtual ISqlServerFunctions? SqlServerFunctions => null;
 
     /// <inheritdoc/>
     public virtual bool SupportsBooleanAggregates => false;
@@ -784,6 +794,10 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB and ClickHouse opt into a native bulk API.</summary>
     public virtual bool SupportsBulkCopy => false;
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB and SQLite opt into one-round-trip batches.</summary>
+    public virtual bool SupportsBatch => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server sends the batch as one <c>;</c>-joined command so a <c>#temp</c> survives across statements.</summary>
+    public virtual bool BatchUsesJoinedCommand => false;
     /// <summary>Defaults to <c>false</c>; SQLite, MySQL, MariaDB and ClickHouse opt into an <c>INSERT ... IGNORE</c> head.</summary>
     public virtual bool SupportsInsertIgnore => false;
     /// <summary>Renders the <c>INSERT</c> head that skips conflicting rows; MySQL/MariaDB override it with <c>insert ignore into </c>.</summary>

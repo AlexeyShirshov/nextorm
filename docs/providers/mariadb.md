@@ -74,10 +74,12 @@ MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the wind
 | Arbitrary-value aggregate | not supported (no `ANY_VALUE` in 10.4–12.x; pending MDEV-10426, targeted for 13.2) |
 | Conditional function | inherited from MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (MariaDB 10.3+) |
+| Native functions | the `SqlFunctions.MySql` surface inherited from MySQL **minus** `uuid_to_bin`/`bin_to_uuid`, **plus** the MariaDB-only names (extended regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, sequence access) |
 
 ## See also
 
 - [Provider overview](overview.md)
+- [MySQL and MariaDB-specific SQL](../guide/provider-specific/mysql.md)
 - [MySQL](mysql.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)

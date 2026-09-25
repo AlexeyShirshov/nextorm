@@ -52,6 +52,10 @@
   href: 26-duration-columns.md
 - name: Interceptors
   href: 27-interceptors.md
+- name: Executing statements in one batch
+  href: 28-sql-batch.md
+- name: Optimistic concurrency and change tracking
+  href: 29-optimistic-concurrency.md
 - name: Provider-specific SQL
   items:
     - name: Overview
@@ -62,3 +66,7 @@
       href: provider-specific/postgresql.md
     - name: SQL Server
       href: provider-specific/sqlserver.md
+    - name: MySQL and MariaDB
+      href: provider-specific/mysql.md
+    - name: SQLite
+      href: provider-specific/sqlite.md
