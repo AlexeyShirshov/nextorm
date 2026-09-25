@@ -60,6 +60,19 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// read by the provider's column mapper.
     /// </summary>
     public bool DefaultOnNull { get; internal set; }
+
+    /// <summary>
+    /// Which column of a <see cref="Range{T}"/> pair this expression reads, or
+    /// <see cref="RangeColumnRole.None"/> for an ordinary column. Set by the entity mapping when a
+    /// property declared with <see cref="RangeColumnsAttribute"/> expands into two columns.
+    /// </summary>
+    internal RangeColumnRole RangeColumnRole { get; set; }
+
+    /// <summary>
+    /// The pair descriptor of the enclosing <see cref="Range{T}"/> property, or <see langword="null"/>
+    /// for an ordinary column. Read by the entity materializer to rebuild the range value.
+    /// </summary>
+    internal RangeColumnsMetadata? RangeColumns { get; set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     // private readonly IQueryRegistry _queryProvider;

@@ -14,4 +14,5 @@ internal class PropertyMetadata : IPropertyMetadata
     public int DurationPrecision { get; init; }
     public string? Collation { get; init; }
     public IPropertyValueConverter? Converter { get; init; }
+    public RangeColumnsMetadata? RangeColumns { get; init; }
 }

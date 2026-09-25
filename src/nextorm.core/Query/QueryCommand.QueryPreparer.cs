@@ -297,6 +297,11 @@ public partial class QueryCommand
             {
                 if (cmd._exp is not null)
                 {
+                    // A bare member projection of a value-converted property is a single column whose
+                    // converter has to reach materialization; computed once so the scalar branch and its
+                    // condition do not each scan the entity metadata.
+                    var bodyConverter = cmd._exp.Body is MemberExpression ? ResolveConverter(srcType, cmd._exp.Body) : null;
+
                     if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
                         var args = ctor.Arguments;
@@ -315,6 +320,7 @@ public partial class QueryCommand
                             var arg = args[idx];
                             var ctorParam = ctor.Constructor!.GetParameters()[idx];
                             var (durationUnit, durationPrecision) = ResolveDuration(srcType, arg);
+                            var converter = ResolveConverter(srcType, arg);
 
                             selExp = new SelectExpression(ctorParam.ParameterType)
                             {
@@ -323,6 +329,8 @@ public partial class QueryCommand
                                 Expression = innerQueryVisitor.Visit(arg),
                                 DurationUnit = durationUnit,
                                 DurationPrecision = durationPrecision,
+                                ProviderType = converter?.ProviderType,
+                                Converter = converter,
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
                             if (!cmd._dontCache && !noHash)
@@ -340,7 +348,8 @@ public partial class QueryCommand
 
                     }
                     else if (TypeFacts.IsSingleColumnProjection(cmd._exp.Body.Type)
-                        || (cmd._exp.Body is not NewExpression && TypeFacts.IsTupleType(cmd._exp.Body.Type)))
+                        || (cmd._exp.Body is not NewExpression && TypeFacts.IsTupleType(cmd._exp.Body.Type))
+                        || bodyConverter is not null)
                     {
 
                         cmd.OneColumn = true;
@@ -353,6 +362,8 @@ public partial class QueryCommand
                             Expression = selectExp,
                             DurationUnit = scalarDurationUnit,
                             DurationPrecision = scalarDurationPrecision,
+                            ProviderType = bodyConverter?.ProviderType,
+                            Converter = bodyConverter,
                         };
                         // A dialect that does not enforce scalar-subquery cardinality (SQLite) would
                         // silently return the first row for Single/SingleOrDefault, so wrap the
@@ -387,6 +398,7 @@ public partial class QueryCommand
 
                             var binding = bindings[idx] as MemberAssignment;
                             var (bindingDurationUnit, bindingDurationPrecision) = ResolveDuration(srcType, binding!.Expression);
+                            var bindingConverter = ResolveConverter(srcType, binding.Expression);
 
                             var selExp = new SelectExpression(((PropertyInfo)binding!.Member).PropertyType)
                             {
@@ -395,6 +407,8 @@ public partial class QueryCommand
                                 Expression = innerQueryVisitor.Visit(binding.Expression),
                                 DurationUnit = bindingDurationUnit,
                                 DurationPrecision = bindingDurationPrecision,
+                                ProviderType = bindingConverter?.ProviderType,
+                                Converter = bindingConverter,
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(binding.Expression);
                             if (!cmd._dontCache && !noHash)
@@ -426,14 +440,12 @@ public partial class QueryCommand
                             if (DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta))
                             {
                                 var props = entityMeta.Properties;
-                                var propsCount = props.Count;
+                                var columns = new List<SelectExpression>(props.Count);
 
-                                selectList = new SelectExpression[propsCount];
-
-                                for (int idx = 0; idx < propsCount; idx++)
+                                for (int idx = 0; idx < props.Count; idx++)
                                 {
                                     if (cancellationToken.IsCancellationRequested)
-                                        return (selectList, columnsPlanHash);
+                                        return (columns.ToArray(), columnsPlanHash);
 
                                     var prop = props[idx];
 
@@ -441,9 +453,35 @@ public partial class QueryCommand
 
                                     Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
 
-                                    var selExp = new SelectExpression(pi.PropertyType)
+                                    if (prop.RangeColumns is { } rangeColumns)
                                     {
-                                        Index = idx,
+                                        var boundType = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
+                                        var nullableBound = typeof(Nullable<>).MakeGenericType(boundType.GetGenericArguments()[0]);
+
+                                        AddColumn(cmd, noHash, columns, ref columnsPlanHash, new SelectExpression(nullableBound)
+                                        {
+                                            Index = columns.Count,
+                                            PropertyName = rangeColumns.LowerColumn,
+                                            Expression = exp,
+                                            PropertyInfo = pi,
+                                            RangeColumnRole = RangeColumnRole.Lower,
+                                            RangeColumns = rangeColumns,
+                                        });
+                                        AddColumn(cmd, noHash, columns, ref columnsPlanHash, new SelectExpression(nullableBound)
+                                        {
+                                            Index = columns.Count,
+                                            PropertyName = rangeColumns.UpperColumn,
+                                            Expression = exp,
+                                            PropertyInfo = pi,
+                                            RangeColumnRole = RangeColumnRole.Upper,
+                                            RangeColumns = rangeColumns,
+                                        });
+                                        continue;
+                                    }
+
+                                    AddColumn(cmd, noHash, columns, ref columnsPlanHash, new SelectExpression(pi.PropertyType)
+                                    {
+                                        Index = columns.Count,
                                         PropertyName = pi.Name,
                                         Expression = exp,
                                         PropertyInfo = pi,
@@ -451,17 +489,10 @@ public partial class QueryCommand
                                         DurationPrecision = prop.DurationPrecision,
                                         ProviderType = prop.Converter?.ProviderType,
                                         Converter = prop.Converter,
-                                    };
-
-                                    if (!cmd._dontCache && !noHash)
-                                        selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                                    selectList[idx] = selExp;
-
-                                    if (!cmd._dontCache && !noHash) unchecked
-                                        {
-                                            columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                                        }
+                                    });
                                 }
+
+                                selectList = columns.ToArray();
                             }
 
                             if (!(selectList?.Length > 0))
@@ -493,10 +524,31 @@ public partial class QueryCommand
             if (srcType is not null
                 && expression is MemberExpression { Member: PropertyInfo pi }
                 && DataContextCache.Metadata.TryGetValue(srcType, out var metadata)
-                && metadata.Properties.FirstOrDefault(p => p.PropertyInfo == pi) is { } property)
+                && MemberTranslator.FindProperty(metadata, pi) is { } property)
                 return (property.DurationUnit, property.DurationPrecision);
 
             return (null, 0);
+        }
+
+        // Resolves the value converter of a directly projected entity property, so a scalar/anonymous
+        // projection of a converted property carries the converter into materialization (the reader then
+        // reads the provider representation and converts it back). A non-member or unmapped expression
+        // stays null.
+        private static IPropertyValueConverter? ResolveConverter(Type? srcType, Expression expression)
+        {
+            expression = TypeFacts.UnwrapConvert(expression);
+            if (expression is MemberExpression { Member: PropertyInfo pi })
+            {
+                IEntityMetadata? metadata = null;
+                if (pi.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(pi.DeclaringType, out var byDeclaring))
+                    metadata = byDeclaring;
+                else if (srcType is not null && DataContextCache.Metadata.TryGetValue(srcType, out var bySource))
+                    metadata = bySource;
+
+                return metadata is null ? null : MemberTranslator.FindProperty(metadata, pi)?.Converter;
+            }
+
+            return null;
         }
 
         private static int PrepareJoin(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
@@ -548,6 +600,18 @@ public partial class QueryCommand
             }
 
             return joinPlanHash;
+        }
+
+        private static void AddColumn(QueryCommand cmd, bool noHash, List<SelectExpression> columns, ref int columnsPlanHash, SelectExpression selExp)
+        {
+            if (!cmd._dontCache && !noHash)
+                selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+            columns.Add(selExp);
+
+            if (!cmd._dontCache && !noHash) unchecked
+                {
+                    columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                }
         }
 
         private static int PrepareSorting(QueryCommand cmd, SelectExpression[]? selectList, bool noHash, CancellationToken cancellationToken)

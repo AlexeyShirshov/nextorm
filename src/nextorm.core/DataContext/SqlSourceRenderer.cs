@@ -900,6 +900,7 @@ internal static class SqlSourceRenderer
     internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
     {
         using var visitor = ctx.CreateColumnVisitor(entityType, 0, dontNeedAlias);
+        visitor.RangeColumnRole = selExp.RangeColumnRole;
         visitor.Visit(selExp.Expression);
 
         if (ctx.ParamMode) return (false, string.Empty);
