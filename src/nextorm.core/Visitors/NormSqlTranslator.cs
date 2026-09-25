@@ -112,6 +112,11 @@ internal static class NormSqlTranslator
             && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction)
             throw new NotSupportedException($"The window function {windowFunction} must be completed with Over(...).");
 
+        // The ClickHouse-native functions are probed first: their names can collide with a
+        // cross-provider built-in (for example extract, md5) that is matched by name only.
+        if (ClickHouseNativeFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
         // The array overloads of any/all (column = any(@array)); the subquery overload is handled below.
         if (ArraySqlTranslator.TryTranslateAnyAll(visitor, node))
             return;
@@ -437,7 +442,13 @@ internal static class NormSqlTranslator
         if (BuiltinFunctionTranslator.TryTranslate(visitor, node))
             return;
 
+        if (SqlServerScalarFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
         if (SessionInfoFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (MySqlFunctionTranslator.TryTranslate(visitor, node))
             return;
 
         if (UuidFunctionTranslator.TryTranslate(visitor, node))
@@ -447,6 +458,9 @@ internal static class NormSqlTranslator
             return;
 
         if (DateConversionSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (SqliteFunctionTranslator.TryTranslate(visitor, node))
             return;
 
         if (ExtendedScalarFunctionTranslator.TryTranslate(visitor, node))

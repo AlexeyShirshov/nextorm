@@ -769,4 +769,253 @@ namespace NextORM.Core;
 
         /// <summary><c>leadInFrame(value, offset, default)</c>: as <c>lead_in_frame</c> with a fallback value.</summary>
         public WindowFunction<T?> lead_in_frame<T>(T? value, int offset, T? defaultValue) => default!;
+
+        /// <summary>
+        /// <c>lowerUTF8(value)</c>: lowercases character-wise (UTF-8 aware), unlike the byte-wise
+        /// <c>lower</c> behind <see cref="string.ToLowerInvariant"/>. Requires a provider that supports
+        /// it (ClickHouse).
+        /// </summary>
+        public string? lower_utf8(string? value) => default!;
+
+        /// <summary><c>upperUTF8(value)</c>: uppercases character-wise (UTF-8 aware).</summary>
+        public string? upper_utf8(string? value) => default!;
+
+        /// <summary>
+        /// <c>trimLeft(value)</c> or <c>trimLeft(value, characters)</c>: removes the leading whitespace,
+        /// or every leading character contained in <paramref name="characters"/>. Requires a provider
+        /// that supports it (ClickHouse).
+        /// </summary>
+        public string? trim_left(string? value, string? characters = null) => default!;
+
+        /// <summary><c>trimRight(value[, characters])</c>: as <see cref="trim_left(string?, string?)"/> from the end.</summary>
+        public string? trim_right(string? value, string? characters = null) => default!;
+
+        /// <summary><c>trimBoth(value[, characters])</c>: as <see cref="trim_left(string?, string?)"/> from both ends.</summary>
+        public string? trim_both(string? value, string? characters = null) => default!;
+
+        /// <summary>
+        /// <c>replaceRegexpOne(value, pattern, replacement)</c>: replaces the first RE2 match of
+        /// <paramref name="pattern"/> (the replacement may reference capture groups with <c>\1</c>).
+        /// Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public string? replace_regexp_one(string? value, string? pattern, string? replacement) => default!;
+
+        /// <summary><c>replaceRegexpAll(value, pattern, replacement)</c>: replaces every RE2 match.</summary>
+        public string? replace_regexp_all(string? value, string? pattern, string? replacement) => default!;
+
+        /// <summary>
+        /// <c>match(value, pattern)</c>: true when the RE2 <paramref name="pattern"/> matches
+        /// <paramref name="value"/>. Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public bool match(string? value, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>extract(value, pattern)</c>: the first fragment of <paramref name="value"/> captured by the
+        /// RE2 <paramref name="pattern"/>, or the empty string. Requires a provider that supports it
+        /// (ClickHouse).
+        /// </summary>
+        public string? extract(string? value, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>extractAll(value, pattern)</c>: every fragment of <paramref name="value"/> captured by the
+        /// RE2 <paramref name="pattern"/>. The native result is <c>Array(String)</c>, surfaced as
+        /// <c>string[]</c> and projected directly or used as the operand of another array function.
+        /// Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public string[] extract_all(string? value, string? pattern) => default!;
+
+        /// <summary>
+        /// <c>splitByString(separator, value)</c>: splits <paramref name="value"/> by a multi-character
+        /// separator. Returns an array, so it can be projected directly or nested. Requires a provider
+        /// that supports it (ClickHouse).
+        /// </summary>
+        public string[] split_by_string(string? separator, string? value) => default!;
+
+        /// <summary><c>splitByRegexp(pattern, value)</c>: splits by an RE2 pattern. Returns an array, so it can be projected directly or nested.</summary>
+        public string[] split_by_regexp(string? pattern, string? value) => default!;
+
+        /// <summary><c>splitByWhitespace(value)</c>: splits on runs of whitespace. Returns an array, so it can be projected directly or nested.</summary>
+        public string[] split_by_whitespace(string? value) => default!;
+
+        /// <summary>
+        /// <c>formatDateTime(value, format)</c> or <c>formatDateTime(value, format, timezone)</c>:
+        /// formats <paramref name="value"/> with a ClickHouse format string. Requires a provider that
+        /// supports it (ClickHouse).
+        /// </summary>
+        public string? format_date_time(DateTime? value, string? format, string? timezone = null) => default!;
+
+        /// <summary>
+        /// <c>parseDateTime(value, format)</c>: parses <paramref name="value"/> with the ClickHouse
+        /// <paramref name="format"/>. Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public DateTime? parse_date_time(string? value, string? format) => default!;
+
+        /// <summary><c>parseDateTimeBestEffort(value[, timezone])</c>: parses a date/time in any of the supported formats.</summary>
+        public DateTime? parse_date_time_best_effort(string? value, string? timezone = null) => default!;
+
+        /// <summary><c>now()</c>: the current date and time in the server time zone. Requires a provider that supports it (ClickHouse).</summary>
+        public DateTime? now() => default!;
+
+        /// <summary><c>today()</c>: the current date in the server time zone.</summary>
+        public DateTime? today() => default!;
+
+        /// <summary><c>yesterday()</c>: the date one day before <see cref="today()"/>.</summary>
+        public DateTime? yesterday() => default!;
+
+        /// <summary>
+        /// <c>arrayConcat(arrays...)</c>: concatenates the arrays into one. Returns an array, so it can
+        /// be projected directly or used as the operand of another array function. Requires a provider
+        /// that supports array functions (see <see cref="ISqlDialect.SupportsArrayFunctions"/>;
+        /// ClickHouse).
+        /// </summary>
+        public T[] array_concat<T>(params T[][] arrays) => default!;
+
+        /// <summary>
+        /// <c>arrayFlatten(array)</c>: flattens one level of nesting of an <c>Array(Array(T))</c>.
+        /// Returns an array, so it can be projected directly or nested. Requires a provider that
+        /// supports array functions (see <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T[] array_flatten<T>(T[][] arrays) => default!;
+
+        /// <summary>
+        /// <c>arrayUniq(array)</c>: the number of distinct elements. Requires a provider that supports
+        /// array functions (see <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long array_uniq<T>(T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayIntersect(arrays...)</c>: the elements common to all the arrays. Returns an array, so
+        /// it can be projected directly or nested. Requires a provider that supports array functions
+        /// (see <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T[] array_intersect<T>(params T[][] arrays) => default!;
+
+        /// <summary><c>arrayUnion(arrays...)</c>: the union of the arrays. Returns an array, so it can be projected directly or nested.</summary>
+        public T[] array_union<T>(params T[][] arrays) => default!;
+
+        /// <summary><c>arrayExcept(arrays...)</c>: the elements of the first array that are not in the others. Returns an array, so it can be projected directly or nested.</summary>
+        public T[] array_except<T>(params T[][] arrays) => default!;
+
+        /// <summary><c>arraySymmetricDifference(arrays...)</c>: the elements that occur in an odd number of the arrays. Returns an array, so it can be projected directly or nested.</summary>
+        public T[] array_symmetric_difference<T>(params T[][] arrays) => default!;
+
+        /// <summary>
+        /// <c>map(key1, value1, key2, value2, ...)</c>: builds a ClickHouse <c>Map</c> from the given
+        /// key/value pairs, surfaced as <see cref="IDictionary{TKey,TValue}"/>. The pairs must be inline
+        /// tuples. Requires a provider that supports the map surface (ClickHouse).
+        /// </summary>
+        public IDictionary<TKey, TValue> map<TKey, TValue>(params Tuple<TKey, TValue>[] pairs) => default!;
+
+        /// <summary><c>mapKeys(map)</c>: the keys of the map, surfaced as <c>TKey[]</c>. Requires a provider that supports the map surface (ClickHouse).</summary>
+        public TKey[] map_keys<TKey, TValue>(IDictionary<TKey, TValue>? map) => default!;
+
+        /// <summary><c>mapValues(map)</c>: the values of the map, surfaced as <c>TValue[]</c>.</summary>
+        public TValue[] map_values<TKey, TValue>(IDictionary<TKey, TValue>? map) => default!;
+
+        /// <summary><c>mapContainsKey(map, key)</c>: true when the map has the key.</summary>
+        public bool map_contains_key<TKey, TValue>(IDictionary<TKey, TValue>? map, TKey? key) => default!;
+
+        /// <summary><c>mapContainsValue(map, value)</c>: true when the map has the value.</summary>
+        public bool map_contains_value<TKey, TValue>(IDictionary<TKey, TValue>? map, TValue? value) => default!;
+
+        /// <summary><c>mapAdd(map1, map2)</c>: the union of the maps, summing the values of repeated keys.</summary>
+        public IDictionary<TKey, TValue>? map_add<TKey, TValue>(IDictionary<TKey, TValue>? map1, IDictionary<TKey, TValue>? map2) => default!;
+
+        /// <summary><c>mapConcat(maps...)</c>: the union of the maps; on a repeated key the value of the last map wins.</summary>
+        public IDictionary<TKey, TValue>? map_concat<TKey, TValue>(params IDictionary<TKey, TValue>[] maps) => default!;
+
+        /// <summary><c>mapFilter((k, v) -&gt; predicate, map)</c>: the entries for which the lambda returns true.</summary>
+        public IDictionary<TKey, TValue>? map_filter<TKey, TValue>(Expression<Func<TKey, TValue, bool>> predicate, IDictionary<TKey, TValue>? map) => default!;
+
+        /// <summary><c>mapApply((k, v) -&gt; expression, map)</c>: the array of the lambda results, one per entry. The native result is <c>Array(T)</c>, surfaced as <c>TResult[]</c>.</summary>
+        public TResult[] map_apply<TKey, TValue, TResult>(Expression<Func<TKey, TValue, TResult>> function, IDictionary<TKey, TValue>? map) => default!;
+
+        /// <summary><c>mapAll((k, v) -&gt; predicate, map)</c>: true when the lambda returns true for every entry.</summary>
+        public bool map_all<TKey, TValue>(Expression<Func<TKey, TValue, bool>> predicate, IDictionary<TKey, TValue>? map) => default!;
+
+        /// <summary><c>mapExists((k, v) -&gt; predicate, map)</c>: true when the lambda returns true for at least one entry.</summary>
+        public bool map_exists<TKey, TValue>(Expression<Func<TKey, TValue, bool>> predicate, IDictionary<TKey, TValue>? map) => default!;
+
+        /// <summary><c>mapSort(map)</c>: the entries sorted by key, surfaced as <c>Tuple&lt;K, V&gt;[]</c>.</summary>
+        public Tuple<TKey, TValue>[] map_sort<TKey, TValue>(IDictionary<TKey, TValue>? map) => default!;
+
+        /// <summary>
+        /// <c>groupBitmap(value)</c>: the bitmap of the distinct unsigned integer values of a group,
+        /// surfaced as the opaque <c>UInt64</c> bitmap state. Combine with the bitmap functions to count
+        /// or merge. Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public ulong? group_bitmap<T>(T? value) => default!;
+
+        /// <summary><c>groupBitmapAnd(bitmap)</c>: the intersection of the group's bitmap states.</summary>
+        public ulong? group_bitmap_and<T>(T? value) => default!;
+
+        /// <summary><c>groupBitmapOr(bitmap)</c>: the union of the group's bitmap states.</summary>
+        public ulong? group_bitmap_or<T>(T? value) => default!;
+
+        /// <summary><c>groupBitmapXor(bitmap)</c>: the symmetric difference of the group's bitmap states.</summary>
+        public ulong? group_bitmap_xor<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>sumMap(key, value)</c>: aggregates the values per key, surfaced as a ClickHouse <c>Map</c>
+        /// (<see cref="IDictionary{TKey,TValue}"/>). Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public IDictionary<TKey, TValue>? sum_map<TKey, TValue>(TKey? key, TValue? value) => default!;
+
+        /// <summary>
+        /// <c>sumMapFiltered(keys)(key, value)</c>: as <see cref="sum_map{TKey,TValue}(TKey, TValue)"/>
+        /// but only for the <paramref name="keysToKeep"/> keys. The keys must be an inline array.
+        /// Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public IDictionary<TKey, TValue>? sum_map_filtered<TKey, TValue>(TKey[] keysToKeep, TKey? key, TValue? value) => default!;
+
+        /// <summary><c>MD5(value)</c>: the 16-byte MD5 digest as a fixed binary string. Requires a provider that supports it (ClickHouse).</summary>
+        public string? md5(string? value) => default!;
+
+        /// <summary><c>SHA1(value)</c>: the 20-byte SHA-1 digest as a fixed binary string.</summary>
+        public string? sha1(string? value) => default!;
+
+        /// <summary><c>SHA256(value)</c>: the 32-byte SHA-256 digest as a fixed binary string.</summary>
+        public string? sha256(string? value) => default!;
+
+        /// <summary><c>SHA512(value)</c>: the 64-byte SHA-512 digest as a fixed binary string.</summary>
+        public string? sha512(string? value) => default!;
+
+        /// <summary><c>xxHash32(value)</c>: the 32-bit xxHash as a signed integer. Requires a provider that supports it (ClickHouse).</summary>
+        public int xx_hash32(string? value) => default!;
+
+        /// <summary><c>xxHash64(value)</c>: the 64-bit xxHash as a signed integer.</summary>
+        public long xx_hash64(string? value) => default!;
+
+        /// <summary><c>xxh3(value)</c>: the 64-bit XXH3 hash as a signed integer.</summary>
+        public long xxh3(string? value) => default!;
+
+        /// <summary><c>cityHash64(value)</c>: the 64-bit CityHash as a signed integer.</summary>
+        public long city_hash64(string? value) => default!;
+
+        /// <summary><c>sipHash64(value)</c>: the 64-bit SipHash as a signed integer.</summary>
+        public long sip_hash64(string? value) => default!;
+
+        /// <summary><c>sipHash128(value)</c>: the 128-bit SipHash as a fixed binary string.</summary>
+        public string? sip_hash128(string? value) => default!;
+
+        /// <summary><c>murmurHash2_32(value)</c>: the 32-bit MurmurHash2 as a signed integer.</summary>
+        public int murmur_hash2_32(string? value) => default!;
+
+        /// <summary><c>murmurHash2_64(value)</c>: the 64-bit MurmurHash2 as a signed integer.</summary>
+        public long murmur_hash2_64(string? value) => default!;
+
+        /// <summary><c>murmurHash3_32(value)</c>: the 32-bit MurmurHash3 as a signed integer.</summary>
+        public int murmur_hash3_32(string? value) => default!;
+
+        /// <summary><c>murmurHash3_64(value)</c>: the 64-bit MurmurHash3 as a signed integer.</summary>
+        public long murmur_hash3_64(string? value) => default!;
+
+        /// <summary><c>murmurHash3_128(value)</c>: the 128-bit MurmurHash3 as a fixed binary string.</summary>
+        public string? murmur_hash3_128(string? value) => default!;
+
+        /// <summary>
+        /// <c>generateULID()</c>: a new ULID (a lexicographically sortable 26-character identifier).
+        /// Requires a provider that supports it (ClickHouse).
+        /// </summary>
+        public string? generate_ulid() => default!;
     }

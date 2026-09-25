@@ -155,7 +155,11 @@ declares:
 * the array-returning aggregates `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, materialised as a CLR `T[]`; `groupArray` of an array column yields a nested `T[][]`);
 * the sequence/funnel aggregates `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` with `toInt32(...)`; `retention` returns an array, projected directly);
 * the shared filtered-aggregate API rendered as the `-If` combinators `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
-* `arg_min`/`arg_max`.
+* `arg_min`/`arg_max`;
+* the bitmap aggregates `group_bitmap`/`group_bitmap_and`/`group_bitmap_or`/`group_bitmap_xor`
+  (`groupBitmap`/`groupBitmapAnd`/`groupBitmapOr`/`groupBitmapXor`; the opaque `UInt64` state) and the
+  per-key `sum_map`/`sum_map_filtered` (`sumMap`/`sumMapFiltered(keys)(key, value)`, surfaced as a
+  `Map`).
 
 Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and
 MariaDB) and `corr`/`covar*` — are documented with the concept page, not here. A plain `UInt64` column
@@ -164,6 +168,46 @@ MariaDB) and `corr`/`covar*` — are documented with the concept page, not here.
 cast.
 
 See [Grouping and aggregates](../04-grouping-and-aggregates.md).
+
+## Native scalar functions, maps and hashes
+
+Beyond the cross-provider scalar surface, `ClickHouseFunctions` exposes the native ClickHouse
+functions that have no portable spelling. They render the exact camel-case name and are rejected by
+every other dialect:
+
+* UTF-8 case, trim and regexp/search strings: `lower_utf8`/`upper_utf8` (`lowerUTF8`/`upperUTF8`),
+  `trim_left`/`trim_right`/`trim_both` (`trimLeft`/`trimRight`/`trimBoth`, with an optional character
+  set), `replace_regexp_one`/`replace_regexp_all`, `match`, `extract`, `extract_all` (projects as
+  `string[]`) and `split_by_string`/`split_by_regexp`/`split_by_whitespace`;
+* date and time: `format_date_time` (`formatDateTime`, optional time zone),
+  `parse_date_time`/`parse_date_time_best_effort` (`parseDateTime`/`parseDateTimeBestEffort`) and the
+  current-date helpers `now`/`today`/`yesterday`;
+* array set operations: `array_concat`, `array_flatten`, `array_uniq` (`arrayUniq`, wrapped in
+  `toInt64`), `array_intersect`, `array_union`, `array_except`, `array_symmetric_difference`;
+* the `Map` family: the `map` constructor (inline `Tuple.Create` pairs), `map_keys`/`map_values`,
+  `map_contains_key`/`map_contains_value`, `map_add`/`map_concat`, the two-parameter lambdas
+  `map_filter`/`map_apply`/`map_all`/`map_exists` and `map_sort`;
+* hashes: `md5`/`sha1`/`sha256`/`sha512` (`MD5`/`SHA1`/`SHA256`/`SHA512`, fixed binary strings),
+  `xx_hash32`/`xx_hash64`/`xxh3`, `city_hash64`, `sip_hash64`/`sip_hash128` and
+  `murmur_hash2_32`/`murmur_hash2_64`/`murmur_hash3_32`/`murmur_hash3_64`/`murmur_hash3_128`;
+* `generate_ulid` (`generateULID`).
+
+A `Map` result is surfaced as `IDictionary<TKey, TValue>`; combine it with `map_keys`/`map_values` or
+one of the contains predicates when it is projected, because the row mapper does not materialise a
+bare `IDictionary` column.
+
+```csharp
+var rows = dataContext.From<Event>()
+    .Select(e => new
+    {
+        HasMatch = SqlFunctions.ClickHouse.match(e.Name, "error"),
+        Keys = SqlFunctions.ClickHouse.map_keys(SqlFunctions.ClickHouse.map(Tuple.Create("a", 1L))),
+        NewId = SqlFunctions.ClickHouse.generate_ulid()
+    })
+    .ToList();
+```
+
+See [Scalar functions](../11-scalar-functions.md).
 
 ## JSON, dictionaries and array functions
 

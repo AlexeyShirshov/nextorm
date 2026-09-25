@@ -314,6 +314,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse renders both UUID generators.</summary>
     public override IUuidGenerators UuidGenerators => ClickHouseUuidGenerators.Instance;
 
+    /// <summary>ClickHouse renders every cross-provider scalar function (UTF-8 character-wise where it matters).</summary>
+    public override IScalarFunctions ScalarFunctions => ClickHouseScalarFunctions.Instance;
+
     /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>.</summary>
     public override bool SupportsDictionaries => true;
 
@@ -923,4 +926,119 @@ internal sealed class ClickHouseStringFormats : IStringFormatFunctions
 
     private static bool Match(string value, int index, string token) =>
         index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on ClickHouse:
+/// <c>left</c>/<c>right</c>, <c>leftPad</c>/<c>rightPad</c>, <c>repeat</c>, <c>reverseUTF8</c>,
+/// <c>space</c>, <c>concatWithSeparator</c>, <c>translate</c>, <c>ascii</c> and <c>char</c>.
+/// Note that ClickHouse's <c>concatWithSeparator</c> returns NULL when any argument is NULL,
+/// whereas the other providers skip null arguments.
+/// </summary>
+internal sealed class ClickHouseScalarFunctions : IScalarFunctions
+{
+    internal static readonly ClickHouseScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
+        "concat_ws" or "translate" or "ascii" or "char" or
+        "lower_utf8" or "upper_utf8" or "trim_left" or "trim_right" or "trim_both" or
+        "replace_regexp_one" or "replace_regexp_all" or "match" or "extract" or "extract_all" or
+        "split_by_string" or "split_by_regexp" or "split_by_whitespace" or
+        "format_date_time" or "parse_date_time" or "parse_date_time_best_effort" or
+        "now" or "today" or "yesterday" or
+        "array_concat" or "array_flatten" or "array_uniq" or "array_intersect" or
+        "array_union" or "array_except" or "array_symmetric_difference" or
+        "map" or "map_keys" or "map_values" or "map_contains_key" or "map_contains_value" or
+        "map_add" or "map_concat" or "map_filter" or "map_apply" or "map_all" or "map_exists" or
+        "map_sort" or
+        "group_bitmap" or "group_bitmap_and" or "group_bitmap_or" or "group_bitmap_xor" or
+        "sum_map" or "sum_map_filtered" or
+        "md5" or "sha1" or "sha256" or "sha512" or
+        "xx_hash32" or "xx_hash64" or "xxh3" or "city_hash64" or
+        "sip_hash64" or "sip_hash128" or
+        "murmur_hash2_32" or "murmur_hash2_64" or "murmur_hash3_32" or "murmur_hash3_64" or
+        "murmur_hash3_128" or "generate_ulid";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        // The UTF8 variants count characters, matching the CLR string semantics and the other
+        // providers; the plain left/right/leftPad/rightPad count bytes.
+        "left" => $"leftUTF8({args[0]}, {args[1]})",
+        "right" => $"rightUTF8({args[0]}, {args[1]})",
+        "lpad" => $"leftPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
+        "rpad" => $"rightPadUTF8({args[0]}, {args[1]}, {Pad(args)})",
+        "repeat" => $"repeat({args[0]}, {args[1]})",
+        "reverse" => $"reverseUTF8({args[0]})",
+        "space" => $"space({args[0]})",
+        "concat_ws" => $"concatWithSeparator({string.Join(", ", args)})",
+        "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
+        "ascii" => $"ascii({args[0]})",
+        "char" => $"char({args[0]})",
+        "lower_utf8" => $"lowerUTF8({args[0]})",
+        "upper_utf8" => $"upperUTF8({args[0]})",
+        "trim_left" => $"trimLeft({string.Join(", ", args)})",
+        "trim_right" => $"trimRight({string.Join(", ", args)})",
+        "trim_both" => $"trimBoth({string.Join(", ", args)})",
+        "replace_regexp_one" => $"replaceRegexpOne({args[0]}, {args[1]}, {args[2]})",
+        "replace_regexp_all" => $"replaceRegexpAll({args[0]}, {args[1]}, {args[2]})",
+        "match" => $"match({args[0]}, {args[1]})",
+        "extract" => $"extract({args[0]}, {args[1]})",
+        "extract_all" => $"extractAll({args[0]}, {args[1]})",
+        "split_by_string" => $"splitByString({args[0]}, {args[1]})",
+        "split_by_regexp" => $"splitByRegexp({args[0]}, {args[1]})",
+        "split_by_whitespace" => $"splitByWhitespace({args[0]})",
+        "format_date_time" => $"formatDateTime({string.Join(", ", args)})",
+        "parse_date_time" => $"parseDateTime({args[0]}, {args[1]})",
+        "parse_date_time_best_effort" => $"parseDateTimeBestEffort({string.Join(", ", args)})",
+        "now" => "now()",
+        "today" => "today()",
+        "yesterday" => "yesterday()",
+        "array_concat" => $"arrayConcat({string.Join(", ", args)})",
+        "array_flatten" => $"arrayFlatten({args[0]})",
+        "array_uniq" => $"toInt64(arrayUniq({args[0]}))",
+        "array_intersect" => $"arrayIntersect({string.Join(", ", args)})",
+        "array_union" => $"arrayUnion({string.Join(", ", args)})",
+        "array_except" => $"arrayExcept({string.Join(", ", args)})",
+        "array_symmetric_difference" => $"arraySymmetricDifference({string.Join(", ", args)})",
+        "map" => $"map({string.Join(", ", args)})",
+        "map_keys" => $"mapKeys({args[0]})",
+        "map_values" => $"mapValues({args[0]})",
+        "map_contains_key" => $"mapContainsKey({args[0]}, {args[1]})",
+        "map_contains_value" => $"mapContainsValue({args[0]}, {args[1]})",
+        "map_add" => $"mapAdd({args[0]}, {args[1]})",
+        "map_concat" => $"mapConcat({string.Join(", ", args)})",
+        "map_filter" => $"mapFilter({args[0]}, {args[1]})",
+        "map_apply" => $"mapApply({args[0]}, {args[1]})",
+        "map_all" => $"mapAll({args[0]}, {args[1]})",
+        "map_exists" => $"mapExists({args[0]}, {args[1]})",
+        "map_sort" => $"mapSort({args[0]})",
+        "group_bitmap" => $"groupBitmap({args[0]})",
+        "group_bitmap_and" => $"groupBitmapAnd({args[0]})",
+        "group_bitmap_or" => $"groupBitmapOr({args[0]})",
+        "group_bitmap_xor" => $"groupBitmapXor({args[0]})",
+        "sum_map" => $"sumMap({args[0]}, {args[1]})",
+        "sum_map_filtered" => $"sumMapFiltered({args[0]})({args[1]}, {args[2]})",
+        "md5" => $"MD5({args[0]})",
+        "sha1" => $"SHA1({args[0]})",
+        "sha256" => $"SHA256({args[0]})",
+        "sha512" => $"SHA512({args[0]})",
+        "xx_hash32" => $"toInt32(xxHash32({args[0]}))",
+        "xx_hash64" => $"toInt64(xxHash64({args[0]}))",
+        "xxh3" => $"toInt64(xxh3({args[0]}))",
+        "city_hash64" => $"toInt64(cityHash64({args[0]}))",
+        "sip_hash64" => $"toInt64(sipHash64({args[0]}))",
+        "sip_hash128" => $"sipHash128({args[0]})",
+        "murmur_hash2_32" => $"toInt32(murmurHash2_32({args[0]}))",
+        "murmur_hash2_64" => $"toInt64(murmurHash2_64({args[0]}))",
+        "murmur_hash3_32" => $"toInt32(murmurHash3_32({args[0]}))",
+        "murmur_hash3_64" => $"toInt64(murmurHash3_64({args[0]}))",
+        "murmur_hash3_128" => $"murmurHash3_128({args[0]})",
+        "generate_ulid" => "generateULID()",
+        _ => throw new NotSupportedException($"The {name} function is not supported by ClickHouse.")
+    };
+
+    private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
 }
