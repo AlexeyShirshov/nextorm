@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// Tests that assert Microsoft SQL Server specific behaviour, backed by a Testcontainers instance
 /// unless NEXTORM_SQLSERVER_CONNECTION points at an existing server.
 /// </summary>
+[Collection("SqlServer")]
 public sealed class SqlServerSpecificTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqlServerTestProvider.Instance;

@@ -97,6 +97,21 @@
 - **Регистры аудита** — `docs/specs/design/code-smells-review.md`, `docs/specs/design/API-NAMING-REVIEW.md`
   (раздел предрелизного аудита).
 
+### 3.6. Флак интеграционных тестов SQL Server (гонка на `MergeEntities`)
+
+- CI (`36171803706`, sha `6680248`) упал на
+  `SqlServerIntegrationTests.Merge_ConditionalMatchedBranch_ShouldUpdateOnlyWhenConditionHolds`:
+  `Single()` не нашёл строку (`throw new InvalidOperationException()` в `QueryExecutor.cs:801`).
+  Повторный прогон **того же коммита** — зелёный → флак, а не регресс.
+- Причина: `SupportsMergeBySourceDelete => true` только у SQL Server (`SqlServerDialect.cs:116`).
+  Тесты с `WHEN NOT MATCHED BY SOURCE THEN DELETE` — `CommonTestSuite.Merge.Merge_WhenNotMatchedBySource_ShouldDeleteStaleTarget`
+  и `SqlServerSpecificTests.FullMerge_NotMatchedBySource_ShouldDeleteOrphan` — удаляют **все** строки
+  общей таблицы `MergeEntities`, кроме своей. Классы `SqlServerIntegrationTests` (общий набор) и
+  `SqlServerSpecificTests` идут параллельно (разные xunit-коллекции) на одной БД, поэтому первый удалял
+  строку второго между его двумя MERGE.
+- Фикс: `[Collection("SqlServer")]` на обоих классах — пара сериализуется, провайдеры по-прежнему
+  параллельны. Контрольный полный прогон — **1812 passed, 0 failed, 86 skipped**.
+
 ## 4. Публикация (шаги владельца)
 
 - [ ] Закоммитить подготовленный объём (§3) на ветке `1.0-b.1` и запушить её.
