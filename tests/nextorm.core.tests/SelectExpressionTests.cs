@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -44,5 +45,27 @@ public class SelectExpressionTests
         var act = () => column.GetDataRecordMethod();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*System.Uri*");
+    }
+
+    [Fact]
+    public void GetDataRecordMethod_ForNullableProviderType_ShouldStripNullable()
+    {
+        var column = new SelectExpression(typeof(long)) { PropertyName = "Value", Index = 0, ProviderType = typeof(long?) };
+
+        column.GetDataRecordMethod().Name.Should().Be(nameof(IDataRecord.GetInt64));
+    }
+
+    [Fact]
+    public void GetDataRecordMethod_ShouldPreferExplicitProviderType()
+    {
+        var column = new SelectExpression(typeof(ProbePoco))
+        {
+            PropertyName = "Data",
+            Index = 0,
+            Converter = new JsonColumnConverter<ProbePoco, string>(),
+            ProviderType = typeof(JsonElement),
+        };
+
+        column.GetDataRecordMethod().ReturnType.Should().Be(typeof(JsonElement));
     }
 }

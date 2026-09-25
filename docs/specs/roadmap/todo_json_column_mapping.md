@@ -1,6 +1,17 @@
 # TODO: JSON-колонка ↔ CLR-объект (авто-сериализация свойства)
 > Tracking issue: [#64](https://github.com/AlexeyShirshov/nextorm/issues/64).
 
+> **Статус (25.09.2026): фаза 1 поставлена.** Реализованы `[JsonColumn]` (+`JsonColumnStorage`,
+> `JsonColumnOptions`), `JsonColumnConverter<TModel,TProvider>` поверх
+> [`ValueConverter<,>`](todo_value_converters.md), fluent `.JsonColumn(...)`; `Storage.Auto`
+> резолвится по диалекту (`SupportsJson` → `jsonb`/`JsonDocument`, иначе текст) через внутренний
+> `IJsonColumnConverter`, поэтому метаданные диалект-независимы; read (`GetFieldValue<JsonDocument>` /
+> `GetString`) и write (единый шов `DurationStorage.ToParameterValue` для INSERT/UPDATE/MERGE/bulk)
+> покрыты; ключ кэша — по инстансу конвертера (не `GetType()`). In-memory — CLR↔CLR identity
+> (конвертер не применяется), задокументировано. Доки: `docs/guide/30-value-converters.md` (+RU).
+> **Отложено:** константы JSON в предикатах/проекциях (фаза 2 общей G1) и AOT/`JsonTypeInfo<T>`
+> (фаза 3).
+
 > Рабочий план (design RFC). Gap-анализ: **G2** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md); аналог linq2db
 > [#1661](https://github.com/linq2db/linq2db/issues/1661) «JSON Column Types, auto serialization with

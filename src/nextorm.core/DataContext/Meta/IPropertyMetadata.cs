@@ -83,4 +83,15 @@ public interface IPropertyMetadata
     /// compiling.
     /// </summary>
     string? Collation => null;
+
+    /// <summary>
+    /// The value converter that maps the property between its CLR model type and the provider
+    /// representation, or <see langword="null"/> when the property is stored as its model type.
+    /// Declared with <see cref="ValueConverterAttribute"/> or <see cref="JsonColumnAttribute"/>, or set
+    /// fluently with <see cref="EntityPropertyBuilder{T}.HasConversion(IPropertyValueConverter)"/> or
+    /// <see cref="EntityPropertyBuilder{T}.JsonColumn(Action{JsonColumnOptions}?)"/>. The default
+    /// implementation returns <see langword="null"/> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    IPropertyValueConverter? Converter => null;
 }

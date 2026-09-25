@@ -38,7 +38,7 @@ output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, �
 | `epic: code-generator` | 21 | CLI/T4-скаффолдинг маппингов из живой БД | none (маппинги только в коде) | **Out-of-scope** (заявленная граница) |
 | `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | none (только явные join'ы) | **Out-of-scope** (нет метаданных связей) |
 | `epic: insert` | 16 | полнота INSERT/UPSERT, bulk, output | `INSERT VALUES/SELECT`, key-upsert, full MERGE, bulk — <span style="color:green">Done</span> | смешанно: см. §4 |
-| `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON и SQLite TVF — нет | **Gap** (G2, G14) |
+| `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON (фаза 1: `[JsonColumn]`) — <span style="color:green">Done</span>; SQLite TVF — нет | **Gap** (G14) |
 | `epic: merge` | 5 | MERGE: immutable-модели, частичные setters, TPH/EF | full MERGE (SQL Server, PG15+) — <span style="color:green">Done</span>; inheritance/EF — out-of-scope | частично **Gap** (G-merge) |
 | `epic: output` | 6 | `OUTPUT`/`OUTPUT INTO`, несколько result-set'ов, INSERT…WithOutput в CTE | returning/output одного стейтмента — <span style="color:green">Done</span>; композируемый `INSERT ... RETURNING` как data-modifying CTE (PG) — <span style="color:green">Done</span> | **Gap** (G4); ~~G3~~ закрыт |
 | `epic: new-provider` | 4 | Oracle/Redshift/Sybase/SAP | provider breadth — граница | **Out-of-scope** |
@@ -72,7 +72,7 @@ output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, �
 | `#5837`, `#5838`, `#5852` | inheritance/TPH write, shadowing-член | **Out-of-scope** (нет TPH) |
 | `#5904`, `#5937`, `#5941`, `#5940`, `#5865` | eager-load ordering/strategy | **Out-of-scope** |
 | `#5717` | DML `RETURNING`/`OUTPUT` как **композируемый** `IQueryable`-источник | **Частично <span style="color:green">Done</span>** (~~G3~~): PG `INSERT ... RETURNING` как data-modifying CTE |
-| `#4562` | PostgreSQL `Overlaps` (range `&&`) | **Gap** (G11) → [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) |
+| `#4562` | PostgreSQL `Overlaps` (range `&&`) | **<span style="color:green">Реализовано</span>** (G11, 1.0-b.1) → [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types) (`todo_postgres_ranges.md` оставлен как журнал) |
 | `#4543` | декларативный `QueryFilter`-атрибут | **Planned** → [`todo_query_filters.md`](../roadmap/todo_query_filters.md) |
 | `#5706`, `#1879`, `#3740`, `#5425` | Oracle-специфика | **Out-of-scope** (нет провайдера) |
 | `#3023`, `#5895`–`#5897` | Sybase/DB2-специфика | **Out-of-scope** |
@@ -84,7 +84,7 @@ output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, �
 |---|---|---|
 | `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **<span style="color:green">реализовано</span>** (~~G7~~): [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения) |
 | `#1645` | table-valued **parameters** для хранимых процедур (TVP) | **Gap** (G8) → [`todo_tvp.md`](../roadmap/todo_tvp.md); смежно [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
-| `#1994` | open-generic `TypeConverter` | **Gap** (G1) |
+| `#1994` | open-generic `TypeConverter` | **Done** (G1, фаза 1: `IPropertyValueConverter`/`ValueConverter<,>`/`[ValueConverter]`/`.HasConversion`) → [Value converters](../../guide/30-value-converters.md); фаза 2 (константы в предикатах/проекциях) открыта |
 | `#3009` | ограничение размера кэша запросов | **Gap** (G10) |
 | `#4039` | логирование SQL-параметров | **<span style="color:green">Реализовано</span>** (интерцепторы, 1.0.6-alpha): `IQueryInterceptor` (`CommandInitialized`/`CommandExecuting`) отдаёт привязанную команду, интерцептор читает `command.Parameters` → [гайд 27](../../guide/27-interceptors.md) |
 | `#4405` | concurrency check с явными исключениями | **By design** (~~G6~~): достижимо через `Where` + число затронутых строк; гайд [Оптимистичная конкурентность и отслеживание изменений](../../guide/29-optimistic-concurrency.md) |
@@ -192,8 +192,12 @@ SQL Server/SQLite/ClickHouse; публичная страница — [`docs/gui
 `DataContextCache` (`MapperCache` уже ограничен `MaxEntries = 4096`); действие: добавить LRU/размер в
 кэш-инфраструктуру.
 
-**G11. PostgreSQL range/`Overlaps`.** `linq2db#4562`; shipped `Sql.Row.Overlaps` (6.5.0). nextorm не
-имеет range-типов (`tsrange`, `daterange`, `&&`). Действие: [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (PG-only surface).
+**G11. PostgreSQL range/`Overlaps` — <span style="color:green">реализовано</span> (1.0-b.1).**
+`linq2db#4562`; shipped `Sql.Row.Overlaps` (6.5.0). Добавлены provider-agnostic `NextORM.Core.Range<T>`
+и PG-only поверхность `SqlFunctions.Postgres` (`overlaps` → `&&`, `range_contains`/`range_contained_by`,
+позиционные/смежные/union/intersection/difference операторы, `lower`/`upper`/`isempty`, конструкторы),
+гейт `ISqlDialect.SupportsRanges`, round-trip `Range<T>` ↔ `NpgsqlRange<T>`. См.
+[PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types).
 
 **G12. C# string-семантика.** `linq2db#5921` (format-спецификаторы в `string.Format`/`$"…"`),
 `#5927` (ordinal `Compare`/`CompareOrdinal` сворачиваются в culture-sensitive `CompareTo`). В nextorm это
@@ -319,7 +323,7 @@ integration-тест. Подробности — [Duration columns](../../guide/
 | P0 | [`todo_output_into.md`](../roadmap/todo_output_into.md): `OUTPUT INTO`/multi-result/upsert-with-output (G4). Композируемый `INSERT ... RETURNING` (~~G3~~, PostgreSQL) — **<span style="color:green">реализовано</span>**: `MutationCteQuery` + [guide 09](../../guide/09-cte.md#data-modifying-cte-postgresql)/[guide 19](../../guide/19-insert-statement.md#data-modifying-cte-postgresql) |
 | P0 | Bulk insert + ~~G5~~ (returning/ignore/identity/chunking) — **<span style="color:green">реализовано</span>**: [Массовая вставка](../../guide/24-bulk-insert.md) |
 | — | ~~G6~~ — **By design**: паттерн оптимистичной конкурентности задокументирован ([гайд](../../guide/29-optimistic-concurrency.md)); `todo_optimistic_concurrency.md` не заводится |
-| P1 | ~~G7 Regex~~ — **<span style="color:green">реализовано</span>**: [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения); ~~G9 Duration~~ — **<span style="color:green">реализовано</span>** (1.0.6-alpha): [Duration-колонки](../../guide/26-duration-columns.md); [`todo_tvp.md`](../roadmap/todo_tvp.md) (G8), [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (G11) |
+| P1 | ~~G7 Regex~~ — **<span style="color:green">реализовано</span>**: [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения); ~~G9 Duration~~ — **<span style="color:green">реализовано</span>** (1.0.6-alpha): [Duration-колонки](../../guide/26-duration-columns.md); ~~G11 PostgreSQL range/`Overlaps`~~ — **<span style="color:green">реализовано</span>** (1.0-b.1): [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types); [`todo_tvp.md`](../roadmap/todo_tvp.md) (G8) |
 | P1 | Хранимые процедуры/функции + `OUT`/несколько result-set (снять `limitations.md`, туда же сырые параметризованные команды) → [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
 | P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../guide/27-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |

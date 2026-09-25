@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json;
 
 namespace NextORM.Core;
 
@@ -38,6 +39,19 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// The fractional-second precision of a native duration type, or zero for the provider default.
     /// </summary>
     public int DurationPrecision { get; set; }
+
+    /// <summary>
+    /// The provider-side type <see cref="Converter"/> produces and reads, or <see langword="null"/>
+    /// when the property is read as its CLR type. The reader selects its typed accessor from this type
+    /// rather than <see cref="PropertyType"/>.
+    /// </summary>
+    public Type? ProviderType { get; set; }
+
+    /// <summary>
+    /// The value converter applied to this column after reading and before materialization, or
+    /// <see langword="null"/> when the column is read as-is.
+    /// </summary>
+    public IPropertyValueConverter? Converter { get; set; }
 
     /// <summary>
     /// True when a SQL NULL in this column means "no row" (the projection came from a
@@ -88,23 +102,25 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
 
     /// <summary>Gets the reader accessor that reads a value of this column's type from a data record.</summary>
     /// <returns>The <see cref="MethodInfo"/> of the matching <see cref="IDataRecord"/> getter.</returns>
-    public MethodInfo GetDataRecordMethod()
-    {
-        // var recordType = typeof(IDataRecord);
+    public MethodInfo GetDataRecordMethod() => GetDataRecordMethod(ProviderType ?? _realType);
 
-        if (_realType == typeof(int))
+    internal MethodInfo GetDataRecordMethod(Type readType)
+    {
+        readType = System.Nullable.GetUnderlyingType(readType) ?? readType;
+
+        if (readType == typeof(int))
         {
             return GetInt32MI;
         }
-        else if (_realType == typeof(long))
+        else if (readType == typeof(long))
         {
             return GetInt64MI;
         }
-        else if (_realType == typeof(DateTime))
+        else if (readType == typeof(DateTime))
         {
             return GetDateTimeMI;
         }
-        else if (_realType == typeof(TimeSpan))
+        else if (readType == typeof(TimeSpan))
         {
             // Native durations/intervals are exposed by the provider driver as System.TimeSpan.
             // Providers without a native type store the value in an integer column and are read by a
@@ -112,47 +128,56 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
             // supportsNativeDuration == false).
             return GetFieldValueMI.MakeGenericMethod(typeof(TimeSpan));
         }
-        else if (_realType == typeof(DateTimeOffset))
+        else if (readType == typeof(DateTimeOffset))
         {
             return GetFieldValueMI.MakeGenericMethod(typeof(DateTimeOffset));
         }
-        else if (_realType == typeof(string))
+        else if (readType == typeof(string))
         {
             return GetStringMI;
         }
-        else if (_realType == typeof(bool))
+        else if (readType == typeof(bool))
         {
             return GetBooleanMI;
         }
-        else if (_realType == typeof(double))
+        else if (readType == typeof(double))
         {
             return GetDoubleMI;
         }
-        else if (_realType == typeof(decimal))
+        else if (readType == typeof(decimal))
         {
             return GetDecimalMI;
         }
-        else if (_realType == typeof(float))
+        else if (readType == typeof(float))
         {
             return GetFloatMI;
         }
-        else if (_realType == typeof(short))
+        else if (readType == typeof(short))
         {
             return GetInt16MI;
         }
-        else if (_realType == typeof(byte))
+        else if (readType == typeof(byte))
         {
             return GetByteMI;
         }
-        else if (_realType == typeof(Guid))
+        else if (readType == typeof(Guid))
         {
             return GetGuidMI;
         }
-        else if (_realType == typeof(ulong))
+        else if (readType == typeof(ulong))
         {
             return GetFieldValueMI.MakeGenericMethod(typeof(ulong));
         }
-        else if (_realType.IsArray)
+        else if (readType == typeof(JsonDocument))
+        {
+            // A provider-native JSON column (PostgreSQL jsonb) is read as System.Text.Json.JsonDocument.
+            return GetFieldValueMI.MakeGenericMethod(typeof(JsonDocument));
+        }
+        else if (readType == typeof(JsonElement))
+        {
+            return GetFieldValueMI.MakeGenericMethod(typeof(JsonElement));
+        }
+        else if (readType.IsArray)
         {
             // Array columns and array-returning expressions (binary bytea/varbinary/blob,
             // PostgreSQL text[]/int[], ClickHouse Array(T) including nested arrays) have no typed
@@ -160,20 +185,20 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
             // declared array type.
             return GetValueMI;
         }
-        else if (TypeFacts.IsTupleType(_realType))
+        else if (TypeFacts.IsTupleType(readType))
         {
             // A ClickHouse Tuple(...) column is read as System.Tuple<...> by the driver; read the
             // value through GetValue and let the caller cast it.
             return GetValueMI;
         }
-        else if (_realType == typeof(Dictionary<string, string>))
+        else if (readType == typeof(Dictionary<string, string>))
         {
             // A native ClickHouse Map(String, String) has no typed reader getter; read the value
             // through GetValue and let the caller cast it to Dictionary<string, string>.
             return GetValueMI;
         }
         else
-            throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");
+            throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {readType} which is not supported");
     }
 
     // public override int GetHashCode()

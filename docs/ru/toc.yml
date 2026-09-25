@@ -70,6 +70,8 @@
       href: guide/28-sql-batch.md
     - name: Оптимистичная конкурентность и отслеживание изменений
       href: guide/29-optimistic-concurrency.md
+    - name: Конвертеры значений и JSON-колонки
+      href: guide/30-value-converters.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

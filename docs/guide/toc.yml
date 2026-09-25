@@ -54,6 +54,8 @@
   href: 28-sql-batch.md
 - name: Optimistic concurrency and change tracking
   href: 29-optimistic-concurrency.md
+- name: Value converters and JSON columns
+  href: 30-value-converters.md
 - name: Provider-specific SQL
   items:
     - name: Overview

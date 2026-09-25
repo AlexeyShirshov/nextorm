@@ -90,6 +90,8 @@ internal static class ReturningProjection
                 PropertyInfo = target,
                 DurationUnit = column.DurationUnit,
                 DurationPrecision = column.DurationPrecision,
+                ProviderType = column.Converter?.ProviderType,
+                Converter = column.Converter,
             };
         }
 

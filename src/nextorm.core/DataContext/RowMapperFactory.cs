@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -18,6 +20,8 @@ internal static class RowMapperFactory
     private static readonly MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     private static readonly MethodInfo ToInt64MI = typeof(Convert).GetMethod(nameof(Convert.ToInt64), [typeof(object)])!;
     private static readonly MethodInfo FromStorageMI = typeof(DurationStorage).GetMethod(nameof(DurationStorage.FromStorage), BindingFlags.NonPublic | BindingFlags.Static)!;
+    private static readonly MethodInfo ConvertFromProviderMI = typeof(IPropertyValueConverter).GetMethod(nameof(IPropertyValueConverter.ConvertFromProvider))!;
+    private static readonly ConcurrentDictionary<Type, MethodInfo?> TypedFromProviderMethods = new();
 
     /// <summary>
     /// Default column accessor: typed getters only (no <c>GetValue</c>/boxing), with the ordinal baked
@@ -31,9 +35,17 @@ internal static class RowMapperFactory
     /// converted with the column's <see cref="DurationUnit"/> (default <see cref="DurationUnit.Ticks"/>);
     /// when <see langword="true"/> the driver exposes the native duration type directly.
     /// </param>
-    public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true)
+    /// <param name="dialect">
+    /// The active dialect, used to resolve a dialect-dependent converter (a JSON column whose storage is
+    /// <see cref="JsonColumnStorage.Auto"/>) before reading. Ignored when the column has no converter.
+    /// </param>
+    public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true, ISqlDialect? dialect = null)
     {
         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+
+        var converter = ResolveConverter(column.Converter, dialect);
+        if (converter is not null)
+            return MapConvertedColumn(column, param, converter);
 
         Expression getter;
         if (realType == typeof(TimeSpan) && !supportsNativeDuration)
@@ -46,11 +58,7 @@ internal static class RowMapperFactory
         }
         else
         {
-            var method = column.GetDataRecordMethod();
-            var accessor = method.DeclaringType == typeof(IDataRecord)
-                ? param
-                : Expression.Convert(param, method.DeclaringType!);
-            getter = Expression.Call(accessor, method, Expression.Constant(column.Index));
+            getter = GetReaderAccessor(column, param, realType);
         }
 
         if (column.Nullable)
@@ -78,6 +86,58 @@ internal static class RowMapperFactory
         }
 
         return getter;
+    }
+
+    private static IPropertyValueConverter? ResolveConverter(IPropertyValueConverter? converter, ISqlDialect? dialect)
+        => converter is IJsonColumnConverter json && dialect is not null ? json.Resolve(dialect) : converter;
+
+    private static Expression GetReaderAccessor(SelectExpression column, Expression param, Type readType)
+    {
+        var method = column.GetDataRecordMethod(readType);
+        var accessor = method.DeclaringType == typeof(IDataRecord)
+            ? param
+            : Expression.Convert(param, method.DeclaringType!);
+        return Expression.Call(accessor, method, Expression.Constant(column.Index));
+    }
+
+    private static Expression MapConvertedColumn(SelectExpression column, Expression param, IPropertyValueConverter converter)
+    {
+        var providerType = converter.ProviderType;
+        var getter = GetReaderAccessor(column, param, providerType);
+        var isDbNull = Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index));
+
+        if (converter.ConvertsNulls)
+        {
+            // The converter owns the null policy: SQL NULL is passed through as the default provider value.
+            Expression nullProviderValue = providerType.IsValueType
+                ? Expression.Default(providerType)
+                : Expression.Constant(null, providerType);
+            return ConvertFromProvider(converter, Expression.Condition(isDbNull, nullProviderValue, getter), column.PropertyType);
+        }
+
+        var converted = ConvertFromProvider(converter, getter, column.PropertyType);
+
+        if (column.Nullable)
+            return Expression.Condition(isDbNull, Expression.Constant(null, column.PropertyType), converted);
+
+        if (column.DefaultOnNull)
+            return Expression.Condition(isDbNull, Expression.Default(column.PropertyType), converted);
+
+        return converted;
+    }
+
+    private static Expression ConvertFromProvider(IPropertyValueConverter converter, Expression providerValue, Type modelType)
+    {
+        // Prefer the closed generic typed method so a value-type model is not boxed per row; fall back
+        // to the interface bridge for a converter implemented directly against IPropertyValueConverter.
+        var typedMethod = TypedFromProviderMethods.GetOrAdd(converter.GetType(), static type => ValueConverterReflection.GetFromProviderMethod(type));
+        Expression call;
+        if (typedMethod is not null && typedMethod.GetParameters()[0].ParameterType == providerValue.Type)
+            call = Expression.Call(Expression.Constant(converter, typedMethod.DeclaringType!), typedMethod, providerValue);
+        else
+            call = Expression.Call(Expression.Constant(converter), ConvertFromProviderMI, Expression.Convert(providerValue, typeof(object)));
+
+        return call.Type == modelType ? call : Expression.Convert(call, modelType);
     }
 
     /// <summary>
@@ -213,6 +273,8 @@ internal static class RowMapperFactory
                     signature = signature * 31 + (column.DefaultOnNull ? 1 : 0);
                     signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
+                    signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);
+                    signature = signature * 31 + (column.Converter is null ? 0 : RuntimeHelpers.GetHashCode(column.Converter));
                 }
             }
         }

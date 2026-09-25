@@ -449,6 +449,8 @@ public partial class QueryCommand
                                         PropertyInfo = pi,
                                         DurationUnit = prop.DurationUnit,
                                         DurationPrecision = prop.DurationPrecision,
+                                        ProviderType = prop.Converter?.ProviderType,
+                                        Converter = prop.Converter,
                                     };
 
                                     if (!cmd._dontCache && !noHash)

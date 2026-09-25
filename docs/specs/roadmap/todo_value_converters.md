@@ -1,6 +1,16 @@
 # TODO: Value converters (кастомный маппинг типов свойств)
 > Tracking issue: [#31](https://github.com/AlexeyShirshov/nextorm/issues/31).
 
+> **Статус (25.09.2026): фаза 1 поставлена, фаза 2 отложена.** Реализованы
+> `IPropertyValueConverter`/`ValueConverter<TModel,TProvider>`/`ValueConverterAttribute`,
+> `IPropertyMetadata.Converter` (DIM `=> null`), fluent `.HasConversion(...)`,
+> `SelectExpression.ProviderType`/`Converter`, чтение через provider-тип (`RowMapperFactory.MapColumn`,
+> кэшированный типизированный инвокер), единый write-шов (`DurationStorage.ToParameterValue`,
+> покрывает INSERT/UPDATE/MERGE/bulk/ключи), `Returning` и идентичность конвертера в кэш-ключе.
+> Доки: `docs/guide/30-value-converters.md` (+RU). **Отложено (фаза 2):** конвертация констант в
+> предикатах и скалярных проекциях (`Where(x => x.Status == Status.Active)`, `Select(x => x.Status)`).
+> G2 (JSON) поставлена отдельно — [`todo_json_column_mapping.md`](todo_json_column_mapping.md).
+
 > Рабочий план (design RFC). Gap-анализ: **G1** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md); аналог linq2db
 > [#1994](https://github.com/linq2db/linq2db/issues/1994) (open-generic `TypeConverter`) и темы

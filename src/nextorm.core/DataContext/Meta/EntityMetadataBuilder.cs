@@ -64,7 +64,12 @@ public class EntityMetadataBuilder<T>
             var generatedAttr = prop.GetCustomAttribute<DatabaseGeneratedAttribute>(true) ?? intProp?.GetCustomAttribute<DatabaseGeneratedAttribute>(true);
             var durationAttr = prop.GetCustomAttribute<DurationAttribute>(true) ?? intProp?.GetCustomAttribute<DurationAttribute>(true);
             var collationAttr = prop.GetCustomAttribute<CollationAttribute>(true) ?? intProp?.GetCustomAttribute<CollationAttribute>(true);
+            var valueConverterAttr = prop.GetCustomAttribute<ValueConverterAttribute>(true) ?? intProp?.GetCustomAttribute<ValueConverterAttribute>(true);
+            var jsonColumnAttr = prop.GetCustomAttribute<JsonColumnAttribute>(true) ?? intProp?.GetCustomAttribute<JsonColumnAttribute>(true);
             var generated = generatedAttr?.DatabaseGeneratedOption ?? DatabaseGeneratedOption.None;
+
+            if (valueConverterAttr is not null && jsonColumnAttr is not null)
+                throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} cannot be mapped with both {nameof(ValueConverterAttribute)} and {nameof(JsonColumnAttribute)}.");
 
             var columnName = !string.IsNullOrEmpty(colAttr?.Name) ? colAttr!.Name! : prop.Name;
             propsMeta.Add(new PropertyMetadata
@@ -78,6 +83,9 @@ public class EntityMetadataBuilder<T>
                 DurationUnit = durationAttr?.Unit,
                 DurationPrecision = durationAttr?.Precision ?? 0,
                 Collation = collationAttr?.Name,
+                Converter = jsonColumnAttr is not null
+                    ? JsonColumnConverterFactory.Create(prop.PropertyType, jsonColumnAttr.Storage)
+                    : valueConverterAttr?.Create(prop.PropertyType),
             });
         }
 

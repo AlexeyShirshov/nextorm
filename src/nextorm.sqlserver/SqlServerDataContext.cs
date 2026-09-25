@@ -71,6 +71,11 @@ public class SqlServerDataContext : DataContext
     /// <returns>An expression that reads and converts the column value.</returns>
     public override Expression MapColumnExpression(SelectExpression column, Expression param)
     {
+        // A converted column owns its reader type; the numeric widening below must not bypass the
+        // converter.
+        if (column.Converter is not null)
+            return base.MapColumnExpression(column, param);
+
         var type = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
 
         if (!IsNumeric(type))
