@@ -75,6 +75,15 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite exposes only the library version from the session/information family.</summary>
     public override ISessionInfoFunctions SessionInfoFunctions => SqliteSessionInfoFunctions.Instance;
 
+    /// <summary>SQLite renders <c>left</c>/<c>right</c> through <c>substr</c>, <c>ascii</c> through <c>unicode</c> and gates the functions it lacks.</summary>
+    public override IScalarFunctions ScalarFunctions => SqliteScalarFunctions.Instance;
+
+    /// <summary>SQLite exposes its core scalars, JSON1, date helpers and math-extension functions through <see cref="SqliteFunctions"/>.</summary>
+    public override ISqliteFunctions SqliteFunctions => SqliteFunctionRenderer.Instance;
+
+    /// <summary>SQLite's built-in JSON table-valued functions <c>json_each</c>/<c>json_tree</c>.</summary>
+    public override bool SupportsTableFunction(string name) => name is "json_each" or "json_tree";
+
     /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
 
@@ -284,6 +293,9 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite accepts <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelectIfNotExists => true;
+
+    /// <summary>SQLite has no <c>DbBatch</c>; the statements are joined with <c>;</c> into one command.</summary>
+    public override bool SupportsBatch => true;
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer
@@ -374,4 +386,33 @@ internal sealed class SqliteStringFormats : IStringFormatFunctions
 
     private static bool Match(string value, int index, string token) =>
         index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on SQLite. SQLite has
+/// no <c>lpad</c>/<c>rpad</c>, <c>repeat</c>, <c>reverse</c>, <c>space</c> or <c>translate</c>, so
+/// those are unsupported; <c>left</c>/<c>right</c> are emulated with <c>substr</c> and <c>ascii</c>
+/// maps to <c>unicode</c>.
+/// </summary>
+internal sealed class SqliteScalarFunctions : IScalarFunctions
+{
+    internal static readonly SqliteScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "concat_ws" or "ascii" or "char";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        // substr(X, 1, n) keeps the first n characters. For right, a start of length - n + 1 goes
+        // negative once n exceeds the value, and SQLite reads a negative start from the end, so the
+        // in-range case is guarded and the whole value is returned instead.
+        "left" => $"substr({args[0]}, 1, {args[1]})",
+        "right" => $"case when ({args[1]}) >= length({args[0]}) then {args[0]} else substr({args[0]}, length({args[0]}) - ({args[1]}) + 1, {args[1]}) end",
+        "concat_ws" => $"concat_ws({string.Join(", ", args)})",
+        "ascii" => $"unicode({args[0]})",
+        "char" => $"char({args[0]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by SQLite.")
+    };
 }

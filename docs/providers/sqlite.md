@@ -110,6 +110,25 @@ select id from complex_entity limit -1 offset 10
 
 SQLite has no `OFFSET` without `LIMIT`, so an offset-only query emits the sentinel `limit -1`.
 
+## SQLite-only functions
+
+`SqlFunctions.Sqlite` exposes the SQLite-only surface: the core scalars, JSON1, the date helpers and the
+math-extension functions. `json_each`/`json_tree` are available as table functions. Other providers
+reject every member of the surface with a `NotSupportedException`.
+
+```csharp
+ctx.From<IComplexEntity>()
+    .Select(x => new
+    {
+        Json = SqlFunctions.Sqlite.json_extract<string>(x.String, "$.name"),
+        Kind = SqlFunctions.Sqlite.@typeof(x.String),
+        Pi = SqlFunctions.Sqlite.pi()
+    });
+```
+
+See [SQLite-specific SQL](../guide/provider-specific/sqlite.md) for the full list, the native SQLite
+spelling and the version/build-option requirements.
+
 ## Limitations
 
 SQLite has no `ANY`/`ALL` subquery support. `SqlFunctions.Sql.any(...)` / `SqlFunctions.Sql.all(...)` are translated to

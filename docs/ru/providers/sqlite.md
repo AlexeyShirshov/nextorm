@@ -110,6 +110,25 @@ select id from complex_entity limit -1 offset 10
 
 В SQLite нет `OFFSET` без `LIMIT`, поэтому запрос только с offset выдаёт сигнальное значение `limit -1`.
 
+## Функции, специфичные для SQLite
+
+`SqlFunctions.Sqlite` даёт поверхность, специфичную для SQLite: функции ядра, JSON1, функции дат и
+функции математического расширения. `json_each`/`json_tree` доступны как табличные функции. Прочие
+провайдеры отклоняют любой член поверхности с `NotSupportedException`.
+
+```csharp
+ctx.From<IComplexEntity>()
+    .Select(x => new
+    {
+        Json = SqlFunctions.Sqlite.json_extract<string>(x.String, "$.name"),
+        Kind = SqlFunctions.Sqlite.@typeof(x.String),
+        Pi = SqlFunctions.Sqlite.pi()
+    });
+```
+
+Полный список, нативное написание в SQLite и требования к версии/опциям сборки — в разделе
+[Специфичный для SQLite SQL](../guide/provider-specific/sqlite.md).
+
 ## Ограничения
 
 В SQLite нет поддержки подзапросов `ANY`/`ALL`. `SqlFunctions.Sql.any(...)` / `SqlFunctions.Sql.all(...)` транслируются в

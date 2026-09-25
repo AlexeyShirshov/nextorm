@@ -140,4 +140,29 @@ public class SqliteDialectTests
     {
         Dialect.UuidGenerators.Should().BeNull();
     }
+
+    [Fact]
+    public void SqliteFunctionHooks_ShouldExposeTheNativeSurface()
+    {
+        var functions = Dialect.SqliteFunctions;
+        functions.Should().NotBeNull();
+
+        functions!.Supports("printf").Should().BeTrue();
+        functions.Supports("json_extract").Should().BeTrue();
+        functions.Supports("acos").Should().BeTrue();
+        functions.Supports("timediff").Should().BeTrue();
+        functions.Supports("nonsense").Should().BeFalse();
+
+        functions.Render("json_get", ["a", "b"]).Should().Be("(a -> b)");
+        functions.Render("json_get_text", ["a", "b"]).Should().Be("(a ->> b)");
+        functions.Render("unhex", ["'41'"]).Should().Be("unhex('41')");
+    }
+
+    [Fact]
+    public void JsonTableFunctions_ShouldBeSupported()
+    {
+        Dialect.SupportsTableFunction("json_each").Should().BeTrue();
+        Dialect.SupportsTableFunction("json_tree").Should().BeTrue();
+        Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
+    }
 }
