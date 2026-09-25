@@ -1694,7 +1694,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
             .Should().Contain("case when (positionUTF8(somestring, 'b', 1 + 1)) = 0 then -1 else (positionUTF8(somestring, 'b', 1 + 1)) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("case when (positionUTF8(reverseUTF8(somestring), reverseUTF8('b'))) = 0 then -1 else lengthUTF8(somestring) - (positionUTF8(reverseUTF8(somestring), reverseUTF8('b'))) - lengthUTF8('b') + 1 end");
+            .Should().Contain("case when (positionUTF8(reverseUTF8(somestring), reverseUTF8('b'))) = 0 then -1 else lengthUTF8(somestring) - (positionUTF8(reverseUTF8(somestring), reverseUTF8('b'))) - (lengthUTF8('b')) + 1 end");
     }
 
     [Fact]

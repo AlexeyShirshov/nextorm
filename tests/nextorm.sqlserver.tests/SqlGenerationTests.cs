@@ -2045,7 +2045,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
             .Should().Contain("case when (charindex('b', somestring, 1 + 1)) = 0 then -1 else (charindex('b', somestring, 1 + 1)) - 1 end");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("case when (charindex(reverse('b'), reverse(somestring))) = 0 then -1 else len(somestring) - (charindex(reverse('b'), reverse(somestring))) - len('b') + 1 end");
+            .Should().Contain("case when (charindex(reverse('b'), reverse(somestring))) = 0 then -1 else len(somestring) - (charindex(reverse('b'), reverse(somestring))) - (len('b')) + 1 end");
     }
 
     [Fact]

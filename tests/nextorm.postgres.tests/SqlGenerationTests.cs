@@ -3173,7 +3173,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
             .Should().Contain("strpos(substring(somestring, 1 + 1, length(somestring) - (1)), 'b')");
         SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
-            .Should().Contain("case when (strpos(reverse(somestring), reverse('b'))) = 0 then -1 else length(somestring) - (strpos(reverse(somestring), reverse('b'))) - length('b') + 1 end");
+            .Should().Contain("case when (strpos(reverse(somestring), reverse('b'))) = 0 then -1 else length(somestring) - (strpos(reverse(somestring), reverse('b'))) - (length('b')) + 1 end");
     }
 
     [Fact]

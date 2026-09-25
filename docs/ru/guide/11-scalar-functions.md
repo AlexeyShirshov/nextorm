@@ -271,7 +271,7 @@ ICU в MySQL, PCRE в MariaDB, RE2 в ClickHouse, .NET в SQLite), поэтом�
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) предоставляет небольшой набор строковых и
 числовых функций, которые рендерятся нативно у каждого провайдера, умеющего их выразить. Каждый вызов
 гейтится **по функции** через [`ISqlDialect.ScalarFunctions`](xref:NextORM.Core.ISqlDialect.ScalarFunctions)
-и [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports): провайдер без нативной формы
+и [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)): провайдер без нативной формы
 отклоняет вызов понятным `NotSupportedException`, а не рендерит SQL, который не сможет выполнить.
 
 | C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |

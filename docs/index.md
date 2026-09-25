@@ -36,6 +36,10 @@
 - [Data merging (MERGE / upsert)](guide/23-merge-statement.md)
 - [Bulk insert](guide/24-bulk-insert.md)
 - [Transactions](guide/25-transactions.md)
+- [Duration (TimeSpan) columns](guide/26-duration-columns.md)
+- [Interceptors](guide/27-interceptors.md)
+- [Executing statements in one batch](guide/28-sql-batch.md)
+- [Optimistic concurrency and change tracking](guide/29-optimistic-concurrency.md)
 
 ### Providers
 
@@ -70,7 +74,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.5-alpha) is a prof of concept.
+The current status (1.0.6-alpha) is a prof of concept.
 
 ## Roadmap
 
@@ -78,6 +82,7 @@ The current status (1.0.5-alpha) is a prof of concept.
 - [1.0.3-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.3)
 - [1.0.4-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.4)
 - [1.0.5-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.5)
+- [1.0.6-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.6)
 - [1.0-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
 - [1.0-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-rc.1)
 - [1.0](https://github.com/AlexeyShirshov/nextorm/milestones/1.0)
@@ -125,6 +130,23 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](guide/15-query-reuse.md).
 
 ## Releases
+
+### 1.0.6-alpha
+
+- [column collation — `Collate(...)` в маппинге и запросах](https://github.com/AlexeyShirshov/nextorm/issues/28)
+- [Interceptors — `IQueryInterceptor` / `IConnectionInterceptor` (наблюдение за командами и соединениями)](https://github.com/AlexeyShirshov/nextorm/issues/30)
+- [Трансляция Regex в запросах — `Regex.IsMatch` / `Regex.Replace`](https://github.com/AlexeyShirshov/nextorm/issues/68)
+- [C# string-семантика — ordinal-сравнения, format-спецификаторы, culture](https://github.com/AlexeyShirshov/nextorm/issues/71)
+- [TimeSpan/interval-колонки и точность дат — атрибут `[Duration]`](https://github.com/AlexeyShirshov/nextorm/issues/72)
+- [DDL/DML + читающий запрос в одном SQL-батче (pgbouncer-safe CTAS)](https://github.com/AlexeyShirshov/nextorm/issues/75)
+- [Кросс-провайдерные строковые/числовые обёртки `SqlFunctions.Sql`](https://github.com/AlexeyShirshov/nextorm/issues/77)
+- [ClickHouse: пробелы функций (`lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`, `map*`, массивы, `groupBitmap`/`sumMap`, хэши, `generateULID`)](https://github.com/AlexeyShirshov/nextorm/issues/78)
+- [MariaDB: пробелы функций (`NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`, `JSON_DETAILED`/`JSON_COMPACT`, последовательности)](https://github.com/AlexeyShirshov/nextorm/issues/79)
+- [MySQL: пробелы функций (`FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `STR_TO_DATE`, `DATE_FORMAT`, `FROM_UNIXTIME`, JSON-mutation, `UUID_TO_BIN`)](https://github.com/AlexeyShirshov/nextorm/issues/80)
+- [PostgreSQL: пробелы функций (`sha224/384/512`, `regexp_substr`, `make_*`, `age`, `date_bin`, `current_setting`, последовательности, SQL/JSON)](https://github.com/AlexeyShirshov/nextorm/issues/81)
+- [SQLite: пробелы функций (JSON1, `printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `timediff`, `Math.*`)](https://github.com/AlexeyShirshov/nextorm/issues/82)
+- [SQL Server: пробелы функций (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `TRANSLATE`, `FORMAT`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, JSON-агрегаты)](https://github.com/AlexeyShirshov/nextorm/issues/83)
+- Новые главы руководства EN + RU: длительности (`[Duration]`), interceptors, SQL-батчи, оптимистичный параллелизм
 
 ### 1.0.5-alpha
 

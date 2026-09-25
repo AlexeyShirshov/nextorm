@@ -266,7 +266,7 @@ patterns. The in-memory provider runs `System.Text.RegularExpressions` natively.
 [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes a small library of string and number
 functions that render natively on every provider that can express them. Each call is gated **per
 function** through [`ISqlDialect.ScalarFunctions`](xref:NextORM.Core.ISqlDialect.ScalarFunctions) and
-[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports): a provider without a native
+[`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String)): a provider without a native
 form rejects the call with a clear `NotSupportedException` instead of emitting SQL it cannot run.
 
 | C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
