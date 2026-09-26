@@ -1482,6 +1482,26 @@ public interface ISqlDialect
     bool BatchUsesJoinedCommand => false;
 
     /// <summary>
+    /// Whether the provider can execute a stored procedure through
+    /// <c>DataContext.ExecuteProcedure</c> (command type <see cref="System.Data.CommandType.StoredProcedure"/>).
+    /// SQL Server, PostgreSQL and MySQL/MariaDB opt in; SQLite and ClickHouse have no stored procedures
+    /// and leave it <c>false</c>, so the call is rejected before a connection is opened. Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    bool SupportsStoredProcedures => false;
+
+    /// <summary>
+    /// Whether the provider can bind a table-valued parameter (<c>ProcedureParameter.Table&lt;T&gt;(name, rows)</c>).
+    /// SQL Server binds it natively through a user-defined table type; PostgreSQL, MySQL/MariaDB and
+    /// SQLite emulate it (typed array or JSON document) and ClickHouse with a bound
+    /// <c>Array(T)</c>/<c>Array(Tuple(...))</c> expanded server-side with <c>arrayJoin(@p)</c>. Only the
+    /// in-memory provider leaves it <c>false</c>. Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsTableValuedParameters => false;
+
+    /// <summary>
     /// Whether the dialect can skip conflicting rows with its <c>INSERT OR IGNORE</c>/<c>INSERT IGNORE</c>
     /// head (SQLite, MySQL, MariaDB; ClickHouse opts in as a no-op because it has no uniqueness).
     /// Declared as a default interface method returning <c>false</c> so existing external implementations

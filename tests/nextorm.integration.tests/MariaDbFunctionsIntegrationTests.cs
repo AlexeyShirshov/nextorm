@@ -205,6 +205,70 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
         Probe.Select(_ => SqlFunctions.MySql.lastval("fn_seq")).First().Should().Be(510);
     }
 
+    private sealed class TvpEntity
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_Scalar_ShouldUseJsonTable()
+    {
+        using var result = _ctx.ExecuteRaw(
+            "select sum(t.value) as s from JSON_TABLE(@ids, '$[*]' COLUMNS(value INT PATH '$')) as t",
+            [ProcedureParameter.Table("ids", new[] { 1, 2, 3 })]);
+
+        result.Read<long>().Should().Equal(6L);
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_Entity_ShouldUseJsonTable()
+    {
+        using var result = _ctx.ExecuteRaw(
+            "select t.Id, t.Name from JSON_TABLE(@rows, '$[*]' COLUMNS(Id INT PATH '$.Id', Name varchar(100) PATH '$.Name')) as t order by t.Id",
+            [ProcedureParameter.Table("rows", new[]
+            {
+                new TvpEntity { Id = 1, Name = "alpha" },
+                new TvpEntity { Id = 2, Name = null },
+            })]);
+
+        var read = result.Read<TvpEntity>();
+
+        read.Should().HaveCount(2);
+        read[0].Id.Should().Be(1);
+        read[0].Name.Should().Be("alpha");
+        read[1].Id.Should().Be(2);
+        read[1].Name.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_EmptyScalar_ShouldReturnNoRows()
+    {
+        using var result = _ctx.ExecuteRaw(
+            "select count(*) as c from JSON_TABLE(@ids, '$[*]' COLUMNS(value INT PATH '$')) as t",
+            [ProcedureParameter.Table("ids", Array.Empty<int>())]);
+
+        result.Read<long>().Should().Equal(0L);
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_EmptyEntity_ShouldReturnNoRows()
+    {
+        using var result = _ctx.ExecuteRaw(
+            "select t.Id, t.Name from JSON_TABLE(@rows, '$[*]' COLUMNS(Id INT PATH '$.Id', Name varchar(100) PATH '$.Name')) as t",
+            [ProcedureParameter.Table("rows", Array.Empty<TvpEntity>())]);
+
+        result.Read<TvpEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameterWithTypeName_ShouldThrowArgumentException()
+    {
+        var act = () => _ctx.ExecuteRaw("select 1", [ProcedureParameter.Table("p", "my_type", new[] { 1 })]);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
     private void Seed()
     {
         Execute("drop table if exists fn_probe");

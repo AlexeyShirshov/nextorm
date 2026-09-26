@@ -12,6 +12,8 @@ internal class PropertyMetadata : IPropertyMetadata
     public bool IsComputed { get; init; }
     public DurationUnit? DurationUnit { get; init; }
     public int DurationPrecision { get; init; }
+    public int? DecimalPrecision { get; init; }
+    public int? DecimalScale { get; init; }
     public string? Collation { get; init; }
     public IPropertyValueConverter? Converter { get; init; }
     public RangeColumnsMetadata? RangeColumns { get; init; }

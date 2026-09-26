@@ -38,6 +38,13 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsRangeColumns => true;
 
     /// <summary>
+    /// ClickHouse emulates a table-valued parameter with a native array bound through the driver and
+    /// expanded server-side with <c>arrayJoin(@p)</c>: a scalar set is an <c>Array(T)</c> and an entity
+    /// set an <c>Array(Tuple(...))</c>. See <c>ClickHouseDataContext.CreateProcedureParameter</c>.
+    /// </summary>
+    public override bool SupportsTableValuedParameters => true;
+
+    /// <summary>
     /// ClickHouse is not marked as having a native bulk path: the driver's <c>ClickHouseBulkCopy</c> is
     /// obsolete in favour of <c>ClickHouseClient.InsertBinaryAsync</c>, which needs a client built from
     /// the connection string rather than the context's connection, so the portable

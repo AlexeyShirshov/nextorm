@@ -16,6 +16,10 @@ public class PostgresDialectTests
     private static readonly ISqlDialect Dialect = PostgresDialect.Instance;
 
     [Fact]
+    public void SupportsTableValuedParameters_IsTrue()
+        => Dialect.SupportsTableValuedParameters.Should().BeTrue();
+
+    [Fact]
     public void DurationHooks_ShouldUseNativeInterval()
     {
         Dialect.SupportsNativeDuration.Should().BeTrue();

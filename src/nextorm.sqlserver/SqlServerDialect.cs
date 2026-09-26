@@ -54,6 +54,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server batches through <c>SqlBatch</c>.</summary>
     public override bool SupportsBatch => true;
 
+    /// <summary>SQL Server executes a stored procedure by name with <c>CommandType.StoredProcedure</c>.</summary>
+    public override bool SupportsStoredProcedures => true;
+
+    /// <summary>SQL Server binds a table-valued parameter natively through a user-defined table type.</summary>
+    public override bool SupportsTableValuedParameters => true;
+
     /// <summary><c>SqlBatch</c> runs each command in its own scope, so a <c>#temp</c> created by one command is not visible to the next; the joined command keeps them in one batch scope.</summary>
     public override bool BatchUsesJoinedCommand => true;
 

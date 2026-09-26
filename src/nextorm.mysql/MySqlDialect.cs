@@ -50,6 +50,12 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL/MariaDB batches through <c>MySqlBatch</c>.</summary>
     public override bool SupportsBatch => true;
 
+    /// <summary>MySqlConnector maps <c>CommandType.StoredProcedure</c> to <c>CALL name(...)</c>.</summary>
+    public override bool SupportsStoredProcedures => true;
+
+    /// <summary>MySQL/MariaDB emulate a table-valued parameter with a JSON document (<c>JSON_TABLE</c>).</summary>
+    public override bool SupportsTableValuedParameters => true;
+
     /// <summary>MySQL skips conflicting rows with the <c>INSERT IGNORE</c> head.</summary>
     public override bool SupportsInsertIgnore => true;
 

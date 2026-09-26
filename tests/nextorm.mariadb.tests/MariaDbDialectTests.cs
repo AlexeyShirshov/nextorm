@@ -13,6 +13,10 @@ public class MariaDbDialectTests
     private static readonly ISqlDialect Dialect = MariaDbDialect.Instance;
 
     [Fact]
+    public void SupportsTableValuedParameters_IsTrue()
+        => Dialect.SupportsTableValuedParameters.Should().BeTrue();
+
+    [Fact]
     public void DurationHooks_ShouldUseNativeTime()
     {
         Dialect.SupportsNativeDuration.Should().BeTrue();

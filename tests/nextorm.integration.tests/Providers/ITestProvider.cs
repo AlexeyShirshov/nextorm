@@ -114,6 +114,22 @@ public interface ITestProvider
     bool SupportsBatch { get; }
 
     /// <summary>
+    /// True when the provider can execute a stored procedure through
+    /// <c>ExecuteProcedure</c> (<c>CommandType.StoredProcedure</c>). SQL Server, PostgreSQL and
+    /// MySQL/MariaDB can; SQLite and ClickHouse have no stored procedures, so the shared
+    /// unsupported-provider test runs instead of the procedure tests.
+    /// </summary>
+    bool SupportsStoredProcedures { get; }
+
+    /// <summary>
+    /// True when the provider can bind a table-valued parameter
+    /// (<c>ProcedureParameter.Table&lt;T&gt;(name, ...)</c>). SQL Server uses a native user-defined table
+    /// type; PostgreSQL, MySQL/MariaDB and SQLite emulate it with an array/JSON document; ClickHouse does
+    /// not support it.
+    /// </summary>
+    bool SupportsTableValuedParameters { get; }
+
+    /// <summary>
     /// True when the provider supports ADO.NET transactions on its connection. SQLite, PostgreSQL,
     /// SQL Server and MySQL/MariaDB do; ClickHouse speaks HTTP and has no transaction, so the shared
     /// transaction tests are skipped there.

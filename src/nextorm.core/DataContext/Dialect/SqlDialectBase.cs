@@ -869,6 +869,10 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsBulkCopy => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB and SQLite opt into one-round-trip batches.</summary>
     public virtual bool SupportsBatch => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL and MySQL/MariaDB opt into stored-procedure execution (<c>CommandType.StoredProcedure</c>).</summary>
+    public virtual bool SupportsStoredProcedures => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server binds a table-valued parameter natively, PostgreSQL, MySQL/MariaDB and SQLite emulate it with a typed array or a JSON document, and ClickHouse with a bound <c>Array(T)</c>/<c>Array(Tuple(...))</c> expanded with <c>arrayJoin</c>.</summary>
+    public virtual bool SupportsTableValuedParameters => false;
     /// <summary>Defaults to <c>false</c>; SQL Server sends the batch as one <c>;</c>-joined command so a <c>#temp</c> survives across statements.</summary>
     public virtual bool BatchUsesJoinedCommand => false;
     /// <summary>Defaults to <c>false</c>; SQLite, MySQL, MariaDB and ClickHouse opt into an <c>INSERT ... IGNORE</c> head.</summary>

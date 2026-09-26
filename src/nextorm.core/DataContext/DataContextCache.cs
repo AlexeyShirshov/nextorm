@@ -20,6 +20,7 @@ namespace NextORM.Core;
 public static class DataContextCache
 {
     private readonly static TimedDictionary<Type, IEntityMetadata> _metadata = new();
+    private readonly static TimedDictionary<Type, IEntityMetadata> _tvpMetadata = new();
     private readonly static TimedDictionary<Type, SelectExpression[]> _selectListCache = new();
     private readonly static TimedDictionary<ExpressionKey, Delegate> _expCache = new();
     private readonly static TimedDictionary<ExpressionKey, Func<object?, object?>> _inValuesCache = new();
@@ -30,6 +31,15 @@ public static class DataContextCache
     /// <c>From&lt;T&gt;</c> call and reused for the rest of the process.
     /// </summary>
     public static IDictionary<Type, IEntityMetadata> Metadata => _metadata;
+    /// <summary>
+    /// Auto-resolved entity metadata kept by the table-valued parameter binder for a row type that was
+    /// never registered as a query source, keyed by that type. It is deliberately separate from
+    /// <see cref="Metadata"/>: seeding the configured cache from the auto path would make a later
+    /// <c>From&lt;T&gt;(cfg)</c> registration silently reuse the auto-built mapping instead of the
+    /// configured one. The auto path always prefers an entry in <see cref="Metadata"/> and only falls
+    /// back to this cache. Internal: not part of the public cache surface.
+    /// </summary>
+    internal static IDictionary<Type, IEntityMetadata> TvpMetadata => _tvpMetadata;
     /// <summary>
     /// Cached select lists (the projected columns) of each CLR type, keyed by that type, so the
     /// projection is not rebuilt per query.
@@ -64,9 +74,10 @@ public static class DataContextCache
     }
 
     /// <summary>
-    /// Clears every process-wide cache in the engine: the metadata, select-list, expression and
-    /// in-values caches owned by this class, the compiled row-mapper cache, the projection-alias and
-    /// FROM caches, and the thread-local plan cache. The next query rebuilds whatever it needs.
+    /// Clears every process-wide cache in the engine: the metadata, table-valued-parameter metadata,
+    /// select-list, expression and in-values caches owned by this class, the compiled row-mapper cache,
+    /// the projection-alias and FROM caches, and the thread-local plan cache. The next query rebuilds
+    /// whatever it needs.
     /// </summary>
     /// <remarks>
     /// The plan cache is <c>[ThreadStatic]</c>, so a plan created on another thread is dropped lazily
@@ -78,10 +89,12 @@ public static class DataContextCache
     public static void Clear()
     {
         _metadata.Clear();
+        _tvpMetadata.Clear();
         _selectListCache.Clear();
         _expCache.Clear();
         _inValuesCache.Clear();
         MapperCache.Clear();
+        RawMapperFactory.Clear();
         ProjectionAliasCache.Clear();
         QueryPlanner.ClearFromCache();
         QueryPlanStore.Clear();

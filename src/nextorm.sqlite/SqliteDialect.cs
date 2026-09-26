@@ -12,6 +12,12 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
 
+    /// <summary>SQLite has no stored procedures, so <c>ExecuteProcedure</c> is rejected by the base capability gate.</summary>
+    public override bool SupportsStoredProcedures => false;
+
+    /// <summary>SQLite emulates a table-valued parameter with a JSON document (<c>json_each</c>/<c>json_extract</c>).</summary>
+    public override bool SupportsTableValuedParameters => true;
+
     // SQLite 3.35.0+ supports the ANSI INSERT ... RETURNING clause; last_insert_rowid() stays
     // available as a fallback but RETURNING is preferred because it is scoped to the statement.
     /// <inheritdoc/>

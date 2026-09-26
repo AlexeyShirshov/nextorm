@@ -14,6 +14,10 @@ public class SqlServerDialectTests
     private static readonly ISqlDialect Dialect = SqlServerDialect.Instance;
 
     [Fact]
+    public void SupportsTableValuedParameters_IsTrue()
+        => Dialect.SupportsTableValuedParameters.Should().BeTrue();
+
+    [Fact]
     public void DurationHooks_ShouldUseIntegerStorage()
     {
         Dialect.SupportsNativeDuration.Should().BeFalse();

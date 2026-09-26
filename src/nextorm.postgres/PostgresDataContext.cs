@@ -91,6 +91,69 @@ public class PostgresDataContext : DataContext
     }
 
     /// <summary>
+    /// Creates an <c>NpgsqlParameter</c> for a descriptor. A <see cref="TableParameterValue"/> is
+    /// emulated: a scalar row type becomes a typed array (<c>unnest(@p)</c>/<c>= ANY(@p)</c>), an
+    /// entity row type becomes a <c>jsonb</c> document (<c>jsonb_to_recordset(@p)</c>). A
+    /// <see cref="ProcedureParameter.TypeName"/> has no meaning on PostgreSQL and is rejected.
+    /// </summary>
+    /// <param name="parameter">The parameter descriptor.</param>
+    /// <returns>A new PostgreSQL parameter configured from <paramref name="parameter"/>.</returns>
+    /// <exception cref="ArgumentException">The descriptor carries a <see cref="ProcedureParameter.TypeName"/> (SQL Server only), or a table parameter is not <see cref="ParameterDirection.Input"/>.</exception>
+    protected override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
+    {
+        if (parameter.Value is TableParameterValue tableValue)
+        {
+            RejectTypeName(parameter);
+            RejectNonInputTable(parameter);
+
+            if (tableValue.IsScalar)
+            {
+                var arrayParameter = new NpgsqlParameter(parameter.Name, tableValue.ToArray(this));
+                ApplyArrayDbType(arrayParameter, tableValue.RowType);
+                return arrayParameter;
+            }
+
+            return new NpgsqlParameter(parameter.Name, tableValue.WriteJson(this)) { NpgsqlDbType = NpgsqlDbType.Jsonb };
+        }
+
+        RejectTypeName(parameter);
+        return base.CreateProcedureParameter(parameter);
+    }
+
+    // Npgsql's CLR-array inference maps a DateTime element to timestamp and a DateTimeOffset element to
+    // timestamptz; setting the array type explicitly keeps the mapping unambiguous and matches the
+    // provider's scalar mapping. Types with an exact inference are left to the driver.
+    private static void ApplyArrayDbType(NpgsqlParameter parameter, Type rowType)
+    {
+        var element = Nullable.GetUnderlyingType(rowType) ?? rowType;
+
+        if (element.IsEnum)
+            element = Enum.GetUnderlyingType(element);
+
+        if (element == typeof(DateTime))
+            parameter.NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Timestamp;
+        else if (element == typeof(DateTimeOffset))
+            parameter.NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.TimestampTz;
+    }
+
+    private static void RejectTypeName(ProcedureParameter parameter)
+    {
+        if (parameter.TypeName is not null)
+            throw new ArgumentException(
+                $"TypeName is SQL Server only, but '{parameter.Name}' has TypeName = '{parameter.TypeName}'. "
+                + "On PostgreSQL pass the rows to ProcedureParameter.Table(name, rows): a scalar set binds as an array and an entity set as jsonb.",
+                nameof(parameter));
+    }
+
+    private static void RejectNonInputTable(ProcedureParameter parameter)
+    {
+        if (parameter.Direction != ParameterDirection.Input)
+            throw new ArgumentException(
+                $"A table-valued parameter is input-only, but '{parameter.Name}' has Direction = {parameter.Direction}.",
+                nameof(parameter));
+    }
+
+    /// <summary>
     /// Materializes a projected <see cref="Range{T}"/> column from the driver's
     /// <c>NpgsqlRange&lt;T&gt;</c> through the typed <c>GetFieldValue</c> accessor, converting it to the
     /// provider-agnostic range. Every other column is mapped by the base implementation.

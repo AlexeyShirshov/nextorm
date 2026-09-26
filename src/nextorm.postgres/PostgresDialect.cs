@@ -33,6 +33,12 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL batches through <c>NpgsqlBatch</c>, which wraps the commands in an implicit transaction so they share one backend.</summary>
     public override bool SupportsBatch => true;
 
+    /// <summary>Npgsql maps <c>CommandType.StoredProcedure</c> to <c>CALL name(...)</c>, so PostgreSQL procedures (not functions) are invoked through <c>ExecuteProcedure</c>.</summary>
+    public override bool SupportsStoredProcedures => true;
+
+    /// <summary>PostgreSQL emulates a table-valued parameter with a typed array (<c>unnest</c>/<c>ANY</c>) or a JSON document (<c>jsonb_to_recordset</c>).</summary>
+    public override bool SupportsTableValuedParameters => true;
+
     /// <summary>PostgreSQL skips conflicting rows with a trailing <c>ON CONFLICT DO NOTHING</c>.</summary>
     public override bool SupportsOnConflictDoNothing => true;
 

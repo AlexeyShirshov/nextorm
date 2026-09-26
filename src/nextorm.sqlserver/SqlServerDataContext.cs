@@ -1,9 +1,11 @@
 ﻿using System.Data;
 using System.Data.Common;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Microsoft.Data.SqlClient;
+using Microsoft.Data.SqlClient.Server;
 using NextORM.Core;
 
 namespace NextORM.SqlServer;
@@ -62,6 +64,299 @@ public class SqlServerDataContext : DataContext
         // ("expects the parameter ... which was not supplied"), so nulls must be passed as DBNull.
         return new SqlParameter(name, value ?? DBNull.Value);
     }
+
+    /// <summary>
+    /// Creates a <c>SqlParameter</c> from a descriptor, additionally applying a structured parameter
+    /// type name. When <see cref="ProcedureParameter.TypeName"/> is set the parameter is marked
+    /// <see cref="SqlDbType.Structured"/> (SqlClient rejects a type name on a non-structured parameter)
+    /// — a structured parameter is <b>input only</b>, so any other <see cref="ParameterDirection"/> is
+    /// rejected. <see cref="SqlDbType.Structured"/> overrides <see cref="ProcedureParameter.DbType"/>
+    /// for that parameter; the legacy value must be a <c>DataTable</c>/<c>IEnumerable&lt;SqlDataRecord&gt;</c>.
+    /// <para>
+    /// When <see cref="ProcedureParameter.Value"/> is a <see cref="TableParameterValue"/> (built with
+    /// <see cref="ProcedureParameter.Table{T}(string, string, IEnumerable{T})"/>) the rows are streamed
+    /// as <c>SqlDataRecord</c>s and <see cref="ProcedureParameter.TypeName"/> is <b>required</b>.
+    /// </para>
+    /// <para>
+    /// The CLR type of each bound column picks a fixed T-SQL type: <c>bool</c>→<c>bit</c>,
+    /// <c>char</c>→<c>nchar(1)</c>, <c>sbyte</c>/<c>short</c>→<c>smallint</c>,
+    /// <c>byte</c>→<c>tinyint</c>, <c>ushort</c>/<c>int</c>→<c>int</c>, <c>uint</c>/<c>long</c>→<c>bigint</c>,
+    /// <c>ulong</c>→<c>decimal(20,0)</c>, <c>float</c>→<c>real</c>, <c>double</c>→<c>float</c>,
+    /// <c>decimal</c>→<c>decimal(38,18)</c> (or the property's declared precision/scale), <c>string</c>→<c>nvarchar(max)</c>,
+    /// <c>Guid</c>→<c>uniqueidentifier</c>, <c>DateTime</c>→<c>datetime2</c>,
+    /// <c>DateTimeOffset</c>→<c>datetimeoffset</c>, <c>DateOnly</c>→<c>date</c>, <c>TimeOnly</c>→<c>time</c>,
+    /// <c>TimeSpan</c>→<c>bigint</c> (the mapped duration unit, or ticks) and <c>byte[]</c>→<c>varbinary(max)</c>.
+    /// A <c>decimal</c> column uses the precision/scale declared with
+    /// <see cref="DecimalPrecisionAttribute"/> or the fluent mapping, defaulting to <c>decimal(38,18)</c>;
+    /// for a different precision/scale on any other type declare the user-defined table type explicitly
+    /// and pass a legacy <c>DataTable</c> with <see cref="ProcedureParameter.TypeName"/>.
+    /// </para>
+    /// </summary>
+    /// <param name="parameter">The parameter descriptor.</param>
+    /// <returns>A new SQL Server parameter configured from <paramref name="parameter"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="parameter"/> is a table-valued parameter without a type name, or a structured parameter whose <see cref="ParameterDirection"/> is not <see cref="ParameterDirection.Input"/>.</exception>
+    protected override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
+    {
+        if (parameter.Value is TableParameterValue tableValue)
+            return CreateTableValuedParameter(parameter, tableValue);
+
+        // A table-valued parameter is input-only: reject an output/return direction before any
+        // parameter is allocated so the per-call command can be disposed by the leak-safe path.
+        if (parameter.TypeName is not null && parameter.Direction != ParameterDirection.Input)
+            throw new ArgumentException(
+                $"A structured (table-valued) parameter is input-only, but '{parameter.Name}' has Direction = {parameter.Direction}. "
+                + "Declare it with ParameterDirection.Input and return the procedure's values through result sets or Output parameters.",
+                nameof(parameter));
+
+        // The base throws on TypeName (no provider-neutral structured type); strip it, then apply the
+        // SQL Server-specific structured handling after the common Direction/DbType/Size processing.
+        var dbParameter = base.CreateProcedureParameter(parameter with { TypeName = null });
+        var sqlParameter = (SqlParameter)dbParameter;
+
+        if (parameter.TypeName is not null)
+        {
+            sqlParameter.TypeName = parameter.TypeName;
+            // SqlClient requires Structured for a table-valued parameter; TypeName alone is rejected.
+            // Structured replaces any DbType the descriptor requested (they describe the same type slot).
+            sqlParameter.SqlDbType = SqlDbType.Structured;
+        }
+
+        return sqlParameter;
+    }
+
+    private SqlParameter CreateTableValuedParameter(ProcedureParameter parameter, TableParameterValue value)
+    {
+        if (parameter.Direction != ParameterDirection.Input)
+            throw new ArgumentException(
+                $"A table-valued parameter is input-only, but '{parameter.Name}' has Direction = {parameter.Direction}.",
+                nameof(parameter));
+
+        if (parameter.TypeName is null)
+            throw new ArgumentException(
+                $"SQL Server table-valued parameter '{parameter.Name}' requires the user-defined table type name. "
+                + "Use ProcedureParameter.Table(name, typeName, rows).",
+                nameof(parameter));
+
+        var sqlParameter = new SqlParameter(parameter.Name, DBNull.Value)
+        {
+            TypeName = parameter.TypeName,
+            SqlDbType = SqlDbType.Structured,
+        };
+
+        // An empty sequence cannot be streamed as records: SqlClient rejects DBNull for a structured
+        // parameter ("Table-valued parameters cannot be DBNull"), so an empty table-valued parameter is
+        // sent as an unset (null) value. A non-empty sequence is streamed lazily (one reused
+        // SqlDataRecord), so a large set is never buffered in memory.
+        sqlParameter.Value = BuildRecords(value);
+        return sqlParameter;
+    }
+
+    private IEnumerable<SqlDataRecord>? BuildRecords(TableParameterValue value)
+    {
+        var columns = value.GetColumns(this);
+        var metadata = new SqlMetaData[columns.Count];
+        for (var i = 0; i < columns.Count; i++)
+            metadata[i] = BuildMetaData(columns[i]);
+
+        // An empty set is bound as an unset (null) value: SqlClient rejects DBNull for a structured
+        // parameter and also rejects an empty record sequence ("Enumerable doesn't contain any records").
+        if (value.Count == 0)
+            return null;
+
+        // A known non-empty collection can always be re-enumerated from the source.
+        if (value.Count is not null)
+            return EnumerateRecords(value.Rows, null, null, columns, metadata);
+
+        // An unknown/lazy source is peeked once at bind time with a dedicated enumerator: no first row
+        // means the set is empty (bind null); otherwise the already-started enumerator is handed to the
+        // first enumeration (so a one-shot source still works) while later enumerations restart from the
+        // source (so a re-enumerable source works repeatedly).
+        var enumerator = value.Rows.GetEnumerator();
+        if (!enumerator.MoveNext())
+        {
+            enumerator.Dispose();
+            return null;
+        }
+
+        return new PeekedRecordSequence(value.Rows, enumerator, enumerator.Current, columns, metadata);
+    }
+
+    // The returned sequence is re-enumerable when the source is: every GetEnumerator that does not own
+    // the peeked enumerator starts a fresh enumeration of the source and allocates its own
+    // SqlDataRecord, so executing the same descriptor twice yields the full set each time.
+    private static IEnumerable<SqlDataRecord> EnumerateRecords(
+        IEnumerable<object> rows,
+        IEnumerator<object>? started,
+        object? first,
+        IReadOnlyList<TableParameterColumn> columns,
+        SqlMetaData[] metadata)
+    {
+        var record = new SqlDataRecord(metadata);
+
+        if (started is not null)
+        {
+            try
+            {
+                yield return Project(record, first!, columns);
+
+                while (started.MoveNext())
+                    yield return Project(record, started.Current, columns);
+            }
+            finally
+            {
+                started.Dispose();
+            }
+
+            yield break;
+        }
+
+        foreach (var row in rows)
+            yield return Project(record, row, columns);
+    }
+
+    private static SqlDataRecord Project(SqlDataRecord record, object row, IReadOnlyList<TableParameterColumn> columns)
+    {
+        for (var i = 0; i < columns.Count; i++)
+            record.SetValue(i, ToSqlValue(columns[i].GetValue(row), columns[i].ClrType) ?? DBNull.Value);
+
+        return record;
+    }
+
+    /// <summary>
+    /// Wraps a source whose emptiness was checked by peeking one row. The first enumeration consumes the
+    /// already-started enumerator (including the peeked row) and disposes it in its finally; later
+    /// enumerations restart from the source. If the parameter is never enumerated (the command is never
+    /// executed), the peeked enumerator is left to the GC: an ordinary LINQ/iterator enumerator holds no
+    /// unmanaged resource, so pass a materialized collection when the source owns one.
+    /// </summary>
+    private sealed class PeekedRecordSequence : IEnumerable<SqlDataRecord>
+    {
+        private readonly IEnumerable<object> _rows;
+        private readonly IReadOnlyList<TableParameterColumn> _columns;
+        private readonly SqlMetaData[] _metadata;
+        private IEnumerator<object>? _peeked;
+        private object? _first;
+
+        internal PeekedRecordSequence(
+            IEnumerable<object> rows,
+            IEnumerator<object> peeked,
+            object first,
+            IReadOnlyList<TableParameterColumn> columns,
+            SqlMetaData[] metadata)
+        {
+            _rows = rows;
+            _peeked = peeked;
+            _first = first;
+            _columns = columns;
+            _metadata = metadata;
+        }
+
+        public IEnumerator<SqlDataRecord> GetEnumerator()
+        {
+            var peeked = _peeked;
+            var first = _first;
+            _peeked = null;
+            _first = null;
+
+            return peeked is null
+                ? EnumerateRecords(_rows, null, null, _columns, _metadata).GetEnumerator()
+                : EnumerateRecords(_rows, peeked, first, _columns, _metadata).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    // The metadata type is chosen from the column's CLR type, so a value that needs a wider/coerced
+    // provider representation is converted to the matching CLR type before SetValue.
+    private static object? ToSqlValue(object? value, Type clrType)
+    {
+        if (value is null)
+            return null;
+
+        var type = Nullable.GetUnderlyingType(clrType) ?? clrType;
+
+        if (type.IsEnum)
+            return Convert.ChangeType(value, Enum.GetUnderlyingType(type), CultureInfo.InvariantCulture);
+        if (type == typeof(char))
+            return value.ToString();
+        if (type == typeof(sbyte))
+            return (short)(sbyte)value;
+        if (type == typeof(ushort))
+            return (int)(ushort)value;
+        if (type == typeof(uint))
+            return (long)(uint)value;
+        if (type == typeof(ulong))
+            return (decimal)(ulong)value;
+
+        return value;
+    }
+
+    // The fixed-width scalar mappings: the CLR type decides the SQL type without any extra
+    // length/precision/scale. Types that need those are handled by BuildSizedMetaData.
+    private static readonly Dictionary<Type, SqlDbType> ScalarSqlDbTypes = new()
+    {
+        [typeof(bool)] = SqlDbType.Bit,
+        [typeof(sbyte)] = SqlDbType.SmallInt,
+        [typeof(byte)] = SqlDbType.TinyInt,
+        [typeof(short)] = SqlDbType.SmallInt,
+        [typeof(ushort)] = SqlDbType.Int,
+        [typeof(int)] = SqlDbType.Int,
+        [typeof(uint)] = SqlDbType.BigInt,
+        [typeof(long)] = SqlDbType.BigInt,
+        [typeof(float)] = SqlDbType.Real,
+        [typeof(double)] = SqlDbType.Float,
+        [typeof(Guid)] = SqlDbType.UniqueIdentifier,
+        [typeof(DateTime)] = SqlDbType.DateTime2,
+        [typeof(DateTimeOffset)] = SqlDbType.DateTimeOffset,
+        [typeof(DateOnly)] = SqlDbType.Date,
+        [typeof(TimeOnly)] = SqlDbType.Time,
+    };
+
+    private static SqlMetaData BuildMetaData(TableParameterColumn column)
+    {
+        var type = Nullable.GetUnderlyingType(column.ClrType) ?? column.ClrType;
+
+        // SQL Server has no native duration type: a TimeSpan column is written as a bigint in ticks
+        // (the same rule as the bulk-copy path).
+        if (type == typeof(TimeSpan))
+            type = typeof(long);
+
+        if (type.IsEnum)
+            type = Enum.GetUnderlyingType(type);
+
+        if (ScalarSqlDbTypes.TryGetValue(type, out var dbType))
+            return new SqlMetaData(column.Name, dbType);
+
+        return BuildSizedMetaData(column, type);
+    }
+
+    // The mappings that carry a max length / precision / scale, kept explicit because SqlMetaData has
+    // no single constructor for them.
+    private static SqlMetaData BuildSizedMetaData(TableParameterColumn column, Type type)
+    {
+        if (type == typeof(char))
+            return new SqlMetaData(column.Name, SqlDbType.NChar, 1);
+        if (type == typeof(string))
+            return new SqlMetaData(column.Name, SqlDbType.NVarChar, -1);
+        if (type == typeof(byte[]))
+            return new SqlMetaData(column.Name, SqlDbType.VarBinary, -1);
+        if (type == typeof(ulong))
+            return new SqlMetaData(column.Name, SqlDbType.Decimal, precision: 20, scale: 0);
+
+        // A decimal column uses the declared precision/scale when the property maps one; otherwise
+        // SQL Server's historical TVP default (38, 18) is kept.
+        if (type == typeof(decimal))
+        {
+            if (column.DecimalPrecision is { } precision)
+                return new SqlMetaData(column.Name, SqlDbType.Decimal, precision: (byte)precision, scale: (byte)(column.DecimalScale ?? 0));
+
+            return new SqlMetaData(column.Name, SqlDbType.Decimal, precision: 38, scale: 18);
+        }
+
+        throw new NotSupportedException(
+            $"SQL Server table-valued parameters do not support the CLR type {type.Name} (column '{column.Name}').");
+    }
+
     /// <summary>
     /// Maps projected numeric columns by reading the raw value and converting it to the projected CLR
     /// type, because SqlClient typed getters throw when the field type does not match.

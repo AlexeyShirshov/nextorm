@@ -43,6 +43,10 @@ internal sealed class SqlServerTestProvider : ITestProvider
     public bool SupportsCreateTableAsSelect => true;
     public bool SupportsTemporaryCreateTableAsSelect => false;
     public bool SupportsBatch => true;
+    public bool SupportsStoredProcedures => true;
+
+    /// <summary>The provider binds table-valued parameters (native SQL Server UDTT or JSON/array emulation).</summary>
+    public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
     public bool SupportsRegex => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
