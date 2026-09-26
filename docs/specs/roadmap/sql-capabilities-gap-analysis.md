@@ -27,7 +27,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 10 | Window functions (`OVER`, ranking, framed aggregates, `lag`/`lead`, named windows, `GROUPS`/`EXCLUDE`) | **Done** |
 > | 11 | User-defined scalar-valued functions (`[SqlFunction]`) | **Done** |
 > | 12 | Table-valued functions (`[SqlTableFunction]`) | **Done**; the built-in `SqlFunctions.Sql` TVFs are gated by `ISqlDialect.SupportsTableFunction` |
-> | 13 | Navigation properties / relationships | **Out of scope** |
+> | 13 | Navigation properties / relationships | **Out of scope** (eager loading `LoadWith`/`Include` closed by decision — ledger §5 п.49) |
 > | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + returning rows + key upsert + full `MERGE` branches (SQL Server, PostgreSQL 15+) + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **Done**; in-memory only the key upsert |
 > | 15 | `APPLY` / `LATERAL` (`CrossApply`/`OuterApply`) | **Done** — SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LATERAL`, including a **correlated** applied source (a lambda over the left-hand row); gated by `ISqlDialect.SupportsApply` (SQLite/ClickHouse reject); the in-memory provider does not support it |
 > | 16 | Statement-level query hints (`Hint(...)`) | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** (SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`); SQLite and ClickHouse reject with `NotSupportedException` |
@@ -293,12 +293,6 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     / `OVERRIDING SYSTEM VALUE` is not emitted for a non-identity table, so SQL Server no longer raises
     error 8106 (previously verified on SQL Server; other providers tolerated the call).
     Docs: [Bulk insert](../../guide/24-bulk-insert.md).
-49. **Eager loading of a graph (`LoadWith`/`Include`) — out of scope, tracked.** nextorm has no
-    navigation properties (workstream 13), so linq2db's `LoadWith(x => x.Children)` and EF's `Include`
-    have no equivalent and a graph is loaded one level per query and stitched in memory (verified: the
-    API is absent on every provider). Either a minimal level-one `LoadWith` is added, or the out-of-scope
-    decision is recorded.
-    Todo: [`todo_eager_loading.md`](todo_eager_loading.md).
 50. **Captured collection lookup (`dict[column]`) — Done (`1.0-b.1`).** Indexing a closed-over
     `Dictionary`/`List`/array by a query expression (jube's
     `y.ScheduleDate > tenants[y.TenantRegistryId.Value]`) now translates to a portable
@@ -585,6 +579,17 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     pattern itself follows each engine's dialect (RE2/ARE/ICU/PCRE/.NET) and is therefore not portable
     as written.
     Shipped: [Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions).
+49. **Eager loading of a graph (`LoadWith`/`Include`) — closed by decision (not planned until navigation
+    properties exist).** nextorm has no navigation properties (workstream 13), so linq2db's
+    `LoadWith(x => x.Children)` and EF's `Include` have no equivalent: a graph is loaded one level per
+    query and stitched in memory. A minimal selector-based level-one `LoadWith` would be a different,
+    EF-divergent API and a new two-query/materialisation subsystem (nested-collection result type,
+    parent keyset + child `IN`, client-side stitching), not an additive query-builder feature, and the
+    provider layer needs no work (`JOIN`/`IN` exist everywhere). The explicit `Join` + `Select`
+    projection and the two-query dictionary stitch already cover related loading. The provider × form
+    matrix and the full rationale are recorded in
+    [`todo_eager_loading.md`](todo_eager_loading.md#статус-реализации); see
+    [Limitations](../../advanced/limitations.md).
 
 ## 6. Implementation plan
 
@@ -606,7 +611,7 @@ developed in parallel on the same working tree.
 | 10 | Window functions (`OVER`, ranking, framed, named windows/`GROUPS`/`EXCLUDE`) | **Done** | `SqlFunctions.cs`, `WindowDefinition.cs`, `EntityBuilder.cs`, `BaseExpressionVisitor.cs`, dialects | `CommonTestSuite.Window.cs`, SQL-generation tests |
 | 11 | User-defined scalar-valued functions | **Done** | `SqlFunctions.cs`, `ISqlDialect.cs`, `BaseExpressionVisitor.cs` | `CommonTestSuite.Udf.cs` |
 | 12 | Table-valued functions | **Done** (+ gated built-ins) | builder + `ISqlDialect.cs`, `SqlBuilder.cs` | `CommonTestSuite.Tvf.cs`, SQL-generation tests |
-| 13 | Navigation properties / relationships | **Out of scope** | metadata (`Meta/`), `EntityBuilder.cs`, `SqlBuilder.cs` | — |
+| 13 | Navigation properties / relationships | **Out of scope** (eager loading `LoadWith`/`Include` closed by decision — §5 п.49, [`todo_eager_loading.md`](todo_eager_loading.md)) | metadata (`Meta/`), `EntityBuilder.cs`, `SqlBuilder.cs` | — |
 | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + `Returning` + key upsert + full `MERGE` branches + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **Done**; in-memory only the key upsert | new subsystem + provider `DbCommand` layer | `CommonTestSuite.Insert.cs`, `CommonTestSuite.Delete.cs`, `CommonTestSuite.Update.cs`, `CommonTestSuite.Merge.cs`, SQL-generation tests |
 | 15 | `APPLY` / `LATERAL` | **Done** (incl. correlated sources) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 16 | Statement-level query hints | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |

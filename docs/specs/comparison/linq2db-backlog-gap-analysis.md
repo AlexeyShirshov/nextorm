@@ -49,7 +49,7 @@ range-типа) и динамическая схема табличных ист
 |---|---|---|---|---|
 | `epic: DDL` | 18 | `CREATE`/`ALTER`/`DROP TABLE`, constraints, индексы, sequences, enums, `Create/Drop Database` | CTAS есть (`ToTempTable`/`ToTable`), управления схемой нет | **Gap (решение нужно)**: либо осознанно out-of-scope, либо новый workstream «DDL» |
 | `epic: code-generator` | 21 | CLI/T4-скаффолдинг маппингов из живой БД | none (маппинги только в коде) | **Out-of-scope** (заявленная граница) |
-| `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | none (только явные join'ы) | **Out-of-scope** (нет метаданных связей) |
+| `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | none (только явные join'ы) | **Out-of-scope** (нет метаданных связей; решение зафиксировано — gap-analysis §5 п.49, [`todo_eager_loading.md`](../roadmap/todo_eager_loading.md)) |
 | `epic: insert` | 16 | полнота INSERT/UPSERT, bulk, output | `INSERT VALUES/SELECT`, key-upsert, full MERGE, bulk — <span style="color:green">Done</span> | смешанно: см. §4 |
 | `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON (фаза 1: `[JsonColumn]`) — <span style="color:green">Done</span>; SQLite TVF — нет | **Gap** (G14) |
 | `epic: merge` | 5 | MERGE: immutable-модели, частичные setters, TPH/EF | full MERGE (SQL Server, PG15+) — <span style="color:green">Done</span>; inheritance/EF — out-of-scope | частично **Gap** (G-merge) |
@@ -328,7 +328,8 @@ integration-тест. Подробности — [Duration columns](../../guide/
   enums, `Create/Drop Database`. nextorm мутирует схему только через CTAS. Это **единственный крупный
   непокрытый эпик**, где нужно явное решение: осознанно оставить или завести workstream «DDL» (в
   `sql-capabilities-gap-analysis.md` DDL сейчас в «Future workstreams (not scheduled)»).
-- **Связи/eager-load** (`epic: eager-load`) и **inheritance/TPH**.
+- **Связи/eager-load** (`epic: eager-load`) и **inheritance/TPH**. Eager loading закрыт решением (не
+  планируется до появления навигаций) — gap-analysis §5 п.49, [`todo_eager_loading.md`](../roadmap/todo_eager_loading.md).
 - **Скаффолдинг/кодогенерация** (`epic: code-generator`).
 - **Новые провайдеры** (`epic: new-provider`): Oracle, Firebird, DB2, SAP HANA, Informix, Sybase,
   Redshift, DuckDB, YDB, Access, SQL CE.
@@ -384,7 +385,7 @@ statement/table/index).
 | Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
 | DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **Out-of-scope** (см. §4) |
 | Хранимые процедуры / сырой `Execute*` / несколько result-set | `WithSql` (только `SELECT`-источник) | **Planned** ([`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md), G4-хвост) |
-| Association/eager-load, inheritance/TPH | нет метаданных связей | **Out-of-scope** |
+| Association/eager-load, inheritance/TPH | нет метаданных связей | **Out-of-scope** (eager loading — решение gap-analysis §5 п.49) |
 | Testing framework, NuGet-упаковка, multi-targeting | собственные тесты/сборка | **N/A** |
 
 ## 5. Общие пробелы (нет и у nextorm, и у linq2db)
