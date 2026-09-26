@@ -1,6 +1,6 @@
 # TODO: command timeout (per-context / per-query)
 
-> Tracking issue: —
+> Tracking issue: [#93](https://github.com/AlexeyShirshov/nextorm/issues/93).
 
 > Рабочий план (design RFC). Источник: сравнение инфраструктуры linq2db (Data Connection System):
 > `DataOptions.UseCommandTimeout()` / `DataContextOptions.WithCommandTimeout()`. В nextorm собственного

@@ -15,18 +15,44 @@ internal static class QueryPlanStore
 {
     private readonly record struct Key(Type ContextType, QueryPlan Plan);
 
+    // The stored key is kept next to the holder so a lookup can hand back the exact plan instance that
+    // is in the cache. A repeated command memoizes that instance and matches it by reference on the
+    // next lookup, instead of re-comparing its expression tree against an equivalent plan.
+    private readonly record struct Entry(Key Key, IDbCommandHolder Holder);
+
     [ThreadStatic]
-    private static Dictionary<Key, IDbCommandHolder>? _cache;
+    private static Dictionary<Key, Entry>? _cache;
 
-    private static Dictionary<Key, IDbCommandHolder> Cache => _cache ??= [];
+    private static Dictionary<Key, Entry> Cache => _cache ??= [];
 
-    internal static bool TryGet(Type contextType, QueryPlan plan, out IDbCommandHolder? holder)
-        => Cache.TryGetValue(new Key(contextType, plan), out holder);
+    internal static bool TryGet(Type contextType, QueryPlan plan, out IDbCommandHolder? holder, out QueryPlan? storedPlan)
+    {
+        if (Cache.TryGetValue(new Key(contextType, plan), out var entry))
+        {
+            holder = entry.Holder;
+            storedPlan = entry.Key.Plan;
+            return true;
+        }
+
+        holder = null;
+        storedPlan = null;
+        return false;
+    }
 
     internal static void Set(Type contextType, QueryPlan plan, IDbCommandHolder holder)
-        => Cache[new Key(contextType, plan)] = holder;
+    {
+        var key = new Key(contextType, plan);
+        Cache[key] = new Entry(key, holder);
+    }
 
     internal static void Clear() => Cache.Clear();
 
-    internal static IEnumerable<IDbCommandHolder> Values => Cache.Values;
+    internal static IEnumerable<IDbCommandHolder> Values
+    {
+        get
+        {
+            foreach (var entry in Cache.Values)
+                yield return entry.Holder;
+        }
+    }
 }

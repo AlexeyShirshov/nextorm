@@ -1,6 +1,6 @@
 # TODO: варианты хинтов — join / subquery / tables-in-scope
 
-> Tracking issue: —
+> Tracking issue: [#96](https://github.com/AlexeyShirshov/nextorm/issues/96).
 
 > Рабочий план (design RFC). Источник: подсекция «Пропущенная ось: shipped-поверхность
 > `LinqExtensions`» в [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md)

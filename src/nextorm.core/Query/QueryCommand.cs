@@ -499,6 +499,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         LookupPartitions = null;
         ShapeScanned = false;
         _whereBasePlanHash = 0;
+        InvalidatePlanKey();
 
         _dataContext?.ResetPreparation(this);
     }
@@ -513,6 +514,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
 
         _referencedQueries[idx] = cmd;
+        // The shared Any/Count command swaps its referenced subquery in place between executions
+        // without resetting: the plan key it was prepared under no longer describes the query.
+        InvalidatePlanKey();
     }
     int IQueryRegistry.AddCommand(QueryCommand cmd)
     {

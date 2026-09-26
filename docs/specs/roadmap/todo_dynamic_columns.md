@@ -1,6 +1,6 @@
 # TODO: динамические колонки (dynamic columns store)
 
-> Tracking issue: —
+> Tracking issue: [#94](https://github.com/AlexeyShirshov/nextorm/issues/94).
 
 > Рабочий план (design RFC). Источник: сравнение инфраструктуры маппинга linq2db — атрибуты
 > `DynamicColumnsStoreAttribute` / `DynamicColumnAccessorAttribute` и fluent

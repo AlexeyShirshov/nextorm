@@ -1,6 +1,6 @@
 # TODO: управление кэшем планов/запросов (ClearCache, disable, sliding expiration)
 
-> Tracking issue: —
+> Tracking issue: [#97](https://github.com/AlexeyShirshov/nextorm/issues/97).
 
 > Рабочий план (design RFC). Расширяет **G10** в
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md) (ограничение размера

@@ -24,6 +24,7 @@ public partial class QueryCommand
         internal static void Prepare(QueryCommand cmd, bool dontCalculateHash, CancellationToken cancellationToken)
         {
             if (cmd._dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
+            cmd.InvalidatePlanKey();
             cmd.ResolvedQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext.QuoteIdentifiers;
             cmd.ResolvedNamingConvention = cmd.NamingConvention ?? cmd._dataContext.NamingConvention;
             cmd.ResolvedKeywordCase = cmd.KeywordCase ?? cmd._dataContext.KeywordCase;
@@ -297,10 +298,16 @@ public partial class QueryCommand
             {
                 if (cmd._exp is not null)
                 {
+                    // Resolve the projection source metadata once: it is consulted for every projected
+                    // column (duration unit, converter), so the shared lookup is not repeated per column.
+                    IEntityMetadata? srcMetadata = srcType is not null && DataContextCache.Metadata.TryGetValue(srcType, out var resolvedSource)
+                        ? resolvedSource
+                        : null;
+
                     // A bare member projection of a value-converted property is a single column whose
                     // converter has to reach materialization; computed once so the scalar branch and its
                     // condition do not each scan the entity metadata.
-                    var bodyConverter = cmd._exp.Body is MemberExpression ? ResolveConverter(srcType, cmd._exp.Body) : null;
+                    var bodyConverter = cmd._exp.Body is MemberExpression ? ResolveConverter(srcMetadata, cmd._exp.Body) : null;
 
                     if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
@@ -319,8 +326,8 @@ public partial class QueryCommand
                             SelectExpression selExp;
                             var arg = args[idx];
                             var ctorParam = ctor.Constructor!.GetParameters()[idx];
-                            var (durationUnit, durationPrecision) = ResolveDuration(srcType, arg);
-                            var converter = ResolveConverter(srcType, arg);
+                            var (durationUnit, durationPrecision) = ResolveDuration(srcMetadata, arg);
+                            var converter = ResolveConverter(srcMetadata, arg);
 
                             selExp = new SelectExpression(ctorParam.ParameterType)
                             {
@@ -355,7 +362,7 @@ public partial class QueryCommand
                         cmd.OneColumn = true;
                         var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
                         var selectExp = innerQueryVisitor.Visit(cmd._exp);
-                        var (scalarDurationUnit, scalarDurationPrecision) = ResolveDuration(srcType, cmd._exp.Body);
+                        var (scalarDurationUnit, scalarDurationPrecision) = ResolveDuration(srcMetadata, cmd._exp.Body);
 
                         var selExp = new SelectExpression(cmd._exp.Body.Type)
                         {
@@ -397,8 +404,8 @@ public partial class QueryCommand
                                 return (selectList, columnsPlanHash);
 
                             var binding = bindings[idx] as MemberAssignment;
-                            var (bindingDurationUnit, bindingDurationPrecision) = ResolveDuration(srcType, binding!.Expression);
-                            var bindingConverter = ResolveConverter(srcType, binding.Expression);
+                            var (bindingDurationUnit, bindingDurationPrecision) = ResolveDuration(srcMetadata, binding!.Expression);
+                            var bindingConverter = ResolveConverter(srcMetadata, binding.Expression);
 
                             var selExp = new SelectExpression(((PropertyInfo)binding!.Member).PropertyType)
                             {
@@ -519,12 +526,11 @@ public partial class QueryCommand
         // Resolves the declared duration storage unit of a directly projected entity property, so a
         // projection of a duration column (`Select(x => x.Dur)`) reads it back in the declared unit on
         // a provider without a native duration type. A non-duration or computed expression stays null.
-        private static (DurationUnit? Unit, int Precision) ResolveDuration(Type? srcType, Expression expression)
+        private static (DurationUnit? Unit, int Precision) ResolveDuration(IEntityMetadata? srcMetadata, Expression expression)
         {
-            if (srcType is not null
+            if (srcMetadata is not null
                 && expression is MemberExpression { Member: PropertyInfo pi }
-                && DataContextCache.Metadata.TryGetValue(srcType, out var metadata)
-                && MemberTranslator.FindProperty(metadata, pi) is { } property)
+                && MemberTranslator.FindProperty(srcMetadata, pi) is { } property)
                 return (property.DurationUnit, property.DurationPrecision);
 
             return (null, 0);
@@ -534,19 +540,11 @@ public partial class QueryCommand
         // projection of a converted property carries the converter into materialization (the reader then
         // reads the provider representation and converts it back). A non-member or unmapped expression
         // stays null.
-        private static IPropertyValueConverter? ResolveConverter(Type? srcType, Expression expression)
+        private static IPropertyValueConverter? ResolveConverter(IEntityMetadata? srcMetadata, Expression expression)
         {
             expression = TypeFacts.UnwrapConvert(expression);
             if (expression is MemberExpression { Member: PropertyInfo pi })
-            {
-                IEntityMetadata? metadata = null;
-                if (pi.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(pi.DeclaringType, out var byDeclaring))
-                    metadata = byDeclaring;
-                else if (srcType is not null && DataContextCache.Metadata.TryGetValue(srcType, out var bySource))
-                    metadata = bySource;
-
-                return metadata is null ? null : MemberTranslator.FindProperty(metadata, pi)?.Converter;
-            }
+                return MemberTranslator.ResolveProperty(pi, srcMetadata)?.Converter;
 
             return null;
         }

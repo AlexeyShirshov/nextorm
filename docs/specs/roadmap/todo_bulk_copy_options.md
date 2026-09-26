@@ -1,6 +1,6 @@
 # TODO: паритет опций bulk copy / bulk insert
 
-> Tracking issue: —
+> Tracking issue: [#92](https://github.com/AlexeyShirshov/nextorm/issues/92).
 
 > Рабочий план (design RFC). Источник: сравнение инфраструктуры linq2db — `BulkCopyOptions`
 > (`CheckConstraints`, `TableLock`, `KeepNulls`, `FireTriggers`, `BulkCopyType`, `MaxDegreeOfParallelism`,

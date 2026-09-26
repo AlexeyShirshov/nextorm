@@ -385,8 +385,13 @@ internal sealed class QueryPlanner : IQueryPlanner
 
         if (queryCommand.Cache && storeInCache)
         {
-            queryPlan = new QueryPlan(queryCommand, ext?.ManualSql);
-            QueryPlanStore.TryGet(_contextType, queryPlan, out planCache);
+            queryPlan = queryCommand.GetOrCreatePlanKey(ext?.ManualSql);
+            if (QueryPlanStore.TryGet(_contextType, queryPlan, out planCache, out var storedPlan))
+            {
+                // Remember the cached instance so the next lookup of this command can match it by
+                // reference rather than re-comparing the whole expression tree.
+                queryCommand.CacheStoredPlanKey(storedPlan!, ext?.ManualSql);
+            }
         }
 
         if (planCache is null)

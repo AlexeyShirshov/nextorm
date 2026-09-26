@@ -1,6 +1,6 @@
 # TODO: per-query переопределение источника (table/schema/database/server, `WithTableExpression`)
 
-> Tracking issue: —
+> Tracking issue: [#99](https://github.com/AlexeyShirshov/nextorm/issues/99).
 
 > Рабочий план (design RFC). Источник: подсекция «Пропущенная ось: shipped-поверхность
 > `LinqExtensions`» в [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md)

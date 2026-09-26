@@ -101,7 +101,7 @@ The current status (1.0.7-beta) is a prof of concept.
 - [1.0.5-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.5)
 - [1.0.6-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.6)
 - [1.0.7-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
-- [1.0-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-rc.1)
+- [1.0.8-b](https://github.com/AlexeyShirshov/nextorm/milestones/1.0.8-b)
 - [1.0](https://github.com/AlexeyShirshov/nextorm/milestones/1.0)
 - [1.1.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-a.1)
 - [1.1-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-b.1)

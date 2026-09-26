@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -13,6 +14,17 @@ namespace NextORM.Core;
 /// </summary>
 internal static class ScalarFunctionTranslator
 {
+    // The SqlFunctionAttribute lookup runs for every method call the built-in dispatch misses (a
+    // folded value, a captured helper), so its reflection result is cached per method: the attribute
+    // set is fixed for the lifetime of the MethodInfo.
+    private static readonly ConcurrentDictionary<MethodInfo, SqlFunctionAttribute?> _sqlFunctionAttributes = new();
+
+    private static SqlFunctionAttribute? ResolveSqlFunctionAttribute(MethodInfo method)
+        => _sqlFunctionAttributes.GetOrAdd(
+            method,
+            static m => m.GetCustomAttribute<SqlFunctionAttribute>(inherit: false)
+                ?? m.DeclaringType?.GetCustomAttribute<SqlFunctionAttribute>(inherit: false));
+
     /// <summary>
     /// Translates the supported scalar functions (string, <see cref="Math"/> and <c>SqlFunctions.Sql.like</c>).
     /// Everything provider-specific is delegated to <see cref="ISqlDialect"/>; this dispatch only maps
@@ -64,8 +76,7 @@ internal static class ScalarFunctionTranslator
     /// </summary>
     internal static bool TryTranslateSqlFunction(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        var attribute = node.Method.GetCustomAttribute<SqlFunctionAttribute>(inherit: false)
-            ?? node.Method.DeclaringType?.GetCustomAttribute<SqlFunctionAttribute>(inherit: false);
+        var attribute = ResolveSqlFunctionAttribute(node.Method);
 
         if (attribute is null)
             return false;

@@ -1,6 +1,6 @@
 # TODO: комментарий-метка запроса (`TagQuery`)
 
-> Tracking issue: —
+> Tracking issue: [#98](https://github.com/AlexeyShirshov/nextorm/issues/98).
 
 > Рабочий план (design RFC). Источник: подсекция «Пропущенная ось: shipped-поверхность
 > `LinqExtensions`» в [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md)
