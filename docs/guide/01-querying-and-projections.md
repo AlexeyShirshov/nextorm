@@ -446,6 +446,70 @@ built ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample) and
 [`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double},NextORM.Core.KeywordCase))). The modifier applies to the query's
 primary table only.
 
+## Per-query source overrides
+
+By default a query reads the table mapped with `EntityMetadataBuilder<T>.Table(...)` (or the name passed
+to `From("table")`). The `With*` methods on [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1)
+change the rendered source for **this query only**; the metadata and every other query are untouched:
+
+```csharp
+public EntityBuilder<TEntity> WithTableName(string name);
+public EntityBuilder<TEntity> WithSchema(string schema);
+public EntityBuilder<TEntity> WithDatabase(string database);
+public EntityBuilder<TEntity> WithServer(string server);
+public EntityBuilder<TEntity> WithTableExpression(string sql);
+```
+
+```csharp
+var rows = await dataContext.From<IOrder>()
+    .WithSchema("sales")
+    .Select(x => x.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQL Server / PostgreSQL
+select id from sales.orders
+```
+
+The schema/database/server qualifiers are provider-specific; the levels a provider cannot express are
+rejected with `NotSupportedException` when the SQL is built:
+
+| Provider | `WithSchema` | `WithDatabase` | `WithServer` |
+|---|---|---|---|
+| PostgreSQL | `schema.table` | rejected | rejected |
+| SQL Server | `schema.table` | `database.schema.table` | `server.database.schema.table` |
+| MySQL / MariaDB | `db.table` (schema = database) | `db.table` | rejected |
+| SQLite | `db.table` (attached database) | `db.table` | rejected |
+| ClickHouse | `db.table` | `db.table` | rejected |
+| In-memory | rejected | rejected | rejected |
+
+On MySQL, MariaDB, ClickHouse and SQLite the schema and the database name the same single qualifier, so
+only one of the two may be set. The parts are quoted with the provider's delimiter when identifier
+quoting is enabled (see [`WithQuotedIdentifiers`](xref:NextORM.Core.EntityBuilder`1.WithQuotedIdentifiers(System.Boolean))),
+each part separately: `[srv].[db].[sales].[orders]`, `` `db`.`orders` ``, `"sales"."orders"`.
+
+[`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) replaces the table access with a raw SQL
+expression rendered as a derived source (`(sql) AS alias`) and cannot be combined with the name
+qualifiers. The fragment is emitted verbatim, so pass only trusted SQL (the caller owns its validity and
+injection safety, as with `WithSql`):
+
+```csharp
+var rows = await dataContext.From<IOrder>()
+    .WithTableExpression("select id from orders_2025 union all select id from orders_2026")
+    .Select(x => x.Id)
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL
+select id from (select id from orders_2025 union all select id from orders_2026) as "t1"
+```
+
+The override is part of the plan-cache key, so two queries that differ only in the override never share a
+cached plan; without an override the generated SQL is exactly as before. The in-memory provider has no SQL
+source to rewrite and rejects every override.
+
 ## JSON output (SQL Server)
 
 [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) is a **terminal operator**: it executes the query and returns the

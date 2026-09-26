@@ -1,5 +1,7 @@
 # TODO: Eager loading графа (`LoadWith`/`Include`)
 
+> Tracking issue: [#95](https://github.com/AlexeyShirshov/nextorm/issues/95).
+
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
 > раздел «Engine gaps — verified on `nextorm 1.0.6-alpha`», пункт 9. Связано:
 > [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §4 п.49, §6 workstream 13

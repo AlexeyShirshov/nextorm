@@ -315,6 +315,37 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     constructors) is gated by `ISqlDialect.SupportsRanges`; the in-memory provider evaluates the
     predicates with PostgreSQL semantics. Docs:
     [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types) (EN+RU).
+52. **SQL Server bulk-copy flags — Done (`1.0-b.1`).** `BulkInsertOptions`/`BulkInsertOptionsBuilder` gained
+    `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (`bool?`, off by default), mapped to
+    `SqlBulkCopyOptions` on the SQL Server native `SqlBulkCopy` path; the PostgreSQL `COPY` path and the
+    portable `INSERT ... VALUES` path (including SQL Server `Returning*`/`KeepIdentity`) reject a requested
+    flag with `NotSupportedException` instead of silently ignoring it. ClickHouse
+    `MaxDegreeOfParallelism`/`WithoutSession` are deferred (`ClickHouseBulkCopy` is obsolete, the driver
+    exposes no `WithoutSession`, and the native path is not wired) and `UseInternalTransaction` is never set
+    (nextorm opens no implicit transaction). Docs:
+    [Bulk insert](../../guide/24-bulk-insert.md#sql-server-bulk-copy-options).
+
+53. **Query tag (`WithTag`) — shipped.** `EntityBuilder<T>.WithTag(string?)` and
+    `QueryCommand<T>.WithTag(string?)` render a free-form `/* tag */` block comment immediately after
+    the `SELECT` keyword on every SQL provider, so the statement is identifiable in profilers, server
+    logs and server-side query stores (`pg_stat_activity`, SQL Server Query Store, ClickHouse
+    `system.query_log`). The native SQL Server `OPTION (LABEL)` and ClickHouse
+    `SETTINGS log_comment` forms are deliberately not used: they are not portable and would have to be
+    merged into an existing `OPTION`/`SETTINGS` clause, whereas the comment is visible everywhere. The
+    comment delimiters `*/`/`/*` and line breaks are neutralised, the tag is part of the plan key, and
+    the in-memory provider accepts it as a no-op.
+    Docs: [Query hints](../../guide/17-query-hints.md) (EN+RU).
+
+54. **Command timeout (per-context / per-query) — shipped (issue #93).** `DataContextBuilder.UseCommandTimeout(seconds)`
+    sets the context-wide `DbCommand.CommandTimeout`; `WithCommandTimeout(seconds)` on `EntityBuilder`/
+    `EntityBuilder<T>`/`QueryCommand<T>` overrides it per query. The resolved value is part of the plan-cache
+    key (a per-query or context timeout cannot be reused by a command with a different one), so the value
+    never leaks across commands; `null`/zero keeps the provider default (zero-cost). DML/batches use the
+    context default; the in-memory context ignores it. All SQL providers share the same ADO path
+    (`DbCommand.CommandTimeout`/`DbBatch.Timeout`); `ClickHouse.Driver` 1.4.0 exposes the property but does
+    not map it to the HTTP request, documented in
+    [Limitations](../../advanced/limitations.md). Docs:
+    [Connections and logging](../../guide/16-connections-and-logging.md#command-timeout) (EN+RU).
 
 ---
 
@@ -480,6 +511,14 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `NotSupportedException`. Gated by [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) /
     [`IIndexHintRenderer`](xref:NextORM.Core.IIndexHintRenderer) and carried on the plan key.
     Shipped: [Query hints](../../guide/17-query-hints.md#index-hints).
+17a. **Join / subquery / tables-in-scope hints — shipped (issue #96).** `EntityBuilder<T>.WithJoinHint(...)`,
+    `.WithSubQueryHint(...)` and `.WithTablesInScopeHint(...)` attach a hint to a specific join, a
+    derived-table source or every physical table in scope. SQL Server renders the join hint inside the
+    join clause (`inner loop join`) and the scope hint as `WITH (...)` on each table; PostgreSQL/MySQL/
+    MariaDB fold all three into the inline `/*+ ... */`; SQLite/ClickHouse/the in-memory provider reject
+    them with `NotSupportedException`. Gated by `ISqlDialect.SupportsJoinHints`/`SupportsSubQueryHints`/
+    `SupportsTablesInScopeHints`/`SupportsInlineHints` (+ `MakeJoinKeyword`/`MakeTablesInScopeHints`) and
+    carried on the plan key. Shipped: [Query hints](../../guide/17-query-hints.md#join-subquery-and-tables-in-scope-hints).
 18. **DML — shipped in full (`INSERT`/`UPDATE`/`DELETE`/`MERGE`).** `INSERT ... VALUES` (single row, entity,
     batch) and `INSERT ... SELECT`, the generated key (`ReturningIdentity`/`ReturningKey`) and returned written
     rows (`Returning`/`Returning(projection)`, PostgreSQL/SQLite/SQL Server) ship through
@@ -546,7 +585,9 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `BulkInsertOptions` record or the fluent `BulkInsertOptionsBuilder` (`MaxBatchSize`/`MaxParameters`/
     `MaxSqlLength` chunking, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, `NotifyAfter` progress with a
     `ProgressCancellationTokenSource`); generated keys are returned on the portable `RETURNING`/`OUTPUT` path
-    (`ReturningKey`/`Returning`). In-memory rejects it.
+    (`ReturningKey`/`Returning`). The SQL Server native path also exposes `CheckConstraints`/`TableLock`/
+    `KeepNulls`/`FireTriggers`; every other path rejects those with `NotSupportedException` (§4 п.52).
+    In-memory rejects it.
     Shipped: [Bulk insert](../../guide/24-bulk-insert.md).
 32. **Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) — shipped.** `ForUpdate`/`ForShare` accept a
     `LockWaitMode` (`Wait`/`NoWait`/`SkipLocked`): PostgreSQL/MySQL/MariaDB append `NOWAIT`/`SKIP LOCKED`
@@ -615,6 +656,7 @@ developed in parallel on the same working tree.
 | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + `Returning` + key upsert + full `MERGE` branches + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **Done**; in-memory only the key upsert | new subsystem + provider `DbCommand` layer | `CommonTestSuite.Insert.cs`, `CommonTestSuite.Delete.cs`, `CommonTestSuite.Update.cs`, `CommonTestSuite.Merge.cs`, SQL-generation tests |
 | 15 | `APPLY` / `LATERAL` | **Done** (incl. correlated sources) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 16 | Statement-level query hints | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
+| 16a | Join / subquery / tables-in-scope hints | **Done (issue #96)** | `EntityBuilder.cs`, `JoinExpression.cs`, `FromExpression.cs`, `QueryCommand.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, dialects | SQL-generation tests, plan-key tests |
 | 17 | Full-text search (`contains`/`freetext`) | **Done** | `BuiltinFunctionTranslator.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | SQL-generation tests |
 | 18 | JSON scalar functions and `isjson` | **Done on SQL Server** | `TextJsonSqlTranslator.cs`, `ISqlDialect.cs`, SQL Server dialect | SQL-generation tests |
 | 19 | `FOR JSON` / `FOR XML` | **Done on SQL Server** | `ForJson.cs`, `ForXml.cs`, `QueryCommand.TResult.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |

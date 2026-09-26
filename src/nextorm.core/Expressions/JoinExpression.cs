@@ -55,7 +55,7 @@ public enum JoinType
 /// <summary>
 /// Optional join modifier that selects which matching right-hand row survives. Only ClickHouse
 /// understands these; every other dialect supports just <see cref="Default"/>. Rendered by
-/// <see cref="ISqlDialect.MakeJoinKeyword"/> and gated by <see cref="ISqlDialect.SupportsJoinStrictness"/>.
+/// <see cref="ISqlDialect.MakeJoinKeyword(JoinType, JoinStrictness, bool, KeywordCase)"/> and gated by <see cref="ISqlDialect.SupportsJoinStrictness"/>.
 /// </summary>
 public enum JoinStrictness
 {
@@ -91,9 +91,17 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// Whether the join is the ClickHouse <c>GLOBAL</c> variant (the right-hand side is resolved once
     /// and broadcast, for distributed queries). Set through the fluent <c>Global</c> modifier, which
     /// copies the join rather than mutating it. Rendered by
-    /// <see cref="ISqlDialect.MakeJoinKeyword"/> and gated by <see cref="ISqlDialect.SupportsGlobalJoin"/>.
+    /// <see cref="ISqlDialect.MakeJoinKeyword(JoinType, JoinStrictness, bool, KeywordCase)"/> and gated by <see cref="ISqlDialect.SupportsGlobalJoin"/>.
     /// </summary>
     public bool IsGlobal { get; internal init; }
+    /// <summary>
+    /// Optional provider-specific hint attached to this join, or <c>null</c> when the join has none.
+    /// Set through the fluent <c>WithJoinHint</c> modifier, which copies the join rather than mutating
+    /// it. A dialect that renders join hints places it inside the join clause (SQL Server
+    /// <c>inner loop join</c>); a dialect with inline hint comments folds it into the statement-level
+    /// <c>/*+ ... */</c>. A dialect that supports neither rejects the command.
+    /// </summary>
+    public string? JoinHint { get; internal init; }
     /// <summary>
     /// Joined source type. Only needed when <see cref="JoinCondition"/> is absent (a cross join has no
     /// condition parameter to read the right-hand type from), so the alias of the joined table can be
@@ -118,7 +126,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
 
         if (newFrom == From) return this;
 
-        return new JoinExpression(JoinCondition, JoinType) { From = newFrom!, EntityType = EntityType, Strictness = Strictness, IsGlobal = IsGlobal, ApplySource = ApplySource };
+        return new JoinExpression(JoinCondition, JoinType) { From = newFrom!, EntityType = EntityType, Strictness = Strictness, IsGlobal = IsGlobal, JoinHint = JoinHint, ApplySource = ApplySource };
     }
     // public override int GetHashCode()
     // {

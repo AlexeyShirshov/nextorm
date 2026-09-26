@@ -44,7 +44,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _isDisposed = isDisposed;
         _currentTransaction = currentTransaction;
         _interceptors = interceptors;
-        _batchRunner = new BatchRunner(connectionManager, createParam, currentTransaction, isDisposed, logging);
+        _batchRunner = new BatchRunner(connectionManager, createParam, currentTransaction, isDisposed, logging, context.CommandTimeout);
     }
 
     // The interception helpers below are the single place the command lifecycle events are raised.
@@ -274,6 +274,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         if (_currentTransaction() is { } transaction)
             cmd.Transaction = transaction;
+
+        if (_context.CommandTimeout is int commandTimeout)
+            cmd.CommandTimeout = commandTimeout;
 
         for (var i = 0; i < parameters.Count; i++)
             cmd.Parameters.Add(_createParam(parameters[i].Name, parameters[i].Value));

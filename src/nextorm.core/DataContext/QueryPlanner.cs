@@ -385,8 +385,13 @@ internal sealed class QueryPlanner : IQueryPlanner
 
         if (queryCommand.Cache && storeInCache)
         {
-            queryPlan = new QueryPlan(queryCommand, ext?.ManualSql);
-            QueryPlanStore.TryGet(_contextType, queryPlan, out planCache);
+            queryPlan = queryCommand.GetOrCreatePlanKey(ext?.ManualSql);
+            if (QueryPlanStore.TryGet(_contextType, queryPlan, out planCache, out var storedPlan))
+            {
+                // Remember the cached instance so the next lookup of this command can match it by
+                // reference rather than re-comparing the whole expression tree.
+                queryCommand.CacheStoredPlanKey(storedPlan!, ext?.ManualSql);
+            }
         }
 
         if (planCache is null)
@@ -419,6 +424,13 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
 
             var dbCommand = _createCommand(sql!);
+
+            // The resolved timeout is part of the plan key, so a cached command is only ever reused
+            // with the timeout it was created with; applying it here is safe (it never leaks between
+            // commands, unlike mutating a shared command on execution).
+            if (queryCommand.ResolvedCommandTimeout is int commandTimeout)
+                dbCommand.CommandTimeout = commandTimeout;
+
             if (!noParams)
             {
                 var parameterList = @params!;
@@ -507,6 +519,8 @@ internal sealed class QueryPlanner : IQueryPlanner
     // A table source is immutable, so one instance can be shared by every query (and cached plan)
     // that selects from the entity. This removes a small allocation and a metadata lookup per join.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FromExpression> _fromCache = new();
+
+    internal static void ClearFromCache() => _fromCache.Clear();
 
     private FromExpression GetFrom(Type t)
     {

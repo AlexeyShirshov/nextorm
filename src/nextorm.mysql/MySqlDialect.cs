@@ -102,6 +102,12 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL 5.7+ (and MariaDB 10.2+) render statement-level hints as inline optimizer hints.</summary>
     public override bool SupportsQueryHints => true;
 
+    /// <summary>MySQL renders join/subquery/tables-in-scope hints as one <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsInlineHints => true;
+
+    /// <summary>MySQL expresses the subquery hint through the same <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsSubQueryHints => true;
+
     /// <summary>
     /// Renders the statement-level hints as a <c>/*+ ... */</c> optimizer-hint comment immediately after
     /// the top-level <c>select</c> (the position MySQL and MariaDB require; a <c>WITH</c> prefix and
@@ -305,6 +311,24 @@ public class MySqlDialect : SqlDialectBase
 
     /// <summary>MySQL quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
     public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
+
+    /// <summary>MySQL qualifies a table with a database name (<c>`db`.`table`</c>); the database is what MySQL calls a schema.</summary>
+    public override bool SupportsCrossDatabase => true;
+
+    /// <summary>
+    /// Renders the MySQL single-qualifier form <c>database.table</c>. A database and a schema are the
+    /// same concept here, so the two overrides are mutually exclusive; a linked server is unsupported.
+    /// </summary>
+    public override string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+
+        if (database is not null && schema is not null)
+            throw new NotSupportedException("MySQL treats the database and the schema as the same qualifier; set only one of them.");
+
+        return JoinTableQualifier(database ?? schema, table);
+    }
 
     /// <inheritdoc/>
     public override string MakeColumnReference(string name) => Escape(name);

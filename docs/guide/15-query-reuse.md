@@ -180,6 +180,24 @@ ReferenceEquals(ctx.SelectListCache, DataContextCache.SelectListCache);   // tru
 ReferenceEquals(ctx.ExpressionsCache, DataContextCache.ExpressionsCache); // false (per instance)
 ```
 
+## Cache controls
+
+`PurgeQueryCache()` clears the plans of one context. Three process-wide controls complement it, and none of them touches the sticky `QueryCommand<TResult>.Cache` flag, so disabling the cache never leaks onto the shared `Any` command.
+
+* [`DataContextCache.Clear()`](xref:NextORM.Core.DataContextCache.Clear) empties every process-wide cache (metadata, select lists, compiled expression and in-list delegates, row mappers, projection aliases and FROM sources) and invalidates the thread-local plan cache. The plan cache is `[ThreadStatic]`, so a plan built on another thread is dropped when that thread next touches the cache. Call this after a schema change.
+* [`DataContextBuilder.UseQueryCache(false)`](xref:NextORM.Core.DataContextBuilder.UseQueryCache(System.Boolean)) — or the `DataContext.QueryCacheEnabled` / `InMemoryDataContext.QueryCacheEnabled` property — rebuilds every plan instead of caching it. It is passed as `storeInCache: false` for the call and leaves `QueryCommand<TResult>.Cache` untouched.
+* [`DataContextBuilder.UseCacheSlidingExpiration(ttl)`](xref:NextORM.Core.DataContextBuilder.UseCacheSlidingExpiration(System.TimeSpan)) enables lazy eviction of the process-wide caches: an entry not read within `ttl` is removed on its next access, and every read refreshes it. `TimeSpan.Zero` (the default) disables expiration.
+
+```csharp
+var builder = new DataContextBuilder().UseQueryCache(false);
+using var ctx = new SqliteDataContext("Data Source=app.db", builder); // every terminal rebuilds its plan
+
+new DataContextBuilder().UseCacheSlidingExpiration(TimeSpan.FromMinutes(10)); // lazy eviction, process-wide
+
+DataContextCache.Clear(); // drop the process-wide caches and the plan cache
+ctx.PurgeQueryCache();    // drop this context's plans
+```
+
 ## Captured `in`/`Contains` collections
 
 An `in` list or a `Contains` call over a captured collection is translated to a parameterised `IN` predicate. The *values* are not part of the plan key - the *shape* is (the evaluated item count and whether a `null` is present). This has two consequences:
@@ -240,6 +258,8 @@ Source: `tests/nextorm.sqlite.tests/PlanCacheTests.cs:49` (buffered then streami
 `tests/nextorm.sqlite.tests/InListCacheTests.cs:92` (reassigned array),
 `tests/nextorm.sqlite.tests/InListCacheTests.cs:117` (grown list);
 `tests/nextorm.core.tests/DataContextCacheScopeTests.cs:20` (cache sharing scope);
+`tests/nextorm.core.tests/QueryCacheControlsTests.cs:45` (clear, disable without mutating `Cache`, sliding expiration);
+`tests/nextorm.sqlite.tests/DataContextCacheClearTests.cs:31` (`DataContextCache.Clear` invalidates the plan cache);
 `tests/nextorm.integration.tests/CommonTestSuite.Cache.cs:6`;
 `src/nextorm.core/Query/QueryCommand.TResult.cs:38` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))),
 `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs:5` (prepared terminals),

@@ -27,6 +27,34 @@ Blank hints are ignored. The hint list is part of the query plan key, so a hinte
 the cached plan of an otherwise identical unhinted command (and vice versa), and two commands with
 different hints do not share a plan.
 
+## Query tags
+
+`WithTag(string? tag)` attaches a free-form tag to a query. Unlike `Hint`, the tag is a plain SQL
+comment (`/* tag */`), not an optimizer hint, so it renders on **every** SQL provider — it is not
+gated. It is emitted immediately after the `SELECT` keyword:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .WithTag("reports.orders")
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .ToList();
+```
+
+```sql
+select /* reports.orders */ id from complex_entity where (id > 1)
+```
+
+Use it to identify a statement in a profiler, the server log or a server-side query store
+(`pg_stat_activity`, SQL Server Query Store, ClickHouse `system.query_log`). Line breaks and the
+comment delimiters `*/` and `/*` are neutralised — SQL Server nests block comments, so `/*` is escaped
+too — and the comment always opens with a space, so a tag starting with `!` or `+` cannot become a
+MySQL/MariaDB executable comment or optimizer hint. The tag is part of the plan key, so two commands
+that differ only in their tag never share a cached plan; passing `null` or an empty string clears it.
+The in-memory provider accepts the call and ignores it (no SQL is generated). When a query also carries
+`Hint(...)`, the optimizer-hint comment is placed first (`select /*+ hint */ /* tag */ ...`) so
+`pg_hint_plan` and the MySQL/MariaDB optimizer still recognise it.
+
 ## Combining with a recursive CTE
 
 SQL Server allows only one `OPTION` clause per statement. When a query also declared a CTE recursion
@@ -124,6 +152,47 @@ var my = dataContext.From<ISimpleEntity>()
 A provider opts in through [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) and [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase)); the
 builder rejects a command that carries hints on a dialect that reports `false`.
 
+## Join, subquery and tables-in-scope hints
+
+`Hint(...)` is statement-level. Three builder methods attach a hint to a narrower part of the query;
+each dialect renders the form it has, or rejects the command:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .WithTableHint("nolock")
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .WithJoinHint("loop")
+    .Select(p => new { p.Item1.Id })
+    .ToList();
+```
+
+* `WithJoinHint(string hint)` attaches a hint to the most recently added join (call it after the join and
+  before the next one, like `WithStrictness`/`Global`). SQL Server inserts it inside the join clause
+  (`inner loop join`, `left hash join`); a hint on a `CROSS`/`APPLY` join is rejected. PostgreSQL, MySQL
+  and MariaDB fold it into the statement-level `/*+ ... */` comment.
+* `WithSubQueryHint(string hint)` attaches a hint to the derived-table source of a `From(subQuery)`
+  builder. PostgreSQL/MySQL/MariaDB fold it into `/*+ ... */`; SQL Server rejects it, because T-SQL
+  cannot append a query hint to a subselect.
+* `WithTablesInScopeHint(params string[] hints)` applies the hints to every physical table in the query's
+  scope. SQL Server adds a `WITH (hint, ...)` clause to the primary and every joined table (the
+  multi-table counterpart of `WithTableHint`); PostgreSQL/MySQL/MariaDB fold it into the statement
+  comment.
+
+```sql
+-- SQL Server:
+select t1.id from simple_entity as [t1] inner loop join complex_entity as [t2] on t1.id = t2.id
+-- PostgreSQL (pg_hint_plan):
+select /*+ HashJoin(t1 t2) */ id from simple_entity as "t1" join complex_entity as "t2" ...
+-- MySQL 8:
+select /*+ JOIN_ORDER(t1, t2) */ id from simple_entity as `t1` join complex_entity as `t2` ...
+```
+
+A blank hint is rejected with `ArgumentException`, and a join hint without a preceding join throws
+`InvalidOperationException`. For the inline-comment dialects the hint text is rendered verbatim, so write
+the source aliases yourself (`HashJoin(t1 t2)`): nextorm's aliases are assigned at render time and are not
+exposed. All three hints are part of the plan key. On SQLite, ClickHouse and the in-memory provider they
+are rejected with `NotSupportedException`.
+
 ## ClickHouse query modifiers
 
 ClickHouse exposes four query-level modifiers that are not hints: `Final()`, `PreWhere(predicate)` and
@@ -156,8 +225,8 @@ both.
 
 ## Limitations
 
-* Locking table hints are only rendered for the primary table; hints on a joined table are not part of the API
-  yet ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) applies to the query's `FROM` table).
+* Locking table hints are only rendered for the primary table; use `WithTablesInScopeHint` to cover the
+  joined tables ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) applies to the query's `FROM` table).
 * Concatenating a hinted command with a set operation ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) is not guarded against;
   the hint travels to the branch it was attached to and should be avoided there.
 
@@ -170,6 +239,7 @@ both.
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
+`src/nextorm.core/Builders/EntityBuilder.cs` (`WithTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB inherits).

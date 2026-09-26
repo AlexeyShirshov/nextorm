@@ -20,6 +20,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // and therefore the hash — must not change. Keeping it in a readonly field makes GetHashCode
     // stable even after GetCacheVersion() mutates the plan, which a dictionary key requires.
     private readonly int _hashPlan;
+    private bool _isCacheVersion;
 
     /// <summary>
     /// Captures a canonical, hashable description of <paramref name="cmd"/> and computes its stable
@@ -74,6 +75,10 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     /// <returns><see langword="true"/> when the plans are equal.</returns>
     public bool Equals(QueryPlan? obj)
     {
+        // A command that is executed repeatedly reuses its memoized key instance, so the plan store
+        // compares the very same object on every warm lookup: reference identity is a full match and
+        // skips the structural query comparison below.
+        if (ReferenceEquals(this, obj)) return true;
         if (obj is null) return false;
 
         return _sql == obj._sql && _comparer.Equals(QueryCommand, obj.QueryCommand);
@@ -87,12 +92,19 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     /// <returns>This plan, after the command has been swapped for its cache clone.</returns>
     public QueryPlan GetCacheVersion()
     {
+        // The same plan key can be stored more than once (the per-thread store is cleared and a
+        // reused command repopulates it), and after the first call the command is already the
+        // detached cache clone — cloning again would be wasted work and a clone of a clone.
+        if (_isCacheVersion)
+            return this;
+
         var newCmd = QueryCommand.CloneForCache();
         Debug.Assert(_comparer == newCmd.GetQueryPlanEqualityComparer(), "QueryPlanEqualityComparer must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_hashPlan == ComputeHash(newCmd, _sql, _comparer), "Hash must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_comparer.Equals(newCmd, QueryCommand), "QueryCommands must be equals, if not see QueryCommand.CopyTo function");
         QueryCommand = newCmd;
         _comparer = newCmd.GetQueryPlanEqualityComparer();
+        _isCacheVersion = true;
         return this;
     }
 }

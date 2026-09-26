@@ -38,6 +38,40 @@ public sealed record BulkInsertOptions
     public bool IgnoreDuplicates { get; init; }
 
     /// <summary>
+    /// Whether CHECK and FOREIGN KEY constraints are checked by the destination while the rows are
+    /// written. Only the SQL Server native <c>SqlBulkCopy</c> path can express it (it maps to
+    /// <c>SqlBulkCopyOptions.CheckConstraints</c>, which SQL Server leaves off by default); every other
+    /// bulk path always enforces or always ignores constraints and rejects a request with a clear
+    /// <see cref="NotSupportedException"/>. Defaults to <see langword="null"/> (the provider default).
+    /// </summary>
+    public bool? CheckConstraints { get; init; }
+
+    /// <summary>
+    /// Whether a table-level bulk-update lock is taken for the duration of the write. Only the SQL
+    /// Server native <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.TableLock</c>);
+    /// other bulk paths reject a request with a clear <see cref="NotSupportedException"/>. Defaults to
+    /// <see langword="null"/> (row locks).
+    /// </summary>
+    public bool? TableLock { get; init; }
+
+    /// <summary>
+    /// Whether explicit null values are written instead of the destination column's DEFAULT. Only the
+    /// SQL Server native <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.KeepNulls</c>);
+    /// other bulk paths reject a request with a clear <see cref="NotSupportedException"/>. Defaults to
+    /// <see langword="null"/> (the provider default).
+    /// </summary>
+    public bool? KeepNulls { get; init; }
+
+    /// <summary>
+    /// Whether INSERT triggers fire for the written rows. Only the SQL Server native
+    /// <c>SqlBulkCopy</c> path can express it (<c>SqlBulkCopyOptions.FireTriggers</c>); other bulk paths
+    /// always fire (or never have) triggers and reject a request with a clear
+    /// <see cref="NotSupportedException"/>. Defaults to <see langword="null"/> (triggers do not fire on
+    /// the native path).
+    /// </summary>
+    public bool? FireTriggers { get; init; }
+
+    /// <summary>
     /// Overrides the entity's mapped table for this write, without requiring a second <c>[SqlTable]</c>
     /// mapping. When set, the naming convention is not applied to the target; <see cref="TableSchema"/>
     /// optionally qualifies it. Defaults to <see langword="null"/> (the mapped table name is used).
@@ -122,6 +156,10 @@ public sealed class BulkInsertOptionsBuilder
     private int? _maxSqlLength;
     private bool _keepIdentity;
     private bool _ignoreDuplicates;
+    private bool? _checkConstraints;
+    private bool? _tableLock;
+    private bool? _keepNulls;
+    private bool? _fireTriggers;
     private string? _tableName;
     private string? _tableSchema;
     private int? _timeoutSeconds;
@@ -177,6 +215,42 @@ public sealed class BulkInsertOptionsBuilder
     public BulkInsertOptionsBuilder IgnoreDuplicates(bool value = true)
     {
         _ignoreDuplicates = value;
+        return this;
+    }
+
+    /// <summary>Checks CHECK and FOREIGN KEY constraints during the write (SQL Server native path only).</summary>
+    /// <param name="value">Whether constraints are checked; defaults to <see langword="true"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertOptionsBuilder CheckConstraints(bool value = true)
+    {
+        _checkConstraints = value;
+        return this;
+    }
+
+    /// <summary>Takes a table-level bulk-update lock for the duration of the write (SQL Server native path only).</summary>
+    /// <param name="value">Whether the table is locked; defaults to <see langword="true"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertOptionsBuilder TableLock(bool value = true)
+    {
+        _tableLock = value;
+        return this;
+    }
+
+    /// <summary>Writes explicit null values instead of the destination DEFAULT (SQL Server native path only).</summary>
+    /// <param name="value">Whether nulls are kept; defaults to <see langword="true"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertOptionsBuilder KeepNulls(bool value = true)
+    {
+        _keepNulls = value;
+        return this;
+    }
+
+    /// <summary>Fires INSERT triggers for the written rows (SQL Server native path only).</summary>
+    /// <param name="value">Whether triggers fire; defaults to <see langword="true"/>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertOptionsBuilder FireTriggers(bool value = true)
+    {
+        _fireTriggers = value;
         return this;
     }
 
@@ -259,6 +333,10 @@ public sealed class BulkInsertOptionsBuilder
         MaxSqlLength = _maxSqlLength,
         KeepIdentity = _keepIdentity,
         IgnoreDuplicates = _ignoreDuplicates,
+        CheckConstraints = _checkConstraints,
+        TableLock = _tableLock,
+        KeepNulls = _keepNulls,
+        FireTriggers = _fireTriggers,
         TableName = _tableName,
         TableSchema = _tableSchema,
         TimeoutSeconds = _timeoutSeconds,

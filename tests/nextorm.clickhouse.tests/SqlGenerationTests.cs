@@ -20,6 +20,26 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void QueryTag_ShouldRenderBlockCommentAfterSelect()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTag("app.list").Select(x => new { x.Id }))
+            .Should().Be("select /* app.list */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryTag_ShouldNeutraliseCommentDelimitersAndNewlines()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithTag("a*/b/*c\r\nd"))
+            .Should().Be("select /* a* /b/ *c d */ id from simple_entity");
+    }
+
+    [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -41,6 +61,40 @@ public class SqlGenerationTests
         var act = () => SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Index hints*");
+    }
+
+    [Fact]
+    public void JoinHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinHint("hash")
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Join hints*");
+    }
+
+    [Fact]
+    public void SubQueryHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
+    }
+
+    [Fact]
+    public void TablesInScopeHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>().WithTablesInScopeHint("nolock").Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Tables-in-scope hints*");
     }
 
     [Fact]

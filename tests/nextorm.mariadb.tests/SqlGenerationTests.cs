@@ -19,6 +19,26 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void QueryTag_ShouldRenderBlockCommentAfterSelect()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTag("app.list").Select(x => new { x.Id }))
+            .Should().Be("select /* app.list */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryTag_ShouldNeutraliseCommentDelimitersAndNewlines()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithTag("a*/b/*c\r\nd"))
+            .Should().Be("select /* a* /b/ *c d */ id from simple_entity");
+    }
+
+    [Fact]
     public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
     {
         using var ctx = MariaDbTestContext.CreateUppercase();

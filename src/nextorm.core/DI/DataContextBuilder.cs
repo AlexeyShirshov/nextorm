@@ -16,6 +16,7 @@ public class DataContextBuilder
     private ILoggerFactory? _loggerFactory;
     //private IDataProvider? _dataProvider;
     private bool _logSensitiveData;
+    private int? _commandTimeout;
     private Func<DataContextBuilder, IDataContext>? _factory;
     private readonly List<IQueryInterceptor> _queryInterceptors = [];
     private readonly List<IConnectionInterceptor> _connectionInterceptors = [];
@@ -53,8 +54,23 @@ public class DataContextBuilder
     /// and the joined command text only, not the per-command <c>DbBatch</c> form.
     /// </summary>
     public bool MultilineBatchSql { get; private set; }
+
+    /// <summary>
+    /// The command timeout in seconds applied to every command of the contexts this builder creates, or
+    /// <see langword="null"/> when no timeout is configured and the provider default applies. Set through
+    /// <see cref="UseCommandTimeout"/>; a command can override it with <c>WithCommandTimeout</c>.
+    /// </summary>
+    public int? CommandTimeout => _commandTimeout;
     //internal IDataProvider? DataProvider => _dataProvider;
     internal ILoggerFactory? LoggerFactory => _loggerFactory;
+
+    /// <summary>
+    /// Whether prepared queries may be stored in and reused from the plan cache. Defaults to
+    /// <see langword="true"/>; set through <see cref="UseQueryCache"/>. When disabled, every
+    /// preparation is built without caching (the equivalent of <c>storeInCache: false</c>) and the
+    /// per-command <c>QueryCommand.Cache</c> flag is never mutated.
+    /// </summary>
+    public bool QueryCacheEnabled { get; private set; } = true;
     // public bool CacheQueryCommand { get; set; } = true;
     // public bool CacheExpressions { get; set; } = true;
     /// <summary>
@@ -159,6 +175,52 @@ public class DataContextBuilder
     public DataContextBuilder UseMultilineBatchSql(bool value = true)
     {
         MultilineBatchSql = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the default command timeout in seconds for every command of the contexts this builder
+    /// creates (the ADO.NET <c>DbCommand.CommandTimeout</c>). A value of zero or less means the
+    /// provider default (nothing is changed, the zero-cost path); the same applies before the call. A
+    /// single command can override the value with <c>WithCommandTimeout</c>. The resolved timeout is
+    /// part of the plan-cache key, so contexts with different defaults do not share a cached command.
+    /// The in-memory context has no command and ignores it.
+    /// </summary>
+    /// <param name="seconds">The default command timeout in seconds; zero or less uses the provider default.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseCommandTimeout(int seconds)
+    {
+        _commandTimeout = seconds > 0 ? seconds : null;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Enables (<paramref name="enabled"/> is <see langword="true"/>, the default) or disables the
+    /// implicit plan cache for every context this builder creates. Disabled means each terminal builds
+    /// its plan again instead of looking it up; the shared <c>AnyCommand</c>'s sticky
+    /// <c>QueryCommand.Cache</c> flag is not touched.
+    /// </summary>
+    /// <param name="enabled"><see langword="true"/> to use the plan cache; otherwise <see langword="false"/>.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseQueryCache(bool enabled = true)
+    {
+        QueryCacheEnabled = enabled;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables sliding expiration for the process-wide caches: an entry that is not read within
+    /// <paramref name="ttl"/> is evicted lazily. Pass <see cref="TimeSpan.Zero"/> to disable it (the
+    /// default). The setting is process-wide because the caches are static, so it applies to every
+    /// context created afterwards as well.
+    /// </summary>
+    /// <param name="ttl">The sliding window; <see cref="TimeSpan.Zero"/> disables expiration.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ttl"/> is negative.</exception>
+    public DataContextBuilder UseCacheSlidingExpiration(TimeSpan ttl)
+    {
+        DataContextCache.CacheSlidingExpiration = ttl;
         return this;
     }
 
