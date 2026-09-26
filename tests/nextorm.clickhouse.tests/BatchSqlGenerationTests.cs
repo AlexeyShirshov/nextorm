@@ -24,6 +24,19 @@ public class BatchSqlGenerationTests
     }
 
     [Fact]
+    public void Batch_MultipleResults_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => ctx.Batch()
+            .AddQuery(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .AddQuery(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .Execute();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*batch*");
+    }
+
+    [Fact]
     public void Dialect_ShouldNotReportBatchSupport()
     {
         using var ctx = ClickHouseTestContext.Create();

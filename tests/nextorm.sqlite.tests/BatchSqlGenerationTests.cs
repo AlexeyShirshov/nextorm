@@ -29,6 +29,39 @@ public class BatchSqlGenerationTests
     }
 
     [Fact]
+    public void Batch_MutationThenTwoAddQueries_ShouldRenderBothSelectsInOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var value = 42;
+        var min = 5;
+        var max = 6;
+
+        var sql = ctx.Batch()
+            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+            .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
+            .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id < max).Select(x => new { x.Id }))
+            .ToSql();
+
+        var statements = sql.Split("; ");
+        statements.Should().HaveCount(3);
+        statements[0].Should().StartWith("update simple_entity set id = $p0");
+        statements[1].Should().Contain("select id from simple_entity").And.Contain("$b1_min");
+        statements[2].Should().Contain("select id from simple_entity").And.Contain("$b2_max");
+    }
+
+    [Fact]
+    public void Batch_ToSql_WithoutResultQuery_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var batch = ctx.Batch();
+        batch.Delete(ctx.DeleteFrom<ISimpleEntity>().Where(x => x.Id == 1));
+
+        var act = () => batch.ToSql();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public void Batch_CreateTableDropExisting_ShouldRenderDropThenCreate()
     {
         using var ctx = SqliteTestContext.Create();

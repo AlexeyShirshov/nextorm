@@ -189,6 +189,40 @@ internal static class RowMapperFactory
         return map;
     }
 
+    /// <summary>
+    /// Returns the compiled mapper for a raw command's result set, building and caching it on a miss.
+    /// Unlike the SQL-keyed overload this uses a separate key that does not contain the SQL text (raw
+    /// commands accept arbitrary text), so the cache cannot grow with the number of distinct statements;
+    /// the shape is the reader's ordered column names plus the result type. The select list is produced
+    /// lazily by <paramref name="buildSelectList"/> and is only evaluated on a cache miss.
+    /// </summary>
+    /// <typeparam name="TResult">The materialized row type.</typeparam>
+    /// <param name="providerType">The concrete context type; its column-mapping policy is part of the key.</param>
+    /// <param name="resultType">The materialized result type (part of the key).</param>
+    /// <param name="oneColumn">Whether the result is a single scalar column.</param>
+    /// <param name="columns">The reader's ordered column names, or an empty string for a scalar.</param>
+    /// <param name="namingConventionType">The naming convention type, when one applies to name matching.</param>
+    /// <param name="buildSelectList">Builds the projection; invoked only on a cache miss.</param>
+    /// <param name="mapColumn">The provider's column accessor factory.</param>
+    /// <returns>The compiled row mapper.</returns>
+    public static Func<IDataRecord, TResult> GetOrBuildRaw<TResult>(
+        Type providerType,
+        Type resultType,
+        bool oneColumn,
+        string columns,
+        Type? namingConventionType,
+        Func<SelectExpression[]> buildSelectList,
+        Func<SelectExpression, Expression, Expression> mapColumn)
+    {
+        var key = new RawMapperCacheKey(providerType, resultType, oneColumn, columns, namingConventionType);
+        if (MapperCache.TryGetRaw(key, out var cached))
+            return (Func<IDataRecord, TResult>)cached;
+
+        var map = Build<TResult>(buildSelectList(), oneColumn, null, mapColumn);
+        MapperCache.AddRaw(key, map);
+        return map;
+    }
+
     private static Func<IDataRecord, TResult> Build<TResult>(
         QueryCommand<TResult> queryCommand,
         ILogger? logger,

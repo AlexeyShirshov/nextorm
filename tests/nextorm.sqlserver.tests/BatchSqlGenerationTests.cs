@@ -62,4 +62,25 @@ public class BatchSqlGenerationTests
         statements[0].Should().Be("update simple_entity set id = @p0 where (id > @b0_min)");
         statements[1].Should().Be("select id from simple_entity\n where (id > @b1_min)");
     }
+
+    [Fact]
+    public void Batch_MutationThenTwoAddQueries_ShouldRenderBothSelectsInOrder()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var value = 42;
+        var min = 5;
+        var max = 6;
+
+        var sql = ctx.Batch()
+            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+            .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
+            .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id < max).Select(x => new { x.Id }))
+            .ToSql();
+
+        var statements = sql.Split("; ");
+        statements.Should().HaveCount(3);
+        statements[0].Should().StartWith("update simple_entity set id = @p0");
+        statements[1].Should().Contain("select id from simple_entity").And.Contain("@b1_min");
+        statements[2].Should().Contain("select id from simple_entity").And.Contain("@b2_max");
+    }
 }

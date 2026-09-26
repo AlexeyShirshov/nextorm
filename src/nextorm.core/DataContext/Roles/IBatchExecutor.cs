@@ -1,4 +1,6 @@
+using System.Collections;
 using System.Data;
+using System.Data.Common;
 
 namespace NextORM.Core;
 
@@ -40,6 +42,33 @@ internal interface IBatchExecutor
     /// <returns>The compiled row mapper.</returns>
     Func<IDataRecord, TResult> BuildBatchMapper<TResult>(BatchPlan plan);
 
+    /// <summary>Builds the row mapper for the result set at <paramref name="resultIndex"/>.</summary>
+    /// <typeparam name="TResult">The projected row type of that result set.</typeparam>
+    /// <param name="plan">The rendered plan.</param>
+    /// <param name="resultIndex">The zero-based position of the result set in <see cref="BatchPlan.Results"/>.</param>
+    /// <returns>The compiled row mapper.</returns>
+    /// <exception cref="InvalidOperationException">The result set at <paramref name="resultIndex"/> does not project <typeparamref name="TResult"/>.</exception>
+    Func<IDataRecord, TResult> BuildBatchMapper<TResult>(BatchPlan plan, int resultIndex);
+
+    /// <summary>
+    /// Executes the batch in one round trip and eagerly materialises every result set. Each
+    /// <paramref name="resultMaterializers"/> entry reads the reader positioned on its result set and
+    /// returns the materialised rows as a non-generic <see cref="IList"/>.
+    /// </summary>
+    /// <param name="plan">The rendered plan.</param>
+    /// <param name="resultMaterializers">One materialiser per result set, in result-set order.</param>
+    /// <returns>The eagerly materialised result sets.</returns>
+    BatchResult ExecuteBatchResults(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> resultMaterializers);
+
+    /// <summary>
+    /// Asynchronously executes the batch in one round trip and eagerly materialises every result set.
+    /// </summary>
+    /// <param name="plan">The rendered plan.</param>
+    /// <param name="resultMaterializers">One materialiser per result set, in result-set order.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the eagerly materialised result sets.</returns>
+    Task<BatchResult> ExecuteBatchResultsAsync(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> resultMaterializers, CancellationToken cancellationToken);
+
     /// <summary>Executes the batch in one round trip and materialises the result rows.</summary>
     /// <typeparam name="TResult">The projected row type.</typeparam>
     /// <param name="plan">The rendered plan.</param>
@@ -67,7 +96,8 @@ internal interface IBatchExecutor
 /// <summary>
 /// One requested batch step. A step is the result-bearing read query, a
 /// <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> materialisation, or a side-effecting DML command
-/// (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE</c>/<c>TRUNCATE</c>). The result query must be the last step.
+/// (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE</c>/<c>TRUNCATE</c>). Result-bearing steps must be the trailing
+/// group of steps: no side-effecting step may follow a result.
 /// </summary>
 internal sealed class BatchStepSpec
 {
@@ -113,24 +143,48 @@ internal sealed class BatchStepSpec
 }
 
 /// <summary>
-/// A rendered batch: the statements with their (globally unique) parameters plus the result-bearing
-/// query. Produced by <see cref="IBatchExecutor.RenderBatch"/>. The result-bearing query is always the
-/// last statement and only it may return rows; every preceding statement is side-effecting — a
+/// One rendered result set of a batch: its result-bearing query and the SQL that produced it, kept in
+/// the order the result queries were added.
+/// </summary>
+internal sealed class BatchResultSpec
+{
+    /// <summary>Creates a result spec.</summary>
+    /// <param name="query">The result-bearing read query.</param>
+    /// <param name="sql">The SQL of that query as rendered within the batch.</param>
+    public BatchResultSpec(QueryCommand query, string sql)
+    {
+        Query = query;
+        Sql = sql;
+    }
+
+    /// <summary>The result-bearing read query.</summary>
+    public QueryCommand Query { get; }
+
+    /// <summary>The SQL of the query as rendered within the batch.</summary>
+    public string Sql { get; }
+}
+
+/// <summary>
+/// A rendered batch: the statements with their (globally unique) parameters plus the ordered result
+/// specs. Produced by <see cref="IBatchExecutor.RenderBatch"/>. The result-bearing queries are the
+/// trailing statements and only they may return rows; every preceding statement is side-effecting — a
 /// materialisation or a DML mutation — which a reader exposes as a result set without columns.
+/// <see cref="ResultQuery"/> and <see cref="ResultSql"/> expose the first result so the single-result
+/// terminal keeps working unchanged.
 /// </summary>
 internal sealed class BatchPlan
 {
     /// <summary>Creates a rendered plan.</summary>
     /// <param name="statements">The rendered statements, in execution order.</param>
-    /// <param name="resultQuery">The result-bearing query; must be the last statement's query.</param>
-    /// <param name="resultSql">The result-bearing statement's SQL.</param>
+    /// <param name="results">The result specs, in result-set order; at least one.</param>
     /// <param name="useJoinedCommand">When <see langword="true"/>, execute the statements as one <c>;</c>-joined command even if the connection exposes a <see cref="System.Data.Common.DbBatch"/>.</param>
     /// <param name="multiline">When <see langword="true"/>, <see cref="ToSql"/> places each statement on its own line.</param>
-    public BatchPlan(IReadOnlyList<BatchStatement> statements, QueryCommand resultQuery, string resultSql, bool useJoinedCommand, bool multiline = false)
+    public BatchPlan(IReadOnlyList<BatchStatement> statements, IReadOnlyList<BatchResultSpec> results, bool useJoinedCommand, bool multiline = false)
     {
         Statements = statements;
-        ResultQuery = resultQuery;
-        ResultSql = resultSql;
+        Results = results;
+        ResultQuery = results[0].Query;
+        ResultSql = results[0].Sql;
         UseJoinedCommand = useJoinedCommand;
         Multiline = multiline;
     }
@@ -138,10 +192,13 @@ internal sealed class BatchPlan
     /// <summary>The rendered statements, in execution order.</summary>
     public IReadOnlyList<BatchStatement> Statements { get; }
 
-    /// <summary>The result-bearing query; the last statement's query.</summary>
+    /// <summary>The result specs, in result-set order.</summary>
+    public IReadOnlyList<BatchResultSpec> Results { get; }
+
+    /// <summary>The first result-bearing query; its <see cref="BatchResultSpec.Sql"/> is <see cref="ResultSql"/>.</summary>
     public QueryCommand ResultQuery { get; }
 
-    /// <summary>The result-bearing statement's SQL.</summary>
+    /// <summary>The SQL of the first result-bearing statement.</summary>
     public string ResultSql { get; }
 
     /// <summary>When <see langword="true"/>, the statements execute as one <c>;</c>-joined command regardless of <see cref="System.Data.Common.DbConnection.CanCreateBatch"/>.</summary>

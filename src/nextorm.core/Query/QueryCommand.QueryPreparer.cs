@@ -444,65 +444,23 @@ public partial class QueryCommand
                     {
                         if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
                         {
-
-                            var p = Expression.Parameter(srcType);
-
                             if (DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta))
                             {
-                                var props = entityMeta.Properties;
-                                var columns = new List<SelectExpression>(props.Count);
+                                // The projection is built by the shared helper (also used by raw-command
+                                // mapping); the per-column plan hash is folded in here so the cached column
+                                // shape stays identical to the previous inline build.
+                                var (columns, completed) = EntitySelectListBuilder.Build(srcType, entityMeta, cancellationToken);
+                                if (!completed)
+                                    return (columns, columnsPlanHash);
 
-                                for (int idx = 0; idx < props.Count; idx++)
-                                {
-                                    if (cancellationToken.IsCancellationRequested)
-                                        return (columns.ToArray(), columnsPlanHash);
+                                selectList = columns;
 
-                                    var prop = props[idx];
-
-                                    var pi = prop.PropertyInfo;
-
-                                    Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
-
-                                    if (prop.RangeColumns is { } rangeColumns)
-                                    {
-                                        var boundType = Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType;
-                                        var nullableBound = typeof(Nullable<>).MakeGenericType(boundType.GetGenericArguments()[0]);
-
-                                        AddColumn(cmd, noHash, columns, ref columnsPlanHash, new SelectExpression(nullableBound)
+                                if (!cmd._dontCache && !noHash)
+                                    for (var i = 0; i < selectList.Length; i++) unchecked
                                         {
-                                            Index = columns.Count,
-                                            PropertyName = rangeColumns.LowerColumn,
-                                            Expression = exp,
-                                            PropertyInfo = pi,
-                                            RangeColumnRole = RangeColumnRole.Lower,
-                                            RangeColumns = rangeColumns,
-                                        });
-                                        AddColumn(cmd, noHash, columns, ref columnsPlanHash, new SelectExpression(nullableBound)
-                                        {
-                                            Index = columns.Count,
-                                            PropertyName = rangeColumns.UpperColumn,
-                                            Expression = exp,
-                                            PropertyInfo = pi,
-                                            RangeColumnRole = RangeColumnRole.Upper,
-                                            RangeColumns = rangeColumns,
-                                        });
-                                        continue;
-                                    }
-
-                                    AddColumn(cmd, noHash, columns, ref columnsPlanHash, new SelectExpression(pi.PropertyType)
-                                    {
-                                        Index = columns.Count,
-                                        PropertyName = pi.Name,
-                                        Expression = exp,
-                                        PropertyInfo = pi,
-                                        DurationUnit = prop.DurationUnit,
-                                        DurationPrecision = prop.DurationPrecision,
-                                        ProviderType = prop.Converter?.ProviderType,
-                                        Converter = prop.Converter,
-                                    });
-                                }
-
-                                selectList = columns.ToArray();
+                                            selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
+                                            columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                                        }
                             }
 
                             if (!(selectList?.Length > 0))
@@ -601,18 +559,6 @@ public partial class QueryCommand
             }
 
             return joinPlanHash;
-        }
-
-        private static void AddColumn(QueryCommand cmd, bool noHash, List<SelectExpression> columns, ref int columnsPlanHash, SelectExpression selExp)
-        {
-            if (!cmd._dontCache && !noHash)
-                selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-            columns.Add(selExp);
-
-            if (!cmd._dontCache && !noHash) unchecked
-                {
-                    columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                }
         }
 
         private static int PrepareSorting(QueryCommand cmd, SelectExpression[]? selectList, bool noHash, CancellationToken cancellationToken)

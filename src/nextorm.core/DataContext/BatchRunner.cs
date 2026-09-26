@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Runtime.CompilerServices;
@@ -82,6 +83,51 @@ internal sealed class BatchRunner
         return await ReadAsync(joinedReader, mapper, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Executes a rendered batch in one round trip and eagerly materialises every result set.</summary>
+    /// <param name="plan">The rendered batch.</param>
+    /// <param name="materializers">One materialiser per result set, in result-set order.</param>
+    /// <returns>The eagerly materialised result sets.</returns>
+    public BatchResult RunBatchMultiple(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers)
+    {
+        CheckDisposed();
+        _connectionManager.EnsureConnectionOpen();
+        var conn = _connectionManager.GetConnection();
+
+        if (!plan.UseJoinedCommand && conn.CanCreateBatch)
+        {
+            using var batch = CreateBatch(conn, plan);
+            using var reader = batch.ExecuteReader();
+            return ReadMultiple(reader, plan, materializers);
+        }
+
+        using var command = CreateJoinedCommand(conn, plan);
+        using var joinedReader = command.ExecuteReader();
+        return ReadMultiple(joinedReader, plan, materializers);
+    }
+
+    /// <summary>Asynchronously executes a rendered batch in one round trip and eagerly materialises every result set.</summary>
+    /// <param name="plan">The rendered batch.</param>
+    /// <param name="materializers">One materialiser per result set, in result-set order.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the eagerly materialised result sets.</returns>
+    public async Task<BatchResult> RunBatchMultipleAsync(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
+    {
+        CheckDisposed();
+        await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var conn = _connectionManager.GetConnection();
+
+        if (!plan.UseJoinedCommand && conn.CanCreateBatch)
+        {
+            await using var batch = CreateBatch(conn, plan);
+            await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            return await ReadMultipleAsync(reader, plan, materializers, cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var command = CreateJoinedCommand(conn, plan);
+        await using var joinedReader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await ReadMultipleAsync(joinedReader, plan, materializers, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Executes a rendered batch in one round trip and returns the first column of the result-bearing query's first row.</summary>
     /// <param name="plan">The rendered batch.</param>
     /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>, or <see langword="null"/> when the query returns no rows.</returns>
@@ -136,7 +182,7 @@ internal sealed class BatchRunner
         {
             await using var batch = CreateBatch(conn, plan);
             await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-            await AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
+            await ResultSetNavigator.AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
 
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 yield return mapper(reader);
@@ -146,7 +192,7 @@ internal sealed class BatchRunner
 
         await using var command = CreateJoinedCommand(conn, plan);
         await using var joinedReader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        await AdvanceToResultSetAsync(joinedReader, cancellationToken).ConfigureAwait(false);
+        await ResultSetNavigator.AdvanceToResultSetAsync(joinedReader, cancellationToken).ConfigureAwait(false);
 
         while (await joinedReader.ReadAsync(cancellationToken).ConfigureAwait(false))
             yield return mapper(joinedReader);
@@ -224,7 +270,7 @@ internal sealed class BatchRunner
 
     private static List<TResult> Read<TResult>(DbDataReader reader, Func<IDataRecord, TResult> mapper)
     {
-        AdvanceToResultSet(reader);
+        ResultSetNavigator.AdvanceToResultSet(reader);
 
         var list = new List<TResult>();
         while (reader.Read())
@@ -235,7 +281,7 @@ internal sealed class BatchRunner
 
     private static async Task<List<TResult>> ReadAsync<TResult>(DbDataReader reader, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
     {
-        await AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
+        await ResultSetNavigator.AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
 
         var list = new List<TResult>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -244,9 +290,76 @@ internal sealed class BatchRunner
         return list;
     }
 
+    private static BatchResult ReadMultiple(DbDataReader reader, BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers)
+    {
+        ValidateMaterializerCount(plan, materializers);
+
+        ResultSetNavigator.AdvanceToResultSet(reader);
+
+        var sets = new List<IList>(materializers.Count);
+        var resultTypes = new List<Type>(materializers.Count);
+        for (var i = 0; i < materializers.Count; i++)
+        {
+            if (reader.FieldCount == 0)
+                throw MissingResultSet(plan, i);
+
+            sets.Add(materializers[i].Read(reader));
+            resultTypes.Add(materializers[i].ResultType);
+
+            if (i < materializers.Count - 1 && !ResultSetNavigator.MoveToNextResultSet(reader))
+                throw MissingResultSet(plan, i + 1);
+        }
+
+        return new BatchResult(sets, resultTypes);
+    }
+
+    private static async Task<BatchResult> ReadMultipleAsync(DbDataReader reader, BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
+    {
+        ValidateMaterializerCount(plan, materializers);
+
+        await ResultSetNavigator.AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
+
+        var sets = new List<IList>(materializers.Count);
+        var resultTypes = new List<Type>(materializers.Count);
+        for (var i = 0; i < materializers.Count; i++)
+        {
+            if (reader.FieldCount == 0)
+                throw MissingResultSet(plan, i);
+
+            sets.Add(await materializers[i].ReadAsync(reader, cancellationToken).ConfigureAwait(false));
+            resultTypes.Add(materializers[i].ResultType);
+
+            if (i < materializers.Count - 1
+                && !await ResultSetNavigator.MoveToNextResultSetAsync(reader, cancellationToken).ConfigureAwait(false))
+            {
+                throw MissingResultSet(plan, i + 1);
+            }
+        }
+
+        return new BatchResult(sets, resultTypes);
+    }
+
+    /// <summary>
+    /// Defensive internal-contract guard: the public API always supplies exactly one materialiser per
+    /// declared result set, so a mismatch indicates an executor bug rather than caller input.
+    /// </summary>
+    private static void ValidateMaterializerCount(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers)
+    {
+        if (materializers.Count != plan.Results.Count)
+            throw new InvalidOperationException(
+                $"The batch declares {plan.Results.Count} result set(s) but {materializers.Count} materialiser(s) were supplied; one materialiser per declared result set is required.");
+    }
+
+    /// <summary>
+    /// Defensive internal-contract guard: SQL always returns every declared result set, so a provider
+    /// returning fewer means a broken internal contract rather than caller input.
+    /// </summary>
+    private static InvalidOperationException MissingResultSet(BatchPlan plan, int returnedCount)
+        => new($"The batch declares {plan.Results.Count} result set(s) but the provider returned only {returnedCount}; a declared result set is missing from the batch output.");
+
     private static object? ReadScalar(DbDataReader reader)
     {
-        AdvanceToResultSet(reader);
+        ResultSetNavigator.AdvanceToResultSet(reader);
 
         if (!reader.Read())
             return null;
@@ -257,35 +370,13 @@ internal sealed class BatchRunner
 
     private static async Task<object?> ReadScalarAsync(DbDataReader reader, CancellationToken cancellationToken)
     {
-        await AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
+        await ResultSetNavigator.AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
 
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             return null;
 
         var value = reader.GetValue(0);
         return value is DBNull ? null : value;
-    }
-
-    // The result-bearing query is the last statement and only it returns columns; the preceding
-    // side-effecting statements (materialisations and DML) surface as result sets without columns.
-    // Stopping on the first set that has columns deliberately avoids calling NextResult on an
-    // already-last set: Microsoft.Data.Sqlite empties the current result set when NextResult returns false.
-    private static void AdvanceToResultSet(DbDataReader reader)
-    {
-        while (reader.FieldCount == 0)
-        {
-            if (!reader.NextResult())
-                break;
-        }
-    }
-
-    private static async Task AdvanceToResultSetAsync(DbDataReader reader, CancellationToken cancellationToken)
-    {
-        while (reader.FieldCount == 0)
-        {
-            if (!await reader.NextResultAsync(cancellationToken).ConfigureAwait(false))
-                break;
-        }
     }
 
     [System.Diagnostics.Conditional("DEBUG")]
