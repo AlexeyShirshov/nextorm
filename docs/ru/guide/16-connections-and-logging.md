@@ -119,6 +119,41 @@ bool same = ReferenceEquals(((IConnectionManager)ctx).GetConnection(), ctx.GetCo
 Её поддерживают SQLite, PostgreSQL, SQL Server и MySQL/MariaDB; ClickHouse её отклоняет, а провайдер
 in-memory её не реализует. Полный гайд — [Транзакции](25-transactions.md).
 
+## Таймаут команды
+
+Каждая команда, которую выполняет nextorm, экспонирует ADO.NET-свойство `DbCommand.CommandTimeout` (в секундах). По умолчанию действует значение провайдера: nextorm не трогает свойство, пока вы не зададите таймаут.
+
+Задайте общий для контекста дефолт через [`UseCommandTimeout`](xref:NextORM.Core.DataContextBuilder.UseCommandTimeout(System.Int32)); он применяется ко всем командам `SELECT`, DML и `ExecuteScalar` создаваемых builder'ом контекстов:
+
+```csharp
+using var ctx = new DataContextBuilder()
+    .UseSqlite("app.db")
+    .UseCommandTimeout(15)
+    .CreateDataContext();
+```
+
+Переопределите его для отдельного запроса через `WithCommandTimeout(seconds)` на builder'е или на построенной команде ([`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) и [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1)):
+
+```csharp
+var ids = ctx.From<ISimpleEntity>()
+    .WithCommandTimeout(5)          // только этот запрос
+    .Select(x => x.Id)
+    .ToList();
+
+var slowIds = ctx.From<ISimpleEntity>()
+    .Select(x => x.Id)
+    .WithCommandTimeout(120)        // и на QueryCommand<T>
+    .ToList();
+```
+
+Примечания:
+
+* Без вызова (`null`) и при значении ноль или меньше действует дефолт провайдера; свойство не меняется, поэтому при неиспользовании настройки нет никаких затрат. `WithCommandTimeout(0)` снимает per-query-переопределение и наследует контекстный дефолт.
+* Итоговое значение входит в ключ план-кэша: два в остальном одинаковых запроса с разными таймаутами не делят кэшированную команду, и таймаут никогда не «протекает» из одного запроса в другой. Контексты с разными [`UseCommandTimeout`](xref:NextORM.Core.DataContextBuilder.UseCommandTimeout(System.Int32)) тоже не делят кэшированный план.
+* Per-query-переопределение доступно для запросов на чтение; DML-команды и батчи всегда используют контекстный дефолт.
+* У in-memory-контекста нет команды, он игнорирует настройку.
+* Особенность провайдера: `ClickHouse.Driver` 1.4.0 экспонирует унаследованное свойство, но HTTP-запрос ограничивается `Timeout` соединения (по умолчанию две минуты), а не `CommandTimeout`; там значение не действует. См. [Ограничения](../advanced/limitations.md).
+
 ## Логирование
 
 ### Подключение `ILoggerFactory`

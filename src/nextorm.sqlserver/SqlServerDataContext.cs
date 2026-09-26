@@ -126,8 +126,9 @@ public class SqlServerDataContext : DataContext
     /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for one batch.</param>
     /// <param name="progress">Called with the cumulative written-row count on each native progress tick, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller.</param>
     /// <returns>The number of rows written.</returns>
-    protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
     {
         EnsureConnectionOpen();
         var table = BuildTable(columnNames, columns);
@@ -141,7 +142,7 @@ public class SqlServerDataContext : DataContext
 
         using (table)
         {
-            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery);
+            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy);
 
             try
             {
@@ -165,9 +166,10 @@ public class SqlServerDataContext : DataContext
     /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for one batch.</param>
     /// <param name="progress">Called with the cumulative written-row count on each native progress tick, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows written.</returns>
-    protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+    protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
     {
         await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
         var table = BuildTable(columnNames, columns);
@@ -181,7 +183,7 @@ public class SqlServerDataContext : DataContext
 
         using (table)
         {
-            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery);
+            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery, bulkCopy);
 
             try
             {
@@ -196,12 +198,12 @@ public class SqlServerDataContext : DataContext
         return count;
     }
 
-    private SqlBulkCopy CreateBulkCopy(string tableName, IReadOnlyList<string> columnNames, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    private SqlBulkCopy CreateBulkCopy(string tableName, IReadOnlyList<string> columnNames, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
     {
         var connection = (SqlConnection)GetConnection();
         var transaction = (this as ITransactionManager)?.CurrentTransaction as SqlTransaction;
 
-        var bulk = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction)
+        var bulk = new SqlBulkCopy(connection, MapBulkCopyOptions(bulkCopy.CheckConstraints, bulkCopy.TableLock, bulkCopy.KeepNulls, bulkCopy.FireTriggers), transaction)
         {
             DestinationTableName = tableName,
             BulkCopyTimeout = commandTimeoutSeconds ?? 30,
@@ -218,6 +220,21 @@ public class SqlServerDataContext : DataContext
         }
 
         return bulk;
+    }
+
+    internal static SqlBulkCopyOptions MapBulkCopyOptions(bool checkConstraints, bool tableLock, bool keepNulls, bool fireTriggers)
+    {
+        var options = SqlBulkCopyOptions.Default;
+        if (checkConstraints)
+            options |= SqlBulkCopyOptions.CheckConstraints;
+        if (tableLock)
+            options |= SqlBulkCopyOptions.TableLock;
+        if (keepNulls)
+            options |= SqlBulkCopyOptions.KeepNulls;
+        if (fireTriggers)
+            options |= SqlBulkCopyOptions.FireTriggers;
+
+        return options;
     }
 
     private DataTable BuildTable(IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns)

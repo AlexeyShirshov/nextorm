@@ -129,6 +129,48 @@ public class BulkInsertBuilderTests
         act.Should().Throw<NotSupportedException>();
     }
 
+    [Fact]
+    public void OptionsBuilder_BulkCopyFlags_ShouldBuild()
+    {
+        var options = new BulkInsertOptionsBuilder()
+            .CheckConstraints()
+            .TableLock()
+            .KeepNulls()
+            .FireTriggers()
+            .Build();
+
+        options.CheckConstraints.Should().BeTrue();
+        options.TableLock.Should().BeTrue();
+        options.KeepNulls.Should().BeTrue();
+        options.FireTriggers.Should().BeTrue();
+    }
+
+    [Fact]
+    public void OptionsBuilder_BulkCopyFlags_ShouldDefaultToNull()
+    {
+        var options = new BulkInsertOptionsBuilder().Build();
+
+        options.CheckConstraints.Should().BeNull();
+        options.TableLock.Should().BeNull();
+        options.KeepNulls.Should().BeNull();
+        options.FireTriggers.Should().BeNull();
+    }
+
+    [Fact]
+    public void OptionsBuilder_BulkCopyFlags_CanBeDisabledExplicitly()
+    {
+        var options = new BulkInsertOptionsBuilder().TableLock(false).Build();
+
+        options.TableLock.Should().BeFalse();
+    }
+
+    [Fact]
+    public void BulkCopyFlags_None_ShouldBeEmpty()
+    {
+        BulkCopyFlags.None.IsAny.Should().BeFalse();
+        new BulkCopyFlags(CheckConstraints: true, TableLock: false, KeepNulls: false, FireTriggers: false).IsAny.Should().BeTrue();
+    }
+
     private static async IAsyncEnumerable<BulkEntity> EmptyAsync()
     {
         await Task.CompletedTask;

@@ -109,6 +109,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.IndexHintKind != y.IndexHintKind) return false;
 
+        if (!StringListsEqual(x.TablesInScopeHints, y.TablesInScopeHints)) return false;
+
         if (x.ForJsonClause != y.ForJsonClause) return false;
 
         if (x.ForXmlClause != y.ForXmlClause) return false;
@@ -155,11 +157,15 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!StringListsEqual(x.Hints, y.Hints)) return false;
 
+        if (!string.Equals(x.Tag, y.Tag, StringComparison.Ordinal)) return false;
+
         if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
 
         if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
 
         if (x.ResolvedKeywordCase != y.ResolvedKeywordCase) return false;
+
+        if (x.ResolvedCommandTimeout != y.ResolvedCommandTimeout) return false;
 
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
@@ -359,6 +365,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             hash.Add(obj.IndexHintKind);
 
+            if (obj.TablesInScopeHints is { Count: > 0 })
+                foreach (var scopeHint in obj.TablesInScopeHints)
+                    hash.Add(scopeHint);
+
             if (obj.ForJsonClause is { } forJson)
                 hash.Add(forJson);
 
@@ -467,11 +477,16 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (obj.HintsPlanHash != 0)
                 hash.Add(obj.HintsPlanHash);
 
+            if (obj.Tag is { Length: > 0 } tag)
+                hash.Add(tag);
+
             hash.Add(obj.ResolvedQuoteIdentifiers);
 
             hash.Add(obj.ResolvedNamingConvention);
 
             hash.Add(obj.ResolvedKeywordCase);
+
+            hash.Add(obj.ResolvedCommandTimeout);
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

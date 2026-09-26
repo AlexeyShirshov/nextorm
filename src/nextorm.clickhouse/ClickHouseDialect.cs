@@ -455,6 +455,24 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
     public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
 
+    /// <summary>ClickHouse qualifies a table with a database name (<c>`db`.`table`</c>); there is no separate schema level.</summary>
+    public override bool SupportsCrossDatabase => true;
+
+    /// <summary>
+    /// Renders the ClickHouse single-qualifier form <c>database.table</c>. A database and a schema are
+    /// the same concept here, so the two overrides are mutually exclusive; a linked server is unsupported.
+    /// </summary>
+    public override string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+
+        if (database is not null && schema is not null)
+            throw new NotSupportedException("ClickHouse treats the database and the schema as the same qualifier; set only one of them.");
+
+        return JoinTableQualifier(database ?? schema, table);
+    }
+
     /// <summary>ClickHouse uses the backtick-quoted identifier for references as well.</summary>
     public override string MakeColumnReference(string name) => Escape(name);
 

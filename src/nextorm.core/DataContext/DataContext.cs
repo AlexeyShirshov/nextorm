@@ -53,7 +53,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.QuoteIdentifiers,
             optionsBuilder.NamingConvention,
             optionsBuilder.KeywordCase,
-            optionsBuilder.MultilineBatchSql);
+            optionsBuilder.MultilineBatchSql,
+            optionsBuilder.CommandTimeout);
+
+        QueryCacheEnabled = optionsBuilder.QueryCacheEnabled;
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -104,6 +107,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private readonly Func<string, object?, DbParameter> _createParam;
 
+    /// <summary>
+    /// Whether prepared plans may be stored in and reused from the plan cache. Initialized from
+    /// <c>DataContextBuilder.UseQueryCache</c> (default <see langword="true"/>); setting it to
+    /// <see langword="false"/> makes every preparation pass <c>storeInCache: false</c> without touching
+    /// the sticky <see cref="QueryCommand.Cache"/> flag on a shared command.
+    /// </summary>
+    public bool QueryCacheEnabled { get; set; } = true;
+
     // Late-bound provider hooks: only the delegates are created in the constructor, never the values.
     private ISqlDialect GetDialect() => Dialect;
 
@@ -145,6 +156,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// (statements joined on one line with <c>"; "</c>).
     /// </summary>
     public bool MultilineBatchSql => _environment.MultilineBatchSql;
+    /// <summary>
+    /// The context-wide default command timeout in seconds (set with
+    /// <c>DataContextBuilder.UseCommandTimeout</c>), or <see langword="null"/> when no timeout is
+    /// configured and the provider default applies. A command can override it with
+    /// <c>WithCommandTimeout</c>.
+    /// </summary>
+    public int? CommandTimeout => _environment.CommandTimeout;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>
@@ -256,7 +274,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to prepare.</param>
     /// <param name="createEnumerator">When <see langword="true"/>, compiles a streaming row enumerator as part of preparation.</param>
-    /// <param name="storeInCache">When <see langword="true"/>, stores the prepared command in the plan cache.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
@@ -270,7 +288,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
         }
 
-        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cancellationToken);
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, cancellationToken);
     }
 
     // A query that reads a lazy temporary table is not a single statement: the table must be created on
@@ -479,7 +497,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             command.TimeoutSeconds,
             command.Batch?.MaxBatchSize,
             command.Progress,
-            command.NotifyEvery);
+            command.NotifyEvery,
+            command.BulkCopy);
     }
 
     async Task<int> IBulkInsertExecutor.BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
@@ -495,6 +514,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             command.Batch?.MaxBatchSize,
             command.Progress,
             command.NotifyEvery,
+            command.BulkCopy,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -521,9 +541,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
     /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; only the provider's native path can express them.</param>
     /// <returns>The number of rows written.</returns>
     /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
-    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through the provider's native bulk API.</summary>
@@ -535,10 +556,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
     /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; only the provider's native path can express them.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows written.</returns>
     /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
-    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     private (string Sql, List<Parameter> Parameters) BuildReturningSql(MutationCommand command)

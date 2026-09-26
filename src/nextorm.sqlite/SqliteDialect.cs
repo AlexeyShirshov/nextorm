@@ -44,6 +44,26 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsRawSqlSource => true;
 
+    // SQLite attaches databases as schemas ("main", "temp" or an ATTACHed name); there is no separate
+    // schema level, so a schema/database override is a single qualifier rendered as <qualifier>.<table>.
+    /// <inheritdoc/>
+    public override bool SupportsCrossDatabase => true;
+
+    /// <summary>
+    /// Renders the SQLite single-qualifier form <c>database.table</c> (an attached database). A schema
+    /// and a database name the same level here, so the two overrides are mutually exclusive.
+    /// </summary>
+    public override string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+
+        if (database is not null && schema is not null)
+            throw new NotSupportedException("SQLite treats the database and the schema as the same qualifier; set only one of them.");
+
+        return JoinTableQualifier(database ?? schema, table);
+    }
+
     // SQLite 3.24.0+ expresses a key upsert as INSERT ... ON CONFLICT (<keys>) DO UPDATE SET.
     /// <inheritdoc/>
     public override bool SupportsOnConflict => true;

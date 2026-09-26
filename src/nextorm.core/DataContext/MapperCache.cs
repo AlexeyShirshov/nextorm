@@ -38,4 +38,6 @@ internal static class MapperCache
         if (_cache.Count >= MaxEntries) return;
         _cache.TryAdd(key, map);
     }
+
+    public static void Clear() => _cache.Clear();
 }

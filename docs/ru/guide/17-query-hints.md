@@ -99,6 +99,34 @@ PostgreSQL (без `pg_hint_plan`), ClickHouse и провайдер in-memory �
 Имена рендерятся дословно, поэтому передавайте только доверенные значения, а список хинтов входит в
 ключ плана.
 
+## Метки запроса
+
+`WithTag(string? tag)` прикрепляет к запросу произвольную метку. В отличие от `Hint`, метка — это
+обычный SQL-комментарий (`/* tag */`), а не оптимизаторный хинт, поэтому она рендерится на **всех**
+SQL-провайдерах и не гейтится. Комментарий вставляется сразу после ключевого слова `SELECT`:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .WithTag("reports.orders")
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .ToList();
+```
+
+```sql
+select /* reports.orders */ id from complex_entity where (id > 1)
+```
+
+Метка позволяет опознать запрос в профилировщике, серверном логе или серверном хранилище запросов
+(`pg_stat_activity`, SQL Server Query Store, ClickHouse `system.query_log`). Переносы строк и
+разделители комментария `*/` и `/*` нейтрализуются — SQL Server **вкладывает** блочные комментарии,
+поэтому экранируется и `/*`; комментарий всегда открывается пробелом, так что метка, начинающаяся с
+`!` или `+`, не превратится в executable-комментарий или optimizer-hint MySQL/MariaDB. Метка входит в
+ключ плана, поэтому две команды, различающиеся только меткой, не делят кэшированный план; `null` или
+пустая строка очищают метку. Провайдер in-memory принимает вызов и игнорирует его (SQL не генерируется).
+Если у запроса есть ещё и `Hint(...)`, комментарий-хинт рендерится первым
+(`select /*+ hint */ /* tag */ ...`), чтобы `pg_hint_plan` и оптимизатор MySQL/MariaDB его распознали.
+
 ## Провайдеры
 
 | Провайдер | Хинты запросов |
@@ -126,6 +154,47 @@ var my = dataContext.From<ISimpleEntity>()
 
 Провайдер включается через [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) и [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase));
 построитель отклоняет команду с хинтами у диалекта, который сообщает `false`.
+
+## Хинты join, подзапроса и таблиц в области видимости
+
+`Hint(...)` действует на уровне всей инструкции. Три метода построителя прикрепляют хинт к более узкой
+части запроса; каждый диалект рендерит доступную ему форму либо отклоняет команду:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .WithTableHint("nolock")
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .WithJoinHint("loop")
+    .Select(p => new { p.Item1.Id })
+    .ToList();
+```
+
+* `WithJoinHint(string hint)` прикрепляет хинт к последнему добавленному join (вызывайте после join и
+  до следующего, как `WithStrictness`/`Global`). SQL Server вставляет его внутрь предложения join
+  (`inner loop join`, `left hash join`); хинт на `CROSS`/`APPLY`-join отклоняется. PostgreSQL, MySQL и
+  MariaDB сворачивают его в комментарий `/*+ ... */` уровня инструкции.
+* `WithSubQueryHint(string hint)` прикрепляет хинт к источнику-производной таблице построителя
+  `From(subQuery)`. PostgreSQL/MySQL/MariaDB сворачивают его в `/*+ ... */`; SQL Server отклоняет —
+  T-SQL не позволяет добавить query hint к подзапросу.
+* `WithTablesInScopeHint(params string[] hints)` применяет хинты к каждой физической таблице области
+  видимости запроса. SQL Server добавляет предложение `WITH (hint, ...)` к основной и каждой
+  присоединённой таблице (многотабличный аналог `WithTableHint`); PostgreSQL/MySQL/MariaDB сворачивают
+  его в комментарий уровня инструкции.
+
+```sql
+-- SQL Server:
+select t1.id from simple_entity as [t1] inner loop join complex_entity as [t2] on t1.id = t2.id
+-- PostgreSQL (pg_hint_plan):
+select /*+ HashJoin(t1 t2) */ id from simple_entity as "t1" join complex_entity as "t2" ...
+-- MySQL 8:
+select /*+ JOIN_ORDER(t1, t2) */ id from simple_entity as `t1` join complex_entity as `t2` ...
+```
+
+Пустой хинт отклоняется через `ArgumentException`, а join-хинт без предшествующего join бросает
+`InvalidOperationException`. Для диалектов с inline-комментарием текст хинта рендерится как есть, поэтому
+пишите псевдонимы источников сами (`HashJoin(t1 t2)`): псевдонимы nextorm назначаются на этапе рендера и
+наружу не отдаются. Все три хинта входят в ключ плана. В SQLite, ClickHouse и провайдере in-memory они
+отклоняются через `NotSupportedException`.
 
 ## Модификаторы запроса ClickHouse
 
@@ -159,8 +228,8 @@ settings max_threads = 2
 
 ## Ограничения
 
-* Блокирующие табличные хинты рендерятся только для основной таблицы; хинты на присоединённой таблице пока не
-  входят в API ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) применяется к таблице из `FROM` запроса).
+* Блокирующие табличные хинты рендерятся только для основной таблицы; для присоединённых таблиц
+  используйте `WithTablesInScopeHint` ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) применяется к таблице из `FROM` запроса).
 * Объединение команды с хинтами через операцию над множествами ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) не
   защищено; хинт «уезжает» в ту ветку, к которой был привязан, и этого следует избегать.
 
@@ -173,6 +242,7 @@ settings max_threads = 2
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
+`src/nextorm.core/Builders/EntityBuilder.cs` (`WithTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

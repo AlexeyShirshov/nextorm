@@ -98,7 +98,7 @@ range-типа) и динамическая схема табличных ист
 | `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **<span style="color:green">реализовано</span>** (~~G7~~): [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения) |
 | `#1645` | table-valued **parameters** для хранимых процедур (TVP) | **Gap** (G8) → [`todo_tvp.md`](../roadmap/todo_tvp.md); смежно [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
 | `#1994` | open-generic `TypeConverter` | **Done** (G1, фазы 1–2: `IPropertyValueConverter`/`ValueConverter<,>`/`[ValueConverter]`/`.HasConversion`, константы в предикатах/`IN` и скалярных проекциях) → [Value converters](../../guide/30-value-converters.md) |
-| `#3009` | ограничение размера кэша запросов | **Gap** (G10) |
+| `#3009` | ограничение размера кэша запросов | **<span style="color:green">Done</span>** (G10): `DataContextCache.Clear()`, `UseQueryCache(false)`, `UseCacheSlidingExpiration` (ленивое вытеснение по времени) → [Query reuse](../../guide/15-query-reuse.md#cache-controls) |
 | `#4039` | логирование SQL-параметров | **<span style="color:green">Реализовано</span>** (интерцепторы, 1.0.6-alpha): `IQueryInterceptor` (`CommandInitialized`/`CommandExecuting`) отдаёт привязанную команду, интерцептор читает `command.Parameters` → [гайд 27](../../guide/27-interceptors.md) |
 | `#4405` | concurrency check с явными исключениями | **By design** (~~G6~~): достижимо через `Where` + число затронутых строк; гайд [Оптимистичная конкурентность и отслеживание изменений](../../guide/29-optimistic-concurrency.md) |
 | `#4199` | «Property X is not defined for interface type Y» | **Planned** (`todo_interface_poco.md`) |
@@ -211,12 +211,16 @@ SQL Server/SQLite/ClickHouse; публичная страница — [`docs/gui
 (+RU). Остаток (sub-day promotion §8.2, ширина `date_diff` §8.3) — **<span style="color:green">реализовано (1.0.6-alpha)</span>**, см.
 [Duration columns](../../guide/26-duration-columns.md)
 
-**G10. Ограничение кэша планов + логирование параметров — <span style="color:green">частично Done</span>.** `linq2db#3009` (cache size), `#4039`
+**G10. Ограничение кэша планов + логирование параметров — <span style="color:green">Done</span>.** `linq2db#3009` (cache size), `#4039`
 (parameter logging). **<span style="color:green">Реализовано</span>** логирование параметров: фаза 1 интерцепторов (1.0.6-alpha)
 отдаёт привязанную команду на `CommandInitialized`/`CommandExecuting`, интерцептор читает `command.Parameters`
-([гайд 27](../../guide/27-interceptors.md)). Остаётся `#3009` — риск неограниченного роста process-wide
-`DataContextCache` (`MapperCache` уже ограничен `MaxEntries = 4096`); действие: добавить LRU/размер в
-кэш-инфраструктуру.
+([гайд 27](../../guide/27-interceptors.md)). **<span style="color:green">Реализовано</span>** управление кэшем
+([`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md)): `DataContextCache.Clear()`
+(process-wide кэши + план-кэш), `UseQueryCache(false)` / `QueryCacheEnabled` (локальный `storeInCache: false`,
+без sticky `QueryCommand.Cache`) и `UseCacheSlidingExpiration(ttl)` — ленивое вытеснение записей
+process-wide `DataContextCache` по времени, закрывающее риск неограниченного роста без LRU; жёсткий предел
+размера `MapperCache` (`MaxEntries = 4096`) сохранён. Публичная страница —
+[Query reuse: cache controls](../../guide/15-query-reuse.md#cache-controls).
 
 **~~G11~~. PostgreSQL range/`Overlaps` — <span style="color:green">Done</span> (1.0-b.1).**
 `linq2db#4562`; shipped `Sql.Row.Overlaps` (6.5.0). Добавлены provider-agnostic `NextORM.Core.Range<T>`
@@ -351,11 +355,11 @@ integration-тест. Подробности — [Duration columns](../../guide/
 | `GroupJoin` (grouped inner, `LEFT JOIN`) | [`LeftJoin`](../../guide/03-joins.md) + `GROUP BY`/агрегат | **By design** |
 | `DefaultIfEmpty` (left-join-семантика `SelectMany`) | [`LeftJoin`](../../guide/03-joins.md) / `OuterApply` | **By design** |
 | `AsSubQuery` | `From(QueryCommand)` (производная таблица); `As` — workstream 38 | **By design / Planned** |
-| `TagQuery` (комментарий-метка в SQL) | нет | **Gap** → [`todo_query_tag.md`](../roadmap/todo_query_tag.md) |
+| `TagQuery` (комментарий-метка в SQL) | [`WithTag`](../../guide/17-query-hints.md) (`/* tag */` сразу после `SELECT`) | **Done** |
 | `InlineParameters` (инлайн констант вместо параметров) | нет (всегда параметризация) | **By design** — расходится с дизайном план-кэша |
 | `RemoveOrderBy` | нет; билдер строится снизу вверх, порядок задаёт `OrderBy` | **N/A** (не нужно без `IQueryable`-композиции) |
-| `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | `QueryCommand.Hint` только statement-level; table hint (SQL Server), index hint | **Gap** → [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md) |
-| `WithTableExpression` / runtime-переопределение `TableName`/`SchemaName`/`ServerName` | `From("table")` + `TableAlias`; `BulkInsertOptions.TableName` (только bulk) | **Gap** → [`todo_source_override.md`](../roadmap/todo_source_override.md) |
+| `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | **<span style="color:green">Реализовано</span>** (issue #96): `WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint` — SQL Server join-хинт внутри `JOIN` (`inner loop join`) и tables-in-scope как `WITH (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`, SQLite/ClickHouse/in-memory отклоняют; [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md) (shipped) | **Done** |
+| `WithTableExpression` / runtime-переопределение `TableName`/`SchemaName`/`ServerName` | `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression` на `EntityBuilder<TEntity>` (per-query; SQL Server 4-part, MySQL/MariaDB/ClickHouse `db.table`, PG/SQLite `schema.table`) | **Shipped** (см. [Per-query source overrides](../../guide/01-querying-and-projections.md#per-query-source-overrides)) |
 
 Источник списка — публичная поверхность `LinqExtensions` (`Source/LinqToDB/LinqExtensions.cs`); отсутствие
 в nextorm проверено по `src/**` (совпадений `TagQuery`/`InlineParameters`/`JoinHint`/`SubQueryHint`/
@@ -379,8 +383,8 @@ statement/table/index).
 | Value converters (`IValueConverter`/`SetConverter`) | `ValueConverter<,>`/`[ValueConverter]`/`HasConversion` ([Value converters](../../guide/30-value-converters.md)) | **Паритет** |
 | Command timeout (`UseCommandTimeout`/`WithCommandTimeout`) | только `BulkInsertOptions.TimeoutSeconds`; для запросов — через интерсептор | **Gap** → [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md) |
 | Dynamic columns (`DynamicColumnsStore`/`DynamicColumnAccessor`) | `[DynamicColumns]`/`DynamicColumnsStore()` — read side: не сопоставленные колонки строки попадают в словарь (`select <mapped>, *`), in-memory паритет ([Dynamic columns](../../guide/32-dynamic-columns.md)) | **Partial** — read side shipped; write side (ключи словаря колонками) deferred → [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md) |
-| `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions` без этих флагов | **Gap** → [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md) |
-| Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | per-command `Cache=false`; размер — хвост G10 | **Gap** → [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
+| `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions.CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (SQL Server native; остальные пути — явный `NotSupportedException`) | **Частичный паритет** (ClickHouse parallel/`WithoutSession` — отложены, `BulkCopyType` не опция, `UseInternalTransaction` — by design; см. [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md)) |
+| Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | `DataContextCache.Clear()` / `UseQueryCache(false)` / `UseCacheSlidingExpiration(ttl)` | **<span style="color:green">Done</span>** → [Query reuse: cache controls](../../guide/15-query-reuse.md#cache-controls) |
 | Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
 | DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **Out-of-scope** (см. §4) |
 | Хранимые процедуры / сырой `Execute*` / несколько result-set | `WithSql` (только `SELECT`-источник) | **Planned** ([`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md), G4-хвост) |
@@ -413,7 +417,7 @@ statement/table/index).
 | P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../guide/27-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); ~~G17~~ — **<span style="color:green">реализовано</span>** (интерфейсные коллекции + явный отказ от неподдерживаемого индексера → [Filtering](../../guide/02-filtering-where.md#captured-collection-lookup-dictcolumn)); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); G14 — проверить |
-| P2 | Слепое пятно shipped-`LinqExtensions` (§4): заведены [`todo_query_tag.md`](../roadmap/todo_query_tag.md), [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md), [`todo_source_override.md`](../roadmap/todo_source_override.md) |
+| P2 | Слепое пятно shipped-`LinqExtensions` (§4): ~~`TagQuery`~~ — **<span style="color:green">реализовано</span>** ([`WithTag`](../../guide/17-query-hints.md), комментарий `/* tag */` сразу после `SELECT`); ~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ — **<span style="color:green">реализовано</span>** (issue #96, [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md)); ~~[`todo_source_override.md`](../roadmap/todo_source_override.md)~~ — **<span style="color:green">реализовано</span>** (per-query `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) |
 | P2 | Инфраструктурные Gap (§4): [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md), ~~[`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md) (read side shipped — [Dynamic columns](../../guide/32-dynamic-columns.md); write side deferred)~~, [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md), [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
 
@@ -438,7 +442,8 @@ PostgreSQL (`MutationCteQuery<TResult>`); **~~G5~~** — массовая вст
 **~~G12~~** — C# string-семантика (ordinal-трансляция + `string.Format`), вместе с колонковой коллацией
 nextorm `#28` ([Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация));
 **~~G15~~** — PG JSONPath уже реализован (`jsonb_path_*`, `jsonpath(cast)`, TVF); **~~G10~~** (логирование
-параметров) — через интерцепторы (фаза 1, [гайд 27](../../guide/27-interceptors.md)); **~~linq2db#5965~~**
+параметров) — через интерцепторы (фаза 1, [гайд 27](../../guide/27-interceptors.md)), управление кэшем —
+`Clear()`/`UseQueryCache(false)`/`UseCacheSlidingExpiration` ([Query reuse: cache controls](../../guide/15-query-reuse.md#cache-controls)); **~~linq2db#5965~~**
 — sub-day-операнд продвигается `ISqlDialect.PromoteDateOperand`
 ([Duration columns](../../guide/26-duration-columns.md)§9.4); **~~G20~~** — ширина `date_diff` закрыта
 аддитивно (`date_diff_big → long?`, `ISqlDialect.MakeDateDiffBig`).
@@ -461,11 +466,12 @@ captured-коллекции, включая интерфейсные типы; �
 linq2db (`SelectMany`/`GroupJoin`/`DefaultIfEmpty`/`AsSubQuery`) и его hint/table-расширения не попадали
 ни в §1–§3, ни в `sql-capabilities-gap-analysis.md`. `SelectMany`/`GroupJoin` классифицированы **By design**
 (эквивалент — `CrossApply`/`OuterApply`/`LeftJoin`, SQL-провайдеры бросают `NotSupportedException`);
-новые **Gap**-пункты — `TagQuery`, `JoinHint`/`SubQueryHint`/`TablesInScopeHint` и per-query
-переопределение источника (`WithTableExpression`/`TableName`). По этим трём Gap-пунктам заведены
-рабочие планы [`todo_query_tag.md`](../roadmap/todo_query_tag.md),
-[`todo_hint_variants.md`](../roadmap/todo_hint_variants.md),
-[`todo_source_override.md`](../roadmap/todo_source_override.md).
+**Gap**-пункты — ~~`TagQuery`~~ (**<span style="color:green">реализовано</span>**: [`WithTag`](../../guide/17-query-hints.md)),
+~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ (**<span style="color:green">реализовано</span>**: issue #96,
+[`todo_hint_variants.md`](../roadmap/todo_hint_variants.md)) и per-query переопределение источника
+(`WithTableExpression`/`TableName`) — **<span style="color:green">реализовано</span>**
+(`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`, см. [Per-query source
+overrides](../../guide/01-querying-and-projections.md#per-query-source-overrides)). Планы сохранены со статусом.
 
 **Добавлено (25.09.2026, инфраструктура):** в §4 заведена вторая подсекция — сравнение инфраструктуры
 linq2db (Data Connection System / Mapping / Query Processing). Паритет подтверждён по соединениям,

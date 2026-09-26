@@ -207,6 +207,34 @@ and MySQL/MariaDB (`INSERT IGNORE`); it is rejected on SQL Server, and on ClickH
 > table — when `Table(...)` retargets a write, the caller is responsible for the target's identity
 > shape.
 
+## SQL Server bulk-copy options
+
+The native `SqlBulkCopy` path exposes four flags that the PostgreSQL `COPY` path and the portable
+`INSERT ... VALUES` path cannot express. They are off by default, matching `SqlBulkCopyOptions.Default`:
+
+```csharp
+var written = ctx.BulkInsertInto<IOrder>(o => o
+        .TableLock()          // SqlBulkCopyOptions.TableLock
+        .CheckConstraints()   // SqlBulkCopyOptions.CheckConstraints
+        .KeepNulls()          // SqlBulkCopyOptions.KeepNulls
+        .FireTriggers())      // SqlBulkCopyOptions.FireTriggers
+    .Values(orders)
+    .BulkInsert();
+```
+
+| Option | Builder method | Effect |
+|---|---|---|
+| `CheckConstraints` | `CheckConstraints()` | check CHECK / FOREIGN KEY constraints during the copy (SQL Server ignores them by default) |
+| `TableLock` | `TableLock()` | take a table-level bulk-update lock for the duration of the copy |
+| `KeepNulls` | `KeepNulls()` | write explicit `NULL`s instead of the destination column's `DEFAULT` |
+| `FireTriggers` | `FireTriggers()` | fire `INSERT` triggers for the copied rows |
+
+`null` and `false` are equivalent: the flag is not set and the write keeps its current behavior. Requesting
+a flag on a path that cannot express it throws a `NotSupportedException` naming the flags instead of
+silently ignoring them — this covers PostgreSQL `COPY`, the portable `INSERT ... VALUES` used by
+MySQL/MariaDB/SQLite/ClickHouse, and SQL Server itself whenever `Returning*` or `KeepIdentity` switches the
+write to the portable path (so `KeepIdentity` and the bulk-copy flags cannot be combined).
+
 ## Inspecting the SQL
 
 `ToSql()` renders the parameterised SQL the portable path would execute for the first batch, without
@@ -238,6 +266,10 @@ ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 | `TableName` / `TableSchema` | `Table(name)` / `Table(schema, name)` | override the mapped destination table, optionally schema-qualified |
 | `KeepIdentity` | `KeepIdentity()` | write explicit identity values (`OVERRIDING SYSTEM VALUE` on PostgreSQL, `SET IDENTITY_INSERT ... ON/OFF` on SQL Server); ignored when the entity has no identity column |
 | `IgnoreDuplicates` | `IgnoreDuplicates()` | skip rows that violate a unique constraint |
+| `CheckConstraints` | `CheckConstraints()` | check CHECK/FOREIGN KEY constraints; SQL Server native only |
+| `TableLock` | `TableLock()` | take a table-level bulk-update lock; SQL Server native only |
+| `KeepNulls` | `KeepNulls()` | write explicit `NULL`s instead of the destination `DEFAULT`; SQL Server native only |
+| `FireTriggers` | `FireTriggers()` | fire `INSERT` triggers; SQL Server native only |
 | `TimeoutSeconds` | `Timeout(seconds)` | command timeout; SQL Server native only |
 | `Progress` / `NotifyEvery` | `NotifyAfter(rows, onRows)` | progress with the cumulative written-row count |
 | `ProgressCancellationTokenSource` | `ProgressCancellationTokenSource(source)` | token passed to the progress callback |
@@ -253,15 +285,15 @@ On the returned builder:
 
 ## Provider support
 
-| Provider | Native bulk | Target override | `Returning` | `IgnoreDuplicates` | `KeepIdentity` |
-|---|---|---|---|---|---|
-| PostgreSQL | binary `COPY` | `schema.table` | `RETURNING` (portable) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` |
-| SQL Server | `SqlBulkCopy` | `schema.table` | `OUTPUT` (portable) | — (rejected) | `SET IDENTITY_INSERT` |
-| MySQL | — (portable) | `db.table` | — | `INSERT IGNORE` | explicit values |
-| MariaDB | — (portable) | `db.table` | — | `INSERT IGNORE` | explicit values |
-| SQLite | — (portable) | `schema.table` | `RETURNING` (portable) | `INSERT OR IGNORE` | explicit values |
-| ClickHouse | — (portable) | `db.table` | — | no-op (no uniqueness) | — |
-| In-memory | — | — | — | — | `NotSupportedException` (read-only) |
+| Provider | Native bulk | Target override | `Returning` | `IgnoreDuplicates` | `KeepIdentity` | Bulk-copy flags |
+|---|---|---|---|---|---|---|
+| PostgreSQL | binary `COPY` | `schema.table` | `RETURNING` (portable) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` | — (rejected) |
+| SQL Server | `SqlBulkCopy` | `schema.table` | `OUTPUT` (portable) | — (rejected) | `SET IDENTITY_INSERT` | `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` |
+| MySQL | — (portable) | `db.table` | — | `INSERT IGNORE` | explicit values | — (rejected) |
+| MariaDB | — (portable) | `db.table` | — | `INSERT IGNORE` | explicit values | — (rejected) |
+| SQLite | — (portable) | `schema.table` | `RETURNING` (portable) | `INSERT OR IGNORE` | explicit values | — (rejected) |
+| ClickHouse | — (portable) | `db.table` | — | no-op (no uniqueness) | — | — (rejected) |
+| In-memory | — | — | — | — | `NotSupportedException` (read-only) | — (read-only) |
 
 ## See also
 

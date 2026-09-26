@@ -73,6 +73,10 @@ public class PlanKeyUniquenessTests
         yield return ("base-scalar", ctx => E(ctx).Select(x => x.Id));
         yield return ("base-identity", ctx => E(ctx).Select(x => x));
 
+        // Query tag
+        yield return ("tag-a", ctx => Row(E(ctx).WithTag("a")));
+        yield return ("tag-b", ctx => Row(E(ctx).WithTag("b")));
+
         // WHERE
         yield return ("where-gt0", ctx => Row(E(ctx).Where(x => x.Id > 0)));
         yield return ("where-gt1", ctx => Row(E(ctx).Where(x => x.Id > 1)));
@@ -183,6 +187,16 @@ public class PlanKeyUniquenessTests
         yield return ("table-hint", ctx => Row(E(ctx).WithTableHint("INDEX(ix)")));
         yield return ("index-hint", ctx => Row(E(ctx).WithIndex(IndexHintKind.Force, "ix")));
         yield return ("index-hint-kind", ctx => Row(E(ctx).WithIndex(IndexHintKind.Ignore, "ix")));
+        yield return ("join-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("hash")
+            .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
+        yield return ("join-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("loop")
+            .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
+        yield return ("subquery-hint", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }))
+            .WithSubQueryHint("NestLoop(t1)").Select(t => new PKRow { Id = t.Id, Int = t.Int }));
+        yield return ("subquery-hint-other", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }))
+            .WithSubQueryHint("SeqScan(t1)").Select(t => new PKRow { Id = t.Id, Int = t.Int }));
+        yield return ("scope-hint", ctx => Row(E(ctx).WithTablesInScopeHint("nolock")));
+        yield return ("scope-hint-other", ctx => Row(E(ctx).WithTablesInScopeHint("index(ix)")));
 
         // PIVOT / UNPIVOT
         yield return ("pivot", ctx => E(ctx).Pivot(PivotAggregate.Count, s => s.Id, s => s.Int, PivotValue.Create("1"))

@@ -97,6 +97,18 @@ public interface ISqlDialect
     /// </summary>
     string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
+    /// Renders the join keyword for <paramref name="joinType"/> with an optional join-level
+    /// <paramref name="hint"/> placed per the provider's syntax (SQL Server inserts it before the
+    /// <c>JOIN</c> keyword, e.g. <c>inner loop join</c>). Only called with a non-<c>null</c> hint when
+    /// <see cref="SupportsJoinHints"/> is <c>true</c>; the base implementation throws, so a dialect that
+    /// did not opt in never emits an unsupported hint. When <paramref name="hint"/> is <c>null</c> this
+    /// delegates to <see cref="MakeJoinKeyword(JoinType, JoinStrictness, bool, KeywordCase)"/>.
+    /// </summary>
+    string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, string? hint, KeywordCase keywordCase = KeywordCase.Lower)
+        => hint is null
+            ? MakeJoinKeyword(joinType, strictness, isGlobal, keywordCase)
+            : throw new NotSupportedException("Join hints are not supported by this SQL dialect");
+    /// <summary>
     /// True when the provider can render the <c>* ALL</c> variants of INTERSECT and EXCEPT
     /// (<c>intersect all</c> / <c>except all</c>). UNION ALL is not covered by this flag because it is
     /// universally supported. SQL Server does not support either variant, and SQLite has no
@@ -143,6 +155,39 @@ public interface ISqlDialect
     /// rejected by the SQL builder on a dialect that does not opt in.
     /// </summary>
     bool SupportsTableHints { get; }
+    /// <summary>
+    /// True when the provider can render a hint attached to a specific join inside the join clause
+    /// (SQL Server <c>INNER LOOP JOIN</c>). The safe default is <c>false</c>; a command that carries a
+    /// join hint is rejected by the SQL builder on a dialect that does not opt in.
+    /// </summary>
+    bool SupportsJoinHints => false;
+    /// <summary>
+    /// True when the provider can render a hint attached to a derived-table subquery (PostgreSQL
+    /// <c>pg_hint_plan</c> and MySQL/MariaDB optimizer hints, through the statement-level inline hint
+    /// comment). SQL Server has no such form (a query hint cannot be appended to a subselect), so its
+    /// default is <c>false</c> and a command carrying a subquery hint is rejected there.
+    /// </summary>
+    bool SupportsSubQueryHints => false;
+    /// <summary>
+    /// True when the provider can render a hint on every physical table in the command's scope. On SQL
+    /// Server that is a <c>WITH (...)</c> table hint on each table; the inline-comment dialects fold the
+    /// same hint into the statement-level <c>/*+ ... */</c>. The safe default is <c>false</c>.
+    /// </summary>
+    bool SupportsTablesInScopeHints => false;
+    /// <summary>
+    /// Renders the tables-in-scope hints appended to a physical table name (SQL Server
+    /// <c>WITH (...)</c>). Only called when <see cref="SupportsTablesInScopeHints"/> is <c>true</c> and
+    /// the hints are non-empty.
+    /// </summary>
+    string MakeTablesInScopeHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+    /// <summary>
+    /// True when the provider expresses join/subquery/tables-in-scope hints as a statement-level inline
+    /// optimizer comment (PostgreSQL <c>pg_hint_plan</c>, MySQL/MariaDB <c>/*+ ... */</c>) rather than a
+    /// structural clause. The engine folds every variant into that comment. The safe default is
+    /// <c>false</c>.
+    /// </summary>
+    bool SupportsInlineHints => false;
     /// <summary>
     /// True when the provider can render a trailing <c>FOR JSON</c> clause (SQL Server). The safe
     /// default is <c>false</c>; a command that carries one is rejected on a dialect that does not opt in.
@@ -747,6 +792,42 @@ public interface ISqlDialect
     /// </para>
     /// </summary>
     string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"") + "\"";
+    /// <summary>
+    /// True when the provider can qualify a table with a database/schema name that differs from the
+    /// current connection's default (SQL Server, MySQL, MariaDB, ClickHouse) or with an attached SQLite
+    /// database. The safe default is <see langword="false"/>, so a <c>WithDatabase</c> override is
+    /// rejected by the SQL builder on a dialect that did not opt in. Declared as a default interface
+    /// method so that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsCrossDatabase => false;
+    /// <summary>
+    /// True when the provider can qualify a table with a linked (remote) server name. The safe default
+    /// is <see langword="false"/> (only SQL Server opts in), so a <c>WithServer</c> override is rejected
+    /// by the SQL builder on a dialect that did not opt in. Declared as a default interface method so
+    /// that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsLinkedServer => false;
+    /// <summary>
+    /// Renders a possibly qualified table name from its parts, omitting the parts that are <c>null</c>.
+    /// The base implementation renders <c>schema.table</c> and rejects the server/database levels; a
+    /// dialect that opted in with <see cref="SupportsCrossDatabase"/>/<see cref="SupportsLinkedServer"/>
+    /// overrides it to place the supported levels (SQL Server <c>server.database.schema.table</c>,
+    /// MySQL/MariaDB/ClickHouse/SQLite a single <c>database.table</c> qualifier). Reached only for the
+    /// levels the provider supports.
+    /// </summary>
+    /// <param name="server">The linked-server name, or <c>null</c>.</param>
+    /// <param name="database">The database name, or <c>null</c>.</param>
+    /// <param name="schema">The schema name, or <c>null</c>.</param>
+    /// <param name="table">The unqualified table name.</param>
+    /// <returns>The qualified table name (unquoted).</returns>
+    string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+        if (database is not null)
+            throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect.");
+        return string.IsNullOrEmpty(schema) ? table : schema + "." + table;
+    }
     /// <summary>
     /// Quotes a column alias when it is referenced from an outer query. Providers that emit quoted
     /// aliases (so they survive as case-sensitive identifiers) must quote the reference accordingly.

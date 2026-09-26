@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Threading;
 
 namespace NextORM.Core;
 
@@ -19,10 +19,12 @@ namespace NextORM.Core;
 /// </remarks>
 public static class DataContextCache
 {
-    private readonly static ConcurrentDictionary<Type, IEntityMetadata> _metadata = new();
-    private readonly static ConcurrentDictionary<Type, SelectExpression[]> _selectListCache = new();
-    private readonly static ExpressionCache<Delegate> _expCache = new();
-    private readonly static ExpressionCache<Func<object?, object?>> _inValuesCache = new();
+    private readonly static TimedDictionary<Type, IEntityMetadata> _metadata = new();
+    private readonly static TimedDictionary<Type, SelectExpression[]> _selectListCache = new();
+    private readonly static TimedDictionary<ExpressionKey, Delegate> _expCache = new();
+    private readonly static TimedDictionary<ExpressionKey, Func<object?, object?>> _inValuesCache = new();
+    private static long _cacheSlidingExpirationTicks;
+
     /// <summary>
     /// Entity metadata resolved for each CLR type, keyed by that type. Populated lazily on the first
     /// <c>From&lt;T&gt;</c> call and reused for the rest of the process.
@@ -44,4 +46,44 @@ public static class DataContextCache
     /// </summary>
     public static IDictionary<ExpressionKey, Func<object?, object?>> InValuesCache => _inValuesCache;
 
+    /// <summary>
+    /// Sliding expiration applied to every process-wide cache this class owns. An entry that has not
+    /// been read within the window is evicted lazily on the next access; every read refreshes it.
+    /// <see cref="TimeSpan.Zero"/> (the default) disables expiration and adds no per-access cost.
+    /// Set through <c>DataContextBuilder.UseCacheSlidingExpiration</c>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The assigned value is negative.</exception>
+    public static TimeSpan CacheSlidingExpiration
+    {
+        get => TimeSpan.FromTicks(Interlocked.Read(ref _cacheSlidingExpirationTicks));
+        set
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, TimeSpan.Zero);
+            Interlocked.Exchange(ref _cacheSlidingExpirationTicks, value.Ticks);
+        }
+    }
+
+    /// <summary>
+    /// Clears every process-wide cache in the engine: the metadata, select-list, expression and
+    /// in-values caches owned by this class, the compiled row-mapper cache, the projection-alias and
+    /// FROM caches, and the thread-local plan cache. The next query rebuilds whatever it needs.
+    /// </summary>
+    /// <remarks>
+    /// The plan cache is <c>[ThreadStatic]</c>, so a plan created on another thread is dropped lazily
+    /// when that thread next touches the cache (the store is invalidated through a process-wide
+    /// generation counter). A context's per-instance caches (for example
+    /// <c>InMemoryDataContext.CommandIndex</c>) are not reached; clear those with
+    /// <c>PurgeQueryCache()</c>.
+    /// </remarks>
+    public static void Clear()
+    {
+        _metadata.Clear();
+        _selectListCache.Clear();
+        _expCache.Clear();
+        _inValuesCache.Clear();
+        MapperCache.Clear();
+        ProjectionAliasCache.Clear();
+        QueryPlanner.ClearFromCache();
+        QueryPlanStore.Clear();
+    }
 }

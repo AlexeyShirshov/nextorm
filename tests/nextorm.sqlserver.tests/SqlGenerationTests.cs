@@ -22,6 +22,7 @@ public class SqlGenerationTests
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
+
     [Fact]
     public void DynamicColumnsStore_ShouldAppendStar()
     {
@@ -29,6 +30,26 @@ public class SqlGenerationTests
         var e = ctx.From<DynamicColumnsEntity>();
 
         SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    [Fact]
+    public void QueryTag_ShouldRenderBlockCommentAfterSelect()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTag("app.list").Select(x => new { x.Id }))
+            .Should().Be("select /* app.list */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryTag_ShouldNeutraliseCommentDelimitersAndNewlines()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithTag("a*/b/*c\r\nd"))
+            .Should().Be("select /* a* /b/ *c d */ id from simple_entity");
     }
 
     [Fact]
@@ -1790,6 +1811,109 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("from simple_entity with (nolock) as [t1] join complex_entity as [t2]");
+    }
+
+    [Fact]
+    public void JoinHint_ShouldEmitInsideJoin()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinHint("loop")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("inner loop join complex_entity as [t2] on cast(t1.id as bigint) = t2.id");
+    }
+
+    [Fact]
+    public void JoinHint_OnLeftJoin_ShouldKeepOuterKeyword()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .LeftJoin(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinHint("hash")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("left hash join complex_entity as [t2]");
+    }
+
+    [Fact]
+    public void JoinHint_OnCrossJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossJoin(ctx.From<IComplexEntity>())
+            .WithJoinHint("hash")
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*join hint*");
+    }
+
+    [Fact]
+    public void TablesInScopeHint_ShouldApplyToEveryTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithTablesInScopeHint("nolock")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("from simple_entity with (nolock) as [t1] join complex_entity with (nolock) as [t2]");
+    }
+
+    [Fact]
+    public void TablesInScopeHint_ShouldFoldIndexHintIntoTheSameClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .WithTableHint("rowlock")
+            .WithIndex("idx_id")
+            .WithTablesInScopeHint("nolock")
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain("from simple_entity with (rowlock, nolock, index(idx_id))");
+    }
+
+    [Fact]
+    public void SubQueryHint_ShouldThrowOnSqlServer()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
+    }
+
+    [Fact]
+    public void VariantHints_ShouldCoexistWithStatementAndTableHints()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .WithTableHint("nolock")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinHint("hash")
+            .Select(p => new { p.Item1.Id })
+            .Hint("recompile"));
+
+        sql.Should().Contain("from simple_entity with (nolock) as [t1] inner hash join complex_entity as [t2]");
+        sql.Should().EndWith("option (recompile)");    }
+
+    [Fact]
+    public void EmptyJoinHint_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id);
+
+        var act = () => joined.WithJoinHint("   ");
+
+        act.Should().Throw<ArgumentException>();
     }
 
     [Fact]

@@ -654,6 +654,25 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return cmd;
     }
     /// <summary>
+    /// Returns a new command carrying a query tag, rendered as a block comment (<c>/* tag */</c>)
+    /// immediately after the <c>SELECT</c> keyword so the statement is identifiable in logs, profilers
+    /// and server-side query stores. The tag is independent of <see cref="Hint(System.String[])"/>: it is
+    /// a plain comment, not an optimizer hint, and it is rendered on every SQL provider. Line breaks and
+    /// the comment delimiters <c>*/</c> and <c>/*</c> are neutralised, so the tag cannot break out of the
+    /// comment. The tag is part of the plan key; passing <c>null</c> or an empty string clears it.
+    /// </summary>
+    /// <param name="tag">The tag text to render, or <c>null</c> to clear the tag.</param>
+    /// <returns>A new command carrying the tag.</returns>
+    public QueryCommand<TResult> WithTag(string? tag)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.Tag = string.IsNullOrEmpty(tag) ? null : tag;
+        return cmd;
+    }
+    /// <summary>
     /// Overrides identifier quoting for this command: when <paramref name="value"/> is <c>true</c>,
     /// physical table and column names are quoted with the provider's delimiter (<c>"id"</c> on
     /// PostgreSQL/SQLite, <c>[id]</c> on SQL Server, `` `id` `` on MySQL/MariaDB/ClickHouse); when
@@ -698,6 +717,24 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         cmd.ResetPreparation();
         cmd._from = source;
         cmd.KeywordCase = keywordCase;
+        return cmd;
+    }
+    /// <summary>
+    /// Overrides the command timeout in seconds for this command: the value is applied to the
+    /// underlying database command and takes precedence over the context default set with
+    /// <c>DataContextBuilder.UseCommandTimeout</c>. A value of zero or less means the provider default.
+    /// The override participates in the plan-cache key, so two otherwise identical commands with
+    /// different timeouts do not share a cached command and the value never leaks to another command.
+    /// </summary>
+    /// <param name="seconds">The command timeout in seconds; zero or less uses the provider default.</param>
+    /// <returns>A new command carrying the timeout override.</returns>
+    public QueryCommand<TResult> WithCommandTimeout(int seconds)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.CommandTimeout = seconds > 0 ? seconds : null;
         return cmd;
     }
     /// <summary>

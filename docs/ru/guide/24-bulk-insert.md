@@ -209,6 +209,34 @@ MySQL/MariaDB (`INSERT IGNORE`); на SQL Server он отклоняется, а
 > фактической целевой таблице: при перенацеливании через `Table(...)` ответственность за identity-форму
 > целевой таблицы лежит на вызывающем.
 
+## Опции bulk copy в SQL Server
+
+Нативный путь `SqlBulkCopy` даёт четыре флага, которые не выразимы ни в `COPY` PostgreSQL, ни в
+портируемом `INSERT ... VALUES`. По умолчанию они выключены — как `SqlBulkCopyOptions.Default`:
+
+```csharp
+var written = ctx.BulkInsertInto<IOrder>(o => o
+        .TableLock()          // SqlBulkCopyOptions.TableLock
+        .CheckConstraints()   // SqlBulkCopyOptions.CheckConstraints
+        .KeepNulls()          // SqlBulkCopyOptions.KeepNulls
+        .FireTriggers())      // SqlBulkCopyOptions.FireTriggers
+    .Values(orders)
+    .BulkInsert();
+```
+
+| Опция | Метод builder | Действие |
+|---|---|---|
+| `CheckConstraints` | `CheckConstraints()` | проверять ограничения CHECK / FOREIGN KEY при копировании (по умолчанию SQL Server их игнорирует) |
+| `TableLock` | `TableLock()` | взять табличную bulk-блокировку на время копирования |
+| `KeepNulls` | `KeepNulls()` | писать явные `NULL` вместо `DEFAULT` целевой колонки |
+| `FireTriggers` | `FireTriggers()` | запускать `INSERT`-триггеры для копируемых строк |
+
+`null` и `false` равнозначны: флаг не выставляется, поведение записи не меняется. Запрос флага на пути,
+который его не выражает, бросает `NotSupportedException` с перечислением флагов (а не игнорирует их
+молча) — это касается `COPY` PostgreSQL, портируемого `INSERT ... VALUES` в MySQL/MariaDB/SQLite/ClickHouse
+и самого SQL Server, когда `Returning*` или `KeepIdentity` переключает запись на портируемый путь
+(поэтому `KeepIdentity` и bulk-copy флаги не комбинируются).
+
 ## Просмотр SQL
 
 `ToSql()` рендерит параметризованный SQL, который выполнил бы портируемый путь для первого батча, не
@@ -240,6 +268,10 @@ ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 | `TableName` / `TableSchema` | `Table(name)` / `Table(schema, name)` | переопределение целевой таблицы, при желании schema-квалифицированной |
 | `KeepIdentity` | `KeepIdentity()` | запись явных значений identity (`OVERRIDING SYSTEM VALUE` в PostgreSQL, `SET IDENTITY_INSERT ... ON/OFF` в SQL Server); игнорируется, если у сущности нет identity-колонки |
 | `IgnoreDuplicates` | `IgnoreDuplicates()` | пропуск строк, нарушающих уникальность |
+| `CheckConstraints` | `CheckConstraints()` | проверять ограничения CHECK/FOREIGN KEY; только нативный путь SQL Server |
+| `TableLock` | `TableLock()` | табличная bulk-блокировка; только нативный путь SQL Server |
+| `KeepNulls` | `KeepNulls()` | писать явные `NULL` вместо `DEFAULT`; только нативный путь SQL Server |
+| `FireTriggers` | `FireTriggers()` | запускать `INSERT`-триггеры; только нативный путь SQL Server |
 | `TimeoutSeconds` | `Timeout(seconds)` | таймаут команды; только нативный путь SQL Server |
 | `Progress` / `NotifyEvery` | `NotifyAfter(rows, onRows)` | прогресс с накопленным числом записанных строк |
 | `ProgressCancellationTokenSource` | `ProgressCancellationTokenSource(source)` | токен, передаваемый в колбэк прогресса |
@@ -255,15 +287,15 @@ ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 
 ## Поддержка провайдеров
 
-| Провайдер | Нативный bulk | Override цели | `Returning` | `IgnoreDuplicates` | `KeepIdentity` |
-|---|---|---|---|---|---|
-| PostgreSQL | бинарный `COPY` | `schema.table` | `RETURNING` (портируемо) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` |
-| SQL Server | `SqlBulkCopy` | `schema.table` | `OUTPUT` (портируемо) | — (отклоняется) | `SET IDENTITY_INSERT` |
-| MySQL | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения |
-| MariaDB | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения |
-| SQLite | — (портируемо) | `schema.table` | `RETURNING` (портируемо) | `INSERT OR IGNORE` | явные значения |
-| ClickHouse | — (портируемо) | `db.table` | — | no-op (нет уникальности) | — |
-| In-memory | — | — | — | — | `NotSupportedException` (только чтение) |
+| Провайдер | Нативный bulk | Override цели | `Returning` | `IgnoreDuplicates` | `KeepIdentity` | Bulk-copy флаги |
+|---|---|---|---|---|---|---|
+| PostgreSQL | бинарный `COPY` | `schema.table` | `RETURNING` (портируемо) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` | — (отклоняются) |
+| SQL Server | `SqlBulkCopy` | `schema.table` | `OUTPUT` (портируемо) | — (отклоняется) | `SET IDENTITY_INSERT` | `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` |
+| MySQL | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения | — (отклоняются) |
+| MariaDB | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения | — (отклоняются) |
+| SQLite | — (портируемо) | `schema.table` | `RETURNING` (портируемо) | `INSERT OR IGNORE` | явные значения | — (отклоняются) |
+| ClickHouse | — (портируемо) | `db.table` | — | no-op (нет уникальности) | — | — (отклоняются) |
+| In-memory | — | — | — | — | `NotSupportedException` (только чтение) | — (только чтение) |
 
 ## См. также
 

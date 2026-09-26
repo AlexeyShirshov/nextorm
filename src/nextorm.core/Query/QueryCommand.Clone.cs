@@ -44,12 +44,15 @@ public partial class QueryCommand
         dst.HintsPlanHash = HintsPlanHash;
         dst.WindowsPlanHash = WindowsPlanHash;
         dst._hints = _hints;
+        dst.Tag = Tag;
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.ResolvedQuoteIdentifiers = ResolvedQuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
         dst.ResolvedNamingConvention = ResolvedNamingConvention;
         dst.KeywordCase = KeywordCase;
         dst.ResolvedKeywordCase = ResolvedKeywordCase;
+        dst.CommandTimeout = CommandTimeout;
+        dst.ResolvedCommandTimeout = ResolvedCommandTimeout;
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
@@ -92,6 +95,7 @@ public partial class QueryCommand
         dst.TableHints = TableHints;
         dst.IndexHints = IndexHints;
         dst.IndexHintKind = IndexHintKind;
+        dst.TablesInScopeHints = TablesInScopeHints;
         dst.ForJsonClause = ForJsonClause;
         dst.ForXmlClause = ForXmlClause;
 

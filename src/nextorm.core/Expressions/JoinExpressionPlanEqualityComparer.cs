@@ -47,6 +47,7 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
         if (x.JoinType != y.JoinType) return false;
         if (x.Strictness != y.Strictness) return false;
         if (x.IsGlobal != y.IsGlobal) return false;
+        if (!string.Equals(x.JoinHint, y.JoinHint, StringComparison.Ordinal)) return false;
 
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.JoinCondition, y.JoinCondition)) return false;
@@ -72,6 +73,8 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
             hash.Add(obj.Strictness);
 
             hash.Add(obj.IsGlobal);
+
+            hash.Add(obj.JoinHint);
 
             hash.Add(obj.JoinCondition, _queryProvider.GetExpressionPlanEqualityComparer());
 
