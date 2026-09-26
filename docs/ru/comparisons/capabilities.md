@@ -3,7 +3,7 @@
 Сводка по категориям: что поддерживает каждая библиотека. Обозначения: **yes** — поддержка первого класса;
 **partial** — поддержка с оговорённым ограничением либо реализуемо, но не реализовано; **no** — не
 поддерживается. В ячейке Nextorm ограничение самой СУБД указано в скобках; оценку это не понижает. Пробелы
-конкурентов с открытым issue даны ссылкой. На **2026-09-25**.
+конкурентов с открытым issue даны ссылкой. На **2026-09-26**.
 
 Это верхнеуровневый обзор — категории, важные при выборе библиотеки, а не каждый конструкт.
 
@@ -24,7 +24,9 @@
 | Temporal-таблицы (`FOR SYSTEM_TIME`) | yes (SQL Server, MariaDB) | no | no |
 | Блокировки строк (`FOR UPDATE`, `NOWAIT`/`SKIP LOCKED`) | yes | yes | no (только сырой SQL) |
 | Хинты запроса / таблицы / индекса | yes | partial | no (сырой SQL или интерцептор) |
-| Сырой SQL (целый запрос и как composable-источник) | yes | yes | yes |
+| Сырой SQL (целый запрос, composable-источник и сырые команды с параметрами/выходными параметрами/несколькими наборами результатов) | yes | yes | yes |
+| Несколько наборов результатов из одного батча (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`) | yes (PostgreSQL, SQL Server, MySQL, MariaDB, SQLite) | yes | no |
+| Хранимые процедуры (`ExecuteProcedure`, `CommandType.StoredProcedure`) | yes (SQL Server, PostgreSQL, MySQL/MariaDB) | yes | yes |
 
 ## Типы и маппинг
 
@@ -63,6 +65,7 @@
 | `INSERT` / `UPDATE` / `DELETE` / `MERGE` | yes | yes | partial (нет `MERGE`) |
 | Возврат затронутых строк | yes | yes | yes |
 | Массовая вставка | yes (нативный copy или пакетный `VALUES`) | yes | partial |
+| Табличные параметры | yes (нативно в SQL Server; эмуляция массивом/JSON в PostgreSQL, MySQL/MariaDB, SQLite и ClickHouse) | yes | no |
 | `CREATE TABLE AS SELECT`, временные таблицы | yes | yes | no |
 | `OUTPUT ... INTO` | yes (SQL Server) | no ([linq2db#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
 | Транзакции (собственные и переданные извне) | yes | yes | yes |

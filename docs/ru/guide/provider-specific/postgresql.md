@@ -5,7 +5,7 @@
 > упорядоченные, регрессионные и логические агрегаты, расширенные скаляры/regexp, `DISTINCT ON` и
 > табличная функция `unnest`.
 
-**Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Провайдер PostgreSQL](../../providers/postgres.md)
+**Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Провайдер PostgreSQL](../../providers/postgres.md)
 
 ## Массивы
 
@@ -44,7 +44,7 @@ select id from complex_entity where (id = any(@p0))
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
 SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
 
-На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../31-range-columns.md); те же операторы транслируются поверх пары.
+На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../29-range-columns.md); те же операторы транслируются поверх пары.
 
 | Член | SQL |
 |---|---|
@@ -123,7 +123,7 @@ select jsonb_agg(somestring) from complex_entity
 ```
 
 См. [JSON и JSONB (PostgreSQL)](../../scalar-functions/index.md) и
-[Поддержка JSON в разных провайдерах](../18-json.md).
+[Поддержка JSON в разных провайдерах](../16-json.md).
 
 ## Упорядоченные, регрессионные и логические агрегаты
 
@@ -135,7 +135,7 @@ select jsonb_agg(somestring) from complex_entity
 * `array_agg` и поверхность строковых/массивных агрегатов гейтятся
   [`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates).
 
-См. [Группировка и агрегаты](../04-grouping-and-aggregates.md).
+См. [Группировка и агрегаты](../03-grouping-and-aggregates.md).
 
 ## Полнотекстовый поиск
 
@@ -200,7 +200,7 @@ var rows = dataContext.From<IComplexEntity>()
 select distinct on (somestring) id, somestring from complex_entity order by somestring
 ```
 
-См. [DISTINCT](../08-distinct.md).
+См. [DISTINCT](../07-distinct.md).
 
 ## Функции, возвращающие наборы
 
@@ -227,7 +227,7 @@ PostgreSQL заменяет единственную колонку скаляр
 колонкой (`from (select generate_series from generate_series(...)) as "t1"`); функции с явной колонкой
 (`value`, `key`/`value`, `word`/`ndoc`/`nentry`) эмитятся без обёртки.
 
-См. [Табличные функции](../13-table-valued-functions.md).
+См. [Табличные функции](../11-table-valued-functions.md).
 
 ## `TABLESAMPLE`
 
@@ -250,7 +250,7 @@ select id from simple_entity tablesample system (10) repeatable (42)
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) генерирует
 `tablesample system (10)`, а [`TableSampleMethod.Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli)
 — `tablesample bernoulli (5)`; остальные провайдеры отклоняют модификатор при построении SQL. См.
-[Сэмплирование таблицы](../01-querying-and-projections.md#сэмплирование-таблицы-tablesample).
+[Сэмплирование таблицы](../../querying/02-query-sources.md#сэмплирование-таблицы-tablesample).
 
 ## Блокировка строк
 
@@ -274,7 +274,7 @@ select id from simple_entity where (id > 5) for update
 `LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. Оба принимают
 [`LockWaitMode`](xref:NextORM.Core.LockWaitMode): `ForUpdate(LockWaitMode.SkipLocked)` генерирует
 `for update skip locked`, а `ForShare(LockWaitMode.NoWait)` — `for share nowait` (PostgreSQL 9.5+). См.
-[Блокировку строк](../01-querying-and-projections.md#блокировка-строк-for-update--for-share).
+[Блокировку строк](../../querying/03-provider-specifics.md#блокировка-строк-for-update--for-share).
 
 ## Модифицирующие CTE
 
@@ -303,15 +303,15 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 Тело может быть `VALUES`-insert или `INSERT ... SELECT`, а мутация может читать более ранний read-CTE
 (объявите его первым и используйте `CteQuery.With(имя, insert)`) либо питать главный `INSERT ... SELECT`.
 Полный набор форм — в разделе
-[Изменение данных (INSERT): Модифицирующий CTE](../19-insert-statement.md#модифицирующий-cte-postgresql);
-общие (read) CTE — в [Общих табличных выражениях](../09-cte.md). Остальные провайдеры отклоняют
+[Изменение данных (INSERT): Модифицирующий CTE](../17-insert-statement.md#модифицирующий-cte-postgresql);
+общие (read) CTE — в [Общих табличных выражениях](../08-cte.md). Остальные провайдеры отклоняют
 `With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 
 ## Динамическая схема записи
 
 `jsonb_to_record`/`jsonb_to_recordset` доступны как табличные функции, схема результата которых
 объявляется типом строки вызывающего и рендерится списком определений колонок в псевдониме
-(`AS x(a int, b text)`). См. [Динамическая схема результата](../13-table-valued-functions.md#dynamic-result-schema).
+(`AS x(a int, b text)`). См. [Динамическая схема результата](../11-table-valued-functions.md#dynamic-result-schema).
 Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
 свободный список колонок) остаются вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).

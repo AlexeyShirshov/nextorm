@@ -60,7 +60,7 @@ On ClickHouse the same query renders `toInt32(countIf((id > 10)))` and `sumIf(id
 ## Set-returning helpers (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` and `SqlFunctions.Postgres.unnest` are pre-declared
-[`[SqlTableFunction]`](../guide/13-table-valued-functions.md) sources, so no user-defined wrapper is needed:
+[`[SqlTableFunction]`](../guide/11-table-valued-functions.md) sources, so no user-defined wrapper is needed:
 
 ```csharp
 var numbers = dataContext

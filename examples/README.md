@@ -84,7 +84,7 @@ instead of being masked:
   `With(name, query).From(name)` — which supports `Join`, `GroupBy`, `Having`, `OrderBy` and `Limit` —
   so none of the demo queries hit this gap. Tracked in
   [`sql-capabilities-gap-analysis.md`](../docs/specs/roadmap/sql-capabilities-gap-analysis.md) (known
-  gap 10); see the [CTE guide](../docs/guide/09-cte.md).
+  gap 10); see the [CTE guide](../docs/guide/08-cte.md).
 * **T-SQL `FORMAT`** — no portable built-in, so the example declares a provider-specific
   `[SqlFunction("format")]` UDF (`DemoUdf.Format`) instead of projecting the raw `DateTime`.
 * **SQL Server `PIVOT`** — the native `EntityBuilder.Pivot` now exists, but it accepts only a plain

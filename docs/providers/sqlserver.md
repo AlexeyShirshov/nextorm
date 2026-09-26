@@ -190,6 +190,47 @@ from all_rows() as [t1]
 join complex_entity as [t2] on t1.id = t2.id
 ```
 
+## Table-valued parameters
+
+SQL Server binds a table-valued parameter natively through a user-defined table type: pass the type name with `ProcedureParameter.Table(name, typeName, rows)`. The rows are streamed as `SqlDataRecord` (one reused record per enumeration), so a large set is never buffered. A scalar row type maps to a single column; an entity row type maps its non-computed columns in metadata order, including identity columns. A `decimal` column uses the precision/scale declared with `[DecimalPrecision(p, s)]` or the fluent mapping, defaulting to `decimal(38,18)`. An empty sequence is bound as an empty table. See [Raw SQL](../guide/12-raw-sql.md#table-valued-parameters).
+
+```sql
+create type dbo.IdList as table (value int not null);
+```
+
+```csharp
+using var result = dataContext.ExecuteRaw(
+    "select sum(value) as total from @p",
+    [ProcedureParameter.Table("p", "dbo.IdList", new[] { 1, 2, 3 })]);
+
+var total = result.Read<int>()[0];   // 6
+```
+
+The CLR type of each column picks a fixed T-SQL type; the user-defined table type must match it by ordinal:
+
+| CLR | T-SQL |
+|---|---|
+| `bool` | `bit` |
+| `char` | `nchar(1)` |
+| `sbyte`, `short` | `smallint` |
+| `byte` | `tinyint` |
+| `ushort`, `int` | `int` |
+| `uint`, `long` | `bigint` |
+| `ulong` | `decimal(20,0)` |
+| `float` | `real` |
+| `double` | `float` |
+| `decimal` | `decimal(38,18)` (or the declared `decimal(p,s)`) |
+| `string` | `nvarchar(max)` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` | `datetime2` |
+| `DateTimeOffset` | `datetimeoffset` |
+| `DateOnly` | `date` |
+| `TimeOnly` | `time` |
+| `TimeSpan` | `bigint` (mapped duration unit, or ticks) |
+| `byte[]` | `varbinary(max)` |
+
+A `decimal` column's precision/scale comes from `[DecimalPrecision]` or the fluent mapping (default `decimal(38,18)`). For a different precision/scale on any other type or a string length other than `max`, declare the table type explicitly and pass a legacy `DataTable` with `ProcedureParameter.TypeName`. An empty sequence is bound as an unset parameter, which SqlClient sends as an empty table.
+
 ## Provider differences
 
 | Aspect | SQL Server |
@@ -218,7 +259,7 @@ join complex_entity as [t2] on t1.id = t2.id
 | Regular expressions | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; `regexp_like` additionally needs database compatibility level 170) |
 | Locking table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
-| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/24-bulk-insert.md#sql-server-bulk-copy-options)) |
+| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/22-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |

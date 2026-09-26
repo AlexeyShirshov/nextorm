@@ -6,7 +6,7 @@
 > helpers (`timediff`, `unixepoch`, `julianday`) and the math-extension functions
 > (`acos`/`asin`/`atan`/`atan2`, the hyperbolics, `log2`/`log10`, `mod`).
 
-**Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [SQLite provider](../../providers/sqlite.md)
+**Prerequisites:** [Querying and projections](../../querying/index.md) · [SQLite provider](../../providers/sqlite.md)
 
 All of the functions on this page are exposed through
 [`SqlFunctions.Sqlite`](xref:NextORM.Core.SqliteFunctions) and gated by
@@ -106,7 +106,7 @@ var rows = dataContext.From<IComplexEntity>()
 ## `json_each` / `json_tree` table functions
 
 `json_each` walks the immediate children of a JSON value and `json_tree` walks it recursively. Use them
-through [`FromTableFunction`](../13-table-valued-functions.md) and project the row shape returned by the
+through [`FromTableFunction`](../11-table-valued-functions.md) and project the row shape returned by the
 call; the columns are `key`, `value`, `type`, `fullkey` and `path` (plus `id`/`parent` for
 `json_tree`).
 

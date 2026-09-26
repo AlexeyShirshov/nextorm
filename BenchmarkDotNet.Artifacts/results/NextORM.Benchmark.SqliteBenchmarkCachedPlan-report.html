@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkCachedPlan-20260926-201746</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+Categories=acceptance  
+</code></pre>
+
+<table>
+<thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Cached_PlanOnly_Param</td><td>500.4 &mu;s</td><td>33.77 &mu;s</td><td>1.85 &mu;s</td><td>0.56</td><td>61.5234</td><td>503.14 KB</td><td>6.61</td>
+</tr><tr><td>Prepared_ToList</td><td>892.3 &mu;s</td><td>99.18 &mu;s</td><td>5.44 &mu;s</td><td>1.00</td><td>8.7891</td><td>76.14 KB</td><td>1.00</td>
+</tr><tr><td>Cached_ToList</td><td>1,698.7 &mu;s</td><td>381.54 &mu;s</td><td>20.91 &mu;s</td><td>1.90</td><td>70.3125</td><td>579.28 KB</td><td>7.61</td>
+</tr></tbody></table>
+</body>
+</html>

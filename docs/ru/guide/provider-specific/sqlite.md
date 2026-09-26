@@ -6,7 +6,7 @@
 > `julianday`) и функции математического расширения (`acos`/`asin`/`atan`/`atan2`, гиперболические,
 > `log2`/`log10`, `mod`).
 
-**Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Провайдер SQLite](../../providers/sqlite.md)
+**Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Провайдер SQLite](../../providers/sqlite.md)
 
 Все функции этой страницы доступны через
 [`SqlFunctions.Sqlite`](xref:NextORM.Core.SqliteFunctions) и гейтятся
@@ -106,7 +106,7 @@ var rows = dataContext.From<IComplexEntity>()
 ## Табличные функции `json_each` / `json_tree`
 
 `json_each` обходит непосредственных детей JSON-значения, `json_tree` — рекурсивно. Используйте их
-через [`FromTableFunction`](../13-table-valued-functions.md) и проецируйте форму строки вызова;
+через [`FromTableFunction`](../11-table-valued-functions.md) и проецируйте форму строки вызова;
 колонки — `key`, `value`, `type`, `fullkey` и `path` (плюс `id`/`parent` у `json_tree`).
 
 ```csharp

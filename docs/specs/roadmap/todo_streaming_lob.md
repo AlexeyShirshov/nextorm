@@ -2,8 +2,17 @@
 
 > Рабочий план (design RFC). Источник: GitHub issue
 > [#27 «TODO: BLOB/CLOB support»](https://github.com/AlexeyShirshov/nextorm/issues/27),
-> milestone `1.1-a.1`. Продолжение уже сделанной буферизованной поддержки `byte[]`
+> milestone `1.0.8-b`. Продолжение уже сделанной буферизованной поддержки `byte[]`
 > (`CommonTestSuite.Binary.cs`): здесь речь только о **потоковом** чтении больших значений.
+
+> **Пересмотр 2026-09-26.** Терминалы вешаются только на `QueryCommand<T>` (не на
+> `EntityBuilder<TResult>`). Владение reader'ом переиспользует владельца из **фазы 0**
+> `todo_stored_procedures.md` с per-call `DbCommand` — это снимает
+> конфликт с общим кэшированным `DbCommand`. Стриминг-дискриминатор входит в **ключ плана**, а
+> `Behavior |= CommandBehavior.SequentialAccess` строится в `QueryPlanner` при создании команды
+> (`Behavior` — readonly). Sync-терминалы принимают `params ReadOnlySpan<object?>`. Зависимость от #70
+> (фаза 0) — первой. **Готово (2026-09-26):** фаза 0 #70 реализована — `CommandReaderOwner` владеет
+> per-call `DbCommand` + `DbDataReader`; зависимость снята.
 
 ## Пункт и цель
 
@@ -83,26 +92,33 @@ Stream s2 = await ctx.From<BinaryEntity>().Where(x => x.Id == 1).Select(x => x.D
 Черновые сигнатуры:
 
 ```csharp
-public static Stream ToStream<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
-public static Stream ToStream<TResult>(this EntityBuilder<TResult> builder, CancellationToken cancellationToken, params object[] @params);
-public static Task<Stream> ToStreamAsync<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
-public static Task<Stream> ToStreamAsync<TResult>(this EntityBuilder<TResult> builder, CancellationToken cancellationToken, params object[] @params);
+public static Stream ToStream(this QueryCommand<byte[]> command, params ReadOnlySpan<object?> @params);
+public static Stream ToStream(this QueryCommand<byte[]> command, CancellationToken cancellationToken, params ReadOnlySpan<object?> @params);
+public static Task<Stream> ToStreamAsync(this QueryCommand<byte[]> command, params object[] @params);
+public static Task<Stream> ToStreamAsync(this QueryCommand<byte[]> command, CancellationToken cancellationToken, params object[] @params);
 
-public static TextReader ToTextReader<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
-public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
+public static TextReader ToTextReader(this QueryCommand<string> command, params ReadOnlySpan<object?> @params);
+public static Task<TextReader> ToTextReaderAsync(this QueryCommand<string> command, params object[] @params);
 ```
 
-Аналогичные перегрузки для `EntityBuilder<TResult>` и `QueryCommand<TResult>` (по образцу
-`ToAsyncEnumerable` в `Builders/EntityBuilderExtensions.cs:14-16`).
+Терминалы — **только** на `QueryCommand<TResult>` (не на `EntityBuilder<TResult>`): `Select` возвращает
+`QueryCommand<TResult>` (`src/nextorm.core/Builders/EntityBuilder.cs:1952`), поэтому пример выше
+разрешается на этом ресивере. Sync-терминалы принимают `params ReadOnlySpan<object?>` (sync-образец —
+`Builders/EntityBuilderExtensions.cs:181`); `ToAsyncEnumerable` — `Builders/EntityBuilderExtensions.cs:14-16`.
 
 Правила:
 
 - проекция обязана быть **одним** столбцом типа `byte[]`/`string`; иначе — `InvalidArgumentException`
   с подсказкой использовать `ToDataReader` (фаза 2);
 - терминал не идёт через `RowMapperFactory`, а читает `reader.GetStream(0)`/`GetTextReader(0)`
-  напрямую — кэш мапперов и ключ плана не меняются;
-- владение: поток-обёртка при `Dispose`/`DisposeAsync` освобождает `DbDataReader` и `DbCommand`
-  (соединение возвращается в пул); контекст должен оставаться живым;
+  напрямую; стриминг-дискриминатор входит в **ключ плана** (см. диалектный план), поэтому тот же
+  SQL-shape не переиспользуется с буферизованным `Behavior=0`;
+- владение: поток-обёртка — это **владелец reader'а из фазы 0** #70
+  (`todo_stored_procedures.md`): держит `DbDataReader` + **per-call**
+  `DbCommand` и при `Dispose`/`DisposeAsync` освобождает их (соединение возвращается в пул и остаётся
+  во владении контекста). Общий кэшированный `DbCommand` из `DbPreparedQueryCommand`
+  (`src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs:21`) не используется — нет конфликта с
+  повторным исполнением формы; контекст должен оставаться живым;
 - исключение «владения»: если контекст `Dispose`-нули раньше потока — операция чтения бросает
   понятную ошибку.
 
@@ -129,9 +145,10 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
   `ClickHouseDialect` — `false` (как `SupportsCommandBehaviorSingleRow`,
   `nextorm.clickhouse/ClickHouseDialect.cs:133-135`).
 - Опционально `SupportsGetStream`/`SupportsGetTextReader` для точечных различий драйверов.
-- `DbPreparedQueryCommand.Behavior` дополняется `| CommandBehavior.SequentialAccess`, когда
-  prepared-команда помечена как LOB-стриминг (рядом с `SingleRow`, `DbPreparedQueryCommand.cs:28-29`;
-  решение — в `QueryPlanner.cs:132-137`).
+- `Behavior` — `readonly`, выставляется только в ctor (`DbPreparedQueryCommand.cs:16,75-76`), поэтому
+  `| CommandBehavior.SequentialAccess` строится в `QueryPlanner` при создании команды
+  (`PreparedCommandOptions(...)`, `QueryPlanner.cs:451`), а не «дополняется» после. Стриминг-
+  дискриминатор входит в **ключ плана**, иначе тот же SQL-shape вернётся с буферизованным `Behavior=0`.
 - SQLite: терминал должен либо добавить `rowid` в SELECT (для `SqliteBlob`), либо пойти чанковым
   `GetBytes` — открытый вопрос №2.
 
@@ -164,6 +181,10 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
   боксинга на буферизованном дефолте.
 
 ## Этапы внедрения
+
+Зависимость: фаза 1 может идти параллельно с #70, но **требует владельца reader'а из фазы 0**
+`todo_stored_procedures.md` (per-call `DbCommand`), поэтому фаза 0 #70 —
+первой.
 
 - **Фаза 1 (MVP):** `SupportsSequentialAccess`, `ToStream`/`ToTextReader` (+async) для одного
   `byte[]`/`string`-столбца, владение ридером/командой, SQLite-обработка `rowid`,
@@ -236,3 +257,8 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
 - **[PERF] ℹ️** Sync-перегрузка `ToStream(..., params object[] @params)` (`:86-87`) аллоцирует массив; sync-терминалы проекта используют `params ReadOnlySpan<object?>` (`src/nextorm.core/Builders/EntityBuilderExtensions.cs:181`). Fix: `params ReadOnlySpan<object?>`.
 - **[OCP] ℹ️** LOB-чтение идёт напрямую, минуя `ResultSetEnumerator`, поэтому `IQueryInterceptor.CommandExecuting/Executed/Failed` не поднимутся, хотя гайд обещает покрытие (`docs/guide/27-interceptors.md`). Fix: поднимать события через `InterceptorHooks` (`DataContext/DataContextDependencies.cs:86-124`).
 - **ℹ️** Устаревшие якоря: `SelectExpression.cs:79-82` → `:119-122`; `:111-116` → `:155-162`; `QueryPlanner.cs:132-137` → `:437-439`.
+
+> Обновление 2026-09-26: блокер L1 (терминал на `EntityBuilder`) снят — терминалы только на
+> `QueryCommand<T>`. Конфликт владения с кэшированным `DbCommand` снят общим владельцем reader'а фазы 0
+> #70 (per-call `DbCommand`). `Behavior` строится в `QueryPlanner` и входит в ключ плана. Sync-терминалы
+> принимают `params ReadOnlySpan<object?>`.

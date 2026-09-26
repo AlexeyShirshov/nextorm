@@ -7,7 +7,7 @@
 > data-type methods (`value`/`query`/`exist` and the `nodes` rowset), the native `PIVOT`/`UNPIVOT`
 > source constructs, plus `string_split`/`openjson` table functions.
 
-**Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [SQL Server provider](../../providers/sqlserver.md)
+**Prerequisites:** [Querying and projections](../../querying/index.md) · [SQL Server provider](../../providers/sqlserver.md)
 
 ## `CHOOSE`
 
@@ -33,7 +33,7 @@ See [Scalar functions](../../scalar-functions/04-conditionals-and-conversion.md#
 ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), and a query hint renders the
 trailing `OPTION (...)` clause, for example `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); the CTE `maxRecursion`
-option maps to `option (maxrecursion n)`. See [Query hints](../17-query-hints.md).
+option maps to `option (maxrecursion n)`. See [Query hints](../15-query-hints.md).
 
 ## Row locking
 
@@ -55,7 +55,7 @@ select id from simple_entity with (updlock)
 `holdlock` (shared lock). The lock hint combines with
 [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), so `.WithTableHint("rowlock").ForUpdate()`
 renders `with (rowlock, updlock)`. See
-[Row locking](../01-querying-and-projections.md#row-locking-for-update--for-share).
+[Row locking](../../querying/03-provider-specifics.md#row-locking-for-update--for-share).
 
 ## `FOR JSON` and `FOR XML`
 
@@ -63,7 +63,7 @@ renders `with (rowlock, updlock)`. See
 XML document
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
 `WithForJson`/`WithForXml` attach the clause without executing; the two clause kinds are mutually
-exclusive. See [JSON support across providers](../18-json.md).
+exclusive. See [JSON support across providers](../16-json.md).
 
 ## XML data-type methods
 
@@ -112,8 +112,8 @@ See [Scalar functions](../../scalar-functions/07-json-and-xml.md#xml-data-type-m
 
 `string_split(...)` and `openjson(...)` are exposed through
 [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). See
-[Table-valued functions](../13-table-valued-functions.md) and
-[JSON support across providers](../18-json.md).
+[Table-valued functions](../11-table-valued-functions.md) and
+[JSON support across providers](../16-json.md).
 
 ## Temporal tables
 
@@ -223,14 +223,14 @@ select id from simple_entity tablesample (10 percent) repeatable (3)
 SQL Server supports only the `System` method
 (`TableSample`); `Bernoulli`
 throws `NotSupportedException`. See
-[Table sampling](../01-querying-and-projections.md#table-sampling-tablesample).
+[Table sampling](../../querying/02-query-sources.md#table-sampling-tablesample).
 
 ## Full-text search
 
 The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`FREETEXT`. For ranking,
 `SqlFunctions.SqlServer.containstable`/`freetexttable` expose the matched key and `RANK` score through
 `SqlFunctions.IKeyRankRow<TKey>`; see
-[Table-valued functions](../13-table-valued-functions.md#built-in-table-functions).
+[Table-valued functions](../11-table-valued-functions.md#built-in-table-functions).
 
 ## T-SQL scalar functions
 

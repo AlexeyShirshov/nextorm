@@ -12,7 +12,7 @@
 > страницах. Эксклюзивная поверхность есть только у трёх провайдеров: ClickHouse, PostgreSQL и
 > SQL Server.
 
-**Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Обзор провайдеров](../../providers/overview.md) · [Ограничения и возможности вне области охвата](../../advanced/limitations.md)
+**Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Обзор провайдеров](../../providers/overview.md) · [Ограничения и возможности вне области охвата](../../advanced/limitations.md)
 
 ## Как устроено гейтирование
 
@@ -55,14 +55,14 @@
 Страницы провайдеров описывают конструкцию со стороны конкретной СУБД; полные, провайдеро-нейтральные
 разборы — в тематических разделах:
 
-* [Фильтрация (WHERE)](../02-filtering-where.md) — `IN`/`Contains`, полнотекстовые предикаты;
-* [Соединения](../03-joins.md) — типы соединений, APPLY/LATERAL, строгость ClickHouse и `GLOBAL JOIN`;
-* [Группировка и агрегаты](../04-grouping-and-aggregates.md) — `ROLLUP`/`CUBE`, семейства агрегатов;
-* [Сортировка и постраничная выборка](../05-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
+* [Фильтрация (WHERE)](../01-filtering-where.md) — `IN`/`Contains`, полнотекстовые предикаты;
+* [Соединения](../02-joins.md) — типы соединений, APPLY/LATERAL, строгость ClickHouse и `GLOBAL JOIN`;
+* [Группировка и агрегаты](../03-grouping-and-aggregates.md) — `ROLLUP`/`CUBE`, семейства агрегатов;
+* [Сортировка и постраничная выборка](../04-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
 * [Скалярные функции](../../scalar-functions/index.md) — массивы, JSON, UUID, session/info, поверхности провайдеров;
-* [Табличные функции](../13-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
-* [Хинты запросов](../17-query-hints.md) — табличные хинты, `OPTION (RECOMPILE)`, модификаторы ClickHouse;
-* [Поддержка JSON в разных провайдерах](../18-json.md) — все поверхности JSON рядом.
+* [Табличные функции](../11-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
+* [Хинты запросов](../15-query-hints.md) — табличные хинты, `OPTION (RECOMPILE)`, модификаторы ClickHouse;
+* [Поддержка JSON в разных провайдерах](../16-json.md) — все поверхности JSON рядом.
 
 Переносимые функции, которые пишутся по-разному в каждой СУБД, живут на
 [`CommonFunctions`](xref:NextORM.Core.CommonFunctions) и документированы на страницах функций:

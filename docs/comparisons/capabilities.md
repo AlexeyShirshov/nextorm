@@ -3,7 +3,7 @@
 A category-level summary of what each library supports. Legend: **yes** = first-class; **partial** =
 supported with a named limitation, or implementable but not implemented; **no** = not supported. A Nextorm
 cell names a database-engine restriction in parentheses; it does not lower the mark. Competitor gaps with an
-open tracking issue link to it. As of **2026-09-25**.
+open tracking issue link to it. As of **2026-09-26**.
 
 This is the high-level view; it covers the categories that matter when choosing a library, not every
 construct.
@@ -25,7 +25,9 @@ construct.
 | Temporal tables (`FOR SYSTEM_TIME`) | yes (SQL Server, MariaDB) | no | no |
 | Row locking (`FOR UPDATE`, `NOWAIT`/`SKIP LOCKED`) | yes | yes | no (raw SQL only) |
 | Query / table / index hints | yes | partial | no (raw SQL or an interceptor) |
-| Raw SQL (whole query, and as a composable source) | yes | yes | yes |
+| Raw SQL (whole query, composable source, and raw commands with parameters/output parameters/multiple result sets) | yes | yes | yes |
+| Multiple result sets from one batch (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`) | yes (PostgreSQL, SQL Server, MySQL, MariaDB, SQLite) | yes | no |
+| Stored procedures (`ExecuteProcedure`, `CommandType.StoredProcedure`) | yes (SQL Server, PostgreSQL, MySQL/MariaDB) | yes | yes |
 
 ## Types and mapping
 
@@ -64,6 +66,7 @@ construct.
 | `INSERT` / `UPDATE` / `DELETE` / `MERGE` | yes | yes | partial (no `MERGE`) |
 | Returning or output of affected rows | yes | yes | yes |
 | Bulk insert | yes (native copy or chunked `VALUES`) | yes | partial |
+| Table-valued parameters | yes (native SQL Server; array/JSON emulation on PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse) | yes | no |
 | `CREATE TABLE AS SELECT`, temporary tables | yes | yes | no |
 | `OUTPUT ... INTO` | yes (SQL Server) | no ([linq2db#3832](https://github.com/linq2db/linq2db/issues/3832)) | no |
 | Transactions (own and enlisted) | yes | yes | yes |

@@ -133,7 +133,7 @@ The provider fails loudly instead of returning wrong results:
 - **Correlated subqueries** (a subquery referencing the outer row, for example
   `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) are evaluated once per outer row for
   depth-one correlation: scalar subqueries, aggregate terminals, `EXISTS` and `IN` work in `SELECT`,
-  `WHERE` and `ORDER BY` (see [Subqueries](../guide/06-subqueries.md#correlated-scalar-subquery)).
+  `WHERE` and `ORDER BY` (see [Subqueries](../guide/05-subqueries.md#correlated-scalar-subquery)).
   Correlation depth greater than one, an outer reference inside the inner projection or `ORDER BY`, a
   correlated `GROUP BY`/`HAVING` and an async inner source throw `NotSupportedException`.
 
@@ -157,7 +157,7 @@ The provider fails loudly instead of returning wrong results:
 - [SQLite](sqlite.md)
 - [SQL Server](sqlserver.md)
 - [PostgreSQL](postgres.md)
-- [Query reuse: cache vs Prepare](../guide/15-query-reuse.md)
+- [Query reuse: cache vs Prepare](../guide/13-query-reuse.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

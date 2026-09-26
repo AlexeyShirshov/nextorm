@@ -132,7 +132,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 - **Коррелированные подзапросы** (подзапрос, ссылающийся на внешнюю строку, например
   `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) вычисляются один раз на внешнюю
   строку для корреляции глубины один: скалярные подзапросы, агрегатные терминалы, `EXISTS` и `IN`
-  работают в `SELECT`, `WHERE` и `ORDER BY` (см. [Подзапросы](../guide/06-subqueries.md#коррелированный-скалярный-подзапрос)).
+  работают в `SELECT`, `WHERE` и `ORDER BY` (см. [Подзапросы](../guide/05-subqueries.md#коррелированный-скалярный-подзапрос)).
   Глубина корреляции больше одной, ссылка на внешнюю строку во внутренней проекции или `ORDER BY`,
   коррелированный `GROUP BY`/`HAVING` и асинхронный внутренний источник бросают `NotSupportedException`.
 
@@ -156,7 +156,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 - [SQLite](sqlite.md)
 - [SQL Server](sqlserver.md)
 - [PostgreSQL](postgres.md)
-- [Query reuse: cache vs Prepare](../guide/15-query-reuse.md)
+- [Query reuse: cache vs Prepare](../guide/13-query-reuse.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

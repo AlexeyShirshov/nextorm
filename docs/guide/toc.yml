@@ -1,63 +1,61 @@
-- name: Querying and projections
-  href: 01-querying-and-projections.md
 - name: Filtering (WHERE)
-  href: 02-filtering-where.md
+  href: 01-filtering-where.md
 - name: Joins
-  href: 03-joins.md
+  href: 02-joins.md
 - name: Grouping and aggregates
-  href: 04-grouping-and-aggregates.md
+  href: 03-grouping-and-aggregates.md
 - name: Sorting and paging
-  href: 05-sorting-and-paging.md
+  href: 04-sorting-and-paging.md
 - name: Subqueries
-  href: 06-subqueries.md
+  href: 05-subqueries.md
 - name: Set operations
-  href: 07-set-operations.md
+  href: 06-set-operations.md
 - name: SELECT DISTINCT
-  href: 08-distinct.md
+  href: 07-distinct.md
 - name: Common table expressions (CTE)
-  href: 09-cte.md
+  href: 08-cte.md
 - name: Window functions
-  href: 10-window-functions.md
+  href: 09-window-functions.md
 - name: User-defined functions
-  href: 12-user-defined-functions.md
+  href: 10-user-defined-functions.md
 - name: Table-valued functions
-  href: 13-table-valued-functions.md
+  href: 11-table-valued-functions.md
 - name: Raw SQL
-  href: 14-raw-sql.md
+  href: 12-raw-sql.md
 - name: "Query reuse: cache vs Prepare"
-  href: 15-query-reuse.md
+  href: 13-query-reuse.md
 - name: Connections and logging
-  href: 16-connections-and-logging.md
+  href: 14-connections-and-logging.md
 - name: Query hints
-  href: 17-query-hints.md
+  href: 15-query-hints.md
 - name: JSON support across providers
-  href: 18-json.md
+  href: 16-json.md
 - name: Data modification (INSERT)
-  href: 19-insert-statement.md
+  href: 17-insert-statement.md
 - name: Data modification (DELETE)
-  href: 20-delete-statement.md
+  href: 18-delete-statement.md
 - name: Data modification (UPDATE)
-  href: 21-update-statement.md
+  href: 19-update-statement.md
 - name: Materializing a query into a table
-  href: 22-create-table-as.md
+  href: 20-create-table-as.md
 - name: Data modification (MERGE)
-  href: 23-merge-statement.md
+  href: 21-merge-statement.md
 - name: Bulk insert
-  href: 24-bulk-insert.md
+  href: 22-bulk-insert.md
 - name: Transactions
-  href: 25-transactions.md
+  href: 23-transactions.md
 - name: Duration (TimeSpan) columns
-  href: 26-duration-columns.md
+  href: 24-duration-columns.md
 - name: Interceptors
-  href: 27-interceptors.md
+  href: 25-interceptors.md
 - name: Executing statements in one batch
-  href: 28-sql-batch.md
+  href: 26-sql-batch.md
 - name: Optimistic concurrency and change tracking
-  href: 29-optimistic-concurrency.md
+  href: 27-optimistic-concurrency.md
 - name: Value converters and JSON columns
-  href: 30-value-converters.md
+  href: 28-value-converters.md
 - name: Range columns (pair of scalar columns)
-  href: 31-range-columns.md
+  href: 29-range-columns.md
 - name: Provider-specific SQL
   items:
     - name: Overview

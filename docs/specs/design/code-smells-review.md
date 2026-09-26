@@ -6251,13 +6251,13 @@ if (body is MemberExpression { Expression: ParameterExpression, Member: Property
 
 ### ✅ Находка 153 (P2, покрытие/док; **закрыто 24.09.2026**) — `ForXml` «`null` при пустом результате» задокументирован, но не покрыт; семантика `FOR XML` на пустом наборе не проверена
 
-**Место.** `src/nextorm.core/Query/QueryCommand.TResult.cs:709` (`<returns>` `ForXml`); `tests/nextorm.integration.tests/SqlServerForJsonTests.cs` (5 тестов, empty-result только `ForJson` — `:41-49`); `docs/guide/18-json.md:86` (+RU `:86`); `docs/guide/01-querying-and-projections.md:489` (+RU).
+**Место.** `src/nextorm.core/Query/QueryCommand.TResult.cs:709` (`<returns>` `ForXml`); `tests/nextorm.integration.tests/SqlServerForJsonTests.cs` (5 тестов, empty-result только `ForJson` — `:41-49`); `docs/guide/18-json.md:86` (+RU `:86`); `docs/querying/03-provider-specifics.md` (+RU).
 
 **Что не так.** `ForJson`-empty→`null` подтверждён тестом `ForJson_NoRows_ShouldReturnNull`; для `ForXml` пустой результат не проверяется ни в SQL-gen, ни в контейнере. SQL Server `FOR XML` на пустом наборе семантически не обязан возвращать NULL (с `ROOT('items')` — пустой корневой элемент `<items/>`). Контракт «`null` when the query produced no rows» в `<returns>` и публичных доках для `ForXml` не верифицирован, а разница `null` vs `<items/>` видна потребителю.
 
 **Стало:** контейнерный тест `ForXml` empty (с `ROOT` и без) на SQL Server; по результату синхронизировать `<returns>` и доки EN+RU (оба guide). До проверки — смягчить формулировку. Маршрут `nextorm-design-engineer`. Публичную форму не менять.
 
-**Проверка:** `SqlServerForJsonTests.cs` — 5 тестов, empty только `ForJson_NoRows_ShouldReturnNull` (`:41-49`); XML-`<returns>` — `QueryCommand.TResult.cs:709`; публичная проза — `docs/guide/18-json.md:86` (+RU), `docs/guide/01-querying-and-projections.md:489` (+RU).
+**Проверка:** `SqlServerForJsonTests.cs` — 5 тестов, empty только `ForJson_NoRows_ShouldReturnNull` (`:41-49`); XML-`<returns>` — `QueryCommand.TResult.cs:709`; публичная проза — `docs/guide/18-json.md:86` (+RU), `docs/querying/03-provider-specifics.md` (+RU).
 
 **Закрыто (24.09.2026, эмпирическая проверка на живом SQL Server).** Сырой SQL дал SQL NULL в обоих случаях: `select 1 as x where 1=0 for xml path, root('items')` и `select 1 as x where 1=0 for xml path` → `emptyRoot=[<null>] emptyNoRoot=[<null>]`, т.е. как и `FOR JSON`; гипотеза про пустой корневой элемент `<items/>` **не подтвердилась**. Добавлен тест `ForXml_NoRows_ShouldReturnNull` (`tests/nextorm.integration.tests/SqlServerForJsonTests.cs:76-84`; всего 6 тестов, было 5), контейнерный прогон `SqlServerForJsonTests` — **6/6 passed**. Задокументированный контракт `<returns>` (`QueryCommand.TResult.cs:709`) и публичная проза EN+RU соответствуют факту — правок доков не требуется.
 
@@ -7947,3 +7947,15 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 **Итог.** 🔴 — **1** (Находка 224/P1-1 — ✅ исправлена); 🟡 — **4** (Находки 225/P2-1, 228/P2-4, 229/P2-5, 230/P2-6 — все ✅ исправлены); ℹ️ — **3** (Находки 226/P2-2, 227/P2-3, 231/ℹ️-3 — все ✅ устранены) + наблюдения A–D. Новых открытых находок/подавлений/слопа — **0**. Публичная сторона — `API-NAMING-REVIEW.md`, RPC6 (✅) и RPC1 (Шаг 5, без изменений).
 
 **Актуализация устаревших ссылок на удалённые планы (26.09.2026).** `docs/specs/roadmap/todo_range_pair_columns.md` (цитировался в Находках 205/215/218) и `todo_portable_scalar_wrappers.md` (наблюдение F аудита 25.09.2026) больше не существуют — соответствующие ссылки помечены как удалённые; заодно отмечены ранее удалённые `todo_value_converters.md`/`todo_json_column_mapping.md`/`todo_postgres_ranges.md`.
+
+## Перенесено из status закрытого потока `stored-procedures` (2026-09-26)
+
+Перенос оставшихся открытых `Deferred + триггер` при удалении `docs/specs/status/stored-procedures-{3,4,5}.md`. Уже отслеживаемое сюда не дублируется: TVP ClickHouse — `todo_tvp.md`, #27 BLOB/CLOB streaming — `todo_streaming_lob.md`, #95 eager loading — `todo_eager_loading.md`.
+
+- **P2 (цикл 1, мёртвый код).** `CommandReaderOwner.CloseReaderAsync` (`src/nextorm.core/DataContext/CommandReaderOwner.cs:49`) не имеет вызовов (Roslyn refs — 0). Триггер: ревизия `CommandReaderOwner`/async-пути reader'а (в т.ч. #27).
+- **P2 (цикл 1, план-кэш).** Ключ naming-convention кэша строится по экземпляру, а не по типу — размножение кэша на инстанциацию. Триггер: ревизия metadata/mapper-кэша при следующей правке ключей.
+- **P2 (цикл 1, аллокации).** Per-Read замыкание + `string.Join` на пути чтения. Триггер: `nextorm-db-perf-analyst` на read-пути / жалоба на аллокации.
+- **P2 (цикл 1, тест).** Нет теста равенства `ColumnsPlanHash` (структурно равные наборы колонок должны совпадать по хэшу). Триггер: правка `ColumnsPlanHash`/`SelectExpressionPlanEqualityComparer`.
+- **Флейк.** `InListCacheTests.In_InlineArray_StructurallyEqualCallSites_ShouldReuseCachedPlan` (`tests/nextorm.sqlite.tests/InListCacheTests.cs:56`) падает при полном прогоне под coverage (pre-existing; предположительно гонка с `DataContextCache.Clear`). Триггер: повтор в CI.
+- **Deferred (цикл 4).** Стриминг multi-result: `BatchResult` буферизует все наборы (eager). Триггер: запрос пользователя / #27-стиль.
+- **Принято как defensive (цикл 4).** Защитные ветки `BatchRunner` («провайдер вернул меньше наборов, чем объявлено»; несовпадение счётчиков) недостижимы через public API и тестами не покрыты — оставлены намеренно.

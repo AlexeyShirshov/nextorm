@@ -11,7 +11,7 @@
 > (`INSERT`/`UPDATE`/`DELETE`/full `MERGE`, PostgreSQL data-modifying CTEs), bulk insert, `CREATE TABLE AS
 > SELECT` and a transactions role.
 
-**Prerequisites:** [Provider overview](../../providers/overview.md) · [Limitations](../../advanced/limitations.md) · [Query hints](../../guide/17-query-hints.md)
+**Prerequisites:** [Provider overview](../../providers/overview.md) · [Limitations](../../advanced/limitations.md) · [Query hints](../../guide/15-query-hints.md)
 
 ## Positioning
 
@@ -178,7 +178,7 @@ surface, which nextorm matches or exceeds. linq2db covers them:
 * **Database-first tooling**: linq2db ships a CLI/T4 code-generation toolchain that scaffolds entity and
   table-function mappings from a live database; nextorm declares mappings in code. The dynamic-schema
   sources nextorm supports through a caller-declared `TRow` schema (ClickHouse `values()`, PostgreSQL
-  `jsonb_to_record(set)`, [dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema))
+  `jsonb_to_record(set)`, [dynamic result schema](../../guide/11-table-valued-functions.md#dynamic-result-schema))
   are unsupported by linq2db as well.
 * **Provider breadth**: linq2db adds Oracle, Firebird, DB2, SAP HANA, Informix, Sybase and SQL CE; nextorm
   focuses on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse.
@@ -222,9 +222,9 @@ leaves out.
 - [linq2db backlog gap analysis](linq2db-backlog-gap-analysis.md) — what linq2db *plans to add* and which of it nextorm lacks.
 - [SQL capabilities gap analysis](../roadmap/sql-capabilities-gap-analysis.md) — nextorm vs EF Core and linq2db, per construct.
 - [Limitations and out-of-scope features](../../advanced/limitations.md)
-- [Joins](../../guide/03-joins.md) — `CrossApply`/`OuterApply`.
-- [Range columns](../../guide/31-range-columns.md) — a `Range<T>` stored as a pair of scalar columns.
-- [Query hints](../../guide/17-query-hints.md)
+- [Joins](../../guide/02-joins.md) — `CrossApply`/`OuterApply`.
+- [Range columns](../../guide/29-range-columns.md) — a `Range<T>` stored as a pair of scalar columns.
+- [Query hints](../../guide/15-query-hints.md)
 - [Provider overview](../../providers/overview.md)
 
 ---

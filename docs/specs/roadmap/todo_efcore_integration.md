@@ -3,7 +3,7 @@
 
 > Рабочий план (design RFC). Источник: [`comparison/linq2db-comparison.md:83`](../comparison/linq2db-comparison.md) —
 > в linq2db есть пакет `linq2db.EntityFrameworkCore`, у nextorm интеграции нет. Дополняет
-> [Transactions (enlistment, общая транзакция с EF Core / Dapper)](../../guide/25-transactions.md): без enlistment в чужую транзакцию
+> [Transactions (enlistment, общая транзакция с EF Core / Dapper)](../../guide/23-transactions.md): без enlistment в чужую транзакцию
 > совместная работа на одном соединении неполна.
 
 ## Пункт и цель
@@ -42,7 +42,7 @@
 | Слой | Где | Состояние |
 |---|---|---|
 | Соединение | `src/nextorm.sqlite/DI/SqliteDataContextOptionsBuilderExtensions.cs:33`, `src/nextorm.postgres/DI/PostgresDataContextOptionsBuilderExtensions.cs:33` | принимает чужой `DbConnection` — **готово** |
-| Транзакция | [Transactions](../../guide/25-transactions.md) | `ITransactionManager` реализован — **блокер снят** |
+| Транзакция | [Transactions](../../guide/23-transactions.md) | `ITransactionManager` реализован — **блокер снят** |
 | Маппинг | `src/nextorm.core/DataContext/DataContextCache.cs:22-30` | процесс-глобальный кэш по `Type`, нет per-context источника |
 | Резолв источника | `src/nextorm.core/DataContext/QueryPlanner.cs:213-231`, статический `_fromCache` (`:210`) | таблица только из глобального кэша |
 | Резолв колонки | `src/nextorm.core/MemberInfoExtensions.cs:22-43`, статический `_columnNames` (`:15`) | то же |
@@ -78,7 +78,7 @@
 | `Microsoft.EntityFrameworkCore.InMemory` | in-memory контекст nextorm | нет | нет | да | только маппинг, соединения нет |
 
 Источник: имена `ProviderName` — из документации соответствующего EF-провайдера; поддержка транзакций —
-из провайдерной матрицы транзакций (см. [Transactions](../../guide/25-transactions.md)). Ячейка «нет» — только после проверки документации
+из провайдерной матрицы транзакций (см. [Transactions](../../guide/23-transactions.md)). Ячейка «нет» — только после проверки документации
 провайдера. Полный список EF-провайдеров шире (Oracle, Firebird, DB2 …) — при отсутствии nextorm-пакета
 строка добавляется по мере появления целевого провайдера.
 
@@ -110,7 +110,7 @@ public static class NextOrmDbContextExtensions
 - Владение: nextorm не открывает/не закрывает чужое соединение, не коммитит/не роллбэкает
   EF-транзакцию; `Dispose` nextorm-контекста не трогает чужую транзакцию.
 - Если у EF активна транзакция, а соединение ещё не открыто — открывать через EF, чтобы не сломать
-  проверку провайдера (см. [Provider support](../../guide/25-transactions.md#provider-support)).
+  проверку провайдера (см. [Provider support](../../guide/23-transactions.md#provider-support)).
 
 ### Маппинг из `IModel` (MVP)
 
@@ -206,14 +206,14 @@ public static class NextOrmQueryableExtensions
 ## Ограничения и цена
 
 - **Зависимость от `ITransactionManager`** (фаза 1) — **реализован**
-  ([Transactions](../../guide/25-transactions.md)).
+  ([Transactions](../../guide/23-transactions.md)).
 - **Глобальный кэш маппинга по `Type`** — один маппинг на тип на процесс (MVP); per-context резолвер —
   отдельный core-рефакторинг (фаза 2).
 - **Не покрывается EF-моделью:** schema (nextorm хранит одно `TableName`), TPH/TPT/TPC, owned types /
   table splitting, shadow properties, keyless views, value converters, query filters, temporal tables.
   Перечислить в `docs/advanced/limitations.md`.
 - **Нет change tracking** — by design.
-- **ClickHouse** — без транзакций (см. [Transactions](../../guide/25-transactions.md)).
+- **ClickHouse** — без транзакций (см. [Transactions](../../guide/23-transactions.md)).
 - **Публичный API «запирается»** — MVP добавляет расширения в новом пакете + не-генерик builder в core;
   соблюсти extend-only (`api-design` skill).
 - **Hot path не трогаем** — интеграция работает на создании контекста, не в построении SQL/исполнении.
@@ -221,7 +221,7 @@ public static class NextOrmQueryableExtensions
 ## Этапы внедрения
 
 - **Фаза 0 (предусловие):** фаза 1 транзакций (`ITransactionManager`, `UseTransaction`,
-  `cmd.Transaction`) — **реализована** ([Transactions](../../guide/25-transactions.md)).
+  `cmd.Transaction`) — **реализована** ([Transactions](../../guide/23-transactions.md)).
 - **Фаза 1 (MVP):** проект; `CreateNextOrmContext`; `NextOrmModelMapper` из `IModel`; enlist в
   транзакцию EF; реестр провайдеров; core-шов для метаданных; unit-тесты SQL-генерации без БД +
   интеграционный SQLite-тест (модель + соединение + транзакция) + shared-transaction на
@@ -264,7 +264,7 @@ public static class NextOrmQueryableExtensions
 - Core (шов метаданных): `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs` (+ не-генерик
   форма), возможно `src/nextorm.core/DataContext/DataContextCache.cs`.
 - Предусловие: `src/nextorm.core/DataContext/Roles/ITransactionManager.cs` — **реализовано**
-  ([Transactions](../../guide/25-transactions.md)).
+  ([Transactions](../../guide/23-transactions.md)).
 - Сборка: `nextorm.sln`, `Directory.Packages.props` (`Microsoft.EntityFrameworkCore.Relational`), при
   необходимости `coverage.settings.xml`, `.github/workflows/dotnet.yml`.
 - Документация: новый `docs/advanced/integration-efcore.md` (+ `docs/ru/advanced/...` + `toc.yml`),
@@ -276,7 +276,7 @@ public static class NextOrmQueryableExtensions
 ## See also
 
 - [nextorm vs linq2db: functionality comparison](../comparison/linq2db-comparison.md)
-- [Transactions (enlistment, общая транзакция с EF Core / Dapper)](../../guide/25-transactions.md)
+- [Transactions (enlistment, общая транзакция с EF Core / Dapper)](../../guide/23-transactions.md)
 - [Capability matrix: nextorm vs EF Core и linq2db](../comparison/capability-matrix.md)
 
 ## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)

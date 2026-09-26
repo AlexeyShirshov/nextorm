@@ -155,11 +155,45 @@ var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
 select concat('id:', id) as `Label` from simple_entity
 ```
 
+## Table-valued parameters
+
+ClickHouse emulates a table-valued parameter with a native array bound through `ProcedureParameter.Table<T>` ([`SupportsTableValuedParameters`](xref:NextORM.Core.ISqlDialect.SupportsTableValuedParameters) is `true`): a scalar row type binds as `Array(T)` and an entity row type as `Array(Tuple(col1, col2, ...))`, and the server expands the array with `arrayJoin`. The provider sets the driver's explicit `ClickHouseType` (wrapping a nullable column in `Nullable(...)`) because the driver infers a non-nullable type from a CLR value and would otherwise fail to serialize a null element or an empty array. A `decimal` column binds as the declared `Decimal(p, s)` (from `[DecimalPrecision(p, s)]` or the fluent mapping) or `Decimal(38, 10)` when none is declared.
+
+```csharp
+using var ctx = new ClickHouseDataContext(
+    "Host=localhost;Username=default;Database=app", new DataContextBuilder());
+
+// scalar set -> select arrayJoin(@ids)
+using var scalar = ctx.ExecuteRaw(
+    "select arrayJoin(@ids) as value order by value",
+    [ProcedureParameter.Table("ids", new[] { 3, 1, 2 })]);
+var values = scalar.Read<int>();   // [1, 2, 3]
+
+// entity set -> select t.1, t.2 from (select arrayJoin(@rows) as t)
+using var entity = ctx.ExecuteRaw(
+    "select t.1 as Id, t.2 as Name from (select arrayJoin(@rows) as t) order by Id",
+    [ProcedureParameter.Table("rows", new[]
+    {
+        new TvpRow { Id = 2, Name = "beta" },
+        new TvpRow { Id = 1, Name = null },
+    })]);
+var rows = entity.Read<TvpRow>();
+
+public sealed class TvpRow
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+}
+```
+
+The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used for a bound parameter — `format`/`values` require a literal structure and `input` is valid only in `INSERT ... SELECT`, so the array form is the supported emulation. ClickHouse has **no stored procedures** ([`SupportsStoredProcedures`](xref:NextORM.Core.ISqlDialect.SupportsStoredProcedures) is `false`, and `ExecuteProcedure` throws `NotSupportedException`), so the parameter is consumed by `ExecuteRaw`/`ExecuteRawAsync` SQL that calls `arrayJoin` itself. `TypeName` is SQL Server only and is rejected with `ArgumentException`. An empty set binds an empty array, and null elements, nullable columns and empty sets are covered by the provider tests. Only CLR types with a ClickHouse mapping are supported — the scalar column set (the integer types, `float`/`double`, `decimal` as the declared `Decimal(p, s)` or `Decimal(38, 10)`, `bool`, `string`/`char`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`, an enum as its underlying number; `TimeOnly` as `String` formatted invariantly as `HH:mm:ss.fffffff`, `TimeSpan` as `Int64` in its mapped duration unit (ticks by default), and `byte[]` as `String`); any other column type throws `NotSupportedException`. A `byte[]` column is bound as `String`, so the row reader returns a `string`, not a `byte[]` — do not rely on a `byte[]` round-trip. The set is sent as one array parameter, not streamed or copied, so use the driver's binary insert API for very large sets. See [Raw SQL: table-valued parameters](../guide/12-raw-sql.md#table-valued-parameters).
+
 ## Provider differences
 
 | Aspect | ClickHouse |
 |---|---|
 | Parameter placeholder | `@name` (driver rewrites to `{name:Type}`) |
+| Table-valued parameters | bound `Array(T)` (scalar) / `Array(Tuple(...))` (entity) expanded with `arrayJoin(@p)`; `TypeName` rejected, no stored procedures |
 | Concat | `concat(a, b)` |
 | Coalesce | `coalesce` |
 | Boolean literal | `true` / `false` |
@@ -223,7 +257,7 @@ select concat('id:', id) as `Label` from simple_entity
 - `hits_v1` and similar wide tables have far more columns than an entity interface declares. Rather
   than mapping every column, project the extra ones by name with
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (see
-  [Querying and projections](../guide/01-querying-and-projections.md#columns-by-name)); the name is
+  [Querying and projections](../querying/01-projections.md#columns-by-name)); the name is
   matched verbatim, so quoting follows the dialect.
 
 ## See also

@@ -10,7 +10,7 @@
 > generators or `PERCENTILE_CONT`), are documented with the matching concept page instead, and only
 > three providers have an exclusive surface at all: ClickHouse, PostgreSQL and SQL Server.
 
-**Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [Provider overview](../../providers/overview.md) · [Limitations and out-of-scope features](../../advanced/limitations.md)
+**Prerequisites:** [Querying and projections](../../querying/index.md) · [Provider overview](../../providers/overview.md) · [Limitations and out-of-scope features](../../advanced/limitations.md)
 
 ## How provider-specific SQL is gated
 
@@ -53,14 +53,14 @@ The MySQL/MariaDB guide page also covers the shared constructs of the MySQL fami
 The provider pages describe a construct from the database's point of view; the concept pages carry the
 full, provider-neutral walkthrough:
 
-* [Filtering (WHERE)](../02-filtering-where.md) — `IN`/`Contains`, full-text predicates;
-* [Joins](../03-joins.md) — join types, APPLY/LATERAL, ClickHouse strictness and `GLOBAL JOIN`;
-* [Grouping and aggregates](../04-grouping-and-aggregates.md) — `ROLLUP`/`CUBE`, the aggregate families;
-* [Sorting and paging](../05-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
+* [Filtering (WHERE)](../01-filtering-where.md) — `IN`/`Contains`, full-text predicates;
+* [Joins](../02-joins.md) — join types, APPLY/LATERAL, ClickHouse strictness and `GLOBAL JOIN`;
+* [Grouping and aggregates](../03-grouping-and-aggregates.md) — `ROLLUP`/`CUBE`, the aggregate families;
+* [Sorting and paging](../04-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
 * [Scalar functions](../../scalar-functions/index.md) — arrays, JSON, UUID, session/info, provider surfaces;
-* [Table-valued functions](../13-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
-* [Query hints](../17-query-hints.md) — table hints, `OPTION (RECOMPILE)`, ClickHouse query modifiers;
-* [JSON support across providers](../18-json.md) — every JSON surface side by side.
+* [Table-valued functions](../11-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
+* [Query hints](../15-query-hints.md) — table hints, `OPTION (RECOMPILE)`, ClickHouse query modifiers;
+* [JSON support across providers](../16-json.md) — every JSON surface side by side.
 
 Portable functions that are spelled differently on every database live on
 [`CommonFunctions`](xref:NextORM.Core.CommonFunctions) and are documented with the concept pages:
