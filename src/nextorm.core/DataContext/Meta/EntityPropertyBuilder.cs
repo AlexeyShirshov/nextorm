@@ -20,6 +20,7 @@ public class EntityPropertyBuilder<T>
     private IPropertyValueConverter? _converter;
     private JsonColumnOptions? _jsonOptions;
     private RangeColumnsMetadata? _rangeColumns;
+    private bool _isDynamicColumnsStore;
 
     /// <summary>
     /// Creates a builder for the property selected by <paramref name="propertySelector"/>.
@@ -215,15 +216,41 @@ public class EntityPropertyBuilder<T>
     }
 
     /// <summary>
+    /// Marks the selected property as the entity's dynamic-columns store: it receives the row's
+    /// unmapped columns when the entity is read instead of mapping to a column itself. The property
+    /// must have a setter and be assignable from <see cref="Dictionary{TKey,TValue}"/> with
+    /// <see cref="string"/> keys and <see cref="object"/> values. Cannot be combined with a column
+    /// name, a value/JSON converter or <see cref="RangeColumns(string, string, bool, bool)"/>.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> DynamicColumnsStore()
+    {
+        _isDynamicColumnsStore = true;
+        return this;
+    }
+
+    /// <summary>
     /// Resolves the selected property's <see cref="PropertyInfo"/> and produces its mapping metadata.
     /// </summary>
     /// <returns>The property's mapping metadata.</returns>
-    /// <exception cref="InvalidOperationException">The selector does not produce a <see cref="PropertyInfo"/>, or the converter's model type does not match the property type.</exception>
+    /// <exception cref="InvalidOperationException">The selector does not produce a <see cref="PropertyInfo"/>, the converter's model type does not match the property type, or the dynamic-columns store has an invalid type.</exception>
     public IPropertyMetadata Build()
     {
         var miVisitor = new MemberExpressionVisitor();
         miVisitor.Visit(_propertySelector);
         var pi = (PropertyInfo)miVisitor.MemberInfo! ?? throw new InvalidOperationException($"Expression {_propertySelector} does not produce PropertyInfo");
+        if (_isDynamicColumnsStore)
+        {
+            if (_columnName is not null || _converter is not null || _jsonOptions is not null || _rangeColumns is not null)
+                throw new InvalidOperationException($"The dynamic-columns store property '{pi.Name}' cannot also declare a column mapping.");
+            if (!pi.CanWrite)
+                throw new InvalidOperationException($"The dynamic-columns store property '{pi.Name}' must have a setter.");
+            if (!DynamicColumnsTypeFacts.IsStoreType(pi.PropertyType))
+                throw new InvalidOperationException($"The dynamic-columns store property '{pi.Name}' must be assignable from Dictionary<string, object?>.");
+
+            return new PropertyMetadata { ColumnName = pi.Name, PropertyInfo = pi, IsColumnNameAuto = true, IsDynamicColumnsStore = true };
+        }
+
         var converter = _jsonOptions is not null
             ? JsonColumnConverterFactory.Create(pi.PropertyType, _jsonOptions.Storage, _jsonOptions.Options)
             : _converter;

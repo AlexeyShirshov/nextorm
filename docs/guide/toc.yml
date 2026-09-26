@@ -58,6 +58,8 @@
   href: 30-value-converters.md
 - name: Range columns (pair of scalar columns)
   href: 31-range-columns.md
+- name: Dynamic columns (read side)
+  href: 32-dynamic-columns.md
 - name: Provider-specific SQL
   items:
     - name: Overview

@@ -74,6 +74,8 @@
       href: guide/30-value-converters.md
     - name: Range-колонки (пара скалярных колонок)
       href: guide/31-range-columns.md
+    - name: Динамические колонки (сторона чтения)
+      href: guide/32-dynamic-columns.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

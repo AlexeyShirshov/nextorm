@@ -25,9 +25,11 @@ public class EntityMetadataBuilder<T>
             ? AutoBuildTableName()
             : (_tableName, false);
 
-        return new EntityMetadata(tableName, _props.Count == 0
-            ? AutoBuildProperties()
-            : _props.Select(pb => pb.Build()).ToArray(), isTableNameAuto);
+        var properties = _props.Count == 0
+            ? AutoBuildProperties(out var store)
+            : BuildDeclaredProperties(out store);
+
+        return CreateMetadata(tableName, isTableNameAuto, properties, store);
     }
     /// <summary>
     /// Builds the metadata entirely by reflecting over the CLR type, ignoring any table or property
@@ -36,20 +38,86 @@ public class EntityMetadataBuilder<T>
     /// <returns>The auto-derived entity metadata.</returns>
     public IEntityMetadata AutoBuild()
     {
-        var propsMeta = AutoBuildProperties();
+        var propsMeta = AutoBuildProperties(out var store);
 
         var (tableName, isTableNameAuto) = AutoBuildTableName();
 
-        return new EntityMetadata(tableName, propsMeta, isTableNameAuto);
+        return CreateMetadata(tableName, isTableNameAuto, propsMeta, store);
     }
 
-    private static List<IPropertyMetadata> AutoBuildProperties()
+    private List<IPropertyMetadata> BuildDeclaredProperties(out IPropertyMetadata? dynamicColumnsStore)
+    {
+        var list = new List<IPropertyMetadata>(_props.Count);
+        dynamicColumnsStore = null;
+        for (var i = 0; i < _props.Count; i++)
+        {
+            var property = _props[i].Build();
+            if (property.IsDynamicColumnsStore)
+            {
+                if (dynamicColumnsStore is not null)
+                    throw new InvalidOperationException($"The entity {typeof(T).Name} declares more than one dynamic-columns store.");
+                dynamicColumnsStore = property;
+                continue;
+            }
+
+            list.Add(property);
+        }
+
+        return list;
+    }
+
+    private IEntityMetadata CreateMetadata(string? tableName, bool isTableNameAuto, List<IPropertyMetadata> properties, IPropertyMetadata? dynamicColumnsStore)
+    {
+        dynamicColumnsStore ??= FindAttributeStore(properties);
+        if (dynamicColumnsStore is not null)
+        {
+            properties.RemoveAll(p => p.PropertyInfo == dynamicColumnsStore.PropertyInfo);
+            ValidateDynamicColumnsStore(typeof(T), dynamicColumnsStore.PropertyInfo);
+        }
+
+        return new EntityMetadata(tableName, properties, isTableNameAuto, dynamicColumnsStore);
+    }
+
+    private static IPropertyMetadata? FindAttributeStore(List<IPropertyMetadata> properties)
+    {
+        var entityType = typeof(T);
+        var props = entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance);
+        foreach (var prop in props)
+        {
+            var intProp = FindInterfaceProperty(entityType, prop);
+            var attr = prop.GetCustomAttribute<DynamicColumnsAttribute>(true) ?? intProp?.GetCustomAttribute<DynamicColumnsAttribute>(true);
+            if (attr is null)
+                continue;
+
+            foreach (var existing in properties)
+            {
+                if (existing.PropertyInfo == prop)
+                    return existing;
+            }
+
+            return new PropertyMetadata { ColumnName = prop.Name, PropertyInfo = prop, IsColumnNameAuto = true, IsDynamicColumnsStore = true };
+        }
+
+        return null;
+    }
+
+    private static void ValidateDynamicColumnsStore(Type entityType, PropertyInfo property)
+    {
+        if (!property.CanWrite)
+            throw new InvalidOperationException($"The dynamic-columns store property '{property.Name}' of {entityType.Name} must have a setter.");
+
+        if (!DynamicColumnsTypeFacts.IsStoreType(property.PropertyType))
+            throw new InvalidOperationException($"The dynamic-columns store property '{property.Name}' of {entityType.Name} must be assignable from Dictionary<string, object?>.");
+    }
+
+    private static List<IPropertyMetadata> AutoBuildProperties(out IPropertyMetadata? dynamicColumnsStore)
     {
         var propsMeta = new List<IPropertyMetadata>();
+        dynamicColumnsStore = null;
 
         var entityType = typeof(T);
 
-        var props = entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
+        var props = entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).ToArray();
         for (var (idx, cnt) = (0, props.Length); idx < cnt; idx++)
         {
             var prop = props[idx];
@@ -59,6 +127,19 @@ public class EntityMetadataBuilder<T>
             // without a direct mapping falls back to its matching interface property (mirrors the
             // former ColumnAttribute-only lookup).
             var intProp = FindInterfaceProperty(entityType, prop);
+            var dynamicColumnsAttr = prop.GetCustomAttribute<DynamicColumnsAttribute>(true) ?? intProp?.GetCustomAttribute<DynamicColumnsAttribute>(true);
+            if (dynamicColumnsAttr is not null)
+            {
+                if (dynamicColumnsStore is not null)
+                    throw new InvalidOperationException($"The entity {entityType.Name} declares more than one dynamic-columns store.");
+                ValidateDynamicColumnsStore(entityType, prop);
+                dynamicColumnsStore = new PropertyMetadata { ColumnName = prop.Name, PropertyInfo = prop, IsColumnNameAuto = true, IsDynamicColumnsStore = true };
+                continue;
+            }
+
+            if (!prop.CanWrite)
+                continue;
+
             var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true) ?? intProp?.GetCustomAttribute<ColumnAttribute>(true);
             var keyAttr = prop.GetCustomAttribute<KeyAttribute>(true) ?? intProp?.GetCustomAttribute<KeyAttribute>(true);
             var generatedAttr = prop.GetCustomAttribute<DatabaseGeneratedAttribute>(true) ?? intProp?.GetCustomAttribute<DatabaseGeneratedAttribute>(true);

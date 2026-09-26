@@ -21,6 +21,7 @@ internal static class RowMapperFactory
     private static readonly MethodInfo ToInt64MI = typeof(Convert).GetMethod(nameof(Convert.ToInt64), [typeof(object)])!;
     private static readonly MethodInfo FromStorageMI = typeof(DurationStorage).GetMethod(nameof(DurationStorage.FromStorage), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ConvertFromProviderMI = typeof(IPropertyValueConverter).GetMethod(nameof(IPropertyValueConverter.ConvertFromProvider))!;
+    private static readonly MethodInfo DynamicColumnsReadMI = typeof(DynamicColumns).GetMethod(nameof(DynamicColumns.Read))!;
     private static readonly ConcurrentDictionary<Type, MethodInfo?> TypedFromProviderMethods = new();
 
     /// <summary>
@@ -232,7 +233,12 @@ internal static class RowMapperFactory
                 param,
                 selectList,
                 ignoreColumns: false,
-                column => mapColumn(column, param));
+                column => mapColumn(column, param),
+                (column, startIndex, dynamicColumns) => Expression.Call(
+                    Expression.Constant(dynamicColumns),
+                    DynamicColumnsReadMI,
+                    param,
+                    Expression.Constant(startIndex)));
 
             lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
         }

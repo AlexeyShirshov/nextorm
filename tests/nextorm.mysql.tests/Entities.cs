@@ -32,3 +32,13 @@ public interface IComplexEntity
     [Column("dt")]
     DateTime? Datetime { get; set; }
 }
+
+[SqlTable("dynamic_entity")]
+public class DynamicColumnsEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [DynamicColumns]
+    public Dictionary<string, object?> Extra { get; set; } = new();
+}

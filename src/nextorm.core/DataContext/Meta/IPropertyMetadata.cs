@@ -104,4 +104,15 @@ public interface IPropertyMetadata
     /// compiling.
     /// </summary>
     IPropertyValueConverter? Converter => null;
+
+    /// <summary>
+    /// Whether the property is the entity's dynamic-columns store: it receives the columns of a read
+    /// row that are not mapped to a declared member instead of mapping to a column itself. Declared
+    /// with <see cref="DynamicColumnsAttribute"/> or set fluently with
+    /// <see cref="EntityPropertyBuilder{T}.DynamicColumnsStore"/>. A dynamic-columns store is not part
+    /// of <see cref="IEntityMetadata.Properties"/>; it is exposed through
+    /// <see cref="IEntityMetadata.DynamicColumnsStore"/>. The default implementation returns
+    /// <see langword="false"/> so existing external implementations keep compiling.
+    /// </summary>
+    bool IsDynamicColumnsStore => false;
 }

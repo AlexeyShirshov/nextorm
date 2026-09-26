@@ -440,6 +440,13 @@ internal readonly struct SqlBuilder
                 for (var i = 0; i < selectListCount; i++)
                 {
                     var item = selectList[i];
+                    if (item.IsDynamicColumnsStore)
+                    {
+                        if (!_ctx.ParamMode)
+                            selectBuilder!.Append("*").Append(", ");
+                        continue;
+                    }
+
                     var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, !needAlias, renameAware: true);
 
                     if (!_ctx.ParamMode)

@@ -25,4 +25,14 @@ public interface IEntityMetadata
     /// mapping as declared) so existing external implementations keep compiling.
     /// </summary>
     bool IsTableNameAuto => false;
+
+    /// <summary>
+    /// The property that receives the entity's unmapped columns when a row is read, or
+    /// <see langword="null"/> when the entity has none. Declared with
+    /// <see cref="DynamicColumnsAttribute"/> or <see cref="EntityPropertyBuilder{T}.DynamicColumnsStore"/>.
+    /// The store is excluded from <see cref="Properties"/>; use this member to reach it. The default
+    /// implementation returns <see langword="null"/> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    IPropertyMetadata? DynamicColumnsStore => null;
 }

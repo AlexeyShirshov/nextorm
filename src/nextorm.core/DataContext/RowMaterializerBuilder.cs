@@ -22,12 +22,23 @@ internal static class RowMaterializerBuilder
     /// <paramref name="ignoreColumns"/> is set (Any/Count select "*"), there is no
     /// projection to bind and an empty constructor call is returned.
     /// </summary>
+    /// <param name="resultType">The type a row is materialized into.</param>
+    /// <param name="param">The row parameter the column accessors read from.</param>
+    /// <param name="selectList">The projected columns, in result-set order.</param>
+    /// <param name="ignoreColumns">Whether the projection is ignored (Any/Count).</param>
+    /// <param name="mapColumn">Builds the accessor expression of one projected column.</param>
+    /// <param name="mapDynamicColumns">
+    /// Builds the accessor expression of the dynamic-columns store from its entry, the ordinal of the
+    /// first star field and the reader for the mapped columns. Providers that do not support the store
+    /// pass <see langword="null"/> and reject an entity that declares one.
+    /// </param>
     public static Expression Build(
         Type resultType,
         ParameterExpression param,
         SelectExpression[] selectList,
         bool ignoreColumns,
-        Func<SelectExpression, Expression> mapColumn)
+        Func<SelectExpression, Expression> mapColumn,
+        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns = null)
     {
         var ctorInfo = resultType.GetConstructors()
             .OrderByDescending(it => it.GetParameters().Length)
@@ -37,6 +48,26 @@ internal static class RowMaterializerBuilder
 
         if (ignoreColumns)
             return Expression.New(ctorInfo);
+
+        var dynamicIndex = -1;
+        for (var i = 0; i < selectList.Length; i++)
+        {
+            if (selectList[i].IsDynamicColumnsStore)
+            {
+                dynamicIndex = i;
+                break;
+            }
+        }
+
+        if (dynamicIndex >= 0)
+        {
+            if (mapDynamicColumns is null)
+                throw new NotSupportedException($"The provider cannot materialize the dynamic-columns store of {resultType.Name}.");
+
+            var parameterlessCtor = resultType.GetConstructor(Type.EmptyTypes)
+                ?? throw new QueryPreparationException($"The entity {resultType.Name} declares a dynamic-columns store but has no parameterless constructor; map it to a parameterless constructor.");
+            return BuildMemberInit(resultType, parameterlessCtor, selectList, mapColumn, mapDynamicColumns);
+        }
 
         var hasRangePairs = false;
         for (var i = 0; i < selectList.Length; i++)
@@ -111,12 +142,43 @@ internal static class RowMaterializerBuilder
         Type resultType,
         ConstructorInfo ctorInfo,
         SelectExpression[] selectList,
-        Func<SelectExpression, Expression> mapColumn)
+        Func<SelectExpression, Expression> mapColumn,
+        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns = null)
     {
         var bindings = new List<MemberBinding>(selectList.Length);
+        DynamicColumns? dynamicColumns = null;
+        var starStart = -1;
+        if (mapDynamicColumns is not null)
+        {
+            var names = new List<string>(selectList.Length);
+            var nonStoreCount = 0;
+            for (var i = 0; i < selectList.Length; i++)
+            {
+                var column = selectList[i];
+                if (column.IsDynamicColumnsStore)
+                    continue;
+
+                nonStoreCount++;
+                if (column.PropertyName is not null)
+                    names.Add(column.PropertyName);
+                if (column.PhysicalColumnName is not null)
+                    names.Add(column.PhysicalColumnName);
+            }
+
+            dynamicColumns = new DynamicColumns(names.ToArray());
+            starStart = nonStoreCount;
+        }
+
         for (var i = 0; i < selectList.Length; i++)
         {
             var column = selectList[i];
+
+            if (column.IsDynamicColumnsStore)
+            {
+                var storeProperty = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                bindings.Add(Expression.Bind(storeProperty, mapDynamicColumns!(column, starStart, dynamicColumns!)));
+                continue;
+            }
 
             // The upper bound of a range pair is materialized together with its lower sibling.
             if (column.RangeColumnRole == RangeColumnRole.Upper)

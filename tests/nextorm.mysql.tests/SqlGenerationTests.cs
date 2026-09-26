@@ -21,6 +21,15 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void DynamicColumnsStore_ShouldAppendStar()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    [Fact]
     public void IndexHint_UseForceIgnore_ShouldRenderMySqlForms()
     {
         using var ctx = MySqlTestContext.Create();

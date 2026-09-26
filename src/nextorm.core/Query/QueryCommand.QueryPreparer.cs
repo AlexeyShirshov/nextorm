@@ -485,10 +485,25 @@ public partial class QueryCommand
                                         PropertyName = pi.Name,
                                         Expression = exp,
                                         PropertyInfo = pi,
+                                        PhysicalColumnName = prop.ColumnName,
                                         DurationUnit = prop.DurationUnit,
                                         DurationPrecision = prop.DurationPrecision,
                                         ProviderType = prop.Converter?.ProviderType,
                                         Converter = prop.Converter,
+                                    });
+                                }
+
+                                if (entityMeta.DynamicColumnsStore is { } dynamicStore)
+                                {
+                                    if (cmd.Joins is { Length: > 0 })
+                                        throw new NotSupportedException("A dynamic-columns store is only supported for a query over a single physical source; the query has joins.");
+
+                                    AddColumn(cmd, noHash, columns, ref columnsPlanHash, new SelectExpression(typeof(Dictionary<string, object?>))
+                                    {
+                                        Index = columns.Count,
+                                        PropertyName = dynamicStore.PropertyInfo.Name,
+                                        PropertyInfo = dynamicStore.PropertyInfo,
+                                        IsDynamicColumnsStore = true,
                                     });
                                 }
 
