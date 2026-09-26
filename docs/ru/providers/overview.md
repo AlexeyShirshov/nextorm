@@ -86,6 +86,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | `lag_in_frame` / `lead_in_frame` | бросает | бросает | бросает | бросает | бросает | `lagInFrame` / `leadInFrame` | не применимо |
 | Квотирование идентификаторов / псевдонимов | одинарные кавычки: `as 't1'` | квадратные скобки: `as [t1]` | двойные кавычки: `as "t1"` | обратные кавычки: `` as `t1` `` | обратные кавычки: `` as `t1` `` | обратные кавычки: `` as `t1` `` | не применимо |
 | Псевдоним производной таблицы (подзапрос в `FROM`) | не требуется | требуется | требуется | требуется | требуется | требуется | не применимо |
+| Переопределение источника на запрос (`WithSchema`/`WithDatabase`/`WithServer`) | schema = attached-база (`main.t`); database — то же; server бросает | `schema.t`, `db.schema.t`, `server.db.schema.t` | `schema.t`; database/server бросают | `db.t` (database = schema); server бросает | как в MySQL | `db.t` (database = schema); server бросает | бросает (нет SQL-источника) |
 | Псевдоним табличной функции | не требуется | требуется | требуется | требуется | требуется | требуется | источник TVF не поддерживается |
 | Соединение `LEFT` / `RIGHT` / `FULL` / `CROSS` | да | да | да | без `FULL` | без `FULL` | да | да |
 | Возможность соединения `RIGHT` / `FULL` | поддерживается | поддерживается | поддерживается | только `RIGHT` | только `RIGHT` | поддерживается | поддерживается |
@@ -111,6 +112,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Хинты join / подзапроса / области видимости | **Две формы** | SQL Server рендерит join-хинт внутри join (`INNER LOOP JOIN`), а хинт области — как `WITH (...)` на каждой таблице; PostgreSQL/MySQL/MariaDB сворачивают все три во встроенный `/*+ ... */`; SQLite/ClickHouse/in-memory их отклоняют (см. [Хинты запросов](../guide/17-query-hints.md)). |
 | Режимы ожидания блокировки строк (`NOWAIT`/`SKIP LOCKED`) | **Унифицировано** | [`ILockRenderer.Render`](xref:NextORM.Core.ILockRenderer.Render(NextORM.Core.LockMode,NextORM.Core.LockWaitMode,NextORM.Core.KeywordCase)) рендерит родную форму каждого способного провайдера: PostgreSQL/MySQL/MariaDB дописывают `NOWAIT`/`SKIP LOCKED` (MySQL переключает разделяемую блокировку на `FOR SHARE`), SQL Server добавляет `NOWAIT`/`READPAST` в блокирующий табличный хинт (`READPAST` приближает `SKIP LOCKED`); SQLite/ClickHouse/in-memory отклоняют любую блокировку строк. |
 | Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/14-raw-sql.md)). |
+| Уровни переопределения источника на запрос | **Гейтится по уровню** | `MakeQualifiedTableName` плюс `SupportsCrossDatabase`/`SupportsLinkedServer`: провайдер, не умеющий уровень, отклоняет `WithDatabase`/`WithServer` через `NotSupportedException`, а не молча теряет квалификатор. Schema/имя таблицы и сырой `WithTableExpression` — универсальные уровни у SQL-провайдеров. |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
 
 Строки таблицы [ограничений](../advanced/limitations.md) описывают итоговое поведение в рантайме.

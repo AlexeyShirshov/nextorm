@@ -86,6 +86,7 @@ change.
 | `lag_in_frame` / `lead_in_frame` | throws | throws | throws | throws | throws | `lagInFrame` / `leadInFrame` | not applicable |
 | Identifier / alias quoting | single quotes: `as 't1'` | brackets: `as [t1]` | double quotes: `as "t1"` | backticks: `` as `t1` `` | backticks: `` as `t1` `` | backticks: `` as `t1` `` | not applicable |
 | Derived table (subquery in `FROM`) alias | not required | required | required | required | required | required | not applicable |
+| Per-query source override (`WithSchema`/`WithDatabase`/`WithServer`) | schema = attached database (`main.t`); database = same; server throws | `schema.t`, `db.schema.t`, `server.db.schema.t` | `schema.t`; database/server throw | `db.t` (database = schema); server throws | same as MySQL | `db.t` (database = schema); server throws | throws (no SQL source) |
 | Table-valued function alias | not required | required | required | required | required | required | TVF source not supported |
 | `LEFT` / `RIGHT` / `FULL` / `CROSS` join | yes | yes | yes | no `FULL` | no `FULL` | yes | yes |
 | `RIGHT` / `FULL` join capability | supported | supported | supported | `RIGHT` only | `RIGHT` only | supported | supported |
@@ -111,6 +112,7 @@ provider-specific. The decision for every known divergence:
 | Join / subquery / tables-in-scope hints | **Two forms** | SQL Server renders a join hint inside the join (`INNER LOOP JOIN`) and a tables-in-scope hint as `WITH (...)` on every table; PostgreSQL/MySQL/MariaDB fold all three into the inline `/*+ ... */` comment; SQLite/ClickHouse/in-memory reject them (see [Query hints](../guide/17-query-hints.md#join-subquery-and-tables-in-scope-hints)). |
 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Unified** | [`ILockRenderer.Render`](xref:NextORM.Core.ILockRenderer.Render(NextORM.Core.LockMode,NextORM.Core.LockWaitMode,NextORM.Core.KeywordCase)) emits each capable provider's native form: PostgreSQL/MySQL/MariaDB append `NOWAIT`/`SKIP LOCKED` (MySQL switches a shared lock to `FOR SHARE`), SQL Server adds `NOWAIT`/`READPAST` to the locking table hint (`READPAST` approximates `SKIP LOCKED`); SQLite/ClickHouse/in-memory reject any row lock. |
 | Raw SQL as a composable `FROM` source | **Unified** | `FromSql` + `SupportsRawSqlSource` on every SQL provider (see [Raw SQL](../guide/14-raw-sql.md#compositing-raw-sql-as-a-from-source)). |
+| Per-query source override levels | **Gated per level** | `MakeQualifiedTableName` plus `SupportsCrossDatabase`/`SupportsLinkedServer`: a provider that cannot express a level rejects `WithDatabase`/`WithServer` with `NotSupportedException` instead of silently dropping the qualifier. Schema/data-table naming and raw `WithTableExpression` are the universal levels on SQL providers. |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Gated** | PostgreSQL and MariaDB support them; SQL Server/SQLite/MySQL reject via `SupportsIntersectExceptAll`. |
 
 The per-feature rows in the [limitations](../advanced/limitations.md) table spell out the resulting

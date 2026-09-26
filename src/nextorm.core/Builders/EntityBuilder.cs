@@ -46,6 +46,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private string? _table;
     private FromExpression? _from;
     private string? _subQueryHint;
+    private string? _tableNameOverride;
+    private string? _schemaOverride;
+    private string? _databaseOverride;
+    private string? _serverOverride;
+    private string? _tableExpression;
     #endregion
     /// <summary>
     /// Initializes a builder over the mapped entity type; the source is resolved from entity metadata.
@@ -206,12 +211,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             BindArrayJoinElement = _bindArrayJoinElement,
         });
 
-        if (_query is not null)
-            cmd.From = new FromExpression(_query) { SubQueryHint = _subQueryHint };
-        else if (_from is not null)
-            cmd.From = _subQueryHint is null || _from.SubQuery is null ? _from : new FromExpression(_from.SubQuery) { SubQueryHint = _subQueryHint };
-        else if (!string.IsNullOrEmpty(_table))
-            cmd.From = new FromExpression(_table);
+        cmd.From = ResolveSource();
 
         if (Ctes is not null)
             cmd.Ctes = Ctes;
@@ -267,12 +267,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             BindArrayJoinElement = _bindArrayJoinElement,
         });
 
-        if (_query is not null)
-            cmd.From = new FromExpression(_query) { SubQueryHint = _subQueryHint };
-        else if (_from is not null)
-            cmd.From = _subQueryHint is null || _from.SubQuery is null ? _from : new FromExpression(_from.SubQuery) { SubQueryHint = _subQueryHint };
-        else if (!string.IsNullOrEmpty(_table))
-            cmd.From = new FromExpression(_table);
+        cmd.From = ResolveSource();
 
         if (Ctes is not null)
             cmd.Ctes = Ctes;
@@ -895,6 +890,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._group = _group;
         dst._table = _table;
         dst._from = _from;
+        dst._tableNameOverride = _tableNameOverride;
+        dst._schemaOverride = _schemaOverride;
+        dst._databaseOverride = _databaseOverride;
+        dst._serverOverride = _serverOverride;
+        dst._tableExpression = _tableExpression;
         dst.IsDistinct = IsDistinct;
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;
@@ -1294,6 +1294,19 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, TablesInScopeHints = TablesInScopeHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         cb.SourceFrom = SourceFrom;
+
+        // Overrides on the pre-join builder are already folded into the materialised left command
+        // (ResolveJoinBase); carrying them as well would make the joined builder reject its own derived
+        // source. Only propagate them when the source stayed unresolved for the planner.
+        if (query is null)
+        {
+            cb._tableNameOverride = _tableNameOverride;
+            cb._schemaOverride = _schemaOverride;
+            cb._databaseOverride = _databaseOverride;
+            cb._serverOverride = _serverOverride;
+            cb._tableExpression = _tableExpression;
+        }
+
         return cb;
     }
     private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition)
@@ -1650,6 +1663,160 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         b.CommandTimeout = seconds > 0 ? seconds : null;
 
         return b;
+    }
+    /// <summary>
+    /// Overrides the physical table name of the primary source for this query only, for example
+    /// <c>From&lt;IOrder&gt;().WithTableName("orders_archive")</c>. The mapped entity (and its columns) is
+    /// unchanged, and other queries are unaffected. The name is emitted verbatim, or quoted when
+    /// identifier quoting is enabled (see <see cref="WithQuotedIdentifiers"/>).
+    /// </summary>
+    /// <param name="name">The table name to render instead of the mapped one.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder<TEntity> WithTableName(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        EnsureSqlSourceOverride();
+
+        var b = Clone();
+        b._tableNameOverride = name;
+        return b;
+    }
+    /// <summary>
+    /// Qualifies the primary table with <paramref name="schema"/> for this query only, for example
+    /// <c>From&lt;IOrder&gt;().WithSchema("sales")</c> rendering <c>sales.orders</c>. Requires a provider
+    /// that can render a schema qualifier (see <see cref="ISqlDialect.MakeQualifiedTableName"/>).
+    /// </summary>
+    /// <param name="schema">The schema name to render before the table.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder<TEntity> WithSchema(string schema)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(schema);
+        EnsureSqlSourceOverride();
+
+        var b = Clone();
+        b._schemaOverride = schema;
+        return b;
+    }
+    /// <summary>
+    /// Qualifies the primary table with <paramref name="database"/> for this query only
+    /// (<c>database.schema.table</c> on SQL Server, <c>database.table</c> on MySQL/MariaDB/ClickHouse,
+    /// an attached database on SQLite). Requires a provider that opted into
+    /// <see cref="ISqlDialect.SupportsCrossDatabase"/>.
+    /// </summary>
+    /// <param name="database">The database name to render before the table.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder<TEntity> WithDatabase(string database)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(database);
+        EnsureSqlSourceOverride();
+
+        var b = Clone();
+        b._databaseOverride = database;
+        return b;
+    }
+    /// <summary>
+    /// Qualifies the primary table with a linked <paramref name="server"/> for this query only
+    /// (<c>server.database.schema.table</c>). Only SQL Server opted into
+    /// <see cref="ISqlDialect.SupportsLinkedServer"/>; every other provider rejects the override with
+    /// <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <param name="server">The linked server name to render before the table.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder<TEntity> WithServer(string server)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(server);
+        EnsureSqlSourceOverride();
+
+        var b = Clone();
+        b._serverOverride = server;
+        return b;
+    }
+    /// <summary>
+    /// Replaces the primary table access with the raw SQL <paramref name="sql"/> rendered as a derived
+    /// source (<c>(sql) AS alias</c>) for this query only. The mapped entity's columns are read from the
+    /// expression's result set. The fragment is emitted verbatim, so pass only trusted SQL (the caller
+    /// owns validity and injection safety, as with <c>WithSql</c>). Cannot be combined with a
+    /// table-name/schema/database/server override. SQL providers only.
+    /// </summary>
+    /// <param name="sql">The raw SQL expression to use as the table source.</param>
+    /// <returns>A builder with the source replaced.</returns>
+    public EntityBuilder<TEntity> WithTableExpression(string sql)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sql);
+        EnsureSqlSourceOverride();
+
+        var b = Clone();
+        b._tableExpression = sql;
+        return b;
+    }
+
+    /// <summary>
+    /// Whether any per-query source override has been set on this builder.
+    /// </summary>
+    private bool HasSourceOverride => _tableNameOverride is not null || _schemaOverride is not null
+        || _databaseOverride is not null || _serverOverride is not null || _tableExpression is not null;
+
+    /// <summary>
+    /// Rejects a source override eagerly on the in-memory provider, which has no SQL source to rewrite.
+    /// The source-kind check (a physical table/entity is required) happens later in
+    /// <see cref="ResolvePhysicalSource"/>.
+    /// </summary>
+    private void EnsureSqlSourceOverride()
+    {
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException("Per-query source overrides are not supported by the in-memory provider; run the query against a SQL provider.");
+    }
+
+    /// <summary>
+    /// Resolves the command's primary source, applying the per-query overrides when any are set. Without
+    /// an override the resolution is unchanged: an explicit source is used as-is, otherwise the command
+    /// leaves <c>From</c> for the planner to resolve from entity metadata.
+    /// </summary>
+    internal FromExpression? ResolveSource()
+    {
+        if (!HasSourceOverride)
+        {
+            if (_query is not null) return new FromExpression(_query) { SubQueryHint = _subQueryHint };
+            if (_from is not null)
+                return _subQueryHint is null || _from.SubQuery is null
+                    ? _from
+                    : new FromExpression(_from.SubQuery) { SubQueryHint = _subQueryHint };
+            return !string.IsNullOrEmpty(_table) ? new FromExpression(_table) : null;
+        }
+
+        if (_tableExpression is not null)
+        {
+            if (_tableNameOverride is not null || _schemaOverride is not null || _databaseOverride is not null || _serverOverride is not null)
+                throw new InvalidOperationException("WithTableExpression cannot be combined with a table-name, schema, database or server override.");
+
+            return ResolvePhysicalSource().WithOverrides(null, null, null, null, _tableExpression);
+        }
+
+        return ResolvePhysicalSource().WithOverrides(_tableNameOverride, _schemaOverride, _databaseOverride, _serverOverride, null);
+    }
+
+    /// <summary>
+    /// Resolves the physical-table base a qualification/table-expression override applies to. Only a
+    /// mapped entity, an explicit table name or an explicit physical <see cref="FromExpression"/> can
+    /// carry one; a derived query, subquery, table-valued function or pivot is rejected.
+    /// </summary>
+    private FromExpression ResolvePhysicalSource()
+    {
+        if (_query is not null || (_from is not null && string.IsNullOrEmpty(_from.Table)))
+            throw new NotSupportedException("A per-query source override can only be applied to a physical table or mapped-entity source, not a derived query, subquery, table-valued function or pivot.");
+
+        if (_from is not null)
+            return _from;
+
+        if (!string.IsNullOrEmpty(_table))
+            return new FromExpression(_table);
+
+        var t = _sourceEntityType ?? typeof(TEntity);
+        if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
+            return new FromExpression(entity.TableName, entity.IsTableNameAuto, t.IsInterface);
+
+        throw new BuildSqlCommandException(
+            $"Table name is not registered for type {t}. Materialize the entity first (for example with {nameof(DataContextExtensions.From)}<{t.Name}>()) so its metadata is registered.");
     }
     /// <summary>
     /// Adds <paramref name="condition"/> to the HAVING clause, which filters grouped rows. A repeated

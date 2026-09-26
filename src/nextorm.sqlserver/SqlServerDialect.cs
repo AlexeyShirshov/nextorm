@@ -161,6 +161,31 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server quotes a physical identifier with brackets, doubling an embedded <c>]</c>.</summary>
     public override string QuoteIdentifier(string name) => "[" + name.Replace("]", "]]") + "]";
 
+    /// <summary>SQL Server qualifies a table with a database name (<c>[db].[schema].[table]</c>).</summary>
+    public override bool SupportsCrossDatabase => true;
+
+    /// <summary>SQL Server qualifies a table with a linked server name (<c>[server].[db].[schema].[table]</c>).</summary>
+    public override bool SupportsLinkedServer => true;
+
+    /// <summary>
+    /// Renders the SQL Server four-part name <c>[server].[database].[schema].[table]</c>, omitting the
+    /// parts that are <c>null</c>. Quoting is applied later by the SQL builder.
+    /// </summary>
+    public override string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is null && database is null)
+            return JoinTableQualifier(schema, table);
+
+        var builder = new StringBuilder();
+        if (server is not null)
+            builder.Append(server).Append('.');
+        if (database is not null)
+            builder.Append(database).Append('.');
+        if (schema is not null)
+            builder.Append(schema).Append('.');
+        return builder.Append(table).ToString();
+    }
+
     /// <summary>
     /// SQL Server uses a bracket-quoted identifier for references as well, so that aliases that
     /// collide with a T-SQL keyword (e.g. "double") stay usable from an outer query.

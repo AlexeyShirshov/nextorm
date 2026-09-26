@@ -447,6 +447,70 @@ SQL Server поддерживает только `System`. Все остальн
 [`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double},NextORM.Core.KeywordCase))). Модификатор применяется только к
 основной таблице запроса.
 
+## Переопределение источника для запроса
+
+По умолчанию запрос читает таблицу, заданную в маппинге (`EntityMetadataBuilder<T>.Table(...)`) или
+переданную в `From("table")`. Методы `With*` у [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1)
+меняют рендер источника **только для этого запроса**; маппинг и остальные запросы не затрагиваются:
+
+```csharp
+public EntityBuilder<TEntity> WithTableName(string name);
+public EntityBuilder<TEntity> WithSchema(string schema);
+public EntityBuilder<TEntity> WithDatabase(string database);
+public EntityBuilder<TEntity> WithServer(string server);
+public EntityBuilder<TEntity> WithTableExpression(string sql);
+```
+
+```csharp
+var rows = await dataContext.From<IOrder>()
+    .WithSchema("sales")
+    .Select(x => x.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQL Server / PostgreSQL
+select id from sales.orders
+```
+
+Квалификаторы schema/database/server зависят от провайдера; недоступные провайдеру уровни
+отклоняются `NotSupportedException` при построении SQL:
+
+| Провайдер | `WithSchema` | `WithDatabase` | `WithServer` |
+|---|---|---|---|
+| PostgreSQL | `schema.table` | отклоняется | отклоняется |
+| SQL Server | `schema.table` | `database.schema.table` | `server.database.schema.table` |
+| MySQL / MariaDB | `db.table` (schema = database) | `db.table` | отклоняется |
+| SQLite | `db.table` (attached-база) | `db.table` | отклоняется |
+| ClickHouse | `db.table` | `db.table` | отклоняется |
+| In-memory | отклоняется | отклоняется | отклоняется |
+
+В MySQL, MariaDB, ClickHouse и SQLite схема и имя базы — это один и тот же единственный квалификатор,
+поэтому можно задать только одно из двух. Части квотируются разделителем провайдера, когда включено
+квотирование идентификаторов (см. [`WithQuotedIdentifiers`](xref:NextORM.Core.EntityBuilder`1.WithQuotedIdentifiers(System.Boolean))),
+каждая часть отдельно: `[srv].[db].[sales].[orders]`, `` `db`.`orders` ``, `"sales"."orders"`.
+
+[`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) заменяет доступ к таблице сырым SQL,
+отрендеренным как derived-источник (`(sql) AS alias`), и не сочетается с квалификаторами имени.
+Фрагмент подставляется дословно, поэтому передавайте только доверенный SQL (ответственность за
+корректность и инъекции — на вызывающем, как и у `WithSql`):
+
+```csharp
+var rows = await dataContext.From<IOrder>()
+    .WithTableExpression("select id from orders_2025 union all select id from orders_2026")
+    .Select(x => x.Id)
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL
+select id from (select id from orders_2025 union all select id from orders_2026) as "t1"
+```
+
+Переопределение входит в ключ кэша планов, поэтому два запроса, различающиеся только им, не делят
+кэшированный план; без переопределения генерируемый SQL не меняется. У in-memory-провайдера нет SQL,
+который можно переписать, поэтому он отклоняет любое переопределение.
+
 ## JSON-вывод (SQL Server)
 
 [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) — **терминальный оператор**: он выполняет запрос и возвращает

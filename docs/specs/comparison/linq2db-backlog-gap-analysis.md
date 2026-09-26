@@ -359,7 +359,7 @@ integration-тест. Подробности — [Duration columns](../../guide/
 | `InlineParameters` (инлайн констант вместо параметров) | нет (всегда параметризация) | **By design** — расходится с дизайном план-кэша |
 | `RemoveOrderBy` | нет; билдер строится снизу вверх, порядок задаёт `OrderBy` | **N/A** (не нужно без `IQueryable`-композиции) |
 | `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | **<span style="color:green">Реализовано</span>** (issue #96): `WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint` — SQL Server join-хинт внутри `JOIN` (`inner loop join`) и tables-in-scope как `WITH (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`, SQLite/ClickHouse/in-memory отклоняют; [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md) (shipped) | **Done** |
-| `WithTableExpression` / runtime-переопределение `TableName`/`SchemaName`/`ServerName` | `From("table")` + `TableAlias`; `BulkInsertOptions.TableName` (только bulk) | **Gap** → [`todo_source_override.md`](../roadmap/todo_source_override.md) |
+| `WithTableExpression` / runtime-переопределение `TableName`/`SchemaName`/`ServerName` | `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression` на `EntityBuilder<TEntity>` (per-query; SQL Server 4-part, MySQL/MariaDB/ClickHouse `db.table`, PG/SQLite `schema.table`) | **Shipped** (см. [Per-query source overrides](../../guide/01-querying-and-projections.md#per-query-source-overrides)) |
 
 Источник списка — публичная поверхность `LinqExtensions` (`Source/LinqToDB/LinqExtensions.cs`); отсутствие
 в nextorm проверено по `src/**` (совпадений `TagQuery`/`InlineParameters`/`JoinHint`/`SubQueryHint`/
@@ -417,7 +417,7 @@ statement/table/index).
 | P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../guide/27-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); ~~G17~~ — **<span style="color:green">реализовано</span>** (интерфейсные коллекции + явный отказ от неподдерживаемого индексера → [Filtering](../../guide/02-filtering-where.md#captured-collection-lookup-dictcolumn)); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); G14 — проверить |
-| P2 | Слепое пятно shipped-`LinqExtensions` (§4): ~~`TagQuery`~~ — **<span style="color:green">реализовано</span>** ([`WithTag`](../../guide/17-query-hints.md), комментарий `/* tag */` сразу после `SELECT`); остаются [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md), [`todo_source_override.md`](../roadmap/todo_source_override.md) |
+| P2 | Слепое пятно shipped-`LinqExtensions` (§4): ~~`TagQuery`~~ — **<span style="color:green">реализовано</span>** ([`WithTag`](../../guide/17-query-hints.md), комментарий `/* tag */` сразу после `SELECT`); ~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ — **<span style="color:green">реализовано</span>** (issue #96, [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md)); ~~[`todo_source_override.md`](../roadmap/todo_source_override.md)~~ — **<span style="color:green">реализовано</span>** (per-query `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) |
 | P2 | Инфраструктурные Gap (§4): [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md), [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md), [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md), [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
 
@@ -467,10 +467,11 @@ linq2db (`SelectMany`/`GroupJoin`/`DefaultIfEmpty`/`AsSubQuery`) и его hint/
 ни в §1–§3, ни в `sql-capabilities-gap-analysis.md`. `SelectMany`/`GroupJoin` классифицированы **By design**
 (эквивалент — `CrossApply`/`OuterApply`/`LeftJoin`, SQL-провайдеры бросают `NotSupportedException`);
 **Gap**-пункты — ~~`TagQuery`~~ (**<span style="color:green">реализовано</span>**: [`WithTag`](../../guide/17-query-hints.md)),
-`JoinHint`/`SubQueryHint`/`TablesInScopeHint` и per-query
-переопределение источника (`WithTableExpression`/`TableName`). По оставшимся двум Gap-пунктам заведены
-рабочие планы [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md),
-[`todo_source_override.md`](../roadmap/todo_source_override.md).
+~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ (**<span style="color:green">реализовано</span>**: issue #96,
+[`todo_hint_variants.md`](../roadmap/todo_hint_variants.md)) и per-query переопределение источника
+(`WithTableExpression`/`TableName`) — **<span style="color:green">реализовано</span>**
+(`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`, см. [Per-query source
+overrides](../../guide/01-querying-and-projections.md#per-query-source-overrides)). Планы сохранены со статусом.
 
 **Добавлено (25.09.2026, инфраструктура):** в §4 заведена вторая подсекция — сравнение инфраструктуры
 linq2db (Data Connection System / Mapping / Query Processing). Паритет подтверждён по соединениям,

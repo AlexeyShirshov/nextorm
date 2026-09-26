@@ -389,6 +389,9 @@ internal static class SqlSourceRenderer
         if (from.RawSqlSource is not null)
             return MakeRawSqlSource(in ctx, from, needAlias, entityType);
 
+        if (from.TableExpressionOverride is not null)
+            return MakeTableExpression(in ctx, from, options, entityType);
+
         if (!ctx.ParamMode && !string.IsNullOrEmpty(from.Table))
         {
             if (tablesInScopeHints is { Count: > 0 })
@@ -413,9 +416,18 @@ internal static class SqlSourceRenderer
             var sqlBuilder = StringBuilderPool.Shared.Get();
             try
             {
-                var tableName = from.Table!;
-                if (from.IsAutoMapped && ctx.NamingConvention is { } namingConvention)
+                var tableName = from.TableNameOverride ?? from.Table!;
+                if (from.TableNameOverride is null && from.IsAutoMapped && ctx.NamingConvention is { } namingConvention)
                     tableName = namingConvention.TableName(tableName, from.SourceIsInterface);
+
+                if (from.ServerOverride is not null && !ctx.Dialect.SupportsLinkedServer)
+                    throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect");
+
+                if (from.DatabaseOverride is not null && !ctx.Dialect.SupportsCrossDatabase)
+                    throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect");
+
+                if (from.HasQualificationOverride)
+                    tableName = ctx.Dialect.MakeQualifiedTableName(from.ServerOverride, from.DatabaseOverride, from.SchemaOverride, tableName);
 
                 sqlBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, tableName) : tableName);
 
@@ -564,6 +576,48 @@ internal static class SqlSourceRenderer
 
                 sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
             }
+
+            return sqlBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+
+    /// <summary>
+    /// Renders a per-query table expression (raw SQL supplied through <c>WithTableExpression</c>) as a
+    /// derived source: <c>(&lt;sql&gt;) AS alias</c>. The fragment is emitted verbatim (the caller owns
+    /// its validity and injection safety) and the mapped entity's columns are read through the alias
+    /// like any other source. Table modifiers that apply to a physical table (hints, index hints and
+    /// <c>FOR SYSTEM_TIME</c>) are rejected because they have no meaning over a raw expression.
+    /// </summary>
+    private static string MakeTableExpression(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, Type? entityType)
+    {
+        if (!ctx.Dialect.SupportsRawSqlSource)
+            throw new NotSupportedException("A raw SQL table expression is not supported by this SQL dialect");
+
+        if (options.Temporal is not null)
+            throw new NotSupportedException("The FOR SYSTEM_TIME clause cannot be combined with a table expression source.");
+
+        if (options.TableHints is { Count: > 0 })
+            throw new NotSupportedException("Table hints cannot be combined with a table expression source.");
+
+        if (options.IndexHints is not null)
+            throw new NotSupportedException("Index hints cannot be combined with a table expression source.");
+
+        if (ctx.ParamMode)
+            return string.Empty;
+
+        var sqlBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            sqlBuilder.Append('(').Append(from.TableExpressionOverride).Append(')');
+
+            if (entityType is not null)
+                ctx.ColumnsProvider.Add(entityType, false);
+
+            sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
 
             return sqlBuilder.ToString();
         }

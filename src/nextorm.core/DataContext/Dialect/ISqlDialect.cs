@@ -793,6 +793,42 @@ public interface ISqlDialect
     /// </summary>
     string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"") + "\"";
     /// <summary>
+    /// True when the provider can qualify a table with a database/schema name that differs from the
+    /// current connection's default (SQL Server, MySQL, MariaDB, ClickHouse) or with an attached SQLite
+    /// database. The safe default is <see langword="false"/>, so a <c>WithDatabase</c> override is
+    /// rejected by the SQL builder on a dialect that did not opt in. Declared as a default interface
+    /// method so that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsCrossDatabase => false;
+    /// <summary>
+    /// True when the provider can qualify a table with a linked (remote) server name. The safe default
+    /// is <see langword="false"/> (only SQL Server opts in), so a <c>WithServer</c> override is rejected
+    /// by the SQL builder on a dialect that did not opt in. Declared as a default interface method so
+    /// that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsLinkedServer => false;
+    /// <summary>
+    /// Renders a possibly qualified table name from its parts, omitting the parts that are <c>null</c>.
+    /// The base implementation renders <c>schema.table</c> and rejects the server/database levels; a
+    /// dialect that opted in with <see cref="SupportsCrossDatabase"/>/<see cref="SupportsLinkedServer"/>
+    /// overrides it to place the supported levels (SQL Server <c>server.database.schema.table</c>,
+    /// MySQL/MariaDB/ClickHouse/SQLite a single <c>database.table</c> qualifier). Reached only for the
+    /// levels the provider supports.
+    /// </summary>
+    /// <param name="server">The linked-server name, or <c>null</c>.</param>
+    /// <param name="database">The database name, or <c>null</c>.</param>
+    /// <param name="schema">The schema name, or <c>null</c>.</param>
+    /// <param name="table">The unqualified table name.</param>
+    /// <returns>The qualified table name (unquoted).</returns>
+    string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+        if (database is not null)
+            throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect.");
+        return string.IsNullOrEmpty(schema) ? table : schema + "." + table;
+    }
+    /// <summary>
     /// Quotes a column alias when it is referenced from an outer query. Providers that emit quoted
     /// aliases (so they survive as case-sensitive identifiers) must quote the reference accordingly.
     /// </summary>

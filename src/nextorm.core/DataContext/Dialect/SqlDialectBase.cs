@@ -380,6 +380,28 @@ public abstract class SqlDialectBase : ISqlDialect
     /// </summary>
     public virtual string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"") + "\"";
     /// <inheritdoc/>
+    public virtual bool SupportsCrossDatabase => false;
+    /// <inheritdoc/>
+    public virtual bool SupportsLinkedServer => false;
+    // ANSI schema.table default; reached only after the SQL builder checked the Supports* flags, so the
+    // server/database throws here are a safety net for a directly-called hook, not the user-facing path.
+    /// <inheritdoc/>
+    public virtual string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+        if (database is not null)
+            throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect.");
+        return JoinTableQualifier(schema, table);
+    }
+    /// <summary>
+    /// Joins an optional single qualifier (schema or, on a provider where they coincide, database) to a
+    /// table name with the standard dot separator: <c>qualifier.table</c>, or <paramref name="table"/>
+    /// when the qualifier is <c>null</c> or empty.
+    /// </summary>
+    protected static string JoinTableQualifier(string? qualifier, string table)
+        => string.IsNullOrEmpty(qualifier) ? table : qualifier + "." + table;
+    /// <inheritdoc/>
     public virtual string MakeColumnReference(string name) => name;
     /// <inheritdoc/>
     public virtual string MakeTableAlias(string tableAlias, KeywordCase keywordCase = KeywordCase.Lower)

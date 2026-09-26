@@ -50,6 +50,15 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (x == y) return true;
         if (x is null || y is null) return false;
 
+        // A per-query source override changes the rendered SQL without changing the table name, so it
+        // has to be part of the key before the table-name short-circuit below would consider the two
+        // sources equal and share a plan.
+        if (!string.Equals(x.TableNameOverride, y.TableNameOverride, StringComparison.Ordinal)) return false;
+        if (!string.Equals(x.SchemaOverride, y.SchemaOverride, StringComparison.Ordinal)) return false;
+        if (!string.Equals(x.DatabaseOverride, y.DatabaseOverride, StringComparison.Ordinal)) return false;
+        if (!string.Equals(x.ServerOverride, y.ServerOverride, StringComparison.Ordinal)) return false;
+        if (!string.Equals(x.TableExpressionOverride, y.TableExpressionOverride, StringComparison.Ordinal)) return false;
+
         // if (x.TableAlias != y.TableAlias) return false;
         if (!string.Equals(x.SubQueryHint, y.SubQueryHint, StringComparison.Ordinal)) return false;
 
@@ -152,6 +161,24 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     {
         if (obj is null) return 0;
 
+        var baseHash = GetBaseHash(obj);
+
+        if (obj.TableNameOverride is null && obj.SchemaOverride is null && obj.DatabaseOverride is null
+            && obj.ServerOverride is null && obj.TableExpressionOverride is null)
+            return baseHash;
+
+        var hash = new System.HashCode();
+        hash.Add(baseHash);
+        hash.Add(obj.TableNameOverride, StringComparer.Ordinal);
+        hash.Add(obj.SchemaOverride, StringComparer.Ordinal);
+        hash.Add(obj.DatabaseOverride, StringComparer.Ordinal);
+        hash.Add(obj.ServerOverride, StringComparer.Ordinal);
+        hash.Add(obj.TableExpressionOverride, StringComparer.Ordinal);
+        return hash.ToHashCode();
+    }
+
+    private int GetBaseHash(FromExpression obj)
+    {
         if (obj.LinqSource is not null)
             return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.LinqSource);
 
@@ -175,24 +202,8 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
             return nodesHash.ToHashCode();
         }
 
-        /*if (obj.TableAlias is not null)
-        {
-            unchecked
-            {
-                var hash = new XxHash32();
-                hash.Add(obj.TableAlias);
-
-                if (!string.IsNullOrEmpty(obj.Table))
-                    hash.Add(obj.Table);
-                else
-                    hash.Add(obj.SubQuery, _equalityComparer.Value);
-
-                return hash.ToHashCode();
-            }
-        }
-        else */
         if (!string.IsNullOrEmpty(obj.Table))
-            return obj.Table.GetHashCode();
+            return StringComparer.Ordinal.GetHashCode(obj.Table);
         else
         {
             var subQueryHash = _equalityComparer.Value.GetHashCode(obj.SubQuery!);
