@@ -354,6 +354,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             _hints = list;
     }
     /// <summary>
+    /// An optional query tag rendered as a block comment (<c>/* tag */</c>) immediately after the
+    /// <c>SELECT</c> keyword, so the statement can be identified in logs, profilers and server-side
+    /// query stores. Set through <c>WithTag</c>. When <c>null</c> no comment is emitted and the plan
+    /// key is unchanged. The tag is part of the plan key, so two commands that differ only in their
+    /// tag never share a cached plan.
+    /// </summary>
+    public string? Tag { get; internal set; }
+    /// <summary>
     /// Table-level hints attached to the command's physical <c>FROM</c> table (for example SQL Server
     /// <c>nolock</c>), or <c>null</c> when there are none. How they are rendered is provider specific;
     /// a dialect that does not implement table hints rejects a command that carries them.

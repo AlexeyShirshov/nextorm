@@ -654,6 +654,25 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return cmd;
     }
     /// <summary>
+    /// Returns a new command carrying a query tag, rendered as a block comment (<c>/* tag */</c>)
+    /// immediately after the <c>SELECT</c> keyword so the statement is identifiable in logs, profilers
+    /// and server-side query stores. The tag is independent of <see cref="Hint(System.String[])"/>: it is
+    /// a plain comment, not an optimizer hint, and it is rendered on every SQL provider. Line breaks and
+    /// the comment delimiters <c>*/</c> and <c>/*</c> are neutralised, so the tag cannot break out of the
+    /// comment. The tag is part of the plan key; passing <c>null</c> or an empty string clears it.
+    /// </summary>
+    /// <param name="tag">The tag text to render, or <c>null</c> to clear the tag.</param>
+    /// <returns>A new command carrying the tag.</returns>
+    public QueryCommand<TResult> WithTag(string? tag)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.Tag = string.IsNullOrEmpty(tag) ? null : tag;
+        return cmd;
+    }
+    /// <summary>
     /// Overrides identifier quoting for this command: when <paramref name="value"/> is <c>true</c>,
     /// physical table and column names are quoted with the provider's delimiter (<c>"id"</c> on
     /// PostgreSQL/SQLite, <c>[id]</c> on SQL Server, `` `id` `` on MySQL/MariaDB/ClickHouse); when

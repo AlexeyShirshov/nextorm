@@ -73,6 +73,10 @@ public class PlanKeyUniquenessTests
         yield return ("base-scalar", ctx => E(ctx).Select(x => x.Id));
         yield return ("base-identity", ctx => E(ctx).Select(x => x));
 
+        // Query tag
+        yield return ("tag-a", ctx => Row(E(ctx).WithTag("a")));
+        yield return ("tag-b", ctx => Row(E(ctx).WithTag("b")));
+
         // WHERE
         yield return ("where-gt0", ctx => Row(E(ctx).Where(x => x.Id > 0)));
         yield return ("where-gt1", ctx => Row(E(ctx).Where(x => x.Id > 1)));

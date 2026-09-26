@@ -155,6 +155,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!StringListsEqual(x.Hints, y.Hints)) return false;
 
+        if (!string.Equals(x.Tag, y.Tag, StringComparison.Ordinal)) return false;
+
         if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
 
         if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
@@ -466,6 +468,9 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.HintsPlanHash != 0)
                 hash.Add(obj.HintsPlanHash);
+
+            if (obj.Tag is { Length: > 0 } tag)
+                hash.Add(tag);
 
             hash.Add(obj.ResolvedQuoteIdentifiers);
 

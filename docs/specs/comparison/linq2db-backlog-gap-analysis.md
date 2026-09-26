@@ -351,7 +351,7 @@ integration-тест. Подробности — [Duration columns](../../guide/
 | `GroupJoin` (grouped inner, `LEFT JOIN`) | [`LeftJoin`](../../guide/03-joins.md) + `GROUP BY`/агрегат | **By design** |
 | `DefaultIfEmpty` (left-join-семантика `SelectMany`) | [`LeftJoin`](../../guide/03-joins.md) / `OuterApply` | **By design** |
 | `AsSubQuery` | `From(QueryCommand)` (производная таблица); `As` — workstream 38 | **By design / Planned** |
-| `TagQuery` (комментарий-метка в SQL) | нет | **Gap** → [`todo_query_tag.md`](../roadmap/todo_query_tag.md) |
+| `TagQuery` (комментарий-метка в SQL) | [`WithTag`](../../guide/17-query-hints.md) (`/* tag */` сразу после `SELECT`) | **Done** |
 | `InlineParameters` (инлайн констант вместо параметров) | нет (всегда параметризация) | **By design** — расходится с дизайном план-кэша |
 | `RemoveOrderBy` | нет; билдер строится снизу вверх, порядок задаёт `OrderBy` | **N/A** (не нужно без `IQueryable`-композиции) |
 | `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | `QueryCommand.Hint` только statement-level; table hint (SQL Server), index hint | **Gap** → [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md) |
@@ -413,7 +413,7 @@ statement/table/index).
 | P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../guide/27-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); ~~G17~~ — **<span style="color:green">реализовано</span>** (интерфейсные коллекции + явный отказ от неподдерживаемого индексера → [Filtering](../../guide/02-filtering-where.md#captured-collection-lookup-dictcolumn)); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); G14 — проверить |
-| P2 | Слепое пятно shipped-`LinqExtensions` (§4): заведены [`todo_query_tag.md`](../roadmap/todo_query_tag.md), [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md), [`todo_source_override.md`](../roadmap/todo_source_override.md) |
+| P2 | Слепое пятно shipped-`LinqExtensions` (§4): ~~`TagQuery`~~ — **<span style="color:green">реализовано</span>** ([`WithTag`](../../guide/17-query-hints.md), комментарий `/* tag */` сразу после `SELECT`); остаются [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md), [`todo_source_override.md`](../roadmap/todo_source_override.md) |
 | P2 | Инфраструктурные Gap (§4): [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md), [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md), [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md), [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
 
@@ -461,10 +461,10 @@ captured-коллекции, включая интерфейсные типы; �
 linq2db (`SelectMany`/`GroupJoin`/`DefaultIfEmpty`/`AsSubQuery`) и его hint/table-расширения не попадали
 ни в §1–§3, ни в `sql-capabilities-gap-analysis.md`. `SelectMany`/`GroupJoin` классифицированы **By design**
 (эквивалент — `CrossApply`/`OuterApply`/`LeftJoin`, SQL-провайдеры бросают `NotSupportedException`);
-новые **Gap**-пункты — `TagQuery`, `JoinHint`/`SubQueryHint`/`TablesInScopeHint` и per-query
-переопределение источника (`WithTableExpression`/`TableName`). По этим трём Gap-пунктам заведены
-рабочие планы [`todo_query_tag.md`](../roadmap/todo_query_tag.md),
-[`todo_hint_variants.md`](../roadmap/todo_hint_variants.md),
+**Gap**-пункты — ~~`TagQuery`~~ (**<span style="color:green">реализовано</span>**: [`WithTag`](../../guide/17-query-hints.md)),
+`JoinHint`/`SubQueryHint`/`TablesInScopeHint` и per-query
+переопределение источника (`WithTableExpression`/`TableName`). По оставшимся двум Gap-пунктам заведены
+рабочие планы [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md),
 [`todo_source_override.md`](../roadmap/todo_source_override.md).
 
 **Добавлено (25.09.2026, инфраструктура):** в §4 заведена вторая подсекция — сравнение инфраструктуры

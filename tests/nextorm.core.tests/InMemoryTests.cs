@@ -32,6 +32,20 @@ public class InMemoryTests
         r.Should().Contain(x => x.Id == 2);
     }
     [Fact]
+    public void TestQueryTag_ShouldNotChangeResult()
+    {
+        var r = _sut.SimpleEntity.WithTag("app.list").Select(it => new { it.Id }).ToList();
+
+        r.Should().HaveCount(2);
+    }
+    [Fact]
+    public void TestQueryTag_CommandLevel_ShouldNotChangeResult()
+    {
+        var r = _sut.SimpleEntity.Select(it => new { it.Id }).WithTag("app.list").ToList();
+
+        r.Should().HaveCount(2);
+    }
+    [Fact]
     public void TestDictionaryLookup()
     {
         // The in-memory provider compiles the predicate, so a captured collection indexed by a column

@@ -400,6 +400,9 @@ internal readonly struct SqlBuilder
             {
                 selectBuilder!.Append(Kw("select "));
 
+                if (cmd.Tag is { Length: > 0 } tag)
+                    selectBuilder.Append(MakeTagComment(tag)).Append(' ');
+
                 if (cmd.DistinctOn is not null)
                 {
                     if (_ctx.Dialect.DistinctOn is not { } distinctOn)
@@ -528,6 +531,64 @@ internal readonly struct SqlBuilder
             if (sqlBuilder is not null)
                 StringBuilderPool.Shared.Return(sqlBuilder);
         }
+    }
+
+    /// <summary>
+    /// Renders a query tag as a single-line block comment. Line breaks are folded to spaces and both
+    /// comment delimiters are neutralised: SQL Server nests block comments, so a literal <c>/*</c> in
+    /// the tag would open a nested comment that the closing <c>*/</c> could not close. The comment opens
+    /// with a space (<c>/* </c>) so a tag starting with <c>!</c> or <c>+</c> cannot turn into a
+    /// MySQL/MariaDB executable comment or optimizer hint.
+    /// </summary>
+    /// <param name="tag">The non-empty tag text.</param>
+    /// <returns>The SQL block comment.</returns>
+    private static string MakeTagComment(string tag)
+    {
+        var sb = new StringBuilder(tag.Length + 6);
+        sb.Append("/* ");
+
+        for (var i = 0; i < tag.Length; i++)
+        {
+            var c = tag[i];
+            switch (c)
+            {
+                case '\r':
+                    sb.Append(' ');
+                    if (i + 1 < tag.Length && tag[i + 1] == '\n') i++;
+                    break;
+                case '\n':
+                    sb.Append(' ');
+                    break;
+                case '*':
+                    if (i + 1 < tag.Length && tag[i + 1] == '/')
+                    {
+                        sb.Append("* /");
+                        i++;
+                    }
+                    else
+                    {
+                        sb.Append('*');
+                    }
+                    break;
+                case '/':
+                    if (i + 1 < tag.Length && tag[i + 1] == '*')
+                    {
+                        sb.Append("/ *");
+                        i++;
+                    }
+                    else
+                    {
+                        sb.Append('/');
+                    }
+                    break;
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+
+        sb.Append(" */");
+        return sb.ToString();
     }
 
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)

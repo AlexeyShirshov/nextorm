@@ -44,6 +44,7 @@ public partial class QueryCommand
         dst.HintsPlanHash = HintsPlanHash;
         dst.WindowsPlanHash = WindowsPlanHash;
         dst._hints = _hints;
+        dst.Tag = Tag;
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.ResolvedQuoteIdentifiers = ResolvedQuoteIdentifiers;
         dst.NamingConvention = NamingConvention;

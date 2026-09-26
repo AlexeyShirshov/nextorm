@@ -331,6 +331,17 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     (nextorm opens no implicit transaction). Docs:
     [Bulk insert](../../guide/24-bulk-insert.md#sql-server-bulk-copy-options).
 
+53. **Query tag (`WithTag`) — shipped.** `EntityBuilder<T>.WithTag(string?)` and
+    `QueryCommand<T>.WithTag(string?)` render a free-form `/* tag */` block comment immediately after
+    the `SELECT` keyword on every SQL provider, so the statement is identifiable in profilers, server
+    logs and server-side query stores (`pg_stat_activity`, SQL Server Query Store, ClickHouse
+    `system.query_log`). The native SQL Server `OPTION (LABEL)` and ClickHouse
+    `SETTINGS log_comment` forms are deliberately not used: they are not portable and would have to be
+    merged into an existing `OPTION`/`SETTINGS` clause, whereas the comment is visible everywhere. The
+    comment delimiters `*/`/`/*` and line breaks are neutralised, the tag is part of the plan key, and
+    the in-memory provider accepts it as a no-op.
+    Docs: [Query hints](../../guide/17-query-hints.md) (EN+RU).
+
 ---
 
 ## 5. Resolved and out-of-scope gaps (ledger)

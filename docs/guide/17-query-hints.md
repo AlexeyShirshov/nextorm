@@ -27,6 +27,34 @@ Blank hints are ignored. The hint list is part of the query plan key, so a hinte
 the cached plan of an otherwise identical unhinted command (and vice versa), and two commands with
 different hints do not share a plan.
 
+## Query tags
+
+`WithTag(string? tag)` attaches a free-form tag to a query. Unlike `Hint`, the tag is a plain SQL
+comment (`/* tag */`), not an optimizer hint, so it renders on **every** SQL provider — it is not
+gated. It is emitted immediately after the `SELECT` keyword:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .WithTag("reports.orders")
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .ToList();
+```
+
+```sql
+select /* reports.orders */ id from complex_entity where (id > 1)
+```
+
+Use it to identify a statement in a profiler, the server log or a server-side query store
+(`pg_stat_activity`, SQL Server Query Store, ClickHouse `system.query_log`). Line breaks and the
+comment delimiters `*/` and `/*` are neutralised — SQL Server nests block comments, so `/*` is escaped
+too — and the comment always opens with a space, so a tag starting with `!` or `+` cannot become a
+MySQL/MariaDB executable comment or optimizer hint. The tag is part of the plan key, so two commands
+that differ only in their tag never share a cached plan; passing `null` or an empty string clears it.
+The in-memory provider accepts the call and ignores it (no SQL is generated). When a query also carries
+`Hint(...)`, the optimizer-hint comment is placed first (`select /*+ hint */ /* tag */ ...`) so
+`pg_hint_plan` and the MySQL/MariaDB optimizer still recognise it.
+
 ## Combining with a recursive CTE
 
 SQL Server allows only one `OPTION` clause per statement. When a query also declared a CTE recursion

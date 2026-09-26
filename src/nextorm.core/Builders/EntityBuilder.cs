@@ -138,6 +138,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// through <see cref="WithKeywordCase"/>.
     /// </summary>
     internal KeywordCase? KeywordCase { get; set; }
+    /// <summary>
+    /// Query tag rendered as a block comment (<c>/* tag */</c>) right after <c>SELECT</c>. Set through
+    /// <see cref="WithTag"/>; <c>null</c> means no tag.
+    /// </summary>
+    internal string? Tag { get; set; }
     internal string? Table { get => _table; set => _table = value; }
     /// <summary>
     /// Explicit FROM source, used for table-valued functions (and any other source that is neither a
@@ -209,6 +214,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
+        cmd.Tag = Tag;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -267,6 +273,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
+        cmd.Tag = Tag;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -894,6 +901,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
         dst.KeywordCase = KeywordCase;
+        dst.Tag = Tag;
         dst.Ctes = Ctes;
     }
     /// <summary>
@@ -1528,6 +1536,23 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     public EntityBuilder<TEntity> WithUppercaseKeywords(bool value = true)
         => WithKeywordCase(value ? global::NextORM.Core.KeywordCase.Upper : global::NextORM.Core.KeywordCase.Lower);
     /// <summary>
+    /// Attaches a query tag to the commands this builder creates. The tag is rendered as a block comment
+    /// (<c>/* tag */</c>) immediately after the <c>SELECT</c> keyword on every SQL provider, so the
+    /// statement is identifiable in logs, profilers and server-side query stores. It is not an optimizer
+    /// hint (use <see cref="QueryCommand{TResult}.Hint(System.String[])"/> for that). Passing a new tag
+    /// returns a new builder; <c>null</c> or an empty string clears it. The tag is part of the plan key.
+    /// </summary>
+    /// <param name="tag">The tag text to render, or <c>null</c> to clear the tag.</param>
+    /// <returns>A builder with the tag applied.</returns>
+    public EntityBuilder<TEntity> WithTag(string? tag)
+    {
+        var b = Clone();
+
+        b.Tag = string.IsNullOrEmpty(tag) ? null : tag;
+
+        return b;
+    }
+    /// <summary>
     /// Adds <paramref name="condition"/> to the HAVING clause, which filters grouped rows. A repeated
     /// call combines the predicates with <c>and</c>.
     /// </summary>
@@ -1625,6 +1650,11 @@ public class EntityBuilder : ICloneable
     /// </summary>
     internal KeywordCase? KeywordCase { get; set; }
     /// <summary>
+    /// Query tag rendered as a block comment (<c>/* tag */</c>) right after <c>SELECT</c>. Set through
+    /// <see cref="WithTag"/>; <c>null</c> means no tag.
+    /// </summary>
+    internal string? Tag { get; set; }
+    /// <summary>
     /// Per-query override of the naming convention for auto-derived table/column names (<c>null</c>
     /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
     /// </summary>
@@ -1668,6 +1698,7 @@ public class EntityBuilder : ICloneable
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
+        cmd.Tag = Tag;
 
         return cmd;
     }
@@ -1697,6 +1728,7 @@ public class EntityBuilder : ICloneable
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
         dst.KeywordCase = KeywordCase;
+        dst.Tag = Tag;
     }
     /// <summary>
     /// Creates the copy returned by <see cref="Clone"/> and the explicit <c>ICloneable.Clone</c> call.
@@ -1779,6 +1811,20 @@ public class EntityBuilder : ICloneable
     /// <returns>A builder with the override applied.</returns>
     public EntityBuilder WithUppercaseKeywords(bool value = true)
         => WithKeywordCase(value ? global::NextORM.Core.KeywordCase.Upper : global::NextORM.Core.KeywordCase.Lower);
+    /// <summary>
+    /// Attaches a query tag to the commands this builder creates (see
+    /// <see cref="EntityBuilder{TEntity}.WithTag"/>).
+    /// </summary>
+    /// <param name="tag">The tag text to render, or <c>null</c> to clear the tag.</param>
+    /// <returns>A builder with the tag applied.</returns>
+    public EntityBuilder WithTag(string? tag)
+    {
+        var b = Clone();
+
+        b.Tag = string.IsNullOrEmpty(tag) ? null : tag;
+
+        return b;
+    }
     /// <summary>
     /// Adds an inner join to <paramref name="from"/>, using <paramref name="joinCondition"/> as the
     /// <c>ON</c> predicate; only matching pairs survive.
