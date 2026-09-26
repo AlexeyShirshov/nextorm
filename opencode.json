@@ -1,7 +1,8 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    "AGENTS.md"
+    "AGENTS.md",
+    ".opencode/nextorm-pdca.md"
   ],
   "references": {
     "specs": {
