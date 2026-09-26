@@ -56,6 +56,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.MultilineBatchSql,
             optionsBuilder.CommandTimeout);
 
+        QueryCacheEnabled = optionsBuilder.QueryCacheEnabled;
+
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
         // Interceptors are created once and shared with every axis, so a per-instance
@@ -104,6 +106,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     }
 
     private readonly Func<string, object?, DbParameter> _createParam;
+
+    /// <summary>
+    /// Whether prepared plans may be stored in and reused from the plan cache. Initialized from
+    /// <c>DataContextBuilder.UseQueryCache</c> (default <see langword="true"/>); setting it to
+    /// <see langword="false"/> makes every preparation pass <c>storeInCache: false</c> without touching
+    /// the sticky <see cref="QueryCommand.Cache"/> flag on a shared command.
+    /// </summary>
+    public bool QueryCacheEnabled { get; set; } = true;
 
     // Late-bound provider hooks: only the delegates are created in the constructor, never the values.
     private ISqlDialect GetDialect() => Dialect;
@@ -264,7 +274,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to prepare.</param>
     /// <param name="createEnumerator">When <see langword="true"/>, compiles a streaming row enumerator as part of preparation.</param>
-    /// <param name="storeInCache">When <see langword="true"/>, stores the prepared command in the plan cache.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
@@ -278,7 +288,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
         }
 
-        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cancellationToken);
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, cancellationToken);
     }
 
     // A query that reads a lazy temporary table is not a single statement: the table must be created on

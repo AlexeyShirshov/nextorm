@@ -10,6 +10,12 @@ namespace NextORM.Core;
 /// Per-thread on purpose. Together with <see cref="DataContextCache"/> (process-wide metadata) and the
 /// per-instance expression caches, this is the third cache scope in the context: see the remarks on
 /// <see cref="DataContextCache"/> for the full picture.
+/// <para>
+/// Clearing is process-wide even though the dictionary is <see cref="ThreadStaticAttribute"/>: a
+/// process-wide generation counter is bumped, and each thread lazily recreates its own dictionary the
+/// next time it touches the store. A dictionary owned by another thread can therefore only be dropped
+/// when that thread runs again, which is the strongest invalidation possible for thread-static state.
+/// </para>
 /// </remarks>
 internal static class QueryPlanStore
 {
@@ -20,10 +26,28 @@ internal static class QueryPlanStore
     // next lookup, instead of re-comparing its expression tree against an equivalent plan.
     private readonly record struct Entry(Key Key, IDbCommandHolder Holder);
 
+    private static long _generation;
+
     [ThreadStatic]
     private static Dictionary<Key, Entry>? _cache;
 
-    private static Dictionary<Key, Entry> Cache => _cache ??= [];
+    [ThreadStatic]
+    private static long _cacheGeneration;
+
+    private static Dictionary<Key, Entry> Cache
+    {
+        get
+        {
+            var generation = Volatile.Read(ref _generation);
+            if (_cache is null || _cacheGeneration != generation)
+            {
+                _cache = [];
+                _cacheGeneration = generation;
+            }
+
+            return _cache;
+        }
+    }
 
     internal static bool TryGet(Type contextType, QueryPlan plan, out IDbCommandHolder? holder, out QueryPlan? storedPlan)
     {
@@ -45,7 +69,7 @@ internal static class QueryPlanStore
         Cache[key] = new Entry(key, holder);
     }
 
-    internal static void Clear() => Cache.Clear();
+    internal static void Clear() => Interlocked.Increment(ref _generation);
 
     internal static IEnumerable<IDbCommandHolder> Values
     {

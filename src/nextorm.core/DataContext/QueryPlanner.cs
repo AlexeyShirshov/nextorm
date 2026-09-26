@@ -520,6 +520,8 @@ internal sealed class QueryPlanner : IQueryPlanner
     // that selects from the entity. This removes a small allocation and a metadata lookup per join.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FromExpression> _fromCache = new();
 
+    internal static void ClearFromCache() => _fromCache.Clear();
+
     private FromExpression GetFrom(Type t)
     {
         if (_fromCache.TryGetValue(t, out var cached))

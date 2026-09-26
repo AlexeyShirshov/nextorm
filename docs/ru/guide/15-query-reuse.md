@@ -180,6 +180,24 @@ ReferenceEquals(ctx.SelectListCache, DataContextCache.SelectListCache);   // tru
 ReferenceEquals(ctx.ExpressionsCache, DataContextCache.ExpressionsCache); // false (per instance)
 ```
 
+## Управление кэшем
+
+`PurgeQueryCache()` очищает планы одного контекста. Три управления на уровне процесса дополняют его, и ни одно из них не трогает «залипающий» флаг `QueryCommand<TResult>.Cache`, поэтому отключение кэша не протекает на общую команду `Any`.
+
+* [`DataContextCache.Clear()`](xref:NextORM.Core.DataContextCache.Clear) очищает все общие для процесса кэши (метаданные, списки выборки, скомпилированные делегаты выражений и in-list, построчные мапперы, псевдонимы проекций и FROM-источники) и инвалидирует потоково-локальный кэш планов. Кэш планов — `[ThreadStatic]`, поэтому план, построенный в другом потоке, отбрасывается, когда тот поток в следующий раз обратится к кэшу. Вызывайте после изменения схемы.
+* [`DataContextBuilder.UseQueryCache(false)`](xref:NextORM.Core.DataContextBuilder.UseQueryCache(System.Boolean)) — или свойство `DataContext.QueryCacheEnabled` / `InMemoryDataContext.QueryCacheEnabled` — перестраивает каждый план вместо кэширования. Значение передаётся как `storeInCache: false` для вызова и не трогает `QueryCommand<TResult>.Cache`.
+* [`DataContextBuilder.UseCacheSlidingExpiration(ttl)`](xref:NextORM.Core.DataContextBuilder.UseCacheSlidingExpiration(System.TimeSpan)) включает ленивое вытеснение общих для процесса кэшей: запись, не прочитанная в течение `ttl`, удаляется при следующем обращении, а каждое чтение обновляет её. `TimeSpan.Zero` (по умолчанию) отключает вытеснение.
+
+```csharp
+var builder = new DataContextBuilder().UseQueryCache(false);
+using var ctx = new SqliteDataContext("Data Source=app.db", builder); // каждый терминал пересобирает план
+
+new DataContextBuilder().UseCacheSlidingExpiration(TimeSpan.FromMinutes(10)); // ленивое вытеснение, на процесс
+
+DataContextCache.Clear(); // очистить общие кэши и кэш планов
+ctx.PurgeQueryCache();    // очистить планы этого контекста
+```
+
 ## Захваченные коллекции `in`/`Contains`
 
 Список `in` или вызов `Contains` по захваченной коллекции транслируется в параметризованный предикат `IN`. *Значения* не являются частью ключа плана — *форма* является (вычисленное количество элементов и наличие `null`). Это имеет два следствия:
@@ -240,6 +258,8 @@ Source: `tests/nextorm.sqlite.tests/PlanCacheTests.cs:49` (buffered then streami
 `tests/nextorm.sqlite.tests/InListCacheTests.cs:92` (reassigned array),
 `tests/nextorm.sqlite.tests/InListCacheTests.cs:117` (grown list);
 `tests/nextorm.core.tests/DataContextCacheScopeTests.cs:20` (cache sharing scope);
+`tests/nextorm.core.tests/QueryCacheControlsTests.cs:45` (clear, disable without mutating `Cache`, sliding expiration);
+`tests/nextorm.sqlite.tests/DataContextCacheClearTests.cs:31` (`DataContextCache.Clear` invalidates the plan cache);
 `tests/nextorm.integration.tests/CommonTestSuite.Cache.cs:6`;
 `src/nextorm.core/Query/QueryCommand.TResult.cs:38` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))),
 `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs:5` (prepared terminals),

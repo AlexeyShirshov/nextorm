@@ -98,7 +98,7 @@ range-типа) и динамическая схема табличных ист
 | `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **<span style="color:green">реализовано</span>** (~~G7~~): [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения) |
 | `#1645` | table-valued **parameters** для хранимых процедур (TVP) | **Gap** (G8) → [`todo_tvp.md`](../roadmap/todo_tvp.md); смежно [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
 | `#1994` | open-generic `TypeConverter` | **Done** (G1, фазы 1–2: `IPropertyValueConverter`/`ValueConverter<,>`/`[ValueConverter]`/`.HasConversion`, константы в предикатах/`IN` и скалярных проекциях) → [Value converters](../../guide/30-value-converters.md) |
-| `#3009` | ограничение размера кэша запросов | **Gap** (G10) |
+| `#3009` | ограничение размера кэша запросов | **<span style="color:green">Done</span>** (G10): `DataContextCache.Clear()`, `UseQueryCache(false)`, `UseCacheSlidingExpiration` (ленивое вытеснение по времени) → [Query reuse](../../guide/15-query-reuse.md#cache-controls) |
 | `#4039` | логирование SQL-параметров | **<span style="color:green">Реализовано</span>** (интерцепторы, 1.0.6-alpha): `IQueryInterceptor` (`CommandInitialized`/`CommandExecuting`) отдаёт привязанную команду, интерцептор читает `command.Parameters` → [гайд 27](../../guide/27-interceptors.md) |
 | `#4405` | concurrency check с явными исключениями | **By design** (~~G6~~): достижимо через `Where` + число затронутых строк; гайд [Оптимистичная конкурентность и отслеживание изменений](../../guide/29-optimistic-concurrency.md) |
 | `#4199` | «Property X is not defined for interface type Y» | **Planned** (`todo_interface_poco.md`) |
@@ -211,12 +211,16 @@ SQL Server/SQLite/ClickHouse; публичная страница — [`docs/gui
 (+RU). Остаток (sub-day promotion §8.2, ширина `date_diff` §8.3) — **<span style="color:green">реализовано (1.0.6-alpha)</span>**, см.
 [Duration columns](../../guide/26-duration-columns.md)
 
-**G10. Ограничение кэша планов + логирование параметров — <span style="color:green">частично Done</span>.** `linq2db#3009` (cache size), `#4039`
+**G10. Ограничение кэша планов + логирование параметров — <span style="color:green">Done</span>.** `linq2db#3009` (cache size), `#4039`
 (parameter logging). **<span style="color:green">Реализовано</span>** логирование параметров: фаза 1 интерцепторов (1.0.6-alpha)
 отдаёт привязанную команду на `CommandInitialized`/`CommandExecuting`, интерцептор читает `command.Parameters`
-([гайд 27](../../guide/27-interceptors.md)). Остаётся `#3009` — риск неограниченного роста process-wide
-`DataContextCache` (`MapperCache` уже ограничен `MaxEntries = 4096`); действие: добавить LRU/размер в
-кэш-инфраструктуру.
+([гайд 27](../../guide/27-interceptors.md)). **<span style="color:green">Реализовано</span>** управление кэшем
+([`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md)): `DataContextCache.Clear()`
+(process-wide кэши + план-кэш), `UseQueryCache(false)` / `QueryCacheEnabled` (локальный `storeInCache: false`,
+без sticky `QueryCommand.Cache`) и `UseCacheSlidingExpiration(ttl)` — ленивое вытеснение записей
+process-wide `DataContextCache` по времени, закрывающее риск неограниченного роста без LRU; жёсткий предел
+размера `MapperCache` (`MaxEntries = 4096`) сохранён. Публичная страница —
+[Query reuse: cache controls](../../guide/15-query-reuse.md#cache-controls).
 
 **~~G11~~. PostgreSQL range/`Overlaps` — <span style="color:green">Done</span> (1.0-b.1).**
 `linq2db#4562`; shipped `Sql.Row.Overlaps` (6.5.0). Добавлены provider-agnostic `NextORM.Core.Range<T>`
@@ -380,7 +384,7 @@ statement/table/index).
 | Command timeout (`UseCommandTimeout`/`WithCommandTimeout`) | только `BulkInsertOptions.TimeoutSeconds`; для запросов — через интерсептор | **Gap** → [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md) |
 | Dynamic columns (`DynamicColumnsStore`/`DynamicColumnAccessor`) | нет | **Gap** → [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md) |
 | `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions.CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (SQL Server native; остальные пути — явный `NotSupportedException`) | **Частичный паритет** (ClickHouse parallel/`WithoutSession` — отложены, `BulkCopyType` не опция, `UseInternalTransaction` — by design; см. [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md)) |
-| Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | per-command `Cache=false`; размер — хвост G10 | **Gap** → [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
+| Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | `DataContextCache.Clear()` / `UseQueryCache(false)` / `UseCacheSlidingExpiration(ttl)` | **<span style="color:green">Done</span>** → [Query reuse: cache controls](../../guide/15-query-reuse.md#cache-controls) |
 | Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
 | DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **Out-of-scope** (см. §4) |
 | Хранимые процедуры / сырой `Execute*` / несколько result-set | `WithSql` (только `SELECT`-источник) | **Planned** ([`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md), G4-хвост) |
@@ -438,7 +442,8 @@ PostgreSQL (`MutationCteQuery<TResult>`); **~~G5~~** — массовая вст
 **~~G12~~** — C# string-семантика (ordinal-трансляция + `string.Format`), вместе с колонковой коллацией
 nextorm `#28` ([Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация));
 **~~G15~~** — PG JSONPath уже реализован (`jsonb_path_*`, `jsonpath(cast)`, TVF); **~~G10~~** (логирование
-параметров) — через интерцепторы (фаза 1, [гайд 27](../../guide/27-interceptors.md)); **~~linq2db#5965~~**
+параметров) — через интерцепторы (фаза 1, [гайд 27](../../guide/27-interceptors.md)), управление кэшем —
+`Clear()`/`UseQueryCache(false)`/`UseCacheSlidingExpiration` ([Query reuse: cache controls](../../guide/15-query-reuse.md#cache-controls)); **~~linq2db#5965~~**
 — sub-day-операнд продвигается `ISqlDialect.PromoteDateOperand`
 ([Duration columns](../../guide/26-duration-columns.md)§9.4); **~~G20~~** — ширина `date_diff` закрыта
 аддитивно (`date_diff_big → long?`, `ISqlDialect.MakeDateDiffBig`).

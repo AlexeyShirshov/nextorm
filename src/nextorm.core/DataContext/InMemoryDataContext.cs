@@ -105,6 +105,13 @@ public partial class InMemoryDataContext : IDataContext
     public bool CacheExpressions { get; set; }
 
     /// <summary>
+    /// Whether prepared commands may be stored in and reused from this context's compiled-query cache.
+    /// Defaults to <see langword="true"/>; set to <see langword="false"/> to rebuild every plan (the
+    /// per-command <c>QueryCommand.Cache</c> flag is not mutated).
+    /// </summary>
+    public bool QueryCacheEnabled { get; set; } = true;
+
+    /// <summary>
     /// Internal seam for the extracted in-memory helpers: the plan cache and the per-instance compiled
     /// delegate caches stay owned by the context and are handed to <see cref="InMemoryQueryBuilder"/>.
     /// </summary>
@@ -138,11 +145,11 @@ public partial class InMemoryDataContext : IDataContext
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to prepare.</param>
     /// <param name="createEnumerator">When <see langword="true"/>, builds a streaming enumerator as part of preparation.</param>
-    /// <param name="storeInCache">When <see langword="true"/>, stores the prepared command in the plan cache.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => InMemoryQueryBuilder.GetPreparedQueryCommand(this, queryCommand, createEnumerator, storeInCache, cancellationToken);
+        => InMemoryQueryBuilder.GetPreparedQueryCommand(this, queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, cancellationToken);
     /// <summary>Builds the delegate that creates a row enumerator for a prepared query.</summary>
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to build the enumerator for.</param>
