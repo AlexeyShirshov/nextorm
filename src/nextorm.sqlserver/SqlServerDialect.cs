@@ -227,6 +227,39 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override string MakeTableHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
         => Kw(keywordCase, " with (") + string.Join(", ", hints) + ")";
 
+    /// <summary>SQL Server renders a join hint inside the join clause, between the join kind and <c>JOIN</c>.</summary>
+    public override bool SupportsJoinHints => true;
+
+    /// <summary>
+    /// Inserts the join <paramref name="hint"/> before the <c>JOIN</c> keyword of the already-rendered
+    /// keyword, e.g. <c>inner join</c> with <c>loop</c> becomes <c>inner loop join</c>. A <c>null</c>
+    /// hint delegates to the plain keyword.
+    /// </summary>
+    public override string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, string? hint, KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var keyword = MakeJoinKeyword(joinType, strictness, isGlobal, keywordCase);
+
+        if (hint is null)
+            return keyword;
+
+        // The ANSI form omits INNER; the hinted form spells it out (INNER LOOP JOIN).
+        if (joinType == JoinType.Inner)
+            keyword = Kw(keywordCase, " inner join ");
+
+        var index = keyword.LastIndexOf("join", StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            throw new NotSupportedException($"A join hint cannot be applied to the {joinType} join");
+
+        return keyword[..index] + hint + " " + keyword[index..];
+    }
+
+    /// <summary>SQL Server renders tables-in-scope hints as a <c>WITH (...)</c> table hint on every table.</summary>
+    public override bool SupportsTablesInScopeHints => true;
+
+    /// <summary>Renders the tables-in-scope hints as a <c>with (hint, ...)</c> suffix on a table.</summary>
+    public override string MakeTablesInScopeHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " with (") + string.Join(", ", hints) + ")";
+
     /// <summary>SQL Server renders index hints as a <c>WITH (INDEX(...))</c> table hint.</summary>
     public override IIndexHintRenderer? IndexHints => SqlServerIndexHintRenderer.Instance;
 

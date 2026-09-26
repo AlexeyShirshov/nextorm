@@ -492,6 +492,43 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JoinHint_ShouldFoldIntoInlineHintComment()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinHint("JOIN_ORDER(t1, t2)")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().StartWith("select /*+ JOIN_ORDER(t1, t2) */");
+        sql.Should().Contain("from simple_entity as `t1` join complex_entity as `t2`");
+    }
+
+    [Fact]
+    public void SubQueryHint_ShouldFoldIntoInlineHintComment()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var sql = SqlOf(ctx, ctx.From(inner).WithSubQueryHint("NO_BNL()").Select(t => new { t.Id }));
+
+        sql.Should().StartWith("select /*+ NO_BNL() */");
+    }
+
+    [Fact]
+    public void TablesInScopeHint_ShouldFoldIntoInlineHintComment()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .WithTablesInScopeHint("NO_RANGE_OPTIMIZATION(t1)")
+            .Select(x => new { x.Id }));
+
+        sql.Should().Be("select /*+ NO_RANGE_OPTIMIZATION(t1) */ id from simple_entity");
+    }
+
+    [Fact]
     public void GroupByRollup_ShouldUseWithRollup()
     {
         using var ctx = MySqlTestContext.Create();

@@ -128,6 +128,13 @@ public sealed class FromExpression
      /// <see cref="LinqSource"/> and <see cref="RawSqlSource"/>.
      /// </summary>
      internal readonly XmlNodesExpression? XmlNodes;
+     /// <summary>
+     /// Optional provider-specific hint attached to this derived-table source, or <c>null</c> when it has
+     /// none. Set through the fluent <c>WithSubQueryHint</c> modifier. Only dialects with an inline hint
+     /// comment (PostgreSQL <c>pg_hint_plan</c>, MySQL/MariaDB optimizer hints) can express it; SQL Server
+     /// rejects a query hint on a subselect, so the command is rejected there.
+     /// </summary>
+     internal string? SubQueryHint { get; init; }
 
      // public override int GetHashCode()
      // {
@@ -164,6 +171,6 @@ public sealed class FromExpression
 
           if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
 
-          return new FromExpression(SubQuery!.CloneForCache());// { TableAlias = TableAlias };
+          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint };// { TableAlias = TableAlias };
      }
 }

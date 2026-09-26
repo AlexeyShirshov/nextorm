@@ -609,6 +609,56 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JoinHint_ShouldFoldIntoInlineHintComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinHint("HashJoin(t1 t2)")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().StartWith("select /*+ HashJoin(t1 t2) */");
+        sql.Should().Contain("from simple_entity as \"t1\" join complex_entity as \"t2\"");
+    }
+
+    [Fact]
+    public void SubQueryHint_ShouldFoldIntoInlineHintComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var sql = SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+
+        sql.Should().StartWith("select /*+ SeqScan(t1) */");
+    }
+
+    [Fact]
+    public void TablesInScopeHint_ShouldFoldIntoInlineHintComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Select(x => new { x.Id }));
+
+        sql.Should().Be("select /*+ SeqScan(t1) */ id from simple_entity");
+    }
+
+    [Fact]
+    public void VariantHints_ShouldCoexistWithStatementHints()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Select(x => new { x.Id })
+            .Hint("Set(enable_hashjoin off)"));
+
+        sql.Should().StartWith("select /*+ Set(enable_hashjoin off) SeqScan(t1) */");
+    }
+
+    [Fact]
     public void Conditional_ShouldEmitCaseWhen()
     {
         using var ctx = PostgresTestContext.Create();

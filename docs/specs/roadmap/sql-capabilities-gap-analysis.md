@@ -517,6 +517,14 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `NotSupportedException`. Gated by [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) /
     [`IIndexHintRenderer`](xref:NextORM.Core.IIndexHintRenderer) and carried on the plan key.
     Shipped: [Query hints](../../guide/17-query-hints.md#index-hints).
+17a. **Join / subquery / tables-in-scope hints — shipped (issue #96).** `EntityBuilder<T>.WithJoinHint(...)`,
+    `.WithSubQueryHint(...)` and `.WithTablesInScopeHint(...)` attach a hint to a specific join, a
+    derived-table source or every physical table in scope. SQL Server renders the join hint inside the
+    join clause (`inner loop join`) and the scope hint as `WITH (...)` on each table; PostgreSQL/MySQL/
+    MariaDB fold all three into the inline `/*+ ... */`; SQLite/ClickHouse/the in-memory provider reject
+    them with `NotSupportedException`. Gated by `ISqlDialect.SupportsJoinHints`/`SupportsSubQueryHints`/
+    `SupportsTablesInScopeHints`/`SupportsInlineHints` (+ `MakeJoinKeyword`/`MakeTablesInScopeHints`) and
+    carried on the plan key. Shipped: [Query hints](../../guide/17-query-hints.md#join-subquery-and-tables-in-scope-hints).
 18. **DML — shipped in full (`INSERT`/`UPDATE`/`DELETE`/`MERGE`).** `INSERT ... VALUES` (single row, entity,
     batch) and `INSERT ... SELECT`, the generated key (`ReturningIdentity`/`ReturningKey`) and returned written
     rows (`Returning`/`Returning(projection)`, PostgreSQL/SQLite/SQL Server) ship through
@@ -643,6 +651,7 @@ developed in parallel on the same working tree.
 | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + `Returning` + key upsert + full `MERGE` branches + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **Done**; in-memory only the key upsert | new subsystem + provider `DbCommand` layer | `CommonTestSuite.Insert.cs`, `CommonTestSuite.Delete.cs`, `CommonTestSuite.Update.cs`, `CommonTestSuite.Merge.cs`, SQL-generation tests |
 | 15 | `APPLY` / `LATERAL` | **Done** (incl. correlated sources) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 16 | Statement-level query hints | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
+| 16a | Join / subquery / tables-in-scope hints | **Done (issue #96)** | `EntityBuilder.cs`, `JoinExpression.cs`, `FromExpression.cs`, `QueryCommand.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, dialects | SQL-generation tests, plan-key tests |
 | 17 | Full-text search (`contains`/`freetext`) | **Done** | `BuiltinFunctionTranslator.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | SQL-generation tests |
 | 18 | JSON scalar functions and `isjson` | **Done on SQL Server** | `TextJsonSqlTranslator.cs`, `ISqlDialect.cs`, SQL Server dialect | SQL-generation tests |
 | 19 | `FOR JSON` / `FOR XML` | **Done on SQL Server** | `ForJson.cs`, `ForXml.cs`, `QueryCommand.TResult.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |

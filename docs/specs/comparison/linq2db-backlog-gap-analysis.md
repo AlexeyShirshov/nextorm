@@ -358,7 +358,7 @@ integration-тест. Подробности — [Duration columns](../../guide/
 | `TagQuery` (комментарий-метка в SQL) | [`WithTag`](../../guide/17-query-hints.md) (`/* tag */` сразу после `SELECT`) | **Done** |
 | `InlineParameters` (инлайн констант вместо параметров) | нет (всегда параметризация) | **By design** — расходится с дизайном план-кэша |
 | `RemoveOrderBy` | нет; билдер строится снизу вверх, порядок задаёт `OrderBy` | **N/A** (не нужно без `IQueryable`-композиции) |
-| `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | `QueryCommand.Hint` только statement-level; table hint (SQL Server), index hint | **Gap** → [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md) |
+| `JoinHint` / `SubQueryHint` / `TablesInScopeHint` | **<span style="color:green">Реализовано</span>** (issue #96): `WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint` — SQL Server join-хинт внутри `JOIN` (`inner loop join`) и tables-in-scope как `WITH (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`, SQLite/ClickHouse/in-memory отклоняют; [`todo_hint_variants.md`](../roadmap/todo_hint_variants.md) (shipped) | **Done** |
 | `WithTableExpression` / runtime-переопределение `TableName`/`SchemaName`/`ServerName` | `From("table")` + `TableAlias`; `BulkInsertOptions.TableName` (только bulk) | **Gap** → [`todo_source_override.md`](../roadmap/todo_source_override.md) |
 
 Источник списка — публичная поверхность `LinqExtensions` (`Source/LinqToDB/LinqExtensions.cs`); отсутствие

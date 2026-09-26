@@ -95,6 +95,7 @@ public partial class QueryCommand
         dst.TableHints = TableHints;
         dst.IndexHints = IndexHints;
         dst.IndexHintKind = IndexHintKind;
+        dst.TablesInScopeHints = TablesInScopeHints;
         dst.ForJsonClause = ForJsonClause;
         dst.ForXmlClause = ForXmlClause;
 

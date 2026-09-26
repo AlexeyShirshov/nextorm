@@ -51,6 +51,8 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (x is null || y is null) return false;
 
         // if (x.TableAlias != y.TableAlias) return false;
+        if (!string.Equals(x.SubQueryHint, y.SubQueryHint, StringComparison.Ordinal)) return false;
+
         if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
 
         // A SelectMany/GroupJoin source is a computed node whose selectors are delegates over the
@@ -192,6 +194,16 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (!string.IsNullOrEmpty(obj.Table))
             return obj.Table.GetHashCode();
         else
-            return _equalityComparer.Value.GetHashCode(obj.SubQuery!);
+        {
+            var subQueryHash = _equalityComparer.Value.GetHashCode(obj.SubQuery!);
+
+            if (obj.SubQueryHint is null)
+                return subQueryHash;
+
+            var hintHash = new System.HashCode();
+            hintHash.Add(subQueryHash);
+            hintHash.Add(obj.SubQueryHint);
+            return hintHash.ToHashCode();
+        }
     }
 }

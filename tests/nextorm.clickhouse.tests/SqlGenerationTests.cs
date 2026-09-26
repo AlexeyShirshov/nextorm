@@ -64,6 +64,40 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JoinHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinHint("hash")
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Join hints*");
+    }
+
+    [Fact]
+    public void SubQueryHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
+    }
+
+    [Fact]
+    public void TablesInScopeHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>().WithTablesInScopeHint("nolock").Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Tables-in-scope hints*");
+    }
+
+    [Fact]
     public void ForUpdate_ShouldThrowBecauseClickHouseHasNoRowLocking()
     {
         using var ctx = ClickHouseTestContext.Create();

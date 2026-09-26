@@ -151,11 +151,23 @@ internal static class SqlSourceRenderer
             parameterProvider: ctx.ParameterProvider);
     }
 
-    internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType)
+    internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null)
     {
         if (join.JoinType is JoinType.Right && !ctx.Dialect.SupportsRightFullJoin
             || join.JoinType is JoinType.Full && (!ctx.Dialect.SupportsRightFullJoin || !ctx.Dialect.SupportsFullJoin))
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
+
+        // A join hint on an inline-comment dialect is folded into the statement-level /*+ ... */ by the
+        // builder, so it is not rendered here. On SQL Server it goes inside the join clause; anywhere
+        // else it is rejected.
+        if (join.JoinHint is not null && !ctx.Dialect.SupportsInlineHints)
+        {
+            if (!ctx.Dialect.SupportsJoinHints)
+                throw new NotSupportedException("Join hints are not supported by this SQL dialect");
+
+            if (join.JoinType is not (JoinType.Inner or JoinType.Left or JoinType.Right or JoinType.Full))
+                throw new NotSupportedException($"A join hint cannot be applied to a {join.JoinType} join");
+        }
 
         if (join.JoinType is JoinType.Semi or JoinType.Anti or JoinType.Paste)
         {
@@ -184,14 +196,15 @@ internal static class SqlSourceRenderer
         {
             if (!ctx.ParamMode)
             {
-                sqlBuilder!.Append(ctx.Dialect.MakeJoinKeyword(join.JoinType, join.Strictness, join.IsGlobal, ctx.KeywordCase));
+                var joinHint = ctx.Dialect.SupportsInlineHints ? null : join.JoinHint;
+                sqlBuilder!.Append(ctx.Dialect.MakeJoinKeyword(join.JoinType, join.Strictness, join.IsGlobal, joinHint, ctx.KeywordCase));
             }
 
             var joinCondition = join.JoinCondition;
 
             if (joinCondition is null)
             {
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TablesInScopeHints: tablesInScopeHints));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -210,7 +223,7 @@ internal static class SqlSourceRenderer
             {
                 var dim = JoinDimension(joinCondition);
 
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TablesInScopeHints: tablesInScopeHints));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -355,7 +368,7 @@ internal static class SqlSourceRenderer
     /// </summary>
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, out string? alias)
     {
-        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind) = options;
+        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints) = options;
         alias = null;
 
         if (from.LinqSource is not null)
@@ -378,6 +391,14 @@ internal static class SqlSourceRenderer
 
         if (!ctx.ParamMode && !string.IsNullOrEmpty(from.Table))
         {
+            if (tablesInScopeHints is { Count: > 0 })
+            {
+                if (!ctx.Dialect.SupportsTablesInScopeHints)
+                    throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
+                tableHints = AppendHints(tableHints, tablesInScopeHints);
+            }
+
             if (tableHints is { Count: > 0 } && !ctx.Dialect.SupportsTableHints)
                 throw new NotSupportedException("Table hints are not supported by this SQL dialect");
 
@@ -441,6 +462,9 @@ internal static class SqlSourceRenderer
 
             if (cmd is not null)
             {
+                if (from.SubQueryHint is not null && !ctx.Dialect.SupportsSubQueryHints)
+                    throw new NotSupportedException("Subquery hints are not supported by this SQL dialect");
+
 #if DEBUG
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
 #endif
@@ -481,6 +505,24 @@ internal static class SqlSourceRenderer
         for (var i = 0; i < hints.Count; i++)
             combined[i] = hints[i];
         combined[^1] = indexToken;
+        return combined;
+    }
+
+    /// <summary>
+    /// Returns <paramref name="hints"/> with <paramref name="extra"/> appended, or <paramref name="extra"/>
+    /// when <paramref name="hints"/> is <c>null</c> or empty. Used to fold the tables-in-scope hints into
+    /// the table's own hint list on a structural-hint dialect (SQL Server).
+    /// </summary>
+    private static IReadOnlyList<string> AppendHints(IReadOnlyList<string>? hints, IReadOnlyList<string> extra)
+    {
+        if (hints is not { Count: > 0 })
+            return extra;
+
+        var combined = new string[hints.Count + extra.Count];
+        for (var i = 0; i < hints.Count; i++)
+            combined[i] = hints[i];
+        for (var i = 0; i < extra.Count; i++)
+            combined[hints.Count + i] = extra[i];
         return combined;
     }
 

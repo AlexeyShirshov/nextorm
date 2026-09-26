@@ -102,6 +102,12 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL 5.7+ (and MariaDB 10.2+) render statement-level hints as inline optimizer hints.</summary>
     public override bool SupportsQueryHints => true;
 
+    /// <summary>MySQL renders join/subquery/tables-in-scope hints as one <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsInlineHints => true;
+
+    /// <summary>MySQL expresses the subquery hint through the same <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsSubQueryHints => true;
+
     /// <summary>
     /// Renders the statement-level hints as a <c>/*+ ... */</c> optimizer-hint comment immediately after
     /// the top-level <c>select</c> (the position MySQL and MariaDB require; a <c>WITH</c> prefix and

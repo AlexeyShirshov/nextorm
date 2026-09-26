@@ -50,6 +50,14 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsQueryHints => false;
     /// <inheritdoc/>
     public virtual bool SupportsTableHints => false;
+    /// <summary>True when the dialect renders a join-level hint inside the join clause (SQL Server); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsJoinHints => false;
+    /// <summary>True when the dialect renders a subquery-level hint (inline-comment dialects); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsSubQueryHints => false;
+    /// <summary>True when the dialect renders a hint on every physical table in scope (SQL Server <c>WITH (...)</c>); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsTablesInScopeHints => false;
+    /// <summary>True when the dialect folds the join/subquery/tables-in-scope hints into a statement-level inline comment (PostgreSQL <c>pg_hint_plan</c>, MySQL/MariaDB); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsInlineHints => false;
     /// <inheritdoc/>
     public virtual bool SupportsForJson => false;
     /// <inheritdoc/>
@@ -750,6 +758,19 @@ public abstract class SqlDialectBase : ISqlDialect
     // dialect can stage the capability without breaking compilation.
     /// <inheritdoc/>
     public virtual string MakeTableHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
+
+    // Reached only through a dialect that set SupportsJoinHints; a dialect that did not opt in has its
+    // join hint rejected before this body runs, so the throw keeps the contract honest.
+    /// <inheritdoc/>
+    public virtual string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, string? hint, KeywordCase keywordCase = KeywordCase.Lower)
+        => hint is null
+            ? MakeJoinKeyword(joinType, strictness, isGlobal, keywordCase)
+            : throw new NotSupportedException("Join hints are not supported by this SQL dialect");
+
+    // Reached only through a dialect that set SupportsTablesInScopeHints (SQL Server).
+    /// <inheritdoc/>
+    public virtual string MakeTablesInScopeHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
 
     /// <inheritdoc/>
     public virtual IIndexHintRenderer? IndexHints => null;

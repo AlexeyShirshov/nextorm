@@ -377,6 +377,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>The intent of <see cref="IndexHints"/> (<c>USE</c>, <c>FORCE</c> or <c>IGNORE</c>).</summary>
     public IndexHintKind IndexHintKind { get; internal set; }
     /// <summary>
+    /// Hints applied to every physical table in this command's scope (for example SQL Server
+    /// <c>WITH (...)</c> on the primary and joined tables, or a <c>pg_hint_plan</c>/MySQL optimizer
+    /// comment listing the participating aliases), or <c>null</c> when there are none. Set through the
+    /// fluent <c>WithTablesInScopeHint</c> modifier. A dialect that supports neither form rejects the
+    /// command when its SQL is built.
+    /// </summary>
+    public IReadOnlyList<string>? TablesInScopeHints { get; internal set; }
+    /// <summary>
     /// Per-command override of identifier quoting: <c>true</c> quotes physical table/column names with
     /// the provider's delimiter, <c>false</c> emits them verbatim, and <c>null</c> inherits the
     /// context default (<c>DataContextBuilder.UseQuotedIdentifiers</c>). Set through

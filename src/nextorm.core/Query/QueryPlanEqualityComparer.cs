@@ -109,6 +109,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.IndexHintKind != y.IndexHintKind) return false;
 
+        if (!StringListsEqual(x.TablesInScopeHints, y.TablesInScopeHints)) return false;
+
         if (x.ForJsonClause != y.ForJsonClause) return false;
 
         if (x.ForXmlClause != y.ForXmlClause) return false;
@@ -362,6 +364,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
                     hash.Add(index);
 
             hash.Add(obj.IndexHintKind);
+
+            if (obj.TablesInScopeHints is { Count: > 0 })
+                foreach (var scopeHint in obj.TablesInScopeHints)
+                    hash.Add(scopeHint);
 
             if (obj.ForJsonClause is { } forJson)
                 hash.Add(forJson);

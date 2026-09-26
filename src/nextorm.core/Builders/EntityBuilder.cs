@@ -45,6 +45,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     protected List<JoinExpression>? _joins;
     private string? _table;
     private FromExpression? _from;
+    private string? _subQueryHint;
     #endregion
     /// <summary>
     /// Initializes a builder over the mapped entity type; the source is resolved from entity metadata.
@@ -123,6 +124,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal IReadOnlyList<string>? IndexHints { get; set; }
     /// <summary>The intent of <see cref="IndexHints"/> (<c>USE</c>, <c>FORCE</c> or <c>IGNORE</c>).</summary>
     internal IndexHintKind IndexHintKind { get; set; }
+    /// <summary>Hints applied to every physical table in the command's scope, or <c>null</c> when there are none.</summary>
+    internal IReadOnlyList<string>? TablesInScopeHints { get; set; }
     /// <summary>
     /// Per-query override of identifier quoting (<c>null</c> inherits the context default). Set through
     /// <see cref="WithQuotedIdentifiers"/>.
@@ -204,9 +207,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         });
 
         if (_query is not null)
-            cmd.From = new FromExpression(_query);
+            cmd.From = new FromExpression(_query) { SubQueryHint = _subQueryHint };
         else if (_from is not null)
-            cmd.From = _from;
+            cmd.From = _subQueryHint is null || _from.SubQuery is null ? _from : new FromExpression(_from.SubQuery) { SubQueryHint = _subQueryHint };
         else if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);
 
@@ -217,6 +220,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.TableHints = TableHints;
         cmd.IndexHints = IndexHints;
         cmd.IndexHintKind = IndexHintKind;
+        cmd.TablesInScopeHints = TablesInScopeHints;
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
@@ -264,9 +268,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         });
 
         if (_query is not null)
-            cmd.From = new FromExpression(_query);
+            cmd.From = new FromExpression(_query) { SubQueryHint = _subQueryHint };
         else if (_from is not null)
-            cmd.From = _from;
+            cmd.From = _subQueryHint is null || _from.SubQuery is null ? _from : new FromExpression(_from.SubQuery) { SubQueryHint = _subQueryHint };
         else if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);
 
@@ -277,6 +281,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.TableHints = TableHints;
         cmd.IndexHints = IndexHints;
         cmd.IndexHintKind = IndexHintKind;
+        cmd.TablesInScopeHints = TablesInScopeHints;
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
@@ -507,7 +512,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// join objects by reference, so the last one is replaced with a fresh copy; mutating it in place
     /// would leak the modifier into the source builder and its other clones.
     /// </summary>
-    private EntityBuilder<TEntity> ReplaceLastJoin(JoinStrictness? strictness = null, bool isGlobal = false)
+    private EntityBuilder<TEntity> ReplaceLastJoin(JoinStrictness? strictness = null, bool isGlobal = false, string? joinHint = null)
     {
         if (_joins is not { Count: > 0 })
             throw new InvalidOperationException("A join modifier requires a preceding join.");
@@ -527,7 +532,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             From = last.From,
             EntityType = last.EntityType,
             Strictness = strictness ?? last.Strictness,
-            IsGlobal = isGlobal || last.IsGlobal
+            IsGlobal = isGlobal || last.IsGlobal,
+            JoinHint = joinHint ?? last.JoinHint
         };
 
         b.OnLastJoinReplaced(joins[^1]);
@@ -906,6 +912,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.TableHints = TableHints;
         dst.IndexHints = IndexHints;
         dst.IndexHintKind = IndexHintKind;
+        dst.TablesInScopeHints = TablesInScopeHints;
+        dst._subQueryHint = _subQueryHint;
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
         dst.KeywordCase = KeywordCase;
@@ -1284,7 +1292,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     private JoinedEntityBuilder<TEntity, TJoinEntity> CreateJoined<TJoinEntity>(JoinExpression join, QueryCommand? query)
     {
-        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
+        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, TablesInScopeHints = TablesInScopeHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         cb.SourceFrom = SourceFrom;
         return cb;
     }
@@ -1450,6 +1458,72 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             ? hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToArray()
             : null;
 
+        return b;
+    }
+    /// <summary>
+    /// Attaches a provider-specific hint to the most recently added join, for example SQL Server
+    /// <c>.WithJoinHint("loop")</c> which renders <c>inner loop join</c>. The builder is copied — the
+    /// source join is replaced by a copy carrying the hint, so neither the source builder nor a sibling
+    /// built from it is affected. Call it after the join it should affect and before the next join. On
+    /// PostgreSQL/MySQL/MariaDB the hint is folded into the statement-level <c>/*+ ... */</c> comment
+    /// (append the aliases yourself, e.g. <c>NestLoop(t1 t2)</c>); a dialect that supports neither form
+    /// rejects the command with <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <param name="hint">The join hint text; must be non-empty.</param>
+    /// <returns>A builder whose last join carries the hint.</returns>
+    /// <exception cref="ArgumentException"><paramref name="hint"/> is null, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The builder has no join to modify.</exception>
+    public EntityBuilder<TEntity> WithJoinHint(string hint)
+    {
+        if (string.IsNullOrWhiteSpace(hint))
+            throw new ArgumentException("A join hint must be a non-empty string.", nameof(hint));
+
+        return ReplaceLastJoin(joinHint: hint);
+    }
+    /// <summary>
+    /// Attaches a provider-specific hint to the derived-table source this builder selects from (for
+    /// example a PostgreSQL <c>pg_hint_plan</c> or MySQL optimizer hint). Only a builder over an explicit
+    /// subquery (<see cref="DataContextExtensions.From{TResult}(IDataContext, QueryCommand{TResult})"/>)
+    /// can carry it; the SQL Server dialect rejects it because a query hint cannot be appended to a
+    /// subselect.
+    /// </summary>
+    /// <param name="hint">The subquery hint text; must be non-empty.</param>
+    /// <returns>A builder whose derived-table source carries the hint.</returns>
+    /// <exception cref="ArgumentException"><paramref name="hint"/> is null, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The builder's source is not a derived-table subquery.</exception>
+    public EntityBuilder<TEntity> WithSubQueryHint(string hint)
+    {
+        if (string.IsNullOrWhiteSpace(hint))
+            throw new ArgumentException("A subquery hint must be a non-empty string.", nameof(hint));
+
+        if (_query is null && _from?.SubQuery is null)
+            throw new InvalidOperationException("A subquery hint requires a derived-table source.");
+
+        var b = Clone();
+        b._subQueryHint = hint;
+        return b;
+    }
+    /// <summary>
+    /// Attaches hints to every physical table in the query's scope: on SQL Server each table (the
+    /// primary source and every joined table) gets a <c>WITH (hint, ...)</c> suffix; on
+    /// PostgreSQL/MySQL/MariaDB the hints are folded into the statement-level <c>/*+ ... */</c> comment.
+    /// A dialect that supports neither rejects the command with <see cref="NotSupportedException"/>.
+    /// The hints are emitted verbatim, so only use trusted values.
+    /// </summary>
+    /// <param name="hints">The hint texts; at least one non-empty.</param>
+    /// <returns>A builder with the tables-in-scope hints applied.</returns>
+    /// <exception cref="ArgumentException">No non-empty hint was supplied.</exception>
+    public EntityBuilder<TEntity> WithTablesInScopeHint(params string[] hints)
+    {
+        var names = hints is { Length: > 0 }
+            ? hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToArray()
+            : [];
+
+        if (names.Length == 0)
+            throw new ArgumentException("A tables-in-scope hint must be a non-empty string.", nameof(hints));
+
+        var b = Clone();
+        b.TablesInScopeHints = names;
         return b;
     }
     /// <summary>

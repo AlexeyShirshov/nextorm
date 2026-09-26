@@ -172,6 +172,12 @@ public sealed class PostgresDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsQueryHints => true;
 
+    /// <summary>PostgreSQL renders join/subquery/tables-in-scope hints as one <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsInlineHints => true;
+
+    /// <summary>PostgreSQL expresses the subquery hint through the same <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsSubQueryHints => true;
+
     /// <summary>
     /// Renders the statement-level hints as a <c>/*+ ... */</c> comment immediately after the top-level
     /// <c>select</c> (the position <c>pg_hint_plan</c> reads; a <c>WITH</c> prefix and subqueries are
