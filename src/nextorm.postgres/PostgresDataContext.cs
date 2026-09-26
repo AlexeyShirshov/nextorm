@@ -192,10 +192,12 @@ public class PostgresDataContext : DataContext
     /// <param name="maxBatchSize">Ignored: the binary importer streams one row at a time.</param>
     /// <param name="progress">Called with the cumulative written-row count every <paramref name="notifyEvery"/> rows, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; <c>COPY</c> cannot express them.</param>
     /// <returns>The number of rows written.</returns>
-    protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
     {
         EnsureCopyTimeoutSupported(commandTimeoutSeconds);
+        bulkCopy.ThrowIfRequested("the PostgreSQL COPY path");
         EnsureConnectionOpen();
         var connection = (NpgsqlConnection)GetConnection();
 
@@ -227,11 +229,13 @@ public class PostgresDataContext : DataContext
     /// <param name="maxBatchSize">Ignored: the binary importer streams one row at a time.</param>
     /// <param name="progress">Called with the cumulative written-row count every <paramref name="notifyEvery"/> rows, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; <c>COPY</c> cannot express them.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows written.</returns>
-    protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+    protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
     {
         EnsureCopyTimeoutSupported(commandTimeoutSeconds);
+        bulkCopy.ThrowIfRequested("the PostgreSQL COPY path");
         await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
         var connection = (NpgsqlConnection)GetConnection();
 

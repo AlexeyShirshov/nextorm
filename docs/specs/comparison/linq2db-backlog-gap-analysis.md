@@ -379,7 +379,7 @@ statement/table/index).
 | Value converters (`IValueConverter`/`SetConverter`) | `ValueConverter<,>`/`[ValueConverter]`/`HasConversion` ([Value converters](../../guide/30-value-converters.md)) | **Паритет** |
 | Command timeout (`UseCommandTimeout`/`WithCommandTimeout`) | только `BulkInsertOptions.TimeoutSeconds`; для запросов — через интерсептор | **Gap** → [`todo_command_timeout.md`](../roadmap/todo_command_timeout.md) |
 | Dynamic columns (`DynamicColumnsStore`/`DynamicColumnAccessor`) | нет | **Gap** → [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md) |
-| `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions` без этих флагов | **Gap** → [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md) |
+| `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions.CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (SQL Server native; остальные пути — явный `NotSupportedException`) | **Частичный паритет** (ClickHouse parallel/`WithoutSession` — отложены, `BulkCopyType` не опция, `UseInternalTransaction` — by design; см. [`todo_bulk_copy_options.md`](../roadmap/todo_bulk_copy_options.md)) |
 | Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | per-command `Cache=false`; размер — хвост G10 | **Gap** → [`todo_query_cache_controls.md`](../roadmap/todo_query_cache_controls.md) |
 | Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
 | DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **Out-of-scope** (см. §4) |

@@ -479,7 +479,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             command.TimeoutSeconds,
             command.Batch?.MaxBatchSize,
             command.Progress,
-            command.NotifyEvery);
+            command.NotifyEvery,
+            command.BulkCopy);
     }
 
     async Task<int> IBulkInsertExecutor.BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
@@ -495,6 +496,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             command.Batch?.MaxBatchSize,
             command.Progress,
             command.NotifyEvery,
+            command.BulkCopy,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -521,9 +523,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
     /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; only the provider's native path can express them.</param>
     /// <returns>The number of rows written.</returns>
     /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
-    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through the provider's native bulk API.</summary>
@@ -535,10 +538,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
     /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; only the provider's native path can express them.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows written.</returns>
     /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
-    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     private (string Sql, List<Parameter> Parameters) BuildReturningSql(MutationCommand command)

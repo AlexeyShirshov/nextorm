@@ -49,7 +49,7 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
 
         var mutation = _bulk.RequireMutationExecutor();
         var command = _bulk.BuildCommand(_bulk.ProjectSyncRows(), null);
-        PortableBulkInsertExecutor.EnsureTimeoutSupported(command);
+        PortableBulkInsertExecutor.EnsurePortableOptionsSupported(command);
 
         var rowsPerBatch = PortableBulkInsertExecutor.RowsPerBatch(command);
         var batch = PortableBulkInsertExecutor.NewBatch(rowsPerBatch);
@@ -77,7 +77,7 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
 
         var mutation = _bulk.RequireMutationExecutor();
         var command = _bulk.BuildCommand(_bulk.ProjectSyncRows(), null);
-        PortableBulkInsertExecutor.EnsureTimeoutSupported(command);
+        PortableBulkInsertExecutor.EnsurePortableOptionsSupported(command);
 
         var rowsPerBatch = PortableBulkInsertExecutor.RowsPerBatch(command);
         var result = new List<TResult>();
@@ -132,7 +132,7 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
     {
         var mutation = _bulk.RequireMutationExecutor();
         var command = _bulk.BuildCommand(rows, null);
-        PortableBulkInsertExecutor.EnsureTimeoutSupported(command);
+        PortableBulkInsertExecutor.EnsurePortableOptionsSupported(command);
 
         var rowsPerBatch = PortableBulkInsertExecutor.RowsPerBatch(command);
         var result = new List<TResult>();
@@ -164,7 +164,7 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
     {
         var mutation = _bulk.RequireMutationExecutor();
         var command = _bulk.BuildCommand(asyncRows: rows, syncRows: null);
-        PortableBulkInsertExecutor.EnsureTimeoutSupported(command);
+        PortableBulkInsertExecutor.EnsurePortableOptionsSupported(command);
 
         var rowsPerBatch = PortableBulkInsertExecutor.RowsPerBatch(command);
         var result = new List<TResult>();

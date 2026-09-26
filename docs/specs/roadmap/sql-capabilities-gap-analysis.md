@@ -321,6 +321,15 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     constructors) is gated by `ISqlDialect.SupportsRanges`; the in-memory provider evaluates the
     predicates with PostgreSQL semantics. Docs:
     [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types) (EN+RU).
+52. **SQL Server bulk-copy flags — Done (`1.0-b.1`).** `BulkInsertOptions`/`BulkInsertOptionsBuilder` gained
+    `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (`bool?`, off by default), mapped to
+    `SqlBulkCopyOptions` on the SQL Server native `SqlBulkCopy` path; the PostgreSQL `COPY` path and the
+    portable `INSERT ... VALUES` path (including SQL Server `Returning*`/`KeepIdentity`) reject a requested
+    flag with `NotSupportedException` instead of silently ignoring it. ClickHouse
+    `MaxDegreeOfParallelism`/`WithoutSession` are deferred (`ClickHouseBulkCopy` is obsolete, the driver
+    exposes no `WithoutSession`, and the native path is not wired) and `UseInternalTransaction` is never set
+    (nextorm opens no implicit transaction). Docs:
+    [Bulk insert](../../guide/24-bulk-insert.md#sql-server-bulk-copy-options).
 
 ---
 
@@ -552,7 +561,9 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `BulkInsertOptions` record or the fluent `BulkInsertOptionsBuilder` (`MaxBatchSize`/`MaxParameters`/
     `MaxSqlLength` chunking, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, `NotifyAfter` progress with a
     `ProgressCancellationTokenSource`); generated keys are returned on the portable `RETURNING`/`OUTPUT` path
-    (`ReturningKey`/`Returning`). In-memory rejects it.
+    (`ReturningKey`/`Returning`). The SQL Server native path also exposes `CheckConstraints`/`TableLock`/
+    `KeepNulls`/`FireTriggers`; every other path rejects those with `NotSupportedException` (§4 п.52).
+    In-memory rejects it.
     Shipped: [Bulk insert](../../guide/24-bulk-insert.md).
 32. **Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) — shipped.** `ForUpdate`/`ForShare` accept a
     `LockWaitMode` (`Wait`/`NoWait`/`SkipLocked`): PostgreSQL/MySQL/MariaDB append `NOWAIT`/`SKIP LOCKED`
