@@ -51,6 +51,8 @@ public partial class QueryCommand
         dst.ResolvedNamingConvention = ResolvedNamingConvention;
         dst.KeywordCase = KeywordCase;
         dst.ResolvedKeywordCase = ResolvedKeywordCase;
+        dst.CommandTimeout = CommandTimeout;
+        dst.ResolvedCommandTimeout = ResolvedCommandTimeout;
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.

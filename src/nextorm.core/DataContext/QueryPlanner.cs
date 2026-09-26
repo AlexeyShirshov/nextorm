@@ -424,6 +424,13 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
 
             var dbCommand = _createCommand(sql!);
+
+            // The resolved timeout is part of the plan key, so a cached command is only ever reused
+            // with the timeout it was created with; applying it here is safe (it never leaks between
+            // commands, unlike mutating a shared command on execution).
+            if (queryCommand.ResolvedCommandTimeout is int commandTimeout)
+                dbCommand.CommandTimeout = commandTimeout;
+
             if (!noParams)
             {
                 var parameterList = @params!;

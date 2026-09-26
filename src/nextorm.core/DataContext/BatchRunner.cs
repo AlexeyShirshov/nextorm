@@ -24,13 +24,15 @@ internal sealed class BatchRunner
     private readonly ILogger? _logger;
     private readonly bool _logParams;
     private readonly bool _logSensitiveData;
+    private readonly int? _commandTimeout;
 
     internal BatchRunner(
         IConnectionManager connectionManager,
         Func<string, object?, DbParameter> createParam,
         Func<DbTransaction?> currentTransaction,
         Func<bool> isDisposed,
-        LoggingOptions logging)
+        LoggingOptions logging,
+        int? commandTimeout)
     {
         _connectionManager = connectionManager;
         _createParam = createParam;
@@ -39,6 +41,7 @@ internal sealed class BatchRunner
         _logger = logging.Logger;
         _logParams = logging.LogParams;
         _logSensitiveData = logging.LogSensitiveData;
+        _commandTimeout = commandTimeout;
     }
 
     /// <summary>Executes a rendered batch in one round trip and materialises its result rows.</summary>
@@ -155,6 +158,9 @@ internal sealed class BatchRunner
         if (_currentTransaction() is { } transaction)
             batch.Transaction = transaction;
 
+        if (_commandTimeout is int timeout)
+            batch.Timeout = timeout;
+
         for (var i = 0; i < plan.Statements.Count; i++)
         {
             var statement = plan.Statements[i];
@@ -182,6 +188,9 @@ internal sealed class BatchRunner
 
         if (_currentTransaction() is { } transaction)
             cmd.Transaction = transaction;
+
+        if (_commandTimeout is int timeout)
+            cmd.CommandTimeout = timeout;
 
         for (var i = 0; i < plan.Statements.Count; i++)
         {

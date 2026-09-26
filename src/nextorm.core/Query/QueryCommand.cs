@@ -414,6 +414,19 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal KeywordCase ResolvedKeywordCase;
     /// <summary>
+    /// Per-query override of the command timeout in seconds: <see langword="null"/> inherits the
+    /// context default (<c>DataContextBuilder.UseCommandTimeout</c>), and a value of zero or less means
+    /// the provider default. Set through <c>WithCommandTimeout</c>.
+    /// </summary>
+    public int? CommandTimeout { get; internal set; }
+    /// <summary>
+    /// The command timeout resolved for this command during preparation: the command override when
+    /// present, otherwise the context default; <see langword="null"/> when neither is set and the
+    /// provider default applies. It is part of the plan key (the inherited value must not let two
+    /// contexts with different defaults share a cached command).
+    /// </summary>
+    internal int? ResolvedCommandTimeout;
+    /// <summary>
     /// The trailing <c>FOR JSON</c> clause (SQL Server), or <c>null</c> when the result set is returned
     /// as rows. A dialect that does not implement it rejects a command that carries it.
     /// </summary>

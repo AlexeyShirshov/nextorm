@@ -143,6 +143,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <see cref="WithTag"/>; <c>null</c> means no tag.
     /// </summary>
     internal string? Tag { get; set; }
+    /// <summary>
+    /// Per-query override of the command timeout in seconds (<c>null</c> inherits the context
+    /// default). A value of zero or less means the provider default. Set through
+    /// <see cref="WithCommandTimeout"/>.
+    /// </summary>
+    internal int? CommandTimeout { get; set; }
     internal string? Table { get => _table; set => _table = value; }
     /// <summary>
     /// Explicit FROM source, used for table-valued functions (and any other source that is neither a
@@ -215,6 +221,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
         cmd.Tag = Tag;
+        cmd.CommandTimeout = CommandTimeout;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -274,6 +281,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
         cmd.Tag = Tag;
+        cmd.CommandTimeout = CommandTimeout;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -902,6 +910,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.NamingConvention = NamingConvention;
         dst.KeywordCase = KeywordCase;
         dst.Tag = Tag;
+        dst.CommandTimeout = CommandTimeout;
         dst.Ctes = Ctes;
     }
     /// <summary>
@@ -1553,6 +1562,22 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return b;
     }
     /// <summary>
+    /// Overrides the command timeout in seconds for the commands this builder creates: it takes
+    /// precedence over the context default set with <c>DataContextBuilder.UseCommandTimeout</c>. A value
+    /// of zero or less means the provider default. The override is part of the plan-cache key, so two
+    /// otherwise identical queries with different timeouts do not share a cached command.
+    /// </summary>
+    /// <param name="seconds">The command timeout in seconds; zero or less uses the provider default.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder<TEntity> WithCommandTimeout(int seconds)
+    {
+        var b = Clone();
+
+        b.CommandTimeout = seconds > 0 ? seconds : null;
+
+        return b;
+    }
+    /// <summary>
     /// Adds <paramref name="condition"/> to the HAVING clause, which filters grouped rows. A repeated
     /// call combines the predicates with <c>and</c>.
     /// </summary>
@@ -1655,6 +1680,12 @@ public class EntityBuilder : ICloneable
     /// </summary>
     internal string? Tag { get; set; }
     /// <summary>
+    /// Per-query override of the command timeout in seconds (<c>null</c> inherits the context
+    /// default). A value of zero or less means the provider default. Set through
+    /// <see cref="WithCommandTimeout"/>.
+    /// </summary>
+    internal int? CommandTimeout { get; set; }
+    /// <summary>
     /// Per-query override of the naming convention for auto-derived table/column names (<c>null</c>
     /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
     /// </summary>
@@ -1699,6 +1730,7 @@ public class EntityBuilder : ICloneable
         cmd.NamingConvention = NamingConvention;
         cmd.KeywordCase = KeywordCase;
         cmd.Tag = Tag;
+        cmd.CommandTimeout = CommandTimeout;
 
         return cmd;
     }
@@ -1729,6 +1761,7 @@ public class EntityBuilder : ICloneable
         dst.NamingConvention = NamingConvention;
         dst.KeywordCase = KeywordCase;
         dst.Tag = Tag;
+        dst.CommandTimeout = CommandTimeout;
     }
     /// <summary>
     /// Creates the copy returned by <see cref="Clone"/> and the explicit <c>ICloneable.Clone</c> call.
@@ -1800,6 +1833,22 @@ public class EntityBuilder : ICloneable
         var b = Clone();
 
         b.KeywordCase = keywordCase;
+
+        return b;
+    }
+    /// <summary>
+    /// Overrides the command timeout in seconds for the commands this builder creates
+    /// (see <see cref="EntityBuilder{TEntity}.WithCommandTimeout"/>): it takes precedence over the
+    /// context default set with <c>DataContextBuilder.UseCommandTimeout</c>, and a value of zero or less
+    /// means the provider default. The override is part of the plan-cache key.
+    /// </summary>
+    /// <param name="seconds">The command timeout in seconds; zero or less uses the provider default.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder WithCommandTimeout(int seconds)
+    {
+        var b = Clone();
+
+        b.CommandTimeout = seconds > 0 ? seconds : null;
 
         return b;
     }

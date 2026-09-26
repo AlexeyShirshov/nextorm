@@ -53,7 +53,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.QuoteIdentifiers,
             optionsBuilder.NamingConvention,
             optionsBuilder.KeywordCase,
-            optionsBuilder.MultilineBatchSql);
+            optionsBuilder.MultilineBatchSql,
+            optionsBuilder.CommandTimeout);
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -145,6 +146,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// (statements joined on one line with <c>"; "</c>).
     /// </summary>
     public bool MultilineBatchSql => _environment.MultilineBatchSql;
+    /// <summary>
+    /// The context-wide default command timeout in seconds (set with
+    /// <c>DataContextBuilder.UseCommandTimeout</c>), or <see langword="null"/> when no timeout is
+    /// configured and the provider default applies. A command can override it with
+    /// <c>WithCommandTimeout</c>.
+    /// </summary>
+    public int? CommandTimeout => _environment.CommandTimeout;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>

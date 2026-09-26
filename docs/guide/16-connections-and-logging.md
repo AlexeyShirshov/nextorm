@@ -119,6 +119,41 @@ implement it. [`DataContext`](xref:NextORM.Core.DataContext) implements
 SQLite, PostgreSQL, SQL Server and MySQL/MariaDB support it; ClickHouse rejects it and the in-memory
 provider does not implement it. See [Transactions](25-transactions.md) for the full guide.
 
+## Command timeout
+
+Every command nextorm executes exposes the ADO.NET `DbCommand.CommandTimeout` (seconds). The default is the provider's: nextorm does not touch the property unless you configure a timeout.
+
+Set a context-wide default with [`UseCommandTimeout`](xref:NextORM.Core.DataContextBuilder.UseCommandTimeout(System.Int32)); it applies to every `SELECT`, DML and `ExecuteScalar` command of the contexts the builder creates:
+
+```csharp
+using var ctx = new DataContextBuilder()
+    .UseSqlite("app.db")
+    .UseCommandTimeout(15)
+    .CreateDataContext();
+```
+
+Override it for a single query with `WithCommandTimeout(seconds)` on the builder or on the built command ([`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1), [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) and [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1)):
+
+```csharp
+var ids = ctx.From<ISimpleEntity>()
+    .WithCommandTimeout(5)          // this query only
+    .Select(x => x.Id)
+    .ToList();
+
+var slowIds = ctx.From<ISimpleEntity>()
+    .Select(x => x.Id)
+    .WithCommandTimeout(120)        // on QueryCommand<T> too
+    .ToList();
+```
+
+Notes:
+
+* No call (`null`) and a value of zero or less keep the provider default; the property is not changed, so there is no cost when the setting is unused. `WithCommandTimeout(0)` clears the per-query override and inherits the context default.
+* The resolved value is part of the plan-cache key, so two otherwise identical queries with different timeouts do not share a cached command and the timeout never leaks from one query to the next. Contexts with different [`UseCommandTimeout`](xref:NextORM.Core.DataContextBuilder.UseCommandTimeout(System.Int32)) values do not share a cached plan either.
+* The per-query override is available on read queries; DML commands and batches always use the context default.
+* The in-memory context has no command and ignores the setting.
+* Provider caveat: `ClickHouse.Driver` 1.4.0 exposes the inherited property, but an HTTP request is bounded by the connection `Timeout` (default two minutes), not `CommandTimeout`; the value has no effect there. See [Limitations](../advanced/limitations.md).
+
 ## Logging
 
 ### Wiring an `ILoggerFactory`

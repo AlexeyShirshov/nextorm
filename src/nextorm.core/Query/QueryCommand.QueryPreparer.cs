@@ -28,6 +28,9 @@ public partial class QueryCommand
             cmd.ResolvedQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext.QuoteIdentifiers;
             cmd.ResolvedNamingConvention = cmd.NamingConvention ?? cmd._dataContext.NamingConvention;
             cmd.ResolvedKeywordCase = cmd.KeywordCase ?? cmd._dataContext.KeywordCase;
+            cmd.ResolvedCommandTimeout = cmd.CommandTimeout is int commandTimeout && commandTimeout > 0
+                ? commandTimeout
+                : cmd._dataContext.CommandTimeout is int contextTimeout && contextTimeout > 0 ? contextTimeout : null;
 
             // The shape of captured collections (value lists, dictionary lookups) is folded into the plan
             // key only when the command participates in the plan cache; otherwise a lookup may be rendered

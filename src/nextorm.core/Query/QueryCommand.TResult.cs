@@ -720,6 +720,24 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return cmd;
     }
     /// <summary>
+    /// Overrides the command timeout in seconds for this command: the value is applied to the
+    /// underlying database command and takes precedence over the context default set with
+    /// <c>DataContextBuilder.UseCommandTimeout</c>. A value of zero or less means the provider default.
+    /// The override participates in the plan-cache key, so two otherwise identical commands with
+    /// different timeouts do not share a cached command and the value never leaks to another command.
+    /// </summary>
+    /// <param name="seconds">The command timeout in seconds; zero or less uses the provider default.</param>
+    /// <returns>A new command carrying the timeout override.</returns>
+    public QueryCommand<TResult> WithCommandTimeout(int seconds)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.CommandTimeout = seconds > 0 ? seconds : null;
+        return cmd;
+    }
+    /// <summary>
     /// Attaches a SQL Server <c>FOR JSON</c> clause so the whole result set is returned as one JSON
     /// document (<c>FOR JSON PATH</c> by default), and returns the command for further composition or
     /// SQL inspection. Prefer <see cref="ForJson(ForJsonMode, string, bool, object[])"/> to execute

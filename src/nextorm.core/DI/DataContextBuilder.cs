@@ -16,6 +16,7 @@ public class DataContextBuilder
     private ILoggerFactory? _loggerFactory;
     //private IDataProvider? _dataProvider;
     private bool _logSensitiveData;
+    private int? _commandTimeout;
     private Func<DataContextBuilder, IDataContext>? _factory;
     private readonly List<IQueryInterceptor> _queryInterceptors = [];
     private readonly List<IConnectionInterceptor> _connectionInterceptors = [];
@@ -53,6 +54,13 @@ public class DataContextBuilder
     /// and the joined command text only, not the per-command <c>DbBatch</c> form.
     /// </summary>
     public bool MultilineBatchSql { get; private set; }
+
+    /// <summary>
+    /// The command timeout in seconds applied to every command of the contexts this builder creates, or
+    /// <see langword="null"/> when no timeout is configured and the provider default applies. Set through
+    /// <see cref="UseCommandTimeout"/>; a command can override it with <c>WithCommandTimeout</c>.
+    /// </summary>
+    public int? CommandTimeout => _commandTimeout;
     //internal IDataProvider? DataProvider => _dataProvider;
     internal ILoggerFactory? LoggerFactory => _loggerFactory;
     // public bool CacheQueryCommand { get; set; } = true;
@@ -159,6 +167,22 @@ public class DataContextBuilder
     public DataContextBuilder UseMultilineBatchSql(bool value = true)
     {
         MultilineBatchSql = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the default command timeout in seconds for every command of the contexts this builder
+    /// creates (the ADO.NET <c>DbCommand.CommandTimeout</c>). A value of zero or less means the
+    /// provider default (nothing is changed, the zero-cost path); the same applies before the call. A
+    /// single command can override the value with <c>WithCommandTimeout</c>. The resolved timeout is
+    /// part of the plan-cache key, so contexts with different defaults do not share a cached command.
+    /// The in-memory context has no command and ignores it.
+    /// </summary>
+    /// <param name="seconds">The default command timeout in seconds; zero or less uses the provider default.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseCommandTimeout(int seconds)
+    {
+        _commandTimeout = seconds > 0 ? seconds : null;
         return this;
     }
 

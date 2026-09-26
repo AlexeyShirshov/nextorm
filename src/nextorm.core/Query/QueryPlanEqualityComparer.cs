@@ -163,6 +163,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.ResolvedKeywordCase != y.ResolvedKeywordCase) return false;
 
+        if (x.ResolvedCommandTimeout != y.ResolvedCommandTimeout) return false;
+
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
         // The outer references are the actual expressions a correlated subquery points at (for
@@ -477,6 +479,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             hash.Add(obj.ResolvedNamingConvention);
 
             hash.Add(obj.ResolvedKeywordCase);
+
+            hash.Add(obj.ResolvedCommandTimeout);
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

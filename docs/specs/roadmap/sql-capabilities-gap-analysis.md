@@ -342,6 +342,17 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     the in-memory provider accepts it as a no-op.
     Docs: [Query hints](../../guide/17-query-hints.md) (EN+RU).
 
+54. **Command timeout (per-context / per-query) — shipped (issue #93).** `DataContextBuilder.UseCommandTimeout(seconds)`
+    sets the context-wide `DbCommand.CommandTimeout`; `WithCommandTimeout(seconds)` on `EntityBuilder`/
+    `EntityBuilder<T>`/`QueryCommand<T>` overrides it per query. The resolved value is part of the plan-cache
+    key (a per-query or context timeout cannot be reused by a command with a different one), so the value
+    never leaks across commands; `null`/zero keeps the provider default (zero-cost). DML/batches use the
+    context default; the in-memory context ignores it. All SQL providers share the same ADO path
+    (`DbCommand.CommandTimeout`/`DbBatch.Timeout`); `ClickHouse.Driver` 1.4.0 exposes the property but does
+    not map it to the HTTP request, documented in
+    [Limitations](../../advanced/limitations.md). Docs:
+    [Connections and logging](../../guide/16-connections-and-logging.md#command-timeout) (EN+RU).
+
 ---
 
 ## 5. Resolved and out-of-scope gaps (ledger)
