@@ -146,6 +146,8 @@
       href: advanced/query-filters.md
     - name: Интеграция с Entity Framework Core
       href: advanced/integration-efcore.md
+    - name: Жадная загрузка дочерних коллекций
+      href: advanced/eager-loading.md
     - name: Ограничения и что вне области
       href: advanced/limitations.md
     - name: Краткий справочник API

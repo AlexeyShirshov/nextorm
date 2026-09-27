@@ -2,6 +2,8 @@
   href: query-filters.md
 - name: Entity Framework Core integration
   href: integration-efcore.md
+- name: Eager loading child collections
+  href: eager-loading.md
 - name: Limitations and out-of-scope features
   href: limitations.md
 - name: API quick reference

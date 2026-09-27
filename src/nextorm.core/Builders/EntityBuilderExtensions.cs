@@ -179,7 +179,11 @@ public static class EntityBuilderExtensions
     /// <returns>A list containing the matching entities.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static List<TEntity> ToList<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().ToList(@params);
+    {
+        var list = builder.ToCommand().ToList(@params);
+        EntityBuilderEagerLoading.Execute(builder, list);
+        return list;
+    }
     /// <summary>
     /// Executes the query asynchronously and materializes the matching entities into a list.
     /// </summary>
@@ -197,8 +201,12 @@ public static class EntityBuilderExtensions
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is a list containing the matching entities.</returns>
-    public static Task<List<TEntity>> ToListAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().ToListAsync(cancellationToken, @params);
+    public static async Task<List<TEntity>> ToListAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
+    {
+        var list = await builder.ToCommand().ToListAsync(cancellationToken, @params).ConfigureAwait(false);
+        await EntityBuilderEagerLoading.ExecuteAsync(builder, list, cancellationToken).ConfigureAwait(false);
+        return list;
+    }
     /// <summary>
     /// Executes the query and materializes the matching entities into an array.
     /// </summary>

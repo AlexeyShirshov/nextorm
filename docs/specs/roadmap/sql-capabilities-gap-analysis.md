@@ -296,12 +296,15 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     / `OVERRIDING SYSTEM VALUE` is not emitted for a non-identity table, so SQL Server no longer raises
     error 8106 (previously verified on SQL Server; other providers tolerated the call).
     Docs: [Bulk insert](../../guide/22-bulk-insert.md).
-49. **Eager loading of a graph (`LoadWith`/`Include`) — out of scope, tracked.** nextorm has no
-    navigation properties (workstream 13, now tracked as issue #105), so linq2db's
-    `LoadWith(x => x.Children)` and EF's `Include`
-    have no equivalent and a graph is loaded one level per query and stitched in memory (verified: the
-    API is absent on every provider). Either a minimal level-one `LoadWith` is added, or the out-of-scope
-    decision is recorded.
+49. **Eager loading of a graph (`LoadWith`) — level one shipped (`1.0.9-a`).** nextorm still has no
+    navigation properties (workstream 13, tracked as issue #105), but an explicit level-one split-query
+    eager load is now available: `EntityBuilder<TEntity>.LoadWith<TChild,TKey>(collection, childQueryFactory,
+    parentKey, childKey)` fills a parent-side `ICollection<TChild>` with two round trips (a parent statement
+    plus a child `WHERE childKey IN (...)` per chunk of at most 1000 parent keys; never N+1) and stitches the
+    children in memory. Only `ToList`/`ToListAsync` honour the declaration; `ToCommand()` and the other
+    terminals ignore it. Nested (level 2+) loads are deferred. EF's `Include` / linq2db's `LoadWith` remain
+    the conceptual equivalents, without inferred metadata.
+    Docs: [Eager loading](../../advanced/eager-loading.md).
     Todo: [`todo_eager_loading.md`](todo_eager_loading.md).
 50. **Captured collection lookup (`dict[column]`) — Done (`1.0-b.1`).** Indexing a closed-over
     `Dictionary`/`List`/array by a query expression (jube's

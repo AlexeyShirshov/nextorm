@@ -111,5 +111,8 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table merge_entity (id integer primary key, name text, age int);
 
         create table delete_entity (id integer primary key, name text, age int);
+
+        create table eager_parent (id integer primary key, name text);
+        create table eager_child (id integer primary key, parent_id int not null, name text);
         """;
 }

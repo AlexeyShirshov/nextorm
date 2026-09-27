@@ -75,3 +75,26 @@ public class DynamicColumnsEntity
     [DynamicColumns]
     public Dictionary<string, object?> Extra { get; set; } = new();
 }
+
+[SqlTable("eager_parent")]
+public sealed class EagerParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
+    public ICollection<EagerChild> Children { get; } = new List<EagerChild>();
+}
+
+[SqlTable("eager_child")]
+public sealed class EagerChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
+}

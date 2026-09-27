@@ -87,6 +87,8 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists insert_entity;
         drop table if exists merge_entity;
         drop table if exists delete_entity;
+        drop table if exists eager_child;
+        drop table if exists eager_parent;
 
         create table simple_entity (id integer primary key);
         insert into simple_entity (id) select generate_series(1, 10);
@@ -160,6 +162,19 @@ internal sealed class PostgresTestProvider : ITestProvider
             id integer primary key,
             name varchar(100),
             age integer
+        );
+
+        create table eager_parent
+        (
+            id integer primary key,
+            name varchar(100)
+        );
+
+        create table eager_child
+        (
+            id integer primary key,
+            parent_id integer not null,
+            name varchar(100)
         );
         """;
 }

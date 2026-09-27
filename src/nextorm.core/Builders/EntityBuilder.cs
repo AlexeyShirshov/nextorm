@@ -42,6 +42,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private List<KeyValuePair<string, string>>? _settings;
     private Expression<Func<TEntity, bool>>? _having;
     private List<Sorting>? _sorting;
+    private List<IEagerLoadSpec<TEntity>>? _loadSpecs;
     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     private string? _table;
@@ -81,6 +82,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal ILogger? Logger { get; init; }
     internal QueryCommand? Query { get => _query; set => _query = value; }
     internal IDataContext DataProvider => _dataProvider;
+    /// <summary>
+    /// The eager-load specifications applied by <see cref="LoadWith{TChild,TKey}"/>, or <c>null</c> when
+    /// the builder carries none. Only the list terminals consult them; <see cref="ToCommand"/> ignores
+    /// them so building the command cannot recurse into the loader.
+    /// </summary>
+    internal IReadOnlyList<IEagerLoadSpec<TEntity>>? LoadSpecs => _loadSpecs;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
     /// <summary>
     /// The ordering keys applied by <c>OrderBy</c>/<c>OrderByDescending</c>, or <c>null</c> when the
@@ -354,6 +361,67 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         var b = Clone();
         b._ignoreFilters = true;
+        return b;
+    }
+    /// <summary>
+    /// Declares a split-query eager load for <paramref name="collection"/>: after the parent query is
+    /// materialized, one extra child query per key chunk is executed to fetch the children, and they are
+    /// stitched onto the parents in memory (two round trips, never N+1). Only the list terminals
+    /// (<c>ToList</c>/<c>ToListAsync</c>) honor the declaration; <see cref="ToCommand"/> ignores it.
+    /// <para>
+    /// The parent's current collection value is cleared and refilled when it is non-null; a null value is
+    /// assigned a fresh list when the member is settable. A read-only member whose value is null is
+    /// rejected with <see cref="NotSupportedException"/>. Every target is validated before the parents are
+    /// mutated, so the rejection leaves no parent partially populated. The child order follows the child
+    /// query's order.
+    /// </para>
+    /// <para>
+    /// A collection member may be declared only once: calling <c>LoadWith</c> twice for the same member
+    /// throws <see cref="InvalidOperationException"/>. Declare distinct members on the same builder to
+    /// load several collections.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <typeparam name="TKey">
+    /// The non-nullable key type shared by the parent and child selectors. A null key value observed at
+    /// runtime is skipped and never matches.
+    /// </typeparam>
+    /// <param name="collection">The parent-side collection member to fill.</param>
+    /// <param name="childQuery">Builds the child query from the data context that owns the parent query.</param>
+    /// <param name="parentKey">Selects the parent key used to match children.</param>
+    /// <param name="childKey">Selects the child key used to match parents.</param>
+    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The collection member already carries an eager-load declaration on this builder.
+    /// </exception>
+    public EntityBuilder<TEntity> LoadWith<TChild, TKey>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Func<IDataContext, EntityBuilder<TChild>> childQuery,
+        Expression<Func<TEntity, TKey>> parentKey,
+        Expression<Func<TChild, TKey>> childKey)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        ArgumentNullException.ThrowIfNull(childQuery);
+        ArgumentNullException.ThrowIfNull(parentKey);
+        ArgumentNullException.ThrowIfNull(childKey);
+
+        var spec = new EagerLoadSpec<TEntity, TChild, TKey>(collection, childQuery, parentKey, childKey);
+
+        if (spec.CollectionMember is { } member && _loadSpecs is not null)
+        {
+            foreach (var registered in _loadSpecs)
+            {
+                if (registered.CollectionMember is { } existing && existing.Equals(member))
+                    throw new InvalidOperationException(
+                        $"The collection member '{member.Name}' on '{typeof(TEntity).Name}' already has an " +
+                        "eager-load declaration; remove the earlier LoadWith call or load a different collection.");
+            }
+        }
+
+        var b = Clone();
+        b._loadSpecs = _loadSpecs is null ? [spec] : [.. _loadSpecs, spec];
+
         return b;
     }
     /// <summary>
@@ -912,6 +980,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._arrayJoinKind = _arrayJoinKind;
         dst._sourceEntityType = _sourceEntityType;
         dst._bindArrayJoinElement = _bindArrayJoinElement;
+        dst._loadSpecs = _loadSpecs is null ? null : [.. _loadSpecs];
     }
     /// <summary>
     /// Copies every piece of query state whose type does not depend on the projection parameter, so it

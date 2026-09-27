@@ -10,6 +10,18 @@
 > Сам eager loading (`LoadWith`/`Include`) **не реализован**: фича перенесена в отдельный майлстоун и
 > остаётся открытой/нереализованной. План ниже — по-прежнему план.
 
+> **Статус реализации (27.09.2026, ветка `1.0.9-a`).** Уровень-1 split-query eager loading **поставлен**:
+> `EntityBuilder<TEntity>.LoadWith<TChild,TKey>(collection, childQueryFactory, parentKey, childKey)` —
+> 2 round trip (родительский statement + дочерний `WHERE childKey IN (...)`), без N+1; родительские ключи
+> чанкуются по 1000; дочерние коллекции сшиваются с родителями в памяти. Загрузка учитывается только
+> списочными терминалами `ToList`/`ToListAsync`; `ToCommand()` и прочие терминалы её игнорируют.
+> **Отложено:** вложенность/N-level eager loading и вариант JOIN+дедуп — до появления конкретного
+> потребителя / требования на вложенность (триггер пересмотра). Реализация —
+> `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`; документация —
+> [Eager loading](../../advanced/eager-loading.md). Тесты: core `EagerLoadingTests` (6), integration
+> `CommonTestSuite.EagerLoading` (4 кейса × SQLite/PostgreSQL/SQL Server/MySQL), SQLite
+> `EagerLoadingSqlGenerationTests` (2 round trip + `IN`-список).
+
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
 > раздел «Engine gaps — verified on `nextorm 1.0.6-alpha`», пункт 9. Связано:
 > [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §4 п.49, §6 workstream 13
