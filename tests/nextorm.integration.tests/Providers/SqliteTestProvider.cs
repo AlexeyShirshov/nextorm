@@ -42,6 +42,7 @@ internal sealed class SqliteTestProvider : ITestProvider
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
     public bool SupportsRegex => true;
+    public bool SupportsLobStreaming => true;
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 
@@ -97,6 +98,13 @@ internal sealed class SqliteTestProvider : ITestProvider
 
         create table binary_entity (id integer primary key, data blob);
         insert into binary_entity (id, data) values (1, X'01020304'), (2, null);
+
+        -- 8 MiB of 0xAB and 8 MiB of 'x'. hex(zeroblob(n)) is 2n zero characters, so replacing each
+        -- '00' pair produces the repeated payload; unhex turns the blob hex back into bytes.
+        create table lob_entity (id integer primary key, data blob, body text);
+        insert into lob_entity (id, data, body) values
+            (1, unhex(replace(hex(zeroblob(8388608)), '00', 'AB')),
+                replace(hex(zeroblob(8388608)), '00', 'x'));
 
         create table insert_entity (id integer primary key autoincrement, name text, age int);
 

@@ -470,6 +470,12 @@ internal readonly struct SqlBuilder
                         selectBuilder.Append(", ");
                     }
                 }
+
+                // A LOB-only projection may need a trailing locator (SQLite's rowid) to switch the
+                // driver to a seekable streaming blob; the payload keeps ordinal 0. The locator is
+                // appended with the loop's ", " separator so the trailing-trim below drops it again.
+                if (!_ctx.ParamMode && _ctx.SequentialAccess && _ctx.Dialect.LobLocatorColumn is { } lobLocator)
+                    selectBuilder!.Append(lobLocator).Append(", ");
             }
 
 

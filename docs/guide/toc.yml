@@ -56,6 +56,8 @@
   href: 28-value-converters.md
 - name: Range columns (pair of scalar columns)
   href: 29-range-columns.md
+- name: Streaming large objects (BLOB/CLOB)
+  href: 30-large-objects.md
 - name: Provider-specific SQL
   items:
     - name: Overview

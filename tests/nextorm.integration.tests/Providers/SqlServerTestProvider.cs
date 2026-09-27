@@ -49,6 +49,8 @@ internal sealed class SqlServerTestProvider : ITestProvider
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
     public bool SupportsRegex => true;
+    public bool SupportsLobStreaming => true;
+    public bool SupportsLobDataReader => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";
@@ -81,6 +83,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
         """
         drop table if exists complex_entity;
         drop table if exists binary_entity;
+        drop table if exists lob_entity;
         drop table if exists xml_entity;
         drop table if exists simple_entity;
         drop table if exists insert_entity;
@@ -125,6 +128,25 @@ internal sealed class SqlServerTestProvider : ITestProvider
         );
 
         insert into binary_entity (id, data) values (1, 0x01020304), (2, null);
+
+        -- 8 MiB of 0xAB and 8 MiB of N'x'. REPLICATE converts a binary argument to varchar(max),
+        -- so the blob is assembled by doubling an 8-byte seed (20 doublings -> 8,388,608 bytes).
+        create table lob_entity
+        (
+            id int not null primary key,
+            data varbinary(max) null,
+            body nvarchar(max) null
+        );
+
+        declare @lob varbinary(max) = 0xABABABABABABABAB;
+        set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob;
+        set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob;
+        set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob;
+        set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob;
+        set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob; set @lob = @lob + @lob;
+
+        insert into lob_entity (id, data, body) values
+            (1, @lob, replicate(cast(N'x' as nvarchar(max)), 8388608));
 
         create table xml_entity
         (

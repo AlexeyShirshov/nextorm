@@ -44,16 +44,6 @@ internal sealed class CommandReaderOwner : IDisposable, IAsyncDisposable
         reader?.Dispose();
     }
 
-    /// <summary>Asynchronously releases the reader but keeps the command.</summary>
-    /// <returns>A value task that completes once the reader has been disposed.</returns>
-    internal async ValueTask CloseReaderAsync()
-    {
-        var reader = _reader;
-        _reader = null;
-        if (reader is not null)
-            await reader.DisposeAsync().ConfigureAwait(false);
-    }
-
     /// <summary>Disposes the reader (when still open) and then the command. Safe to call more than once.</summary>
     public void Dispose()
     {

@@ -6,7 +6,8 @@ subset of the full benchmark corpus (7 cases) chosen so a full run fits in the `
 budget on a developer host.
 
 It is not a CI performance gate and not a correctness test; the mandate lives in the
-PDCA overlay (`.opencode/nextorm-pdca.md`, `### Перф-приёмка cached path`).
+PDCA overlay (skill `.opencode/skills/nextorm-pdca/SKILL.md`, `### Перф-приёмка cached path`,
+загружается вместе с глобальным скиллом `pdca-dotnet`).
 
 ## Reproducible command
 
@@ -113,3 +114,53 @@ must not be used for the cached-vs-prepared rule.
 - Cost target: **≤4 min** wall clock on the current host for the `ShortRun` acceptance command.
   Exceeding it is a gate failure — report the measured time; do not silently loosen the
   criterion.
+
+## Results 2026-09-27
+
+Two in-cycle re-runs of the acceptance command on the same host/config/case set as the baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7** cases, **0** failures).
+Machine verified quiet of other builds/tests before each run.
+
+### Iteration 1 (earlier this cycle)
+
+External shell wall clock **48 s**; BDN `Global total time` **45.67 s** — both under the 4 min
+budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.225 ms | 335.16 KB | -24% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 59.32 ms | 50 MB | -2.7% |
+| `Nextorm_Cached` | 1.834 ms | 534.43 KB | +3.5% |
+| `Prepared_ToList` | 901.9 us | 76.14 KB | -2.4% |
+| `Cached_ToList` | 1,779.1 us | 565.22 KB | +3.0% |
+| `Cached_PlanOnly_Param` | 514.8 us | 489.08 KB | -0.7% |
+| `Nextorm_Cached_ToListAsync` | 2.089 ms | 692.07 KB | -2.2% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.97** (baseline
+**1.87**, +5.5%); the corresponding allocated ratio is **7.42**, unchanged.
+
+### Iteration 2 (post-fix re-verification)
+
+External shell wall clock **50.69 s**; BDN `Global total time` **49.21 s**, **7** executed
+benchmarks, **0** failures — both under the 4 min budget. (BenchmarkDotNet logged its usual
+`Failed to set up priority High ... Permission denied` process warning; it is not a benchmark
+failure.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline | Delta Mean vs iter 1 |
+|------|------|-----------|------------------------|----------------------|
+| `Nextorm_Count` | 2.201 ms | 335.16 KB | -24% (high-variance row, not an assertion) | -1.1% |
+| `Nextorm_GroupByCount` | 59.82 ms | 50.01 MB | -1.9% | +0.8% |
+| `Nextorm_Cached` | 1.801 ms | 534.42 KB | +1.6% | -1.8% |
+| `Prepared_ToList` | 904.8 us | 76.14 KB | -2.1% | +0.3% |
+| `Cached_ToList` | 1,735.6 us | 565.22 KB | +0.5% | -2.4% |
+| `Cached_PlanOnly_Param` | 498.4 us | 489.08 KB | -3.8% | -3.2% |
+| `Nextorm_Cached_ToListAsync` | 1.987 ms | 692.06 KB | -7.0% | -4.9% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.92** — vs baseline
+**1.87** (+2.7%) and vs iteration 1 **1.97** (-2.5%); the corresponding allocated ratio is
+**7.42**, unchanged. Both deltas are far below the 20% investigation threshold, so no re-run was
+required.
+
+Verdict (final, iteration 2): within noise, **no regression**; baseline numbers above left
+unchanged.

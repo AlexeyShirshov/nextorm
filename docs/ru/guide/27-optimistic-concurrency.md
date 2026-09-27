@@ -35,7 +35,7 @@
 | версия `long` / `int` | все | `long Version { get; set; }` | управляется приложением; инкремент в том же утверждении |
 | `rowversion` / `timestamp` | SQL Server | `byte[] Version { get; }` | управляется базой; помечается computed |
 | `TIMESTAMP ... ON UPDATE CURRENT_TIMESTAMP` | MySQL / MariaDB | `DateTime Version { get; set; }` | управляется базой |
-| версия `long` (или `xmin`) | PostgreSQL | `long Version { get; set; }` | родной колонки rowversion нет; `xmin` — системная колонка |
+| `xmin` (системная колонка) | PostgreSQL | `uint Revision { get; set; }` | родной колонки rowversion нет; системная колонка маппится через `[Column("xmin")]` и помечается computed, `uint` — CLR-тип для `xid` |
 
 ```csharp
 [SqlTable("orders")]
@@ -106,6 +106,60 @@ order.Version = row.Version;                          // write-back во вла�
 той же транзакции, если она есть), чтобы получить новый токен. Никакого «refresh» на стороне фреймворка
 нет: nextorm не держит вашу сущность, поэтому возвращённое значение присваиваете *вы*, ровно как после
 любого другого чтения.
+
+## PostgreSQL `xmin`
+
+В таблице PostgreSQL колонки `rowversion` нет, но у каждой строки есть системная колонка `xmin` —
+транзакция, последней её записавшая. Сопоставьте её обычному свойству `uint` (`uint` — CLR-тип, в
+который отображается `xid`), и отдельная колонка версии не понадобится:
+
+```csharp
+[SqlTable("orders")]
+public interface IOrder
+{
+    [Key] long Id { get; }
+    string Status { get; set; }
+    [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+    [Column("xmin")] uint Revision { get; set; }   // системная колонка, приложением не пишется
+}
+```
+
+`xmin` управляется базой, поэтому свойство помечается computed
+(`[DatabaseGenerated(DatabaseGeneratedOption.Computed)]` или `.Computed()`) и никогда не вызывается `Set`;
+с пометкой computed `.Set(entity)` его пропускает, и insert сущности не трогает колонку. Проверка и
+write-back такие же, как для любого токена — сравните `Revision` в `Where` и прочитайте новое
+значение через `Returning`:
+
+```csharp
+var affected = ctx.Update<IOrder>()
+    .Set(o => o.Status, "paid")
+    .Where(o => o.Id == order.Id && o.Revision == order.Revision)
+    .Update();                                        // устаревший токен → 0 строк
+
+// Ту же проверку и чтение назад можно объединить в одном утверждении:
+var row = ctx.Update<IOrder>()
+    .Set(o => o.Status, "paid")
+    .Where(o => o.Id == order.Id && o.Revision == order.Revision)
+    .Returning(o => new { o.Id, o.Revision })         // UPDATE ... RETURNING xmin
+    .Single();
+
+order.Revision = row.Revision;
+```
+
+```sql
+-- PostgreSQL
+update orders set status = @p0 where (id = @p1 and xmin = @p2) returning xmin
+```
+
+Обновление самоподдерживающееся: `xmin` — идентификатор транзакции, последней изменившей строку, поэтому
+новое значение даёт только запись из другой транзакции (повторные записи в той же транзакции сохраняют
+его), и в `SET` нечего инкрементировать.
+
+`xmin` годится только как токен **сравнения на равенство**. Идентификаторы транзакций не монотонны,
+поэтому никогда не сортируйте по `Revision` и не сравнивайте его через `<`/`>` — только
+`Revision == original` в `Where`. `uint`-параметр сравнения/записи связывается как PostgreSQL `xid` —
+32-битный идентификатор транзакции, подверженный переполнению (wraparound), поэтому отдельное значение
+непрозрачно.
 
 ## Upsert с проверкой токена
 

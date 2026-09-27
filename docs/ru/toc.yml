@@ -72,6 +72,8 @@
       href: guide/28-value-converters.md
     - name: Range-колонки (пара скалярных колонок)
       href: guide/29-range-columns.md
+    - name: Потоковое чтение больших объектов (BLOB/CLOB)
+      href: guide/30-large-objects.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

@@ -76,6 +76,7 @@ MariaDB отличается от [MySQL](mysql.md) возможностью о�
 | Условная функция | наследуется от MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
 | Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (MariaDB 10.3+) |
 | Нативные функции | поверхность `SqlFunctions.MySql`, унаследованная от MySQL, **минус** `uuid_to_bin`/`bin_to_uuid`, **плюс** имена MariaDB (расширенный regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, доступ к последовательностям) |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 ## См. также
 

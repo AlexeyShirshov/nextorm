@@ -220,6 +220,10 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsCommandBehaviorSingleRow => true;
     /// <inheritdoc/>
+    public virtual bool SupportsSequentialAccess => false;
+    /// <inheritdoc/>
+    public virtual string? LobLocatorColumn => null;
+    /// <inheritdoc/>
     public virtual bool SupportsTransactions => true;
 
     /// <summary>Defaults to <c>null</c>; ClickHouse exposes the <c>LIMIT n BY expr</c> renderer.</summary>
@@ -418,6 +422,7 @@ public abstract class SqlDialectBase : ISqlDialect
         _ when type == typeof(short) => "smallint",
         _ when type == typeof(int) => "integer",
         _ when type == typeof(long) => "bigint",
+        _ when type == typeof(uint) => "bigint",
         _ when type == typeof(float) => "real",
         _ when type == typeof(double) => "double precision",
         _ when type == typeof(decimal) => "numeric",

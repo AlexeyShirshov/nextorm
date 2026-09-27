@@ -181,6 +181,11 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         {
             return GetFieldValueMI.MakeGenericMethod(typeof(ulong));
         }
+        else if (readType == typeof(uint))
+        {
+            // PostgreSQL xid/xmin are 32-bit unsigned integers exposed as System.UInt32.
+            return GetFieldValueMI.MakeGenericMethod(typeof(uint));
+        }
         else if (readType == typeof(JsonDocument))
         {
             // A provider-native JSON column (PostgreSQL jsonb) is read as System.Text.Json.JsonDocument.

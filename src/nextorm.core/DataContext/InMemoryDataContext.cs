@@ -320,6 +320,8 @@ public partial class InMemoryDataContext : IDataContext
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
+
+    internal bool IsDisposed => _disposedValue;
     // public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     // {
     //     if (!queryCommand.IsPrepared)

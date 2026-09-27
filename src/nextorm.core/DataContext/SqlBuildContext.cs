@@ -31,6 +31,7 @@ internal readonly record struct SqlBuildContext
 
     internal ISqlDialect Dialect { get; init; }
     internal bool ParamMode { get; init; }
+    internal bool SequentialAccess { get; init; }
     internal List<Parameter> Params { get; init; }
     internal IColumnsProvider ColumnsProvider { get; init; }
     internal IQueryRegistry QueryProvider { get; init; }

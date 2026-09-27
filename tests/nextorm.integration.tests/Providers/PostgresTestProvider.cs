@@ -48,6 +48,9 @@ internal sealed class PostgresTestProvider : ITestProvider
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
     public bool SupportsRegex => true;
+    public bool SupportsLobStreaming => true;
+    public bool SupportsLobDataReader => true;
+    public bool SupportsZeroColumnResult => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.";
 
     public string SkipReason => PostgresContainer.Failure ?? "PostgreSQL is not available.";
@@ -78,6 +81,8 @@ internal sealed class PostgresTestProvider : ITestProvider
         """
         drop table if exists complex_entity;
         drop table if exists binary_entity;
+        drop table if exists pg_oid_entity;
+        drop table if exists lob_entity;
         drop table if exists simple_entity;
         drop table if exists insert_entity;
         drop table if exists merge_entity;
@@ -114,6 +119,27 @@ internal sealed class PostgresTestProvider : ITestProvider
         insert into binary_entity (id, data) values
             (1, decode('01020304', 'hex')),
             (2, null);
+
+        -- oid/cid are 32-bit unsigned system types (CLR uint in Npgsql); nextorm binds uint as xid,
+        -- so these columns are read directly and filtered only through an explicit bigint cast.
+        create table pg_oid_entity
+        (
+            id integer primary key,
+            oid_value oid,
+            cid_value cid
+        );
+        insert into pg_oid_entity (id, oid_value, cid_value) values
+            (1, 42::oid, '7'::cid);
+
+        -- 8 MiB of 0xAB and 8 MiB of 'x'; repeat() avoids embedding the payload in the seed script.
+        create table lob_entity
+        (
+            id integer primary key,
+            data bytea,
+            body text
+        );
+        insert into lob_entity (id, data, body) values
+            (1, decode(repeat('ab', 8388608), 'hex'), repeat('x', 8388608));
 
         create table insert_entity
         (

@@ -348,6 +348,7 @@ public class MySqlDialect : SqlDialectBase
         _ when type == typeof(short) => "signed",
         _ when type == typeof(int) => "signed",
         _ when type == typeof(long) => "signed",
+        _ when type == typeof(uint) => "bigint",
         _ when type == typeof(float) => "float",
         _ when type == typeof(double) => "double",
         _ when type == typeof(decimal) => "decimal",

@@ -14,4 +14,8 @@ public readonly record struct PreparedCommandOptions(
     bool SingleRow = false,
     string? Sql = null,
     bool NoParams = false,
-    bool NeedsParamRefresh = false);
+    bool NeedsParamRefresh = false)
+{
+    /// <summary>Whether the reader must be opened with <see cref="System.Data.CommandBehavior.SequentialAccess"/> for streaming LOB columns.</summary>
+    public bool SequentialAccess { get; init; }
+}

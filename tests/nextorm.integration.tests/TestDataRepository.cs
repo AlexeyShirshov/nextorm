@@ -9,6 +9,7 @@ public class TestDataRepository(IDataContext dataProvider)
     public EntityBuilder<ISimpleEntity> SimpleEntity { get; } = dataProvider.From<ISimpleEntity>();
     public EntityBuilder<IComplexEntity> ComplexEntity { get; } = dataProvider.From<IComplexEntity>();
     public EntityBuilder<BinaryEntity> BinaryEntity { get; } = dataProvider.From<BinaryEntity>();
+    public EntityBuilder<LobEntity> LobEntity { get; } = dataProvider.From<LobEntity>();
     public EntityBuilder<IArrayEntity> ArrayEntity { get; } = dataProvider.From<IArrayEntity>();
     public EntityBuilder<SimpleEntity> SimpleEntityAsClass { get; } = dataProvider.From<SimpleEntity>();
 

@@ -254,6 +254,26 @@ var r = ctx.From<IComplexEntity>()
 // r[0].Id == 1 (the row whose Int is NULL)
 ```
 
+## Large objects (LOB streaming)
+
+A single `byte[]` or `string` column can be read as a `Stream`/`TextReader` without loading the value into managed memory. Npgsql implements `GetStream`/`GetTextReader` for `bytea` and `text`, so PostgreSQL is one of the three providers that support the LOB terminals in this release (alongside SQL Server and SQLite):
+
+```csharp
+await using var stream = ctx.From<BinaryEntity>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Payload)
+    .ToStream();          // opens the reader with CommandBehavior.SequentialAccess
+
+using var reader = ctx.From<Document>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Body)
+    .ToTextReader();
+```
+
+The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/30-large-objects.md).
+
+PostgreSQL also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite rejects it because its streaming projection always carries the `rowid` locator; MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support.
+
 ## Aliases
 
 Derived tables and table-valued functions must be aliased with double quotes:
@@ -279,6 +299,7 @@ join complex_entity as "t2" on t1.id = t2.id
 | `*ALL` | supported |
 | Arrays | supported (`any(@array)`, `cardinality`, ...) |
 | JSON/JSONB | supported (`json_agg`, `->`, ...; `JsonDocument` params bind as `jsonb`) |
+| LOB streaming (`ToStream`/`ToTextReader`, `ToDataReader`) | supported (`SequentialAccess`; single `byte[]`/`string` column, or a multi-column caller-owned reader) |
 | `greatest` / `least` / `date_trunc` | supported (`greatest`/`least` ignore NULL arguments) |
 | Conditional function | `iif(cond, a, b)` → `case when cond then a else b end` |
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported |

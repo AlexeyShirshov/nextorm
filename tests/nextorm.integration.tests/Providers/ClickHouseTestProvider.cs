@@ -48,6 +48,7 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => false;
     public bool SupportsRegex => true;
+    public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for ClickHouse.";
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";

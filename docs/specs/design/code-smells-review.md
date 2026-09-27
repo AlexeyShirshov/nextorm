@@ -6840,7 +6840,7 @@ LF-only (CR=0): `src/nextorm.core/Query/SqlFunctions.Postgres.cs`, `src/nextorm.
 
 ### ℹ️ Наблюдения (фикс не требуется), issue #79
 
-- **A. Типизация по движку.** `xxh32` возвращает `long?` (в `SelectExpression` нет reader-пути для `uint`), `xxh3` — `ulong?`, `kdf` — `byte[]?`, `to_number` — `double?`; `nvl`/`nvl2` дженерики. XML-doc полный, build `0/0`.
+- **A. Типизация по движку.** `xxh32` возвращает `long?` (исторически: в `SelectExpression` не было reader-пути для `uint`; теперь reader-путь для `uint` добавлен — используется маппингом PostgreSQL `xmin`), `xxh3` — `ulong?`, `kdf` — `byte[]?`, `to_number` — `double?`; `nvl`/`nvl2` дженерики. XML-doc полный, build `0/0`.
 - **B. Имена последовательностей рендерятся идентификатором.** `next_value_for`/`nextval`/`setval`/`lastval` снимают кавычки со строкового аргумента (`next value for s`, `nextval(s)`), иначе `NEXT VALUE FOR 's'` был бы невалиден. Задокументировано в guide EN+RU.
 - **C. Версии MariaDB.** Контейнер `mariadb:11.4` покрывает `regexp_*`/`nvl`/`nvl2`/`add_months`/`to_char`/`kdf`/`json_*`/последовательности; `months_between` (12.2+), `to_number` (12.2+), `to_date` (12.3+), `xxh3`/`xxh32` (13.1+) — SQL-gen-only.
 - **D. Пре-существующее (база #80, не связано с #79).** `tests/nextorm.mysql.tests/SqlGenerationTests.IndexOfLastIndexOf_ShouldUseInstrAndLocate` падает: ожидается `… - char_length('b') + 1`, прод даёт `… - (char_length('b')) + 1`. Мой дифф не касается `MySqlDialect`/трансляторов; падение присутствует и на стейдженной базе. Не трогаю (границы skill: одна фича на изменение).
@@ -7950,12 +7950,128 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 
 ## Перенесено из status закрытого потока `stored-procedures` (2026-09-26)
 
-Перенос оставшихся открытых `Deferred + триггер` при удалении `docs/specs/status/stored-procedures-{3,4,5}.md`. Уже отслеживаемое сюда не дублируется: TVP ClickHouse — `todo_tvp.md`, #27 BLOB/CLOB streaming — `todo_streaming_lob.md`, #95 eager loading — `todo_eager_loading.md`.
+Перенос оставшихся открытых `Deferred + триггер` при удалении `docs/specs/status/stored-procedures-{3,4,5}.md`. Уже отслеживаемое сюда не дублируется: TVP ClickHouse — **отгружено** (план `todo_tvp.md` удалён; issue #73 закрыт), #27 BLOB/CLOB streaming — `todo_streaming_lob.md`, #95 eager loading — `todo_eager_loading.md`.
 
-- **P2 (цикл 1, мёртвый код).** `CommandReaderOwner.CloseReaderAsync` (`src/nextorm.core/DataContext/CommandReaderOwner.cs:49`) не имеет вызовов (Roslyn refs — 0). Триггер: ревизия `CommandReaderOwner`/async-пути reader'а (в т.ч. #27).
+- **P2 (цикл 1, мёртвый код).** `CommandReaderOwner.CloseReaderAsync` (`src/nextorm.core/DataContext/CommandReaderOwner.cs:49`) не имеет вызовов (Roslyn refs — 0). **Ревизия #27 выполнена (2026-09-27): всё ещё мёртв** — LOB-путь закрывает владельца через `CommandReaderOwner.Dispose`/`DisposeAsync` (`LobStream.cs:110,130`, `LobTextReader.cs:133,154`), раннее закрытие ридера не использует; sync `CloseReader` вызывается только из `ProcedureResult.EnsureOutputsRead`, async-двойника у него нет. Решение: **re-defer** (удаление вне диффа #27, потребовало бы отдельного re-CHECK). Новый триггер: появление async-пути раннего закрытия ридера (async `EnsureOutputsRead`/async-чтение `OutputParameters`) или иного потребителя.
 - **P2 (цикл 1, план-кэш).** Ключ naming-convention кэша строится по экземпляру, а не по типу — размножение кэша на инстанциацию. Триггер: ревизия metadata/mapper-кэша при следующей правке ключей.
-- **P2 (цикл 1, аллокации).** Per-Read замыкание + `string.Join` на пути чтения. Триггер: `nextorm-db-perf-analyst` на read-пути / жалоба на аллокации.
-- **P2 (цикл 1, тест).** Нет теста равенства `ColumnsPlanHash` (структурно равные наборы колонок должны совпадать по хэшу). Триггер: правка `ColumnsPlanHash`/`SelectExpressionPlanEqualityComparer`.
+- **P2 (цикл 1, аллокации).** Per-Read замыкание + `string.Join` на пути чтения. Триггер: `nextorm-db-perf-analyst` на read-пути / жалоба на аллокации. **Цикл #27 не затронут** (2026-09-27): LOB-путь идёт мимо `ResultSetEnumerator`/mapper'а (no-mapper `GetStream(0)`), per-Read-цикла не добавляет (`QueryCommandExtensions.cs:199-277`). Триггер прежний.
+- **P2 (цикл 1, тест).** Нет теста равенства `ColumnsPlanHash` (структурно равные наборы колонок должны совпадать по хэшу). Триггер: правка `ColumnsPlanHash`/`SelectExpressionPlanEqualityComparer`. **Цикл #27 не затронут** (2026-09-27): `ColumnsPlanHash`/`SelectExpressionPlanEqualityComparer` не менялись (diff `SelectExpression.cs` — +5 строк режима, не хэш). Триггер не наступил.
 - **Флейк.** `InListCacheTests.In_InlineArray_StructurallyEqualCallSites_ShouldReuseCachedPlan` (`tests/nextorm.sqlite.tests/InListCacheTests.cs:56`) падает при полном прогоне под coverage (pre-existing; предположительно гонка с `DataContextCache.Clear`). Триггер: повтор в CI.
-- **Deferred (цикл 4).** Стриминг multi-result: `BatchResult` буферизует все наборы (eager). Триггер: запрос пользователя / #27-стиль.
+- **Deferred (цикл 4).** Стриминг multi-result: `BatchResult` буферизует все наборы (eager). Триггер: запрос пользователя / #27-стиль. **Цикл #27 не затронут** (2026-09-27): скалярный срез (одна колонка, одно значение) не идёт через `BatchResult`; multi-result стриминг остаётся фазой 2/3. Триггер прежний.
 - **Принято как defensive (цикл 4).** Защитные ветки `BatchRunner` («провайдер вернул меньше наборов, чем объявлено»; несовпадение счётчиков) недостижимы через public API и тестами не покрыты — оставлены намеренно.
+
+### Цикл #27 (LOB-стриминг, фаза 1, 2026-09-27)
+
+Проверка по коду (`roslyn`) в ACT цикла #27 (PostgreSQL + SQL Server; скалярные `ToStream`/`ToTextReader` на `QueryCommand<T>`):
+
+- **Мёртвый `CommandReaderOwner.CloseReaderAsync`** — ревизован LOB-путём, но остался без вызовов → re-defer с новым триггером (см. выше, «мёртвый код»).
+- **Per-Read замыкание + `string.Join` (read-путь)** — не затронуто: LOB-путь — не mapper-путь.
+- **Тест равенства `ColumnsPlanHash`** — не добавлен; `ColumnsPlanHash`/`SelectExpressionPlanEqualityComparer` не менялись.
+- **Eager `BatchResult` (multi-result)** — не затронуто (скалярный срез).
+
+Открыто и перенесено: SQLite (`rowid`/`SqliteBlob`/`GetBytes`-чанки), MySQL/MariaDB (capability-тест `GetStream`/`GetTextReader`), фазы 2/3 (`ToDataReader`, `Stream`/`TextReader` в проекции), mid-read cancel. Детали — `docs/specs/status/lob-streaming-1.md`.
+
+### Цикл #27 — цикл 2 (capability-эксперимент, 2026-09-27)
+
+Принятые отклонения (без action; product-код не менялся, `src/**` не тронут):
+
+- Probe-харнессы `tests/nextorm.sqlite.tests/SqliteRowIdLobProbeTests.cs` и `tests/nextorm.integration.tests/LobCapabilityProbeTests.cs` — env-гейтед печатающие harness'ы **без value-ассертов** (verdict опирается на записанные результаты). Для эксперимента это допустимо; при превращении в регрессионный тест нужны явные ассерты.
+- Выборка аллокаций **min-of-3** принята для эксперимента; строгий метод обязателен до любого сравнительного benchmark-claim.
+- SQLite-probe адресует строки по явному `id` (без `ORDER BY`) и открывает подключение с `Pooling=False`, а ошибки `File.Delete` **логируются**, а не глотаются.
+
+### Цикл #27 — цикл 3 (SQLite binary+text через trailing `rowid`, 2026-09-27)
+
+Принято/отсрочено (**без action**; `src/**` в ACT-цикле не меняется):
+
+- **(a)** Многостолбцовый raw `WithSql` отклоняется, даже если он проецирует `rowid` — по решению PLAN (locator добавляет только диалект на стриминговом пути, raw SQL билдер обходит).
+- **(b)** Сохранённый текст `InvalidOperationException` не закреплён по сообщению (message-pinning в тестах отсутствует).
+- **(c)** `LobSqlGenerationTests` использует реальную генерацию `QueryPlanner`/`SqlBuilder`, но **не** полный маршрут `DataContext`.
+- **(d)** Ветка null-locator покрыта stub'ом; терминального теста PostgreSQL/SQL Server в SQLite-срезе нет.
+- **(e)** Литерал исключения дублируется в тестах.
+- **(f)** `null`-контекст маппится на in-memory сообщение; `PrepareFromSql` + LOB не покрыт.
+
+Пред-существующие принятые (не переоткрываются): ключ плана **не** включает `sequentialAccess` (триггер — появление кэширующего вызова); `LobTextReader.DisposeAsync` блокирует внутренний dispose (триггер — блокирующий сценарий); дублирование sync/async владения в `QueryExecutor`.
+
+### Цикл #27 — цикл 4 (multi-column `ToDataReader`/`ToDataReaderAsync`, 2026-09-27)
+
+Проверка по коду (`roslyn`) и runtime-пробой BCL (`DbDataReader`, file-based app net10.0) в ACT цикла #27, фаза 2. Build Release — **0/0**; новых подавлений/слопа в цикле — **0** (соотношение проекта **11/11**: 6 `SuppressMessage` с `Justification` + 5 парных `#pragma`; `Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` в файлах цикла — 0; `slopwatch` локально не установлен, скан вручную).
+
+- 🟡 **Находка 232 (P2, `IDisposable`/двойной dispose; НОВАЯ) — `LobDataReader` освобождает внутренний `DbDataReader` дважды.**
+  **Было:** `Dispose(bool)` (`src/nextorm.core/DataContext/LobDataReader.cs:306-324`) и `DisposeAsync()` (`:327-346`) вызывают `_inner.Dispose()`/`_inner.DisposeAsync()`, а затем `ReleaseOwner()`/`owner.DisposeAsync()`. В отличие от `LobStream`/`LobTextReader` (там `_inner` — отдельный поток/ридер от `GetStream(0)`/`GetTextReader(0)`), у `LobDataReader` `_inner == owner.Reader` (`ctor :27`), поэтому `owner.Dispose()` (`CommandReaderOwner.cs:48-57`) вызывает `_reader.Dispose()` **повторно** на том же экземпляре (и `DisposeAsync` — тоже).
+  **Стало:** полагаться на владельца — не вызывать `_inner.Dispose*()` отдельно, освобождать только `owner` (он освобождает reader → command), либо разнести в `CommandReaderOwner` «освободить reader» и «освободить команду». Тест `LobDataReader_Dispose_ShouldBeIdempotent` (`tests/nextorm.core.tests/LobDataReaderTests.cs:262-294`) дефект не ловит: `FakeDbDataReader.Dispose(bool)` сам идемпотентен (`:469-478`), поэтому `DisposeCount == 1` и при двойном вызове.
+  **Проверка:** `roslyn refs NextORM.Core.LobDataReader` — `_inner` и `owner.Reader` один и тот же объект; runtime-проба подтвердила, что базовый `DbDataReader.Dispose` идемпотентен, но контракт идемпотентности обёртки не должен зависеть от драйвера (второй `Dispose` может бросить у стороннего провайдера, что нарушит «Safe to call more than once»).
+
+- 🟡 **Находка 233 (P2, прозрачность обёртки/неполное делегирование; НОВАЯ) — `GetSchemaTable()` не делегируется внутреннему reader'у.**
+  **Было:** `LobDataReader` переопределяет значения/метаданные, но не `GetSchemaTable()`; базовый `DbDataReader.GetSchemaTable()` по умолчанию **бросает `NotSupportedException`**, а расширение `GetColumnSchema()` требует `IDbColumnSchemaGenerator`, которого обёртка не реализует, — схема недоступна, хотя `NpgsqlDataReader`/`SqlDataReader` её отдают.
+  **Стало:** `public override DataTable? GetSchemaTable() { ThrowIfDisposed(); return _inner.GetSchemaTable(); }` (при необходимости — пробросить `IDbColumnSchemaGenerator`).
+  **Проверка:** runtime-проба net10.0 — минимальный `DbDataReader`-потомок: `GetSchemaTable()` → `NotSupportedException`; `roslyn members NextORM.Core.LobDataReader` — переопределения нет.
+
+- 🟡 **Находка 234 (P2, диагностика/дрейф контракта; НОВАЯ) — текст `NotSupportedException` не упоминает `ToDataReader`.**
+  **Было:** `DataContext.PrepareLobCommand` (`src/nextorm.core/DataContext/DataContext.cs:339`) и `QueryCommandExtensions.RequireRelationalContext` (`:328`) называют только `ToStream/ToTextReader`; `ToDataReader` на MySQL/MariaDB/ClickHouse (`SupportsSequentialAccess => false`, переопределений нет) и на in-memory получает сообщение, не называющее вызванный терминал.
+  **Стало:** обобщить текст («LOB-терминалы `ToStream`/`ToTextReader`/`ToDataReader`…») либо различать терминал.
+  **Проверка:** MySQL наследует `false`, поэтому `EnsureDataReaderSupported` (`:286-290`) пропускает, и отказ приходит из `PrepareLobCommand`; тесты `LobDataReader_UnsupportedProvider*` (`tests/nextorm.integration.tests/CommonTestSuite.Lob.cs:424-444`) проверяют только тип, не текст.
+
+- 🟡 **Находка 235 (P2, аллокации на горячем пути; НОВАЯ) — `ToDataReaderAsync` создаёт связанный `CancellationTokenSource` на каждую строку.**
+  **Было:** `LobDataReader.ReadAsync`/`NextResultAsync` (`:90-95`, `:106-111`) на каждый вызов безусловно вызывают `CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken, cancellationToken)`; sync-перегрузка `ToDataReader(..., params ReadOnlySpan<object?>)` (`:190`) передаёт `CancellationToken.None`, но `CreateLinkedTokenSource(None, None)` всё равно создаёт CTS → одна аллокация на каждый `ReadAsync` (потоковая строка).
+  **Стало:** связывать только при `_cancellationToken.CanBeCanceled` (иначе передавать `cancellationToken` напрямую); `using` при этом сохраняется для связанной ветки.
+  **Проверка:** чтение `LobDataReader.cs:90-111` и `QueryCommandExtensions.cs:190,206`; `ReadAsync` — самый частый вызов на multi-row потоке.
+
+**ℹ️ Наблюдения (фикс не обязателен).**
+- **A.** `Close()` (`:114`) — бессодержательный `override => base.Close()`: база уже вызывает `Dispose(true)`, переопределение можно удалить (мёртвая обёртка).
+- **B.** `LobDataReaderLocatorMessage` объявлен `internal` (`:274`), но вне сборки не используется (SQLite-тесты пиннят литерал) — достаточно `private`; на публичную поверхность не влияет.
+- **C.** XML-doc 4 новых терминалов полон (`<summary>/<typeparam>/<param>/<returns>/<remarks>`); `<exception>` отсутствует, как и у `ToStream`/`ToTextReader` (CS1591 его не требует, gate — build `0/0` + `GenerateDocumentationFile=true`).
+- **D.** `IsDBNullAsync`/`GetFieldValueAsync` (`:166-170`, `:292-296`) не проверяют `_cancellationToken` (в отличие от `ReadAsync`/`NextResultAsync`) — асимметрия без функционального дефекта.
+- **E.** `IsClosed => _inner.IsClosed` (`:63`) и `ThrowIfDisposed` несовместимы по стилю, но согласованы с базовым поведением (`IsClosed` после dispose → `true`).
+- **F.** Добавлены `InternalsVisibleTo nextorm.core.tests`/`nextorm.sqlite.tests` (`src/nextorm.core/nextorm.core.csproj:22-26`) — тестовый шов для `LobDataReader`/`SqlBuilder`; на публичный API не влияет, прецедент — `nextorm.sqlserver`.
+
+**Мёртвый код.** `CommandReaderOwner.CloseReaderAsync()` удалён — `roslyn refs` подтверждает отсутствие символа; sync-`CloseReader` (`CommandReaderOwner.cs:40`) жив и используется `ProcedureResult.cs:194`. Иных удалённых/осиротевших членов в цикле нет.
+
+**Raw-SQL/`WithSql` + `ToDataReader`.** Маршрут корректен: `QueryPlanner.GetPreparedQueryCommand` (`src/nextorm.core/DataContext/QueryPlanner.cs:380-455`) берёт `ext.ManualSql`/`ext.MakeParams`, `map = null` из-за `sequentialAccess`, `Behavior |= CommandBehavior.SequentialAccess` (`:75-78`); на SQLite `EnsureDataReaderSupported` отклоняет до открытия. `EnsureDataReaderSupported` вызывается **до** `OpenLobReader` (`:212` перед `:214`) — fail-fast без утечки ресурса; проверка sequential-access на не-locator диалектах идёт позже, но всё ещё до исполнения (`PrepareLobCommand`), что корректно.
+
+**Итог цикла 4.** 🔴 — **0**; 🟡 — **4 новых** (232–235); ℹ️ — наблюдения A–F. Публичная сторона — `API-NAMING-REVIEW.md` (LOB1 расширен). Фаза 3 (стриминг `Stream`/`TextReader` в проекции) остаётся планом.
+
+### Цикл #27 — цикл 5 (in-memory, «срез A»: скалярные LOB-терминалы, 2026-09-27)
+
+**Область.** Четыре скалярных терминала (`ToStream`/`ToStreamAsync`, `ToTextReader`/`ToTextReaderAsync`) получили in-memory-ветку **до** `RequireRelationalContext`; `ToDataReader`/`ToDataReaderAsync` остаются relational-only. Новых публичных имён нет; статус цикла — `docs/specs/status/lob-streaming-5.md`.
+
+**База.** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors**; focused `tests/nextorm.core.tests --filter "FullyQualifiedName~Lob"` (Debug) — **62 / 0 failed / 0 skipped** (было 61: +1 тест read-only-потока). Подавления `src/` — **11/11** (6 `SuppressMessage` с `Justification` + 5 парных `#pragma`); в файлах цикла (`QueryCommandExtensions.cs`, `LobStreamingTests.cs`) — **0**. `NoWarn` — 0; `Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` — 0; `T? x = null` — 0. `.editorconfig` — 7 `dotnet_diagnostic.*.severity = silent` (6 инертных `S*` без `SonarAnalyzer` + `CA2254`; пре-существующее, не переоткрывается). `slopwatch` локально не установлен (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx) → скан вручную.
+
+**Недетерминизм дерева (важно).** `QueryCommandExtensions.cs` и `LobStreamingTests.cs` правились **во время** аудита (mtime 12:53:51 / 12:54:06) параллельным редактором: `new MemoryStream(value)` → `new MemoryStream(value, writable: false)` (`:112`, `:140`) + новый тест `ToStream_InMemory_ShouldReturnReadOnlyStream` (`tests/nextorm.core.tests/LobStreamingTests.cs:49-63`). Аудит и все числа/строки этого раздела зафиксированы на состоянии 12:54:06 (Release 0/0, LOB 62/0/0).
+
+- 🟡 **Находка 236 (P2, диагностика/устаревший текст; НОВАЯ) — `RequireRelationalContext` всё ещё утверждает «the in-memory provider cannot stream».**
+  **Было:** `src/nextorm.core/Query/QueryCommandExtensions.cs:352-359`, сообщение `:357-358`: `"Streaming LOB reads are only supported by database providers; the in-memory provider cannot stream."` После цикла 5 in-memory **умеет** стримить скалярные терминалы, поэтому текст устарел и вводит в заблуждение; он теперь достижим с in-memory только через `ToDataReader`/`ToDataReaderAsync` (`:237`/`:285`) — т.е. там, где in-memory-стриминг действительно невозможен, но терминал не назван (продолжение Находки 234 цикла 4).
+  **Стало (предлагаемая формулировка; применяет `nextorm-design-engineer`):** `"This LOB terminal requires a relational database provider with a DbDataReader; the in-memory provider supports only ToStream/ToTextReader for a single byte[] or string column."` (либо параметризовать имя терминала).
+  **Проверка:** `roslyn implementations NextORM.Core.IDataContext` — единственный не-`DataContext` контекст продукта — `InMemoryDataContext`; скалярные терминалы перехватывают его в `:109/:136/:165/:192` **до** `RequireRelationalContext`, поэтому до сообщения доходят только `ToDataReader`(`:237`)/`ToDataReaderAsync`(`:285`).
+
+- ℹ️ **Наблюдение A (каст на async-пути — звуковой, не находка).** `command.ExecuteScalarAsync(cancellationToken, (object[])parameters)` (`:139`, `:195`): `parameters` статически `object?[]`, а `QueryCommand<TResult>.ExecuteScalarAsync(CancellationToken, params object[] @params)` (`Query/QueryCommand.TResult.cs:303`) требует `object[]`. Каст чисто аннотационный: рантайм-тип `object?[]`/`object[]` один и тот же, ковариантный `string[]`→`object[]` проходит, `null`-массив не бросает, элементы-`null` сохраняются (repro net10 file-based). Без каста — **CS8620**, а при `TreatWarningsAsErrors=true` это ошибка (проверено тем же repro: `error CS8620 ... due to differences in the nullability of reference types`). Идиома совпадает с relational-соседом `(object[]?)parameters` (`:144`/`:200`), где каст направлен в nullable-сторону. Более чистый вариант — сделать элемент `QueryCommand<TResult>.ExecuteScalarAsync` `object?[]` (как sync `ReadOnlySpan<object?>` и async-терминалы), но это аннотационное изменение публичного члена вне среза → **отложить** (триггер: следующий проход по nullable-аннотациям / Шаг 5).
+
+- ℹ️ **Наблюдение B (NULL vs пустое значение; контракт соблюдён, тест-пробел).** Замороженный контракт (`docs/specs/status/lob-streaming-5.md`, таблица «нет строк / первая строка NULL / иначе»): нет строк и первая строка `NULL` → `Stream.Null`/`TextReader.Null` (намеренно неразличимы; EN+RU-доки это фиксируют); пустое (не-`NULL`) значение — «иначе» → `new MemoryStream(empty, writable: false)` / `new StringReader("")`. Реализация контракту верна, но **пустое значение не покрыто** тест-стратегией/тестами (есть только «нет строк» и «NULL»). Рекомендация: кейс «строка есть, значение пустое» для обеих пар терминалов.
+
+- ℹ️ **Наблюдение C (DRY; извлечение — не сейчас).** Ветки `:109-113`, `:136-141`, `:165-169`, `:192-197` почти идентичны. Моя рекомендация — **отложить**: по ~4 строки, sync/async всё равно потребует двух хелперов, а выгода мала; индирекция размыла бы зафиксированный контракт (NULL/пусто/первая строка). Триггер — пятый терминал/новый тип-обёртки или вторая настройка вида `writable`.
+
+- ℹ️ **Наблюдение D (покрытие `ThrowIfDisposed` — полное, чек не декоративен).** Все четыре ветки вызывают `ThrowIfDisposed(command.DataContext)` до `ExecuteScalar*` (`:111/:138/:167/:194`); relational-путь получает тот же чек внутри `RequireRelationalContext` (`:354`). Покрытие единообразно, тесты `*_AfterContextDispose_*` (`LobStreamingTests.cs:276-324`) это фиксируют. Чек **необходим**: sync `QueryExecutor.ExecuteScalar` (`DataContext/QueryExecutor.cs:773-796`) не вызывает `CheckDisposed()` (в отличие от async `:800`), поэтому контракт sync-терминалов держится именно явным `ThrowIfDisposed`.
+
+- ℹ️ **Наблюдение E (стиль).** Sync — `ExecuteScalar(...) is { } value`, async — `value is null ? ... : ...`. Для ссылочных `byte[]`/`string` оба эквивалентны и корректны; расхождение только стилевое.
+
+- ℹ️ **Наблюдение F (дрейф текста контракта).** Read-only-уточнение (`MemoryStream(value, writable: false)`) и новый тест не отражены в таблице замороженного контракта `status-5` (там `new MemoryStream(value)`) и в публичных доках (`MemoryStream` без «read-only»). Реализация+тест согласованы; рекомендуется обновить строку `status-5` (и, опционально, доки) — файлы вне моих регистров.
+
+**Итог цикла 5.** 🔴 — **0**; 🟡 — **1 новая** (Находка 236, P2); ℹ️ — наблюдения A–F. Новых подавлений/слопа/`T? x = null` — **0**. Публичная сторона — `API-NAMING-REVIEW.md` («Цикл 5», LOB2 — XML-doc in-memory; LOB1 без изменений).
+
+## Перенесено из status закрытого потока `lob-streaming` (2026-09-27)
+
+Перенос открытых `Deferred + триггер` при удалении `docs/specs/status/lob-streaming-{1,2,3,4,5}.md`
+(issue #27 закрыт 2026-09-27, следующих циклов потока нет). Вынесенное в #100/#101 не дублируется;
+живой план и зеркало списка — `docs/specs/roadmap/todo_streaming_lob.md` §«Deferred + триггер».
+Содержимое самих статус-файлов сохранено в разделах «Цикл #27 — …» выше как исторический артефакт
+(упоминания путей `lob-streaming-N.md` в этих записях — исторические).
+
+- **Mid-read cancel (P2, контракт отмены).** Токен действует только на открытие ридера; чтение
+  возвращённого `Stream`/`TextReader` не отменяется. Триггер: следующая правка LOB-ридера.
+- **SQLite locator-backed multi-column `ToDataReader` (P2, фича).** Нужна отдельная модель скрытия
+  `rowid` + доказательство порядка чтения. Триггер: конкретный пользовательский сценарий.
+- **Двойное освобождение inner reader (ℹ️, корректность).** `LobDataReader.Dispose` +
+  `CommandReaderOwner.Dispose` — безвредно (идемпотентно по ADO.NET). Триггер: следующая правка владения.
+- **`GetSchemaTable()` не делегируется (ℹ️).** Триггер: первый потребитель schema-метаданных.
+- **DRY: четыре in-memory-ветки (ℹ️).** См. Наблюдение C цикла 5; триггер — пятый терминал.
+- **`(object[])parameters` async (ℹ️).** См. Наблюдение A цикла 5; триггер — следующий проход по nullable.
+- **Многоколоночный `ToDataReader` на in-memory — ограничение, не TODO** (нет `DbDataReader`).

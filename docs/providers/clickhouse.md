@@ -227,6 +227,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Array functions | over `Array(T)` columns/expressions: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Tuple surface | a native `Tuple(...)` column/expression projects as `System.Tuple<...>` (arity 1–7); `Tuple.Create(a, b, ...)` renders `tuple(a, b, ...)` and `System.Tuple<...>.ItemN` renders `tupleElement(t, n)`, both under [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` is not supported (it changes the result column set) |
 | Native JSON column type | not mapped: `ClickHouse.Driver` reads a native `JSON` column as `System.Text.Json.Nodes.JsonObject`, which the row reader cannot materialise. The native-JSON *functions* are available over any JSON-valued expression |
+| LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` (the driver exposes no streaming getters) |
 
 ## Notes and limitations
 
@@ -259,6 +260,9 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (see
   [Querying and projections](../querying/01-projections.md#columns-by-name)); the name is
   matched verbatim, so quoting follows the dialect.
+- The LOB streaming terminals (`ToStream`/`ToTextReader`) are rejected with `NotSupportedException`:
+  `ClickHouse.Driver` exposes no streaming getters (see
+  [Streaming large objects](../guide/30-large-objects.md)).
 
 ## See also
 

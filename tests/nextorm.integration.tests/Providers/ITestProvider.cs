@@ -142,6 +142,27 @@ public interface ITestProvider
     /// </summary>
     bool SupportsRegex { get; }
 
+    /// <summary>
+    /// True when the provider implements the streaming LOB terminals (<c>ToStream</c>/<c>ToTextReader</c>).
+    /// PostgreSQL, SQL Server and SQLite do; MySQL/MariaDB, ClickHouse and the in-memory provider
+    /// reject them with <see cref="NotSupportedException"/>.
+    /// </summary>
+    bool SupportsLobStreaming { get; }
+
+    /// <summary>
+    /// True when the provider implements the multi-column <c>ToDataReader</c>/<c>ToDataReaderAsync</c>
+    /// terminal. PostgreSQL and SQL Server do; SQLite appends its <c>rowid</c> locator to the streaming
+    /// projection and fails closed, while MySQL/MariaDB and ClickHouse have no sequential-access support.
+    /// </summary>
+    bool SupportsLobDataReader => false;
+
+    /// <summary>
+    /// True when the provider accepts a zero-column result set (a <c>select</c> with an empty target
+    /// list, as PostgreSQL allows). Only such a provider can exercise the <c>FieldCount != 1</c>
+    /// guard of the LOB terminals with zero columns; the shared boundary test skips elsewhere.
+    /// </summary>
+    bool SupportsZeroColumnResult => false;
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

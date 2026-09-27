@@ -237,6 +237,26 @@ var total = result.Read<int>()[0];   // 6
 
 Точность/масштаб столбца `decimal` берётся из `[DecimalPrecision]` или fluent-отображения (по умолчанию `decimal(38,18)`). Для другой точности/масштаба у любого другого типа или длины строки, отличной от `max`, объявите табличный тип явно и передайте устаревший `DataTable` с `ProcedureParameter.TypeName`. Пустая последовательность связывается как незаданный параметр, который SqlClient отправляет как пустую таблицу.
 
+## Большие объекты (потоковое чтение LOB)
+
+Одну колонку `byte[]` или `string` можно прочитать как `Stream`/`TextReader`, не загружая значение целиком в managed-память. SqlClient реализует `GetStream`/`GetTextReader` для `varbinary(max)` и `nvarchar(max)`; потоковый режим требует `CommandBehavior.SequentialAccess` (без него значение буферизуется) — nextorm выставляет его на LOB-пути:
+
+```csharp
+await using var stream = ctx.From<BinaryEntity>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Payload)
+    .ToStream();          // открывает reader с CommandBehavior.SequentialAccess
+
+using var reader = ctx.From<Document>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Body)
+    .ToTextReader();
+```
+
+Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/30-large-objects.md).
+
+SQL Server также поддерживает многоколоночный терминал `ToDataReader`/`ToDataReaderAsync`: он отдаёт ту же sequential-access команду как принадлежащий вызывающему `DbDataReader`, поэтому вызывающий может прочитать все колонки и строки (или несколько LOB-колонок по порядку), не материализуя результат. SQLite его отклоняет, потому что его потоковая проекция всегда несёт локатор `rowid`; MySQL/MariaDB, ClickHouse и провайдер in-memory не имеют поддержки sequential access.
+
 ## Различия провайдеров
 
 | Аспект | SQL Server |
@@ -251,6 +271,7 @@ var total = result.Read<int>()[0];   // 6
 | Логический литерал | `1` / `0` (материализация bit) |
 | Квотирование идентификаторов | квадратные скобки (`as [t1]`) |
 | Псевдоним производной таблицы / TVF | требуется |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`, `ToDataReader`) | поддерживается (`SequentialAccess`; одна колонка `byte[]`/`string` или многоколоночный reader, принадлежащий вызывающему) |
 | `*ALL` | не поддерживается (бросает исключение) |
 | Рекурсивный CTE | `with` + `option (maxrecursion n)` |
 | Имена агрегатов | `stdev`/`var` нативные; доступен `count_big` |

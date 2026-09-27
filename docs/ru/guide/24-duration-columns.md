@@ -12,10 +12,26 @@
 | MySQL / MariaDB | нативный `TIME` |
 | SQL Server | целочисленная колонка (`bigint`), по умолчанию тики — нативного типа длительности нет |
 | SQLite | целочисленная колонка (`bigint`), по умолчанию тики |
-| ClickHouse | целочисленная колонка (`bigint`), по умолчанию тики |
+| ClickHouse | целочисленная колонка (`Int64`), по умолчанию тики |
 | In-memory | само значение CLR `TimeSpan` |
 
 На целочисленных провайдерах значение записывается в единицах `DurationUnit` и читается обратно в той же единице: `[Duration(DurationUnit.Seconds)]` над колонкой `bigint` хранит целые секунды. Чтение, запись и сравнения применяют одно и то же преобразование, поэтому свойство `TimeSpan` проходит round-trip без ручной конвертации.
+
+Генератор схемы выдаёт для объявлений ниже такие типы колонок:
+
+```sql
+-- PostgreSQL: нативный interval
+create table tasks (id bigint, estimate interval, paused interval(3));
+
+-- MySQL / MariaDB: нативный тип времени суток
+create table tasks (id bigint, estimate time, paused time(3));
+
+-- SQL Server / SQLite: целочисленная колонка (`bigint`), тип не зависит от объявленной единицы
+create table tasks (id bigint, estimate bigint, paused bigint);
+
+-- ClickHouse: nullable TimeSpan становится Nullable(Int64)
+create table tasks (id Int64, estimate Int64, paused Nullable(Int64));
+```
 
 ## Объявление единицы
 
@@ -59,6 +75,20 @@ var overdue = ctx.From<Task>()
     .Select(x => new { x.Id, x.Estimate })
     .ToList();
 ```
+
+Сгенерированный SQL имеет одинаковую форму у всех провайдеров; отличаются плейсхолдер и связываемый параметр:
+
+```sql
+-- PostgreSQL / MySQL / MariaDB: @p0 несёт нативную длительность
+select id, estimate from tasks
+ where (estimate > @p0);   -- @p0 = interval '00:05:00' / time '00:05:00'
+
+-- SQL Server / SQLite / ClickHouse: @p0 несёт целочисленное значение в единице хранения
+select id, estimate from tasks
+ where (estimate > @p0);   -- @p0 = 300 (секунды из [Duration(DurationUnit.Seconds)])
+```
+
+В SQLite плейсхолдер — `$p0`, а не `@p0`.
 
 Запись идёт через то же преобразование, включая bulk insert.
 

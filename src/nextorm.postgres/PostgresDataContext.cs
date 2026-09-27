@@ -87,6 +87,13 @@ public class PostgresDataContext : DataContext
         if (value is JsonDocument or JsonElement or JsonNode)
             parameter.NpgsqlDbType = NpgsqlDbType.Jsonb;
 
+        // Npgsql cannot infer a type for a CLR uint; bind it as xid, the type PostgresDialect
+        // renders for it, so the value matches the column without an explicit cast. A boxed
+        // uint? with a value arrives here as uint; null (DBNull) is left untouched.
+        // In Npgsql oid/cid are also uint, but nextorm binds every uint as xid by design (for xmin).
+        if (value is uint)
+            parameter.NpgsqlDbType = NpgsqlDbType.Xid;
+
         return parameter;
     }
 

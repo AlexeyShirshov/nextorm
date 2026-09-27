@@ -124,6 +124,7 @@ public class MySqlDialectTests
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsFullJoin.Should().BeFalse();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
+        Dialect.SupportsSequentialAccess.Should().BeFalse();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsCube.Should().BeFalse();
@@ -172,6 +173,7 @@ public class MySqlDialectTests
         Dialect.MakeTypeName(typeof(short)).Should().Be("signed");
         Dialect.MakeTypeName(typeof(int)).Should().Be("signed");
         Dialect.MakeTypeName(typeof(long)).Should().Be("signed");
+        Dialect.MakeTypeName(typeof(uint)).Should().Be("bigint");
         Dialect.MakeTypeName(typeof(double)).Should().Be("double");
         Dialect.MakeTypeName(typeof(decimal)).Should().Be("decimal");
         Dialect.MakeTypeName(typeof(DateTime)).Should().Be("datetime");

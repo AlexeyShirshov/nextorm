@@ -35,7 +35,7 @@ compares it like any other column.
 | `long` / `int` version | all | `long Version { get; set; }` | application-managed; increment in the same statement |
 | `rowversion` / `timestamp` | SQL Server | `byte[] Version { get; }` | database-managed; mark computed |
 | `TIMESTAMP ... ON UPDATE CURRENT_TIMESTAMP` | MySQL / MariaDB | `DateTime Version { get; set; }` | database-managed |
-| `long` version (or `xmin`) | PostgreSQL | `long Version { get; set; }` | no native rowversion column; `xmin` is a system column |
+| `xmin` (system column) | PostgreSQL | `uint Revision { get; set; }` | no native rowversion column; map the system column with `[Column("xmin")]` and mark it computed, `uint` is the CLR type for `xid` |
 
 ```csharp
 [SqlTable("orders")]
@@ -105,6 +105,59 @@ order.Version = row.Version;                          // caller-owned write-back
 (`OUTPUT`), on the predicate form only. MySQL/MariaDB and ClickHouse reject it — there, re-select the row
 (inside the same transaction, if any) to obtain the new token. There is no framework-side "refresh":
 nextorm does not hold your entity, so *you* assign the returned value, exactly like after any other read.
+
+## PostgreSQL `xmin`
+
+A PostgreSQL table has no `rowversion` column, but every row carries the `xmin` system column — the
+transaction that last wrote it. Map it to an ordinary `uint` property (`uint` is the CLR type `xid` maps
+to), and no separate version column is needed:
+
+```csharp
+[SqlTable("orders")]
+public interface IOrder
+{
+    [Key] long Id { get; }
+    string Status { get; set; }
+    [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+    [Column("xmin")] uint Revision { get; set; }   // system column, never written by the application
+}
+```
+
+`xmin` is database-managed, so the property is marked computed
+(`[DatabaseGenerated(DatabaseGeneratedOption.Computed)]` or `.Computed()`) and must never be `Set`; with
+computed set, `.Set(entity)` skips it and an entity insert leaves the column alone. The check
+and the write-back are the same as for any token — compare `Revision` in `Where` and read the new value
+back with `Returning`:
+
+```csharp
+var affected = ctx.Update<IOrder>()
+    .Set(o => o.Status, "paid")
+    .Where(o => o.Id == order.Id && o.Revision == order.Revision)
+    .Update();                                        // stale token → 0 rows
+
+// The same check and the read-back can be combined in one statement:
+var row = ctx.Update<IOrder>()
+    .Set(o => o.Status, "paid")
+    .Where(o => o.Id == order.Id && o.Revision == order.Revision)
+    .Returning(o => new { o.Id, o.Revision })         // UPDATE ... RETURNING xmin
+    .Single();
+
+order.Revision = row.Revision;
+```
+
+```sql
+-- PostgreSQL
+update orders set status = @p0 where (id = @p1 and xmin = @p2) returning xmin
+```
+
+The update is self-maintaining: `xmin` is the id of the transaction that last modified the row, so only a
+write from a different transaction yields a new token (repeated writes in the same transaction keep it),
+and there is nothing to bump in the `SET` clause.
+
+Use `xmin` as an **equality** token only. Transaction ids are not monotonic, so never order by
+`Revision` and never compare it with `<`/`>` — only `Revision == original` in `Where`. A `uint`
+comparison/write parameter binds as PostgreSQL `xid`, a 32-bit transaction id subject to wraparound, so
+an individual value is opaque.
 
 ## Token-guarded upsert
 

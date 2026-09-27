@@ -346,6 +346,7 @@ public class ClickHouseDialectTests
 
     [Theory]
     [InlineData(typeof(int), "Int32")]
+    [InlineData(typeof(uint), "UInt32")]
     [InlineData(typeof(long), "Int64")]
     [InlineData(typeof(double), "Float64")]
     [InlineData(typeof(decimal), "Decimal(38, 10)")]
@@ -378,6 +379,7 @@ public class ClickHouseDialectTests
         Dialect.RequireSubqueryAlias.Should().BeTrue();
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
+        Dialect.SupportsSequentialAccess.Should().BeFalse();
         Dialect.SupportsApply.Should().BeFalse();
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateTrunc.Should().BeTrue();

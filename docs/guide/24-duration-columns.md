@@ -12,10 +12,26 @@
 | MySQL / MariaDB | native `TIME` |
 | SQL Server | integer column (`bigint`), ticks by default — no native duration type |
 | SQLite | integer column (`bigint`), ticks by default |
-| ClickHouse | integer column (`bigint`), ticks by default |
+| ClickHouse | integer column (`Int64`), ticks by default |
 | In-memory | the CLR `TimeSpan` value |
 
 On the integer providers the value is written as `DurationUnit` units and read back with the same unit, so `[Duration(DurationUnit.Seconds)]` over a `bigint` column stores whole seconds. Reading, writing and comparisons all apply the same conversion, so a `TimeSpan` property round-trips without manual conversion.
+
+A schema generator emits these column types for the declarations below:
+
+```sql
+-- PostgreSQL: native duration
+create table tasks (id bigint, estimate interval, paused interval(3));
+
+-- MySQL / MariaDB: native time-of-day
+create table tasks (id bigint, estimate time, paused time(3));
+
+-- SQL Server / SQLite: integer column (`bigint`), the type is independent of the declared unit
+create table tasks (id bigint, estimate bigint, paused bigint);
+
+-- ClickHouse: a nullable TimeSpan becomes Nullable(Int64)
+create table tasks (id Int64, estimate Int64, paused Nullable(Int64));
+```
 
 ## Declaring the unit
 
@@ -59,6 +75,20 @@ var overdue = ctx.From<Task>()
     .Select(x => new { x.Id, x.Estimate })
     .ToList();
 ```
+
+The generated SQL has the same shape on every provider; only the placeholder and the bound parameter differ:
+
+```sql
+-- PostgreSQL / MySQL / MariaDB: @p0 carries a native duration
+select id, estimate from tasks
+ where (estimate > @p0);   -- @p0 = interval '00:05:00' / time '00:05:00'
+
+-- SQL Server / SQLite / ClickHouse: @p0 carries the integer storage value
+select id, estimate from tasks
+ where (estimate > @p0);   -- @p0 = 300 (seconds, from [Duration(DurationUnit.Seconds)])
+```
+
+On SQLite the placeholder is `$p0` instead of `@p0`.
 
 Writes go through the same conversion, including bulk insert.
 

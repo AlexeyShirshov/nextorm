@@ -54,7 +54,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     private List<Parameter> ExtractParams(QueryCommand queryCommand)
     {
         var @params = new List<Parameter>();
-        MakeSelect(queryCommand, true, @params, queryCommand, null);
+        MakeSelect(queryCommand, true, @params, queryCommand, null, false);
         return @params;
     }
 
@@ -353,7 +353,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         return (sql, parameters);
     }
 
-    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider)
+    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess)
     {
         var ctx = new SqlBuildContext
         {
@@ -368,12 +368,16 @@ internal sealed class QueryPlanner : IQueryPlanner
             QuoteIdentifiers = queryCommand.ResolvedQuoteIdentifiers,
             NamingConvention = queryCommand.ResolvedNamingConvention,
             KeywordCase = queryCommand.ResolvedKeywordCase,
+            SequentialAccess = sequentialAccess,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
     }
 
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, false, cancellationToken);
+
+    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, CancellationToken cancellationToken)
     {
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
@@ -403,7 +407,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                 ? MakeSelectInternal()
                 : (ext.ManualSql, ext.MakeParams?.Invoke());
 
-            Func<IDataRecord, TResult>? map = queryCommand.DocumentMode || (queryCommand.SingleRow && queryCommand.OneColumn)
+            Func<IDataRecord, TResult>? map = queryCommand.DocumentMode || sequentialAccess || (queryCommand.SingleRow && queryCommand.OneColumn)
                 ? null
                 : GetMapCached(queryCommand, sql);
 
@@ -448,7 +452,10 @@ internal sealed class QueryPlanner : IQueryPlanner
             // there to avoid a duplicated clause.
             var singleRow = queryCommand.SingleRow && _dialect().SupportsCommandBehaviorSingleRow;
 
-            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh));
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh)
+            {
+                SequentialAccess = sequentialAccess,
+            });
 
             if (createEnumerator)
             {
@@ -507,7 +514,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         {
             var @params = new List<Parameter>();
             var aliasProvider = new DefaultAliasProvider();
-            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider), @params);
+            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess), @params);
         }
     }
 

@@ -60,6 +60,18 @@ public class BinaryEntity
     public byte[]? Data { get; set; }
 }
 
+[SqlTable("lob_entity")]
+public class LobEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("data")]
+    public byte[]? Data { get; set; }
+    [Column("body")]
+    public string? Body { get; set; }
+}
+
 [SqlTable("array_entity")]
 public interface IArrayEntity
 {

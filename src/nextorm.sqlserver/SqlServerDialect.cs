@@ -26,6 +26,9 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsOutput => true;
 
+    /// <summary>Microsoft.Data.SqlClient streams LOB columns through <c>GetStream</c>/<c>GetTextReader</c> when the reader is opened with <see cref="System.Data.CommandBehavior.SequentialAccess"/>.</summary>
+    public override bool SupportsSequentialAccess => true;
+
     /// <inheritdoc/>
     public override bool SupportsRangeColumns => true;
 

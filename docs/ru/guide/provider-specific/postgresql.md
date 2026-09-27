@@ -276,6 +276,18 @@ select id from simple_entity where (id > 5) for update
 `for update skip locked`, а `ForShare(LockWaitMode.NoWait)` — `for share nowait` (PostgreSQL 9.5+). См.
 [Блокировку строк](../../querying/03-provider-specifics.md#блокировка-строк-for-update--for-share).
 
+Для оптимистичной конкурентности доступна и системная колонка PostgreSQL `xmin`: сопоставьте её свойству
+`uint`, помеченному computed, и сравнивайте в `Where` (только на равенство) — см.
+[Оптимистичную конкурентность и отслеживание изменений](../27-optimistic-concurrency.md#postgresql-xmin).
+
+То же отображение `uint` читает системные колонки PostgreSQL `oid` и другие системные типы на основе
+`uint` (например, `cid`) в CLR-свойство `uint`: Npgsql представляет их как `uint`, поэтому
+материализация работает. Ограничены только параметры сравнения и записи: nextorm связывает
+`uint`-параметр как `xid`, а у `oid = xid` (и `cid = xid`) нет оператора, поэтому для цели, отличной от
+`xid`, запрос падает с SQLSTATE 42883. Сравнивайте через приведение к `bigint` —
+`Where(e => (long)e.Oid == (long)value)` — либо выполняйте сырой SQL с `bigint`-параметром и явным
+приведением `::oid`.
+
 ## Модифицирующие CTE
 
 PostgreSQL — единственный провайдер, принимающий модифицирующую инструкцию как тело CTE

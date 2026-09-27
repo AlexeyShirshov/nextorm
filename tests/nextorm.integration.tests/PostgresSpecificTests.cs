@@ -1438,6 +1438,186 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         }
     }
 
+    [SqlTable("complex_entity")]
+    internal interface IPgXminReadEntity
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("xmin")]
+        uint Revision { get; set; }
+    }
+
+    [SqlTable("delete_entity")]
+    internal interface IPgXminEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("name")]
+        string? Name { get; set; }
+        [Column("xmin")]
+        uint Revision { get; set; }
+    }
+
+    [Fact]
+    public void Xmin_ReadIntoUInt_ShouldReturnPositiveRevision()
+    {
+        // PostgreSQL exposes xmin as xid, a 32-bit unsigned integer; the projection reads it through
+        // GetFieldValue<uint>. The seeded complex_entity row 1 always has a live xmin.
+        var revision = _sut.DataProvider
+            .From<IPgXminReadEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Revision)
+            .First();
+
+        revision.Should().BeGreaterThan(0u);
+    }
+
+    [Fact]
+    public void Xmin_GuardedUpdate_ShouldRejectStaleToken()
+    {
+        var ctx = _sut.DataProvider;
+        var id = RawProcedureKey();
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
+            .Insert();
+
+        var token = ctx.From<IPgXminEntity>()
+            .Where(x => x.Id == id)
+            .Select(x => x.Revision)
+            .First();
+
+        token.Should().BeGreaterThan(0u);
+
+        // xmin is the id of the transaction that wrote the row version, so a new version only gets a
+        // different xmin when it is written by a different committed transaction. Running the guarded
+        // update in its own committed transaction (while the insert above was already autocommitted)
+        // makes that boundary explicit and the stale-token assertion deterministic.
+        var transactions = (ITransactionManager)ctx;
+        uint newToken;
+        using (var tx = transactions.BeginTransaction())
+        {
+            // The current token matches: the guarded update touches exactly the one row and returns its new xmin.
+            var updated = ctx.Update<IPgXminEntity>()
+                .Set(x => x.Name, "after")
+                .Where(x => x.Id == id && x.Revision == token)
+                .Returning(x => x.Revision)
+                .ToList();
+
+            updated.Should().ContainSingle();
+            newToken = updated[0];
+            tx.Commit();
+        }
+
+        // The update wrote a new row version in its own transaction, so the token actually changed.
+        newToken.Should().NotBe(token);
+
+        // The old token is stale and affects zero rows.
+        var stale = ctx.Update<IPgXminEntity>()
+            .Set(x => x.Name, "stale")
+            .Where(x => x.Id == id && x.Revision == token)
+            .Returning(x => x.Revision)
+            .ToList();
+
+        stale.Should().BeEmpty();
+
+        // The token observed after the first update is current and still affects exactly one row.
+        var current = ctx.Update<IPgXminEntity>()
+            .Set(x => x.Name, "current")
+            .Where(x => x.Id == id && x.Revision == newToken)
+            .Returning(x => x.Revision)
+            .ToList();
+
+        current.Should().ContainSingle();
+
+        ctx.From<IPgXminEntity>().Where(x => x.Id == id).Select(x => x.Name).Single().Should().Be("current");
+    }
+
+    [SqlTable("pg_oid_entity")]
+    internal interface IPgOidEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("oid_value")]
+        uint Oid { get; set; }
+        [Column("cid_value")]
+        uint Cid { get; set; }
+    }
+
+    [Fact]
+    public void Cid_Column_ShouldReadAsUInt()
+    {
+        // cid is a 32-bit unsigned system type surfaced as System.UInt32 in Npgsql, like oid; the
+        // projection reads it through GetFieldValue<uint> even though uint parameters bind as xid.
+        var cid = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Cid)
+            .First();
+
+        cid.Should().Be(7u);
+    }
+
+    [Fact]
+    public void Oid_Column_ShouldReadAsUInt()
+    {
+        // oid is a 32-bit unsigned system type surfaced as System.UInt32 in Npgsql; nextorm reads it
+        // into a uint property even though it renders uint as xid for parameters.
+        var oid = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Oid)
+            .First();
+
+        oid.Should().Be(42u);
+    }
+
+    [Fact]
+    public void Oid_Column_FilterViaLongCast_ShouldMatch()
+    {
+        // nextorm binds uint as xid and PostgreSQL has no oid = xid operator, so an oid column is
+        // compared through an explicit bigint cast; the right-hand value is widened to long so the
+        // parameter binds as bigint too (a uint parameter would be xid and xid has no bigint cast).
+        var oid = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Oid)
+            .First();
+        long expected = oid;
+
+        var ids = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(e => (long)e.Oid == (long)expected)
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(1);
+    }
+
+    [Fact]
+    public void Oid_Column_CompareToUIntParam_ShouldFailWithOperatorMissing()
+    {
+        // A uint parameter is bound as xid and PostgreSQL has no oid = xid operator, so comparing the
+        // column to it directly fails with SQLSTATE 42883 (undefined_function).
+        var expected = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Oid)
+            .First();
+
+        var act = () => _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(e => e.Oid == expected)
+            .Select(e => e.Id)
+            .ToList();
+
+        act.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42883");
+    }
+
     private static int RawProcedureKey() => Random.Shared.Next(2_000_000, int.MaxValue);
 
     public interface IDynamicRecordRow

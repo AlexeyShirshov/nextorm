@@ -316,6 +316,33 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return prepared;
     }
 
+    internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        return _executor.OpenLobReader(prepared, @params);
+    }
+
+    internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        return await _executor.OpenLobReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
+    }
+
+    private DbPreparedQueryCommand<TResult> PrepareLobCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
+
+        if (!Dialect.SupportsSequentialAccess)
+            throw new NotSupportedException(
+                $"Streaming LOB terminals (ToStream/ToTextReader) are not supported by the {Dialect.GetType().Name} provider; they require sequential-access support (PostgreSQL, SQL Server or SQLite).");
+
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
+    }
+
+    internal bool IsDisposed => _disposed;
+
     BatchPlan IBatchExecutor.RenderTemporaryTableBatch(QueryCommand command)
     {
         var tempTables = new List<ITempTableSource>();

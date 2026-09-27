@@ -228,6 +228,7 @@ public sealed class TvpRow
 | Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Поверхность кортежей | нативная колонка/выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7); `Tuple.Create(a, b, ...)` рендерится как `tuple(a, b, ...)`, а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)`, оба под [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` не поддерживается (меняет набор колонок результата) |
 | Нативный тип колонки JSON | не замаплен: `ClickHouse.Driver` читает нативную колонку `JSON` как `System.Text.Json.Nodes.JsonObject`, который row reader материализовать не умеет. Функции нативного JSON при этом доступны над любым JSON-выражением |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` (у драйвера нет потоковых геттеров) |
 
 ## Замечания и ограничения
 
@@ -262,6 +263,9 @@ public sealed class TvpRow
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (см.
   [Запросы и проекции](../querying/01-projections.md#колонки-по-имени)); имя сверяется
   дословно, поэтому кавычки — по диалекту.
+- Терминалы потокового чтения LOB (`ToStream`/`ToTextReader`) отклоняются через `NotSupportedException`:
+  у `ClickHouse.Driver` нет потоковых геттеров (см.
+  [Потоковое чтение больших объектов](../guide/30-large-objects.md)).
 
 ## См. также
 

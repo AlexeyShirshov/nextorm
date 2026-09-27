@@ -274,6 +274,17 @@ select id from simple_entity where (id > 5) for update
 `for update skip locked` and `ForShare(LockWaitMode.NoWait)` renders `for share nowait` (PostgreSQL 9.5+).
 See [Row locking](../../querying/03-provider-specifics.md#row-locking-for-update--for-share).
 
+For optimistic concurrency, PostgreSQL's `xmin` system column is available too: map it to a `uint`
+property marked computed and compare it in `Where` (equality only) — see
+[Optimistic concurrency and change tracking](../27-optimistic-concurrency.md#postgresql-xmin).
+
+The same `uint` mapping reads PostgreSQL's `oid` and other `uint`-backed system types (for example
+`cid`) into a CLR `uint` property: Npgsql surfaces them as `uint`, so materialising one works. Only
+comparison and write parameters are limited: nextorm binds a `uint` parameter as `xid`, and `oid = xid`
+(or `cid = xid`) has no operator, so against a non-`xid` target it fails with SQLSTATE 42883. Compare
+through a `bigint` cast — `Where(e => (long)e.Oid == (long)value)` — or run raw SQL with a `bigint`
+parameter and an explicit `::oid` cast.
+
 ## Data-modifying CTEs
 
 PostgreSQL is the only provider that accepts a data-modifying statement as a CTE body

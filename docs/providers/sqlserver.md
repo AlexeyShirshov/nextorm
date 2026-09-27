@@ -231,6 +231,26 @@ The CLR type of each column picks a fixed T-SQL type; the user-defined table typ
 
 A `decimal` column's precision/scale comes from `[DecimalPrecision]` or the fluent mapping (default `decimal(38,18)`). For a different precision/scale on any other type or a string length other than `max`, declare the table type explicitly and pass a legacy `DataTable` with `ProcedureParameter.TypeName`. An empty sequence is bound as an unset parameter, which SqlClient sends as an empty table.
 
+## Large objects (LOB streaming)
+
+A single `byte[]` or `string` column can be read as a `Stream`/`TextReader` without loading the value into managed memory. SqlClient implements `GetStream`/`GetTextReader` for `varbinary(max)` and `nvarchar(max)`; the streaming mode requires `CommandBehavior.SequentialAccess` (without it the value is buffered), which nextorm sets on the LOB path:
+
+```csharp
+await using var stream = ctx.From<BinaryEntity>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Payload)
+    .ToStream();          // opens the reader with CommandBehavior.SequentialAccess
+
+using var reader = ctx.From<Document>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Body)
+    .ToTextReader();
+```
+
+The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/30-large-objects.md).
+
+SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite rejects it because its streaming projection always carries the `rowid` locator; MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support.
+
 ## Provider differences
 
 | Aspect | SQL Server |
@@ -245,6 +265,7 @@ A `decimal` column's precision/scale comes from `[DecimalPrecision]` or the flue
 | Boolean literal | `1` / `0` (bit materialisation) |
 | Identifier quoting | brackets (`as [t1]`) |
 | Derived table / TVF alias | required |
+| LOB streaming (`ToStream`/`ToTextReader`, `ToDataReader`) | supported (`SequentialAccess`; single `byte[]`/`string` column, or a multi-column caller-owned reader) |
 | `*ALL` | not supported (throws) |
 | Recursive CTE | `with` + `option (maxrecursion n)` |
 | Aggregate names | `stdev`/`var` native; `count_big` available |

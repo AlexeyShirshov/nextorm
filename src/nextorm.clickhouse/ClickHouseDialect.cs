@@ -696,6 +696,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _ when type == typeof(byte) => "UInt8",
         _ when type == typeof(short) => "Int16",
         _ when type == typeof(int) => "Int32",
+        _ when type == typeof(uint) => "UInt32",
         _ when type == typeof(long) => "Int64",
         _ when type == typeof(float) => "Float32",
         _ when type == typeof(double) => "Float64",

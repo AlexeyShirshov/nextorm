@@ -675,6 +675,22 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsCommandBehaviorSingleRow { get; }
     /// <summary>
+    /// True when the provider supports <see cref="System.Data.CommandBehavior.SequentialAccess"/>, which
+    /// lets a LOB column be read incrementally through <c>DbDataReader.GetStream</c>/<c>GetTextReader</c>
+    /// instead of being buffered whole. The safe default is <c>false</c>; PostgreSQL, SQL Server and SQLite opt in.
+    /// Declared as a default interface method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsSequentialAccess => false;
+    /// <summary>
+    /// The name of the trailing column a dialect appends to a LOB-only projection so that the driver can
+    /// stream the payload without buffering it, or <see langword="null"/> when no locator is needed. The
+    /// payload stays ordinal 0 and the locator is rendered last; SQLite uses <c>rowid</c>, which makes
+    /// <c>DbDataReader.GetStream</c> return a seekable <c>SqliteBlob</c>. The safe default is
+    /// <see langword="null"/>; declared as a default interface method so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    string? LobLocatorColumn => null;
+    /// <summary>
     /// True when the provider supports ADO.NET transactions on its connection
     /// (<c>BEGIN</c>/<c>COMMIT</c>/<c>ROLLBACK</c>). Declared as a default interface method returning
     /// <c>true</c> so existing external implementations keep compiling; only ClickHouse opts out,

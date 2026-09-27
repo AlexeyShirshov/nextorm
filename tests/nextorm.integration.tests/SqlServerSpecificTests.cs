@@ -1343,6 +1343,70 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         }
     }
 
+    [SqlTable("uint_bigint_probe")]
+    internal interface IUintBigintProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("value")]
+        uint Value { get; set; }
+    }
+
+    // Probes whether a CLR uint property materializes from a SQL Server bigint column. uint is not in
+    // the provider's IsNumeric widening list, so it falls through to the core GetFieldValue<uint> branch.
+    [Fact]
+    public void Uint_FromBigintColumn_ShouldMaterialize()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists uint_bigint_probe");
+        Execute(ctx, "create table uint_bigint_probe (id bigint not null primary key, value bigint not null)");
+
+        try
+        {
+            Execute(ctx, "insert into uint_bigint_probe (id, value) values (1, 42)");
+
+            ctx.From<IUintBigintProbe>().Where(x => x.Id == 1).Select(x => x.Value).First()
+                .Should().Be(42u);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists uint_bigint_probe");
+        }
+    }
+
+    [SqlTable("ulong_bigint_probe")]
+    internal interface IUlongBigintProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("value")]
+        ulong Value { get; set; }
+    }
+
+    // Companion probe: ulong is likewise absent from IsNumeric, so the comparison shows whether uint is
+    // uniquely broken or shares the same GetFieldValue<T> path as the already-tolerated ulong type.
+    [Fact]
+    public void Ulong_FromBigintColumn_ShouldMaterialize()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists ulong_bigint_probe");
+        Execute(ctx, "create table ulong_bigint_probe (id bigint not null primary key, value bigint not null)");
+
+        try
+        {
+            Execute(ctx, "insert into ulong_bigint_probe (id, value) values (1, 42)");
+
+            ctx.From<IUlongBigintProbe>().Where(x => x.Id == 1).Select(x => x.Value).First()
+                .Should().Be(42ul);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists ulong_bigint_probe");
+        }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

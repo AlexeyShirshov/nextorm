@@ -146,6 +146,10 @@ await ctx.From<ISimpleEntity>()
 [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) are rejected by the dialect with a `NotSupportedException` because SQLite
 has no `intersect all` / `except all`.
 
+The LOB streaming terminals (`ToStream`/`ToTextReader`) are supported for a single `byte[]`/`string` column (binary and text). SQLite has no row locator of its own, so `Microsoft.Data.Sqlite` returns a true streaming `SqliteBlob` only when the query also selects `rowid`; the dialect appends its trailing [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`rowid`, with the payload staying at ordinal `0`). The source must therefore be a normal rowid table: on a `view` or a `WITHOUT ROWID` table the command fails closed with the raw `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — there is no buffered fallback. See [Streaming large objects](../guide/30-large-objects.md).
+
+The multi-column `ToDataReader`/`ToDataReaderAsync` terminal is **not** supported on SQLite: its streaming projection always carries the trailing `rowid` locator, so the terminal would expose a column the caller never projected. It fails closed with `NotSupportedException` before execution; use `ToStream`/`ToTextReader` for a single LOB column.
+
 ## Provider differences
 
 | Aspect | SQLite |
@@ -162,6 +166,7 @@ has no `intersect all` / `except all`.
 | TVF alias | not required |
 | `*ALL` | not supported |
 | `ANY`/`ALL` subqueries | rejected by the database at execution |
+| LOB streaming (`ToStream`/`ToTextReader`) | supported (`blob` / `text`; the source must expose `rowid` — a `view`/`WITHOUT ROWID` source fails with `SqliteException: no such column: rowid`); `ToDataReader` throws `NotSupportedException` (rowid locator) |
 | Session/info functions | `version()` → `sqlite_version()` (no user/schema/database information) |
 
 ## See also

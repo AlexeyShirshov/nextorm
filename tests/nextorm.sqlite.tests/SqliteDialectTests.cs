@@ -95,6 +95,8 @@ public class SqliteDialectTests
         Dialect.RequireSubqueryAlias.Should().BeFalse();
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
+        Dialect.SupportsSequentialAccess.Should().BeTrue();
+        Dialect.LobLocatorColumn.Should().Be("rowid");
         Dialect.SupportsApply.Should().BeFalse();
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateArithmetic.Should().BeTrue();
