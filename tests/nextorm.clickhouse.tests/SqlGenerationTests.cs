@@ -40,6 +40,15 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DynamicColumnsStore_ShouldAppendStar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {
         using var ctx = ClickHouseTestContext.Create();

@@ -11,4 +11,4 @@ LaunchCount=1  WarmupCount=3  Categories=acceptance
 ```
 | Method         | Mean     | Error    | StdDev    | Gen0    | Allocated |
 |--------------- |---------:|---------:|----------:|--------:|----------:|
-| Nextorm_Cached | 2.524 ms | 7.141 ms | 0.3914 ms | 62.5000 | 534.43 KB |
+| Nextorm_Cached | 2.274 ms | 6.660 ms | 0.3650 ms | 62.5000 | 534.43 KB |

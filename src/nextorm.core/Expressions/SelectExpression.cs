@@ -73,6 +73,19 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// for an ordinary column. Read by the entity materializer to rebuild the range value.
     /// </summary>
     internal RangeColumnsMetadata? RangeColumns { get; set; }
+
+    /// <summary>
+    /// Whether this entry is the entity's dynamic-columns store rather than a projected column. Such
+    /// an entry renders the source's <c>*</c> after the mapped columns; it carries no expression and is
+    /// read into the store by the materializer.
+    /// </summary>
+    internal bool IsDynamicColumnsStore { get; set; }
+
+    /// <summary>
+    /// The physical column name the mapped property reads, used by the dynamic-columns store to skip
+    /// the columns already read into declared members. <see langword="null"/> for a computed column.
+    /// </summary>
+    internal string? PhysicalColumnName { get; set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     // private readonly IQueryRegistry _queryProvider;

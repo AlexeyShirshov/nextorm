@@ -48,7 +48,7 @@ internal static class InMemoryRowMaterializer
                 else
                 {
                     var param = Expression.Parameter(typeof(TEntity));
-                    var body = RowMaterializerBuilder.Build(resultType, param, queryCommand.SelectList!, queryCommand.IgnoreColumns, column => context.MapColumn(column, param));
+                    var body = RowMaterializerBuilder.Build(resultType, param, queryCommand.SelectList!, queryCommand.IgnoreColumns, column => context.MapColumn(column, param), BuildDynamicColumnsAccessor<TEntity>(param));
                     lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
                 }
             }
@@ -80,7 +80,8 @@ internal static class InMemoryRowMaterializer
                             var rewritten = rewriter.Rewrite(column.Expression!);
                             var mapped = new ReplaceParameterExpressionVisitor(param).Visit(rewritten)!;
                             return EnsureType(mapped, column.PropertyType);
-                        });
+                        },
+                        BuildDynamicColumnsAccessor<TEntity>(param));
 
                     lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
                 }
@@ -110,4 +111,9 @@ internal static class InMemoryRowMaterializer
 
         return Expression.Convert(expression, type);
     }
+
+    // In-memory rows are already materialised objects, so a projected dynamic-columns store reads the
+    // store property of the source row rather than collecting the star fields of a data record.
+    private static Func<SelectExpression, int, DynamicColumns, Expression> BuildDynamicColumnsAccessor<TEntity>(ParameterExpression param)
+        => (column, _, _) => Expression.Property(param, column.PropertyInfo ?? typeof(TEntity).GetProperty(column.PropertyName!)!);
 }

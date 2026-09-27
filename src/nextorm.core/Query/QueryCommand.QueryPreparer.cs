@@ -442,9 +442,15 @@ public partial class QueryCommand
 
                     if (cmd._dataContext!.NeedMapping)
                     {
+                        DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta);
+                        if (entityMeta is not null
+                            && entityMeta.DynamicColumnsStore is not null
+                            && cmd.Joins is { Length: > 0 })
+                            throw new NotSupportedException("A dynamic-columns store is only supported for a query over a single physical source; the query has joins.");
+
                         if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
                         {
-                            if (DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta))
+                            if (entityMeta is not null)
                             {
                                 // The projection is built by the shared helper (also used by raw-command
                                 // mapping); the per-column plan hash is folded in here so the cached column
@@ -454,6 +460,20 @@ public partial class QueryCommand
                                     return (columns, columnsPlanHash);
 
                                 selectList = columns;
+
+                                if (entityMeta.DynamicColumnsStore is { } dynamicStore)
+                                {
+                                    var withStore = new SelectExpression[selectList.Length + 1];
+                                    selectList.CopyTo(withStore, 0);
+                                    withStore[selectList.Length] = new SelectExpression(typeof(Dictionary<string, object?>))
+                                    {
+                                        Index = selectList.Length,
+                                        PropertyName = dynamicStore.PropertyInfo.Name,
+                                        PropertyInfo = dynamicStore.PropertyInfo,
+                                        IsDynamicColumnsStore = true,
+                                    };
+                                    selectList = withStore;
+                                }
 
                                 if (!cmd._dontCache && !noHash)
                                     for (var i = 0; i < selectList.Length; i++) unchecked

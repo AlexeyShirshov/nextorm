@@ -10,8 +10,8 @@ IterationCount=3  LaunchCount=1  WarmupCount=3
 Categories=acceptance  
 
 ```
-| Method                | Mean       | Error     | StdDev   | Ratio | Gen0    | Allocated | Alloc Ratio |
-|---------------------- |-----------:|----------:|---------:|------:|--------:|----------:|------------:|
-| Cached_PlanOnly_Param |   535.2 μs |  40.93 μs |  2.24 μs |  0.51 | 59.5703 | 489.08 KB |        6.42 |
-| Prepared_ToList       | 1,050.5 μs | 227.71 μs | 12.48 μs |  1.00 |  7.8125 |  76.14 KB |        1.00 |
-| Cached_ToList         | 2,100.2 μs | 933.94 μs | 51.19 μs |  2.00 | 66.4063 | 565.23 KB |        7.42 |
+| Method                | Mean       | Error      | StdDev    | Ratio | Gen0    | Allocated | Alloc Ratio |
+|---------------------- |-----------:|-----------:|----------:|------:|--------:|----------:|------------:|
+| Cached_PlanOnly_Param |   501.4 μs |   297.5 μs |  16.31 μs |  0.34 | 59.5703 | 489.86 KB |        6.43 |
+| Prepared_ToList       | 1,547.1 μs | 6,745.7 μs | 369.76 μs |  1.05 |  7.8125 |  76.14 KB |        1.00 |
+| Cached_ToList         | 1,835.3 μs | 4,735.9 μs | 259.59 μs |  1.24 | 68.3594 |    566 KB |        7.43 |

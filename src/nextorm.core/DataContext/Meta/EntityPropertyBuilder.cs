@@ -22,6 +22,7 @@ public class EntityPropertyBuilder<T>
     private IPropertyValueConverter? _converter;
     private JsonColumnOptions? _jsonOptions;
     private RangeColumnsMetadata? _rangeColumns;
+    private bool _isDynamicColumnsStore;
 
     /// <summary>
     /// Creates a builder for the property selected by <paramref name="propertySelector"/>.
@@ -235,16 +236,43 @@ public class EntityPropertyBuilder<T>
     }
 
     /// <summary>
+    /// Marks the selected property as the entity's dynamic-columns store: it receives the row's
+    /// unmapped columns when the entity is read instead of mapping to a column itself. The property
+    /// must have a setter and be assignable from <see cref="Dictionary{TKey,TValue}"/> with
+    /// <see cref="string"/> keys and <see cref="object"/> values. Cannot be combined with a column
+    /// name, a value/JSON converter or <see cref="RangeColumns(string, string, bool, bool)"/>.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> DynamicColumnsStore()
+    {
+        _isDynamicColumnsStore = true;
+        return this;
+    }
+
+    /// <summary>
     /// Resolves the selected property's <see cref="PropertyInfo"/> and produces its mapping metadata.
     /// </summary>
     /// <returns>The property's mapping metadata.</returns>
-    /// <exception cref="InvalidOperationException">The selector does not produce a <see cref="PropertyInfo"/>, the converter's model type does not match the property type, or <see cref="DecimalPrecision(int, int)"/> was declared with a bound provider type that is not <see cref="decimal"/> (a converter to text or a JSON column) or as a partial pair.</exception>
+    /// <exception cref="InvalidOperationException">The selector does not produce a <see cref="PropertyInfo"/>, the converter's model type does not match the property type, the dynamic-columns store has an invalid type, or <see cref="DecimalPrecision(int, int)"/> was declared with a bound provider type that is not <see cref="decimal"/> (a converter to text or a JSON column) or as a partial pair.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="DecimalPrecision(int, int)"/> declared a precision or scale outside its allowed range (precision 1..38, scale 0..precision).</exception>
     public IPropertyMetadata Build()
     {
         var miVisitor = new MemberExpressionVisitor();
         miVisitor.Visit(_propertySelector);
         var pi = (PropertyInfo)miVisitor.MemberInfo! ?? throw new InvalidOperationException($"Expression {_propertySelector} does not produce PropertyInfo");
+        if (_isDynamicColumnsStore)
+        {
+            if (_columnName is not null || _converter is not null || _jsonOptions is not null || _rangeColumns is not null
+                || _isKey || _isIdentity || _isComputed || _collation is not null || _decimalPrecision is not null)
+                throw new InvalidOperationException($"The dynamic-columns store property '{pi.Name}' cannot also declare a column mapping.");
+            if (pi.GetSetMethod() is null)
+                throw new InvalidOperationException($"The dynamic-columns store property '{pi.Name}' must have a public setter.");
+            if (!DynamicColumnsTypeFacts.IsStoreType(pi.PropertyType))
+                throw new InvalidOperationException($"The dynamic-columns store property '{pi.Name}' must be a string-keyed dictionary of object? (for example Dictionary<string, object?>, IDictionary<string, object?> or IReadOnlyDictionary<string, object?>).");
+
+            return new PropertyMetadata { ColumnName = pi.Name, PropertyInfo = pi, IsColumnNameAuto = true, IsDynamicColumnsStore = true };
+        }
+
         var converter = _jsonOptions is not null
             ? JsonColumnConverterFactory.Create(pi.PropertyType, _jsonOptions.Storage, _jsonOptions.Options)
             : _converter;

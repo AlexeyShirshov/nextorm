@@ -66,6 +66,7 @@ internal static class EntitySelectListBuilder
                 PropertyName = pi.Name,
                 Expression = exp,
                 PropertyInfo = pi,
+                PhysicalColumnName = prop.ColumnName,
                 DurationUnit = prop.DurationUnit,
                 DurationPrecision = prop.DurationPrecision,
                 ProviderType = prop.Converter?.ProviderType,

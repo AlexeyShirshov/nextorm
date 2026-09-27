@@ -51,6 +51,15 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DynamicColumnsStore_ShouldAppendStar()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    [Fact]
     public void IndexHint_UseForceIgnore_ShouldRenderMySqlForms()
     {
         using var ctx = MySqlTestContext.Create();

@@ -58,6 +58,8 @@
   href: 29-range-columns.md
 - name: Streaming large objects (BLOB/CLOB)
   href: 30-large-objects.md
+- name: Dynamic columns (read side)
+  href: 32-dynamic-columns.md
 - name: Provider-specific SQL
   items:
     - name: Overview

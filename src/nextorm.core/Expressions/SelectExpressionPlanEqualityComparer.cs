@@ -49,6 +49,10 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.PropertyName != y.PropertyName) return false;
 
+        if (x.PhysicalColumnName != y.PhysicalColumnName) return false;
+
+        if (x.IsDynamicColumnsStore != y.IsDynamicColumnsStore) return false;
+
         if (x.DefaultOnNull != y.DefaultOnNull) return false;
 
         if (x.DurationUnit != y.DurationUnit) return false;
@@ -80,6 +84,10 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             hash.Add(obj.PropertyType);
 
             hash.Add(obj.PropertyName);
+
+            hash.Add(obj.PhysicalColumnName);
+
+            hash.Add(obj.IsDynamicColumnsStore);
 
             hash.Add(obj.DefaultOnNull);
 
