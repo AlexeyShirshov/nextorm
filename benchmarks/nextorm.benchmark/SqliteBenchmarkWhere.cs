@@ -129,6 +129,7 @@ public class SqliteBenchmarkWhere
         }
     }
     [Benchmark()]
+    [BenchmarkCategory("acceptance")]
     //[BenchmarkCategory("Stream")]
     public async Task Nextorm_Cached_ToListAsync()
     {

@@ -5,7 +5,7 @@
 > query modifiers, join strictness and `GLOBAL JOIN`, the distributed `GLOBAL IN` predicate, its own
 > aggregate, array, JSON and dictionary functions, and the `numbers`/`zeros` table functions.
 
-**Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [ClickHouse provider](../../providers/clickhouse.md)
+**Prerequisites:** [Querying and projections](../../querying/index.md) · [ClickHouse provider](../../providers/clickhouse.md)
 
 ## Arrays and `ARRAY JOIN`
 
@@ -46,7 +46,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id, nullableint from complex_entity order by id limit 2 by nullableint
 ```
 
-See [Sorting and paging](../05-sorting-and-paging.md#limit-by-clickhouse)
+See [Sorting and paging](../04-sorting-and-paging.md#limit-by-clickhouse)
 ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)).
 
 ## `GROUP BY ... WITH TOTALS`
@@ -67,7 +67,7 @@ var rows = dataContext.From<IComplexEntity>()
 select nullableint, count(*) from complex_entity group by nullableint with totals
 ```
 
-See [Grouping and aggregates](../04-grouping-and-aggregates.md#with-totals)
+See [Grouping and aggregates](../03-grouping-and-aggregates.md#with-totals)
 ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). The official
 `ClickHouse.Driver` returns the totals block separately and does not surface it through `IDataReader`, so
 only the group rows are materialised.
@@ -90,7 +90,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-See [Query hints](../17-query-hints.md#clickhouse-query-modifiers)
+See [Query hints](../15-query-hints.md#clickhouse-query-modifiers)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` need a table engine that supports them — the `Memory` engine rejects both.
 
@@ -112,7 +112,7 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id, t2.somestring from simple_entity as `t1` global left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-See [Joins](../03-joins.md#provider-specific-join-modifiers-clickhouse)
+See [Joins](../02-joins.md#provider-specific-join-modifiers-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` keeps one right-hand row per left-hand row, `ALL` keeps every match and `ASOF` needs one equi-join
 column plus a final inequality; `GLOBAL` broadcasts the right side for distributed queries.
@@ -137,7 +137,7 @@ var ids = dataContext.From<ISimpleEntity>()
 select id from simple_entity where global in (@p0, @p1)
 ```
 
-See [Filtering](../02-filtering-where.md#global-in-clickhouse)
+See [Filtering](../01-filtering-where.md#global-in-clickhouse)
 ([`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates)).
 
 ## Aggregates
@@ -167,7 +167,7 @@ MariaDB) and `corr`/`covar*` — are documented with the concept page, not here.
 `DbDataReader.GetFieldValue<ulong>` accessor, so only the function results above need the normalising
 cast.
 
-See [Grouping and aggregates](../04-grouping-and-aggregates.md).
+See [Grouping and aggregates](../03-grouping-and-aggregates.md).
 
 ## Native scalar functions, maps and hashes
 
@@ -230,7 +230,7 @@ See [Scalar functions](../../scalar-functions/index.md).
   `System.Tuple<...>.ItemN` renders `tupleElement(t, n)` (a whole `Tuple(...)` projects as
   `System.Tuple<...>`); `untuple` is not supported.
 
-See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../18-json.md)
+See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../16-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Table functions
@@ -246,7 +246,7 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
     .ToList();
 ```
 
-See [Table-valued functions](../13-table-valued-functions.md).
+See [Table-valued functions](../11-table-valued-functions.md).
 
 ## Not yet supported
 

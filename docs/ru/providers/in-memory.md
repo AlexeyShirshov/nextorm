@@ -95,6 +95,10 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 работает с обоими — **кроме** [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}}))/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})): они доступны только в in-memory, а на SQL-провайдере
 сразу бросают `NotSupportedException` (см. [Ограничения](../advanced/limitations.md)).
 
+## Потоковое чтение LOB
+
+Скалярные LOB-терминалы работают на провайдере in-memory. [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/`ToStreamAsync` возвращают `MemoryStream` над единственной спроецированной колонкой `byte[]`, а [`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object}))/`ToTextReaderAsync` — `StringReader` над единственной спроецированной `string`. Проекция должна быть ровно одной колонкой `byte[]`/`string`. Читается только первая строка; пустой результат и `NULL` в первом значении оба возвращают `Stream.Null`/`TextReader.Null` (скалярный API in-memory их не различает). Возвращённый объект — обычный BCL `MemoryStream`/`StringReader`, принадлежащий вызывающему, — на контексте освобождать нечего. Поскольку значение уже материализовано, выигрыша O(буфера) в памяти нет. Многоколоночный [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) остаётся неподдерживаемым (`NotSupportedException`: нет `DbDataReader`). См. [Потоковое чтение больших объектов](../guide/30-large-objects.md).
+
 ## Не поддерживается
 
 Провайдер громко падает вместо возврата неверных результатов:
@@ -132,7 +136,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 - **Коррелированные подзапросы** (подзапрос, ссылающийся на внешнюю строку, например
   `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) вычисляются один раз на внешнюю
   строку для корреляции глубины один: скалярные подзапросы, агрегатные терминалы, `EXISTS` и `IN`
-  работают в `SELECT`, `WHERE` и `ORDER BY` (см. [Подзапросы](../guide/06-subqueries.md#коррелированный-скалярный-подзапрос)).
+  работают в `SELECT`, `WHERE` и `ORDER BY` (см. [Подзапросы](../guide/05-subqueries.md#коррелированный-скалярный-подзапрос)).
   Глубина корреляции больше одной, ссылка на внешнюю строку во внутренней проекции или `ORDER BY`,
   коррелированный `GROUP BY`/`HAVING` и асинхронный внутренний источник бросают `NotSupportedException`.
 
@@ -146,6 +150,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 | Плейсхолдеры параметров | не применимо |
 | Источники TVF | `NotSupportedException` |
 | Raw SQL | `NotSupportedException` |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`) | поддерживается (`MemoryStream`/`StringReader` над единственным материализованным значением; `ToDataReader` остаётся `NotSupportedException`) |
 | [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) по типам без равенства по значению | `NotSupportedException` |
 | Коррелированные подзапросы | `NotSupportedException` |
 | [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}})) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) | поддерживаются (эти операторы доступны только в in-memory) |
@@ -156,7 +161,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 - [SQLite](sqlite.md)
 - [SQL Server](sqlserver.md)
 - [PostgreSQL](postgres.md)
-- [Query reuse: cache vs Prepare](../guide/15-query-reuse.md)
+- [Query reuse: cache vs Prepare](../guide/13-query-reuse.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

@@ -1267,6 +1267,44 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         rows.Select(r => (r.A, r.B)).Should().Equal(((byte)1, "x"), ((byte)2, "y"));
     }
+
+    [Fact]
+    public void Lob_ToStream_ShouldThrowNotSupported()
+    {
+        var act = () => _sut.LobEntity.Where(it => it.Id == 1).Select(it => it.Data!).ToStream();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void Lob_ToTextReader_ShouldThrowNotSupported()
+    {
+        var act = () => _sut.LobEntity.Where(it => it.Id == 1).Select(it => it.Body!).ToTextReader();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task Lob_ToStreamAsync_ShouldThrowNotSupported()
+    {
+        var act = async () => await _sut.LobEntity
+            .Where(it => it.Id == 1)
+            .Select(it => it.Data!)
+            .ToStreamAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task Lob_ToTextReaderAsync_ShouldThrowNotSupported()
+    {
+        var act = async () => await _sut.LobEntity
+            .Where(it => it.Id == 1)
+            .Select(it => it.Body!)
+            .ToTextReaderAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
 }
 
 [SqlTable("uint64_entity")]

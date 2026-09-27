@@ -38,6 +38,13 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsRangeColumns => true;
 
     /// <summary>
+    /// ClickHouse emulates a table-valued parameter with a native array bound through the driver and
+    /// expanded server-side with <c>arrayJoin(@p)</c>: a scalar set is an <c>Array(T)</c> and an entity
+    /// set an <c>Array(Tuple(...))</c>. See <c>ClickHouseDataContext.CreateProcedureParameter</c>.
+    /// </summary>
+    public override bool SupportsTableValuedParameters => true;
+
+    /// <summary>
     /// ClickHouse is not marked as having a native bulk path: the driver's <c>ClickHouseBulkCopy</c> is
     /// obsolete in favour of <c>ClickHouseClient.InsertBinaryAsync</c>, which needs a client built from
     /// the connection string rather than the context's connection, so the portable
@@ -455,6 +462,24 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
     public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
 
+    /// <summary>ClickHouse qualifies a table with a database name (<c>`db`.`table`</c>); there is no separate schema level.</summary>
+    public override bool SupportsCrossDatabase => true;
+
+    /// <summary>
+    /// Renders the ClickHouse single-qualifier form <c>database.table</c>. A database and a schema are
+    /// the same concept here, so the two overrides are mutually exclusive; a linked server is unsupported.
+    /// </summary>
+    public override string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+
+        if (database is not null && schema is not null)
+            throw new NotSupportedException("ClickHouse treats the database and the schema as the same qualifier; set only one of them.");
+
+        return JoinTableQualifier(database ?? schema, table);
+    }
+
     /// <summary>ClickHouse uses the backtick-quoted identifier for references as well.</summary>
     public override string MakeColumnReference(string name) => Escape(name);
 
@@ -671,6 +696,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _ when type == typeof(byte) => "UInt8",
         _ when type == typeof(short) => "Int16",
         _ when type == typeof(int) => "Int32",
+        _ when type == typeof(uint) => "UInt32",
         _ when type == typeof(long) => "Int64",
         _ when type == typeof(float) => "Float32",
         _ when type == typeof(double) => "Float64",

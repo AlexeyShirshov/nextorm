@@ -255,6 +255,26 @@ var r = ctx.From<IComplexEntity>()
 // r[0].Id == 1 (the row whose Int is NULL)
 ```
 
+## Большие объекты (потоковое чтение LOB)
+
+Одну колонку `byte[]` или `string` можно прочитать как `Stream`/`TextReader`, не загружая значение целиком в managed-память. Npgsql реализует `GetStream`/`GetTextReader` для `bytea` и `text`, поэтому PostgreSQL — один из трёх провайдеров, поддерживающих LOB-терминалы в этом выпуске (наряду с SQL Server и SQLite):
+
+```csharp
+await using var stream = ctx.From<BinaryEntity>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Payload)
+    .ToStream();          // открывает reader с CommandBehavior.SequentialAccess
+
+using var reader = ctx.From<Document>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Body)
+    .ToTextReader();
+```
+
+Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/30-large-objects.md).
+
+PostgreSQL также поддерживает многоколоночный терминал `ToDataReader`/`ToDataReaderAsync`: он отдаёт ту же sequential-access команду как принадлежащий вызывающему `DbDataReader`, поэтому вызывающий может прочитать все колонки и строки (или несколько LOB-колонок по порядку), не материализуя результат. SQLite его отклоняет, потому что его потоковая проекция всегда несёт локатор `rowid`; MySQL/MariaDB, ClickHouse и провайдер in-memory не имеют поддержки sequential access.
+
 ## Псевдонимы
 
 Производные таблицы и табличные функции должны иметь псевдонимы в двойных кавычках:
@@ -280,6 +300,7 @@ join complex_entity as "t2" on t1.id = t2.id
 | `*ALL` | поддерживается |
 | Массивы | поддерживаются (`any(@array)`, `cardinality`, ...) |
 | JSON/JSONB | поддерживается (`json_agg`, `->`, ...; параметры `JsonDocument` привязываются как `jsonb`) |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`, `ToDataReader`) | поддерживается (`SequentialAccess`; одна колонка `byte[]`/`string` или многоколоночный reader, принадлежащий вызывающему) |
 | `greatest` / `least` / `date_trunc` | поддерживаются (`greatest`/`least` игнорируют NULL-аргументы) |
 | Условная функция | `iif(cond, a, b)` → `case when cond then a else b end` |
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются |

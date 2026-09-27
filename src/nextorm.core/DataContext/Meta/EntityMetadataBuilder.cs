@@ -16,7 +16,9 @@ public class EntityMetadataBuilder<T>
 
     /// <summary>
     /// Builds the metadata from the mappings declared on this builder, auto-deriving the table name
-    /// and, when no properties were declared, the property mappings from the CLR type.
+    /// and, when no properties were declared, the property mappings from the CLR type. Declaring even
+    /// one property fluently maps <b>only</b> the declared properties: the CLR attributes on the other
+    /// properties are not auto-built (they would otherwise need merging with the fluent overrides).
     /// </summary>
     /// <returns>The resolved entity metadata.</returns>
     public IEntityMetadata Build()
@@ -64,6 +66,7 @@ public class EntityMetadataBuilder<T>
             var generatedAttr = prop.GetCustomAttribute<DatabaseGeneratedAttribute>(true) ?? intProp?.GetCustomAttribute<DatabaseGeneratedAttribute>(true);
             var durationAttr = prop.GetCustomAttribute<DurationAttribute>(true) ?? intProp?.GetCustomAttribute<DurationAttribute>(true);
             var collationAttr = prop.GetCustomAttribute<CollationAttribute>(true) ?? intProp?.GetCustomAttribute<CollationAttribute>(true);
+            var decimalPrecisionAttr = prop.GetCustomAttribute<DecimalPrecisionAttribute>(true) ?? intProp?.GetCustomAttribute<DecimalPrecisionAttribute>(true);
             var valueConverterAttr = prop.GetCustomAttribute<ValueConverterAttribute>(true) ?? intProp?.GetCustomAttribute<ValueConverterAttribute>(true);
             var jsonColumnAttr = prop.GetCustomAttribute<JsonColumnAttribute>(true) ?? intProp?.GetCustomAttribute<JsonColumnAttribute>(true);
             var rangeColumnsAttr = prop.GetCustomAttribute<RangeColumnsAttribute>(true) ?? intProp?.GetCustomAttribute<RangeColumnsAttribute>(true);
@@ -84,6 +87,16 @@ public class EntityMetadataBuilder<T>
                     throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} cannot be mapped with both {nameof(ColumnAttribute)} and {nameof(RangeColumnsAttribute)}; the range pair declares its own column names.");
             }
 
+            // The value/JSON converter owns the provider representation, so the precision/scale pair is
+            // validated against the type actually bound for the column, not the model property type: a
+            // non-decimal model converted to decimal is accepted, a decimal model converted to text or a
+            // JSON column is rejected.
+            var converter = jsonColumnAttr is not null
+                ? JsonColumnConverterFactory.Create(prop.PropertyType, jsonColumnAttr.Storage)
+                : valueConverterAttr?.Create(prop.PropertyType);
+
+            DecimalPrecisionRules.Validate(converter?.ProviderType ?? prop.PropertyType, prop.Name, decimalPrecisionAttr?.Precision, decimalPrecisionAttr?.Scale);
+
             var columnName = rangeColumnsAttr is not null
                 ? rangeColumnsAttr.LowerColumn
                 : !string.IsNullOrEmpty(colAttr?.Name) ? colAttr!.Name! : prop.Name;
@@ -97,10 +110,10 @@ public class EntityMetadataBuilder<T>
                 IsComputed = generated == DatabaseGeneratedOption.Computed,
                 DurationUnit = durationAttr?.Unit,
                 DurationPrecision = durationAttr?.Precision ?? 0,
+                DecimalPrecision = decimalPrecisionAttr?.Precision,
+                DecimalScale = decimalPrecisionAttr?.Scale,
                 Collation = collationAttr?.Name,
-                Converter = jsonColumnAttr is not null
-                    ? JsonColumnConverterFactory.Create(prop.PropertyType, jsonColumnAttr.Storage)
-                    : valueConverterAttr?.Create(prop.PropertyType),
+                Converter = converter,
                 RangeColumns = rangeColumnsAttr?.ToMetadata(),
             });
         }

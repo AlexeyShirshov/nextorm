@@ -54,4 +54,13 @@ public interface IContextEnvironment
     /// on a single line.
     /// </summary>
     bool MultilineBatchSql => false;
+
+    /// <summary>
+    /// The context-wide default command timeout in seconds (see
+    /// <c>DataContextBuilder.UseCommandTimeout</c>), or <see langword="null"/> when no timeout is
+    /// configured and the provider default applies. A command can override it with
+    /// <c>WithCommandTimeout</c>. The default implementation returns <see langword="null"/> so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    int? CommandTimeout => null;
 }

@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using MySqlConnector;
 using NextORM.Core;
@@ -51,5 +52,43 @@ public class MySqlDataContext : DataContext
     {
         // MySqlConnector rejects a null parameter value, so unset/null values must be passed as DBNull.
         return new MySqlParameter(name, value ?? DBNull.Value);
+    }
+
+    /// <summary>
+    /// Creates a <c>MySqlParameter</c> for a descriptor. A <see cref="TableParameterValue"/> is emulated
+    /// as a JSON text parameter (<c>JSON_TABLE(@p, '$[*]' COLUMNS(...))</c> on MySQL 8.0+/MariaDB
+    /// 10.6+). A <see cref="ProcedureParameter.TypeName"/> is SQL Server only and is rejected.
+    /// </summary>
+    /// <param name="parameter">The parameter descriptor.</param>
+    /// <returns>A new MySQL parameter configured from <paramref name="parameter"/>.</returns>
+    /// <exception cref="ArgumentException"><see cref="ProcedureParameter.TypeName"/> is set (SQL Server only), or a table parameter is not <see cref="ParameterDirection.Input"/>.</exception>
+    protected override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
+    {
+        if (parameter.Value is TableParameterValue tableValue)
+        {
+            RejectTypeName(parameter);
+            RejectNonInputTable(parameter);
+            return new MySqlParameter(parameter.Name, tableValue.WriteJson(this));
+        }
+
+        RejectTypeName(parameter);
+        return base.CreateProcedureParameter(parameter);
+    }
+
+    private static void RejectTypeName(ProcedureParameter parameter)
+    {
+        if (parameter.TypeName is not null)
+            throw new ArgumentException(
+                $"TypeName is SQL Server only, but '{parameter.Name}' has TypeName = '{parameter.TypeName}'. "
+                + "On MySQL/MariaDB pass the rows to ProcedureParameter.Table(name, rows) and read them with JSON_TABLE.",
+                nameof(parameter));
+    }
+
+    private static void RejectNonInputTable(ProcedureParameter parameter)
+    {
+        if (parameter.Direction != ParameterDirection.Input)
+            throw new ArgumentException(
+                $"A table-valued parameter is input-only, but '{parameter.Name}' has Direction = {parameter.Direction}.",
+                nameof(parameter));
     }
 }

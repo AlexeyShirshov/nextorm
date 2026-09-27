@@ -8,6 +8,10 @@
     <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="nextorm.sqlserver.tests" />
+  </ItemGroup>
+
   <PropertyGroup>
     <PackageId>nextorm.sqlserver</PackageId>
     <Title>Nextorm MS SqlServer provider</Title>

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
 using FluentAssertions;
 using NextORM.Core;
 using Npgsql;
@@ -1183,6 +1184,441 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             Execute(ctx, "drop table if exists pg_range_agg_entity");
         }
     }
+
+    [Fact]
+    public void ExecuteRaw_JsonbParameter_ShouldBindThroughProviderParameter()
+    {
+        // A JsonDocument value is bound by PostgresDataContext.CreateParam as jsonb, so the jsonb
+        // operators in the raw command accept it without an explicit cast.
+        var ctx = _sut.DataProvider;
+        using var document = JsonDocument.Parse("""{"name":"alice","age":30}""");
+
+        using var result = ctx.ExecuteRaw(
+            "select @v ->> 'name' as value",
+            [new ProcedureParameter("v", document)]);
+
+        result.Read<string>().Should().Equal("alice");
+    }
+
+    [Fact]
+    public void ExecuteProcedure_InOutParameter_ShouldReturnUpdatedValue()
+    {
+        // Npgsql maps CommandType.StoredProcedure to CALL. PostgreSQL exposes an INOUT parameter's
+        // result as a result-set column named after the parameter; Npgsql's output-parameter support
+        // copies that column's first-row value into the parameter when the reader is closed, so
+        // ProcedureResult.OutputParameters is populated.
+        var ctx = _sut.DataProvider;
+        var proc = "p_raw_inout_" + Guid.NewGuid().ToString("N")[..12];
+
+        Execute(ctx, $"create procedure {proc}(inout p int, in q int) language plpgsql as $$ begin p := p + q; end; $$");
+
+        try
+        {
+            using var result = ctx.ExecuteProcedure(
+                proc,
+                [
+                    new ProcedureParameter("p", 10, Direction: ParameterDirection.InputOutput, DbType: DbType.Int32),
+                    new ProcedureParameter("q", 5, DbType: DbType.Int32),
+                ]);
+
+            var outputs = result.OutputParameters;
+            outputs.Should().ContainSingle();
+            outputs[0].Name.Should().Be("p");
+            outputs[0].Value.Should().Be(15);
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc}");
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteProcedureAsync_InOutParameter_ShouldReturnUpdatedValue()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "p_raw_ainout_" + Guid.NewGuid().ToString("N")[..12];
+
+        Execute(ctx, $"create procedure {proc}(inout p int, in q int) language plpgsql as $$ begin p := p + q; end; $$");
+
+        try
+        {
+            await using var result = await ctx.ExecuteProcedureAsync(
+                proc,
+                [
+                    new ProcedureParameter("p", 10, Direction: ParameterDirection.InputOutput, DbType: DbType.Int32),
+                    new ProcedureParameter("q", 5, DbType: DbType.Int32),
+                ],
+                TestContext.Current.CancellationToken);
+
+            var outputs = result.OutputParameters;
+            outputs.Should().ContainSingle();
+            outputs[0].Name.Should().Be("p");
+            outputs[0].Value.Should().Be(15);
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc}");
+        }
+    }
+
+    [Fact]
+    public void ExecuteProcedure_InsertSideEffect_ShouldPersistRow()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "p_raw_ins_" + Guid.NewGuid().ToString("N")[..12];
+        var id = RawProcedureKey();
+
+        Execute(ctx, $"create procedure {proc}(in p_id int, in p_name text) language plpgsql as $$ begin insert into delete_entity (id, name, age) values (p_id, p_name, 1); end; $$");
+
+        try
+        {
+            using (ctx.ExecuteProcedure(
+                proc,
+                [
+                    new ProcedureParameter("p_id", id, DbType: DbType.Int32),
+                    new ProcedureParameter("p_name", "proc-insert"),
+                ]))
+            {
+            }
+
+            ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => x.Name).ToList().Should().Equal("proc-insert");
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc}");
+        }
+    }
+
+    [Fact]
+    public void ExecuteRaw_FunctionViaSelect_ShouldReturnValue()
+    {
+        // PostgreSQL functions are not procedures: Npgsql's CommandType.StoredProcedure generates
+        // CALL, so a function is invoked through ExecuteRaw instead.
+        var ctx = _sut.DataProvider;
+        var fn = "p_raw_fn_" + Guid.NewGuid().ToString("N")[..12];
+
+        Execute(ctx, $"create function {fn}(a int) returns int language sql as $$ select a * 2 $$");
+
+        try
+        {
+            using var result = ctx.ExecuteRaw($"select {fn}(@a) as value", [new ProcedureParameter("a", 21, DbType: DbType.Int32)]);
+
+            result.Read<int>().Should().Equal(42);
+        }
+        finally
+        {
+            Execute(ctx, $"drop function if exists {fn}(int)");
+        }
+    }
+
+    private sealed class TvpEntity
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_Scalar_ShouldUseUnnest()
+    {
+        var ctx = _sut.DataProvider;
+
+        using (var result = ctx.ExecuteRaw(
+            "select count(*) as c from unnest(@ids) as x",
+            [ProcedureParameter.Table("ids", new[] { 1, 2, 3 })]))
+        {
+            result.Read<long>().Should().Equal(3L);
+        }
+
+        using (var result = ctx.ExecuteRaw(
+            "select sum(x) as s from unnest(@ids) as x",
+            [ProcedureParameter.Table("ids", new[] { 1, 2, 3 })]))
+        {
+            result.Read<long>().Should().Equal(6L);
+        }
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_EmptyScalar_ShouldReadNoRows()
+    {
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw(
+            "select count(*) as c from unnest(@ids) as x",
+            [ProcedureParameter.Table("ids", Array.Empty<int>())]);
+
+        result.Read<long>().Should().Equal(0L);
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_Entity_ShouldUseJsonbToRecordset()
+    {
+        var ctx = _sut.DataProvider;
+
+        var rows = new[]
+        {
+            new TvpEntity { Id = 1, Name = "alpha" },
+            new TvpEntity { Id = 2, Name = null },
+        };
+
+        using var result = ctx.ExecuteRaw(
+            "select x.\"Id\", x.\"Name\" from jsonb_to_recordset(@rows) as x(\"Id\" int, \"Name\" text) order by x.\"Id\"",
+            [ProcedureParameter.Table("rows", rows)]);
+
+        var read = result.Read<TvpEntity>();
+
+        read.Should().HaveCount(2);
+        read[0].Id.Should().Be(1);
+        read[0].Name.Should().Be("alpha");
+        read[1].Id.Should().Be(2);
+        read[1].Name.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameterWithTypeName_ShouldThrowArgumentException()
+    {
+        var ctx = _sut.DataProvider;
+
+        var act = () => ctx.ExecuteRaw(
+            "select 1",
+            [ProcedureParameter.Table("p", "my_type", new[] { 1 })]);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_DateTime_ShouldRoundTripUnnest()
+    {
+        var ctx = _sut.DataProvider;
+        var dates = new[]
+        {
+            new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Unspecified),
+            new DateTime(2024, 6, 7, 8, 9, 10, DateTimeKind.Unspecified),
+        };
+
+        using (var count = ctx.ExecuteRaw(
+            "select count(*) as c from unnest(@dates) as x",
+            [ProcedureParameter.Table("dates", dates)]))
+        {
+            count.Read<long>().Should().Equal(2L);
+        }
+
+        using (var first = ctx.ExecuteRaw(
+            "select x from unnest(@dates) as x order by x limit 1",
+            [ProcedureParameter.Table("dates", dates)]))
+        {
+            first.Read<DateTime>().Should().Equal(new DateTime(2024, 1, 2, 3, 4, 5));
+        }
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_NullableIntArray_ShouldKeepNulls()
+    {
+        var ctx = _sut.DataProvider;
+        var ids = new int?[] { 1, null, 3 };
+
+        using (var count = ctx.ExecuteRaw(
+            "select count(*) as c from unnest(@ids) as x",
+            [ProcedureParameter.Table("ids", ids)]))
+        {
+            count.Read<long>().Should().Equal(3L);
+        }
+
+        using (var nonNull = ctx.ExecuteRaw(
+            "select count(x) as c from unnest(@ids) as x",
+            [ProcedureParameter.Table("ids", ids)]))
+        {
+            nonNull.Read<long>().Should().Equal(2L);
+        }
+
+        using (var sum = ctx.ExecuteRaw(
+            "select sum(x) as s from unnest(@ids) as x",
+            [ProcedureParameter.Table("ids", ids)]))
+        {
+            sum.Read<long>().Should().Equal(4L);
+        }
+    }
+
+    [SqlTable("complex_entity")]
+    internal interface IPgXminReadEntity
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("xmin")]
+        uint Revision { get; set; }
+    }
+
+    [SqlTable("delete_entity")]
+    internal interface IPgXminEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("name")]
+        string? Name { get; set; }
+        [Column("xmin")]
+        uint Revision { get; set; }
+    }
+
+    [Fact]
+    public void Xmin_ReadIntoUInt_ShouldReturnPositiveRevision()
+    {
+        // PostgreSQL exposes xmin as xid, a 32-bit unsigned integer; the projection reads it through
+        // GetFieldValue<uint>. The seeded complex_entity row 1 always has a live xmin.
+        var revision = _sut.DataProvider
+            .From<IPgXminReadEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Revision)
+            .First();
+
+        revision.Should().BeGreaterThan(0u);
+    }
+
+    [Fact]
+    public void Xmin_GuardedUpdate_ShouldRejectStaleToken()
+    {
+        var ctx = _sut.DataProvider;
+        var id = RawProcedureKey();
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
+            .Insert();
+
+        var token = ctx.From<IPgXminEntity>()
+            .Where(x => x.Id == id)
+            .Select(x => x.Revision)
+            .First();
+
+        token.Should().BeGreaterThan(0u);
+
+        // xmin is the id of the transaction that wrote the row version, so a new version only gets a
+        // different xmin when it is written by a different committed transaction. Running the guarded
+        // update in its own committed transaction (while the insert above was already autocommitted)
+        // makes that boundary explicit and the stale-token assertion deterministic.
+        var transactions = (ITransactionManager)ctx;
+        uint newToken;
+        using (var tx = transactions.BeginTransaction())
+        {
+            // The current token matches: the guarded update touches exactly the one row and returns its new xmin.
+            var updated = ctx.Update<IPgXminEntity>()
+                .Set(x => x.Name, "after")
+                .Where(x => x.Id == id && x.Revision == token)
+                .Returning(x => x.Revision)
+                .ToList();
+
+            updated.Should().ContainSingle();
+            newToken = updated[0];
+            tx.Commit();
+        }
+
+        // The update wrote a new row version in its own transaction, so the token actually changed.
+        newToken.Should().NotBe(token);
+
+        // The old token is stale and affects zero rows.
+        var stale = ctx.Update<IPgXminEntity>()
+            .Set(x => x.Name, "stale")
+            .Where(x => x.Id == id && x.Revision == token)
+            .Returning(x => x.Revision)
+            .ToList();
+
+        stale.Should().BeEmpty();
+
+        // The token observed after the first update is current and still affects exactly one row.
+        var current = ctx.Update<IPgXminEntity>()
+            .Set(x => x.Name, "current")
+            .Where(x => x.Id == id && x.Revision == newToken)
+            .Returning(x => x.Revision)
+            .ToList();
+
+        current.Should().ContainSingle();
+
+        ctx.From<IPgXminEntity>().Where(x => x.Id == id).Select(x => x.Name).Single().Should().Be("current");
+    }
+
+    [SqlTable("pg_oid_entity")]
+    internal interface IPgOidEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("oid_value")]
+        uint Oid { get; set; }
+        [Column("cid_value")]
+        uint Cid { get; set; }
+    }
+
+    [Fact]
+    public void Cid_Column_ShouldReadAsUInt()
+    {
+        // cid is a 32-bit unsigned system type surfaced as System.UInt32 in Npgsql, like oid; the
+        // projection reads it through GetFieldValue<uint> even though uint parameters bind as xid.
+        var cid = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Cid)
+            .First();
+
+        cid.Should().Be(7u);
+    }
+
+    [Fact]
+    public void Oid_Column_ShouldReadAsUInt()
+    {
+        // oid is a 32-bit unsigned system type surfaced as System.UInt32 in Npgsql; nextorm reads it
+        // into a uint property even though it renders uint as xid for parameters.
+        var oid = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Oid)
+            .First();
+
+        oid.Should().Be(42u);
+    }
+
+    [Fact]
+    public void Oid_Column_FilterViaLongCast_ShouldMatch()
+    {
+        // nextorm binds uint as xid and PostgreSQL has no oid = xid operator, so an oid column is
+        // compared through an explicit bigint cast; the right-hand value is widened to long so the
+        // parameter binds as bigint too (a uint parameter would be xid and xid has no bigint cast).
+        var oid = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Oid)
+            .First();
+        long expected = oid;
+
+        var ids = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(e => (long)e.Oid == (long)expected)
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(1);
+    }
+
+    [Fact]
+    public void Oid_Column_CompareToUIntParam_ShouldFailWithOperatorMissing()
+    {
+        // A uint parameter is bound as xid and PostgreSQL has no oid = xid operator, so comparing the
+        // column to it directly fails with SQLSTATE 42883 (undefined_function).
+        var expected = _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Oid)
+            .First();
+
+        var act = () => _sut.DataProvider
+            .From<IPgOidEntity>()
+            .Where(e => e.Oid == expected)
+            .Select(e => e.Id)
+            .ToList();
+
+        act.Should().Throw<PostgresException>()
+            .Which.SqlState.Should().Be("42883");
+    }
+
+    private static int RawProcedureKey() => Random.Shared.Next(2_000_000, int.MaxValue);
 
     public interface IDynamicRecordRow
     {

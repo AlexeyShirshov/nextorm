@@ -51,6 +51,7 @@ internal sealed class BulkInsertCommand
     /// <param name="notifyEvery">The reporting interval in rows; the native path uses it to set its own progress cadence.</param>
     /// <param name="timeoutSeconds">The command timeout in seconds, or <see langword="null"/> for the provider default.</param>
     /// <param name="tableSchema">The schema (or database) that qualifies <paramref name="tableName"/>, or <see langword="null"/>.</param>
+    /// <param name="bulkCopy">The SQL Server-only bulk-copy flags, or <see cref="BulkCopyFlags.None"/>.</param>
     public BulkInsertCommand(
         Type entityType,
         string tableName,
@@ -64,7 +65,8 @@ internal sealed class BulkInsertCommand
         Action<int>? progress,
         int notifyEvery,
         int? timeoutSeconds,
-        string? tableSchema = null)
+        string? tableSchema = null,
+        BulkCopyFlags bulkCopy = default)
     {
         EntityType = entityType;
         TableName = tableName;
@@ -79,6 +81,7 @@ internal sealed class BulkInsertCommand
         NotifyEvery = notifyEvery;
         TimeoutSeconds = timeoutSeconds;
         TableSchema = tableSchema;
+        BulkCopy = bulkCopy;
     }
 
     /// <summary>The CLR entity type written.</summary>
@@ -124,6 +127,9 @@ internal sealed class BulkInsertCommand
 
     /// <summary>The command timeout in seconds, or <see langword="null"/> for the provider default.</summary>
     public int? TimeoutSeconds { get; }
+
+    /// <summary>The SQL Server-only bulk-copy flags, or <see cref="BulkCopyFlags.None"/>.</summary>
+    public BulkCopyFlags BulkCopy { get; }
 }
 
 /// <summary>

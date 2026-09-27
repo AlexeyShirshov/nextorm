@@ -37,6 +37,7 @@ public class InMemoryBenchmarkGroupBy
     private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(Rows);
 
     [Benchmark(Baseline = true)]
+    [BenchmarkCategory("acceptance")]
     public void Nextorm_GroupByCount()
     {
         var acc = 0L;

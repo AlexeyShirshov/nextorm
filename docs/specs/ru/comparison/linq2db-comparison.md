@@ -11,7 +11,7 @@
 > (`INSERT`/`UPDATE`/`DELETE`/полный `MERGE`, модифицирующие CTE PostgreSQL), массовую вставку,
 > `CREATE TABLE AS SELECT` и роль транзакций.
 
-**Предварительные требования:** [Обзор провайдеров](../../../providers/overview.md) · [Ограничения](../../../advanced/limitations.md) · [Хинты запросов](../../../guide/17-query-hints.md)
+**Предварительные требования:** [Обзор провайдеров](../../../providers/overview.md) · [Ограничения](../../../advanced/limitations.md) · [Хинты запросов](../../../guide/15-query-hints.md)
 
 ## Позиционирование
 
@@ -93,7 +93,7 @@ linq2db или превосходит её — и расходятся в *мо�
 | Соглашения об именовании (например snake_case) | partial — нет встроенной конвенции | **yes** (включается явно, встроенный `SnakeCaseNamingConvention`) | `INamingConvention` / `SnakeCaseNamingConvention` |
 | Регистр ключевых слов SQL (верхний/нижний) | no (ключевые слова выводятся в каноническом регистре провайдера) | **yes** — включается через `KeywordCase.Upper`; по умолчанию `KeywordCase.Lower` байт-в-байт совпадает с историческим выводом | `KeywordCase`, `DataContextBuilder.UseKeywordCase`/`EntityBuilder.WithKeywordCase` |
 | **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **yes** | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `MergeMatchedBuilder<TEntity>`, `MergeNotMatchedBuilder<TEntity>`, `MergeNotMatchedBySourceBuilder<TEntity>`, `MergeReturningBuilder<TEntity,TResult>`, `DeleteBuilder<TEntity>`, `UpdateBuilder<TEntity>`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge`/`SupportsDelete`; in-memory применяет только key upsert |
-| Bulk copy / merge / временные таблицы | yes | **частично** — key upsert (`MergeInto`/`MergeBuilder<T>`), полный `MERGE` с ветками (`WhenMatched`/`WhenNotMatched`/`WhenNotMatchedBySource`, произвольные условия, `RETURNING`/`OUTPUT`; SQL Server, PostgreSQL 15+), массовая вставка (`BulkInsertInto<T>`: нативные `COPY`/`SqlBulkCopy` + чанковый `INSERT ... VALUES`, настройка через record `BulkInsertOptions` или fluent-`BulkInsertOptionsBuilder` — `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, прогресс `NotifyAfter` с `ProgressCancellationTokenSource`; `ReturningKey`/`Returning`) и материализация запроса во (временную) таблицу ([`ToTempTable`/`ToTable`](../../../ru/guide/22-create-table-as.md), `CREATE [TEMPORARY] TABLE ... AS SELECT`, PostgreSQL/SQLite/MySQL/MariaDB) реализованы | `MergeBuilder<TEntity>`, `BulkInsertBuilder<TEntity>`, `BulkInsertOptions`, `TempTableExtensions` |
+| Bulk copy / merge / временные таблицы | yes | **частично** — key upsert (`MergeInto`/`MergeBuilder<T>`), полный `MERGE` с ветками (`WhenMatched`/`WhenNotMatched`/`WhenNotMatchedBySource`, произвольные условия, `RETURNING`/`OUTPUT`; SQL Server, PostgreSQL 15+), массовая вставка (`BulkInsertInto<T>`: нативные `COPY`/`SqlBulkCopy` + чанковый `INSERT ... VALUES`, настройка через record `BulkInsertOptions` или fluent-`BulkInsertOptionsBuilder` — `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, прогресс `NotifyAfter` с `ProgressCancellationTokenSource`; `ReturningKey`/`Returning`) и материализация запроса во (временную) таблицу ([`ToTempTable`/`ToTable`](../../../ru/guide/20-create-table-as.md), `CREATE [TEMPORARY] TABLE ... AS SELECT`, PostgreSQL/SQLite/MySQL/MariaDB) реализованы | `MergeBuilder<TEntity>`, `BulkInsertBuilder<TEntity>`, `BulkInsertOptions`, `TempTableExtensions` |
 | Транзакции (собственные и привязанные) | yes | **yes** (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse и in-memory отклоняют) | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `ISqlDialect.SupportsTransactions` |
 | Навигационные свойства / связи / eager loading | yes (`[Association]`, `LoadWith`) | **no** | — |
 | Отслеживание изменений / identity map | partial | **no** (по замыслу) | — |
@@ -182,7 +182,7 @@ linq2db или превосходит её — и расходятся в *мо�
   скаффолдит маппинги сущностей и табличных функций из живой базы; nextorm объявляет маппинги в коде.
   Источники с динамической схемой, которые nextorm поддерживает через объявляемую вызывающим схему
   `TRow` (ClickHouse `values()`, PostgreSQL `jsonb_to_record(set)`,
-  [динамическая схема результата](../../../guide/13-table-valued-functions.md#dynamic-result-schema)),
+  [динамическая схема результата](../../../guide/11-table-valued-functions.md#dynamic-result-schema)),
   не поддерживает и linq2db.
 * **Широта провайдеров**: linq2db добавляет Oracle, Firebird, DB2, SAP HANA, Informix, Sybase и SQL CE;
   nextorm сосредоточен на SQL Server, PostgreSQL, MySQL/MariaDB, SQLite и ClickHouse.
@@ -227,9 +227,9 @@ linq2db квотирует по умолчанию и фиксирует име�
 - [Gap-анализ открытого backlog linq2db](../../comparison/linq2db-backlog-gap-analysis.md) — что linq2db *планирует добавить* и чего из этого не хватает nextorm.
 - [SQL capabilities gap analysis](../../roadmap/sql-capabilities-gap-analysis.md) — nextorm vs EF Core и linq2db, по конструкциям.
 - [Ограничения и возможности вне области охвата](../../../advanced/limitations.md)
-- [Соединения](../../../guide/03-joins.md) — `CrossApply`/`OuterApply`.
-- [Range-колонки](../../../guide/31-range-columns.md) — `Range<T>`, хранимый как пара скалярных колонок.
-- [Хинты запросов](../../../guide/17-query-hints.md)
+- [Соединения](../../../guide/02-joins.md) — `CrossApply`/`OuterApply`.
+- [Range-колонки](../../../guide/29-range-columns.md) — `Range<T>`, хранимый как пара скалярных колонок.
+- [Хинты запросов](../../../guide/15-query-hints.md)
 - [Обзор провайдеров](../../../providers/overview.md)
 
 ---

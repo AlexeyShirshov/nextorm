@@ -156,11 +156,45 @@ var query = ctx.From<ISimpleEntity>().Select(x => new { Label = "id:" + x.Id });
 select concat('id:', id) as `Label` from simple_entity
 ```
 
+## Табличные параметры
+
+ClickHouse эмулирует табличный параметр нативным массивом, связываемым через `ProcedureParameter.Table<T>` ([`SupportsTableValuedParameters`](xref:NextORM.Core.ISqlDialect.SupportsTableValuedParameters) равно `true`): скалярный тип строки связывается как `Array(T)`, а тип-сущность — как `Array(Tuple(col1, col2, ...))`, и сервер разворачивает массив через `arrayJoin`. Провайдер задаёт драйверу явный `ClickHouseType` (оборачивая nullable-колонку в `Nullable(...)`), потому что драйвер выводит non-nullable тип из CLR-значения и иначе не смог бы сериализовать null-элемент или пустой массив. Столбец `decimal` связывается как объявленный `Decimal(p, s)` (из `[DecimalPrecision(p, s)]` или fluent-отображения) либо как `Decimal(38, 10)`, если ничего не объявлено.
+
+```csharp
+using var ctx = new ClickHouseDataContext(
+    "Host=localhost;Username=default;Database=app", new DataContextBuilder());
+
+// скалярный набор -> select arrayJoin(@ids)
+using var scalar = ctx.ExecuteRaw(
+    "select arrayJoin(@ids) as value order by value",
+    [ProcedureParameter.Table("ids", new[] { 3, 1, 2 })]);
+var values = scalar.Read<int>();   // [1, 2, 3]
+
+// набор сущностей -> select t.1, t.2 from (select arrayJoin(@rows) as t)
+using var entity = ctx.ExecuteRaw(
+    "select t.1 as Id, t.2 as Name from (select arrayJoin(@rows) as t) order by Id",
+    [ProcedureParameter.Table("rows", new[]
+    {
+        new TvpRow { Id = 2, Name = "beta" },
+        new TvpRow { Id = 1, Name = null },
+    })]);
+var rows = entity.Read<TvpRow>();
+
+public sealed class TvpRow
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+}
+```
+
+Формы `format(JSONEachRow, ...)`, `values()` и `input()` для связанного параметра **не** используются — `format`/`values` требуют литеральной структуры, а `input` допустим только в `INSERT ... SELECT`, поэтому поддерживаемая эмуляция — именно массив. В ClickHouse **нет хранимых процедур** ([`SupportsStoredProcedures`](xref:NextORM.Core.ISqlDialect.SupportsStoredProcedures) равно `false`, а `ExecuteProcedure` бросает `NotSupportedException`), поэтому параметр потребляется SQL из `ExecuteRaw`/`ExecuteRawAsync`, вызывающим `arrayJoin` самостоятельно. `TypeName` — только для SQL Server и отклоняется через `ArgumentException`. Пустой набор связывается пустым массивом, а null-элементы, nullable-колонки и пустые наборы покрыты тестами провайдера. Поддерживаются только CLR-типы с маппингом на ClickHouse — набор скалярных колонок (целочисленные типы, `float`/`double`, `decimal` как объявленный `Decimal(p, s)` или `Decimal(38, 10)`, `bool`, `string`/`char`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`, перечисление как его базовое число; `TimeOnly` как `String` в инвариантном формате `HH:mm:ss.fffffff`, `TimeSpan` как `Int64` в объявленной единице длительности (по умолчанию тики), `byte[]` как `String`); любой другой тип колонки бросает `NotSupportedException`. Колонка `byte[]` связывается как `String`, поэтому читатель строк возвращает `string`, а не `byte[]` — не полагайтесь на круговой путь `byte[]`. Набор отправляется одним параметром-массивом, без стриминга и копирования, поэтому для очень больших наборов используйте API бинарной вставки драйвера. См. [Сырой SQL: табличные параметры](../guide/12-raw-sql.md#табличные-параметры).
+
 ## Различия провайдера
 
 | Аспект | ClickHouse |
 |---|---|
 | Плейсхолдер параметра | `@name` (драйвер переписывает в `{name:Type}`) |
+| Табличные параметры | связанный `Array(T)` (скаляр) / `Array(Tuple(...))` (сущность), разворачиваемый через `arrayJoin(@p)`; `TypeName` отклоняется, хранимых процедур нет |
 | Конкатенация | `concat(a, b)` |
 | Coalesce | `coalesce` |
 | Логический литерал | `true` / `false` |
@@ -194,6 +228,7 @@ select concat('id:', id) as `Label` from simple_entity
 | Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Поверхность кортежей | нативная колонка/выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7); `Tuple.Create(a, b, ...)` рендерится как `tuple(a, b, ...)`, а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)`, оба под [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` не поддерживается (меняет набор колонок результата) |
 | Нативный тип колонки JSON | не замаплен: `ClickHouse.Driver` читает нативную колонку `JSON` как `System.Text.Json.Nodes.JsonObject`, который row reader материализовать не умеет. Функции нативного JSON при этом доступны над любым JSON-выражением |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` (у драйвера нет потоковых геттеров) |
 
 ## Замечания и ограничения
 
@@ -226,8 +261,11 @@ select concat('id:', id) as `Label` from simple_entity
 - В `hits_v1` и других широких таблицах колонок намного больше, чем объявляет интерфейс сущности.
   Вместо маппинга всех колонок лишние можно спроецировать по имени через
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (см.
-  [Запросы и проекции](../guide/01-querying-and-projections.md#колонки-по-имени)); имя сверяется
+  [Запросы и проекции](../querying/01-projections.md#колонки-по-имени)); имя сверяется
   дословно, поэтому кавычки — по диалекту.
+- Терминалы потокового чтения LOB (`ToStream`/`ToTextReader`) отклоняются через `NotSupportedException`:
+  у `ClickHouse.Driver` нет потоковых геттеров (см.
+  [Потоковое чтение больших объектов](../guide/30-large-objects.md)).
 
 ## См. также
 

@@ -26,6 +26,9 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsOutput => true;
 
+    /// <summary>Microsoft.Data.SqlClient streams LOB columns through <c>GetStream</c>/<c>GetTextReader</c> when the reader is opened with <see cref="System.Data.CommandBehavior.SequentialAccess"/>.</summary>
+    public override bool SupportsSequentialAccess => true;
+
     /// <inheritdoc/>
     public override bool SupportsRangeColumns => true;
 
@@ -53,6 +56,12 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>SQL Server batches through <c>SqlBatch</c>.</summary>
     public override bool SupportsBatch => true;
+
+    /// <summary>SQL Server executes a stored procedure by name with <c>CommandType.StoredProcedure</c>.</summary>
+    public override bool SupportsStoredProcedures => true;
+
+    /// <summary>SQL Server binds a table-valued parameter natively through a user-defined table type.</summary>
+    public override bool SupportsTableValuedParameters => true;
 
     /// <summary><c>SqlBatch</c> runs each command in its own scope, so a <c>#temp</c> created by one command is not visible to the next; the joined command keeps them in one batch scope.</summary>
     public override bool BatchUsesJoinedCommand => true;
@@ -161,6 +170,31 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server quotes a physical identifier with brackets, doubling an embedded <c>]</c>.</summary>
     public override string QuoteIdentifier(string name) => "[" + name.Replace("]", "]]") + "]";
 
+    /// <summary>SQL Server qualifies a table with a database name (<c>[db].[schema].[table]</c>).</summary>
+    public override bool SupportsCrossDatabase => true;
+
+    /// <summary>SQL Server qualifies a table with a linked server name (<c>[server].[db].[schema].[table]</c>).</summary>
+    public override bool SupportsLinkedServer => true;
+
+    /// <summary>
+    /// Renders the SQL Server four-part name <c>[server].[database].[schema].[table]</c>, omitting the
+    /// parts that are <c>null</c>. Quoting is applied later by the SQL builder.
+    /// </summary>
+    public override string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is null && database is null)
+            return JoinTableQualifier(schema, table);
+
+        var builder = new StringBuilder();
+        if (server is not null)
+            builder.Append(server).Append('.');
+        if (database is not null)
+            builder.Append(database).Append('.');
+        if (schema is not null)
+            builder.Append(schema).Append('.');
+        return builder.Append(table).ToString();
+    }
+
     /// <summary>
     /// SQL Server uses a bracket-quoted identifier for references as well, so that aliases that
     /// collide with a T-SQL keyword (e.g. "double") stay usable from an outer query.
@@ -225,6 +259,39 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>Renders the hints as a <c>with (hint, ...)</c> suffix.</summary>
     public override string MakeTableHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " with (") + string.Join(", ", hints) + ")";
+
+    /// <summary>SQL Server renders a join hint inside the join clause, between the join kind and <c>JOIN</c>.</summary>
+    public override bool SupportsJoinHints => true;
+
+    /// <summary>
+    /// Inserts the join <paramref name="hint"/> before the <c>JOIN</c> keyword of the already-rendered
+    /// keyword, e.g. <c>inner join</c> with <c>loop</c> becomes <c>inner loop join</c>. A <c>null</c>
+    /// hint delegates to the plain keyword.
+    /// </summary>
+    public override string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, string? hint, KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var keyword = MakeJoinKeyword(joinType, strictness, isGlobal, keywordCase);
+
+        if (hint is null)
+            return keyword;
+
+        // The ANSI form omits INNER; the hinted form spells it out (INNER LOOP JOIN).
+        if (joinType == JoinType.Inner)
+            keyword = Kw(keywordCase, " inner join ");
+
+        var index = keyword.LastIndexOf("join", StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+            throw new NotSupportedException($"A join hint cannot be applied to the {joinType} join");
+
+        return keyword[..index] + hint + " " + keyword[index..];
+    }
+
+    /// <summary>SQL Server renders tables-in-scope hints as a <c>WITH (...)</c> table hint on every table.</summary>
+    public override bool SupportsTablesInScopeHints => true;
+
+    /// <summary>Renders the tables-in-scope hints as a <c>with (hint, ...)</c> suffix on a table.</summary>
+    public override string MakeTablesInScopeHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
         => Kw(keywordCase, " with (") + string.Join(", ", hints) + ")";
 
     /// <summary>SQL Server renders index hints as a <c>WITH (INDEX(...))</c> table hint.</summary>

@@ -65,7 +65,7 @@ select id from simple_entity
 * **`[Key]` and `[DatabaseGenerated]`** - `KeyAttribute` marks the primary key and
   `DatabaseGeneratedAttribute` marks a database-generated column (`DatabaseGeneratedOption.Identity`
   or `.Computed`). Queries ignore both, but the insert builder reads them: identity/computed columns
-  are excluded from the written values (see [Data modification (INSERT)](../guide/19-insert-statement.md)).
+  are excluded from the written values (see [Data modification (INSERT)](../guide/17-insert-statement.md)).
   When no key is declared, a property named `Id` or `<TypeName>Id` is treated as the key by convention.
 * **Binary columns** - a `byte[]` property maps to a binary column (`bytea` on PostgreSQL,
   `varbinary`/`image` on SQL Server, `blob` on SQLite). A `byte[]` can also be projected directly

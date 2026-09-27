@@ -11,36 +11,37 @@
 
 ### Guide
 
-- [Querying and projections](guide/01-querying-and-projections.md)
-- [Filtering (WHERE)](guide/02-filtering-where.md)
-- [Joins](guide/03-joins.md)
-- [Grouping and aggregates](guide/04-grouping-and-aggregates.md)
-- [Sorting and paging](guide/05-sorting-and-paging.md)
-- [Subqueries](guide/06-subqueries.md)
-- [Set operations](guide/07-set-operations.md)
-- [SELECT DISTINCT](guide/08-distinct.md)
-- [Common table expressions (CTE)](guide/09-cte.md)
-- [Window functions](guide/10-window-functions.md)
-- [User-defined functions](guide/12-user-defined-functions.md)
-- [Table-valued functions](guide/13-table-valued-functions.md)
-- [Raw SQL](guide/14-raw-sql.md)
-- [Query reuse: cache vs Prepare](guide/15-query-reuse.md)
-- [Connections and logging](guide/16-connections-and-logging.md)
-- [Query hints](guide/17-query-hints.md)
-- [JSON support across providers](guide/18-json.md)
-- [Data modification (INSERT)](guide/19-insert-statement.md)
-- [Data modification (DELETE)](guide/20-delete-statement.md)
-- [Data modification (UPDATE)](guide/21-update-statement.md)
-- [Materializing a query into a table](guide/22-create-table-as.md)
-- [Data merging (MERGE / upsert)](guide/23-merge-statement.md)
-- [Bulk insert](guide/24-bulk-insert.md)
-- [Transactions](guide/25-transactions.md)
-- [Duration (TimeSpan) columns](guide/26-duration-columns.md)
-- [Interceptors](guide/27-interceptors.md)
-- [Executing statements in one batch](guide/28-sql-batch.md)
-- [Optimistic concurrency and change tracking](guide/29-optimistic-concurrency.md)
-- [Value converters and JSON columns](guide/30-value-converters.md)
-- [Range columns (pair of scalar columns)](guide/31-range-columns.md)
+- [Querying and projections](querying/index.md)
+- [Filtering (WHERE)](guide/01-filtering-where.md)
+- [Joins](guide/02-joins.md)
+- [Grouping and aggregates](guide/03-grouping-and-aggregates.md)
+- [Sorting and paging](guide/04-sorting-and-paging.md)
+- [Subqueries](guide/05-subqueries.md)
+- [Set operations](guide/06-set-operations.md)
+- [SELECT DISTINCT](guide/07-distinct.md)
+- [Common table expressions (CTE)](guide/08-cte.md)
+- [Window functions](guide/09-window-functions.md)
+- [User-defined functions](guide/10-user-defined-functions.md)
+- [Table-valued functions](guide/11-table-valued-functions.md)
+- [Raw SQL](guide/12-raw-sql.md)
+- [Query reuse: cache vs Prepare](guide/13-query-reuse.md)
+- [Connections and logging](guide/14-connections-and-logging.md)
+- [Query hints](guide/15-query-hints.md)
+- [JSON support across providers](guide/16-json.md)
+- [Data modification (INSERT)](guide/17-insert-statement.md)
+- [Data modification (DELETE)](guide/18-delete-statement.md)
+- [Data modification (UPDATE)](guide/19-update-statement.md)
+- [Materializing a query into a table](guide/20-create-table-as.md)
+- [Data merging (MERGE / upsert)](guide/21-merge-statement.md)
+- [Bulk insert](guide/22-bulk-insert.md)
+- [Transactions](guide/23-transactions.md)
+- [Duration (TimeSpan) columns](guide/24-duration-columns.md)
+- [Interceptors](guide/25-interceptors.md)
+- [Executing statements in one batch](guide/26-sql-batch.md)
+- [Optimistic concurrency and change tracking](guide/27-optimistic-concurrency.md)
+- [Value converters and JSON columns](guide/28-value-converters.md)
+- [Range columns (pair of scalar columns)](guide/29-range-columns.md)
+- [Streaming large objects (BLOB/CLOB)](guide/30-large-objects.md)
 
 ### Scalar functions
 
@@ -91,7 +92,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.7-beta) is a prof of concept.
+The current status (1.0.8-b) is a prof of concept.
 
 ## Roadmap
 
@@ -101,7 +102,7 @@ The current status (1.0.7-beta) is a prof of concept.
 - [1.0.5-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.5)
 - [1.0.6-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.6)
 - [1.0.7-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
-- [1.0-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-rc.1)
+- [1.0.8-b](https://github.com/AlexeyShirshov/nextorm/milestones/1.0.8-b)
 - [1.0](https://github.com/AlexeyShirshov/nextorm/milestones/1.0)
 - [1.1.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-a.1)
 - [1.1-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-b.1)
@@ -144,9 +145,23 @@ cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/
 [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
-its limitations are covered in the [Query reuse guide](guide/15-query-reuse.md).
+its limitations are covered in the [Query reuse guide](guide/13-query-reuse.md).
 
 ## Releases
+
+### 1.0.8-b
+
+- [Multi-resultset support](https://github.com/AlexeyShirshov/nextorm/issues/25)
+- [BLOB/CLOB support](https://github.com/AlexeyShirshov/nextorm/issues/27)
+- [Хранимые процедуры и функции (вызов, output-параметры, несколько result-set)](https://github.com/AlexeyShirshov/nextorm/issues/70)
+- [Table-valued parameters (TVP)](https://github.com/AlexeyShirshov/nextorm/issues/73)
+- [Паритет опций bulk copy / bulk insert](https://github.com/AlexeyShirshov/nextorm/issues/92)
+- [Command timeout (per-context / per-query)](https://github.com/AlexeyShirshov/nextorm/issues/93)
+- [Варианты хинтов — join / subquery / tables-in-scope](https://github.com/AlexeyShirshov/nextorm/issues/96)
+- [Управление кэшем планов/запросов (ClearCache, disable, sliding expiration)](https://github.com/AlexeyShirshov/nextorm/issues/97)
+- [Комментарий-метка запроса (TagQuery)](https://github.com/AlexeyShirshov/nextorm/issues/98)
+- [Per-query переопределение источника (table/schema/database/server, `WithTableExpression`)](https://github.com/AlexeyShirshov/nextorm/issues/99)
+- Новая глава руководства EN + RU: потоковое чтение больших объектов (BLOB/CLOB)
 
 ### 1.0.7-beta
 

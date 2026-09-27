@@ -44,8 +44,13 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool SupportsCreateTableAsSelect => true;
     public bool SupportsTemporaryCreateTableAsSelect => true;
     public bool SupportsBatch => true;
+    public bool SupportsStoredProcedures => true;
+
+    /// <summary>The provider binds table-valued parameters (native SQL Server UDTT or JSON/array emulation).</summary>
+    public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => true;
     public bool SupportsRegex => true;
+    public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";

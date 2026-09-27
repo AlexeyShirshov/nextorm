@@ -16,4 +16,13 @@
   <ItemGroup>
     <None Include="..\..\readme.md" Pack="true" PackagePath="\" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- The streaming wrappers (LobStream/LobTextReader) and CommandReaderOwner are internal; the
+         core tests exercise the wrapper operations and the reader/command lifecycle directly. -->
+    <InternalsVisibleTo Include="nextorm.core.tests" />
+    <!-- The SQLite SQL-generation tests build the internal SqlBuilder/SqlBuildContext directly to
+         assert the sequential-access locator seam (trailing rowid) without opening a connection. -->
+    <InternalsVisibleTo Include="nextorm.sqlite.tests" />
+  </ItemGroup>
 </Project>

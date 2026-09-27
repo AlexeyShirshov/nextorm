@@ -8,7 +8,8 @@ namespace NextORM.Core;
 /// <item><see cref="IQueryExecutor"/> — terminal operators;</item>
 /// <item><see cref="IQueryMaterializer"/> — planning + row reading;</item>
 /// <item><see cref="IQueryCache"/> — plan cache;</item>
-/// <item><see cref="IContextEnvironment"/> — loggers, mapping mode, property bag.</item>
+/// <item><see cref="IContextEnvironment"/> — loggers, mapping mode, property bag;</item>
+/// <item><see cref="IRawCommandExecutor"/> — raw parameterised commands.</item>
 /// </list>
 /// Connection management is deliberately <b>not</b> part of this composite
 /// (see <see cref="IConnectionManager"/>): the in-memory provider must not be forced to
@@ -19,6 +20,7 @@ public interface IDataContext :
     IQueryMaterializer,
     IQueryCache,
     IContextEnvironment,
+    IRawCommandExecutor,
     IAsyncDisposable,
     IDisposable
 {

@@ -16,6 +16,10 @@ public class PostgresDialectTests
     private static readonly ISqlDialect Dialect = PostgresDialect.Instance;
 
     [Fact]
+    public void SupportsTableValuedParameters_IsTrue()
+        => Dialect.SupportsTableValuedParameters.Should().BeTrue();
+
+    [Fact]
     public void DurationHooks_ShouldUseNativeInterval()
     {
         Dialect.SupportsNativeDuration.Should().BeTrue();
@@ -39,6 +43,14 @@ public class PostgresDialectTests
     public void MakeTypeName_String_ShouldBeText()
     {
         Dialect.MakeTypeName(typeof(string)).Should().Be("text");
+    }
+
+    [Fact]
+    public void MakeTypeName_UInt_ShouldBeXid()
+    {
+        // PostgreSQL's xid/xmin system columns are 32-bit unsigned and surfaced as System.UInt32,
+        // so the dialect names the CLR type after the native xid type.
+        Dialect.MakeTypeName(typeof(uint)).Should().Be("xid");
     }
 
     [Fact]
@@ -146,6 +158,9 @@ public class PostgresDialectTests
         Dialect.RequireSubqueryAlias.Should().BeTrue();
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
+        Dialect.SupportsSequentialAccess.Should().BeTrue();
+        // No trailing locator: Npgsql streams the payload without a rowid, so no "<payload>, rowid" SQL.
+        Dialect.LobLocatorColumn.Should().BeNull();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsArrays.Should().BeTrue();
@@ -256,6 +271,31 @@ public class PostgresDialectTests
         var parameter = (NpgsqlParameter)ctx.CreateParam("p", "{\"a\":1}");
 
         parameter.NpgsqlDbType.Should().NotBe(NpgsqlDbType.Jsonb);
+    }
+
+    [Fact]
+    public void CreateParam_UInt_ShouldBindAsXid()
+    {
+        // Npgsql cannot infer a type for a CLR uint and rejects the parameter outright; binding it as
+        // xid makes a guarded update such as "where ... and xmin = @token" work without an explicit cast.
+        using var ctx = PostgresTestContext.CreatePostgres();
+
+        var parameter = (NpgsqlParameter)ctx.CreateParam("token", 42u);
+
+        parameter.NpgsqlDbType.Should().Be(NpgsqlDbType.Xid);
+    }
+
+    [Fact]
+    public void CreateParam_NullUInt_ShouldNotForceXid()
+    {
+        // A null uint? arrives here as DBNull, not a boxed uint, so it must stay untyped rather than
+        // be forced to xid; Npgsql then sends an untyped null that PostgreSQL resolves from context.
+        using var ctx = PostgresTestContext.CreatePostgres();
+
+        var parameter = (NpgsqlParameter)ctx.CreateParam("token", (uint?)null);
+
+        parameter.NpgsqlDbType.Should().NotBe(NpgsqlDbType.Xid);
+        parameter.Value.Should().Be(DBNull.Value);
     }
 
     [Fact]

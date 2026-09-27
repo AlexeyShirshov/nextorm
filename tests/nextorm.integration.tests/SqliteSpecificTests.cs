@@ -10,6 +10,7 @@ namespace NextORM.Integration.Tests;
 /// Tests for behaviour that is specific to the SQLite provider and therefore not part of the
 /// shared suite (SQLite has no ANY/ALL subquery support and sorts NULLs first).
 /// </summary>
+[Collection("Sqlite")]
 public sealed class SqliteSpecificTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;
@@ -234,6 +235,367 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
             .ToList();
 
         rows.Select(r => r.n).OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    // --- SQLite LOB streaming (issue #27) ---------------------------------------------------------
+    // The generated LOB SQL appends a trailing `rowid` locator so Microsoft.Data.Sqlite exposes a
+    // streaming `SqliteBlob`; the payload stays at ordinal 0. These facts are SQLite-only: a source
+    // without `rowid` (a view, a `WITHOUT ROWID` table, or a raw `WithSql` projection) fails closed
+    // with the driver's raw exception, and they must not be lifted into the shared suite without a
+    // `Dialect.LobLocatorColumn != null` / rowid-bearing guard (PostgreSQL/SQL Server have no
+    // locator, so their terminal accepts a plain single-column projection instead).
+    // ----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The LOB locator is fail-closed: a view has no <c>rowid</c>, so the generated
+    /// <c>select data, rowid from ...</c> is rejected by the driver and the raw exception surfaces.
+    /// Only the raw exception type is asserted; its exact text is a Microsoft.Data.Sqlite detail.
+    /// </summary>
+    [Fact]
+    public void LobStream_OnView_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobView();
+
+        var command = ctx.From<ILobViewEntity>().Where(it => it.Id == 1).Select(it => it.Data!);
+
+        var act = () => command.ToStream();
+
+        act.Should().Throw<SqliteException>();
+    }
+
+    /// <summary>Text LOB on a view: the same fail-closed locator path as the binary terminal.</summary>
+    [Fact]
+    public void LobTextReader_OnView_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobView();
+
+        var command = ctx.From<ILobViewEntity>().Where(it => it.Id == 1).Select(it => it.Body!);
+
+        var act = () => command.ToTextReader();
+
+        act.Should().Throw<SqliteException>();
+    }
+
+    /// <summary>The async terminal opens the reader first, so the driver error surfaces from the returned task too.</summary>
+    [Fact]
+    public async Task LobStreamAsync_OnView_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobView();
+
+        var command = ctx.From<ILobViewEntity>().Where(it => it.Id == 1).Select(it => it.Data!);
+
+        var act = async () => await command.ToStreamAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<SqliteException>();
+    }
+
+    [Fact]
+    public async Task LobTextReaderAsync_OnView_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobView();
+
+        var command = ctx.From<ILobViewEntity>().Where(it => it.Id == 1).Select(it => it.Body!);
+
+        var act = async () => await command.ToTextReaderAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<SqliteException>();
+    }
+
+    /// <summary>
+    /// A <c>WITHOUT ROWID</c> table has no rowid either, so the locator SQL fails closed the same way.
+    /// </summary>
+    [Fact]
+    public void LobStream_OnWithoutRowidTable_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobWithoutRowidTable();
+
+        var command = ctx.From<ILobWithoutRowidEntity>().Where(it => it.Id == 1).Select(it => it.Data!);
+
+        var act = () => command.ToStream();
+
+        act.Should().Throw<SqliteException>();
+    }
+
+    [Fact]
+    public void LobTextReader_OnWithoutRowidTable_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobWithoutRowidTable();
+
+        var command = ctx.From<ILobWithoutRowidEntity>().Where(it => it.Id == 1).Select(it => it.Body!);
+
+        var act = () => command.ToTextReader();
+
+        act.Should().Throw<SqliteException>();
+    }
+
+    [Fact]
+    public async Task LobStreamAsync_OnWithoutRowidTable_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobWithoutRowidTable();
+
+        var command = ctx.From<ILobWithoutRowidEntity>().Where(it => it.Id == 1).Select(it => it.Data!);
+
+        var act = async () => await command.ToStreamAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<SqliteException>();
+    }
+
+    [Fact]
+    public async Task LobTextReaderAsync_OnWithoutRowidTable_ShouldThrowRawSqliteException()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobWithoutRowidTable();
+
+        var command = ctx.From<ILobWithoutRowidEntity>().Where(it => it.Id == 1).Select(it => it.Body!);
+
+        var act = async () => await command.ToTextReaderAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<SqliteException>();
+    }
+
+    /// <summary>
+    /// There is no buffered fallback: after a fail-closed LOB attempt (binary and text, sync and
+    /// async) the same <see cref="DataContext"/> still serves an ordinary buffered query.
+    /// </summary>
+    [Fact]
+    public async Task LobFailClosed_ShouldKeepContextUsable()
+    {
+        var ctx = _sut.DataProvider;
+        using var cleanup = SetUpLobView();
+
+        var blob = ctx.From<ILobViewEntity>().Where(it => it.Id == 1).Select(it => it.Data!);
+        FluentActions.Invoking(() => blob.ToStream()).Should().Throw<SqliteException>();
+
+        var text = ctx.From<ILobViewEntity>().Where(it => it.Id == 1).Select(it => it.Body!);
+        var textAct = async () => await text.ToTextReaderAsync(TestContext.Current.CancellationToken);
+        await textAct.Should().ThrowAsync<SqliteException>();
+
+        _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
+    }
+
+    /// <summary>
+    /// A raw <c>WithSql</c> override bypasses the SQL builder, so no trailing <c>rowid</c> can be
+    /// added: a single-column raw LOB is rejected outright rather than silently switching to a
+    /// buffered read. A raw projection with several columns keeps the generic projection-mismatch
+    /// error (that generic shape is also exercised through the shared LOB suite).
+    /// </summary>
+    [Fact]
+    public void LobStream_RawSqlSingleColumn_ShouldThrowNotSupported()
+    {
+        var command = _sut.LobEntity
+            .Where(it => it.Id == 1)
+            .Select(it => it.Data!)
+            .WithSql("select data from lob_entity where id = 1");
+
+        var act = () => command.ToStream();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("SQLite LOB streaming with raw SQL (WithSql) is not supported because a rowid locator cannot be added safely.");
+    }
+
+    [Fact]
+    public void LobTextReader_RawSqlSingleColumn_ShouldThrowNotSupported()
+    {
+        var command = _sut.LobEntity
+            .Where(it => it.Id == 1)
+            .Select(it => it.Body!)
+            .WithSql("select body from lob_entity where id = 1");
+
+        var act = () => command.ToTextReader();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("SQLite LOB streaming with raw SQL (WithSql) is not supported because a rowid locator cannot be added safely.");
+    }
+
+    [Fact]
+    public void LobStream_RawSqlMultipleColumns_ShouldThrowInvalidOperation()
+    {
+        var command = _sut.LobEntity
+            .Where(it => it.Id == 1)
+            .Select(it => it.Data!)
+            .WithSql("select data, id from lob_entity where id = 1");
+
+        var act = () => command.ToStream();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    /// <summary>
+    /// A NULL blob cannot be opened as a stream by Microsoft.Data.Sqlite: the driver throws its raw
+    /// <see cref="SqliteException"/> instead of a nextorm-specific error. This pins the actual
+    /// behavior so a future silent buffered substitution is caught. Source <c>binary_entity</c> row 2
+    /// is a rowid table with a NULL <c>data</c> column.
+    /// </summary>
+    [Fact]
+    public void LobStream_NullBlob_ShouldThrowRawSqliteException()
+    {
+        var command = _sut.BinaryEntity.Where(it => it.Id == 2).Select(it => it.Data!);
+
+        var act = () => command.ToStream();
+
+        act.Should().Throw<SqliteException>();
+    }
+
+    [Fact]
+    public async Task LobStreamAsync_NullBlob_ShouldThrowRawSqliteException()
+    {
+        var command = _sut.BinaryEntity.Where(it => it.Id == 2).Select(it => it.Data!);
+
+        var act = async () => await command.ToStreamAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<SqliteException>();
+    }
+
+    /// <summary>
+    /// A NULL text value yields an empty reader (Microsoft.Data.Sqlite maps it to an empty string
+    /// reader) — it must not throw. Source <c>complex_entity</c> row 3 is a rowid table with a NULL
+    /// <c>somestring</c> column.
+    /// </summary>
+    [Fact]
+    public void LobTextReader_NullText_ShouldReturnEmpty()
+    {
+        using var reader = _sut.ComplexEntity.Where(it => it.Id == 3).Select(it => it.String!).ToTextReader();
+
+        reader.ReadToEnd().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task LobTextReaderAsync_NullText_ShouldReturnEmpty()
+    {
+        using var reader = await _sut.ComplexEntity
+            .Where(it => it.Id == 3)
+            .Select(it => it.String!)
+            .ToTextReaderAsync(TestContext.Current.CancellationToken);
+
+        var text = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
+
+        text.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Async terminal with a positional parameter on a normal rowid table: the parameter is bound to
+    /// the generated <c>select data, rowid</c> command. The seed is 8 MiB of <c>0xAB</c>.
+    /// </summary>
+    [Fact]
+    public async Task LobStreamAsync_WithParameter_ShouldRoundTripAllBytes()
+    {
+        await using var stream = await _sut.LobEntity
+            .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
+            .Select(it => it.Data!)
+            .ToStreamAsync(TestContext.Current.CancellationToken, 1);
+
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, TestContext.Current.CancellationToken);
+
+        var bytes = buffer.ToArray();
+        bytes.Should().HaveCount(8 * 1024 * 1024);
+        bytes.Should().OnlyContain(b => b == 0xAB);
+    }
+
+    /// <summary>The text twin: the seed is 8 MiB of <c>'x'</c>.</summary>
+    [Fact]
+    public async Task LobTextReaderAsync_WithParameter_ShouldRoundTripAllChars()
+    {
+        using var reader = await _sut.LobEntity
+            .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
+            .Select(it => it.Body!)
+            .ToTextReaderAsync(TestContext.Current.CancellationToken, 1);
+
+        var text = await reader.ReadToEndAsync(TestContext.Current.CancellationToken);
+
+        text.Length.Should().Be(8 * 1024 * 1024);
+        text.All(c => c == 'x').Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The multi-column <c>ToDataReader</c> terminal is fail-closed on SQLite: its streaming projection
+    /// always appends a trailing <c>rowid</c> locator, so the terminal would expose a driver column the
+    /// caller never asked for. It is rejected before the reader is opened, and the context stays usable.
+    /// </summary>
+    [Fact]
+    public void LobDataReader_ToDataReader_ShouldThrowNotSupported()
+    {
+        var command = _sut.ComplexEntity.OrderBy(it => it.Id).Select(it => new { it.Id, it.String });
+
+        var act = () => command.ToDataReader();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("ToDataReader is not supported on providers that append a LOB locator column (SQLite); use ToStream/ToTextReader for a single LOB column.");
+
+        _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task LobDataReader_ToDataReaderAsync_ShouldThrowNotSupported()
+    {
+        var command = _sut.ComplexEntity.OrderBy(it => it.Id).Select(it => new { it.Id, it.String });
+
+        var act = async () => await command.ToDataReaderAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>()
+            .WithMessage("ToDataReader is not supported on providers that append a LOB locator column (SQLite); use ToStream/ToTextReader for a single LOB column.");
+
+        _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
+    }
+
+    private IDisposable SetUpLobView()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop view if exists lob_view");
+        Execute(ctx, "drop table if exists lob_view_source");
+        Execute(ctx, "create table lob_view_source (id integer primary key, data blob, body text)");
+        Execute(ctx, "insert into lob_view_source (id, data, body) values (1, x'01020304', 'abcd')");
+        Execute(ctx, "create view lob_view as select id, data, body from lob_view_source");
+        return new TeardownAction(() =>
+        {
+            Execute(ctx, "drop view if exists lob_view");
+            Execute(ctx, "drop table if exists lob_view_source");
+        });
+    }
+
+    private IDisposable SetUpLobWithoutRowidTable()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists lob_without_rowid");
+        Execute(ctx, "create table lob_without_rowid (id integer primary key, data blob, body text) without rowid");
+        Execute(ctx, "insert into lob_without_rowid (id, data, body) values (1, x'01020304', 'abcd')");
+        return new TeardownAction(() => Execute(ctx, "drop table if exists lob_without_rowid"));
+    }
+
+    private sealed class TeardownAction(Action action) : IDisposable
+    {
+        public void Dispose() => action();
+    }
+
+    [SqlTable("lob_view")]
+    internal interface ILobViewEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("data")]
+        byte[]? Data { get; set; }
+        [Column("body")]
+        string? Body { get; set; }
+    }
+
+    [SqlTable("lob_without_rowid")]
+    internal interface ILobWithoutRowidEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("data")]
+        byte[]? Data { get; set; }
+        [Column("body")]
+        string? Body { get; set; }
     }
 
     [SqlTable("collation_probe")]

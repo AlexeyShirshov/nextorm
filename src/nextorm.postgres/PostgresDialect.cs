@@ -21,6 +21,9 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL supports <c>INSERT ... RETURNING &lt;column&gt;</c>.</summary>
     public override bool SupportsReturning => true;
 
+    /// <summary>Npgsql exposes streaming <c>GetStream</c>/<c>GetTextReader</c> accessors for LOB columns.</summary>
+    public override bool SupportsSequentialAccess => true;
+
     /// <summary>PostgreSQL allows a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public override bool SupportsDataModifyingCtes => true;
 
@@ -32,6 +35,12 @@ public sealed class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL batches through <c>NpgsqlBatch</c>, which wraps the commands in an implicit transaction so they share one backend.</summary>
     public override bool SupportsBatch => true;
+
+    /// <summary>Npgsql maps <c>CommandType.StoredProcedure</c> to <c>CALL name(...)</c>, so PostgreSQL procedures (not functions) are invoked through <c>ExecuteProcedure</c>.</summary>
+    public override bool SupportsStoredProcedures => true;
+
+    /// <summary>PostgreSQL emulates a table-valued parameter with a typed array (<c>unnest</c>/<c>ANY</c>) or a JSON document (<c>jsonb_to_recordset</c>).</summary>
+    public override bool SupportsTableValuedParameters => true;
 
     /// <summary>PostgreSQL skips conflicting rows with a trailing <c>ON CONFLICT DO NOTHING</c>.</summary>
     public override bool SupportsOnConflictDoNothing => true;
@@ -136,6 +145,7 @@ public sealed class PostgresDialect : SqlDialectBase
         {
             _ when type == typeof(string) => "text",
             _ when type == typeof(TimeSpan) => "interval",
+            _ when type == typeof(uint) => "xid",
             _ => base.MakeTypeName(type)
         };
     }
@@ -171,6 +181,12 @@ public sealed class PostgresDialect : SqlDialectBase
     /// on a server without the extension it is an ordinary comment.
     /// </summary>
     public override bool SupportsQueryHints => true;
+
+    /// <summary>PostgreSQL renders join/subquery/tables-in-scope hints as one <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsInlineHints => true;
+
+    /// <summary>PostgreSQL expresses the subquery hint through the same <c>/*+ ... */</c> comment.</summary>
+    public override bool SupportsSubQueryHints => true;
 
     /// <summary>
     /// Renders the statement-level hints as a <c>/*+ ... */</c> comment immediately after the top-level

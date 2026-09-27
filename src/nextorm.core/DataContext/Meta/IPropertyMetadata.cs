@@ -84,6 +84,27 @@ public interface IPropertyMetadata
     int DurationPrecision => 0;
 
     /// <summary>
+    /// The decimal precision declared for the property (the total number of digits), or
+    /// <see langword="null"/> when the bound column type is not <see cref="decimal"/> or no precision is
+    /// declared. Declared with <see cref="DecimalPrecisionAttribute"/> or set fluently with
+    /// <see cref="EntityPropertyBuilder{T}.DecimalPrecision(int, int)"/>. A provider that needs a column
+    /// precision (for example the table-valued parameter column metadata) uses it; otherwise the
+    /// provider default applies. The default implementation returns <see langword="null"/> so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    int? DecimalPrecision => null;
+
+    /// <summary>
+    /// The decimal scale declared for the property (the number of digits to the right of the decimal
+    /// point), or <see langword="null"/> when the bound column type is not <see cref="decimal"/> or no
+    /// scale is declared. Declared together with <see cref="DecimalPrecision"/> with
+    /// <see cref="DecimalPrecisionAttribute"/> or set fluently with
+    /// <see cref="EntityPropertyBuilder{T}.DecimalPrecision(int, int)"/>. The default implementation
+    /// returns <see langword="null"/> so existing external implementations keep compiling.
+    /// </summary>
+    int? DecimalScale => null;
+
+    /// <summary>
     /// The provider-native collation declared for the property's column, or <see langword="null"/>
     /// when the column follows the database default. Declared with <see cref="CollationAttribute"/> or
     /// set fluently with <see cref="EntityPropertyBuilder{T}.Collation(string)"/>. The value is applied

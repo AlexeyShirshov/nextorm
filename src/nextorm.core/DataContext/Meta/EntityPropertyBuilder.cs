@@ -16,6 +16,8 @@ public class EntityPropertyBuilder<T>
     private bool _isComputed;
     private DurationUnit? _durationUnit;
     private int _durationPrecision;
+    private int? _decimalPrecision;
+    private int? _decimalScale;
     private string? _collation;
     private IPropertyValueConverter? _converter;
     private JsonColumnOptions? _jsonOptions;
@@ -103,6 +105,24 @@ public class EntityPropertyBuilder<T>
     public EntityPropertyBuilder<T> Collation(string collation)
     {
         _collation = collation;
+        return this;
+    }
+
+    /// <summary>
+    /// Declares the decimal precision and scale of the selected property. The pair is read by
+    /// <see cref="IPropertyMetadata.DecimalPrecision"/>/<see cref="IPropertyMetadata.DecimalScale"/> and
+    /// used where a provider needs the declared precision/scale (for example the column metadata of a
+    /// table-valued parameter). The pair is only recorded here; it is validated by <see cref="Build"/>
+    /// against the type actually bound for the column (precision 1..38, scale 0..precision, and a bound
+    /// provider type of <see cref="decimal"/>).
+    /// </summary>
+    /// <param name="precision">The total number of decimal digits (1 to 38).</param>
+    /// <param name="scale">The number of digits to the right of the decimal point (0 to <paramref name="precision"/>).</param>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> DecimalPrecision(int precision, int scale)
+    {
+        _decimalPrecision = precision;
+        _decimalScale = scale;
         return this;
     }
 
@@ -218,7 +238,8 @@ public class EntityPropertyBuilder<T>
     /// Resolves the selected property's <see cref="PropertyInfo"/> and produces its mapping metadata.
     /// </summary>
     /// <returns>The property's mapping metadata.</returns>
-    /// <exception cref="InvalidOperationException">The selector does not produce a <see cref="PropertyInfo"/>, or the converter's model type does not match the property type.</exception>
+    /// <exception cref="InvalidOperationException">The selector does not produce a <see cref="PropertyInfo"/>, the converter's model type does not match the property type, or <see cref="DecimalPrecision(int, int)"/> was declared with a bound provider type that is not <see cref="decimal"/> (a converter to text or a JSON column) or as a partial pair.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><see cref="DecimalPrecision(int, int)"/> declared a precision or scale outside its allowed range (precision 1..38, scale 0..precision).</exception>
     public IPropertyMetadata Build()
     {
         var miVisitor = new MemberExpressionVisitor();
@@ -232,7 +253,8 @@ public class EntityPropertyBuilder<T>
             throw new InvalidOperationException($"Property '{pi.Name}' cannot be mapped with both RangeColumns and a value/JSON converter.");
         if (_rangeColumns is not null && !RangeTypeFacts.IsRange(pi.PropertyType))
             throw new InvalidOperationException($"Property '{pi.Name}' is mapped with RangeColumns but its type {pi.PropertyType} is not Range<T>.");
-        var r = new PropertyMetadata() { ColumnName = _rangeColumns?.LowerColumn ?? _columnName!, PropertyInfo = pi, IsColumnNameAuto = false, IsKey = _isKey, IsIdentity = _isIdentity, IsComputed = _isComputed, DurationUnit = _durationUnit, DurationPrecision = _durationPrecision, Collation = _collation, Converter = converter, RangeColumns = _rangeColumns };
+        DecimalPrecisionRules.Validate(converter?.ProviderType ?? pi.PropertyType, pi.Name, _decimalPrecision, _decimalScale);
+        var r = new PropertyMetadata() { ColumnName = _rangeColumns?.LowerColumn ?? _columnName ?? pi.Name, PropertyInfo = pi, IsColumnNameAuto = _rangeColumns is null && _columnName is null, IsKey = _isKey, IsIdentity = _isIdentity, IsComputed = _isComputed, DurationUnit = _durationUnit, DurationPrecision = _durationPrecision, DecimalPrecision = _decimalPrecision, DecimalScale = _decimalScale, Collation = _collation, Converter = converter, RangeColumns = _rangeColumns };
         return r;
     }
 

@@ -6,7 +6,7 @@
 > предикат `GLOBAL IN`, собственные агрегаты, функции массивов, JSON и словарей, а также табличные
 > функции `numbers`/`zeros`.
 
-**Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Провайдер ClickHouse](../../providers/clickhouse.md)
+**Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Провайдер ClickHouse](../../providers/clickhouse.md)
 
 ## Массивы и `ARRAY JOIN`
 
@@ -47,7 +47,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id, nullableint from complex_entity order by id limit 2 by nullableint
 ```
 
-См. [Сортировка и постраничная выборка](../05-sorting-and-paging.md#limit-by-clickhouse)
+См. [Сортировка и постраничная выборка](../04-sorting-and-paging.md#limit-by-clickhouse)
 ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)).
 
 ## `GROUP BY ... WITH TOTALS`
@@ -68,7 +68,7 @@ var rows = dataContext.From<IComplexEntity>()
 select nullableint, count(*) from complex_entity group by nullableint with totals
 ```
 
-См. [Группировка и агрегаты](../04-grouping-and-aggregates.md#with-totals)
+См. [Группировка и агрегаты](../03-grouping-and-aggregates.md#with-totals)
 ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals)). Официальный
 `ClickHouse.Driver` возвращает блок итогов отдельно и не отдаёт его через `IDataReader`, поэтому
 материализуются только строки групп.
@@ -91,7 +91,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-См. [Хинты запросов](../17-query-hints.md#модификаторы-запроса-clickhouse)
+См. [Хинты запросов](../15-query-hints.md#модификаторы-запроса-clickhouse)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` требуют движок таблицы, который их поддерживает, — движок `Memory` отклоняет оба.
 
@@ -113,7 +113,7 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id, t2.somestring from simple_entity as `t1` global left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-См. [Соединения](../03-joins.md#специфичные-для-провайдера-модификаторы-соединения-clickhouse)
+См. [Соединения](../02-joins.md#специфичные-для-провайдера-модификаторы-соединения-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, `ASOF` требует одну
 колонку равенства и завершающее неравенство; `GLOBAL` рассылает правую сторону в распределённых
@@ -139,7 +139,7 @@ var ids = dataContext.From<ISimpleEntity>()
 select id from simple_entity where global in (@p0, @p1)
 ```
 
-См. [Фильтрация](../02-filtering-where.md#global-in-clickhouse)
+См. [Фильтрация](../01-filtering-where.md#global-in-clickhouse)
 ([`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates)).
 
 ## Агрегаты
@@ -168,7 +168,7 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 `DbDataReader.GetFieldValue<ulong>`, поэтому нормализующее приведение нужно только результатам функций
 выше.
 
-См. [Группировка и агрегаты](../04-grouping-and-aggregates.md).
+См. [Группировка и агрегаты](../03-grouping-and-aggregates.md).
 
 ## Нативные скалярные функции, Map и хэши
 
@@ -234,7 +234,7 @@ var rows = dataContext.From<Event>()
   а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
   `System.Tuple<...>`); `untuple` не поддерживается.
 
-См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../18-json.md)
+См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../16-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Табличные функции
@@ -250,7 +250,7 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
     .ToList();
 ```
 
-См. [Табличные функции](../13-table-valued-functions.md).
+См. [Табличные функции](../11-table-valued-functions.md).
 
 ## Пока не поддерживается
 

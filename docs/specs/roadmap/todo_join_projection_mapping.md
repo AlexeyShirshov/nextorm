@@ -6,7 +6,7 @@
 > `/home/alex/sources/nextorm-worktrees/poc-sourcegen` (Option A, source gen).
 > Связано: [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §6, строка 2
 > «Join arity > 3 (4..8)»; текущий потолок зафиксирован в
-> [`docs/guide/03-joins.md`](../../guide/03-joins.md) (+RU).
+> [`docs/guide/03-joins.md`](../../guide/02-joins.md) (+RU).
 
 ## Пункт и цель
 

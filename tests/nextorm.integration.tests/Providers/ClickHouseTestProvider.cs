@@ -42,8 +42,13 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     public bool SupportsCreateTableAsSelect => true;
     public bool SupportsTemporaryCreateTableAsSelect => false;
     public bool SupportsBatch => false;
+    public bool SupportsStoredProcedures => false;
+
+    /// <summary>ClickHouse emulates a table parameter with a native array expanded server-side with <c>arrayJoin(@p)</c>.</summary>
+    public bool SupportsTableValuedParameters => true;
     public bool SupportsTransactions => false;
     public bool SupportsRegex => true;
+    public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for ClickHouse.";
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";

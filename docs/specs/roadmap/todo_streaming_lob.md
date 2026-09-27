@@ -2,8 +2,74 @@
 
 > Рабочий план (design RFC). Источник: GitHub issue
 > [#27 «TODO: BLOB/CLOB support»](https://github.com/AlexeyShirshov/nextorm/issues/27),
-> milestone `1.1-a.1`. Продолжение уже сделанной буферизованной поддержки `byte[]`
+> milestone `1.0.8-b`. Продолжение уже сделанной буферизованной поддержки `byte[]`
 > (`CommonTestSuite.Binary.cs`): здесь речь только о **потоковом** чтении больших значений.
+
+> **Закрыто (2026-09-27).** Issue #27 закрыт: ядро фаз 1–2 отгружено — скалярный стриминг
+> `ToStream`/`ToTextReader` (+async) на PostgreSQL/SQL Server/SQLite, `ToDataReader`/`ToDataReaderAsync`
+> фазы 2 на PostgreSQL/SQL Server, in-memory скалярный стриминг (цикл 5); критерий приёмки выполнен.
+> Невыполнимый/без-потребителя остаток вынесен scope-reduction'ом в follow-up:
+> [#100](https://github.com/AlexeyShirshov/nextorm/issues/100) (server-side LOB chunking —
+> MySQL/MariaDB streaming и чанковые `GetBytes`/`GetChars`) и
+> [#101](https://github.com/AlexeyShirshov/nextorm/issues/101) (`TableAlias`-аксессоры и фаза 3).
+> Детали — раздел «Follow-up» ниже; status-файлы циклов 1–5 удалены при закрытии (перенос — регистр
+> `docs/specs/design/code-smells-review.md` §«Перенесено из status закрытого потока `lob-streaming`» и
+> раздел «Deferred + триггер» ниже).
+
+> **Пересмотр 2026-09-26.** Терминалы вешаются только на `QueryCommand<T>` (не на
+> `EntityBuilder<TResult>`). Владение reader'ом переиспользует владельца из **фазы 0**
+> `todo_stored_procedures.md` с per-call `DbCommand` — это снимает
+> конфликт с общим кэшированным `DbCommand`. Стриминг-дискриминатор входит в **ключ плана**, а
+> `Behavior |= CommandBehavior.SequentialAccess` строится в `QueryPlanner` при создании команды
+> (`Behavior` — readonly). Sync-терминалы принимают `params ReadOnlySpan<object?>`. Зависимость от #70
+> (фаза 0) — первой. **Готово (2026-09-26):** фаза 0 #70 реализована — `CommandReaderOwner` владеет
+> per-call `DbCommand` + `DbDataReader`; зависимость снята.
+
+> **Отгружено (2026-09-27), фаза 1.** Терминалы `ToStream`/`ToStreamAsync`/`ToTextReader`/`ToTextReaderAsync`
+> на `QueryCommand<T>` реализованы для **PostgreSQL и SQL Server** (`CommandBehavior.SequentialAccess`,
+> владение reader'ом и per-call командой до `Dispose`, ровно одна колонка `byte[]`/`string`). Остальные
+> провайдеры (SQLite, MySQL/MariaDB, ClickHouse, in-memory) в этом срезе отклоняют терминал через
+> `NotSupportedException`. Фазы 2 (`ToDataReader`, чанковое чтение) и 3 остаются планом; issue #27 открыт.
+> Верификация цикла 1 — `docs/specs/status/lob-streaming-1.md`; перф-замер — `docs/specs/performance/lob-streaming-benchmarks.md`.
+
+> **Ревизия цикла 2 (2026-09-27, experiment-only).** Открытые вопросы №1 и №2 закрыты на реальных
+> драйверах: MySQL/MariaDB — **NEGATIVE** (MySqlConnector 2.6.2 буферизует значение; остаются
+> `NotSupportedException`), SQLite — **POSITIVE только для проекции `payload, rowid`** (настоящий
+> `SqliteBlob`, память O(buffer)). Реализация SQLite-шва — цикл 3; product-код циклом 2 не менялся.
+> Логи/вердикт — `docs/specs/status/lob-streaming-2.md`.
+
+> **Отгружено (2026-09-27), цикл 3 — SQLite binary + text.** SQLite подключён к существующим
+> терминалам `ToStream`/`ToTextReader` (+async) через **trailing locator**: новый `ISqlDialect.LobLocatorColumn`
+> (`string?`, DIM `=> null;`), `SqlDialectBase` — `virtual string? => null;`, `SqliteDialect` —
+> `SupportsSequentialAccess => true` + `LobLocatorColumn => "rowid"`. SQLite LOB-SQL: `SELECT <payload>, rowid FROM ...`,
+> payload остаётся **ordinal 0**. Провайдеры: **PostgreSQL, SQL Server, SQLite — поддержаны**;
+> **MySQL/MariaDB — нет** (MySqlConnector буферизует значение — результат цикла 2); **ClickHouse/in-memory —
+> `NotSupportedException`**. Ограничения SQLite (внутренняя заметка): raw `WithSql` с одной колонкой →
+> `NotSupportedException` (locator некуда безопасно добавить), raw ≥2 колонок → `InvalidOperationException`;
+> join/multi-source/`DISTINCT`/`UNION`/`GROUP BY`/агрегаты — не поддержаны и могут падать драйверной ошибкой
+> (`no such column: rowid` или иной), **deferred** с триггером «конкретный пользовательский сценарий».
+> Фазы 2 (`ToDataReader`) и 3 (проекция) остаются планом; issue #27 открыт.
+> Верификация цикла — `docs/specs/status/lob-streaming-3.md`.
+
+> **Отгружено (2026-09-27), цикл 5 — in-memory (срез A).** Скалярные терминалы `ToStream`/`ToStreamAsync`/
+> `ToTextReader`/`ToTextReaderAsync` работают на провайдере **in-memory**: поскольку `DbDataReader` нет,
+> терминал возвращает обычный BCL-объект над единственным материализованным значением — `MemoryStream`
+> над `byte[]` и `StringReader` над `string` (владение у вызывающего, на контексте освобождать нечего).
+> Пустой результат и `NULL` в первой строке дают `Stream.Null`/`TextReader.Null`; при нескольких строках
+> читается только первая. `ToDataReader`/`ToDataReaderAsync` на in-memory остаются `NotSupportedException`
+> (нет `DbDataReader`). Чанковые `GetBytes`/`GetChars`, `TableAlias`-аксессоры и фаза 3 остаются планом;
+> issue #27 открыт. Верификация цикла — `docs/specs/status/lob-streaming-5.md`.
+
+> **Отгружено (2026-09-27), цикл 4 — `ToDataReader`/`ToDataReaderAsync`.** Фаза 2 частично:
+> терминалы `ToDataReader<TResult>`/`ToDataReaderAsync<TResult>` (sync+async, с/без
+> `CancellationToken`) на `QueryCommand<TResult>` возвращают владеемый вызывающим forward-only
+> `DbDataReader` (`internal sealed LobDataReader`, владеет `CommandReaderOwner`). Поддержаны
+> **PostgreSQL/SQL Server** (нужен `SupportsSequentialAccess`); **SQLite — fail-closed**
+> (`NotSupportedException`: локатор `rowid` в general multi-column reader этим циклом не поддержан);
+> **MySQL/MariaDB/ClickHouse — `NotSupportedException`** (in-memory поддержан циклом 5). Чанковые
+> `GetBytes`/`GetChars` и MySQL/MariaDB-streaming вынесены в #100, `TableAlias`-аксессоры и фаза 3 —
+> в #101; issue #27 **закрыт**.
+> Верификация цикла — `docs/specs/status/lob-streaming-4.md`.
 
 ## Пункт и цель
 
@@ -47,8 +113,9 @@
 - Microsoft.Data.SqlClient 6.1.7: `GetStream`/`GetTextReader`/`GetChars` есть; для потокового
   поведения обязателен `CommandBehavior.SequentialAccess`, иначе значение буферизуется.
 - Npgsql 10.0.3: `GetStream`/`GetTextReader`/`GetChars` поддерживаются.
-- MySqlConnector 2.6.2: `GetBytes`/`GetChars` есть; поддержку `GetStream`/`GetTextReader` нужно
-  подтвердить тестом (открытый вопрос №1).
+- MySqlConnector 2.6.2: `GetBytes`/`GetChars` есть; `GetStream`/`GetTextReader` **буферизуют**
+  значение целиком (`MemoryStream` поверх буферизованной строки / `StringReader(GetString())`),
+  `SequentialAccess` — no-op (подтверждено циклом 2, вопрос №1 закрыт).
 - ClickHouse.Driver 1.4.0: членов потокового чтения нет — `NotSupportedException`.
 
 ## Дизайн
@@ -83,26 +150,33 @@ Stream s2 = await ctx.From<BinaryEntity>().Where(x => x.Id == 1).Select(x => x.D
 Черновые сигнатуры:
 
 ```csharp
-public static Stream ToStream<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
-public static Stream ToStream<TResult>(this EntityBuilder<TResult> builder, CancellationToken cancellationToken, params object[] @params);
-public static Task<Stream> ToStreamAsync<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
-public static Task<Stream> ToStreamAsync<TResult>(this EntityBuilder<TResult> builder, CancellationToken cancellationToken, params object[] @params);
+public static Stream ToStream(this QueryCommand<byte[]> command, params ReadOnlySpan<object?> @params);
+public static Stream ToStream(this QueryCommand<byte[]> command, CancellationToken cancellationToken, params ReadOnlySpan<object?> @params);
+public static Task<Stream> ToStreamAsync(this QueryCommand<byte[]> command, params object[] @params);
+public static Task<Stream> ToStreamAsync(this QueryCommand<byte[]> command, CancellationToken cancellationToken, params object[] @params);
 
-public static TextReader ToTextReader<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
-public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TResult> builder, params object[] @params);
+public static TextReader ToTextReader(this QueryCommand<string> command, params ReadOnlySpan<object?> @params);
+public static Task<TextReader> ToTextReaderAsync(this QueryCommand<string> command, params object[] @params);
 ```
 
-Аналогичные перегрузки для `EntityBuilder<TResult>` и `QueryCommand<TResult>` (по образцу
-`ToAsyncEnumerable` в `Builders/EntityBuilderExtensions.cs:14-16`).
+Терминалы — **только** на `QueryCommand<TResult>` (не на `EntityBuilder<TResult>`): `Select` возвращает
+`QueryCommand<TResult>` (`src/nextorm.core/Builders/EntityBuilder.cs:1952`), поэтому пример выше
+разрешается на этом ресивере. Sync-терминалы принимают `params ReadOnlySpan<object?>` (sync-образец —
+`Builders/EntityBuilderExtensions.cs:181`); `ToAsyncEnumerable` — `Builders/EntityBuilderExtensions.cs:14-16`.
 
 Правила:
 
-- проекция обязана быть **одним** столбцом типа `byte[]`/`string`; иначе — `InvalidArgumentException`
+- проекция обязана быть **одним** столбцом типа `byte[]`/`string`; иначе — `InvalidOperationException`
   с подсказкой использовать `ToDataReader` (фаза 2);
 - терминал не идёт через `RowMapperFactory`, а читает `reader.GetStream(0)`/`GetTextReader(0)`
-  напрямую — кэш мапперов и ключ плана не меняются;
-- владение: поток-обёртка при `Dispose`/`DisposeAsync` освобождает `DbDataReader` и `DbCommand`
-  (соединение возвращается в пул); контекст должен оставаться живым;
+  напрямую; стриминг-дискриминатор входит в **ключ плана** (см. диалектный план), поэтому тот же
+  SQL-shape не переиспользуется с буферизованным `Behavior=0`;
+- владение: поток-обёртка — это **владелец reader'а из фазы 0** #70
+  (`todo_stored_procedures.md`): держит `DbDataReader` + **per-call**
+  `DbCommand` и при `Dispose`/`DisposeAsync` освобождает их (соединение возвращается в пул и остаётся
+  во владении контекста). Общий кэшированный `DbCommand` из `DbPreparedQueryCommand`
+  (`src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs:21`) не используется — нет конфликта с
+  повторным исполнением формы; контекст должен оставаться живым;
 - исключение «владения»: если контекст `Dispose`-нули раньше потока — операция чтения бросает
   понятную ошибку.
 
@@ -129,22 +203,24 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
   `ClickHouseDialect` — `false` (как `SupportsCommandBehaviorSingleRow`,
   `nextorm.clickhouse/ClickHouseDialect.cs:133-135`).
 - Опционально `SupportsGetStream`/`SupportsGetTextReader` для точечных различий драйверов.
-- `DbPreparedQueryCommand.Behavior` дополняется `| CommandBehavior.SequentialAccess`, когда
-  prepared-команда помечена как LOB-стриминг (рядом с `SingleRow`, `DbPreparedQueryCommand.cs:28-29`;
-  решение — в `QueryPlanner.cs:132-137`).
-- SQLite: терминал должен либо добавить `rowid` в SELECT (для `SqliteBlob`), либо пойти чанковым
-  `GetBytes` — открытый вопрос №2.
+- `Behavior` — `readonly`, выставляется только в ctor (`DbPreparedQueryCommand.cs:16,75-76`), поэтому
+  `| CommandBehavior.SequentialAccess` строится в `QueryPlanner` при создании команды
+  (`PreparedCommandOptions(...)`, `QueryPlanner.cs:451`), а не «дополняется» после. Стриминг-
+  дискриминатор входит в **ключ плана**, иначе тот же SQL-shape вернётся с буферизованным `Behavior=0`.
+- SQLite: терминал добавляет **trailing `rowid`** в SELECT через LOB-only шов проекции (payload
+  остаётся ordinal 0) для настоящего `SqliteBlob`; view/`WITHOUT ROWID` — fail-closed. Чанковый
+  `GetBytes` **отклонён** (вопрос №2 закрыт циклом 2; реализация — цикл 3).
 
 ## Провайдерная матрица
 
 | Провайдер | `GetStream` | `GetTextReader` | `GetBytes`/`GetChars` | Комментарий |
 |---|---|---|---|---|
-| SQLite | да, `SqliteBlob` при `rowid` в проекции, иначе `MemoryStream` | да | да | true streaming требует `rowid` |
+| SQLite | да, `SqliteBlob` (trailing `rowid`) | да | да | true streaming через `LobLocatorColumn => "rowid"`; **отгружено циклом 3** |
 | PostgreSQL (Npgsql) | да | да | да | |
 | SQL Server | да (нужен `SequentialAccess`) | да | да | без `SequentialAccess` буферизует |
-| MySQL / MariaDB (MySqlConnector) | подтвердить тестом | подтвердить тестом | да | |
+| MySQL / MariaDB (MySqlConnector) | нет (буферизует в `MemoryStream`) | нет (`StringReader(GetString())`) | да | цикл 2 → `NotSupportedException` |
 | ClickHouse | нет | нет | нет | `NotSupportedException` |
-| In-memory | `MemoryStream` над значением (фаза 2) | `StringReader` (фаза 2) | — | фаза 1 — `NotSupportedException` |
+| In-memory | `MemoryStream` над значением — **✅ цикл 5** | `StringReader` — **✅ цикл 5** | — | скалярные терминалы поддержаны (срез A); `ToDataReader` — `NotSupportedException` (нет `DbDataReader`) |
 
 ## Ограничения и цена
 
@@ -165,13 +241,62 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
 
 ## Этапы внедрения
 
-- **Фаза 1 (MVP):** `SupportsSequentialAccess`, `ToStream`/`ToTextReader` (+async) для одного
-  `byte[]`/`string`-столбца, владение ридером/командой, SQLite-обработка `rowid`,
-  ClickHouse/in-memory — `NotSupportedException`.
-- **Фаза 2:** `ToDataReader`, чанковые `GetBytes`/`GetChars`, `TableAlias`-аксессоры, in-memory.
-- **Фаза 3 (опционально):** `Stream`/`TextReader` в проекции строкового стрима с контрактом
-  времени жизни.
+Зависимость: фаза 1 может идти параллельно с #70, но **требует владельца reader'а из фазы 0**
+`todo_stored_procedures.md` (per-call `DbCommand`), поэтому фаза 0 #70 —
+первой.
+
+- **Фаза 1 (MVP) — ✅ отгружена (2026-09-27, PostgreSQL + SQL Server):** `SupportsSequentialAccess`, `ToStream`/`ToTextReader` (+async) для одного
+   `byte[]`/`string`-столбца, владение ридером/командой; SQLite-обработка `rowid` подтверждена циклом 2
+   (positive) и **реализована в цикле 3**; ClickHouse — `NotSupportedException`, а in-memory добавлен срезом A в цикле 5.
+- **Фаза 2 — частично ✅ (2026-09-27, циклы 4–5):** `ToDataReader`/`ToDataReaderAsync` отгружены для
+  PostgreSQL/SQL Server; **SQLite — fail-closed** (general multi-column reader с локатором `rowid`
+  не поддержан). **In-memory streaming (срез A) ✅ цикл 5:** скалярные `ToStream`/`ToTextReader` (+async)
+  возвращают `MemoryStream`/`StringReader` над материализованным значением (пустой результат/NULL →
+  `Stream.Null`/`TextReader.Null`). Чанковые `GetBytes`/`GetChars` и MySQL/MariaDB-streaming вынесены в
+  **#100**, `TableAlias`-аксессоры — в **#101**.
+- **Фаза 3 (опционально) — вынесена в #101:** `Stream`/`TextReader` в проекции строкового стрима с
+  контрактом времени жизни.
 - **Вне области:** запись/`BulkCopy`, сжатие, шифрование потока, серверные LOB-операции.
+
+## Follow-up (scope-reduction при закрытии #27, 2026-09-27)
+
+Отгружено по #27: фаза 1 (PostgreSQL, SQL Server, SQLite — скалярный `ToStream`/`ToTextReader`),
+фаза 2 `ToDataReader`/`ToDataReaderAsync` (PostgreSQL/SQL Server; SQLite/in-memory — fail-closed),
+in-memory скалярный стриминг (цикл 5). Status-файлы циклов 1–5 удалены при закрытии #27; их история —
+разделы «Цикл #27 — …» в `docs/specs/design/code-smells-review.md`.
+
+Невыполнимые или не имеющие потребителя пункты чеклиста вынесены:
+
+- **[#100](https://github.com/AlexeyShirshov/nextorm/issues/100) — server-side LOB chunking.**
+  MySQL/MariaDB streaming (драйвер `MySqlConnector 2.6.2` буферизует значение; нужен драйвер со
+  стримингом либо `SUBSTRING`-чанки) + публичные чанковые `GetBytes`/`GetChars` (отвергнуты для SQLite
+  циклом 2, оставлены для остальных сценариев). Триггер: драйвер получает настоящий стриминг либо
+  появляется server-side chunking design.
+- **[#101](https://github.com/AlexeyShirshov/nextorm/issues/101) — `TableAlias`-аксессоры и фаза 3.**
+  `TableAlias.GetStream`/`GetTextReader`/`GetChars` (named-column режим) и опциональная фаза 3
+  (`Stream`/`TextReader` в проекции строкового стрима). Триггер: конкретный пользовательский сценарий.
+
+## Deferred + триггер (перенесено из удалённых status-файлов, 2026-09-27)
+
+Открытые пункты `docs/specs/status/lob-streaming-{1..5}.md` (удалены при закрытии #27; вынесенное в
+#100/#101 здесь не дублируется). Зеркало — `docs/specs/design/code-smells-review.md`
+§«Перенесено из status закрытого потока `lob-streaming`».
+
+- **Mid-read cancel.** Токен действует только на открытие ридера; чтение уже возвращённого
+  `Stream`/`TextReader` не отменяется. Триггер: следующая правка LOB-ридера.
+- **SQLite locator-backed multi-column `ToDataReader`.** Нужна отдельная модель скрытия `rowid` +
+  доказательство порядка чтения. Триггер: конкретный пользовательский сценарий.
+- **Двойное освобождение inner reader** (`LobDataReader.Dispose` + `CommandReaderOwner.Dispose`) —
+  безвредно (идемпотентно по ADO.NET). Триггер: следующая правка владения ридером.
+- **`GetSchemaTable()` не делегируется** во внутренний ридер. Триггер: первый потребитель
+  schema-метаданных.
+- **DRY: четыре почти идентичные in-memory-ветки** (`ToStream`/`ToTextReader` sync/async) — разные
+  sentinel'ы и типы. Триггер: пятый терминал или новая настройка вида `writable`.
+- **`(object[])parameters` на async-пути** — корректный идиом; чистый фикс (расширение публичного
+  `ExecuteScalarAsync` до `object?[]`) — отдельное cross-cutting изменение. Триггер: следующий проход
+  по nullable-аннотациям.
+- **Ограничение (не TODO):** многоколоночный `ToDataReader` на in-memory остаётся
+  `NotSupportedException` (у in-memory нет `DbDataReader`); зафиксировано в публичных доках EN+RU.
 
 ## План тестов
 
@@ -190,10 +315,24 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
 
 ## Открытые вопросы
 
-1. Поддерживает ли `MySqlConnector.GetStream`/`GetTextReader` потоково и нужен ли ему
-   `SequentialAccess` — подтвердить тестом до реализации.
-2. SQLite: добавлять `rowid` в SELECT автоматически (риск конфликта с явной проекцией/`DISTINCT`)
-   или всегда идти чанковым `GetBytes` (проще, но не «настоящий» `SqliteBlob`).
+> **Цикл 2 (2026-09-27, experiment-only):** вопросы №1 и №2 закрыты на реальных драйверах.
+> **Цикл 3 (2026-09-27):** оба закрытия **реализованы** — MySQL/MariaDB остаются unsupported,
+> SQLite выбран путь trailing `rowid` (не чанковый `GetBytes`). Логи и вердикт — `docs/specs/status/lob-streaming-2.md`,
+> верификация реализации — `docs/specs/status/lob-streaming-3.md`.
+
+1. ~~Поддерживает ли `MySqlConnector.GetStream`/`GetTextReader` потоково и нужен ли ему
+   `SequentialAccess`?~~ **Закрыт: NEGATIVE (2026-09-27).** `MySqlConnector 2.6.2` буферизует значение
+   целиком: `GetStream` = `MemoryStream` поверх буферизованной строки, `GetTextReader` =
+   `StringReader(GetString())`, `CommandBehavior.SequentialAccess` — no-op; измеренный alloc ratio
+   1→8 МиБ ≈ **8.0** на `mysql:8.4` и `mariadb:11.4`. MySQL/MariaDB остаются `NotSupportedException`.
+   Новый триггер: драйвер получает настоящий стриминг, либо появляется server-side chunking design
+   (`SUBSTRING`-чанки).
+2. ~~SQLite: добавлять `rowid` в SELECT автоматически или всегда идти чанковым `GetBytes`?~~
+   **Закрыт (2026-09-27): trailing `rowid`.** На `Microsoft.Data.Sqlite 10.0.12` запрос
+   `SELECT payload, rowid FROM t` + `GetStream(0)` возвращает настоящий `SqliteBlob` с памятью
+   O(buffer) (allocated флэт ~2.9 КБ на 1/8/32 МиБ против `MemoryStream` ≈ размер без `rowid`);
+   `view`/`WITHOUT ROWID` падают fail-closed (`SqliteException: no such column: rowid`).
+   Проекция-шов сохраняет payload в ordinal 0; чанковый `GetBytes` **не выбран**. **Реализовано (цикл 3).**
 3. Минимальный API фазы 1: только `ToStream`/`ToTextReader` или сразу `ToDataReader`.
 4. Имена обёрток: `NextOrmStream`/`NextOrmTextReader` vs `LobStream`/`LobTextReader`; `ToStream` vs
    `AsStream`.
@@ -236,3 +375,8 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
 - **[PERF] ℹ️** Sync-перегрузка `ToStream(..., params object[] @params)` (`:86-87`) аллоцирует массив; sync-терминалы проекта используют `params ReadOnlySpan<object?>` (`src/nextorm.core/Builders/EntityBuilderExtensions.cs:181`). Fix: `params ReadOnlySpan<object?>`.
 - **[OCP] ℹ️** LOB-чтение идёт напрямую, минуя `ResultSetEnumerator`, поэтому `IQueryInterceptor.CommandExecuting/Executed/Failed` не поднимутся, хотя гайд обещает покрытие (`docs/guide/27-interceptors.md`). Fix: поднимать события через `InterceptorHooks` (`DataContext/DataContextDependencies.cs:86-124`).
 - **ℹ️** Устаревшие якоря: `SelectExpression.cs:79-82` → `:119-122`; `:111-116` → `:155-162`; `QueryPlanner.cs:132-137` → `:437-439`.
+
+> Обновление 2026-09-26: блокер L1 (терминал на `EntityBuilder`) снят — терминалы только на
+> `QueryCommand<T>`. Конфликт владения с кэшированным `DbCommand` снят общим владельцем reader'а фазы 0
+> #70 (per-call `DbCommand`). `Behavior` строится в `QueryPlanner` и входит в ключ плана. Sync-терминалы
+> принимают `params ReadOnlySpan<object?>`.

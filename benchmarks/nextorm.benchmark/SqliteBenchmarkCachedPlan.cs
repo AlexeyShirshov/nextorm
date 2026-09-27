@@ -41,6 +41,7 @@ public class SqliteBenchmarkCachedPlan
 
     // DB-bound baseline: prepared command, no plan lookup and no parameter re-extraction.
     [Benchmark(Baseline = true)]
+    [BenchmarkCategory("acceptance")]
     public int Prepared_ToList()
     {
         var sum = 0;
@@ -55,6 +56,7 @@ public class SqliteBenchmarkCachedPlan
     // DB-bound cached query: identical SQL execution, but pays plan lookup + ExtractParams each run.
     // Delta vs Prepared_ToList is the per-execution cached-query overhead (DB cost cancels out).
     [Benchmark]
+    [BenchmarkCategory("acceptance")]
     public int Cached_ToList()
     {
         var sum = 0;
@@ -68,6 +70,7 @@ public class SqliteBenchmarkCachedPlan
 
     // No DB: isolates plan-cache lookup + parameter extraction (ExtractParams).
     [Benchmark]
+    [BenchmarkCategory("acceptance")]
     public IPreparedQueryCommand<int> Cached_PlanOnly_Param()
     {
         IPreparedQueryCommand<int>? r = null;

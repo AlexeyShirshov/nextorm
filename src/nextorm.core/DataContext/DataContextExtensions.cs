@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
@@ -18,6 +19,64 @@ public static class DataContextExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, QueryDefinition definition)
         => new(dataContext, definition);
+
+    /// <summary>
+    /// Executes a raw command text without parameters. Convenience overload of
+    /// <see cref="IRawCommandExecutor.ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/>.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="sql">The command text to execute.</param>
+    /// <returns>The result, which must be disposed to release the reader and command.</returns>
+    /// <exception cref="NotSupportedException">The context does not support raw SQL execution.</exception>
+    public static ProcedureResult ExecuteRaw(this IDataContext dataContext, string sql)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        return dataContext.ExecuteRaw(sql, Array.Empty<ProcedureParameter>());
+    }
+
+    /// <summary>
+    /// Asynchronously executes a raw command text without parameters. Convenience overload of
+    /// <see cref="IRawCommandExecutor.ExecuteRawAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="sql">The command text to execute.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    /// <exception cref="NotSupportedException">The context does not support raw SQL execution.</exception>
+    public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContext, string sql, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        return dataContext.ExecuteRawAsync(sql, Array.Empty<ProcedureParameter>(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes a stored procedure without parameters. Convenience overload of
+    /// <see cref="IRawCommandExecutor.ExecuteProcedure(string, IReadOnlyList{ProcedureParameter})"/>.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The procedure name, passed to the provider as-is.</param>
+    /// <returns>The result, which must be disposed to release the reader and command.</returns>
+    /// <exception cref="NotSupportedException">The context does not support stored procedures.</exception>
+    public static ProcedureResult ExecuteProcedure(this IDataContext dataContext, string name)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        return dataContext.ExecuteProcedure(name, Array.Empty<ProcedureParameter>());
+    }
+
+    /// <summary>
+    /// Asynchronously executes a stored procedure without parameters. Convenience overload of
+    /// <see cref="IRawCommandExecutor.ExecuteProcedureAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The procedure name, passed to the provider as-is.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    /// <exception cref="NotSupportedException">The context does not support stored procedures.</exception>
+    public static Task<ProcedureResult> ExecuteProcedureAsync(this IDataContext dataContext, string name, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        return dataContext.ExecuteProcedureAsync(name, Array.Empty<ProcedureParameter>(), cancellationToken);
+    }
 
     /// <summary>
     /// Starts an <c>INSERT</c> over the mapping of <typeparamref name="TEntity"/> and returns its fluent
@@ -185,6 +244,49 @@ public static class DataContextExtensions
             DataContextCache.Metadata[typeof(TEntity)] = metadata;
         }
 
+        return metadata;
+    }
+
+    /// <summary>
+    /// Resolves the mapping of an entity type known only at run time (used by the table-valued
+    /// parameter binder, where the row type is carried as <see cref="Type"/>). A configured mapping
+    /// (registered through <c>From&lt;T&gt;(cfg)</c> or any other mapping entry point, and held in
+    /// <see cref="DataContextCache.Metadata"/>) is reused; otherwise the metadata is auto-built from
+    /// the CLR type and cached in the separate <see cref="DataContextCache.TvpMetadata"/> cache.
+    /// <para>
+    /// The auto-built result is deliberately <b>not</b> written to the configured metadata cache: a
+    /// later fluent registration for the same type must still be able to register, and the next bind
+    /// must pick it up.
+    /// </para>
+    /// </summary>
+    /// <param name="entityType">The entity type to resolve.</param>
+    /// <returns>The resolved entity metadata.</returns>
+    /// <exception cref="InvalidOperationException">The metadata builder for the type could not be created or produced no metadata, or a mapping declares a decimal precision/scale whose bound provider type is not decimal or as a partial pair.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A mapping declares a decimal precision/scale outside the allowed range (precision 1..38, scale 0..precision); propagated unwrapped from the reflected auto-build.</exception>
+    internal static IEntityMetadata ResolveMetadata(Type entityType)
+    {
+        ArgumentNullException.ThrowIfNull(entityType);
+
+        // A configured mapping always wins, whether it was registered before or after an auto bind.
+        if (DataContextCache.Metadata.TryGetValue(entityType, out var metadata) && !string.IsNullOrEmpty(metadata.TableName))
+            return metadata;
+
+        // The auto path keeps a private cache so it never shadows a later configured registration.
+        if (DataContextCache.TvpMetadata.TryGetValue(entityType, out var autoMetadata))
+            return autoMetadata;
+
+        var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(entityType);
+        var builder = Activator.CreateInstance(builderType)
+            ?? throw new InvalidOperationException($"Cannot create an entity metadata builder for {entityType.Name}.");
+        var build = builderType.GetMethod(nameof(EntityMetadataBuilder<object>.Build), Type.EmptyTypes)
+            ?? throw new InvalidOperationException($"The entity metadata builder for {entityType.Name} has no parameterless Build method.");
+
+        // DoNotWrapExceptions keeps a mapping error (for example an out-of-range decimal precision)
+        // observable as its own type instead of a TargetInvocationException, so the reflected auto-build
+        // path reports exactly the same failure as the strongly typed one.
+        metadata = build.Invoke(builder, BindingFlags.DoNotWrapExceptions, null, null, null) as IEntityMetadata
+            ?? throw new InvalidOperationException($"Building entity metadata for {entityType.Name} returned no metadata.");
+        DataContextCache.TvpMetadata[entityType] = metadata;
         return metadata;
     }
 

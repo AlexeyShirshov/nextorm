@@ -69,4 +69,6 @@ internal static class ProjectionAliasCache
 
         return result;
     }
+
+    public static void Clear() => _occurrences.Clear();
 }

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
@@ -53,7 +54,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             optionsBuilder.QuoteIdentifiers,
             optionsBuilder.NamingConvention,
             optionsBuilder.KeywordCase,
-            optionsBuilder.MultilineBatchSql);
+            optionsBuilder.MultilineBatchSql,
+            optionsBuilder.CommandTimeout);
+
+        QueryCacheEnabled = optionsBuilder.QueryCacheEnabled;
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -79,6 +83,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // (F6). Binding the abstract method keeps the provider override on the dispatch path, and a
         // field avoids allocating a delegate per command.
         _createParam = CreateParam;
+        _createProcedureParam = CreateProcedureParameter;
 
         // The execution axis receives everything through its constructor (connection role, parameter
         // factory, logging config, disposal state) so it never sees the concrete context.
@@ -86,6 +91,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             this,
             _connectionManager,
             _createParam,
+            _createProcedureParam,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
             () => _disposed,
             () => _connectionManager.CurrentTransaction,
@@ -103,6 +109,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     }
 
     private readonly Func<string, object?, DbParameter> _createParam;
+    private readonly Func<ProcedureParameter, DbParameter> _createProcedureParam;
+
+    /// <summary>
+    /// Whether prepared plans may be stored in and reused from the plan cache. Initialized from
+    /// <c>DataContextBuilder.UseQueryCache</c> (default <see langword="true"/>); setting it to
+    /// <see langword="false"/> makes every preparation pass <c>storeInCache: false</c> without touching
+    /// the sticky <see cref="QueryCommand.Cache"/> flag on a shared command.
+    /// </summary>
+    public bool QueryCacheEnabled { get; set; } = true;
 
     // Late-bound provider hooks: only the delegates are created in the constructor, never the values.
     private ISqlDialect GetDialect() => Dialect;
@@ -145,6 +160,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// (statements joined on one line with <c>"; "</c>).
     /// </summary>
     public bool MultilineBatchSql => _environment.MultilineBatchSql;
+    /// <summary>
+    /// The context-wide default command timeout in seconds (set with
+    /// <c>DataContextBuilder.UseCommandTimeout</c>), or <see langword="null"/> when no timeout is
+    /// configured and the provider default applies. A command can override it with
+    /// <c>WithCommandTimeout</c>.
+    /// </summary>
+    public int? CommandTimeout => _environment.CommandTimeout;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>
@@ -256,7 +278,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <typeparam name="TResult">The projected result type.</typeparam>
     /// <param name="queryCommand">The command to prepare.</param>
     /// <param name="createEnumerator">When <see langword="true"/>, compiles a streaming row enumerator as part of preparation.</param>
-    /// <param name="storeInCache">When <see langword="true"/>, stores the prepared command in the plan cache.</param>
+    /// <param name="storeInCache">When <see langword="true"/> (and <see cref="QueryCacheEnabled"/> is set), stores the prepared command in the plan cache.</param>
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
@@ -270,7 +292,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
         }
 
-        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cancellationToken);
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, cancellationToken);
     }
 
     // A query that reads a lazy temporary table is not a single statement: the table must be created on
@@ -293,6 +315,33 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         prepared.PendingBatch = BuildTemporaryTableBatch(queryCommand, tempTables);
         return prepared;
     }
+
+    internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        return _executor.OpenLobReader(prepared, @params);
+    }
+
+    internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        return await _executor.OpenLobReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
+    }
+
+    private DbPreparedQueryCommand<TResult> PrepareLobCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
+
+        if (!Dialect.SupportsSequentialAccess)
+            throw new NotSupportedException(
+                $"Streaming LOB terminals (ToStream/ToTextReader) are not supported by the {Dialect.GetType().Name} provider; they require sequential-access support (PostgreSQL, SQL Server or SQLite).");
+
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
+    }
+
+    internal bool IsDisposed => _disposed;
 
     BatchPlan IBatchExecutor.RenderTemporaryTableBatch(QueryCommand command)
     {
@@ -336,6 +385,52 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="value">The parameter value, or <see langword="null"/>.</param>
     /// <returns>A new database parameter.</returns>
     public abstract DbParameter CreateParam(string name, object? value);
+
+    /// <summary>
+    /// Creates a provider-specific parameter from a <see cref="ProcedureParameter"/> descriptor: it
+    /// delegates name/value to <see cref="CreateParam(string, object?)"/> and then applies the
+    /// descriptor's <see cref="ParameterDirection"/>, <see cref="System.Data.DbType"/> and size.
+    /// Providers with extra parameter options (for example SQL Server structured parameters) override
+    /// this.
+    /// </summary>
+    /// <param name="parameter">The parameter descriptor.</param>
+    /// <returns>A new database parameter configured from <paramref name="parameter"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="parameter"/>.<see cref="ProcedureParameter.Name"/> is <see langword="null"/>, empty or whitespace.</exception>
+    /// <exception cref="NotSupportedException">The descriptor requests a structured parameter type the provider does not support.</exception>
+    protected internal virtual DbParameter CreateProcedureParameter(ProcedureParameter parameter)
+    {
+        // Validate the descriptor before any provider work, so a malformed parameter fails with a
+        // clear message and a fresh per-call command is disposed by the existing leak-safe path.
+        ArgumentException.ThrowIfNullOrWhiteSpace(parameter.Name);
+
+        // Reject an unsupported structured/table parameter before touching the provider, so no parameter
+        // is allocated (and no provider-specific side effect runs) for a descriptor we cannot honour.
+        if (parameter.Value is TableParameterValue || parameter.TypeName is not null)
+        {
+            if (!Dialect.SupportsTableValuedParameters)
+                throw new NotSupportedException(
+                    $"{GetType().Name} does not support table-valued parameters. "
+                    + "Use SQL Server (native user-defined table type), or PostgreSQL, MySQL/MariaDB, SQLite or ClickHouse (array/JSON emulation).");
+
+            // A provider that advertises the capability must override CreateProcedureParameter; reaching
+            // the base means its override is missing the table-parameter branch.
+            throw new NotSupportedException(
+                $"{GetType().Name} advertises table-valued parameters but does not implement their binding.");
+        }
+
+        var dbParameter = CreateParam(parameter.Name, parameter.Value);
+
+        if (parameter.Direction != ParameterDirection.Input)
+            dbParameter.Direction = parameter.Direction;
+
+        if (parameter.DbType is { } dbType)
+            dbParameter.DbType = dbType;
+
+        if (parameter.Size is { } size)
+            dbParameter.Size = size;
+
+        return dbParameter;
+    }
 
     /// <summary>
     /// Maps a projected column to a reader accessor. Providers whose reader does not widen CLR
@@ -462,6 +557,149 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken).ConfigureAwait(false);
     }
 
+    // Raw command execution (IRawCommandExecutor). Public so a concrete context exposes the entry
+    // point directly; the role interface carries a throwing default for providers without raw support.
+    // The returned ProcedureResult owns the per-call command and reader; the connection stays owned by
+    // the context.
+    /// <summary>
+    /// Executes <paramref name="sql"/> with <paramref name="parameters"/> and returns a
+    /// <see cref="ProcedureResult"/> owning the reader and command.
+    /// </summary>
+    /// <param name="sql">The command text to execute.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <returns>The result, which must be disposed to release the reader and command.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>SQL injection.</b> <paramref name="sql"/> is sent to the provider verbatim and never
+    /// parameterised by the planner. Never concatenate untrusted input into it; pass values through
+    /// <see cref="ProcedureParameter"/> so the provider binds them.
+    /// </para>
+    /// <para>
+    /// <b>Open reader.</b> The returned <see cref="ProcedureResult"/> holds the command and its reader
+    /// open until disposed. On SQL Server without MARS, an open reader blocks every other command on the
+    /// same connection — dispose the result (and read/close it) before issuing another command on the
+    /// context. On providers that support multiple active result sets this is provider-dependent.
+    /// </para>
+    /// <para>
+    /// <b>Return values.</b> A <see cref="ParameterDirection.ReturnValue"/> parameter is populated only
+    /// for a stored-procedure command type issued through
+    /// <see cref="ExecuteProcedure(string, IReadOnlyList{ProcedureParameter})"/>, and only where the
+    /// provider has a return status (SQL Server). Text commands like <c>EXEC</c> are provider-dependent
+    /// and typically leave it unset; capture a value with an
+    /// <see cref="ParameterDirection.Output"/> parameter instead.
+    /// </para>
+    /// <para>
+    /// <b>Mapping.</b> <c>Read&lt;T&gt;()</c> accepts a scalar or a mapped entity. A mapped entity's
+    /// metadata is resolved from <see cref="DataContextCache.Metadata"/> or, when absent, registered on
+    /// demand with the default mapping (attributes and auto-derived names, the context's naming
+    /// convention applied). A scalar read of SQL <c>NULL</c> returns <c>default</c>; use a nullable
+    /// <c>T</c> (for example <c>int?</c>) to observe a <c>NULL</c>.
+    /// </para>
+    /// </remarks>
+    public ProcedureResult ExecuteRaw(string sql, IReadOnlyList<ProcedureParameter> parameters)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        var owner = _executor.OpenReader(sql, parameters, CommandType.Text);
+        return new ProcedureResult(this, owner);
+    }
+
+    /// <summary>
+    /// Asynchronously executes <paramref name="sql"/> with <paramref name="parameters"/> and returns a
+    /// <see cref="ProcedureResult"/> owning the reader and command. See
+    /// <see cref="ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/> for the SQL-injection, open
+    /// reader (MARS) and return-value notes.
+    /// </summary>
+    /// <param name="sql">The command text to execute.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    public async Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        var owner = await _executor.OpenReaderAsync(sql, parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
+        return new ProcedureResult(this, owner);
+    }
+
+    /// <summary>
+    /// Executes the stored procedure <paramref name="name"/> with <paramref name="parameters"/> and
+    /// returns a <see cref="ProcedureResult"/> owning the reader and command. The command is sent with
+    /// <see cref="CommandType.StoredProcedure"/>.
+    /// </summary>
+    /// <param name="name">The procedure name, passed to the provider as-is.</param>
+    /// <param name="parameters">The procedure parameters (input, output, input/output and return value).</param>
+    /// <returns>The result, which must be disposed to release the reader and command.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Name.</b> <paramref name="name"/> is not escaped, quoted or parameterised — it is set as the
+    /// command's text. Never pass untrusted input as the procedure name. Parameter names are supplied
+    /// without the provider's prefix (for example <c>@</c> for SQL Server).
+    /// </para>
+    /// <para>
+    /// <b>PostgreSQL.</b> Npgsql maps <see cref="CommandType.StoredProcedure"/> to <c>CALL name(...)</c>,
+    /// which invokes a <em>procedure</em> (PostgreSQL 11+), not a function. Call a function through
+    /// <see cref="ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/> instead (for example
+    /// <c>select * from f(@a)</c>). An <c>OUT</c>/<c>INOUT</c> parameter's value is read through
+    /// <see cref="ProcedureResult.OutputParameters"/>.
+    /// </para>
+    /// <para>
+    /// <b>Return values.</b> <see cref="ProcedureResult.ReturnValue"/> is populated only where the
+    /// provider supports a procedure return status (SQL Server, through a
+    /// <see cref="ParameterDirection.ReturnValue"/> parameter). MySQL and PostgreSQL have no such
+    /// return value.
+    /// </para>
+    /// <para>
+    /// <b>Capability.</b> SQL Server, PostgreSQL and MySQL/MariaDB support this call; SQLite,
+    /// ClickHouse and the in-memory context throw <see cref="NotSupportedException"/>.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/>, empty or whitespace.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The provider has no stored procedures (<c>ISqlDialect.SupportsStoredProcedures</c> is <c>false</c>).</exception>
+    public ProcedureResult ExecuteProcedure(string name, IReadOnlyList<ProcedureParameter> parameters)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(parameters);
+        ThrowIfStoredProceduresUnsupported();
+
+        var owner = _executor.OpenReader(name, parameters, CommandType.StoredProcedure);
+        return new ProcedureResult(this, owner);
+    }
+
+    /// <summary>
+    /// Asynchronously executes the stored procedure <paramref name="name"/> with
+    /// <paramref name="parameters"/> and returns a <see cref="ProcedureResult"/> owning the reader and
+    /// command. See <see cref="ExecuteProcedure(string, IReadOnlyList{ProcedureParameter})"/> for the
+    /// name, PostgreSQL and return-value notes.
+    /// </summary>
+    /// <param name="name">The procedure name, passed to the provider as-is.</param>
+    /// <param name="parameters">The procedure parameters (input, output, input/output and return value).</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/>, empty or whitespace.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The provider has no stored procedures (<c>ISqlDialect.SupportsStoredProcedures</c> is <c>false</c>).</exception>
+    public async Task<ProcedureResult> ExecuteProcedureAsync(string name, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentNullException.ThrowIfNull(parameters);
+        ThrowIfStoredProceduresUnsupported();
+
+        var owner = await _executor.OpenReaderAsync(name, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
+        return new ProcedureResult(this, owner);
+    }
+
+    private void ThrowIfStoredProceduresUnsupported()
+    {
+        if (!Dialect.SupportsStoredProcedures)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support stored procedures. "
+                + "Use SQL Server, PostgreSQL or MySQL/MariaDB, or run the source as a text command with ExecuteRaw.");
+    }
+
     // Bulk insert (IBulkInsertExecutor). The native path is provider-supplied through the
     // BulkInsertRows hooks; the portable path is the shared INSERT ... VALUES loop and is chosen by the
     // builder when the request needs RETURNING/OUTPUT, conflict handling or an identity-insert form, or
@@ -479,7 +717,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             command.TimeoutSeconds,
             command.Batch?.MaxBatchSize,
             command.Progress,
-            command.NotifyEvery);
+            command.NotifyEvery,
+            command.BulkCopy);
     }
 
     async Task<int> IBulkInsertExecutor.BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
@@ -495,6 +734,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             command.Batch?.MaxBatchSize,
             command.Progress,
             command.NotifyEvery,
+            command.BulkCopy,
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -521,9 +761,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
     /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; only the provider's native path can express them.</param>
     /// <returns>The number of rows written.</returns>
     /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
-    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy)
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through the provider's native bulk API.</summary>
@@ -535,10 +776,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
     /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="bulkCopy">The bulk-copy flags requested by the caller; only the provider's native path can express them.</param>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows written.</returns>
     /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
-    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, BulkCopyFlags bulkCopy, CancellationToken cancellationToken)
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     private (string Sql, List<Parameter> Parameters) BuildReturningSql(MutationCommand command)
@@ -696,13 +938,31 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 $"{GetType().Name} cannot execute a batch: the provider has no single-round-trip batch form. "
                 + "Run the statements separately, or use a provider whose dialect sets ISqlDialect.SupportsBatch.");
 
-        if (steps.Count == 0 || steps[^1].Query is not { } resultQuery)
-            throw new InvalidOperationException("A batch must end with a result-bearing query.");
+        if (steps.Count == 0)
+            throw new InvalidOperationException("A batch must contain at least one statement.");
+
+        var firstResult = -1;
+        for (var i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].Query is null)
+            {
+                if (firstResult >= 0)
+                    throw new InvalidOperationException(
+                        "A batch's result-bearing queries must be the trailing statements; a side-effecting statement cannot follow a result-bearing query.");
+            }
+            else if (firstResult < 0)
+            {
+                firstResult = i;
+            }
+        }
+
+        if (firstResult < 0)
+            throw new InvalidOperationException("A batch must end with at least one result-bearing query.");
 
         var provider = new DefaultParameterProvider();
         var accumulator = new List<Parameter>();
         var statements = new List<BatchStatement>(steps.Count);
-        string? resultSql = null;
+        var results = new List<BatchResultSpec>(steps.Count - firstResult);
 
         for (var i = 0; i < steps.Count; i++)
         {
@@ -736,16 +996,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             {
                 var (withSql, sourceSql, _) = _planner.RenderSource(step.Query!, provider, accumulator, null, BatchParameterPrefix(i));
                 sql = withSql is null ? sourceSql : withSql + sourceSql;
-
-                if (i == steps.Count - 1)
-                    resultSql = sql;
+                results.Add(new BatchResultSpec(step.Query!, sql));
             }
 
             var count = accumulator.Count - start;
             statements.Add(new BatchStatement(sql, SliceStatementParameters(accumulator, start, count)));
         }
 
-        return new BatchPlan(statements, resultQuery, resultSql!, Dialect.BatchUsesJoinedCommand, MultilineBatchSql);
+        return new BatchPlan(statements, results, Dialect.BatchUsesJoinedCommand, MultilineBatchSql);
     }
 
     // A statement's parameters are the accumulator slice it produced. A captured member referenced more
@@ -782,11 +1040,16 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     }
 
     Func<IDataRecord, TResult> IBatchExecutor.BuildBatchMapper<TResult>(BatchPlan plan)
-    {
-        if (plan.ResultQuery is not QueryCommand<TResult> query)
-            throw new InvalidOperationException("The batch has no result-bearing query to materialize.");
+        => ((IBatchExecutor)this).BuildBatchMapper<TResult>(plan, 0);
 
-        return RowMapperFactory.GetOrBuild(query, plan.ResultSql, GetType(), Logger, MapColumnExpression);
+    Func<IDataRecord, TResult> IBatchExecutor.BuildBatchMapper<TResult>(BatchPlan plan, int resultIndex)
+    {
+        var spec = plan.Results[resultIndex];
+        if (spec.Query is not QueryCommand<TResult> query)
+            throw new InvalidOperationException(
+                $"The result set at index {resultIndex} projects '{spec.Query.ResultType?.Name ?? "unknown"}', not '{typeof(TResult).Name}'.");
+
+        return RowMapperFactory.GetOrBuild(query, spec.Sql, GetType(), Logger, MapColumnExpression);
     }
 
     List<TResult> IBatchExecutor.ExecuteBatch<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper)
@@ -797,6 +1060,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     IAsyncEnumerable<TResult> IBatchExecutor.StreamBatch<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
         => _executor.RunBatchStream(plan, mapper, cancellationToken);
+
+    BatchResult IBatchExecutor.ExecuteBatchResults(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> resultMaterializers)
+        => _executor.RunBatchMultiple(plan, resultMaterializers);
+
+    Task<BatchResult> IBatchExecutor.ExecuteBatchResultsAsync(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> resultMaterializers, CancellationToken cancellationToken)
+        => _executor.RunBatchMultipleAsync(plan, resultMaterializers, cancellationToken);
 
     private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command)
         => BuildDeleteSql(command, new DefaultParameterProvider(), string.Empty);

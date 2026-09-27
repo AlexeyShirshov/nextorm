@@ -15,7 +15,7 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
     /// <inheritdoc/>
     public int BulkInsert(BulkInsertCommand command)
     {
-        EnsureTimeoutSupported(command);
+        EnsurePortableOptionsSupported(command);
 
         var rows = command.SyncRows
             ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
@@ -47,7 +47,7 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
     /// <inheritdoc/>
     public Task<int> BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
     {
-        EnsureTimeoutSupported(command);
+        EnsurePortableOptionsSupported(command);
 
         return command.AsyncRows is not null
             ? BulkInsertAsyncRowsAsync(command, command.AsyncRows, cancellationToken)
@@ -107,11 +107,13 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
         return total;
     }
 
-    internal static void EnsureTimeoutSupported(BulkInsertCommand command)
+    internal static void EnsurePortableOptionsSupported(BulkInsertCommand command)
     {
         if (command.TimeoutSeconds is not null)
             throw new NotSupportedException(
                 "A bulk-insert Timeout is only supported on the native bulk path; the portable INSERT ... VALUES path uses the provider's default command timeout.");
+
+        command.BulkCopy.ThrowIfRequested("the portable INSERT ... VALUES path");
     }
 
     /// <summary>Computes the rows per batch from the command's limits (<see cref="int.MaxValue"/> for unbounded).</summary>

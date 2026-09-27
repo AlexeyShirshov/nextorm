@@ -12,6 +12,7 @@ namespace NextORM.Core;
 /// <param name="Temporal">The <c>FOR SYSTEM_TIME</c> clause rendered before the alias, or <c>null</c>.</param>
 /// <param name="IndexHints">Index-hint index names rendered after the table name and before the alias, or <c>null</c>.</param>
 /// <param name="IndexHintKind">The intent of <paramref name="IndexHints"/>.</param>
+/// <param name="TablesInScopeHints">Hints applied to every physical table in the command's scope, or <c>null</c>.</param>
 internal readonly record struct FromRenderOptions(
     bool NeedAlias,
     Type? EntityType,
@@ -19,4 +20,5 @@ internal readonly record struct FromRenderOptions(
     IReadOnlyList<string>? TableHints = null,
     TemporalClause? Temporal = null,
     IReadOnlyList<string>? IndexHints = null,
-    IndexHintKind IndexHintKind = IndexHintKind.Use);
+    IndexHintKind IndexHintKind = IndexHintKind.Use,
+    IReadOnlyList<string>? TablesInScopeHints = null);

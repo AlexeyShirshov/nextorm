@@ -236,16 +236,16 @@ SQL-generation tests.
 - Update the item's per-feature `docs/specs/roadmap/todo_*.md` (mark shipped / delete) and repoint its `Todo:`
   line in `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 to the shipped docs.
 - **Move the new functionality into the documentation** (EN + RU). First try to cluster it into the
-  existing guide section that matches its area — `docs/guide/11-scalar-functions.md`,
-  `04-grouping-and-aggregates.md`, `10-window-functions.md`, `13-table-valued-functions.md` (plus the
-  `docs/ru/guide/` mirror). If the feature does not belong to any existing section, **create a new
+  existing guide section that matches its area — `docs/scalar-functions/index.md`,
+  `docs/guide/03-grouping-and-aggregates.md`, `docs/guide/09-window-functions.md`,
+  `docs/guide/11-table-valued-functions.md` (plus the `docs/ru/` mirror). If the feature does not belong to any existing section, **create a new
   guide page** (and its RU mirror, and a DocFX `toc.yml` entry on both sides) rather than leaving it
   undocumented. Reference the new function/operator with its exact C# signature and a short sample.
 - After the documentation is in place, **delete** the provisional work-plan file — its conclusions must
   live in the docs/backlog, not in the plan file.
 - Provider docs EN + RU: `docs/providers/<provider>.md` and `docs/ru/providers/<provider>.md`; guide
-  pages `docs/guide/11-scalar-functions.md`, `04-grouping-and-aggregates.md`,
-  `10-window-functions.md`, `13-table-valued-functions.md` plus the `docs/ru/guide/` mirror, as applicable.
+  pages `docs/scalar-functions/index.md`, `docs/guide/03-grouping-and-aggregates.md`,
+  `docs/guide/09-window-functions.md`, `docs/guide/11-table-valued-functions.md` plus the `docs/ru/` mirror, as applicable.
 - Matrix/limitations: `docs/providers/overview.md` (+RU), `docs/advanced/limitations.md` (+RU),
   `docs/advanced/api-reference.md` (+RU).
 - Specs: `docs/specs/roadmap/sql-capabilities-gap-analysis.md`; on a public-API change

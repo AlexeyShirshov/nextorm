@@ -28,7 +28,7 @@
 2. linq2db (`HasQueryFilter`/`[QueryFilter]`, `IgnoreFilters`) и EF Core (`HasQueryFilter`,
    `IgnoreQueryFilters`, keyed-фильтры в EF10) это умеют — у nextorm нет.
 3. Разрыв по расширяемости уже зафиксирован в сравнении; query filters — последний крупный элемент
-   extensibility-блока (после [интерцепторов](../../guide/27-interceptors.md), фаза 1 которых отгружена).
+   extensibility-блока (после [интерцепторов](../../guide/25-interceptors.md), фаза 1 которых отгружена).
 
 ## 3. Текущее состояние (проверено по коду)
 
@@ -97,7 +97,7 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
 
 ## 6. Критично: план-кэш и per-context scoping
 
-Это главный риск (и причина, по которой фича вынесена из [интерцепторов](../../guide/27-interceptors.md) в отдельный план):
+Это главный риск (и причина, по которой фича вынесена из [интерцепторов](../../guide/25-interceptors.md) в отдельный план):
 
 1. **Идентичность фильтра в ключе плана.** `QueryPlanEqualityComparer` должен включать набор активных
    фильтров (ключи/хэши лямбд) и набор `IgnoreFilters`. Иначе запрос из контекста A переиспользует
@@ -109,7 +109,7 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
    поэтому хранить в них нужно **лямбду**, а не вычисленные значения; привязка к контексту —
    на построении плана.
 4. **Нулевая цена.** Пустой список фильтров не должен добавлять ветвлений/аллокаций в горячий путь
-   (см. требования интерцепторов, [гайд 27](../../guide/27-interceptors.md)).
+   (см. требования интерцепторов, [гайд 27](../../guide/25-interceptors.md)).
 
 ## 7. Этапы внедрения
 
@@ -161,7 +161,7 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
   `DataContext/QueryPlanner.cs`, `Query/QueryPlanEqualityComparer.cs`, `DataContext/Cache/QueryPlanStore.cs`,
   `Builders/EntityBuilder.cs` (`IgnoreFilters`), `DataContext/InMemoryDataContext.cs`,
   `DataContext/InMemoryJoin.cs`, `DI/DataContextBuilder.cs` (регистрация/дефолты).
-- Доки: `docs/guide/01-querying-and-projections.md` (+RU) или новый гайд `docs/guide/26-query-filters.md`
+- Доки: `docs/querying/index.md` (+RU) или новый гайд `docs/guide/26-query-filters.md`
   (+RU), `docs/advanced/limitations.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/providers/overview.md` (+RU), `comparison/linq2db-comparison.md` (EN+RU),
   `comparison/linq2db-backlog-gap-analysis.md`, `specs/design/API-NAMING-REVIEW.md`.

@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
@@ -18,6 +19,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private readonly IDataContext _context;
     private readonly IConnectionManager _connectionManager;
     private readonly Func<string, object?, DbParameter> _createParam;
+    private readonly Func<ProcedureParameter, DbParameter> _createProcedureParam;
     private readonly ILogger? _logger;
     private readonly bool _logParams;
     private readonly bool _logSensitiveData;
@@ -30,6 +32,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         IDataContext context,
         IConnectionManager connectionManager,
         Func<string, object?, DbParameter> createParam,
+        Func<ProcedureParameter, DbParameter> createProcedureParam,
         LoggingOptions logging,
         Func<bool> isDisposed,
         Func<DbTransaction?> currentTransaction,
@@ -38,13 +41,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _context = context;
         _connectionManager = connectionManager;
         _createParam = createParam;
+        _createProcedureParam = createProcedureParam;
         _logger = logging.Logger;
         _logParams = logging.LogParams;
         _logSensitiveData = logging.LogSensitiveData;
         _isDisposed = isDisposed;
         _currentTransaction = currentTransaction;
         _interceptors = interceptors;
-        _batchRunner = new BatchRunner(connectionManager, createParam, currentTransaction, isDisposed, logging);
+        _batchRunner = new BatchRunner(connectionManager, createParam, currentTransaction, isDisposed, logging, context.CommandTimeout);
     }
 
     // The interception helpers below are the single place the command lifecycle events are raised.
@@ -259,30 +263,180 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         return cmd;
     }
 
+    // Per-call binding state carried by value so the command builder allocates no closure on the
+    // mutation/scalar hot path. The binder delegates are static and capture nothing, so they are
+    // cached once for the process.
+    private readonly record struct MutationParameterState(IReadOnlyList<Parameter> Parameters, Func<string, object?, DbParameter> CreateParam);
+    private readonly record struct ProcedureParameterState(IReadOnlyList<ProcedureParameter> Parameters, Func<ProcedureParameter, DbParameter> CreateParam);
+
+    private static readonly Action<DbCommand, MutationParameterState> BindMutationParameters = static (cmd, state) =>
+    {
+        for (var i = 0; i < state.Parameters.Count; i++)
+            cmd.Parameters.Add(state.CreateParam(state.Parameters[i].Name, state.Parameters[i].Value));
+    };
+
+    private static readonly Action<DbCommand, ProcedureParameterState> BindProcedureParameters = static (cmd, state) =>
+    {
+        for (var i = 0; i < state.Parameters.Count; i++)
+            cmd.Parameters.Add(state.CreateParam(state.Parameters[i]));
+    };
+
     /// <summary>
     /// Creates a fresh <see cref="DbCommand"/> for a mutation, binds its parameters and attaches it to
     /// the current connection. Unlike a prepared query command, a mutation command is not reused across
     /// executions, so the parameters are added each time.
     /// </summary>
     private DbCommand CreateMutationCommand(string sql, IReadOnlyList<Parameter> parameters)
+        => CreateCommand(sql, new MutationParameterState(parameters, _createParam), BindMutationParameters);
+
+    /// <summary>
+    /// Creates a fresh <see cref="DbCommand"/> for a raw/procedure command, binding each descriptor
+    /// through the provider's <see cref="DataContext.CreateProcedureParameter(ProcedureParameter)"/> hook.
+    /// </summary>
+    private DbCommand CreateRawCommand(string commandText, IReadOnlyList<ProcedureParameter> parameters, CommandType commandType)
+        => CreateCommand(commandText, new ProcedureParameterState(parameters, _createProcedureParam), BindProcedureParameters, commandType);
+
+    private DbCommand CreateCommand<TState>(string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text)
     {
         _connectionManager.EnsureConnectionOpen();
-        var conn = _connectionManager.GetConnection();
+        return InitCommand(_connectionManager.GetConnection(), commandText, state, bindParameters, commandType);
+    }
 
+    // Shared per-call command construction: create the command, attach the active transaction and the
+    // configured timeout, bind the parameters, then raise the interceptor and logging hooks. The
+    // command is disposed when any step after its creation throws, so a rejected descriptor (for
+    // example an unsupported TypeName) or a throwing interceptor cannot leak it.
+    private DbCommand InitCommand<TState>(DbConnection conn, string commandText, TState state, Action<DbCommand, TState> bindParameters, CommandType commandType = CommandType.Text)
+    {
         var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
+        try
+        {
+            cmd.CommandText = commandText;
 
-        if (_currentTransaction() is { } transaction)
-            cmd.Transaction = transaction;
+            if (commandType != CommandType.Text)
+                cmd.CommandType = commandType;
 
-        for (var i = 0; i < parameters.Count; i++)
-            cmd.Parameters.Add(_createParam(parameters[i].Name, parameters[i].Value));
+            if (_currentTransaction() is { } transaction)
+                cmd.Transaction = transaction;
 
-        RaiseCommandInitialized(cmd);
+            if (_context.CommandTimeout is int commandTimeout)
+                cmd.CommandTimeout = commandTimeout;
 
-        if (_logParams) LogParams(cmd);
+            bindParameters(cmd, state);
 
-        return cmd;
+            RaiseCommandInitialized(cmd);
+
+            if (_logParams) LogParams(cmd);
+
+            return cmd;
+        }
+        catch
+        {
+            cmd.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Executes <paramref name="commandText"/> with <paramref name="parameters"/> and returns an owner
+    /// of the resulting reader and its per-call command. <paramref name="commandType"/> selects text or
+    /// stored-procedure execution. The caller must dispose the owner; on a failed execution the command
+    /// is disposed here and nothing leaks.
+    /// </summary>
+    internal CommandReaderOwner OpenReader(string commandText, IReadOnlyList<ProcedureParameter> parameters, CommandType commandType)
+    {
+        CheckDisposed();
+        DbCommand? command = null;
+        try
+        {
+            command = CreateRawCommand(commandText, parameters, commandType);
+            var reader = RunReader(command, CommandBehavior.Default);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
+    }
+
+    /// <summary>Asynchronously executes <paramref name="commandText"/> and returns an owner of the reader and its per-call command.</summary>
+    internal async Task<CommandReaderOwner> OpenReaderAsync(string commandText, IReadOnlyList<ProcedureParameter> parameters, CommandType commandType, CancellationToken cancellationToken)
+    {
+        CheckDisposed();
+        DbCommand? command = null;
+        try
+        {
+            await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+
+            command = InitCommand(
+                _connectionManager.GetConnection(),
+                commandText,
+                new ProcedureParameterState(parameters, _createProcedureParam),
+                BindProcedureParameters,
+                commandType);
+
+            var reader = await RunReaderAsync(command, CommandBehavior.Default, cancellationToken).ConfigureAwait(false);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Opens a reader for a LOB command with the command's <see cref="CommandBehavior"/> (which carries
+    /// <see cref="CommandBehavior.SequentialAccess"/>) and returns an owner of the reader and the
+    /// per-call command. The caller must dispose the owner.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="compiledQuery">The per-call LOB command to execute.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    /// <returns>An owner of the open reader and its command.</returns>
+    internal CommandReaderOwner OpenLobReader<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+
+        DbCommand? command = GetDbCommand(compiledQuery, @params);
+        try
+        {
+            var reader = RunReader(command!, compiledQuery.Behavior);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
+    }
+
+    /// <summary>Asynchronously opens a reader for a LOB command with the command's <see cref="CommandBehavior"/>.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="compiledQuery">The per-call LOB command to execute.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    /// <param name="cancellationToken">Cancels opening the reader.</param>
+    /// <returns>A task producing an owner of the open reader and its command.</returns>
+    internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+
+        DbCommand? command = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var reader = await RunReaderAsync(command!, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
     }
 
     /// <summary>Executes a mutation and returns the number of affected rows.</summary>
@@ -386,6 +540,21 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     /// <summary>Streams a rendered batch's result rows; the reader stays open for the whole batch.</summary>
     public IAsyncEnumerable<TResult> RunBatchStream<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
         => _batchRunner.RunStream(plan, mapper, cancellationToken);
+
+    /// <summary>Executes a rendered batch in one round trip and eagerly materialises every result set.</summary>
+    /// <param name="plan">The rendered plan.</param>
+    /// <param name="materializers">One materialiser per result set, in result-set order.</param>
+    /// <returns>The eagerly materialised result sets.</returns>
+    public BatchResult RunBatchMultiple(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers)
+        => _batchRunner.RunBatchMultiple(plan, materializers);
+
+    /// <summary>Asynchronously executes a rendered batch in one round trip and eagerly materialises every result set.</summary>
+    /// <param name="plan">The rendered plan.</param>
+    /// <param name="materializers">One materialiser per result set, in result-set order.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the eagerly materialised result sets.</returns>
+    public Task<BatchResult> RunBatchMultipleAsync(BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
+        => _batchRunner.RunBatchMultipleAsync(plan, materializers, cancellationToken);
 
     /// <summary>
     /// Single entry guard for the public execution overloads: a context only executes the command

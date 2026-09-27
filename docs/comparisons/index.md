@@ -25,9 +25,9 @@ The comparison has two parts:
 - **partial** — supported with a named limitation, or implementable but not implemented yet.
 - **no** — not supported.
 
-Marks are judgement calls against the **public documentation** of each library, as of **2026-09-25**. Where a
+Marks are judgement calls against the **public documentation** of each library, as of **2026-09-26**. Where a
 competitor has an open tracking issue for a gap, it is linked. A Nextorm cell names a restriction imposed by
-the database engine when one exists; that does not lower the mark. This is a summary — the [guide](../guide/01-querying-and-projections.md)
+the database engine when one exists; that does not lower the mark. This is a summary — the [guide](../querying/index.md)
 and the [API reference](../advanced/api-reference.md) are authoritative for Nextorm, and each competitor's own
 documentation is authoritative for that competitor.
 
@@ -68,8 +68,11 @@ boundaries:
   cache still trails Dapper by roughly 1.15–1.6× on CTE, recursive CTE, 4-table join and captured IN-list
   (inline IN-list is level); closing that gap is ongoing (see [Benchmarks](benchmarks.md)).
 - **EF Core integration**: planned, not shipped — there is no `linq2db.EntityFrameworkCore`-style package yet.
-- **Stored procedures, dynamic SQL and multiple result sets**: raw SQL covers a whole query, but calling a
-  stored procedure and materialising several result sets in order are deferred.
+- **Stored procedures, dynamic SQL and multiple result sets**: raw SQL covers a whole query; raw
+  `EXEC`/`CALL` commands via `ExecuteRaw` and the dedicated `CommandType.StoredProcedure` API
+  `ExecuteProcedure` support parameters, output parameters and sequential result sets, and a batch can
+  carry several result sets in one round trip (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`). Dynamic
+  SQL assembly remains deferred.
 - **Deeper query forms**: `SelectMany`/`GroupJoin` work on the in-memory provider only, `APPLY`/`LATERAL`
   cannot take a join projection, and in-memory correlation stops at depth one.
 - **Provider-gated native types**: native range/multirange, arrays and native JSON columns are

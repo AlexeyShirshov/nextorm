@@ -61,7 +61,7 @@ from complex_entity group by nullableint
 ## Функции, возвращающие наборы (PostgreSQL)
 
 `SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — это предобъявленные источники
-[`[SqlTableFunction]`](../guide/13-table-valued-functions.md), поэтому отдельная обёртка не нужна:
+[`[SqlTableFunction]`](../guide/11-table-valued-functions.md), поэтому отдельная обёртка не нужна:
 
 ```csharp
 var numbers = dataContext

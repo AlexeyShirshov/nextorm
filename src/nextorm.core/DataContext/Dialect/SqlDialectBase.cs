@@ -50,6 +50,14 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsQueryHints => false;
     /// <inheritdoc/>
     public virtual bool SupportsTableHints => false;
+    /// <summary>True when the dialect renders a join-level hint inside the join clause (SQL Server); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsJoinHints => false;
+    /// <summary>True when the dialect renders a subquery-level hint (inline-comment dialects); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsSubQueryHints => false;
+    /// <summary>True when the dialect renders a hint on every physical table in scope (SQL Server <c>WITH (...)</c>); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsTablesInScopeHints => false;
+    /// <summary>True when the dialect folds the join/subquery/tables-in-scope hints into a statement-level inline comment (PostgreSQL <c>pg_hint_plan</c>, MySQL/MariaDB); the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsInlineHints => false;
     /// <inheritdoc/>
     public virtual bool SupportsForJson => false;
     /// <inheritdoc/>
@@ -212,6 +220,10 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsCommandBehaviorSingleRow => true;
     /// <inheritdoc/>
+    public virtual bool SupportsSequentialAccess => false;
+    /// <inheritdoc/>
+    public virtual string? LobLocatorColumn => null;
+    /// <inheritdoc/>
     public virtual bool SupportsTransactions => true;
 
     /// <summary>Defaults to <c>null</c>; ClickHouse exposes the <c>LIMIT n BY expr</c> renderer.</summary>
@@ -372,6 +384,28 @@ public abstract class SqlDialectBase : ISqlDialect
     /// </summary>
     public virtual string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"") + "\"";
     /// <inheritdoc/>
+    public virtual bool SupportsCrossDatabase => false;
+    /// <inheritdoc/>
+    public virtual bool SupportsLinkedServer => false;
+    // ANSI schema.table default; reached only after the SQL builder checked the Supports* flags, so the
+    // server/database throws here are a safety net for a directly-called hook, not the user-facing path.
+    /// <inheritdoc/>
+    public virtual string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+        if (database is not null)
+            throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect.");
+        return JoinTableQualifier(schema, table);
+    }
+    /// <summary>
+    /// Joins an optional single qualifier (schema or, on a provider where they coincide, database) to a
+    /// table name with the standard dot separator: <c>qualifier.table</c>, or <paramref name="table"/>
+    /// when the qualifier is <c>null</c> or empty.
+    /// </summary>
+    protected static string JoinTableQualifier(string? qualifier, string table)
+        => string.IsNullOrEmpty(qualifier) ? table : qualifier + "." + table;
+    /// <inheritdoc/>
     public virtual string MakeColumnReference(string name) => name;
     /// <inheritdoc/>
     public virtual string MakeTableAlias(string tableAlias, KeywordCase keywordCase = KeywordCase.Lower)
@@ -388,6 +422,7 @@ public abstract class SqlDialectBase : ISqlDialect
         _ when type == typeof(short) => "smallint",
         _ when type == typeof(int) => "integer",
         _ when type == typeof(long) => "bigint",
+        _ when type == typeof(uint) => "bigint",
         _ when type == typeof(float) => "real",
         _ when type == typeof(double) => "double precision",
         _ when type == typeof(decimal) => "numeric",
@@ -751,6 +786,19 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual string MakeTableHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
 
+    // Reached only through a dialect that set SupportsJoinHints; a dialect that did not opt in has its
+    // join hint rejected before this body runs, so the throw keeps the contract honest.
+    /// <inheritdoc/>
+    public virtual string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, string? hint, KeywordCase keywordCase = KeywordCase.Lower)
+        => hint is null
+            ? MakeJoinKeyword(joinType, strictness, isGlobal, keywordCase)
+            : throw new NotSupportedException("Join hints are not supported by this SQL dialect");
+
+    // Reached only through a dialect that set SupportsTablesInScopeHints (SQL Server).
+    /// <inheritdoc/>
+    public virtual string MakeTablesInScopeHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
     /// <inheritdoc/>
     public virtual IIndexHintRenderer? IndexHints => null;
 
@@ -826,6 +874,10 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsBulkCopy => false;
     /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB and SQLite opt into one-round-trip batches.</summary>
     public virtual bool SupportsBatch => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server, PostgreSQL and MySQL/MariaDB opt into stored-procedure execution (<c>CommandType.StoredProcedure</c>).</summary>
+    public virtual bool SupportsStoredProcedures => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server binds a table-valued parameter natively, PostgreSQL, MySQL/MariaDB and SQLite emulate it with a typed array or a JSON document, and ClickHouse with a bound <c>Array(T)</c>/<c>Array(Tuple(...))</c> expanded with <c>arrayJoin</c>.</summary>
+    public virtual bool SupportsTableValuedParameters => false;
     /// <summary>Defaults to <c>false</c>; SQL Server sends the batch as one <c>;</c>-joined command so a <c>#temp</c> survives across statements.</summary>
     public virtual bool BatchUsesJoinedCommand => false;
     /// <summary>Defaults to <c>false</c>; SQLite, MySQL, MariaDB and ClickHouse opt into an <c>INSERT ... IGNORE</c> head.</summary>

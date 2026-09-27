@@ -196,6 +196,67 @@ from all_rows() as [t1]
 join complex_entity as [t2] on t1.id = t2.id
 ```
 
+## Табличные параметры
+
+SQL Server связывает табличный параметр нативно через пользовательский табличный тип: передайте имя типа в `ProcedureParameter.Table(name, typeName, rows)`. Строки передаются потоком как `SqlDataRecord` (один переиспользуемый record на перечисление), поэтому большой набор не буферизуется. Скалярный тип строки отображается на один столбец; тип-сущность — на её невычисляемые столбцы в порядке метаданных, включая identity-столбцы. Столбец `decimal` использует точность/масштаб, объявленные через `[DecimalPrecision(p, s)]` или fluent-отображение, по умолчанию — `decimal(38,18)`. Пустая последовательность связывается с пустой таблицей. См. [Сырой SQL](../guide/12-raw-sql.md#табличные-параметры).
+
+```sql
+create type dbo.IdList as table (value int not null);
+```
+
+```csharp
+using var result = dataContext.ExecuteRaw(
+    "select sum(value) as total from @p",
+    [ProcedureParameter.Table("p", "dbo.IdList", new[] { 1, 2, 3 })]);
+
+var total = result.Read<int>()[0];   // 6
+```
+
+Тип CLR каждого столбца выбирает фиксированный тип T-SQL; пользовательский табличный тип должен совпасть по порядку столбцов:
+
+| CLR | T-SQL |
+|---|---|
+| `bool` | `bit` |
+| `char` | `nchar(1)` |
+| `sbyte`, `short` | `smallint` |
+| `byte` | `tinyint` |
+| `ushort`, `int` | `int` |
+| `uint`, `long` | `bigint` |
+| `ulong` | `decimal(20,0)` |
+| `float` | `real` |
+| `double` | `float` |
+| `decimal` | `decimal(38,18)` (или объявленный `decimal(p,s)`) |
+| `string` | `nvarchar(max)` |
+| `Guid` | `uniqueidentifier` |
+| `DateTime` | `datetime2` |
+| `DateTimeOffset` | `datetimeoffset` |
+| `DateOnly` | `date` |
+| `TimeOnly` | `time` |
+| `TimeSpan` | `bigint` (объявленная единица длительности или тики) |
+| `byte[]` | `varbinary(max)` |
+
+Точность/масштаб столбца `decimal` берётся из `[DecimalPrecision]` или fluent-отображения (по умолчанию `decimal(38,18)`). Для другой точности/масштаба у любого другого типа или длины строки, отличной от `max`, объявите табличный тип явно и передайте устаревший `DataTable` с `ProcedureParameter.TypeName`. Пустая последовательность связывается как незаданный параметр, который SqlClient отправляет как пустую таблицу.
+
+## Большие объекты (потоковое чтение LOB)
+
+Одну колонку `byte[]` или `string` можно прочитать как `Stream`/`TextReader`, не загружая значение целиком в managed-память. SqlClient реализует `GetStream`/`GetTextReader` для `varbinary(max)` и `nvarchar(max)`; потоковый режим требует `CommandBehavior.SequentialAccess` (без него значение буферизуется) — nextorm выставляет его на LOB-пути:
+
+```csharp
+await using var stream = ctx.From<BinaryEntity>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Payload)
+    .ToStream();          // открывает reader с CommandBehavior.SequentialAccess
+
+using var reader = ctx.From<Document>()
+    .Where(x => x.Id == 1)
+    .Select(x => x.Body)
+    .ToTextReader();
+```
+
+Возвращённый поток владеет reader'ом и per-call командой до освобождения и не закрывает контекст; проекция обязана быть ровно одной колонкой `byte[]`/`string` (иначе `InvalidOperationException`). MySQL/MariaDB, ClickHouse и провайдер in-memory отклоняют терминалы через `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/30-large-objects.md).
+
+SQL Server также поддерживает многоколоночный терминал `ToDataReader`/`ToDataReaderAsync`: он отдаёт ту же sequential-access команду как принадлежащий вызывающему `DbDataReader`, поэтому вызывающий может прочитать все колонки и строки (или несколько LOB-колонок по порядку), не материализуя результат. SQLite его отклоняет, потому что его потоковая проекция всегда несёт локатор `rowid`; MySQL/MariaDB, ClickHouse и провайдер in-memory не имеют поддержки sequential access.
+
 ## Различия провайдеров
 
 | Аспект | SQL Server |
@@ -210,6 +271,7 @@ join complex_entity as [t2] on t1.id = t2.id
 | Логический литерал | `1` / `0` (материализация bit) |
 | Квотирование идентификаторов | квадратные скобки (`as [t1]`) |
 | Псевдоним производной таблицы / TVF | требуется |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`, `ToDataReader`) | поддерживается (`SequentialAccess`; одна колонка `byte[]`/`string` или многоколоночный reader, принадлежащий вызывающему) |
 | `*ALL` | не поддерживается (бросает исключение) |
 | Рекурсивный CTE | `with` + `option (maxrecursion n)` |
 | Имена агрегатов | `stdev`/`var` нативные; доступен `count_big` |
@@ -227,6 +289,7 @@ join complex_entity as [t2] on t1.id = t2.id
 | Регулярные выражения | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; для `regexp_like` дополнительно нужен уровень совместимости БД 170) |
 | Блокирующие табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
 | Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на основной таблице ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
+| Нативный bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions` (см. [Массовая вставка](../guide/22-bulk-insert.md#опции-bulk-copy-в-sql-server)) |
 | JSON-вывод | весь набор одним JSON-документом, терминальные `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
 | XML-вывод | весь набор одним XML-документом, терминальные `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |
 | Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |

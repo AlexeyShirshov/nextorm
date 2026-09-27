@@ -114,6 +114,22 @@ public interface ITestProvider
     bool SupportsBatch { get; }
 
     /// <summary>
+    /// True when the provider can execute a stored procedure through
+    /// <c>ExecuteProcedure</c> (<c>CommandType.StoredProcedure</c>). SQL Server, PostgreSQL and
+    /// MySQL/MariaDB can; SQLite and ClickHouse have no stored procedures, so the shared
+    /// unsupported-provider test runs instead of the procedure tests.
+    /// </summary>
+    bool SupportsStoredProcedures { get; }
+
+    /// <summary>
+    /// True when the provider can bind a table-valued parameter
+    /// (<c>ProcedureParameter.Table&lt;T&gt;(name, ...)</c>). SQL Server uses a native user-defined table
+    /// type; PostgreSQL, MySQL/MariaDB and SQLite emulate it with an array/JSON document; ClickHouse does
+    /// not support it.
+    /// </summary>
+    bool SupportsTableValuedParameters { get; }
+
+    /// <summary>
     /// True when the provider supports ADO.NET transactions on its connection. SQLite, PostgreSQL,
     /// SQL Server and MySQL/MariaDB do; ClickHouse speaks HTTP and has no transaction, so the shared
     /// transaction tests are skipped there.
@@ -125,6 +141,27 @@ public interface ITestProvider
     /// into native SQL. PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ can.
     /// </summary>
     bool SupportsRegex { get; }
+
+    /// <summary>
+    /// True when the provider implements the streaming LOB terminals (<c>ToStream</c>/<c>ToTextReader</c>).
+    /// PostgreSQL, SQL Server and SQLite do; MySQL/MariaDB, ClickHouse and the in-memory provider
+    /// reject them with <see cref="NotSupportedException"/>.
+    /// </summary>
+    bool SupportsLobStreaming { get; }
+
+    /// <summary>
+    /// True when the provider implements the multi-column <c>ToDataReader</c>/<c>ToDataReaderAsync</c>
+    /// terminal. PostgreSQL and SQL Server do; SQLite appends its <c>rowid</c> locator to the streaming
+    /// projection and fails closed, while MySQL/MariaDB and ClickHouse have no sequential-access support.
+    /// </summary>
+    bool SupportsLobDataReader => false;
+
+    /// <summary>
+    /// True when the provider accepts a zero-column result set (a <c>select</c> with an empty target
+    /// list, as PostgreSQL allows). Only such a provider can exercise the <c>FieldCount != 1</c>
+    /// guard of the LOB terminals with zero columns; the shared boundary test skips elsewhere.
+    /// </summary>
+    bool SupportsZeroColumnResult => false;
 
     void EnsureSeeded();
 

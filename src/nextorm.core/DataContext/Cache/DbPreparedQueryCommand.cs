@@ -10,8 +10,9 @@ namespace NextORM.Core;
 public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResult, IDataRecord>, IDbCommandHolder
 {
     /// <summary>
-    /// The <see cref="CommandBehavior"/> requested from the underlying reader; only
-    /// <see cref="CommandBehavior.SingleRow"/> is applied today, otherwise <c>0</c>.
+    /// The <see cref="CommandBehavior"/> requested from the underlying reader. A buffered command uses
+    /// <see cref="CommandBehavior.SingleRow"/> or <c>0</c>; a streaming LOB command additionally sets
+    /// <see cref="CommandBehavior.SequentialAccess"/>.
     /// </summary>
     public readonly CommandBehavior Behavior = 0;
     /// <summary>
@@ -74,6 +75,8 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         DbCommandParams = dbCommand.Parameters;
         if (options.SingleRow)
             Behavior = CommandBehavior.SingleRow;
+        if (options.SequentialAccess)
+            Behavior |= CommandBehavior.SequentialAccess;
 
         SqlStmt = options.Sql;
         NoParams = options.NoParams;

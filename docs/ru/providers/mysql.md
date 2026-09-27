@@ -100,6 +100,7 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 184467440737
 | Произвольное значение | `ANY_VALUE(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)` |
 | Оконные квантили | не поддерживаются (`PERCENTILE_CONT` только в MariaDB) |
+| Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 MySQL 8.0.31 и новее поддерживает `INTERSECT`/`EXCEPT`; диалект отклоняет варианты `*ALL` с
 `NotSupportedException`, соответствуя движку.

@@ -1223,3 +1223,331 @@ NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 ```
 
 Артефакты: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark{Any,First,Single,Join,Where,Iteration,LargeIteration,Cache}-report-github.md`.
+
+# Итерация 11 — регресс prepare-фазы warm/cached-пути после правок 1.0.6 → 1.0-b.1 (2026-09-25)
+
+> **Ревизия:** `HEAD` = `5d9b8d8` (merge PR #91, релиз `1.0-b.1`), база сравнения = `dd4482f`
+> (`v1.0.4-alpha-4-gdd4482f`, ветка `1.0.5-alpha`) — ревизия Итерации 10. Между ними 34 коммита,
+> ~146 файлов в `src/nextorm.core` (`1.0.6-alpha` → `1.0-b.1`).
+> **Дата прогона:** 2026-09-25.
+> **Повод:** после серии ядровых правок есть подозрение на деградацию cached-пути. Итерация 10
+> закрывала warm-путь как «не изменившийся»; здесь проверяется, не сдвинулся ли он после 1.0.6.
+
+## Методика
+
+- Окружение идентично Итерации 10: AMD Ryzen 7 5800HS, WSL2, **8 логических / 4 физических ядра**,
+  11 GiB RAM, .NET `10.0.401`, BenchmarkDotNet 0.15.8; БД — tmpfs `/tmp/nextorm-bench/test.db`
+  (`NEXTORM_BENCH_DB`).
+- **Два независимых инструмента, оба в режиме интерлива база/HEAD:**
+  1. **Точный harness** (вне репозитория): план-кэш без БД, `Stopwatch.GetTimestamp` + `GC.GetAllocatedBytesForCurrentThread`,
+     `min` из 7 замерных раундов внутри запуска, 5–7 чередующихся запусков на сторону; медиана по запускам.
+     Каждый arm строит **свежую** fluent-команду и останавливается на своём этапе
+     (`construct` → `PrepareCommand(true)` no-hash → `PrepareCommand(false)` hash → `GetPreparedQueryCommand`
+     полный hit; плюс `reused_planonly` на уже подготовленной команде и `prepared_tolist`/`cached_tolist` с БД).
+  2. `SqliteBenchmarkCachedPlan` через BenchmarkDotNet `Job.ShortRun` + `InProcessEmitToolchain`, 3 чередующихся запуска.
+- Выделение памяти в harness **детерминировано** (совпадает во всех раундах), поэтому служит основным
+  сигналом; процент времени на загруженной машине шумит (load average 3–5 на 8 ядрах) — отсюда диапазоны.
+
+## Память — детерминированный сигнал (байт на операцию)
+
+| Arm | BASE (`dd4482f`) | HEAD (`5d9b8d8`) | Δ |
+|---|--:|--:|--:|
+| `construct` (Where+Select, без prepare) | 2 448.1 | 2 456.1 | **+8** |
+| `prepare_nohash` (1 сравнение) | 3 760.2 | 3 824.2 | **+64** |
+| `prepare_hash` | 4 232.2 | 4 296.2 | **+64** |
+| `planonly_param` (construct+prepare+hash+lookup) | 4 816.2 | 4 880.2 | **+64** |
+| `reused_planonly` (только lookup) | 480.0 | 480.0 | **0** |
+| `reprepare_param` | 2 288.0 | 2 344.0 | +56 |
+| `in_inline` (`@in` по литеральному массиву) | 5 880.0 | 5 960.0 | **+80** |
+| `in_captured` (`Contains` по captured-массиву) | 7 128.2 | 7 312.2 | **+184** |
+| `prepare_nohash_multi4` (4 сравнения) | 4 672.2 | 4 856.2 | **+184** |
+| `prepared_tolist` (`Prepare()`, исполнение) | 8 568.0 | 8 568.0 | **0** |
+| `cached_tolist` (10 запросов, implicit-кэш) | 56 736.4 | 57 376.4 | **+640** (+64/запрос) |
+
+Чтение таблицы:
+
+1. **Prepare-фаза выросла на 64 B на запрос**: `construct` почти не изменился (+8 B), `prepare_nohash`
+   сразу даёт +64 B, `prepare_hash` не добавляет ничего сверх этого (тот же +64 B) — то есть рост
+   сидит в `PrepareCommand` (визиторы/рендер), а не в хешировании и не в сборке fluent-дерева.
+2. **План-кэш lookup не изменился** (`reused_planonly` — 0 B), **prepared-путь не изменился**
+   (`prepared_tolist` — 0 B побайтово).
+3. **Рост масштабируется размером предиката**: 1 сравнение → +64 B, 4 сравнения → +184 B,
+   т.е. ≈ **+40 B на каждое дополнительное сравнение**.
+4. `in_captured` +184 B — к `InValuesTranslator` добавилось разрешение конвертера на каждый in-list.
+
+## Время — prepare/SQL-build регрессировал, lookup и prepared — нет
+
+Точный harness (медиана 5 интерлив-раундов; абсолютные ns на вызов, шумно):
+
+| Arm | BASE ns | HEAD ns | Δ |
+|---|--:|--:|--:|
+| `construct` | 3 609 | 3 556 | −1.5 % |
+| `prepare_nohash` | 6 936.5 | 7 504.5 | **+8.2 %** |
+| `prepare_hash` | 9 959.5 | 10 788.7 | **+8.3 %** |
+| `reused_planonly` (lookup) | 2 865.1 | 2 930.7 | +2.3 % |
+| `planonly_param` | 15 953.5 | 17 666.0 | **+10.7 %** |
+| `reprepare_param` | 19 360.8 | 22 856.0 | +18 % (шум) |
+| `prepared_tolist` | 112 278.1 | 112 110.4 | −0.1 % |
+
+BDN `SqliteBenchmarkCachedPlan` A/B (`ShortRun`, медиана 3 интерлив-раундов, µs на 100 итераций):
+
+| Arm | BASE | HEAD | Δ | Что меряет |
+|---|--:|--:|--:|---|
+| `Construct_Only` | 126.1 | 114.5 | −9.2 % | только fluent-сборка (шум, harness: 0 %) |
+| `RePrepare_PlanOnly_Param` | 213.6 | 232.5 | **+8.8 %** | prepare + lookup по готовой команде |
+| `Cached_PlanOnly_Param` | 438.3 | 418.9 | −4.4 % | полный implicit hit (шум) |
+| `Cached_PlanOnly_NoParam` | 338.3 | 350.7 | +3.7 % | implicit hit без параметров |
+| `Build_Sql` | 563.6 | 624.4 | **+10.8 %** | construct + prepare + SQL-build (без кэша) |
+| `Build_Sql_Join` | 1252.8 | 1396.2 | **+11.4 %** | то же с join (alias-резолв) |
+| `M12_NoCache_PlanOnly_Param` | 534.7 | 604.5 | **+13.1 %** | prepare без хеша + SQL-build |
+| `Cached_ToList` | 1583.3 | 1514.5 | −4.3 % | implicit hit + БД (шум) |
+| `M12_NoCache_ToList` | 2907.6 | 3076.7 | +5.8 % | без кэша + БД |
+| `Prepared_ToList` | 888.1 | 881.3 | −0.8 % | prepared + БД |
+
+Согласованный сигнал: **все arm'ы, содержащие prepare/SQL-build свежей команды, замедлились на
+~9–13 %** (`Build_Sql`, `Build_Sql_Join`, `RePrepare`, `M12_NoCache`), тогда как `Construct`,
+`reused_planonly`, `Prepared_ToList` и end-to-end warm-БД — в пределах шума. End-to-end warm
+(`cached_tolist`) в разных прогонах дал от −10 % до +8 % (SQLite-исполнение доминирует), т.е.
+заметной деградации сквозного cached-пути нет: +1–2 µs prepare тонут в ~40 µs исполнения запроса.
+
+## Где именно и откуда
+
+- Точка локализации: `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs` — фаза
+  `PrepareCommand`. `prepare_nohash` уже содержит полный регресс, `prepare_hash` не добавляет,
+  `reused_planonly` (только ключ/поиск) — 0 B.
+- Кандидаты (внесены в цикле 1.0.6):
+  - `src/nextorm.core/Visitors/PredicateTranslator.cs:382` (`VisitBinary`) — на **каждое сравнение**
+    при `!Dialect.SupportsNativeDuration` (SQLite) вызывается `ResolveDurationUnit` для обоих
+    операндов и `ResolveConverter` для левого/правого. Каждый вызов — `DataContextCache.Metadata.TryGetValue`
+    плюс линейный `MemberTranslator.FindProperty` (`MemberTranslator.cs:110`).
+  - `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:527` (`ResolveDuration`) и `:548`
+    (`ResolveConverter`) — свежий metadata-поиск + `FindProperty` на каждый скалярный/анонимный
+    проектируемый член (путь проекции всей сущности уже берёт `prop.DurationUnit`/`prop.Converter`).
+  - `src/nextorm.core/Expressions/SelectExpression.cs` — добавлены `DurationUnit?`,
+    `DurationPrecision`, `ProviderType`, `Converter`, `RangeColumnRole`, `RangeColumns` (≈ +40 B к
+    объекту колонки), из-за чего вырос размер каждой проекции.
+  - `src/nextorm.core/Visitors/InValuesTranslator.cs` — `ResolveConverter` на каждый in-list
+    (объясняет `in_captured` +184 B).
+- **Бисект не сходится до одного коммита.** `14dd77e` (1.0.5) — good (3 760.2 B), `e5e7457`
+  (#30 interceptors) — bad (3 856.2 B); промежуточные `993ff5c`/`18ed028`/`a8caca2`/`cdab43a`
+  по отдельности не собираются (ссылаются на типы, добавленные в параллельных ветках). Регресс
+  лежит в цепочке 1.0.6: #71 string semantics / #68 regex / #28 collation / #72 timespan /
+  #30 interceptors, преимущественно в #72 (duration) и #28 (collation) — они и трогают
+  сравнения/проекции.
+
+## Вывод
+
+- **Cached/warm-путь деградировал точечно — в prepare-фазе, а не в кэше.** Память: **+64 B на
+  prepare** (+40 B на каждое дополнительное сравнение, +80…184 B на IN-list), тогда как
+  `construct`, план-кэш lookup и prepared-исполнение побайтово не изменились.
+- **Время**: SQL-build/prepare свежей команды **+9…13 %**; план-кэш lookup **+2 %**; prepared-путь
+  и сквозной warm-БД — в пределах шума. Практический сквозной эффект ограничен (prepare — единицы µs
+  против десятков µs SQLite-исполнения).
+- Функциональных регрессий нет: план-ключевые тесты (`PlanKeyUniquenessTests`, `PlanCacheTests`,
+  `InListCacheTests`) — 28/28 зелёные; SQL и публичный API не затронуты.
+- Корень — **избыточная per-column/per-comparison resolution** метаданных (duration/converter/
+  collation), добавленная в 1.0.6, плюс рост `SelectExpression`. Это не ошибка кэша.
+
+## Предложения (по убыванию отношения эффект/риск)
+
+1. **Мемоизировать разрешённые метаданные члена.** Derive `converter`/`durationUnit`/`collation`
+   один раз на `(IEntityMetadata, PropertyInfo)` (словарь в метаданных или `ConditionalWeakTable`).
+   Убирает линейный `FindProperty` и повторные `DataContextCache.Metadata.TryGetValue` на каждом
+   сравнении/колонке.
+2. **Не разрешать лишнее в `PredicateTranslator.VisitBinary`.** `ResolveDurationUnit` — только если
+   операнд `TimeSpan`/`Nullable<TimeSpan>`; `ResolveConverter` — только для операнда-члена; не
+   гонять оба операнда, когда ни один не является членом.
+3. **В `PrepareColumns` брать конвертер/единицу из `IPropertyMetadata`** для скалярных/анонимных
+   проекций (как уже сделано в ветке проекции всей сущности), без нового metadata-скана.
+4. **Ужать `SelectExpression`.** Вынести редкие поля (`Duration*`, `ProviderType`, `Converter`,
+   `Range*`) в опциональный side-объект, чтобы обычная колонка не платила ~40 B.
+5. **Кэшировать конвертер in-list** один раз на команду в `InValuesTranslator`.
+6. **Регресс-гейт в CI на аллокации.** Дельты памяти детерминированы и поймали бы это сразу:
+   зафиксировать бюджет байт/операцию для `SqliteBenchmarkCachedPlan.Build_Sql` и
+   `RePrepare_PlanOnly_Param` (или в harness-аналоге) рядом с существующими harness-проверками.
+
+## Воспроизведение
+
+```bash
+cd benchmarks/nextorm.benchmark && dotnet build -c Release
+mkdir -p /tmp/nextorm-bench && cp data/test.db /tmp/nextorm-bench/test.db
+
+# A/B: базовый worktree на dd4482f и рабочее дерево HEAD, чередуя
+git worktree add /tmp/nextorm-base dd4482f
+
+# декомпозиция prepare/lookup (BDN ShortRun, in-process)
+NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkCachedPlan*"
+
+# точный интерлив-замер аллокаций: harness, строящий свежую команду на каждый вызов
+#   construct → PrepareCommand(true) → PrepareCommand(false) → GetPreparedQueryCommand(storeInCache:true)
+#   + reused_planonly (готовый QueryCommand) + prepared_tolist/cached_tolist
+#   метрики: Stopwatch.GetTimestamp и GC.GetAllocatedBytesForCurrentThread, min из раундов
+```
+
+Артефакты BDN: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-github.md`.
+
+# Итерация 12 — применённые оптимизации SQL-build/prepare (2026-09-26)
+
+> **База:** `5d9b8d8` (та же ревизия, что Итерация 11). Изменения — внутренние (публичный API
+> не затронут). Патч: 83 вставки / 40 удалений в 4 файлах `src/nextorm.core`.
+
+## Что сделано
+
+1. **Кэш `SqlFunctionAttribute` по `MethodInfo`** (`Visitors/ScalarFunctionTranslator.cs`).
+   Профиль (`dotnet-trace`, `dotnet-sampled-thread-time`) показал, что на пути SQL-build
+   `TryTranslateSqlFunction` вызывал `GetCustomAttribute<SqlFunctionAttribute>` **на каждый**
+   method-call, не попавший в built-in-диспетчер (`SqlFunctions.Parameter(...)`, свёрнутые
+   вызовы, captured-хелперы): `CustomAttribute.GetCustomAttributes` — 6.9 % inclusive и ~164 B
+   аллокаций на вызов. Результат рефлексии теперь кэшируется (`ConcurrentDictionary`,
+   `GetOrAdd`), набор атрибутов у `MethodInfo` неизменен.
+2. **O(1) индекс свойств сущности** (`DataContext/Meta/Implementation/EntityMetadata.cs`).
+   `Dictionary<PropertyInfo, IPropertyMetadata>` строится один раз в конструкторе;
+   `MemberTranslator.FindProperty` использует его (`EntityMetadata.FindProperty`), линейный
+   скан остаётся только fallback'ом для внешних реализаций `IEntityMetadata`.
+3. **Убрана повторная резолюция метаданных** (`Visitors/MemberTranslator.cs`,
+   `Query/QueryCommand.QueryPreparer.cs`). `PrepareColumns` резолвит метаданные источника один
+   раз на запрос и переиспользует их на каждую колонку (`ResolveDuration`/`ResolveConverter`
+   больше не делают `Metadata.TryGetValue` на колонку); `MemberTranslator.ResolveProperty`
+   переиспользует declaring-first семантику без повторного поиска; `ResolveDurationUnit`,
+   `ResolveCollation`, `ResolveRangeColumnsMember` ходят через `FindProperty(Type, PropertyInfo)`.
+
+## Измерения (интерлив-харнесс, база `5d9b8d8` ⟷ opt)
+
+Точный harness: свежая команда на вызов, `Stopwatch` (min из раундов) и
+`GC.GetAllocatedBytesForCurrentThread`, 6 чередующихся запусков, медиана; машина загружена
+(load ~10), поэтому время шумное, память — основной сигнал.
+
+| Arm | ns opt/base | B/op base → opt |
+|---|--:|---|
+| `build_simple` (`Where`+`Select`, cache miss) | **0.82** | 6510 → 6342 (−168) |
+| `build_complex7` (7 колонок) | **0.87** | 14233 → 14120 (−113) |
+| `build_join3` (join + 3 колонки) | **0.90** | 11720 → 11552 (−168) |
+| `cached_planonly_param` (warm hit) | 1.02 | 4880 → 4880 |
+| `reused_planonly` (только lookup) | 1.02 | 480 → 480 |
+
+BDN `SqliteBenchmarkCachedPlan` (ShortRun, аллокации/100):
+
+| Arm | base | opt | Δ |
+|---|--:|--:|--:|
+| `Build_Sql` | 629.72 KB | 613.30 KB | **−16.42 KB** |
+| `M12_NoCache_PlanOnly_Param` | 657.46 KB | 641.03 KB | **−16.43 KB** |
+| `Build_Sql_Join` | 1144.63 KB | 1128.20 KB | **−16.43 KB** |
+| `M12_NoCache_ToList` | 750.83 KB | 734.41 KB | **−16.42 KB** |
+| warm-arms (`Cached_*`, `Prepared_*`, `Reused`) | без изменений | без изменений | 0 |
+
+Вывод: **SQL-build/холодный путь ускорился на ~10–18 % и потерял ~150–190 B/op** (в основном за
+счёт снятой рефлексии). **Тёплый cached-путь не изменился**: на cache hit SQL не генерируется,
+поэтому `TryTranslateSqlFunction` и резолюция колонок не выполняются. Регресс Итерации 11
+относился именно к фазе `PrepareCommand`, которая на warm-пути отрабатывает один раз.
+
+## Профиль тёплого пути (следующий кандидат)
+
+`reused_planonly` (чистый cache hit) на 49 % занят сравнением ключа плана:
+`QueryPlanEqualityComparer.Equals` ≈ 39 %, `ExpressionComparer.CompareLambda` ≈ 31 %,
+`SelectExpressionPlanEqualityComparer.Equals` ≈ 14 %, `QueryPlanStore.TryGet` ≈ 6 %
+(+ `CastHelpers.IsInstanceOfClass`). На каждом hit строится новый `QueryPlan` и выполняется
+глубокое структурное сравнение выражения с командой-клоном, лежащей в кэше. Идея следующего
+шага — мемоизировать идентичность плана на подготовленной команде (с инвалидацией по
+`InValuesShapeHash`/`ResetPreparation` и fast-path `ReferenceEquals` в `QueryPlan.Equals`),
+закрыв это тестами уникальности ключей (`PlanKeyUniquenessTests`). Это рискованнее: ключ плана —
+место, где ошибка тихо переиспользует чужой план.
+
+## Проверка корректности
+
+- Юнит-тесты (все зелёные): core 401, sqlite 514, postgres 521, sqlserver 388, mysql 168,
+  clickhouse 338.
+- Интеграционные тесты через Testcontainers (PostgreSQL, SQL Server, MySQL, ClickHouse):
+  **1812 выполнено, 0 failed, 0 errors, 86 provider-capability skip** (осознанные пропуски вроде
+  «SQL Server не умеет CTAS batch»).
+
+## Файлы
+
+- `src/nextorm.core/Visitors/ScalarFunctionTranslator.cs`
+- `src/nextorm.core/DataContext/Meta/Implementation/EntityMetadata.cs`
+- `src/nextorm.core/Visitors/MemberTranslator.cs`
+- `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs`
+
+## Воспроизведение
+
+```bash
+# база 5d9b8d8 и рабочее дерево с патчем, тот же harness в обоих, чередуя:
+dotnet build benchmarks/bench-harness -c Release
+bash ab_harness.sh 6 300 10        # base vs opt, медианы ns и B/op
+# профиль (нужен dotnet-trace):
+dotnet-trace collect --profile dotnet-sampled-thread-time -o prepare.nettrace -- bench-harness profile
+dotnet-trace report prepare.nettrace topN -n 30 --inclusive
+```
+
+# Итерация 13 — тёплый путь: мемоизация ключа плана (2026-09-26)
+
+> **База:** Итерация 12 (SQL-build оптимизации). Изменения — внутренние, публичный API не затронут.
+> Суммарный патч с Итерацией 12: 197 вставок / 48 удалений в 9 файлах `src/nextorm.core`.
+
+## Что сделано
+
+Профиль тёплого lookup'а (Итерация 12) показал, что на cache hit почти всё время уходит на
+**структурное сравнение ключа плана**: `QueryPlanEqualityComparer.Equals` ≈ 39 %,
+`ExpressionComparer.CompareLambda` ≈ 31 %, `SelectExpressionPlanEqualityComparer.Equals` ≈ 14 %.
+Причина — на каждый lookup строится новый `QueryPlan`, и `QueryPlanStore` сравнивает его с
+командой-клоном, лежащей в кэше, обходя всё дерево выражения. Хэш при этом уже дешёвый
+(считается из предвычисленных `*PlanHash`, 5–6 %).
+
+1. **Мемоизация ключа плана на команде** (`Query/QueryCommand.Plan.cs`). `GetOrCreatePlanKey(sql)`
+   возвращает ранее построенный `QueryPlan`, пока команда подготовлена и её value-list shape
+   (`InValuesShapeHash`/`PreWhereShapeHash`, единственное, что переоценивается на уже подготовленной
+   команде) не изменился. `Prepare`, `ResetPreparation` и `ReplaceCommand` сбрасывают мемо.
+2. **`ReferenceEquals` fast-path в `QueryPlan.Equals`** — сравнение того же экземпляра ключа O(1).
+3. **`QueryPlanStore` возвращает хранимый ключ** (`TryGet(..., out storedPlan)`): на попадании команда
+   мемоизирует именно экземпляр из кэша, поэтому следующий lookup совпадает по ссылке.
+4. **Идемпотентный `QueryPlan.GetCacheVersion()`** — повторная запись того же ключа не клонирует клон.
+
+## Измерения (интерлив-харнесс: база = только Итерация 12 ⟷ opt = +Итерация 13)
+
+| Arm | ns base | ns opt | opt/base | B/op base → opt |
+|---|--:|--:|--:|---|
+| `reused_planonly` (повторный lookup переиспользуемой команды) | 4385.1 | **290.9** | **0.066** | 480 → **0** |
+| `cached_planonly_param` (свежая команда каждый вызов) | 26481.5 | 27263.0 | 1.03 | 4880 → 4904 |
+| `build_simple` / `build_join3` / `build_complex7` | — | — | 1.00–1.04 | без изменений |
+| `construct_simple` / `construct_complex7` | — | — | 0.96–1.02 | без изменений |
+
+**Тёплый lookup переиспользуемой команды: 4385 → 291 ns (−93 %) и 0 аллокаций.** Свежая команда
+на каждый вызов (`cached_planonly_param`) выигрыша не получает: её негде мемоизировать, и она
+по-прежнему платит структурное сравнение — это заложено в дизайн ключа. Выигрывают команды,
+которые выполняются повторно (явное переиспользование `QueryCommand`, повторный вызов терминала
+на одной команде).
+
+## Пойманный регресс (важно)
+
+Первая версия ломала `.Any()`: `AnyCommand` — общая команда на контекст, и
+`EntityBuilderExtensions.GetAnyCommand` меняет её ссылочный подзапрос через `ReplaceCommand`
+**без** `ResetPreparation`. Мемо, проверявшее только shape-хэши, возвращало устаревший план, и
+`ComplexEntity.Where(it => it.Id == 100).Any()` возвращал `true` по предикату предыдущего запроса.
+Поймано интеграционными тестами (`Any_ShouldReturnTrue`, `SelectAnyOnBuilder_ShouldReturnTrue` у
+Sqlite/Postgres/MySql). Исправлено сбросом мемо в `ReplaceCommand`. Это ровно та зона риска, о
+которой предупреждает `AGENTS.md`: общая команда мутируется без reset.
+
+## Проверка корректности (после исправления)
+
+- Юнит-тесты: core 401, sqlite 514, postgres 521, sqlserver 388, mysql 168, clickhouse 338 — все зелёные.
+- Интеграционные через Testcontainers (PG/SQL Server/MySQL/ClickHouse):
+  **1812 выполнено, 0 failed, 0 errors, 86 provider-capability skip**.
+
+## Файлы (Итерация 13)
+
+- `src/nextorm.core/Query/QueryCommand.Plan.cs` — мемо ключа, `GetOrCreatePlanKey`, `CacheStoredPlanKey`, `InvalidatePlanKey`.
+- `src/nextorm.core/Query/QueryCommand.cs` — сброс мемо в `ResetPreparation` и `ReplaceCommand`.
+- `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs` — сброс мемо в начале `Prepare`.
+- `src/nextorm.core/DataContext/Cache/QueryPlan.cs` — `ReferenceEquals` fast-path, идемпотентный `GetCacheVersion`.
+- `src/nextorm.core/DataContext/Cache/QueryPlanStore.cs` — возврат хранимого ключа.
+- `src/nextorm.core/DataContext/QueryPlanner.cs` — мемоизация хранимого ключа на попадании.
+
+## Воспроизведение
+
+```bash
+# база = Итерация 12, opt = Итерация 13; тот же harness в обоих, чередуя 6 раундов:
+bash ab_harness.sh 6 300 10
+# профиль тёплого пути:
+dotnet-trace collect --profile dotnet-sampled-thread-time -o warm.nettrace -- bench-harness profile-warm
+dotnet-trace report warm.nettrace topN -n 25 --inclusive
+```

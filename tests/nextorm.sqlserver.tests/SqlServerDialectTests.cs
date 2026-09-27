@@ -14,6 +14,10 @@ public class SqlServerDialectTests
     private static readonly ISqlDialect Dialect = SqlServerDialect.Instance;
 
     [Fact]
+    public void SupportsTableValuedParameters_IsTrue()
+        => Dialect.SupportsTableValuedParameters.Should().BeTrue();
+
+    [Fact]
     public void DurationHooks_ShouldUseIntegerStorage()
     {
         Dialect.SupportsNativeDuration.Should().BeFalse();
@@ -280,6 +284,9 @@ public class SqlServerDialectTests
         Dialect.RequireSubqueryAlias.Should().BeTrue();
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
+        Dialect.SupportsSequentialAccess.Should().BeTrue();
+        // No trailing locator: SqlClient streams the payload without a rowid, so no "<payload>, rowid" SQL.
+        Dialect.LobLocatorColumn.Should().BeNull();
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsGreatestLeast.Should().BeTrue();

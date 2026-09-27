@@ -57,10 +57,10 @@
 | 8 | `todo_clickhouse_aggregate_function_state.md` | не готов к ревью | 5 | 1 (полнота) |
 | 9 | `todo_query_filters.md` | нужен пересмотр | 9 | 3 |
 | 10 | `todo_batch_dml.md` | **файл удалён** | — | — |
-| 11 | `todo_output_into.md` | нужен пересмотр | 7 | 2 |
+| 11 | `todo_output_into.md` | пересмотрено 2026-09-26 | 7 | 2 |
 | 12 | `todo_dynamic_result_schema.md` | **файл удалён (shipped)** | — | — |
-| 13 | `todo_stored_procedures.md` | нужен пересмотр | 9 | 1 |
-| 14 | `todo_tvp.md` | нужен пересмотр | 8 | 2 |
+| 13 | `todo_stored_procedures.md` | пересмотрено 2026-09-26 | 9 | 1 |
+| 14 | `todo_tvp.md` | пересмотрено 2026-09-26 | 8 | 2 |
 | 15 | `todo_sharding.md` | нужен пересмотр | 10 | 1 |
 | 16 | `todo_json_column_mapping.md` | **файл удалён (shipped)** | — | — |
 | 17 | `todo_interface_poco.md` | дизайн-здоров | 5 | 0 |
@@ -68,7 +68,7 @@
 | 19 | `todo_join_projection_mapping.md` | дизайн-здоров | 4 | 0 |
 | 20 | `todo_timespan_columns.md` | **файл удалён (shipped)** | — | — |
 | 21 | `todo_value_converters.md` | **файл удалён (shipped)** | — | — |
-| 22 | `todo_streaming_lob.md` | нужен пересмотр | 9 | 1 |
+| 22 | `todo_streaming_lob.md` | пересмотрено 2026-09-26 | 9 | 1 |
 | 23 | `todo_json_streaming.md` | нужен пересмотр | 9 | 1 (корректность) |
 | 24 | `todo_efcore_integration.md` | пересмотр | 8 | 1 (архитектура) |
 | 25 | `todo_interceptors.md` | **файл удалён (shipped)** | — | — |
@@ -124,3 +124,7 @@
 - Правило процесса: при создании/добавлении нового TODO запускать `nextorm-design-engineer` по плану.
 - При починке реестровых ссылок: `API-NAMING-REVIEW.md:4653` (BAT6) и `code-smells-review.md:6740`
   указывают на удалённый `todo_batch_dml.md`.
+- **Пересмотрено 26.09.2026:** планы `todo_output_into` (фаза 2), `todo_stored_procedures`, `todo_tvp`
+  и `todo_streaming_lob` унифицированы вокруг #70 «Фаза 0 — Основа» (дескриптор параметра, владелец
+  reader'а с отдельной `DbCommand` на вызов, общий helper навигации result-set'ов, мапперы произвольного
+  `T`); #25 (несколько result-set'ов) слит в #70 фазу 4.

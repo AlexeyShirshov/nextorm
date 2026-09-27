@@ -28,6 +28,10 @@
 - Never mutate that command on behalf of a single call — in particular `queryCommand.Cache = false`, which is backed by the sticky `_dontCache` field. The flag persists across calls, so it leaks to every later query on the context and silently disables the plan cache for the whole context (green tests, production regression).
 - To prepare without caching, pass `storeInCache: false` to `_planner.GetPreparedQueryCommand(...)` — it is local to the call and does not touch the command. The lazy temp-table path (`DataContext.GetPreparedTemporaryTableCommand`, `DataContext.cs`) is the reference example.
 
+## TVP metadata & decimal precision
+- The TVP auto-resolution path keeps **its own** metadata cache inside `DataContextCache` (`TvpMetadataCacheTests`): it must never seed the process-wide configured-metadata cache, always defers to a configured `From<T>(cfg)` mapping, and is cleared by `DataContextCache.Clear()`. Seeding the configured cache silently ignores a later fluent registration.
+- `[DecimalPrecision(p, s)]` / fluent `DecimalPrecision(p, s)` are validated against the **bound provider type** (`converter?.ProviderType ?? propertyType`) in `DecimalPrecisionRules.Validate`; a non-decimal bound type or a pair declaring only one of precision/scale throws. Provider defaults stay (SQL Server `decimal(38,18)`, ClickHouse `Decimal(38,10)`).
+
 ## Git
 - Never run `git push`; the user pushes manually.
 - Do not create commits unless explicitly asked — **this includes work in separate git worktrees**.

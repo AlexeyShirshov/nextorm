@@ -7,7 +7,7 @@
 > методы типа XML (`value`/`query`/`exist` и rowset `nodes`), нативные конструкции источника
 > `PIVOT`/`UNPIVOT`, а также табличные функции `string_split`/`openjson`.
 
-**Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Провайдер SQL Server](../../providers/sqlserver.md)
+**Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Провайдер SQL Server](../../providers/sqlserver.md)
 
 ## `CHOOSE`
 
@@ -34,7 +34,7 @@ select choose(2, 'a', 'b', 'c') as [Label] from complex_entity
 рендерит завершающую клаузу `OPTION (...)`, например `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); параметр CTE
 `maxRecursion` отображается в `option (maxrecursion n)`. См.
-[Хинты запросов](../17-query-hints.md).
+[Хинты запросов](../15-query-hints.md).
 
 ## Блокировка строк
 
@@ -56,7 +56,7 @@ select id from simple_entity with (updlock)
 (разделяемая блокировка). Хинт блокировки комбинируется с
 [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])): `.WithTableHint("rowlock").ForUpdate()` даёт
 `with (rowlock, updlock)`. См.
-[Блокировку строк](../01-querying-and-projections.md#блокировка-строк-for-update--for-share).
+[Блокировку строк](../../querying/03-provider-specifics.md#блокировка-строк-for-update--for-share).
 
 ## `FOR JSON` и `FOR XML`
 
@@ -64,7 +64,7 @@ select id from simple_entity with (updlock)
 XML-документом
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
 `WithForJson`/`WithForXml` присоединяют предложение без выполнения; два вида предложений
-взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../18-json.md).
+взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../16-json.md).
 
 ## Методы типа XML
 
@@ -113,8 +113,8 @@ from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value
 
 `string_split(...)` и `openjson(...)` доступны через
 [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). См.
-[Табличные функции](../13-table-valued-functions.md) и
-[Поддержка JSON в разных провайдерах](../18-json.md).
+[Табличные функции](../11-table-valued-functions.md) и
+[Поддержка JSON в разных провайдерах](../16-json.md).
 
 ## Temporal-таблицы
 
@@ -224,14 +224,14 @@ select id from simple_entity tablesample (10 percent) repeatable (3)
 SQL Server поддерживает только метод `System`
 (`TableSample`); `Bernoulli`
 выбрасывает `NotSupportedException`. См.
-[Сэмплирование таблицы](../01-querying-and-projections.md#сэмплирование-таблицы-tablesample).
+[Сэмплирование таблицы](../../querying/02-query-sources.md#сэмплирование-таблицы-tablesample).
 
 ## Полнотекстовый поиск
 
 Кросс-провайдерные boolean-предикаты `contains`/`freetext` рендерят `CONTAINS`/`FREETEXT`. Для
 ранжирования `SqlFunctions.SqlServer.containstable`/`freetexttable` отдают ключ совпавшей строки и
 оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
-[Табличные функции](../13-table-valued-functions.md#встроенные-табличные-функции).
+[Табличные функции](../11-table-valued-functions.md#встроенные-табличные-функции).
 
 ## Скаляры T-SQL
 

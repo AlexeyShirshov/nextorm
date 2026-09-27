@@ -9,8 +9,22 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>Gets the shared SQLite dialect instance.</summary>
     public static readonly SqliteDialect Instance = new();
 
+    // Microsoft.Data.Sqlite exposes a blob as a seekable SqliteBlob when it is read through
+    // SequentialAccess, but only if the row has a rowid it can address lazily.
+    /// <inheritdoc/>
+    public override bool SupportsSequentialAccess => true;
+
+    /// <inheritdoc/>
+    public override string? LobLocatorColumn => "rowid";
+
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
+
+    /// <summary>SQLite has no stored procedures, so <c>ExecuteProcedure</c> is rejected by the base capability gate.</summary>
+    public override bool SupportsStoredProcedures => false;
+
+    /// <summary>SQLite emulates a table-valued parameter with a JSON document (<c>json_each</c>/<c>json_extract</c>).</summary>
+    public override bool SupportsTableValuedParameters => true;
 
     // SQLite 3.35.0+ supports the ANSI INSERT ... RETURNING clause; last_insert_rowid() stays
     // available as a fallback but RETURNING is preferred because it is scoped to the statement.
@@ -43,6 +57,26 @@ public sealed class SqliteDialect : SqlDialectBase
     // SQLite supports a raw SQL derived table (FROM (<sql>) AS alias).
     /// <inheritdoc/>
     public override bool SupportsRawSqlSource => true;
+
+    // SQLite attaches databases as schemas ("main", "temp" or an ATTACHed name); there is no separate
+    // schema level, so a schema/database override is a single qualifier rendered as <qualifier>.<table>.
+    /// <inheritdoc/>
+    public override bool SupportsCrossDatabase => true;
+
+    /// <summary>
+    /// Renders the SQLite single-qualifier form <c>database.table</c> (an attached database). A schema
+    /// and a database name the same level here, so the two overrides are mutually exclusive.
+    /// </summary>
+    public override string MakeQualifiedTableName(string? server, string? database, string? schema, string table)
+    {
+        if (server is not null)
+            throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect.");
+
+        if (database is not null && schema is not null)
+            throw new NotSupportedException("SQLite treats the database and the schema as the same qualifier; set only one of them.");
+
+        return JoinTableQualifier(database ?? schema, table);
+    }
 
     // SQLite 3.24.0+ expresses a key upsert as INSERT ... ON CONFLICT (<keys>) DO UPDATE SET.
     /// <inheritdoc/>

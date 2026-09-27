@@ -100,6 +100,7 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 184467440737
 | Arbitrary-value aggregate | `ANY_VALUE(x)` |
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)` |
 | Window percentiles | not supported (`PERCENTILE_CONT` is MariaDB-only) |
+| LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 MySQL 8.0.31 and later support `INTERSECT`/`EXCEPT`; the dialect rejects the `*ALL` variants with a
 `NotSupportedException`, matching the engine.

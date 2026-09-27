@@ -128,6 +128,71 @@ public sealed class FromExpression
      /// <see cref="LinqSource"/> and <see cref="RawSqlSource"/>.
      /// </summary>
      internal readonly XmlNodesExpression? XmlNodes;
+     /// <summary>
+     /// Optional provider-specific hint attached to this derived-table source, or <c>null</c> when it has
+     /// none. Set through the fluent <c>WithSubQueryHint</c> modifier. Only dialects with an inline hint
+     /// comment (PostgreSQL <c>pg_hint_plan</c>, MySQL/MariaDB optimizer hints) can express it; SQL Server
+     /// rejects a query hint on a subselect, so the command is rejected there.
+     /// </summary>
+     internal string? SubQueryHint { get; init; }
+     /// <summary>
+     /// Per-query override of the physical table name; <c>null</c> means the mapped or declared name is
+     /// used. Set through <c>EntityBuilder&lt;TEntity&gt;.WithTableName</c>.
+     /// </summary>
+     internal readonly string? TableNameOverride;
+     /// <summary>
+     /// Per-query schema qualifier rendered before the table name; <c>null</c> means unqualified. Set
+     /// through <c>EntityBuilder&lt;TEntity&gt;.WithSchema</c>.
+     /// </summary>
+     internal readonly string? SchemaOverride;
+     /// <summary>
+     /// Per-query database qualifier; <c>null</c> means the provider's default database. Set through
+     /// <c>EntityBuilder&lt;TEntity&gt;.WithDatabase</c>.
+     /// </summary>
+     internal readonly string? DatabaseOverride;
+     /// <summary>
+     /// Per-query linked-server qualifier; <c>null</c> means the local server. Set through
+     /// <c>EntityBuilder&lt;TEntity&gt;.WithServer</c>.
+     /// </summary>
+     internal readonly string? ServerOverride;
+     /// <summary>
+     /// Per-query raw SQL fragment rendered as the <c>FROM</c> source in place of the table. Set through
+     /// <c>EntityBuilder&lt;TEntity&gt;.WithTableExpression</c>.
+     /// </summary>
+     internal readonly string? TableExpressionOverride;
+
+     /// <summary>Copies every source slot and applies the given overrides, falling back to the source's own.</summary>
+     private FromExpression(FromExpression source, string? tableName, string? schema, string? database, string? server, string? tableExpression)
+     {
+          Table = source.Table;
+          IsAutoMapped = source.IsAutoMapped;
+          SourceIsInterface = source.SourceIsInterface;
+          SubQuery = source.SubQuery;
+          TempTable = source.TempTable;
+          SourceType = source.SourceType;
+          ColumnShape = source.ColumnShape;
+          TableFunction = source.TableFunction;
+          Pivot = source.Pivot;
+          LinqSource = source.LinqSource;
+          RawSqlSource = source.RawSqlSource;
+          XmlNodes = source.XmlNodes;
+          TableNameOverride = tableName ?? source.TableNameOverride;
+          SchemaOverride = schema ?? source.SchemaOverride;
+          DatabaseOverride = database ?? source.DatabaseOverride;
+          ServerOverride = server ?? source.ServerOverride;
+          TableExpressionOverride = tableExpression ?? source.TableExpressionOverride;
+          SubQueryHint = source.SubQueryHint;
+     }
+
+     /// <summary>Whether any table-name/schema/database/server qualifier override is present.</summary>
+     internal bool HasQualificationOverride => TableNameOverride is not null || SchemaOverride is not null || DatabaseOverride is not null || ServerOverride is not null;
+
+     /// <summary>
+     /// Returns a new source with the given per-query overrides applied; the original is not mutated so a
+     /// metadata-cached source stays shared. A <c>null</c> argument keeps the current value.
+     /// </summary>
+     internal FromExpression WithOverrides(string? tableName, string? schema, string? database, string? server, string? tableExpression)
+          => new(this, tableName, schema, database, server, tableExpression);
 
      // public override int GetHashCode()
      // {
@@ -164,6 +229,6 @@ public sealed class FromExpression
 
           if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
 
-          return new FromExpression(SubQuery!.CloneForCache());// { TableAlias = TableAlias };
+          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint };// { TableAlias = TableAlias };
      }
 }

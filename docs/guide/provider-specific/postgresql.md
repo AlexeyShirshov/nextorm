@@ -5,7 +5,7 @@
 > regression and boolean aggregates, the extended scalar/regexp helpers, `DISTINCT ON` and the `unnest`
 > table function.
 
-**Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [PostgreSQL provider](../../providers/postgres.md)
+**Prerequisites:** [Querying and projections](../../querying/index.md) · [PostgreSQL provider](../../providers/postgres.md)
 
 ## Arrays
 
@@ -44,7 +44,7 @@ surface is gated by [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRan
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). The operators are exposed as static methods named
 after the SQL tokens, so no range member collides with a CLR operator or the full-text `Contains`:
 
-On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../31-range-columns.md); the same operators are then translated over the pair.
+On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../29-range-columns.md); the same operators are then translated over the pair.
 
 | Member | SQL |
 |---|---|
@@ -123,7 +123,7 @@ select jsonb_agg(somestring) from complex_entity
 ```
 
 See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
-[JSON support across providers](../18-json.md).
+[JSON support across providers](../16-json.md).
 
 ## Ordered-set, regression and boolean aggregates
 
@@ -135,7 +135,7 @@ See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
 * `array_agg` and the string/array aggregate surface are gated by
   [`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates).
 
-See [Grouping and aggregates](../04-grouping-and-aggregates.md).
+See [Grouping and aggregates](../03-grouping-and-aggregates.md).
 
 ## Full-text search
 
@@ -199,7 +199,7 @@ var rows = dataContext.From<IComplexEntity>()
 select distinct on (somestring) id, somestring from complex_entity order by somestring
 ```
 
-See [Distinct](../08-distinct.md).
+See [Distinct](../07-distinct.md).
 
 ## Set-returning functions
 
@@ -226,7 +226,7 @@ adds to a derived source, so the dialect wraps those calls in a one-column subqu
 (`from (select generate_series from generate_series(...)) as "t1"`); the functions with an explicit
 output column (`value`, `key`/`value`, `word`/`ndoc`/`nentry`) are emitted unchanged.
 
-See [Table-valued functions](../13-table-valued-functions.md).
+See [Table-valued functions](../11-table-valued-functions.md).
 
 ## `TABLESAMPLE`
 
@@ -249,7 +249,7 @@ select id from simple_entity tablesample system (10) repeatable (42)
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) renders
 `tablesample system (10)` and [`TableSampleMethod.Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli)
 renders `tablesample bernoulli (5)`; other providers reject the modifier at SQL build time. See
-[Table sampling](../01-querying-and-projections.md#table-sampling-tablesample).
+[Table sampling](../../querying/02-query-sources.md#table-sampling-tablesample).
 
 ## Row locking
 
@@ -272,7 +272,18 @@ select id from simple_entity where (id > 5) for update
 `LockMode.Update` renders `for update` and `LockMode.Share` renders `for share`. Both accept a
 [`LockWaitMode`](xref:NextORM.Core.LockWaitMode): `ForUpdate(LockWaitMode.SkipLocked)` renders
 `for update skip locked` and `ForShare(LockWaitMode.NoWait)` renders `for share nowait` (PostgreSQL 9.5+).
-See [Row locking](../01-querying-and-projections.md#row-locking-for-update--for-share).
+See [Row locking](../../querying/03-provider-specifics.md#row-locking-for-update--for-share).
+
+For optimistic concurrency, PostgreSQL's `xmin` system column is available too: map it to a `uint`
+property marked computed and compare it in `Where` (equality only) — see
+[Optimistic concurrency and change tracking](../27-optimistic-concurrency.md#postgresql-xmin).
+
+The same `uint` mapping reads PostgreSQL's `oid` and other `uint`-backed system types (for example
+`cid`) into a CLR `uint` property: Npgsql surfaces them as `uint`, so materialising one works. Only
+comparison and write parameters are limited: nextorm binds a `uint` parameter as `xid`, and `oid = xid`
+(or `cid = xid`) has no operator, so against a non-`xid` target it fails with SQLSTATE 42883. Compare
+through a `bigint` cast — `Where(e => (long)e.Oid == (long)value)` — or run raw SQL with a `bigint`
+parameter and an explicit `::oid` cast.
 
 ## Data-modifying CTEs
 
@@ -300,16 +311,16 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 
 The body may be a `VALUES` insert or an `INSERT ... SELECT`, and the mutation may read an earlier read CTE
 (declare it first and use `CteQuery.With(name, insert)`) or feed a main `INSERT ... SELECT`. See
-[Data modification (INSERT): Data-modifying CTE](../19-insert-statement.md#data-modifying-cte-postgresql)
+[Data modification (INSERT): Data-modifying CTE](../17-insert-statement.md#data-modifying-cte-postgresql)
 for the full set of forms; general read CTEs are in
-[Common table expressions](../09-cte.md). Every
+[Common table expressions](../08-cte.md). Every
 other provider rejects `With(name, insert)` at build time with `NotSupportedException`.
 
 ## Dynamic record schema
 
 `jsonb_to_record`/`jsonb_to_recordset` are exposed as table-valued functions whose result schema is
 declared by the caller's row type and rendered as the alias column-definition list
-(`AS x(a int, b text)`). See [Dynamic result schema](../13-table-valued-functions.md#dynamic-result-schema).
+(`AS x(a int, b text)`). See [Dynamic result schema](../11-table-valued-functions.md#dynamic-result-schema).
 The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
 free-form column list) remain out of scope. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).

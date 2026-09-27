@@ -75,6 +75,7 @@ MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the wind
 | Conditional function | inherited from MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (MariaDB 10.3+) |
 | Native functions | the `SqlFunctions.MySql` surface inherited from MySQL **minus** `uuid_to_bin`/`bin_to_uuid`, **plus** the MariaDB-only names (extended regexp, `nvl`/`nvl2`, `add_months`/`months_between`, `to_char`/`to_date`/`to_number`, `kdf`, `xxh3`/`xxh32`, `json_detailed`/`json_compact`, sequence access) |
+| LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` |
 
 ## See also
 

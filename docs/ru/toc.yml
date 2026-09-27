@@ -14,66 +14,66 @@
       href: getting-started/04-dependency-injection.md
 - name: Руководство
   items:
-    - name: Запросы и проекции
-      href: guide/01-querying-and-projections.md
     - name: Фильтрация (WHERE)
-      href: guide/02-filtering-where.md
+      href: guide/01-filtering-where.md
     - name: Соединения (JOIN)
-      href: guide/03-joins.md
+      href: guide/02-joins.md
     - name: Группировка и агрегаты
-      href: guide/04-grouping-and-aggregates.md
+      href: guide/03-grouping-and-aggregates.md
     - name: Сортировка и постраничный вывод
-      href: guide/05-sorting-and-paging.md
+      href: guide/04-sorting-and-paging.md
     - name: Подзапросы
-      href: guide/06-subqueries.md
+      href: guide/05-subqueries.md
     - name: Операции над множествами
-      href: guide/07-set-operations.md
+      href: guide/06-set-operations.md
     - name: SELECT DISTINCT
-      href: guide/08-distinct.md
+      href: guide/07-distinct.md
     - name: Обобщённые табличные выражения (CTE)
-      href: guide/09-cte.md
+      href: guide/08-cte.md
     - name: Оконные функции
-      href: guide/10-window-functions.md
+      href: guide/09-window-functions.md
     - name: Пользовательские функции
-      href: guide/12-user-defined-functions.md
+      href: guide/10-user-defined-functions.md
     - name: Табличные функции
-      href: guide/13-table-valued-functions.md
+      href: guide/11-table-valued-functions.md
     - name: Сырой SQL
-      href: guide/14-raw-sql.md
+      href: guide/12-raw-sql.md
     - name: "Переиспользование запросов: кэш и Prepare"
-      href: guide/15-query-reuse.md
+      href: guide/13-query-reuse.md
     - name: Подключения и логирование
-      href: guide/16-connections-and-logging.md
+      href: guide/14-connections-and-logging.md
     - name: Хинты запросов
-      href: guide/17-query-hints.md
+      href: guide/15-query-hints.md
     - name: Поддержка JSON в разных провайдерах
-      href: guide/18-json.md
+      href: guide/16-json.md
     - name: Изменение данных (INSERT)
-      href: guide/19-insert-statement.md
+      href: guide/17-insert-statement.md
     - name: Изменение данных (DELETE)
-      href: guide/20-delete-statement.md
+      href: guide/18-delete-statement.md
     - name: Изменение данных (UPDATE)
-      href: guide/21-update-statement.md
+      href: guide/19-update-statement.md
     - name: Материализация запроса в таблицу
-      href: guide/22-create-table-as.md
+      href: guide/20-create-table-as.md
     - name: Изменение данных (MERGE)
-      href: guide/23-merge-statement.md
+      href: guide/21-merge-statement.md
     - name: Массовая вставка (bulk)
-      href: guide/24-bulk-insert.md
+      href: guide/22-bulk-insert.md
     - name: Транзакции
-      href: guide/25-transactions.md
+      href: guide/23-transactions.md
     - name: Колонки-длительности (TimeSpan)
-      href: guide/26-duration-columns.md
+      href: guide/24-duration-columns.md
     - name: Интерцепторы
-      href: guide/27-interceptors.md
+      href: guide/25-interceptors.md
     - name: Выполнение утверждений одним батчем
-      href: guide/28-sql-batch.md
+      href: guide/26-sql-batch.md
     - name: Оптимистичная конкурентность и отслеживание изменений
-      href: guide/29-optimistic-concurrency.md
+      href: guide/27-optimistic-concurrency.md
     - name: Конвертеры значений и JSON-колонки
-      href: guide/30-value-converters.md
+      href: guide/28-value-converters.md
     - name: Range-колонки (пара скалярных колонок)
-      href: guide/31-range-columns.md
+      href: guide/29-range-columns.md
+    - name: Потоковое чтение больших объектов (BLOB/CLOB)
+      href: guide/30-large-objects.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор
@@ -88,6 +88,16 @@
           href: guide/provider-specific/mysql.md
         - name: SQLite
           href: guide/provider-specific/sqlite.md
+- name: Запросы
+  items:
+    - name: Обзор
+      href: querying/index.md
+    - name: Проекции
+      href: querying/01-projections.md
+    - name: Источники запроса
+      href: querying/02-query-sources.md
+    - name: Провайдер-специфика
+      href: querying/03-provider-specifics.md
 - name: Скалярные функции
   items:
     - name: Обзор

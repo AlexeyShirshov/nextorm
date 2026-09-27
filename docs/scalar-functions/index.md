@@ -3,7 +3,7 @@
 > Translate `string`, `Math` and `DateTime` members, `??` coalescing, boolean predicates and numeric
 > conversions into provider-specific SQL.
 
-**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../guide/01-querying-and-projections.md) · [Filtering (WHERE)](../guide/02-filtering-where.md)
+**Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](../querying/index.md) · [Filtering (WHERE)](../guide/01-filtering-where.md)
 
 ## Overview
 
@@ -18,7 +18,7 @@ Two rules apply throughout:
 * a **constant** is inlined. For `Contains`/`StartsWith`/`EndsWith` that also means `%`, `_` and `\` in a
   constant are escaped and an `escape '\'` clause is emitted.
 
-The built-in translations are attempted **before** any [`[SqlFunction]`](../guide/12-user-defined-functions.md)
+The built-in translations are attempted **before** any [`[SqlFunction]`](../guide/10-user-defined-functions.md)
 mapping, so a user-defined attribute cannot change the behaviour of `string`/`Math`/`DateTime` members.
 
 Cross-provider helpers live on [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Functions that only one provider supports are grouped
@@ -33,9 +33,9 @@ provider that does not opt in throws `NotSupportedException`.
 
 ## See also
 
-* [Filtering (WHERE)](../guide/02-filtering-where.md) - `Contains`/`in`, `??` and conditional expressions in predicates.
-* [Grouping and aggregates](../guide/04-grouping-and-aggregates.md) - aggregate functions (`count`, `sum`, ...).
-* [User-defined functions](../guide/12-user-defined-functions.md) - when a scalar function is not built in.
+* [Filtering (WHERE)](../guide/01-filtering-where.md) - `Contains`/`in`, `??` and conditional expressions in predicates.
+* [Grouping and aggregates](../guide/03-grouping-and-aggregates.md) - aggregate functions (`count`, `sum`, ...).
+* [User-defined functions](../guide/10-user-defined-functions.md) - when a scalar function is not built in.
 * [Provider overview](../providers/overview.md) - capability flags and quoting.
 
 ---

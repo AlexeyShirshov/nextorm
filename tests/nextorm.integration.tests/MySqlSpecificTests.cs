@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -441,6 +442,182 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
                 SqlFunctions.MySql.uuid_to_bin("6ccd780c-baba-1026-9564-5b8c656024db")))
             .First()
             .Should().Be("6ccd780c-baba-1026-9564-5b8c656024db");
+    }
+
+    [Fact]
+    public void ExecuteRaw_Parameter_ShouldRoundTripThroughProviderParameter()
+    {
+        var ctx = _sut.DataProvider;
+        var value = Random.Shared.Next(1, 1_000_000);
+
+        using var result = ctx.ExecuteRaw("select @v + 1 as value", [new ProcedureParameter("v", value)]);
+
+        result.Read<int>().Should().Equal(value + 1);
+    }
+
+    [Fact]
+    public void ExecuteProcedure_WithInAndOutputAndSelect_ShouldReadSetAndOutput()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "p_raw_" + Guid.NewGuid().ToString("N")[..20];
+
+        Execute(ctx, $"create procedure {proc}(in p_id int, out p_label varchar(50)) begin select p_id as value; set p_label = 'label'; end");
+
+        try
+        {
+            using var result = ctx.ExecuteProcedure(
+                proc,
+                [
+                    new ProcedureParameter("p_id", 7, DbType: DbType.Int32),
+                    new ProcedureParameter("p_label", null, Direction: ParameterDirection.Output, DbType: DbType.String, Size: 50),
+                ]);
+
+            result.Read<int>().Should().Equal(7);
+
+            var outputs = result.OutputParameters;
+            outputs.Should().ContainSingle();
+            outputs[0].Value.Should().Be("label");
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc}");
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteProcedureAsync_WithInAndOutputAndSelect_ShouldReadSetAndOutput()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "p_raw_a_" + Guid.NewGuid().ToString("N")[..20];
+
+        Execute(ctx, $"create procedure {proc}(in p_id int, out p_label varchar(50)) begin select p_id as value; set p_label = 'label'; end");
+
+        try
+        {
+            await using var result = await ctx.ExecuteProcedureAsync(
+                proc,
+                [
+                    new ProcedureParameter("p_id", 7, DbType: DbType.Int32),
+                    new ProcedureParameter("p_label", null, Direction: ParameterDirection.Output, DbType: DbType.String, Size: 50),
+                ],
+                TestContext.Current.CancellationToken);
+
+            var values = new List<int>();
+            await foreach (var v in result.ReadAsync<int>(TestContext.Current.CancellationToken))
+                values.Add(v);
+            values.Should().Equal(7);
+
+            var outputs = result.OutputParameters;
+            outputs.Should().ContainSingle();
+            outputs[0].Value.Should().Be("label");
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc}");
+        }
+    }
+
+    private sealed class TvpEntity
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_Scalar_ShouldUseJsonTable()
+    {
+        var ctx = _sut.DataProvider;
+
+        using (var result = ctx.ExecuteRaw(
+            "select count(*) as c from JSON_TABLE(@ids, '$[*]' COLUMNS(value INT PATH '$')) as t",
+            [ProcedureParameter.Table("ids", new[] { 1, 2, 3 })]))
+        {
+            result.Read<long>().Should().Equal(3L);
+        }
+
+        using (var result = ctx.ExecuteRaw(
+            "select sum(t.value) as s from JSON_TABLE(@ids, '$[*]' COLUMNS(value INT PATH '$')) as t",
+            [ProcedureParameter.Table("ids", new[] { 1, 2, 3 })]))
+        {
+            result.Read<long>().Should().Equal(6L);
+        }
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_Entity_ShouldUseJsonTable()
+    {
+        var ctx = _sut.DataProvider;
+
+        var rows = new[]
+        {
+            new TvpEntity { Id = 1, Name = "alpha" },
+            new TvpEntity { Id = 2, Name = null },
+        };
+
+        using var result = ctx.ExecuteRaw(
+            "select t.Id, t.Name from JSON_TABLE(@rows, '$[*]' COLUMNS(Id INT PATH '$.Id', Name varchar(100) PATH '$.Name')) as t order by t.Id",
+            [ProcedureParameter.Table("rows", rows)]);
+
+        var read = result.Read<TvpEntity>();
+
+        read.Should().HaveCount(2);
+        read[0].Id.Should().Be(1);
+        read[0].Name.Should().Be("alpha");
+        read[1].Id.Should().Be(2);
+        read[1].Name.Should().BeNull();
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_EmptyScalar_ShouldReturnNoRows()
+    {
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw(
+            "select count(*) as c from JSON_TABLE(@ids, '$[*]' COLUMNS(value INT PATH '$')) as t",
+            [ProcedureParameter.Table("ids", Array.Empty<int>())]);
+
+        result.Read<long>().Should().Equal(0L);
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameter_EmptyEntity_ShouldReturnNoRows()
+    {
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw(
+            "select t.Id, t.Name from JSON_TABLE(@rows, '$[*]' COLUMNS(Id INT PATH '$.Id', Name varchar(100) PATH '$.Name')) as t",
+            [ProcedureParameter.Table("rows", Array.Empty<TvpEntity>())]);
+
+        result.Read<TvpEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_TableParameter_Scalar_ShouldUseJsonTable()
+    {
+        var ctx = _sut.DataProvider;
+
+        await using var result = await ctx.ExecuteRawAsync(
+            "select sum(t.value) as s from JSON_TABLE(@ids, '$[*]' COLUMNS(value INT PATH '$')) as t",
+            [ProcedureParameter.Table("ids", new[] { 1, 2, 3 })],
+            TestContext.Current.CancellationToken);
+
+        var read = new List<long>();
+        await foreach (var value in result.ReadAsync<long>(TestContext.Current.CancellationToken))
+            read.Add(value);
+
+        read.Should().Equal(6L);
+    }
+
+    [Fact]
+    public void ExecuteRaw_TableParameterWithTypeName_ShouldThrowArgumentException()
+    {
+        var ctx = _sut.DataProvider;
+
+        var act = () => ctx.ExecuteRaw(
+            "select 1",
+            [ProcedureParameter.Table("p", "my_type", new[] { 1 })]);
+
+        act.Should().Throw<ArgumentException>();
     }
 
     private static void Execute(IDataContext ctx, string sql)

@@ -13,6 +13,14 @@ public class MariaDbDialectTests
     private static readonly ISqlDialect Dialect = MariaDbDialect.Instance;
 
     [Fact]
+    public void SupportsTableValuedParameters_IsTrue()
+        => Dialect.SupportsTableValuedParameters.Should().BeTrue();
+
+    [Fact]
+    public void SupportsSequentialAccess_IsFalse()
+        => Dialect.SupportsSequentialAccess.Should().BeFalse();
+
+    [Fact]
     public void DurationHooks_ShouldUseNativeTime()
     {
         Dialect.SupportsNativeDuration.Should().BeTrue();
@@ -33,6 +41,7 @@ public class MariaDbDialectTests
         Dialect.MakeCoalesce("a", "b").Should().Be("coalesce(a, b)");
         Dialect.MakeStringLength("x").Should().Be("char_length(x)");
         Dialect.MakeNow(true).Should().Be("utc_timestamp()");
+        Dialect.MakeTypeName(typeof(uint)).Should().Be("bigint");
     }
 
     [Fact]

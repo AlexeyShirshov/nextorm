@@ -97,18 +97,20 @@ internal static class MemberTranslator
     internal static DurationUnit? ResolveDurationUnit(BaseExpressionVisitor visitor, Expression expression)
     {
         if (expression is MemberExpression { Member: PropertyInfo pi }
-            && DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var metadata)
-            && FindProperty(metadata, pi) is { } property)
+            && FindProperty(visitor.EntityType, pi) is { } property)
             return DurationStorage.ResolveStorageUnit(property, visitor.Dialect);
 
         return null;
     }
 
-    // Closure-free lookup of a mapped property: a query is prepared once per plan, but the lookups run
-    // per projected column and per comparison operand, so a first-class indexed scan avoids capturing
-    // the PropertyInfo in a delegate and boxing the IReadOnlyList enumerator.
+    // Indexed lookup of a mapped property: a query is prepared once per plan, but the lookups run
+    // per projected column and per comparison operand, so the property index built by EntityMetadata
+    // keeps this O(1). External IEntityMetadata implementations fall back to the linear scan.
     internal static IPropertyMetadata? FindProperty(IEntityMetadata metadata, PropertyInfo property)
     {
+        if (metadata is EntityMetadata indexed)
+            return indexed.FindProperty(property);
+
         var properties = metadata.Properties;
         for (var i = 0; i < properties.Count; i++)
         {
@@ -119,11 +121,30 @@ internal static class MemberTranslator
         return null;
     }
 
+    // Resolves the mapped property of an entity type, or null when the type is not mapped or the
+    // member is not one of its columns.
+    internal static IPropertyMetadata? FindProperty(Type? entityType, PropertyInfo property)
+        => entityType is not null && DataContextCache.Metadata.TryGetValue(entityType, out var metadata)
+            ? FindProperty(metadata, property)
+            : null;
+
+    // Resolves the mapped property of a member access. The member's declaring type is consulted
+    // first (a projection over a join addresses the joined entity), then the caller's fallback
+    // metadata (the visitor's entity type, or the projection source type). Null when the member is
+    // not mapped by either.
+    internal static IPropertyMetadata? ResolveProperty(PropertyInfo property, IEntityMetadata? fallbackMetadata)
+    {
+        if (property.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(property.DeclaringType, out var byDeclaring))
+            return FindProperty(byDeclaring, property);
+
+        return fallbackMetadata is null ? null : FindProperty(fallbackMetadata, property);
+    }
+
     // Resolves the value converter of an entity member access, if the mapped property declares one.
     // Used so a constant compared with a converted column is bound as the provider representation, and
     // the same converter is applied to the elements of an IN/Contains value list. The metadata is keyed
     // by the member's declaring type (the entity type in a simple query, or the joined entity type in a
-    // projection), falling back to the visitor's entity type. A boxed comparison operands wraps the
+    // projection), falling back to the visitor's entity type. A boxed comparison operand wraps the
     // member in a Convert (the C# lowering of an enum comparison), so the wrapper is unwrapped first.
     internal readonly record struct ResolvedConverter(IPropertyValueConverter Converter, Type ModelType);
 
@@ -133,13 +154,13 @@ internal static class MemberTranslator
         if (expression is not MemberExpression { Member: PropertyInfo pi })
             return null;
 
-        IEntityMetadata? metadata = null;
+        IPropertyMetadata? property;
         if (pi.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(pi.DeclaringType, out var byDeclaring))
-            metadata = byDeclaring;
-        else if (DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var byEntity))
-            metadata = byEntity;
+            property = FindProperty(byDeclaring, pi);
+        else
+            property = FindProperty(visitor.EntityType, pi);
 
-        if (metadata is null || FindProperty(metadata, pi)?.Converter is not { } converter)
+        if (property?.Converter is not { } converter)
             return null;
 
         var resolved = converter is IJsonColumnConverter json ? json.Resolve(visitor.Dialect) : converter;
@@ -148,11 +169,10 @@ internal static class MemberTranslator
 
     internal static string? ResolveCollation(BaseExpressionVisitor visitor, Type entityType, MemberInfo member)
     {
-        if (member is not PropertyInfo pi
-            || !DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+        if (member is not PropertyInfo pi)
             return null;
 
-        return FindProperty(metadata, pi)?.Collation is { Length: > 0 } collation ? collation : null;
+        return FindProperty(entityType, pi)?.Collation is { Length: > 0 } collation ? collation : null;
     }
 
     private static string? ResolveRangeColumnsMember(BaseExpressionVisitor visitor, MemberInfo member)
@@ -160,10 +180,7 @@ internal static class MemberTranslator
         if (member is not PropertyInfo pi || visitor.EntityType is null)
             return null;
 
-        if (!DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var metadata))
-            return null;
-
-        var rangeColumns = FindProperty(metadata, pi)?.RangeColumns;
+        var rangeColumns = FindProperty(visitor.EntityType, pi)?.RangeColumns;
         if (rangeColumns is null)
             return null;
 

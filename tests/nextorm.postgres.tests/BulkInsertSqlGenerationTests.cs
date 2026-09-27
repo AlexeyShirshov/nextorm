@@ -109,4 +109,21 @@ public class BulkInsertSqlGenerationTests
 
         sql.Should().Be("insert into simple_entity (id) values (@p0)");
     }
+
+    [Fact]
+    public void BulkInsert_WithSqlServerOnlyFlags_ShouldThrowNamingEveryFlag()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => ctx.BulkInsertInto<IInsertEntity>(o => o
+                .CheckConstraints()
+                .TableLock()
+                .KeepNulls()
+                .FireTriggers())
+            .Values([Row("a", 1)])
+            .BulkInsert();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*CheckConstraints*TableLock*KeepNulls*FireTriggers*PostgreSQL COPY*");
+    }
 }

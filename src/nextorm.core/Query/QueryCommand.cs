@@ -354,6 +354,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             _hints = list;
     }
     /// <summary>
+    /// An optional query tag rendered as a block comment (<c>/* tag */</c>) immediately after the
+    /// <c>SELECT</c> keyword, so the statement can be identified in logs, profilers and server-side
+    /// query stores. Set through <c>WithTag</c>. When <c>null</c> no comment is emitted and the plan
+    /// key is unchanged. The tag is part of the plan key, so two commands that differ only in their
+    /// tag never share a cached plan.
+    /// </summary>
+    public string? Tag { get; internal set; }
+    /// <summary>
     /// Table-level hints attached to the command's physical <c>FROM</c> table (for example SQL Server
     /// <c>nolock</c>), or <c>null</c> when there are none. How they are rendered is provider specific;
     /// a dialect that does not implement table hints rejects a command that carries them.
@@ -368,6 +376,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public IReadOnlyList<string>? IndexHints { get; internal set; }
     /// <summary>The intent of <see cref="IndexHints"/> (<c>USE</c>, <c>FORCE</c> or <c>IGNORE</c>).</summary>
     public IndexHintKind IndexHintKind { get; internal set; }
+    /// <summary>
+    /// Hints applied to every physical table in this command's scope (for example SQL Server
+    /// <c>WITH (...)</c> on the primary and joined tables, or a <c>pg_hint_plan</c>/MySQL optimizer
+    /// comment listing the participating aliases), or <c>null</c> when there are none. Set through the
+    /// fluent <c>WithTablesInScopeHint</c> modifier. A dialect that supports neither form rejects the
+    /// command when its SQL is built.
+    /// </summary>
+    public IReadOnlyList<string>? TablesInScopeHints { get; internal set; }
     /// <summary>
     /// Per-command override of identifier quoting: <c>true</c> quotes physical table/column names with
     /// the provider's delimiter, <c>false</c> emits them verbatim, and <c>null</c> inherits the
@@ -405,6 +421,19 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// contexts with different defaults share a cached plan).
     /// </summary>
     internal KeywordCase ResolvedKeywordCase;
+    /// <summary>
+    /// Per-query override of the command timeout in seconds: <see langword="null"/> inherits the
+    /// context default (<c>DataContextBuilder.UseCommandTimeout</c>), and a value of zero or less means
+    /// the provider default. Set through <c>WithCommandTimeout</c>.
+    /// </summary>
+    public int? CommandTimeout { get; internal set; }
+    /// <summary>
+    /// The command timeout resolved for this command during preparation: the command override when
+    /// present, otherwise the context default; <see langword="null"/> when neither is set and the
+    /// provider default applies. It is part of the plan key (the inherited value must not let two
+    /// contexts with different defaults share a cached command).
+    /// </summary>
+    internal int? ResolvedCommandTimeout;
     /// <summary>
     /// The trailing <c>FOR JSON</c> clause (SQL Server), or <c>null</c> when the result set is returned
     /// as rows. A dialect that does not implement it rejects a command that carries it.
@@ -499,6 +528,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         LookupPartitions = null;
         ShapeScanned = false;
         _whereBasePlanHash = 0;
+        InvalidatePlanKey();
 
         _dataContext?.ResetPreparation(this);
     }
@@ -513,6 +543,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
 
         _referencedQueries[idx] = cmd;
+        // The shared Any/Count command swaps its referenced subquery in place between executions
+        // without resetting: the plan key it was prepared under no longer describes the query.
+        InvalidatePlanKey();
     }
     int IQueryRegistry.AddCommand(QueryCommand cmd)
     {

@@ -123,6 +123,7 @@ public class SqliteBenchmarkAny
             await _db.AnyAsync(_cmd, i);
     }
     [Benchmark()]
+    [BenchmarkCategory("acceptance")]
     public async Task Nextorm_Cached()
     {
         for (var i = 0; i < Iterations; i++)

@@ -236,6 +236,12 @@ public sealed class BulkInsertBuilder<TEntity>
         var tableName = _options.TableName ?? _metadata.TableName!;
         var isTableNameAuto = _options.TableName is null && _metadata.IsTableNameAuto;
 
+        var bulkCopy = new BulkCopyFlags(
+            _options.CheckConstraints is true,
+            _options.TableLock is true,
+            _options.KeepNulls is true,
+            _options.FireTriggers is true);
+
         return new BulkInsertCommand(
             typeof(TEntity),
             tableName,
@@ -249,7 +255,8 @@ public sealed class BulkInsertBuilder<TEntity>
             CreateProgressCallback(),
             _options.NotifyEvery,
             _options.TimeoutSeconds,
-            _options.TableSchema);
+            _options.TableSchema,
+            bulkCopy);
     }
 
     /// <summary>Resolves the executor that can satisfy a returning terminal (the mutation executor).</summary>

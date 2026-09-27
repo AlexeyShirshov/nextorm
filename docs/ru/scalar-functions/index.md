@@ -3,7 +3,7 @@
 > Преобразуйте члены `string`, `Math` и `DateTime`, объединение `??`, логические предикаты и числовые
 > преобразования в SQL, специфичный для провайдера.
 
-**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../guide/01-querying-and-projections.md) · [Фильтрация (WHERE)](../guide/02-filtering-where.md)
+**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](../querying/index.md) · [Фильтрация (WHERE)](../guide/01-filtering-where.md)
 
 ## Обзор
 
@@ -20,7 +20,7 @@ nextorm распознаёт фиксированный набор членов 
   в константе экранируются и генерируется предложение `escape '\'`.
 
 Встроенные преобразования применяются **до** любого сопоставления
-[`[SqlFunction]`](../guide/12-user-defined-functions.md), поэтому пользовательский атрибут не может изменить
+[`[SqlFunction]`](../guide/10-user-defined-functions.md), поэтому пользовательский атрибут не может изменить
 поведение членов `string`/`Math`/`DateTime`.
 
 Кросс-провайдерные помощники находятся в [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql). Функции, которые поддерживает только один
@@ -35,9 +35,9 @@ JSONPath-скаляры `json_value`/`json_query`/`json_exists` и функци�
 
 ## См. также
 
-* [Фильтрация (WHERE)](../guide/02-filtering-where.md) — `Contains`/`in`, `??` и условные выражения в предикатах.
-* [Группировка и агрегаты](../guide/04-grouping-and-aggregates.md) — агрегатные функции (`count`, `sum`, ...).
-* [Пользовательские функции](../guide/12-user-defined-functions.md) — когда скалярная функция не встроена.
+* [Фильтрация (WHERE)](../guide/01-filtering-where.md) — `Contains`/`in`, `??` и условные выражения в предикатах.
+* [Группировка и агрегаты](../guide/03-grouping-and-aggregates.md) — агрегатные функции (`count`, `sum`, ...).
+* [Пользовательские функции](../guide/10-user-defined-functions.md) — когда скалярная функция не встроена.
 * [Обзор провайдеров](../providers/overview.md) — флаги возможностей и кавычки.
 
 ---

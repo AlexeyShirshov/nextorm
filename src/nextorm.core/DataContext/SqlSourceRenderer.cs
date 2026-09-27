@@ -151,11 +151,23 @@ internal static class SqlSourceRenderer
             parameterProvider: ctx.ParameterProvider);
     }
 
-    internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType)
+    internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null)
     {
         if (join.JoinType is JoinType.Right && !ctx.Dialect.SupportsRightFullJoin
             || join.JoinType is JoinType.Full && (!ctx.Dialect.SupportsRightFullJoin || !ctx.Dialect.SupportsFullJoin))
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
+
+        // A join hint on an inline-comment dialect is folded into the statement-level /*+ ... */ by the
+        // builder, so it is not rendered here. On SQL Server it goes inside the join clause; anywhere
+        // else it is rejected.
+        if (join.JoinHint is not null && !ctx.Dialect.SupportsInlineHints)
+        {
+            if (!ctx.Dialect.SupportsJoinHints)
+                throw new NotSupportedException("Join hints are not supported by this SQL dialect");
+
+            if (join.JoinType is not (JoinType.Inner or JoinType.Left or JoinType.Right or JoinType.Full))
+                throw new NotSupportedException($"A join hint cannot be applied to a {join.JoinType} join");
+        }
 
         if (join.JoinType is JoinType.Semi or JoinType.Anti or JoinType.Paste)
         {
@@ -184,14 +196,15 @@ internal static class SqlSourceRenderer
         {
             if (!ctx.ParamMode)
             {
-                sqlBuilder!.Append(ctx.Dialect.MakeJoinKeyword(join.JoinType, join.Strictness, join.IsGlobal, ctx.KeywordCase));
+                var joinHint = ctx.Dialect.SupportsInlineHints ? null : join.JoinHint;
+                sqlBuilder!.Append(ctx.Dialect.MakeJoinKeyword(join.JoinType, join.Strictness, join.IsGlobal, joinHint, ctx.KeywordCase));
             }
 
             var joinCondition = join.JoinCondition;
 
             if (joinCondition is null)
             {
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TablesInScopeHints: tablesInScopeHints));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -210,7 +223,7 @@ internal static class SqlSourceRenderer
             {
                 var dim = JoinDimension(joinCondition);
 
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TablesInScopeHints: tablesInScopeHints));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -355,7 +368,7 @@ internal static class SqlSourceRenderer
     /// </summary>
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, out string? alias)
     {
-        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind) = options;
+        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints) = options;
         alias = null;
 
         if (from.LinqSource is not null)
@@ -376,8 +389,19 @@ internal static class SqlSourceRenderer
         if (from.RawSqlSource is not null)
             return MakeRawSqlSource(in ctx, from, needAlias, entityType);
 
+        if (from.TableExpressionOverride is not null)
+            return MakeTableExpression(in ctx, from, options, entityType);
+
         if (!ctx.ParamMode && !string.IsNullOrEmpty(from.Table))
         {
+            if (tablesInScopeHints is { Count: > 0 })
+            {
+                if (!ctx.Dialect.SupportsTablesInScopeHints)
+                    throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
+                tableHints = AppendHints(tableHints, tablesInScopeHints);
+            }
+
             if (tableHints is { Count: > 0 } && !ctx.Dialect.SupportsTableHints)
                 throw new NotSupportedException("Table hints are not supported by this SQL dialect");
 
@@ -392,9 +416,18 @@ internal static class SqlSourceRenderer
             var sqlBuilder = StringBuilderPool.Shared.Get();
             try
             {
-                var tableName = from.Table!;
-                if (from.IsAutoMapped && ctx.NamingConvention is { } namingConvention)
+                var tableName = from.TableNameOverride ?? from.Table!;
+                if (from.TableNameOverride is null && from.IsAutoMapped && ctx.NamingConvention is { } namingConvention)
                     tableName = namingConvention.TableName(tableName, from.SourceIsInterface);
+
+                if (from.ServerOverride is not null && !ctx.Dialect.SupportsLinkedServer)
+                    throw new NotSupportedException("A linked-server table qualifier is not supported by this SQL dialect");
+
+                if (from.DatabaseOverride is not null && !ctx.Dialect.SupportsCrossDatabase)
+                    throw new NotSupportedException("A cross-database table qualifier is not supported by this SQL dialect");
+
+                if (from.HasQualificationOverride)
+                    tableName = ctx.Dialect.MakeQualifiedTableName(from.ServerOverride, from.DatabaseOverride, from.SchemaOverride, tableName);
 
                 sqlBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, tableName) : tableName);
 
@@ -441,6 +474,9 @@ internal static class SqlSourceRenderer
 
             if (cmd is not null)
             {
+                if (from.SubQueryHint is not null && !ctx.Dialect.SupportsSubQueryHints)
+                    throw new NotSupportedException("Subquery hints are not supported by this SQL dialect");
+
 #if DEBUG
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
 #endif
@@ -485,6 +521,24 @@ internal static class SqlSourceRenderer
     }
 
     /// <summary>
+    /// Returns <paramref name="hints"/> with <paramref name="extra"/> appended, or <paramref name="extra"/>
+    /// when <paramref name="hints"/> is <c>null</c> or empty. Used to fold the tables-in-scope hints into
+    /// the table's own hint list on a structural-hint dialect (SQL Server).
+    /// </summary>
+    private static IReadOnlyList<string> AppendHints(IReadOnlyList<string>? hints, IReadOnlyList<string> extra)
+    {
+        if (hints is not { Count: > 0 })
+            return extra;
+
+        var combined = new string[hints.Count + extra.Count];
+        for (var i = 0; i < hints.Count; i++)
+            combined[i] = hints[i];
+        for (var i = 0; i < extra.Count; i++)
+            combined[hints.Count + i] = extra[i];
+        return combined;
+    }
+
+    /// <summary>
     /// Renders a raw SQL fragment as a derived table: <c>(&lt;sql&gt;) AS alias</c>. The fragment's
     /// named parameters (the public properties of <see cref="RawSqlSourceExpression.Parameters"/>) are
     /// bound into the enclosing command in both the parameter and the SQL pass, so the order matches.
@@ -522,6 +576,48 @@ internal static class SqlSourceRenderer
 
                 sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
             }
+
+            return sqlBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+
+    /// <summary>
+    /// Renders a per-query table expression (raw SQL supplied through <c>WithTableExpression</c>) as a
+    /// derived source: <c>(&lt;sql&gt;) AS alias</c>. The fragment is emitted verbatim (the caller owns
+    /// its validity and injection safety) and the mapped entity's columns are read through the alias
+    /// like any other source. Table modifiers that apply to a physical table (hints, index hints and
+    /// <c>FOR SYSTEM_TIME</c>) are rejected because they have no meaning over a raw expression.
+    /// </summary>
+    private static string MakeTableExpression(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, Type? entityType)
+    {
+        if (!ctx.Dialect.SupportsRawSqlSource)
+            throw new NotSupportedException("A raw SQL table expression is not supported by this SQL dialect");
+
+        if (options.Temporal is not null)
+            throw new NotSupportedException("The FOR SYSTEM_TIME clause cannot be combined with a table expression source.");
+
+        if (options.TableHints is { Count: > 0 })
+            throw new NotSupportedException("Table hints cannot be combined with a table expression source.");
+
+        if (options.IndexHints is not null)
+            throw new NotSupportedException("Index hints cannot be combined with a table expression source.");
+
+        if (ctx.ParamMode)
+            return string.Empty;
+
+        var sqlBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            sqlBuilder.Append('(').Append(from.TableExpressionOverride).Append(')');
+
+            if (entityType is not null)
+                ctx.ColumnsProvider.Add(entityType, false);
+
+            sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
 
             return sqlBuilder.ToString();
         }
