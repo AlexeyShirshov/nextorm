@@ -239,6 +239,26 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return cmd;
     }
     /// <summary>
+    /// Projects each row with <paramref name="selector"/> and exposes the result as a derived table,
+    /// returning a builder that can be joined, filtered and projected further. This names an
+    /// intermediate join projection (typically <c>p =&gt; new { p.Item1.X, p.Item2.Y }</c>) and starts a
+    /// new join from it, so the fixed <c>Projection&lt;T1..T8&gt;</c> arity cap no longer terminates the
+    /// chain: <c>...Join(...).As(p =&gt; new { ... }).Join(...)</c> works on every arity.
+    /// </summary>
+    /// <remarks>
+    /// Implemented as <c>DataProvider.From(Select(selector))</c>: only the projected members stay
+    /// visible to later joins, and the projection becomes a materialization boundary, so outer-join
+    /// semantics across the boundary follow derived-table rules. A subsequent <c>Join</c> on the
+    /// in-memory provider throws <see cref="NotSupportedException"/> (derived sources cannot be joined
+    /// in memory).
+    /// </remarks>
+    /// <typeparam name="TResult">The named projection type produced by <paramref name="selector"/>.</typeparam>
+    /// <param name="selector">The projection expression, for example <c>p =&gt; new { p.Item1.Id, p.Item2.Name }</c>.</param>
+    /// <returns>A builder over the derived table that can be composed further.</returns>
+    /// <exception cref="NotSupportedException">A following <c>Join</c>/<c>Apply</c> on the derived source is rejected by the in-memory provider.</exception>
+    public EntityBuilder<TResult> As<TResult>(Expression<Func<TEntity, TResult>> selector)
+        => _dataProvider.From(Select(selector));
+    /// <summary>
     /// Creates a SELECT command over the entity type without a custom projection, carrying every
     /// modifier set on this builder.
     /// </summary>

@@ -17,7 +17,9 @@ public interface IProjection
 /// projection can be extended.
 /// <para>
 /// The maximum supported join arity is 8 tables (<c>Projection&lt;T1..Item8&gt;</c>); that projection
-/// deliberately does not implement this interface.
+/// deliberately does not implement this interface. To keep composing past the cap, project the
+/// accumulated join into a named type with <c>EntityBuilder&lt;T&gt;.As&lt;TResult&gt;(...)</c> and
+/// continue from the resulting derived table.
 /// </para>
 /// </summary>
 public interface IExtendableProjection : IProjection
@@ -208,9 +210,11 @@ public class Projection<T1, T2, T3, T4, T5, T6, T7> : IExtendableProjection
 
 /// <summary>
 /// Maximum supported join arity: eight tables (T1..Item8). It intentionally does not implement
-/// <see cref="IExtendableProjection"/>, so no ninth item can be absorbed; combining that with
-/// <c>JoinedEntityBuilder&lt;T1..Item8&gt;</c> (which exposes no further join methods) makes exceeding
-/// the limit a compile-time error.
+/// <see cref="IExtendableProjection"/>, so no ninth item can be absorbed and a direct further
+/// <c>Join</c> on <c>JoinedEntityBuilder&lt;T1..Item8&gt;</c> is rejected at compile time. The
+/// supported escape is to project the accumulated join into a named type with
+/// <c>EntityBuilder&lt;T&gt;.As&lt;TResult&gt;(...)</c>, which exposes it as a derived table and
+/// starts a new join from the named members.
 /// </summary>
 public class Projection<T1, T2, T3, T4, T5, T6, T7, T8> : IProjection
 {

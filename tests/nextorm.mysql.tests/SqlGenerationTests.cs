@@ -811,6 +811,51 @@ public class SqlGenerationTests
         sql.Should().Be("select t1.id, t2.id as `SId` from (select id, somestring as `String` from complex_entity) as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as signed)\n where (t1.id > 5)");
     }
 
+    [Fact]
+    public void AsThenJoin_ShouldRenderDerivedTable()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.`OrderId`, t3.`CustomerName`, t4.id as `Third` from (select t1.id as `OrderId`, t2.somestring as `CustomerName` from simple_entity as `t1` join complex_entity as `t2` on cast(t1.id as signed) = t2.id) as `t3` join complex_entity as `t4` on cast(t3.`OrderId` as signed) = t4.id");
+    }
+
+    [Fact]
+    public void AsThenWhere_ShouldFilterDerivedTable()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Where(d => d.OrderId > 0)
+            .Select(d => new { d.OrderId, d.CustomerName }));
+
+        sql.Should().Contain("from (select t1.id as");
+        sql.Should().Contain("where (t3");
+        sql.Should().Contain("OrderId");
+        sql.Should().Contain("CustomerName");
+    }
+
+    [Fact]
+    public void AsThenJoin_SameTypedSources_ShouldUseDistinctAliases()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
+            .As(p => new { A = p.Item1.Id, B = p.Item2.Id })
+            .Join(ctx.From<ISimpleEntity>(), (d, s3) => d.B == s3.Id)
+            .Select(p => new { p.Item1.A, p.Item1.B, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.`A`, t3.`B`, t4.id as `Third` from (select t1.id as `A`, t2.id as `B` from simple_entity as `t1` join simple_entity as `t2` on t1.id = t2.id) as `t3` join simple_entity as `t4` on t3.`B` = t4.id");
+    }
+
     public interface IJsonTableRow
     {
         [Column("id")]

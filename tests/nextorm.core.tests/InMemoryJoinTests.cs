@@ -282,4 +282,18 @@ public class InMemoryJoinTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*derived query*primary FROM*");
     }
+
+    [Fact]
+    public void TestAsThenJoin_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity
+            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
+            .As(p => new { LeftId = p.Item1.Id, RightId = p.Item2.Id })
+            .Join(_sut.SimpleEntity, (d, t3) => d.LeftId == t3.Id)
+            .Select(p => new { p.Item1.LeftId, Third = p.Item2.Id })
+            .ToList();
+
+        // As wraps the projection in a derived source; joining it is what the in-memory provider rejects.
+        act.Should().Throw<NotSupportedException>().WithMessage("*derived query*primary FROM*");
+    }
 }

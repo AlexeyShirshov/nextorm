@@ -25,7 +25,8 @@ Two things are important before looking at the examples:
    [`JoinedEntityBuilder<T1, T2>`](xref:NextORM.Core.JoinedEntityBuilder`2), the next [`JoinedEntityBuilder<T1, T2, T3>`](xref:NextORM.Core.JoinedEntityBuilder`3), and so on up to `JoinedEntityBuilder<T1..T8>`.
    `JoinedEntityBuilder` deliberately exposes no further [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0}))
    methods, and `Projection<T1..T8>` does not implement [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), so a ninth join
-   does not compile.
+   does not compile. The cap can be lifted by naming the accumulated projection with
+   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (see [Naming an intermediate projection](#naming-an-intermediate-projection-as)).
 2. **The accumulated projection is addressed as `p.Item1`, `p.Item2`, … `p.Item8`.** After the first join the
    condition receives that projection instead of the plain entity, so a chained join references the
    tables already joined through `p.tN`.
@@ -358,6 +359,34 @@ var sql = e[0]
     .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id,
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
+
+## Naming an intermediate projection: `As`
+
+[`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) projects each joined row into a named type and exposes the result as a derived
+table, so a later `Join` starts from the named members instead of `p.Item1`, `p.Item2`, …:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+    .Join(dataContext.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+    .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id })
+    .ToList();
+```
+
+```sql
+select t3.OrderId, t3.CustomerName, t4.id as 'Third' from (select t1.id as 'OrderId', t2.somestring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id
+```
+
+`As` is declared once on `EntityBuilder<T>` and inherited by every `JoinedEntityBuilder<T1..Tn>`, so
+there is no per-arity overload. Because the result is a derived table, it also lifts the eight-table
+compile-time cap: `.As(...)` resets the arity counter, and a further `Join` returns a fresh
+`JoinedEntityBuilder<TResult, …>`.
+
+Only the projected members remain visible after `As`, and the projection becomes a materialization
+boundary, so the columns of earlier sources cannot be referenced by later joins. The in-memory
+provider compiles joins to delegates and cannot join a derived source, so joining after `As` throws
+`NotSupportedException`.
 
 ## Captured parameters in a join
 
