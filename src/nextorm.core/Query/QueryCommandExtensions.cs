@@ -205,6 +205,92 @@ public static class QueryCommandExtensions
         return await CreateTextReaderAsync(owner, context, command, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Opens a streaming read of a binary column selected by name as a <see cref="Stream"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming binary column.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A stream that owns the reader and the per-call command until it is disposed.</returns>
+    public static Stream ToStream(this QueryCommand<Stream> command, params ReadOnlySpan<object?> parameters)
+        => ToStream(command, CancellationToken.None, parameters);
+
+    /// <summary>Opens a streaming read of a binary column selected by name as a <see cref="Stream"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming binary column.</param>
+    /// <param name="cancellationToken">A token that cancels opening the reader.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A stream that owns the reader and the per-call command until it is disposed.</returns>
+    public static Stream ToStream(this QueryCommand<Stream> command, CancellationToken cancellationToken, params ReadOnlySpan<object?> parameters)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = RequireRelationalContext(command);
+        return CreateStream(context.OpenLobReader(command, parameters, cancellationToken), context, command);
+    }
+
+    /// <summary>Asynchronously opens a streaming read of a binary column selected by name as a <see cref="Stream"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming binary column.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A task producing a stream that owns the reader and the per-call command until it is disposed.</returns>
+    public static Task<Stream> ToStreamAsync(this QueryCommand<Stream> command, params object?[] parameters)
+        => ToStreamAsync(command, CancellationToken.None, parameters);
+
+    /// <summary>Asynchronously opens a streaming read of a binary column selected by name as a <see cref="Stream"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming binary column.</param>
+    /// <param name="cancellationToken">A token that cancels opening the reader.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A task producing a stream that owns the reader and the per-call command until it is disposed.</returns>
+    public static async Task<Stream> ToStreamAsync(this QueryCommand<Stream> command, CancellationToken cancellationToken, params object?[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = RequireRelationalContext(command);
+        var owner = await context.OpenLobReaderAsync(command, (object[]?)parameters, cancellationToken).ConfigureAwait(false);
+        return await CreateStreamAsync(owner, context, command, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Opens a streaming read of a text column selected by name as a <see cref="TextReader"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming text column.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A text reader that owns the reader and the per-call command until it is disposed.</returns>
+    public static TextReader ToTextReader(this QueryCommand<TextReader> command, params ReadOnlySpan<object?> parameters)
+        => ToTextReader(command, CancellationToken.None, parameters);
+
+    /// <summary>Opens a streaming read of a text column selected by name as a <see cref="TextReader"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming text column.</param>
+    /// <param name="cancellationToken">A token that cancels opening the reader.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A text reader that owns the reader and the per-call command until it is disposed.</returns>
+    public static TextReader ToTextReader(this QueryCommand<TextReader> command, CancellationToken cancellationToken, params ReadOnlySpan<object?> parameters)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = RequireRelationalContext(command);
+        return CreateTextReader(context.OpenLobReader(command, parameters, cancellationToken), context, command);
+    }
+
+    /// <summary>Asynchronously opens a streaming read of a text column selected by name as a <see cref="TextReader"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming text column.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A task producing a text reader that owns the reader and the per-call command until it is disposed.</returns>
+    public static Task<TextReader> ToTextReaderAsync(this QueryCommand<TextReader> command, params object?[] parameters)
+        => ToTextReaderAsync(command, CancellationToken.None, parameters);
+
+    /// <summary>Asynchronously opens a streaming read of a text column selected by name as a <see cref="TextReader"/>.</summary>
+    /// <param name="command">The command whose projection is a single streaming text column.</param>
+    /// <param name="cancellationToken">A token that cancels opening the reader.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A task producing a text reader that owns the reader and the per-call command until it is disposed.</returns>
+    public static async Task<TextReader> ToTextReaderAsync(this QueryCommand<TextReader> command, CancellationToken cancellationToken, params object?[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = RequireRelationalContext(command);
+        var owner = await context.OpenLobReaderAsync(command, (object[]?)parameters, cancellationToken).ConfigureAwait(false);
+        return await CreateTextReaderAsync(owner, context, command, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Opens a forward-only <see cref="DbDataReader"/> over the command's multi-column projection.</summary>
     /// <typeparam name="TResult">The projected result type; it is not materialized on this path.</typeparam>
     /// <param name="command">The command to execute.</param>

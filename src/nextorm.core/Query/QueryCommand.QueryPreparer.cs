@@ -312,6 +312,10 @@ public partial class QueryCommand
                     // condition do not each scan the entity metadata.
                     var bodyConverter = cmd._exp.Body is MemberExpression ? ResolveConverter(srcMetadata, cmd._exp.Body) : null;
 
+                    // A streaming named-column accessor projects one LOB column even though its CLR type
+                    // (Stream/TextReader) is not one of the scalar types in IsSingleColumnProjection.
+                    var bodyIsStreaming = TableAliasAccessors.IsStreaming(cmd._exp.Body);
+
                     if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
                         var args = ctor.Arguments;
@@ -341,6 +345,7 @@ public partial class QueryCommand
                                 DurationPrecision = durationPrecision,
                                 ProviderType = converter?.ProviderType,
                                 Converter = converter,
+                                IsLobStreaming = TableAliasAccessors.IsStreaming(arg),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
                             if (!cmd._dontCache && !noHash)
@@ -358,6 +363,7 @@ public partial class QueryCommand
 
                     }
                     else if (TypeFacts.IsSingleColumnProjection(cmd._exp.Body.Type)
+                        || bodyIsStreaming
                         || (cmd._exp.Body is not NewExpression && TypeFacts.IsTupleType(cmd._exp.Body.Type))
                         || bodyConverter is not null)
                     {
@@ -374,6 +380,7 @@ public partial class QueryCommand
                             DurationPrecision = scalarDurationPrecision,
                             ProviderType = bodyConverter?.ProviderType,
                             Converter = bodyConverter,
+                            IsLobStreaming = bodyIsStreaming,
                         };
                         // A dialect that does not enforce scalar-subquery cardinality (SQLite) would
                         // silently return the first row for Single/SingleOrDefault, so wrap the
@@ -419,6 +426,7 @@ public partial class QueryCommand
                                 DurationPrecision = bindingDurationPrecision,
                                 ProviderType = bindingConverter?.ProviderType,
                                 Converter = bindingConverter,
+                                IsLobStreaming = TableAliasAccessors.IsStreaming(binding.Expression),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(binding.Expression);
                             if (!cmd._dontCache && !noHash)

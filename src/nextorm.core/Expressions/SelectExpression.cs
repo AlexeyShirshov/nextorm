@@ -82,6 +82,15 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     internal bool IsDynamicColumnsStore { get; set; }
 
     /// <summary>
+    /// True when the column was projected through a streaming named-column accessor
+    /// (<see cref="TableAlias.GetStream"/>/<see cref="TableAlias.GetTextReader"/> or
+    /// <see cref="TableColumn.AsStream"/>/<see cref="TableColumn.AsTextReader"/>). Such a column can
+    /// only be materialized by a streaming terminal; the buffered row mapper rejects it and the mapper
+    /// cache key carries the flag so a buffered mapper is never reused for a streaming shape.
+    /// </summary>
+    internal bool IsLobStreaming { get; set; }
+
+    /// <summary>
     /// The physical column name the mapped property reads, used by the dynamic-columns store to skip
     /// the columns already read into declared members. <see langword="null"/> for a computed column.
     /// </summary>

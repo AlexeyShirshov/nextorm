@@ -282,6 +282,17 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, streamingRows: false, cancellationToken);
+
+    /// <summary>
+    /// Prepares the command for the <c>ToAsyncEnumerable</c> terminal. This is the only preparation
+    /// entry point allowed to promote a row projection containing a live <c>Stream</c>/<c>TextReader</c>
+    /// member to sequential access; every other terminal keeps the buffered path and rejects the shape.
+    /// </summary>
+    internal IPreparedQueryCommand<TResult> GetStreamingRowsQueryCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator: true, storeInCache: true, streamingRows: true, cancellationToken);
+
+    private IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool streamingRows, CancellationToken cancellationToken)
     {
         // The check is allocation-free and false for every ordinary query, so the common preparation
         // path only pays a few branches.
@@ -292,7 +303,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
         }
 
-        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, cancellationToken);
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, false, streamingRows, cancellationToken);
     }
 
     // A query that reads a lazy temporary table is not a single statement: the table must be created on

@@ -5288,3 +5288,32 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 - **Публичные доки EN+RU.** Обновлены в релизной дельте (новая глава 30 «Streaming large objects (BLOB/CLOB)» EN+RU; провайдерные страницы, `querying`, `advanced/api-reference`, `providers/overview`, `advanced/limitations` — обе ветки); новых P1-доков нет, ссылок на `docs/specs/**` из публичных доков нет.
 - **Шаг 5 (заморозка `PublicAPI.*.txt`, issue #53) — P2, вне скоупа.** `find -name 'PublicAPI*.txt'` — **0**; `PublicApiAnalyzers`/ApiCompat/API-approval-теста нет.
 - **Регистрация к заморозке (LOB1).** 8 сигнатур фазы 1 (`ToStream`/`ToStreamAsync`/`ToTextReader`/`ToTextReaderAsync`) + 4 фазы 2 (`ToDataReader`/`ToDataReaderAsync<TResult>`) + `ISqlDialect.SupportsSequentialAccess` + `ISqlDialect.LobLocatorColumn`; прочие секции (MR1, CTAS8, DRS1, BAT1, DOI1, QCC1 и т. д.) — без изменений.
+
+## Аудит 27.09.2026 — LOB-стриминг, фаза 3 / #101: именованные колонки и построчный стриминг (uncommitted working tree; P0 — нет; P1 по именам — нет; P2 — LOB1 (расширен))
+
+**Область.** Отгрузка #101 (`TableAlias`-аксессоры и фаза 3, `docs/specs/roadmap/todo_streaming_lob.md`): именованные потоковые аксессоры `TableAlias.GetStream`/`GetTextReader`, члены `TableColumn.AsStream`/`AsTextReader`, 8 перегрузок терминалов на `QueryCommand<Stream>`/`QueryCommand<TextReader>` и построчный стриминг `Stream`/`TextReader` внутри `ToAsyncEnumerable` (значение валидно только до следующего `MoveNext`). Провайдеры — PostgreSQL, SQL Server, SQLite (SQLite добавляет локатор `rowid`); MySQL/MariaDB/ClickHouse и in-memory отклоняют построчный стриминг через `NotSupportedException`.
+
+| Имя | Комментарий |
+|---|---|
+| `TableAlias.GetStream(string) -> Stream` — реализовано (2026-09-27) | Именованный аксессор; XML-doc с контрактом «валиден только до следующего `MoveNext`» и `NotSupportedException`. |
+| `TableAlias.GetTextReader(string) -> TextReader` — реализовано (2026-09-27) | CLOB-аксессор; `GetChars` намеренно не выставлен (#100). |
+| `TableColumn.AsStream { get; }` — реализовано (2026-09-27) | Член индексатора (`t["data"]`); поток валиден до следующего `MoveNext`. |
+| `TableColumn.AsTextReader { get; }` — реализовано (2026-09-27) | CLOB-член индексатора. |
+| `QueryCommandExtensions.ToStream(QueryCommand<Stream>, params ReadOnlySpan<object?>)` — реализовано (2026-09-27) | Терминал поверх именованной потоковой проекции. |
+| `QueryCommandExtensions.ToStream(QueryCommand<Stream>, CancellationToken, params ReadOnlySpan<object?>)` — реализовано (2026-09-27) | Sync с отменой открытия. |
+| `QueryCommandExtensions.ToStreamAsync(QueryCommand<Stream>, params object?[])` — реализовано (2026-09-27) | Async-двойник; суффикс корректен по AGENTS.md. |
+| `QueryCommandExtensions.ToStreamAsync(QueryCommand<Stream>, CancellationToken, params object?[])` — реализовано (2026-09-27) | Async с отменой открытия. |
+| `QueryCommandExtensions.ToTextReader(QueryCommand<TextReader>, params ReadOnlySpan<object?>)` — реализовано (2026-09-27) | Sync-терминал для именованного CLOB. |
+| `QueryCommandExtensions.ToTextReader(QueryCommand<TextReader>, CancellationToken, params ReadOnlySpan<object?>)` — реализовано (2026-09-27) | Sync с отменой открытия. |
+| `QueryCommandExtensions.ToTextReaderAsync(QueryCommand<TextReader>, params object?[])` — реализовано (2026-09-27) | Async-двойник. |
+| `QueryCommandExtensions.ToTextReaderAsync(QueryCommand<TextReader>, CancellationToken, params object?[])` — реализовано (2026-09-27) | Async с отменой открытия. |
+
+**P0 — нет.** Новых публичных **типов** нет (`LobStream`/`LobTextReader`/`CommandReaderOwner` — `internal`). BCL-конфликтов/аббревиатур нет; `AsStream`/`AsTextReader` следуют существующим `AsBytes`/`AsString`, а `GetStream`/`GetTextReader` — `GetBytes`/`GetString`.
+
+**P1 по именам — нет.** Extend-only: 4 аксессора добавлены к существующим публичным `TableAlias`/`TableColumn`, 8 терминалов — extension-перегрузки на существующий `QueryCommand<T>`; порядок параметров и формы (`params ReadOnlySpan<object?>` sync / `params object?[]` async) совпадают с фазой 1; существующие члены не переименованы и не сменили подпись.
+
+**LOB1 (P2, трекинг Шага 5) — расширен.** `find -name 'PublicAPI*.txt'` — **0**. При заморозке к 8+4 сигнатурам предыдущих циклов + `ISqlDialect.SupportsSequentialAccess` + `ISqlDialect.LobLocatorColumn` добавить **12** членов выше (4 аксессора + 8 терминалов).
+
+**Проверка (27.09.2026).** Публичные доки EN+RU обновлены: `docs/guide/30-large-objects.md` (+RU-зеркало, раздел «Named columns and row streaming» / «Именованные колонки и построчный стриминг») — именованные аксессоры, построчный стриминг в `ToAsyncEnumerable`, контракт «валиден до следующего `MoveNext`», `NotSupportedException`; ссылок на `docs/specs/**` нет.
+
+**Итог.** P0 — **нет**; P1 по **именам** — **нет**; P2 — **LOB1** (Шаг 5, трекинг заморозки, +12 членов). `#101` реализован (части A/B).

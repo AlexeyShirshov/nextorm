@@ -69,6 +69,50 @@ Stream stream = await ctx.From<BinaryEntity>()
     .ToStreamAsync(cancellationToken, id);
 ```
 
+## Named columns and row streaming
+
+The streaming accessors are also available on the named-column (`From("table")`) surface and can be
+read per row of an `IAsyncEnumerable` projection. A `Stream`/`TextReader` member in the projection is
+opened lazily from the sequential-access reader and is **valid only until the enumerator advances to
+the next row** (`MoveNext`): the underlying reader is owned by the enumerator and its per-call
+command, so the value must be fully consumed inside the loop body and never stored past the step.
+Dispose each per-row stream/reader before the next iteration; this releases the provider's per-row
+handle (required by SQLite, whose rowid locator keeps the statement pinned until the value is
+released).
+
+After `MoveNext` the handle **must not be used**: its behavior is undefined and provider-specific.
+PostgreSQL may hand back the **next** row's bytes, SQL Server throws `ObjectDisposedException`, and
+SQLite returns end-of-stream at the blob's end. The only guarantee is a safety property — a stale
+handle never yields the watched row's data — so treat the value as invalid the moment the enumerator
+advances and do not depend on any particular failure mode.
+
+The named-column accessors are
+[`TableAlias.GetStream`](xref:NextORM.Core.TableAlias.GetStream(System.String)) /
+[`TableAlias.GetTextReader`](xref:NextORM.Core.TableAlias.GetTextReader(System.String)) and the
+indexer members [`TableColumn.AsStream`](xref:NextORM.Core.TableColumn.AsStream) /
+[`TableColumn.AsTextReader`](xref:NextORM.Core.TableColumn.AsTextReader). The streaming member must be
+the **last** member of the projection, so the sequential-access reader reaches the LOB column after
+every scalar column:
+
+```csharp
+await foreach (var row in ctx.From("documents")
+    .Where(t => t.GetInt32("id") == id)
+    .Select(t => new { Id = t.GetInt32("id"), Data = t.GetStream("data") })
+    .ToAsyncEnumerable(cancellationToken))
+{
+    // The stream is valid only until the next MoveNext: read and release it before iterating.
+    await using var data = row.Data;
+    await data.CopyToAsync(destination, cancellationToken);
+}
+```
+
+A row projection that contains a streaming member is prepared fresh with
+`CommandBehavior.SequentialAccess` and is never written to the plan cache, so an ordinary buffered
+projection of the same shape keeps its plan. On SQLite the `rowid` locator is appended to these rows
+too, so the source must be a rowid-bearing table. A provider without sequential-access support
+(MySQL/MariaDB, ClickHouse) throws `NotSupportedException` when the query is executed; use the
+buffered `byte[]`/`string` projection there instead.
+
 ## Providers
 
 | Provider | `ToStream` / `ToTextReader` |

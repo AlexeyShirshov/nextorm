@@ -71,6 +71,18 @@
 > в #101; issue #27 **закрыт**.
 > Верификация цикла — `docs/specs/status/lob-streaming-4.md`.
 
+> **Отгружено (2026-09-27), #101 — `TableAlias`-аксессоры и фаза 3.** Именованные потоковые
+> аксессоры `TableAlias.GetStream(string)`/`GetTextReader(string)` и члены `TableColumn.AsStream`/
+> `AsTextReader` (throws-маркеры query-expression), терминалы на `QueryCommand<Stream>`/
+> `QueryCommand<TextReader>` (+async), а также **фаза 3** — построчный стриминг `Stream`/`TextReader`
+> внутри `ToAsyncEnumerable`. Скоуп провайдеров — только `SupportsSequentialAccess`:
+> **PostgreSQL/SQL Server/SQLite** (SQLite добавляет trailing `rowid`), **MySQL/MariaDB/ClickHouse
+> бросают `NotSupportedException`**. Контракт времени жизни: значение валидно **только до следующего
+> `MoveNext`**; после — undefined/зависит от провайдера, гарантируется лишь безопасность (прочитать/
+> освободить внутри итерации). Стриминг-план готовится `storeInCache: false` и не кэшируется; ключ
+> маппера получает флаг `Streaming`, нестриминговые пути сохраняют прежний ключ. Вынесенные пункты —
+> раздел «Deferred/accepted — #101» ниже; status-файл цикла удалён при коммите #101.
+
 ## Пункт и цель
 
 - Фича: читать большие бинарные (`BLOB`/`bytea`/`varbinary`) и текстовые (`CLOB`/`text`/`nvarchar(max)`)
@@ -253,9 +265,11 @@ public static Task<TextReader> ToTextReaderAsync(this QueryCommand<string> comma
   не поддержан). **In-memory streaming (срез A) ✅ цикл 5:** скалярные `ToStream`/`ToTextReader` (+async)
   возвращают `MemoryStream`/`StringReader` над материализованным значением (пустой результат/NULL →
   `Stream.Null`/`TextReader.Null`). Чанковые `GetBytes`/`GetChars` и MySQL/MariaDB-streaming вынесены в
-  **#100**, `TableAlias`-аксессоры — в **#101**.
-- **Фаза 3 (опционально) — вынесена в #101:** `Stream`/`TextReader` в проекции строкового стрима с
-  контрактом времени жизни.
+  **#100** (открыт; это остаток фазы 2), `TableAlias`-аксессоры — **✅ отгружены #101 (2026-09-27)**.
+- **Фаза 3 — ✅ отгружена (2026-09-27, #101):** `Stream`/`TextReader` в проекции строкового стрима
+  внутри `ToAsyncEnumerable` с контрактом времени жизни (валиден до следующего `MoveNext`), только
+  для `SupportsSequentialAccess`-провайдеров (PostgreSQL/SQL Server/SQLite); MySQL/MariaDB/ClickHouse —
+  `NotSupportedException`.
 - **Вне области:** запись/`BulkCopy`, сжатие, шифрование потока, серверные LOB-операции.
 
 ## Follow-up (scope-reduction при закрытии #27, 2026-09-27)
@@ -272,9 +286,11 @@ in-memory скалярный стриминг (цикл 5). Status-файлы ц
   стримингом либо `SUBSTRING`-чанки) + публичные чанковые `GetBytes`/`GetChars` (отвергнуты для SQLite
   циклом 2, оставлены для остальных сценариев). Триггер: драйвер получает настоящий стриминг либо
   появляется server-side chunking design.
-- **[#101](https://github.com/AlexeyShirshov/nextorm/issues/101) — `TableAlias`-аксессоры и фаза 3.**
-  `TableAlias.GetStream`/`GetTextReader`/`GetChars` (named-column режим) и опциональная фаза 3
-  (`Stream`/`TextReader` в проекции строкового стрима). Триггер: конкретный пользовательский сценарий.
+- **✅ [#101](https://github.com/AlexeyShirshov/nextorm/issues/101) — `TableAlias`-аксессоры и фаза 3
+  (отгружено 2026-09-27 на `1.0.9-a`).** `TableAlias.GetStream`/`GetTextReader` и
+  `TableColumn.AsStream`/`AsTextReader` (named-column режим) + фаза 3 (`Stream`/`TextReader` в проекции
+  строкового стрима). `GetChars` намеренно не выставлен — чанковое чтение остаётся в **#100**.
+  Открытые пункты перенесены в раздел «Deferred/accepted — #101»; issue закрыт.
 
 ## Deferred + триггер (перенесено из удалённых status-файлов, 2026-09-27)
 
@@ -297,6 +313,38 @@ in-memory скалярный стриминг (цикл 5). Status-файлы ц
   по nullable-аннотациям.
 - **Ограничение (не TODO):** многоколоночный `ToDataReader` на in-memory остаётся
   `NotSupportedException` (у in-memory нет `DbDataReader`); зафиксировано в публичных доках EN+RU.
+
+## Deferred/accepted — #101 (2026-09-27)
+
+Принятые (осознанно оставленные) решения цикла #101; не блокируют отгрузку, но фиксируются с
+триггером на пересмотр. Status-файл `docs/specs/status/lob-alias-streaming-1.md` удалён при коммите.
+
+- **Enumerator owns reader/command.** Транзиентный построчный enumerator берёт на себя владение и
+  освобождает per-call `DbCommand`/`DbDataReader`; вызывающий освобождает только per-row
+  `Stream`/`TextReader`. Триггер пересмотра: тест ресурсов на early-break итерации.
+- **Нет финализатора у `LobStream`/`LobTextReader`.** Освобождение только явное/через `Dispose`;
+  полагаемся на владельца (`CommandReaderOwner`) и документированный контракт. Триггер: утечка при
+  отказе от явного `Dispose` в потребителе.
+- **Sync `Dispose` внутри `DisposeAsync`.** Драйверное освобождение синхронное; `DisposeAsync`
+  делегирует `Dispose`. Триггер: async-only драйвер или перф-замечание на больших объёмах.
+- **Raw mapper path всегда буферизуется.** У raw/`WithSql`-маппера нет флага `Streaming`; потоковая
+  проекция через raw-путь не поддержана (fail-closed). Триггер: запрос на raw-стриминг.
+- **Streaming-план исключён из кэша локально.** Хэш/ключ плана для него вычисляется, но сам план в
+  кэш не кладётся (`storeInCache: false`). Это оптимизационная возможность на будущее — кэшировать
+  стриминговый shape отдельно. Триггер: горячий стриминговый сценарий.
+- **Нет in-memory ветки для терминалов `Stream`/`TextReader`-проекции.** In-memory отклоняет
+  построчный стриминг (`NotSupportedException`), как и прочие non-`SupportsSequentialAccess`
+  провайдеры. Триггер: требование паритета in-memory (симметрично срезу A скалярного пути).
+- **NRT `= null!` на `AsStream`/`AsTextReader`.** Члены индексатора аннотированы non-null без
+  runtime-инициализации (throws-маркеры). Триггер: ужесточение аннотаций/анализаторов.
+- **Отсутствует `<remarks>` про NULL/empty.** XML-doc покрывает контракт времени жизни и
+  `NotSupportedException`, но не описывает отдельно NULL/пустое значение. Триггер: первый вопрос
+  потребителя или правка доков.
+
+**Контракт времени жизни (сводно).** Per-row `Stream`/`TextReader` в `ToAsyncEnumerable` валиден
+**только до следующего `MoveNext`**; после — поведение undefined/зависит от провайдера, и
+гарантируется лишь безопасность (значение не должно использоваться и обязано быть освобождено внутри
+итерации). Контракт зафиксирован в публичных доках EN+RU и XML-doc аксессоров.
 
 ## План тестов
 

@@ -111,14 +111,29 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <summary>Returns the result set as an async stream using the default cancellation token.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>An async stream of the result rows.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IAsyncEnumerable<TResult> ToAsyncEnumerable(params object[] @params) => _dataContext!.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(params object[] @params)
+        => ToAsyncEnumerableCore(CancellationToken.None, @params);
     /// <summary>Returns the result set as an async stream, using the supplied cancellation token.</summary>
     /// <param name="cancellationToken">A token observed while enumerating rows.</param>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>An async stream of the result rows.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataContext!.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params)
+        => ToAsyncEnumerableCore(cancellationToken, @params);
+
+    // The command is prepared lazily, on the first MoveNextAsync of the returned sequence, so an
+    // enumerable that is never enumerated never creates the transient streaming DbCommand. This
+    // iterator is also the only terminal that promotes a projection with a live Stream/TextReader
+    // member to sequential access (see DataContext.GetStreamingRowsQueryCommand).
+    private async IAsyncEnumerable<TResult> ToAsyncEnumerableCore([EnumeratorCancellation] CancellationToken cancellationToken, object[] @params)
+    {
+        var dataContext = _dataContext!;
+        var preparedCommand = dataContext is DataContext db
+            ? db.GetStreamingRowsQueryCommand(this, cancellationToken)
+            : dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken);
+
+        await foreach (var row in dataContext.GetAsyncEnumerable<TResult>(preparedCommand, cancellationToken, @params).ConfigureAwait(false))
+            yield return row;
+    }
     /// <summary>Executes the command and returns the result set as a synchronous sequence.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>A sequence over the result rows.</returns>

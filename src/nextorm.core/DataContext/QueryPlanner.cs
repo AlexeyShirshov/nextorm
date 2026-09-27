@@ -375,15 +375,41 @@ internal sealed class QueryPlanner : IQueryPlanner
     }
 
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, false, cancellationToken);
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, false, false, cancellationToken);
 
     internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, CancellationToken cancellationToken)
+        => GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, sequentialAccess, false, cancellationToken);
+
+    internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, CancellationToken cancellationToken)
     {
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
         else queryCommand.RefreshInValuesShape();
+
+        // A row enumeration that projects a live Stream/TextReader member needs the same sequential
+        // access as the single-column LOB terminals: the SQL gains the dialect locator (SQLite rowid),
+        // the reader behavior carries SequentialAccess and the compiled mapper reads GetStream/
+        // GetTextReader instead of buffering. Such a plan is never cached, so a later buffered
+        // preparation of the same shape cannot pick up the streaming behavior/mapper.
+        //
+        // Only the ToAsyncEnumerable terminal requests this (streamingRowsRequested), matching the
+        // documented contract; the other enumerator terminals (ToEnumerable/Pipeline/CreateEnumerator)
+        // stay on the buffered path and reject the shape. The projection is validated before the SQL
+        // is rendered so an unsupported shape fails with an actionable message.
+        var streamingRows = streamingRowsRequested && createEnumerator && RowMapperFactory.HasStreamingColumns(queryCommand.SelectList);
+        if (streamingRows)
+        {
+            RowMapperFactory.ValidateStreamingColumns(queryCommand.SelectList);
+
+            if (!_dialect().SupportsSequentialAccess)
+                throw new NotSupportedException(
+                    $"Streaming row projections are not supported by the {_dialect().GetType().Name} provider; they require sequential-access support (PostgreSQL, SQL Server or SQLite).");
+
+            sequentialAccess = true;
+            storeInCache = false;
+        }
 
         var ext = queryCommand.CustomData as RawSqlOverride;
 
@@ -407,9 +433,13 @@ internal sealed class QueryPlanner : IQueryPlanner
                 ? MakeSelectInternal()
                 : (ext.ManualSql, ext.MakeParams?.Invoke());
 
-            Func<IDataRecord, TResult>? map = queryCommand.DocumentMode || sequentialAccess || (queryCommand.SingleRow && queryCommand.OneColumn)
-                ? null
-                : GetMapCached(queryCommand, sql);
+            // A streaming row projection needs a compiled mapper (it materializes the row, including
+            // the streaming column); the single-column LOB terminals keep the map-less path below.
+            Func<IDataRecord, TResult>? map = streamingRows
+                ? GetMapCached(queryCommand, sql, streaming: true)
+                : queryCommand.DocumentMode || sequentialAccess || (queryCommand.SingleRow && queryCommand.OneColumn)
+                    ? null
+                    : GetMapCached(queryCommand, sql, streaming: false);
 
             var noParams = !(@params?.Count > 0);
             var needsParamRefresh = false;
@@ -459,7 +489,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             if (createEnumerator)
             {
-                var enumerator = CreateResultSetEnumerator(compiledQuery!);
+                var enumerator = CreateResultSetEnumerator(compiledQuery!, ownsCommand: streamingRows);
                 compiledQuery.Enumerator = enumerator;
             }
 
@@ -567,9 +597,9 @@ internal sealed class QueryPlanner : IQueryPlanner
             return null;
     }
 
-    private Func<IDataRecord, TResult> GetMapCached<TResult>(QueryCommand<TResult> queryCommand, string? sql)
+    private Func<IDataRecord, TResult> GetMapCached<TResult>(QueryCommand<TResult> queryCommand, string? sql, bool streaming)
     {
-        return RowMapperFactory.GetOrBuild(queryCommand, sql, _contextType, _logger, _mapColumn);
+        return RowMapperFactory.GetOrBuild(queryCommand, sql, _contextType, _logger, _mapColumn, streaming);
     }
 
     /// <summary>
@@ -591,9 +621,11 @@ internal sealed class QueryPlanner : IQueryPlanner
     /// enumerator receives the logger directly rather than pulling it from the context through a
     /// property, which is what kept the enumerator tied to the concrete <c>DataContext</c>.
     /// </summary>
-    private ResultSetEnumerator<TResult> CreateResultSetEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+    private ResultSetEnumerator<TResult> CreateResultSetEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, bool ownsCommand = false)
     {
         var enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
+        if (ownsCommand)
+            enumerator.OwnCommand();
         enumerator.InitEnvironment(_resultSetEnumeratorLogger, _logSensitiveData);
         return enumerator;
     }

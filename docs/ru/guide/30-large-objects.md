@@ -69,6 +69,47 @@ Stream stream = await ctx.From<BinaryEntity>()
     .ToStreamAsync(cancellationToken, id);
 ```
 
+## Именованные колонки и построчный стриминг
+
+Потоковые аксессоры доступны и на поверхности именованных колонок (`From("table")`), и их можно
+читать построчно в проекции `IAsyncEnumerable`. Член проекции `Stream`/`TextReader` открывается
+лениво из sequential-access reader'а и **валиден только до перехода перечислителя к следующей
+строке** (`MoveNext`): нижележащим reader'ом и его per-call командой владеет перечислитель, поэтому
+значение нужно полностью прочитать внутри тела цикла и не сохранять за пределами шага. Освобождайте каждый построчный stream/reader до следующей итерации: это освобождает per-row handle провайдера (обязательно для SQLite, где локатор `rowid` удерживает statement, пока значение не освобождено).
+
+После `MoveNext` handle **использовать нельзя**: его поведение не определено и зависит от
+провайдера. PostgreSQL может вернуть байты **следующей** строки, SQL Server бросает
+`ObjectDisposedException`, а SQLite возвращает конец потока на конце blob'а. Единственная гарантия —
+это safety-свойство: устаревший handle никогда не возвращает данные наблюдённой строки. Поэтому
+считайте значение недействительным в момент перехода перечислителя и не полагайтесь на конкретный
+сценарий отказа.
+
+Аксессоры именованных колонок —
+[`TableAlias.GetStream`](xref:NextORM.Core.TableAlias.GetStream(System.String)) /
+[`TableAlias.GetTextReader`](xref:NextORM.Core.TableAlias.GetTextReader(System.String)), а также
+члены индексатора [`TableColumn.AsStream`](xref:NextORM.Core.TableColumn.AsStream) /
+[`TableColumn.AsTextReader`](xref:NextORM.Core.TableColumn.AsTextReader). Потоковый член обязан быть
+**последним** в проекции, чтобы sequential-access reader дошёл до LOB-колонки после всех скалярных:
+
+```csharp
+await foreach (var row in ctx.From("documents")
+    .Where(t => t.GetInt32("id") == id)
+    .Select(t => new { Id = t.GetInt32("id"), Data = t.GetStream("data") })
+    .ToAsyncEnumerable(cancellationToken))
+{
+    // Поток валиден только до следующего MoveNext: прочитайте и освободите его до следующей итерации.
+    await using var data = row.Data;
+    await data.CopyToAsync(destination, cancellationToken);
+}
+```
+
+Строковая проекция, содержащая потоковый член, готовится заново с
+`CommandBehavior.SequentialAccess` и никогда не пишется в кэш планов, поэтому обычная буферизованная
+проекция той же формы сохраняет свой план. В SQLite к таким строкам тоже добавляется локатор
+`rowid`, поэтому источник обязан быть rowid-таблицей. Провайдер без поддержки sequential access
+(MySQL/MariaDB, ClickHouse) бросает `NotSupportedException` при выполнении запроса; используйте там
+буферизованную проекцию `byte[]`/`string`.
+
 ## Провайдеры
 
 | Провайдер | `ToStream` / `ToTextReader` |
