@@ -1,5 +1,11 @@
 # TODO: динамические колонки (dynamic columns store)
 
+> **Статус (2026-09-27, линия `1.0.9-a`):** сторона **чтения** отгружена и верифицирована —
+> коммит `37d3092`, тесты зелёные. Сторона **записи** отложена в GitHub issue
+> [#104](https://github.com/AlexeyShirshov/nextorm/issues/104) (милстоун `1.1`). Публичное
+> ограничение опубликовано в `docs/advanced/limitations.md` и `docs/ru/advanced/limitations.md`.
+> План остаётся частично реализованным.
+
 > Tracking issue: [#94](https://github.com/AlexeyShirshov/nextorm/issues/94).
 
 ## Статус
