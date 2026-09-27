@@ -27,7 +27,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 10 | Window functions (`OVER`, ranking, framed aggregates, `lag`/`lead`, named windows, `GROUPS`/`EXCLUDE`) | **Done** |
 > | 11 | User-defined scalar-valued functions (`[SqlFunction]`) | **Done** |
 > | 12 | Table-valued functions (`[SqlTableFunction]`) | **Done**; the built-in `SqlFunctions.Sql` TVFs are gated by `ISqlDialect.SupportsTableFunction` |
-> | 13 | Navigation properties / relationships | **Out of scope** |
+> | 13 | Navigation properties / relationships | **Deferred** — tracked as issue #105 (milestone `1.1`); out of scope for 1.0.x |
 > | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + returning rows + key upsert + full `MERGE` branches (SQL Server, PostgreSQL 15+) + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **Done**; in-memory only the key upsert |
 > | 15 | `APPLY` / `LATERAL` (`CrossApply`/`OuterApply`) | **Done** — SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LATERAL`, including a **correlated** applied source (a lambda over the left-hand row); gated by `ISqlDialect.SupportsApply` (SQLite/ClickHouse reject); the in-memory provider does not support it |
 > | 16 | Statement-level query hints (`Hint(...)`) | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** (SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`); SQLite and ClickHouse reject with `NotSupportedException` |
@@ -294,7 +294,8 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     error 8106 (previously verified on SQL Server; other providers tolerated the call).
     Docs: [Bulk insert](../../guide/22-bulk-insert.md).
 49. **Eager loading of a graph (`LoadWith`/`Include`) — out of scope, tracked.** nextorm has no
-    navigation properties (workstream 13), so linq2db's `LoadWith(x => x.Children)` and EF's `Include`
+    navigation properties (workstream 13, now tracked as issue #105), so linq2db's
+    `LoadWith(x => x.Children)` and EF's `Include`
     have no equivalent and a graph is loaded one level per query and stitched in memory (verified: the
     API is absent on every provider). Either a minimal level-one `LoadWith` is added, or the out-of-scope
     decision is recorded.
@@ -658,7 +659,7 @@ developed in parallel on the same working tree.
 | 10 | Window functions (`OVER`, ranking, framed, named windows/`GROUPS`/`EXCLUDE`) | **Done** | `SqlFunctions.cs`, `WindowDefinition.cs`, `EntityBuilder.cs`, `BaseExpressionVisitor.cs`, dialects | `CommonTestSuite.Window.cs`, SQL-generation tests |
 | 11 | User-defined scalar-valued functions | **Done** | `SqlFunctions.cs`, `ISqlDialect.cs`, `BaseExpressionVisitor.cs` | `CommonTestSuite.Udf.cs` |
 | 12 | Table-valued functions | **Done** (+ gated built-ins) | builder + `ISqlDialect.cs`, `SqlBuilder.cs` | `CommonTestSuite.Tvf.cs`, SQL-generation tests |
-| 13 | Navigation properties / relationships | **Out of scope** | metadata (`Meta/`), `EntityBuilder.cs`, `SqlBuilder.cs` | — |
+| 13 | Navigation properties / relationships | **Deferred** — tracked as issue #105 (milestone `1.1`); acceptance criteria there | metadata (`Meta/`), `EntityBuilder.cs`, `SqlBuilder.cs` | — (acceptance criteria in #105) |
 | 14 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | `INSERT` + `Returning` + key upsert + full `MERGE` branches + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) + `UPDATE` (predicate/key/`Returning`/join, ClickHouse mutation) **Done**; in-memory only the key upsert | new subsystem + provider `DbCommand` layer | `CommonTestSuite.Insert.cs`, `CommonTestSuite.Delete.cs`, `CommonTestSuite.Update.cs`, `CommonTestSuite.Merge.cs`, SQL-generation tests |
 | 15 | `APPLY` / `LATERAL` | **Done** (incl. correlated sources) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 16 | Statement-level query hints | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
