@@ -281,11 +281,18 @@ in-memory скалярный стриминг (цикл 5). Status-файлы ц
 
 Невыполнимые или не имеющие потребителя пункты чеклиста вынесены:
 
-- **[#100](https://github.com/AlexeyShirshov/nextorm/issues/100) — server-side LOB chunking.**
-  MySQL/MariaDB streaming (драйвер `MySqlConnector 2.6.2` буферизует значение; нужен драйвер со
-  стримингом либо `SUBSTRING`-чанки) + публичные чанковые `GetBytes`/`GetChars` (отвергнуты для SQLite
-  циклом 2, оставлены для остальных сценариев). Триггер: драйвер получает настоящий стриминг либо
-  появляется server-side chunking design.
+- **[#100](https://github.com/AlexeyShirshov/nextorm/issues/100) — server-side LOB chunking
+  (remaining deferred).** MySQL/MariaDB streaming + публичные чанковые `GetBytes`/`GetChars`
+  (отвергнуты для SQLite циклом 2, оставлены для остальных сценариев).
+  **Разведка 2026-09-27 (negative result):** на закреплённом `MySqlConnector 2.6.2`
+  (MySQL 8.4 + MariaDB 11.4) memory-bounded пути чтения нет. Измеренные отношения аллокаций
+  1→8 МиБ (пробник `tests/nextorm.integration.tests/LobCapabilityProbeTests.cs`, env-gate
+  `NEXTORM_LOB_PROBE=1`): baseline `GetStream` **7.99**; фиксированный буферный цикл `GetBytes`
+  **7.99** (byte-exact); server-side пагинация `SUBSTRING` **8.00** (byte-exact; ограничивает пик,
+  но не кумулятивную аллокацию); цикл `GetChars` **59.20** (O(n²)). **Решение:** чанковые
+  `GetBytes`/`GetChars`-терминалы как streaming API **не отгружать**; #100 остаётся deferred с
+  триггером «принять по-настоящему стриминговый драйвер MySQL/MariaDB». План-файл сохранён
+  (фаза 2 чанкового чтения частично остаётся нереализованной).
 - **✅ [#101](https://github.com/AlexeyShirshov/nextorm/issues/101) — `TableAlias`-аксессоры и фаза 3
   (отгружено 2026-09-27 на `1.0.9-a`).** `TableAlias.GetStream`/`GetTextReader` и
   `TableColumn.AsStream`/`AsTextReader` (named-column режим) + фаза 3 (`Stream`/`TextReader` в проекции
