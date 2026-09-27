@@ -17,6 +17,21 @@
 > P3 (трансляция EF `IQueryable`) и P4 (мост DML/`SaveChanges`); принятые решения — в разделе
 > «Deferred/accepted» ниже. Status-файл цикла `docs/specs/status/efcore-integration-1.md` удалён при коммите.
 
+> **P2 (UseNextOrm + DI) и P3 (трансляция EF `IQueryable`) — DONE (2026-09-27, линия `1.0.9-a`).**
+> `UseNextOrm` на `DbContextOptionsBuilder` (+ generic-перегрузка) хранит `Action<DataContextBuilder>?`
+> в `IDbContextOptionsExtension`; `GetNextOrmContext` строит read-only `IDataContext` по сохранённым
+> опциям, а `AddNextOrmFromDbContext<TDbContext>` регистрирует scoped `IDataContext` из `TDbContext`.
+> P3 отгружает `ToNextOrm<T>(DbSet<T>)` и `ToNextOrm<T>(IQueryable<T>, DbContext)` → `EntityBuilder<T>`
+> с ограниченным подмножеством операторов (`Where`; один primary `OrderBy`/`OrderByDescending` +
+> `ThenBy`/`ThenByDescending`; `Skip`→Offset, `Take`→Limit; `Distinct`; `AsNoTracking`/`AsTracking`/
+> `TagWith` игнорируются). Всё остальное — `Select`/`SelectMany`, `Include`/навигации, `Join`/
+> `GroupJoin`, `GroupBy`, `EF.Property`/`EF.Functions`, `IgnoreQueryFilters`, `AsSplitQuery`, корни с
+> сырым SQL, подзапросы, второй primary `OrderBy`, `ThenBy` без primary и неверный порядок
+> сортировки/`Distinct`/пагинации — отклоняется `NotSupportedException` без client evaluation;
+> проекция выполняется после `ToNextOrm` средствами nextorm (`Select` терминальный). **P4 (мост
+> DML/`SaveChanges`) — явно вне области:** интеграция read-only, change tracking остаётся за EF Core.
+> Публичные члены — в `docs/specs/design/API-NAMING-REVIEW.md`.
+
 ## Пункт и цель
 
 - Фича: использовать nextorm рядом с существующим EF Core `DbContext` — на том же `DbConnection`,
@@ -238,9 +253,16 @@ public static class NextOrmQueryableExtensions
   `ProviderName`; unit-тесты SQL-генерации без БД + интеграционные тесты SQLite (модель + соединение +
   транзакция + владение соединением). Shared-transaction на PostgreSQL/SQL Server/MySQL и SQL Server
   enlist-тест — см. «Deferred/accepted».
-- **Фаза 2:** `UseNextOrm` + DI; контекстно-локальный резолвер маппинга (если нужно).
-- **Фаза 3:** трансляция EF `IQueryable` (подмножество) — прототип, затем границы.
-- **Фаза 4:** opt-in мост DML/трекера (или явно вне области).
+- **Фаза 2: ✅ реализована (2026-09-27, `1.0.9-a`):** `UseNextOrm` (+generic) хранит опции,
+  `GetNextOrmContext` строит read-only `IDataContext`, `AddNextOrmFromDbContext<TDbContext>`
+  регистрирует scoped `IDataContext`. Контекстно-локальный резолвер маппинга не потребовался —
+  действует прежний процесс-глобальный кэш по `Type` (ограничение задокументировано).
+- **Фаза 3: ✅ реализована (2026-09-27, `1.0.9-a`):** `ToNextOrm<T>(DbSet<T>)` /
+  `ToNextOrm<T>(IQueryable<T>, DbContext)` → `EntityBuilder<T>` с задокументированным подмножеством
+  операторов; неподдерживаемые операторы и узлы бросают `NotSupportedException` без client evaluation.
+  Отдельный LINQ-provider-shim не потребовался.
+- **Фаза 4: вне области:** read-only мост; change tracking и `SaveChanges` остаются за EF Core
+  (и задокументировано в [limitations](../../advanced/limitations.md)).
 - **Вне области:** миграции, design-time, `Include`/навигации, замена EF.
 
 ## План тестов
@@ -266,8 +288,11 @@ public static class NextOrmQueryableExtensions
 3. Schema-qualified имена: поддерживать `schema.table` (quoting?) или явно ограничить.
 4. Автоопределение провайдера: единый реестр в core vs glue-пакеты
    `nextorm.<provider>.entityframeworkcore`.
-5. Границы фазы 3 (какие узлы `IQueryable` поддерживаем).
-6. Фаза 4: opt-in attach vs явный out-of-scope.
+5. Границы фазы 3 — **решено**: поддерживаемое подмножество (`Where`, один primary
+   `OrderBy`/`OrderByDescending` + `ThenBy`/`ThenByDescending`, `Skip`→Offset, `Take`→Limit,
+   `Distinct`; `AsNoTracking`/`AsTracking`/`TagWith` игнорируются) зафиксировано кодом и документацией
+   `docs/advanced/integration-efcore.md` EN+RU.
+6. Фаза 4 — **решено**: явный out-of-scope; интеграция read-only, DML/`SaveChanges` остаются за EF Core.
 7. Владение соединением/транзакцией и взаимодействие с `EnsureConnectionOpen`/`Dispose`.
 
 ## Файлы к изменению
@@ -285,18 +310,27 @@ public static class NextOrmQueryableExtensions
   `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §6, регистр
   `docs/specs/design/API-NAMING-REVIEW.md`.
 
-## Deferred/accepted — #61 (2026-09-27)
+## Deferred + trigger / accepted — #61 (2026-09-27)
 
 Принятые (осознанно оставленные) решения MVP-цикла #61; не блокируют отгрузку, но фиксируются с
 триггером пересмотра. Status-файл `docs/specs/status/efcore-integration-1.md` удалён при коммите.
 
-- **SQL Server EF transaction-enlistment тест.** Сюита доказывает enlist nextorm в EF-транзакцию
-  только на SQLite, чьи транзакции connection-scoped и потому не доказывают совместную работу на
-  сервере с session-scoped транзакциями. Триггер: пакет `Microsoft.EntityFrameworkCore.SqlServer`
-  добавлен в CPM и подключён к `tests/nextorm.entityframeworkcore.tests`, затем enlist-тест против
-  реального SQL Server (Testcontainers).
-- **Фазы P2-P4.** `UseNextOrm` + DI (P2), трансляция EF `IQueryable` (P3), opt-in мост
-  DML/`SaveChanges` (P4) остаются планом в этом файле.
+- **P1/P2/P3 — отгружены; P4 — вне области.** P2 (`UseNextOrm` + DI) и P3 (трансляция EF
+  `IQueryable`) отгружены (см. «Статус»/«Этапы внедрения»); P4 (opt-in мост DML/`SaveChanges`) признан
+  явно вне области — интеграция остаётся read-only.
+- **Shared-transaction тесты на PostgreSQL / SQL Server / MySQL — отложено → [#106](https://github.com/AlexeyShirshov/nextorm/issues/106).**
+  Сюита доказывает enlist nextorm в EF-транзакцию только на SQLite, чьи транзакции connection-scoped
+  и потому не доказывают совместную работу на сервере с session-scoped транзакциями. Предусловие
+  (пакеты `Microsoft.EntityFrameworkCore.SqlServer`, `Npgsql.EntityFrameworkCore.PostgreSQL`,
+  `Pomelo.EntityFrameworkCore.MySql` в CPM + container-backed тесты) и триггер описаны в #106.
+- **P3-guard: консервативное переотклонение mapped-колонок-массивов/`List<int>`.** `LambdaBodyGuard`
+  (`NextOrmQueryableExtensions.cs`) отклоняет member-доступ по типу, а не по маппингу: скалярные
+  array/`List<int>`-колонки, которые EF-модель и провайдер умеют транслировать, могут быть отвергнуты
+  `NotSupportedException`. Триггер: поддержка трансляции array-колонок в nextorm.
+- **P3-guard: потенциальный false negative для member-доступа типа `object`/`dynamic`.** Guard
+  пропускает `System.*`/`object`-типы, поэтому запрос поддерживаемой формы с `object`/`dynamic`-членом
+  может дать неверный SQL вместо отказа. Триггер: воспроизводимый запрос в поддерживаемом scope,
+  порождающий неверный SQL.
 - **Coverage нового пакета исключён из `coverage.settings.xml`.** Файл включает только
   `nextorm.{core,sqlite,postgres,sqlserver}`; `nextorm.entityframeworkcore` в цифру покрытия не
   входит. Триггер: включение пакета в порог `MIN_LINE_COVERAGE`.

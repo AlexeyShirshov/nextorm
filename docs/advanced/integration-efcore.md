@@ -49,6 +49,104 @@ using var next = db.CreateNextOrmContext(builder => builder
 
 To register the mapping without creating a context, call [`NextOrmModelMapper.Register`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) with `db.Model` directly — see [Model mapping](#model-mapping).
 
+## Options builder and dependency injection
+
+`UseNextOrm` stores the optional nextorm configuration on the EF Core options, so every later bridge call picks it up without taking the delegate again:
+
+```csharp
+DbContextOptionsBuilder UseNextOrm(this DbContextOptionsBuilder optionsBuilder, Action<DataContextBuilder>? configure = null);
+
+DbContextOptionsBuilder<TContext> UseNextOrm<TContext>(this DbContextOptionsBuilder<TContext> optionsBuilder, Action<DataContextBuilder>? configure = null)
+    where TContext : DbContext;
+```
+
+```csharp
+public sealed class AppDbContext : DbContext
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        => optionsBuilder
+            .UseNpgsql(connectionString)
+            .UseNextOrm(builder => builder.UseCommandTimeout(30));
+}
+
+using var db = new AppDbContext();
+
+using var next = db.GetNextOrmContext();
+
+var top = next.From<Order>()
+    .Where(o => o.Total > 100)
+    .Select(o => new { o.Id, o.Total })
+    .ToList();
+```
+
+`GetNextOrmContext` takes no arguments — it reads the connection, current transaction and model from `db`, plus the configuration stored by `UseNextOrm`:
+
+```csharp
+IDataContext GetNextOrmContext(this DbContext dbContext);
+```
+
+`AddNextOrmFromDbContext<TDbContext>` registers `IDataContext` as a **scoped** service built from the scope's `TDbContext`, so its lifetime matches the EF context:
+
+```csharp
+IServiceCollection AddNextOrmFromDbContext<TDbContext>(this IServiceCollection services, Action<DataContextBuilder>? configure = null)
+    where TDbContext : DbContext;
+```
+
+```csharp
+services.AddDbContext<AppDbContext>(options => options
+    .UseNpgsql(connectionString)
+    .UseNextOrm(builder => builder.UseCommandTimeout(30)));
+
+services.AddNextOrmFromDbContext<AppDbContext>();
+```
+
+A class can then take `IDataContext` through its constructor. The `configure` callback passed to `AddNextOrmFromDbContext` runs after the delegate stored by `UseNextOrm`, so it can override it per registration.
+
+## Translating an EF query with `ToNextOrm`
+
+`ToNextOrm` converts an EF Core `IQueryable<T>` rooted at a `DbSet<T>` into an equivalent nextorm [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1), so a LINQ-to-Entities query executes on the same connection and transaction. Both overloads require a class entity:
+
+```csharp
+EntityBuilder<T> ToNextOrm<T>(this DbSet<T> source) where T : class;
+
+EntityBuilder<T> ToNextOrm<T>(this IQueryable<T> source, DbContext dbContext) where T : class;
+```
+
+The `DbSet<T>` overload resolves the owning `DbContext` from the set itself; pass the context explicitly through the `IQueryable<T>, DbContext` overload for a query already composed with operators:
+
+```csharp
+var all = db.Orders
+    .ToNextOrm()
+    .Select(o => new { o.Id, o.Total })
+    .ToList();
+
+var top = db.Orders
+    .Where(o => o.Total > 100)
+    .OrderBy(o => o.Total)
+    .ThenBy(o => o.Id)
+    .Skip(20)
+    .Take(10)
+    .ToNextOrm(db)
+    .Select(o => new { o.Id, o.Total })
+    .ToList();
+```
+
+### Supported operators
+
+Only operators nextorm can render without a client-side fallback are translated:
+
+| EF Core operator | nextorm |
+|---|---|
+| `Where` | `Where(predicate)` |
+| `OrderBy` / `OrderByDescending` | the single primary `OrderBy` / `OrderByDescending` |
+| `ThenBy` / `ThenByDescending` | ordering-key continuations |
+| `Skip(n)` | `Offset(n)` |
+| `Take(n)` | `Limit(n)` |
+| `Distinct()` | `Distinct()` |
+| `AsNoTracking()` / `AsTracking()` / `TagWith(...)` | ignored |
+
+**`Select` is terminal in nextorm.** `ToNextOrm` returns an `EntityBuilder<T>`, so project **after** it with nextorm's own `Select`/projection; a `Select` placed before `ToNextOrm(...)` is captured as an unsupported operator.
+
 ## Shared connection and transaction
 
 `CreateNextOrmContext` reads `dbContext.Database.GetDbConnection()` and builds the nextorm context over that exact `DbConnection` instance. If the connection is closed when a nextorm query runs, nextorm opens it and leaves it open; it never closes, commits or rolls back the borrowed connection or transaction. EF Core keeps ownership for their whole lifetime, and disposing the nextorm context disposes neither.
@@ -97,7 +195,8 @@ Provider names are matched exactly (ordinal), so a look-alike name is rejected. 
 
 ## Limitations
 
-- **Read-only bridge.** The integration is designed for reads: there is no change-tracking sync and no `SaveChanges` bridge, and nextorm mutations would run outside EF's change tracker. Write through EF Core; use the returned [`IDataContext`](xref:NextORM.Core.IDataContext) for queries.
+- **Read-only bridge.** The integration is designed for reads: there is no change-tracking sync and no `SaveChanges` bridge, and nextorm mutations would run outside EF's change tracker. Write through EF Core; use the returned [`IDataContext`](xref:NextORM.Core.IDataContext) for queries. A DML/`SaveChanges` bridge is explicitly out of scope.
+- **`ToNextOrm` translates a bounded operator subset.** Every operator outside the [supported set](#supported-operators) — `Select`/`SelectMany`, `Include`/navigations, `Join`/`GroupJoin`, `GroupBy`, `EF.Property`/`EF.Functions`, `IgnoreQueryFilters`, `AsSplitQuery`, raw-SQL roots, subqueries, a second primary `OrderBy` after sorting has started, `ThenBy` without a primary, and an invalid sort/`Distinct`/paging order — throws `NotSupportedException`. Nothing is silently evaluated in memory; unlike `Select`, which is terminal in nextorm and must be applied after `ToNextOrm(...)`.
 - **One CLR mapping per process.** The mapping lives in nextorm's process-wide metadata cache keyed by `Type`; re-registering the identical mapping is fine, but a second `DbContext` that maps an already-mapped CLR type differently throws `InvalidOperationException` (clear `DataContextCache.Metadata` to reset).
 - **EF InMemory is unsupported.** `Microsoft.EntityFrameworkCore.InMemory` has no `DbConnection` and its provider name is rejected as unsupported before the connection is touched. Only relational EF providers are bridged.
 - **Unsupported model shapes are rejected, not silently mapped.** Query filters, schema-qualified tables and inheritance (TPH/TPT/TPC) throw `NotSupportedException`, because nextorm has no query-filter, schema or discriminator support and would otherwise emit wrong SQL. Owned types, table splitting, shadow properties, value converters and temporal tables are not projected either.

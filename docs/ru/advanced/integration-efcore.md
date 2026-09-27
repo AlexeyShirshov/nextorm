@@ -49,6 +49,104 @@ using var next = db.CreateNextOrmContext(builder => builder
 
 Чтобы зарегистрировать маппинг без создания контекста, вызовите [`NextOrmModelMapper.Register`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) напрямую с `db.Model` — см. [Отображение модели](#отображение-модели).
 
+## Опции и внедрение зависимостей
+
+`UseNextOrm` сохраняет необязательную конфигурацию nextorm в опциях EF Core, поэтому каждый последующий вызов моста её подхватывает, не принимая делегат заново:
+
+```csharp
+DbContextOptionsBuilder UseNextOrm(this DbContextOptionsBuilder optionsBuilder, Action<DataContextBuilder>? configure = null);
+
+DbContextOptionsBuilder<TContext> UseNextOrm<TContext>(this DbContextOptionsBuilder<TContext> optionsBuilder, Action<DataContextBuilder>? configure = null)
+    where TContext : DbContext;
+```
+
+```csharp
+public sealed class AppDbContext : DbContext
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        => optionsBuilder
+            .UseNpgsql(connectionString)
+            .UseNextOrm(builder => builder.UseCommandTimeout(30));
+}
+
+using var db = new AppDbContext();
+
+using var next = db.GetNextOrmContext();
+
+var top = next.From<Order>()
+    .Where(o => o.Total > 100)
+    .Select(o => new { o.Id, o.Total })
+    .ToList();
+```
+
+`GetNextOrmContext` не принимает аргументов — соединение, текущую транзакцию и модель он читает из `db`, а конфигурацию — из сохранённой `UseNextOrm`:
+
+```csharp
+IDataContext GetNextOrmContext(this DbContext dbContext);
+```
+
+`AddNextOrmFromDbContext<TDbContext>` регистрирует `IDataContext` как **scoped**-сервис, построенный из `TDbContext` текущей области, поэтому его время жизни совпадает с EF-контекстом:
+
+```csharp
+IServiceCollection AddNextOrmFromDbContext<TDbContext>(this IServiceCollection services, Action<DataContextBuilder>? configure = null)
+    where TDbContext : DbContext;
+```
+
+```csharp
+services.AddDbContext<AppDbContext>(options => options
+    .UseNpgsql(connectionString)
+    .UseNextOrm(builder => builder.UseCommandTimeout(30)));
+
+services.AddNextOrmFromDbContext<AppDbContext>();
+```
+
+После этого класс может получать `IDataContext` через конструктор. Колбэк `configure`, переданный в `AddNextOrmFromDbContext`, вызывается после делегата, сохранённого `UseNextOrm`, поэтому может переопределить его для конкретной регистрации.
+
+## Трансляция EF-запроса через `ToNextOrm`
+
+`ToNextOrm` преобразует EF Core `IQueryable<T>` с корнем `DbSet<T>` в эквивалентный nextorm [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1), поэтому LINQ-to-Entities-запрос выполняется на том же соединении и в той же транзакции. Обе перегрузки требуют класс-сущность:
+
+```csharp
+EntityBuilder<T> ToNextOrm<T>(this DbSet<T> source) where T : class;
+
+EntityBuilder<T> ToNextOrm<T>(this IQueryable<T> source, DbContext dbContext) where T : class;
+```
+
+Перегрузка `DbSet<T>` сама определяет владеющий `DbContext`; передавайте контекст явно через перегрузку `IQueryable<T>, DbContext` для запроса, уже составленного из операторов:
+
+```csharp
+var all = db.Orders
+    .ToNextOrm()
+    .Select(o => new { o.Id, o.Total })
+    .ToList();
+
+var top = db.Orders
+    .Where(o => o.Total > 100)
+    .OrderBy(o => o.Total)
+    .ThenBy(o => o.Id)
+    .Skip(20)
+    .Take(10)
+    .ToNextOrm(db)
+    .Select(o => new { o.Id, o.Total })
+    .ToList();
+```
+
+### Поддерживаемые операторы
+
+Транслируются только операторы, которые nextorm умеет рендерить без клиентского фолбэка:
+
+| Оператор EF Core | nextorm |
+|---|---|
+| `Where` | `Where(predicate)` |
+| `OrderBy` / `OrderByDescending` | единственный primary `OrderBy` / `OrderByDescending` |
+| `ThenBy` / `ThenByDescending` | продолжения ключей сортировки |
+| `Skip(n)` | `Offset(n)` |
+| `Take(n)` | `Limit(n)` |
+| `Distinct()` | `Distinct()` |
+| `AsNoTracking()` / `AsTracking()` / `TagWith(...)` | игнорируются |
+
+**`Select` в nextorm терминальный.** `ToNextOrm` возвращает `EntityBuilder<T>`, поэтому проецируйте **после** него средствами nextorm (`Select`/проекция); `Select`, поставленный перед `ToNextOrm(...)`, распознаётся как неподдерживаемый оператор.
+
 ## Общее соединение и транзакция
 
 `CreateNextOrmContext` читает `dbContext.Database.GetDbConnection()` и строит контекст nextorm поверх этого самого экземпляра `DbConnection`. Если соединение закрыто к моменту выполнения запроса nextorm, nextorm открывает его и оставляет открытым; он никогда не закрывает, не фиксирует и не откатывает заимствованные соединение или транзакцию. EF Core владеет ими всё время их жизни, и освобождение контекста nextorm не освобождает ни то, ни другое.
@@ -97,7 +195,8 @@ next.From<Row>().Where(r => r.Name == "pending").ToList(); // пусто
 
 ## Ограничения
 
-- **Мост только для чтения.** Интеграция рассчитана на чтение: синхронизации отслеживания изменений и моста `SaveChanges` нет, а мутации nextorm выполнялись бы в обход трекера изменений EF. Пишите через EF Core; возвращённый [`IDataContext`](xref:NextORM.Core.IDataContext) используйте для запросов.
+- **Мост только для чтения.** Интеграция рассчитана на чтение: синхронизации отслеживания изменений и моста `SaveChanges` нет, а мутации nextorm выполнялись бы в обход трекера изменений EF. Пишите через EF Core; возвращённый [`IDataContext`](xref:NextORM.Core.IDataContext) используйте для запросов. Мост DML/`SaveChanges` явно вне области.
+- **`ToNextOrm` транслирует ограниченное подмножество операторов.** Любой оператор вне [поддерживаемого набора](#поддерживаемые-операторы) — `Select`/`SelectMany`, `Include`/навигации, `Join`/`GroupJoin`, `GroupBy`, `EF.Property`/`EF.Functions`, `IgnoreQueryFilters`, `AsSplitQuery`, корни с сырым SQL, подзапросы, второй primary `OrderBy` после начала сортировки, `ThenBy` без primary и неверный порядок сортировки/`Distinct`/пагинации — бросает `NotSupportedException`. Ничего не вычисляется в памяти молча; в отличие от `Select`, который в nextorm терминальный и должен применяться после `ToNextOrm(...)`.
 - **Один маппинг CLR на процесс.** Маппинг живёт в процесс-глобальном кэше метаданных nextorm с ключом по `Type`; повторная регистрация идентичного маппинга допустима, но второй `DbContext`, отображающий уже отображённый CLR-тип по-другому, бросает `InvalidOperationException` (очистите `DataContextCache.Metadata`, чтобы сбросить).
 - **EF InMemory не поддерживается.** У `Microsoft.EntityFrameworkCore.InMemory` нет `DbConnection`, и его имя провайдера отклоняется как неподдерживаемое до обращения к соединению. Связываются только реляционные EF-провайдеры.
 - **Неподдерживаемые формы модели отклоняются, а не отображаются молча.** Фильтры запросов, таблицы со схемой и наследование (TPH/TPT/TPC) бросают `NotSupportedException`, потому что в nextorm нет поддержки фильтров запросов, схем или дискриминаторов и иначе генерировался бы неверный SQL. Owned-типы, table splitting, shadow-свойства, конвертеры значений и temporal-таблицы также не проецируются.

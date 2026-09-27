@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using NextORM.Core;
 using NextORM.MySql;
@@ -45,6 +46,15 @@ public static class EntityFrameworkCoreExtensions
     {
         ArgumentNullException.ThrowIfNull(dbContext);
 
+        return CreateContext(dbContext, configure);
+    }
+
+    /// <summary>
+    /// Shared pipeline for every public entry point: resolves the provider, borrows EF's connection and
+    /// current transaction, registers the EF model mapping and builds a read-only nextorm context.
+    /// </summary>
+    internal static IDataContext CreateContext(DbContext dbContext, Action<DataContextBuilder>? configure)
+    {
         // Resolve and validate the provider before touching the connection. The non-relational InMemory
         // provider has no DbConnection, so it must fail with the documented unsupported-provider error
         // rather than EF's relational one.
@@ -71,6 +81,14 @@ public static class EntityFrameworkCoreExtensions
 
         return context;
     }
+
+    /// <summary>
+    /// Reads the configure delegate stored by <c>UseNextOrm</c> from the context's options, or
+    /// <see langword="null"/> when the bridge was not configured through
+    /// <see cref="DbContextOptionsBuilder"/>.
+    /// </summary>
+    internal static Action<DataContextBuilder>? FindConfiguredDelegate(DbContext dbContext)
+        => dbContext.GetService<IDbContextOptions>().FindExtension<NextOrmOptionsExtension>()?.Configure;
 
     /// <summary>
     /// Maps <paramref name="providerName"/> to a nextorm provider by exact EF provider name.
