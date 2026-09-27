@@ -35,4 +35,11 @@ public interface IEntityMetadata
     /// compiling.
     /// </summary>
     IPropertyMetadata? DynamicColumnsStore => null;
+
+    /// <summary>
+    /// The global query filters declared for the entity, in declaration order; empty when none are
+    /// declared. The default implementation returns an empty list so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    IReadOnlyList<IQueryFilterMetadata> Filters => Array.Empty<IQueryFilterMetadata>();
 }

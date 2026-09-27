@@ -40,6 +40,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     protected Type? _srcType;
     private bool _dontCache;
+    private bool _ignoreFilters;
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
     internal int SortingPlanHash;
@@ -143,6 +144,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _exp = definition.Exp;
         _srcType = definition.SrcType;
         _condition = definition.Condition;
+        _ignoreFilters = definition.IgnoreFilters;
         _joins = definition.Joins;
         Paging = definition.Paging;
         _sorting = definition.Sorting;
@@ -175,6 +177,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Exp = _exp,
         SrcType = _srcType,
         Condition = _condition,
+        IgnoreFilters = _ignoreFilters,
         Joins = _joins,
         Paging = Paging,
         Sorting = _sorting,
@@ -229,6 +232,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => !_dontCache;
         set => _dontCache = !value;
+    }
+    /// <summary>Whether the command ignores the global query filters declared for its entity type.</summary>
+    public bool IgnoreFilters
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _ignoreFilters;
+        set => _ignoreFilters = value;
     }
     internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }

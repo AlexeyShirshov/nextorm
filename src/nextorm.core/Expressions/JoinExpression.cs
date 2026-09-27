@@ -80,7 +80,19 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// <summary>The kind of join.</summary>
     public JoinType JoinType { get; } = joinType;
     /// <summary>The <c>ON</c> condition, or <c>null</c> when the join has none (cross and apply joins).</summary>
-    public LambdaExpression? JoinCondition { get; } = joinCondition;
+    public LambdaExpression? JoinCondition { get; private set; } = joinCondition;
+    private LambdaExpression? _originalJoinCondition = joinCondition;
+    internal LambdaExpression? OriginalJoinCondition
+    {
+        get => _originalJoinCondition;
+        init => _originalJoinCondition = value;
+    }
+    /// <summary>
+    /// Replaces the <c>ON</c> condition during preparation, after the joined entity's global query
+    /// filters have been combined into it.
+    /// </summary>
+    /// <param name="condition">The condition to install.</param>
+    internal void SetJoinCondition(LambdaExpression condition) => JoinCondition = condition;
     /// <summary>
     /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set through the fluent
     /// <c>WithStrictness</c> modifier, which copies the join rather than mutating it; defaults to
@@ -124,9 +136,16 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     {
         var newFrom = From.CloneForCache();
 
-        if (newFrom == From) return this;
-
-        return new JoinExpression(JoinCondition, JoinType) { From = newFrom!, EntityType = EntityType, Strictness = Strictness, IsGlobal = IsGlobal, JoinHint = JoinHint, ApplySource = ApplySource };
+        return new JoinExpression(JoinCondition, JoinType)
+        {
+            From = newFrom!,
+            EntityType = EntityType,
+            Strictness = Strictness,
+            IsGlobal = IsGlobal,
+            JoinHint = JoinHint,
+            ApplySource = ApplySource,
+            OriginalJoinCondition = _originalJoinCondition,
+        };
     }
     // public override int GetHashCode()
     // {

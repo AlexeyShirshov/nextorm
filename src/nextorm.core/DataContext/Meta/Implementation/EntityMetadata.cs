@@ -7,12 +7,13 @@ internal class EntityMetadata : IEntityMetadata
     private readonly IReadOnlyList<IPropertyMetadata> _propertiesMeta;
     private readonly Dictionary<PropertyInfo, IPropertyMetadata> _propertiesByInfo;
 
-    public EntityMetadata(string? tableName, IReadOnlyList<IPropertyMetadata> propertiesMetas, bool isTableNameAuto = false, IPropertyMetadata? dynamicColumnsStore = null)
+    public EntityMetadata(string? tableName, IReadOnlyList<IPropertyMetadata> propertiesMetas, bool isTableNameAuto = false, IPropertyMetadata? dynamicColumnsStore = null, IReadOnlyList<IQueryFilterMetadata>? filters = null)
     {
         _propertiesMeta = propertiesMetas;
         TableName = tableName;
         IsTableNameAuto = isTableNameAuto;
         DynamicColumnsStore = dynamicColumnsStore;
+        Filters = filters ?? Array.Empty<IQueryFilterMetadata>();
 
         // Indexed once at construction: property resolution runs per projected column and per
         // comparison operand, so the linear scan is on the prepare hot path.
@@ -31,6 +32,8 @@ internal class EntityMetadata : IEntityMetadata
     public bool IsTableNameAuto { get; }
 
     public IPropertyMetadata? DynamicColumnsStore { get; }
+
+    public IReadOnlyList<IQueryFilterMetadata> Filters { get; }
 
     /// <summary>Looks up a mapped property by its CLR member; <see langword="null"/> when it is not mapped.</summary>
     internal IPropertyMetadata? FindProperty(PropertyInfo property)

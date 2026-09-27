@@ -12,6 +12,7 @@ namespace NextORM.Core;
 public class EntityMetadataBuilder<T>
 {
     private readonly IList<EntityPropertyBuilder<T>> _props = new List<EntityPropertyBuilder<T>>();
+    private readonly List<IQueryFilterMetadata> _filters = new();
     private string? _tableName;
 
     /// <summary>
@@ -31,7 +32,7 @@ public class EntityMetadataBuilder<T>
             ? AutoBuildProperties(out var store)
             : BuildDeclaredProperties(out store);
 
-        return CreateMetadata(tableName, isTableNameAuto, properties, store);
+        return CreateMetadata(tableName, isTableNameAuto, properties, store, BuildFilters(includeFluent: true));
     }
     /// <summary>
     /// Builds the metadata entirely by reflecting over the CLR type, ignoring any table or property
@@ -44,7 +45,7 @@ public class EntityMetadataBuilder<T>
 
         var (tableName, isTableNameAuto) = AutoBuildTableName();
 
-        return CreateMetadata(tableName, isTableNameAuto, propsMeta, store);
+        return CreateMetadata(tableName, isTableNameAuto, propsMeta, store, BuildFilters(includeFluent: false));
     }
 
     private List<IPropertyMetadata> BuildDeclaredProperties(out IPropertyMetadata? dynamicColumnsStore)
@@ -68,13 +69,52 @@ public class EntityMetadataBuilder<T>
         return list;
     }
 
-    private IEntityMetadata CreateMetadata(string? tableName, bool isTableNameAuto, List<IPropertyMetadata> properties, IPropertyMetadata? dynamicColumnsStore)
+    private IEntityMetadata CreateMetadata(string? tableName, bool isTableNameAuto, List<IPropertyMetadata> properties, IPropertyMetadata? dynamicColumnsStore, IReadOnlyList<IQueryFilterMetadata> filters)
     {
         dynamicColumnsStore ??= FindAttributeStore(properties);
         if (dynamicColumnsStore is not null)
             ValidateDynamicColumnsStore(typeof(T), dynamicColumnsStore.PropertyInfo);
 
-        return new EntityMetadata(tableName, properties, isTableNameAuto, dynamicColumnsStore);
+        return new EntityMetadata(tableName, properties, isTableNameAuto, dynamicColumnsStore, filters);
+    }
+
+    private IReadOnlyList<IQueryFilterMetadata> BuildFilters(bool includeFluent)
+    {
+        var filters = new List<IQueryFilterMetadata>();
+
+        if (includeFluent)
+            filters.AddRange(_filters);
+
+        foreach (var attribute in typeof(T).GetCustomAttributes<QueryFilterAttribute>(true))
+        {
+            var lambda = ResolveFilterLambda(attribute.FilterLambda);
+            if (lambda is not null)
+                filters.Add(new QueryFilterMetadata(null, lambda));
+        }
+
+        return filters;
+    }
+
+    private static LambdaExpression? ResolveFilterLambda(string? memberName)
+    {
+        if (string.IsNullOrWhiteSpace(memberName))
+            throw new InvalidOperationException($"The {nameof(QueryFilterAttribute)} on {typeof(T).Name} must name a static member in {nameof(QueryFilterAttribute.FilterLambda)}.");
+
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        var members = typeof(T).GetMember(memberName, flags);
+        if (members.Length == 0)
+            throw new InvalidOperationException($"The static member '{memberName}' named by {nameof(QueryFilterAttribute)} was not found on {typeof(T).Name}.");
+
+        var value = members[0] switch
+        {
+            PropertyInfo property => property.GetValue(null),
+            FieldInfo field => field.GetValue(null),
+            MethodInfo method when method.GetParameters().Length == 0 => method.Invoke(null, null),
+            _ => throw new InvalidOperationException($"The member '{memberName}' named by {nameof(QueryFilterAttribute)} on {typeof(T).Name} must be a static field, a static property or a parameterless static method."),
+        };
+
+        return value as LambdaExpression
+            ?? throw new InvalidOperationException($"The static member '{memberName}' named by {nameof(QueryFilterAttribute)} on {typeof(T).Name} must return a {nameof(LambdaExpression)}.");
     }
 
     private static IPropertyMetadata? FindAttributeStore(List<IPropertyMetadata> properties)
@@ -322,6 +362,42 @@ public class EntityMetadataBuilder<T>
     public EntityMetadataBuilder<T> Table(string tableName)
     {
         _tableName = tableName;
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a global query filter that is applied to every query in which the entity participates
+    /// (the primary source, joins and subqueries) unless the query calls <c>IgnoreFilters</c>. A
+    /// repeated call on this builder adds another predicate; the declared filters are combined with
+    /// <c>and</c>. The mapping is registered once per entity type: a later <c>From&lt;T&gt;(...)</c>
+    /// configuration for the same type is ignored, so the first registration wins.
+    /// </summary>
+    /// <param name="filter">The filter predicate over the entity.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityMetadataBuilder<T> HasQueryFilter(Expression<Func<T, bool>> filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        _filters.Add(new QueryFilterMetadata(null, filter));
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a global query filter that is applied to every query in which the entity participates
+    /// (the primary source, joins and subqueries) unless the query calls <c>IgnoreFilters</c>. The
+    /// predicate receives the executing <see cref="IDataContext"/> so it can read per-context state
+    /// such as a tenant identifier. A repeated call on this builder adds another predicate; the
+    /// declared filters are combined with <c>and</c>. The mapping is registered once per entity type:
+    /// a later <c>From&lt;T&gt;(...)</c> configuration for the same type is ignored, so the first
+    /// registration wins.
+    /// </summary>
+    /// <param name="filter">The filter predicate over the entity and the executing data context.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityMetadataBuilder<T> HasQueryFilter(Expression<Func<T, IDataContext, bool>> filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        _filters.Add(new QueryFilterMetadata(null, filter));
         return this;
     }
 }

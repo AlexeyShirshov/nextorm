@@ -1,3 +1,5 @@
+- name: Global query filters
+  href: query-filters.md
 - name: Entity Framework Core integration
   href: integration-efcore.md
 - name: Limitations and out-of-scope features

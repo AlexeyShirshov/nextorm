@@ -55,7 +55,7 @@ public partial class QueryCommand
             PrepareFrom(from, dontCalculateHash, cancellationToken);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
-            var wherePlanHash = PrepareWhere(cmd, dontCalculateHash, cancellationToken);
+            var wherePlanHash = PrepareWhere(cmd, InjectMainSourceFilters(cmd, srcType), dontCalculateHash, cancellationToken);
             PreparePreWhere(cmd, dontCalculateHash, cancellationToken);
             PrepareArrayJoin(cmd, cancellationToken);
 
@@ -579,14 +579,99 @@ public partial class QueryCommand
                         PrepareFrom(join.From, noHash, cancellationToken);
                     }
 
+                    InjectJoinFilters(cmd, join);
+
                     if (!cmd._dontCache && !noHash) unchecked
-                        {
-                            joinPlanHash = joinPlanHash * 13 + cmd.GetJoinExpressionPlanEqualityComparer().GetHashCode(join);
-                        }
+                    {
+                        joinPlanHash = joinPlanHash * 13 + cmd.GetJoinExpressionPlanEqualityComparer().GetHashCode(join);
+                    }
                 }
             }
 
             return joinPlanHash;
+        }
+
+        private static IReadOnlyList<IQueryFilterMetadata> GetFilters(QueryCommand cmd, Type? entityType)
+        {
+            if (cmd._ignoreFilters || entityType is null)
+                return Array.Empty<IQueryFilterMetadata>();
+
+            return DataContextCache.Metadata.TryGetValue(entityType, out var metadata)
+                ? metadata.Filters
+                : Array.Empty<IQueryFilterMetadata>();
+        }
+
+        private static LambdaExpression? InjectMainSourceFilters(QueryCommand cmd, Type srcType)
+        {
+            var filters = GetFilters(cmd, srcType);
+            if (filters.Count == 0)
+                return cmd._condition;
+
+            var condition = cmd._condition;
+            var parameter = condition is { Parameters.Count: >= 1 } typedCondition
+                ? typedCondition.Parameters[0]
+                : Expression.Parameter(srcType);
+            Expression? body = condition?.Body;
+
+            for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+            {
+                var filterBody = BuildFilterBody(filters[i].Lambda, cmd._dataContext!, parameter);
+                body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
+            }
+
+            return body is null ? null : Expression.Lambda(body, parameter);
+        }
+
+        private static void InjectJoinFilters(QueryCommand cmd, JoinExpression join)
+        {
+            if (join.From.SubQuery is not null)
+                return;
+
+            if (join.OriginalJoinCondition is not { Parameters: { Count: >= 2 } } joinCondition)
+                return;
+
+            var rightType = join.EntityType ?? join.From.SourceType ?? joinCondition.Parameters[1].Type;
+            var filters = GetFilters(cmd, rightType);
+            if (filters.Count == 0)
+                return;
+
+            var rightParameter = joinCondition.Parameters[1];
+            var body = joinCondition.Body;
+
+            for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+            {
+                var filterBody = BuildFilterBody(filters[i].Lambda, cmd._dataContext!, rightParameter);
+                body = Expression.AndAlso(body, filterBody);
+            }
+
+            join.SetJoinCondition(Expression.Lambda(body, joinCondition.Parameters));
+        }
+
+        private static Expression BuildFilterBody(LambdaExpression filter, IDataContext dataContext, ParameterExpression entityParameter)
+        {
+            if (filter.Parameters.Count == 0)
+                throw new NotSupportedException($"The query filter registered for the {entityParameter.Type.Name} source declares no entity parameter.");
+
+            var filterEntityParameter = filter.Parameters[0];
+            if (filterEntityParameter.Type != entityParameter.Type)
+                throw new NotSupportedException($"The query filter registered for {filterEntityParameter.Type.Name} cannot be applied to the {entityParameter.Type.Name} source: the filter's entity parameter type does not match the source type.");
+
+            var body = filter.Body;
+
+            if (filter.Parameters.Count > 1)
+            {
+                var host = new QueryFilterContext(dataContext);
+                var context = Expression.Property(Expression.Constant(host), nameof(QueryFilterContext.Context));
+                body = new ReplaceParameterInstanceVisitor(filter.Parameters[1], context).Visit(body);
+            }
+
+            return new ReplaceParameterInstanceVisitor(filterEntityParameter, entityParameter).Visit(body);
+        }
+
+        private sealed class ReplaceParameterInstanceVisitor(ParameterExpression target, Expression replacement) : ExpressionVisitor
+        {
+            protected override Expression VisitParameter(ParameterExpression node)
+                => ReferenceEquals(node, target) ? replacement : base.VisitParameter(node);
         }
 
         private static int PrepareSorting(QueryCommand cmd, SelectExpression[]? selectList, bool noHash, CancellationToken cancellationToken)
@@ -679,13 +764,13 @@ public partial class QueryCommand
             }
         }
 
-        private static int PrepareWhere(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
+        private static int PrepareWhere(QueryCommand cmd, LambdaExpression? condition, bool noHash, CancellationToken cancellationToken)
         {
             int wherePlanHash = 7;
-            if (cmd._condition is not null)
+            if (condition is not null)
             {
                 var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
-                cmd.PreparedCondition = innerQueryVisitor.Visit(cmd._condition);
+                cmd.PreparedCondition = innerQueryVisitor.Visit(condition);
 
                 if (!cmd._dontCache && !noHash) unchecked
                     {

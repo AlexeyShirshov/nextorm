@@ -7,6 +7,19 @@
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md:73) и фаза 2
 > расширяемости (этот план). Публичный API → `docs/specs/design/API-NAMING-REVIEW.md`.
 
+## 0. Статус реализации (27.09.2026)
+
+- **Фаза 1 — shipped** (issue #67, ветка `1.0.9-a`): fluent `HasQueryFilter` (обе перегрузки), атрибут
+  `[QueryFilter(FilterLambda = nameof(...))]`, применение к основному источнику/join-ам/подзапросам,
+  контекст как runtime-параметр (идентичность фильтра в ключе плана), `IgnoreFilters()`, in-memory
+  parity. Публичный API — `QueryFilterAttribute`, `IQueryFilterMetadata`,
+  `EntityMetadataBuilder<T>.HasQueryFilter`, `EntityBuilder<T>.IgnoreFilters`; доки EN+RU —
+  [`advanced/query-filters.md`](../../advanced/query-filters.md).
+- **Фаза 2 — отложена:** keyed-фильтры (`HasQueryFilter(string, …)`, `FilterKey`), `FilterFunc`
+  (`IQueryable`-форма), `IgnoreFilters` для отдельного соединённого билдера / по типам / по ключам,
+  фильтры на DML (`INSERT`/`UPDATE`/`DELETE`).
+- **Фаза 3 — отложена:** EF Core bridge (проброс keyed-фильтров EF Core 10).
+
 ## 1. Пункт и цель
 
 - **Фича:** фильтр-предикат, привязанный к **типу сущности** в mapping-метаданных, который nextorm
@@ -113,12 +126,14 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
 
 ## 7. Этапы внедрения
 
-- **Фаза 1 (MVP):** анонимный предикат `(entity, IDataContext) => bool` через fluent и `[QueryFilter]`;
+- **Фаза 1 (MVP) — shipped (27.09.2026):** анонимный предикат `(entity, IDataContext) => bool` через fluent и `[QueryFilter]`;
   применение к основному источнику, join-ам и подзапросам; `IgnoreFilters()` / `IgnoreFilters(params Type[])`;
   in-memory; идентичность фильтра в ключе плана; динамические параметры. Закрывает soft-delete и
   multi-tenancy.
-- **Фаза 2:** именованные/keyed-фильтры (`filterKey`), `FilterFunc` (`IQueryable`-форма), выборочное
-  отключение (`filterKeys` × entityTypes), атрибут на интерфейсных маппингах.
+- **Фаза 2:** именованные/keyed-фильтры (`HasQueryFilter(string, …)`, `filterKey`), `FilterFunc`
+  (`IQueryable`-форма), `IgnoreFilters` для отдельного соединённого билдера / по типам / по ключам
+  (`filterKeys` × entityTypes), фильтры на DML (`INSERT`/`UPDATE`/`DELETE`), атрибут на интерфейсных
+  маппингах.
 - **Фаза 3:** EF Core bridge — проброс keyed-фильтров EF Core 10 (смежно `todo_efcore_integration.md`).
 - **Вне области:** фильтры на DML (`INSERT`/`UPDATE`/`DELETE`) в MVP — отдельное решение (риск
   неожиданной потери строк); фильтры на `FromSql`/raw-источники.

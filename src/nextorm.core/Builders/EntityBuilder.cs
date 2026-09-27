@@ -26,6 +26,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     protected readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
+    private bool _ignoreFilters;
     private LambdaExpression? _group;
     private LimitByClause? _limitBy;
     private DistinctOnClause? _distinctOn;
@@ -193,6 +194,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Exp = exp,
             SrcType = _sourceEntityType,
             Condition = _condition,
+            IgnoreFilters = _ignoreFilters,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -269,6 +271,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         {
             SrcType = _sourceEntityType ?? typeof(TEntity),
             Condition = _condition,
+            IgnoreFilters = _ignoreFilters,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -339,6 +342,18 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         else
             b._condition = condition;
 
+        return b;
+    }
+    /// <summary>
+    /// Disables the global query filters declared for the query's entity type (and for every entity
+    /// joined by it), so the query reads the unfiltered rows. The current builder is unchanged; the
+    /// returned builder is a copy with the flag set.
+    /// </summary>
+    /// <returns>A builder that ignores the entity's global query filters.</returns>
+    public EntityBuilder<TEntity> IgnoreFilters()
+    {
+        var b = Clone();
+        b._ignoreFilters = true;
         return b;
     }
     /// <summary>
@@ -548,7 +563,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             EntityType = last.EntityType,
             Strictness = strictness ?? last.Strictness,
             IsGlobal = isGlobal || last.IsGlobal,
-            JoinHint = joinHint ?? last.JoinHint
+            JoinHint = joinHint ?? last.JoinHint,
+            OriginalJoinCondition = last.OriginalJoinCondition
         };
 
         b.OnLastJoinReplaced(joins[^1]);
@@ -889,6 +905,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         CopyProjectionIndependentStateTo(dst);
         dst._condition = _condition;
+        dst._ignoreFilters = _ignoreFilters;
         dst._having = _having;
         dst._arrayJoins = _arrayJoins is null ? null : [.. _arrayJoins];
         dst._windows = _windows is null ? null : [.. _windows];
