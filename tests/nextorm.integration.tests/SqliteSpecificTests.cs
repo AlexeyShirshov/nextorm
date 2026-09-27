@@ -10,6 +10,7 @@ namespace NextORM.Integration.Tests;
 /// Tests for behaviour that is specific to the SQLite provider and therefore not part of the
 /// shared suite (SQLite has no ANY/ALL subquery support and sorts NULLs first).
 /// </summary>
+[Collection("Sqlite")]
 public sealed class SqliteSpecificTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

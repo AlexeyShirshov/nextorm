@@ -9,6 +9,7 @@ namespace NextORM.Integration.Tests;
 /// tests in <c>nextorm.sqlite.tests</c>, these run against the seeded provider database, so the
 /// insert + read-back path is exercised end to end.
 /// </summary>
+[Collection("Sqlite")]
 public sealed class SqliteTableValuedParameterTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqliteTestProvider.Instance;

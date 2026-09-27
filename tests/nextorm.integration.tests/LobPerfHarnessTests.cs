@@ -12,6 +12,7 @@ namespace NextORM.Integration.Tests;
 /// implement streaming, inserts a 1 MiB row, then reports the best-of-N
 /// <see cref="GC.GetAllocatedBytesForCurrentThread"/> delta for each path.
 /// </summary>
+[Collection("Sqlite")]
 public sealed class LobPerfHarnessTests
 {
     private const int MiB = 1024 * 1024;

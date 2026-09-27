@@ -41,6 +41,7 @@
 - [Optimistic concurrency and change tracking](guide/27-optimistic-concurrency.md)
 - [Value converters and JSON columns](guide/28-value-converters.md)
 - [Range columns (pair of scalar columns)](guide/29-range-columns.md)
+- [Streaming large objects (BLOB/CLOB)](guide/30-large-objects.md)
 
 ### Scalar functions
 
@@ -91,7 +92,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.7-beta) is a prof of concept.
+The current status (1.0.8-b) is a prof of concept.
 
 ## Roadmap
 
@@ -147,6 +148,20 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](guide/13-query-reuse.md).
 
 ## Releases
+
+### 1.0.8-b
+
+- [Multi-resultset support](https://github.com/AlexeyShirshov/nextorm/issues/25)
+- [BLOB/CLOB support](https://github.com/AlexeyShirshov/nextorm/issues/27)
+- [Хранимые процедуры и функции (вызов, output-параметры, несколько result-set)](https://github.com/AlexeyShirshov/nextorm/issues/70)
+- [Table-valued parameters (TVP)](https://github.com/AlexeyShirshov/nextorm/issues/73)
+- [Паритет опций bulk copy / bulk insert](https://github.com/AlexeyShirshov/nextorm/issues/92)
+- [Command timeout (per-context / per-query)](https://github.com/AlexeyShirshov/nextorm/issues/93)
+- [Варианты хинтов — join / subquery / tables-in-scope](https://github.com/AlexeyShirshov/nextorm/issues/96)
+- [Управление кэшем планов/запросов (ClearCache, disable, sliding expiration)](https://github.com/AlexeyShirshov/nextorm/issues/97)
+- [Комментарий-метка запроса (TagQuery)](https://github.com/AlexeyShirshov/nextorm/issues/98)
+- [Per-query переопределение источника (table/schema/database/server, `WithTableExpression`)](https://github.com/AlexeyShirshov/nextorm/issues/99)
+- Новая глава руководства EN + RU: потоковое чтение больших объектов (BLOB/CLOB)
 
 ### 1.0.7-beta
 

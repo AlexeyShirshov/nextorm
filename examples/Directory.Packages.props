@@ -1,0 +1,25 @@
+<Project>
+
+  <!--
+    Nested Directory.Packages.props stops NuGet's upward search, so the repository-wide package
+    versions must be imported explicitly.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)../Directory.Packages.props" />
+
+  <PropertyGroup>
+    <!--
+      The runnable examples consume the published nextorm packages (not the source projects) so they
+      double as a real consumer of what ships on nuget.org. Bump this after a release is published,
+      to the version that was actually pushed (the git tag without the leading v).
+    -->
+    <NextOrmVersion>1.0.7-b</NextOrmVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="nextorm" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.clickhouse" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.postgres" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.sqlserver" Version="$(NextOrmVersion)" />
+  </ItemGroup>
+
+</Project>
