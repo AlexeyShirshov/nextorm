@@ -5317,3 +5317,22 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 **Проверка (27.09.2026).** Публичные доки EN+RU обновлены: `docs/guide/30-large-objects.md` (+RU-зеркало, раздел «Named columns and row streaming» / «Именованные колонки и построчный стриминг») — именованные аксессоры, построчный стриминг в `ToAsyncEnumerable`, контракт «валиден до следующего `MoveNext`», `NotSupportedException`; ссылок на `docs/specs/**` нет.
 
 **Итог.** P0 — **нет**; P1 по **именам** — **нет**; P2 — **LOB1** (Шаг 5, трекинг заморозки, +12 членов). `#101` реализован (части A/B).
+
+## Аудит 27.09.2026 — интеграция с EF Core (`nextorm.entityframeworkcore`, #61, MVP part 3 — документация; uncommitted working tree; P0 — нет; P1 по именам — нет; P2 — Шаг 5)
+
+**Область.** Новый пакет `nextorm.entityframeworkcore` (референс — `linq2db.EntityFrameworkCore`): публичная поверхность — `EntityFrameworkCoreExtensions.CreateNextOrmContext(this DbContext, Action<DataContextBuilder>? = null) -> IDataContext` и `NextOrmModelMapper.Register(IModel) -> void`. Провайдер выбирается по `Database.ProviderName` (Npgsql/SqlServer/Pomelo-MySql/Sqlite); контекст работает на чужом `DbConnection` и текущей транзакции EF; маппинг читается из `IModel`; мост read-only (`SaveChanges`/DML-моста нет). Ядро не менялось.
+
+| Имя | Комментарий |
+|---|---|
+| `NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(DbContext, Action<DataContextBuilder>?) -> IDataContext` — реализовано (2026-09-27) | Extension на существующий EF `DbContext`; `configure` — необязательный последний параметр (как у `AddNextOrmContext(Action<DataContextBuilder>)`). |
+| `NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(IModel) -> void` — реализовано (2026-09-27) | Статический маппер EF-модели в процесс-глобальный `DataContextCache.Metadata`. |
+
+**P0 — нет.** Новых публичных типов два, оба `static` (ctor-поверхности нет). BCL/EF-конфликтов имён нет: `EntityFrameworkCoreExtensions` следует суффиксу `*Extensions` (`SqliteDataContextOptionsBuilderExtensions` и т. п.), `NextOrmModelMapper` не совпадает с типами EF (`IModel`/`ModelBuilder`). Namespace `NextORM.EntityFrameworkCore` не конфликтует с `Microsoft.EntityFrameworkCore`.
+
+**P1 по именам — нет.** Extend-only: пакет новый, ядро и существующие пакеты не тронуты. `CreateNextOrmContext` — глагол + объект, `this DbContext` первым, `configure` последним; `Register(IModel)` — глагол, единственный параметр, `void`. `Async`-суффикса нет (sync-пары нет) — по AGENTS.md.
+
+**P2 — Шаг 5 (заморозка), без изменений.** `find -name 'PublicAPI*.txt'` — **0**. При заморозке в инвентарь добавить 2 сигнатуры выше (пакет `nextorm.entityframeworkcore`); список LOB1 не затрагивается.
+
+**Проверка (27.09.2026).** Оба класса — в `src/nextorm.entityframeworkcore/{EntityFrameworkCoreExtensions,NextOrmModelMapper}.cs`, с полным XML-doc (`<summary>/<remarks>/<param>/<returns>/<exception>`); сборка `0/0` при `GenerateDocumentationFile=true` + `TreatWarningsAsErrors=true` ⇒ CS1591 покрыт. `docfx` (проект добавлен в `docs/docfx.json`) генерирует uid `NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(Microsoft.EntityFrameworkCore.DbContext,System.Action{NextORM.Core.DataContextBuilder})` и `NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)`, на которые ссылается `docs/advanced/api-reference.md` (+RU); ссылок на `docs/specs/**` нет.
+
+**Итог.** P0 — **нет**; P1 по **именам** — **нет**; P2 — **Шаг 5** (+2 сигнатуры в инвентарь заморозки). `#61` MVP (part 3 — документация) закрыт.

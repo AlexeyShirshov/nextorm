@@ -142,6 +142,8 @@
   href: comparisons/
 - name: Продвинутое
   items:
+    - name: Интеграция с Entity Framework Core
+      href: advanced/integration-efcore.md
     - name: Ограничения и что вне области
       href: advanced/limitations.md
     - name: Краткий справочник API

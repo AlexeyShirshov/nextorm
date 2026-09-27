@@ -1,0 +1,114 @@
+# Интеграция с Entity Framework Core
+
+> Запускайте чтения nextorm поверх соединения и транзакции существующего EF Core `DbContext`, переиспользуя маппинг из EF-модели вместо повторного его объявления.
+
+**Предварительные требования:** [Provider overview](../providers/overview.md) · [Транзакции](../guide/23-transactions.md) · [API reference](api-reference.md)
+
+## Обзор
+
+Пакет `nextorm.entityframeworkcore` связывает EF Core `DbContext` с контекстом nextorm. `db.CreateNextOrmContext()` возвращает [`IDataContext`](xref:NextORM.Core.IDataContext), который:
+
+- выполняет каждый запрос на том самом [`DbConnection`](https://learn.microsoft.com/dotnet/api/system.data.common.dbconnection), которым уже владеет `DbContext`;
+- встраивается в транзакцию, открытую EF (`db.Database.CurrentTransaction`), если она есть;
+- читает маппинг таблиц/колонок из EF `IModel`, поэтому классам сущностей не нужны nextorm-атрибуты `[SqlTable]`/`[Column]` (или fluent-конфигурация).
+
+Это позволяет оставить запись, отслеживание изменений и связывание навигаций в EF Core, а аналитические чтения nextorm (окна, CTE, агрегаты) выполнять на том же соединении и в той же транзакции. Мост односторонний: nextorm наблюдает, владеет EF Core.
+
+## Требования
+
+- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) с одним из поддерживаемых провайдеров: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL и MariaDB) или `Microsoft.EntityFrameworkCore.Sqlite`.
+- Пакет `nextorm.entityframeworkcore`; он ссылается на `nextorm.core` и четыре провайдерных пакета, поэтому отдельная ссылка на nextorm-провайдер для маппинга не нужна.
+- Нереляционный провайдер EF `InMemory` не поддерживается (см. [Ограничения](#ограничения)).
+
+## Минимальный пример
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using NextORM.Core;                 // From<T>() и терминальные методы-расширения
+using NextORM.EntityFrameworkCore; // CreateNextOrmContext()
+
+using var db = new AppDbContext(options); // ваш EF Core-контекст
+
+// nextorm работает на соединении db и, если EF её открыл, в текущей транзакции EF.
+using var next = db.CreateNextOrmContext();
+
+var top = next.From<Order>()
+    .Where(o => o.Total > 100)
+    .OrderBy(o => o.Total)
+    .Select(o => new { o.Id, o.Total })
+    .ToList();
+```
+
+`CreateNextOrmContext` также принимает необязательный колбэк `configure`, который вызывается после выбора провайдера по `Database.ProviderName`; используйте его, чтобы переопределить умолчания nextorm (логгер, соглашение об именах, тайм-аут команды, …):
+
+```csharp
+using var next = db.CreateNextOrmContext(builder => builder
+    .UseLoggerFactory(loggerFactory)
+    .UseCommandTimeout(30));
+```
+
+Чтобы зарегистрировать маппинг без создания контекста, вызовите [`NextOrmModelMapper.Register`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) напрямую с `db.Model` — см. [Отображение модели](#отображение-модели).
+
+## Общее соединение и транзакция
+
+`CreateNextOrmContext` читает `dbContext.Database.GetDbConnection()` и строит контекст nextorm поверх этого самого экземпляра `DbConnection`. Если соединение закрыто к моменту выполнения запроса nextorm, nextorm открывает его и оставляет открытым; он никогда не закрывает, не фиксирует и не откатывает заимствованные соединение или транзакцию. EF Core владеет ими всё время их жизни, и освобождение контекста nextorm не освобождает ни то, ни другое.
+
+Когда `dbContext.Database.CurrentTransaction` активна, мост встраивается в неё через `ITransactionManager.UseTransaction(...)`. Пока EF-транзакция открыта, nextorm видит незакоммиченные строки EF, а откат EF их убирает:
+
+```csharp
+await using var tx = await db.Database.BeginTransactionAsync();
+
+db.Rows.Add(new Row { Name = "pending" });
+await db.SaveChangesAsync(ct);          // не закоммичено, всё ещё внутри tx
+
+using var next = db.CreateNextOrmContext();
+next.From<Row>().Where(r => r.Name == "pending").ToList(); // видит строку
+
+await tx.RollbackAsync(ct);
+next.From<Row>().Where(r => r.Name == "pending").ToList(); // пусто
+```
+
+Контракт встраивания, общий с Dapper и сырым ADO.NET, описан в разделе [Транзакции](../guide/23-transactions.md).
+
+## Отображение модели
+
+[`NextOrmModelMapper.Register(db.Model)`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) проецирует EF-модель в метаданные nextorm и вызывается автоматически из `CreateNextOrmContext`:
+
+- **Таблица / представление** — имя таблицы (`entityType.GetTableName()`) или имя представления (`GetViewName()`) для типа, отображённого на представление.
+- **Колонки** — имя колонки из `property.GetColumnName()`, поэтому переименованные колонки (`HasColumnName("selected_id")`) учитываются без nextorm-атрибута.
+- **Ключ / identity / computed** — первичный ключ (`FindPrimaryKey()`), `ValueGenerated.OnAdd` (identity) и `ValueGenerated.OnAddOrUpdate` (computed) переносятся.
+- **Пропускаются** — shadow-свойства (без CLR-члена), owned-типы и типы сущностей без имени таблицы/представления или без отображённых CLR-свойств.
+- **Отклоняются** — формы модели, которые интеграция не может представить корректно и иначе отобразила бы неверно: таблица со схемой (в метаданных nextorm нет члена схемы), глобальный фильтр запросов (фильтрация soft-delete / мультитенантность была бы потеряна) и любая иерархия наследования — TPH/TPT/TPC (nextorm не переносит дискриминатор). Каждая форма бросает `NotSupportedException`.
+
+Поскольку кэш метаданных nextorm процесс-глобальный и ключуется по `Type` (`DataContextCache.Metadata`), **на процесс существует не более одного маппинга на CLR-тип**. Повторная регистрация идентичного маппинга ничего не делает; регистрация *другого* макета таблицы/колонок для уже отображённого типа бросает `InvalidOperationException`. Очистите кэш (`DataContextCache.Clear()`), чтобы отобразить этот тип заново.
+
+## Выбор провайдера
+
+`CreateNextOrmContext` смотрит на `dbContext.Database.ProviderName` и подключает соответствующий контекст nextorm поверх EF-соединения:
+
+| `Database.ProviderName` (точно) | Провайдер nextorm |
+|---|---|
+| `Npgsql.EntityFrameworkCore.PostgreSQL` | `nextorm.postgres` ([`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext)) |
+| `Microsoft.EntityFrameworkCore.SqlServer` | `nextorm.sqlserver` ([`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext)) |
+| `Pomelo.EntityFrameworkCore.MySql` | `nextorm.mysql` ([`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext)) |
+| `Microsoft.EntityFrameworkCore.Sqlite` | `nextorm.sqlite` ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext)) |
+
+Имена провайдеров сопоставляются точно (ordinal), поэтому похожее имя отклоняется. Всё остальное — включая `Microsoft.EntityFrameworkCore.InMemory`, отсутствующее имя провайдера или EF-провайдер базы, которую nextorm не связывает (например ClickHouse или Oracle) — бросает `InvalidOperationException` до создания контекста. MariaDB обслуживается MySQL-провайдером Pomelo, который направляется в MariaDB-совместимый контекст `nextorm.mysql`. Колбэк `configure` не может добавить провайдера; постройте контекст nextorm сами поверх EF-соединения, если вам нужен другой провайдер nextorm.
+
+## Ограничения
+
+- **Мост только для чтения.** Интеграция рассчитана на чтение: синхронизации отслеживания изменений и моста `SaveChanges` нет, а мутации nextorm выполнялись бы в обход трекера изменений EF. Пишите через EF Core; возвращённый [`IDataContext`](xref:NextORM.Core.IDataContext) используйте для запросов.
+- **Один маппинг CLR на процесс.** Маппинг живёт в процесс-глобальном кэше метаданных nextorm с ключом по `Type`; повторная регистрация идентичного маппинга допустима, но второй `DbContext`, отображающий уже отображённый CLR-тип по-другому, бросает `InvalidOperationException` (очистите `DataContextCache.Metadata`, чтобы сбросить).
+- **EF InMemory не поддерживается.** У `Microsoft.EntityFrameworkCore.InMemory` нет `DbConnection`, и его имя провайдера отклоняется как неподдерживаемое до обращения к соединению. Связываются только реляционные EF-провайдеры.
+- **Неподдерживаемые формы модели отклоняются, а не отображаются молча.** Фильтры запросов, таблицы со схемой и наследование (TPH/TPT/TPC) бросают `NotSupportedException`, потому что в nextorm нет поддержки фильтров запросов, схем или дискриминаторов и иначе генерировался бы неверный SQL. Owned-типы, table splitting, shadow-свойства, конвертеры значений и temporal-таблицы также не проецируются.
+
+## См. также
+
+- [Транзакции](../guide/23-transactions.md)
+- [Подключения и логирование](../guide/14-connections-and-logging.md)
+- [Provider overview](../providers/overview.md)
+- [API reference](api-reference.md)
+
+---
+
+Source: `src/nextorm.entityframeworkcore/**` (XML doc comments are the authoritative API documentation).

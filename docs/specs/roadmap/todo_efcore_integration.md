@@ -6,6 +6,17 @@
 > [Transactions (enlistment, общая транзакция с EF Core / Dapper)](../../guide/23-transactions.md): без enlistment в чужую транзакцию
 > совместная работа на одном соединении неполна.
 
+## Статус
+
+> **P1 MVP — DONE (2026-09-27, линия `1.0.9-a`).** Пакет `nextorm.entityframeworkcore` отгружен:
+> `CreateNextOrmContext(this DbContext, Action<DataContextBuilder>?)` + `NextOrmModelMapper.Register(IModel)`
+> запускают nextorm поверх соединения EF и его текущей транзакции, а маппинг таблиц и переименованных
+> колонок читается из EF-модели; интеграция **read-only**. Провайдер выбирается по точному
+> `ProviderName`; невыразимые фичи отклоняются fail-fast: EF query filters, TPH/TPT/TPC,
+> schema-qualified таблица и конфликтующее повторное сопоставление. Остаются P2 (`UseNextOrm` + DI),
+> P3 (трансляция EF `IQueryable`) и P4 (мост DML/`SaveChanges`); принятые решения — в разделе
+> «Deferred/accepted» ниже. Status-файл цикла `docs/specs/status/efcore-integration-1.md` удалён при коммите.
+
 ## Пункт и цель
 
 - Фича: использовать nextorm рядом с существующим EF Core `DbContext` — на том же `DbConnection`,
@@ -222,10 +233,11 @@ public static class NextOrmQueryableExtensions
 
 - **Фаза 0 (предусловие):** фаза 1 транзакций (`ITransactionManager`, `UseTransaction`,
   `cmd.Transaction`) — **реализована** ([Transactions](../../guide/23-transactions.md)).
-- **Фаза 1 (MVP):** проект; `CreateNextOrmContext`; `NextOrmModelMapper` из `IModel`; enlist в
-  транзакцию EF; реестр провайдеров; core-шов для метаданных; unit-тесты SQL-генерации без БД +
-  интеграционный SQLite-тест (модель + соединение + транзакция) + shared-transaction на
-  PostgreSQL/SQL Server/MySQL.
+- **Фаза 1 (MVP): ✅ реализована (2026-09-27, `1.0.9-a`):** проект; `CreateNextOrmContext`;
+  `NextOrmModelMapper.Register` из `IModel`; enlist в транзакцию EF; выбор провайдера по точному
+  `ProviderName`; unit-тесты SQL-генерации без БД + интеграционные тесты SQLite (модель + соединение +
+  транзакция + владение соединением). Shared-transaction на PostgreSQL/SQL Server/MySQL и SQL Server
+  enlist-тест — см. «Deferred/accepted».
 - **Фаза 2:** `UseNextOrm` + DI; контекстно-локальный резолвер маппинга (если нужно).
 - **Фаза 3:** трансляция EF `IQueryable` (подмножество) — прототип, затем границы.
 - **Фаза 4:** opt-in мост DML/трекера (или явно вне области).
@@ -272,6 +284,27 @@ public static class NextOrmQueryableExtensions
   `docs/specs/comparison/linq2db-comparison.md` (+RU),
   `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §6, регистр
   `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Deferred/accepted — #61 (2026-09-27)
+
+Принятые (осознанно оставленные) решения MVP-цикла #61; не блокируют отгрузку, но фиксируются с
+триггером пересмотра. Status-файл `docs/specs/status/efcore-integration-1.md` удалён при коммите.
+
+- **SQL Server EF transaction-enlistment тест.** Сюита доказывает enlist nextorm в EF-транзакцию
+  только на SQLite, чьи транзакции connection-scoped и потому не доказывают совместную работу на
+  сервере с session-scoped транзакциями. Триггер: пакет `Microsoft.EntityFrameworkCore.SqlServer`
+  добавлен в CPM и подключён к `tests/nextorm.entityframeworkcore.tests`, затем enlist-тест против
+  реального SQL Server (Testcontainers).
+- **Фазы P2-P4.** `UseNextOrm` + DI (P2), трансляция EF `IQueryable` (P3), opt-in мост
+  DML/`SaveChanges` (P4) остаются планом в этом файле.
+- **Coverage нового пакета исключён из `coverage.settings.xml`.** Файл включает только
+  `nextorm.{core,sqlite,postgres,sqlserver}`; `nextorm.entityframeworkcore` в цифру покрытия не
+  входит. Триггер: включение пакета в порог `MIN_LINE_COVERAGE`.
+- **Стабильность контейнеров под конкурентной нагрузкой.** Testcontainers/Podman под параллельными
+  прогонами не проверялись в этом цикле. Триггер: флейки или конкурентные прогоны интеграции.
+- **Приоритет configure vs EF-имени провайдера.** Явный `configure` применяется после выбора
+  провайдера по `ProviderName` и перекрывает его дефолты; поведение задокументировано и покрыто
+  тестами. Триггер: изменение порядка применения опций в `CreateNextOrmContext`.
 
 ## See also
 

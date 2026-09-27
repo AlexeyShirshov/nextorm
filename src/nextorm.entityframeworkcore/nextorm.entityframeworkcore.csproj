@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>nextorm.entityframeworkcore</PackageId>
+    <Title>Nextorm Entity Framework Core integration</Title>
+    <Description>Entity Framework Core integration for Nextorm: run nextorm reads over an existing DbContext connection and transaction, reusing the EF model mapping.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\nextorm.postgres\nextorm.postgres.csproj" />
+    <ProjectReference Include="..\nextorm.sqlite\nextorm.sqlite.csproj" />
+    <ProjectReference Include="..\nextorm.sqlserver\nextorm.sqlserver.csproj" />
+    <ProjectReference Include="..\nextorm.mysql\nextorm.mysql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -23,10 +23,12 @@
   <Project Path="benchmarks/nextorm.benchmark/nextorm.benchmark.csproj" />
   <Project Path="src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj" />
   <Project Path="src/nextorm.core/nextorm.core.csproj" />
+  <Project Path="src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj" />
   <Project Path="src/nextorm.postgres/nextorm.postgres.csproj" />
   <Project Path="src/nextorm.sqlite/nextorm.sqlite.csproj" />
   <Project Path="src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
   <Project Path="tests/nextorm.core.tests/nextorm.core.tests.csproj" />
+  <Project Path="tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj" />
   <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />
   <Project Path="tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj" />
   <Project Path="tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj" />

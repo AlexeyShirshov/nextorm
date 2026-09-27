@@ -211,6 +211,13 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 | [`ClickHouseDialect`](xref:NextORM.ClickHouse.ClickHouseDialect) | ClickHouse [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance)). |
 | [`ClickHouseDataContextOptionsBuilderExtensions`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions) | `UseClickHouse(string connectionString)` and `UseClickHouse(DbConnection)`. |
 
+## Namespace [`NextORM.EntityFrameworkCore`](xref:NextORM.EntityFrameworkCore)
+
+| Type | Description |
+|---|---|
+| [`EntityFrameworkCoreExtensions`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions) | Bridge from an EF Core [`DbContext`](https://learn.microsoft.com/dotnet/api/microsoft.entityframeworkcore.dbcontext) to a nextorm [`IDataContext`](xref:NextORM.Core.IDataContext): [`CreateNextOrmContext`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(Microsoft.EntityFrameworkCore.DbContext,System.Action{NextORM.Core.DataContextBuilder})) reuses the EF connection, enlists its current transaction and registers the EF model mapping; the optional `configure` callback overrides nextorm defaults after provider selection. See [EF Core integration](integration-efcore.md). |
+| [`NextOrmModelMapper`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper) | Reads an EF Core `IModel` with [`Register`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) and writes the entity mapping (table, schema, column names, key, identity/computed) into nextorm's process-wide metadata cache, so entity classes need no nextorm attributes. See [EF Core integration](integration-efcore.md#model-mapping). |
+
 ## See also
 
 - [Provider overview](../providers/overview.md)
@@ -226,4 +233,4 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 
 Source: `src/nextorm.core/**`, `src/nextorm.sqlite/**`, `src/nextorm.postgres/**`,
 `src/nextorm.sqlserver/**`, `src/nextorm.mysql/**`, `src/nextorm.mariadb/**`,
-`src/nextorm.clickhouse/**` (XML doc comments are the authoritative API documentation).
+`src/nextorm.clickhouse/**`, `src/nextorm.entityframeworkcore/**` (XML doc comments are the authoritative API documentation).

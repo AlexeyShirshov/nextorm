@@ -206,6 +206,13 @@
 | [`ClickHouseDialect`](xref:NextORM.ClickHouse.ClickHouseDialect) | Синглтон [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) для ClickHouse ([`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance)). |
 | [`ClickHouseDataContextOptionsBuilderExtensions`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions) | `UseClickHouse(string connectionString)` и `UseClickHouse(DbConnection)`. |
 
+## Пространство имён `nextorm.entityframeworkcore`
+
+| Тип | Описание |
+|---|---|
+| [`EntityFrameworkCoreExtensions`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions) | Мост из EF Core [`DbContext`](https://learn.microsoft.com/dotnet/api/microsoft.entityframeworkcore.dbcontext) в nextorm [`IDataContext`](xref:NextORM.Core.IDataContext): [`CreateNextOrmContext`](xref:NextORM.EntityFrameworkCore.EntityFrameworkCoreExtensions.CreateNextOrmContext(Microsoft.EntityFrameworkCore.DbContext,System.Action{NextORM.Core.DataContextBuilder})) переиспользует EF-соединение, встраивается в текущую транзакцию EF и регистрирует маппинг из EF-модели; необязательный колбэк `configure` переопределяет умолчания nextorm после выбора провайдера. См. [Интеграция с EF Core](integration-efcore.md). |
+| [`NextOrmModelMapper`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper) | Читает EF Core `IModel` через [`Register`](xref:NextORM.EntityFrameworkCore.NextOrmModelMapper.Register(Microsoft.EntityFrameworkCore.Metadata.IModel)) и записывает маппинг сущностей (таблица, схема, имена колонок, ключ, identity/computed) в процесс-глобальный кэш метаданных nextorm, поэтому классам сущностей не нужны nextorm-атрибуты. См. [Интеграция с EF Core](integration-efcore.md#отображение-модели). |
+
 ## См. также
 
 - [Provider overview](../providers/overview.md)
@@ -221,4 +228,4 @@
 
 Source: `src/nextorm.core/**`, `src/nextorm.sqlite/**`, `src/nextorm.postgres/**`,
 `src/nextorm.sqlserver/**`, `src/nextorm.mysql/**`, `src/nextorm.mariadb/**`,
-`src/nextorm.clickhouse/**` (XML doc comments are the authoritative API documentation).
+`src/nextorm.clickhouse/**`, `src/nextorm.entityframeworkcore/**` (XML doc comments are the authoritative API documentation).
