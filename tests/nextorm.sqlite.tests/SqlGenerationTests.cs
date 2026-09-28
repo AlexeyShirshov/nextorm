@@ -108,6 +108,84 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select \"id\" from \"simple_entity\"");
     }
 
+    private static DynamicColumnsEntity DynamicWriteEntity()
+        => new()
+        {
+            Id = 1,
+            Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null },
+        };
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldRenderQuotedOrdinalKeysAndParameters()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
+        // every dynamic key is double-quoted even though the global identifier-quoting flag is off.
+        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+            .Values(DynamicWriteEntity())
+            .ToSql())
+            .Should().Contain("(id, name, \"alpha\", \"mid\", \"zeta\") values ($p0, $p1, $p2, $p3, $p4)");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Update_ShouldRenderQuotedKeysInSet()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        Normalize(ctx.Update<DynamicColumnsEntity>()
+            .Set(DynamicWriteEntity())
+            .Where(x => x.Id == 1)
+            .ToSql())
+            .Should().Contain("set name = $p0, \"alpha\" = $p1, \"mid\" = $p2, \"zeta\" = $p3 where id = 1");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_KeyUpsert_ShouldKeepDynamicKeysOutOfMatchCondition()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql());
+
+        sql.Should().Contain("(id, name, \"alpha\", \"mid\", \"zeta\") values ($p0, $p1, $p2, $p3, $p4)");
+        sql.Should().Contain("on conflict (id) do update set name = excluded.name, \"alpha\" = excluded.\"alpha\", \"mid\" = excluded.\"mid\", \"zeta\" = excluded.\"zeta\"");
+        sql.Should().NotContain("on conflict (\"alpha\")");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_FullMerge_ShouldThrowAndNotDropDynamicColumns()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // SQLite has no full MERGE. The unsupported path must reject the whole statement rather than
+        // silently render a MERGE without the store's dynamic columns.
+        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void Write_StorelessInsertSqlUnchanged()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values ($p0, $p1, $p2)");
+    }
+
     [Fact]
     public void QuotedIdentifiers_CommandOverride_ShouldEnable()
     {

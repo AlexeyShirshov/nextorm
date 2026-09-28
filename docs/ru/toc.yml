@@ -74,7 +74,7 @@
       href: guide/29-range-columns.md
     - name: Потоковое чтение больших объектов (BLOB/CLOB)
       href: guide/30-large-objects.md
-    - name: Динамические колонки (сторона чтения)
+    - name: Динамические колонки
       href: guide/32-dynamic-columns.md
     - name: Специфичный для провайдеров SQL
       items:

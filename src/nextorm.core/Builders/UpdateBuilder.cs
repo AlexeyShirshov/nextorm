@@ -22,6 +22,7 @@ public sealed class UpdateBuilder<TEntity>
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
     private readonly List<UpdateAssignment> _assignments = [];
+    private DynamicColumnSet? _dynamicColumns;
     private EntityBuilder<TEntity>? _filter;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
 
@@ -99,6 +100,8 @@ public sealed class UpdateBuilder<TEntity>
 
             SetAssignment(UpdateAssignment.FromConstant(property, property.PropertyInfo.GetValue(entity)));
         }
+
+        _dynamicColumns = DynamicColumnSet.FromEntity(_metadata, entity);
 
         return this;
     }
@@ -277,11 +280,11 @@ public sealed class UpdateBuilder<TEntity>
 
     private UpdateCommand BuildCommand(IReadOnlyList<KeyValue>? keys = null)
     {
-        if (_assignments.Count == 0)
+        if (_assignments.Count == 0 && _dynamicColumns is null)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, keys);
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, keys, dynamicColumns: _dynamicColumns);
     }
 
     /// <summary>Builds the update command for use as a side-effecting step of a batch.</summary>
@@ -294,11 +297,11 @@ public sealed class UpdateBuilder<TEntity>
     /// <returns>The update command carrying the returned columns.</returns>
     internal UpdateCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns, OutputIntoClause? outputInto = null)
     {
-        if (_assignments.Count == 0)
+        if (_assignments.Count == 0 && _dynamicColumns is null)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto);
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto, _dynamicColumns);
     }
 
     /// <summary>Builds the update command for an <c>OUTPUT ... INTO</c>-only terminal: the updated rows are written into the target and nothing is returned to the client.</summary>
@@ -307,11 +310,11 @@ public sealed class UpdateBuilder<TEntity>
     /// <returns>The update command carrying the output-into target.</returns>
     internal UpdateCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
     {
-        if (_assignments.Count == 0)
+        if (_assignments.Count == 0 && _dynamicColumns is null)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, new OutputIntoClause(targetTable, outputColumns));
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, new OutputIntoClause(targetTable, outputColumns), _dynamicColumns);
     }
 
     // The source command that carries the UPDATE's WHERE and drives the assignments. It always carries

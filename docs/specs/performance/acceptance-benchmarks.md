@@ -230,3 +230,68 @@ measured cost of the function form; no "no regression" claim is made for this pa
 rows is large on `ShortRun` (`FuncFilter_Cached_ToList` `Error = 2.033 ms`), so the ratio is
 indicative, not a hard gate; any future optimisation (memoizing the injected predicate per plan
 shape) should re-run this focused case.
+
+## Results 2026-09-28 — issue #104 (dynamic-columns write side)
+
+Perf acceptance for #104 measured on the same host/config/case set as the baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`). This is the re-run after the
+DML static-arm fix below. **7** cases selected, **0** failures. External shell wall clock
+**45.79 s**; BDN `Global total time` **44.49 s** — both under the 4 min budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.191 ms | 339.84 KB | -24.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 59.59 ms | 50.01 MB | -2.2% |
+| `Nextorm_Cached` | 1.932 ms | 539.92 KB | +9.0% (high-variance row) |
+| `Prepared_ToList` | 956.1 us | 76.14 KB | +3.5% |
+| `Cached_ToList` | 1,802.9 us | 572.25 KB | +4.4% |
+| `Cached_PlanOnly_Param` | 500.5 us | 496.11 KB | -3.4% |
+| `Nextorm_Cached_ToListAsync` | 2.153 ms | 705.35 KB | +0.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.89** — vs documented
+baseline **1.87** (+0.9%) and vs the stated prior figure **2.07** (-8.6%); the corresponding
+allocated ratio is **7.52** (baseline **7.42**, +1.3%). Both time deltas are below the **20%**
+investigation threshold, so no >20% growth flag is raised. Verdict: within noise, no regression.
+
+## DML benchmark: static vs dynamic-columns insert (#104 write side)
+
+Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkDynamicInsert*
+```
+
+Same host/config as above (`Job.ShortRun`, `InProcessEmitToolchain`, `MemoryDiagnoser`); **2**
+executed benchmarks, **0** failures (the logged `Failed to set up priority High ... Permission
+denied` is the known benign BDN process warning, not a benchmark failure). BDN `Global total time`
+**14.95 s**; external shell wall clock **16.69 s**.
+
+Each measured invocation is a real per-call `InsertInto<T>().Values(...).Insert()` build (store
+key extraction + ordinal sort) + SQL render + execute against a benchmark-owned SQLite database,
+inside a transaction that is rolled back, so the dynamic-key work is inside the measurement and
+the statement actually runs.
+
+Both arms execute the **same region** over the **same table** (`dynamic_insert_bench`), but on
+**different entity types**: `Insert_Static` uses `StaticInsertEntity`, which has only the two
+mapped columns (`id`, `name`) and **no `[DynamicColumns]` store at all**; `Insert_DynamicColumns`
+uses `DynamicInsertEntity` (mapped `id`/`name` plus a store) and populates two store keys (`age`,
+`city`). This matters: an earlier revision of this benchmark used the store-carrying entity in
+**both** arms (with an empty store on the "static" side), so the `FromEntities` / `MappedNames` /
+`ReadKeys` store plumbing still ran in the baseline arm and understated the real dynamic-path
+overhead — that figure is superseded by the numbers below.
+
+| Case | Mean | Allocated | Ratio (time) | Alloc ratio |
+|------|------|-----------|--------------|-------------|
+| `Insert_Static` | 614.2 us | 268.37 KB | 1.00 | 1.00 |
+| `Insert_DynamicColumns` | 892.0 us | 485.56 KB | **1.45** | **1.81** |
+
+**Caveat — this is not a before/after regression comparison.** The `Insert_Static` arm is the
+**store-less** baseline (the byte-identity-guarded mapped-only path), not a pre-#104 revision of
+the dynamic-columns path. With a genuinely store-less baseline the DML figure now quantifies the
+**true overhead of the dynamic-columns form relative to the static form**: **1.45×** time and
+**1.81×** allocation on this run (the dynamic arm's `Allocated` is unchanged at 485.56 KB, while
+the static arm dropped from 331.65 KB to 268.37 KB — exactly the store plumbing it no longer
+pays). It must not be reported as either a regression or an improvement introduced by #104.
+`Error` on both rows is large on `ShortRun` (`Insert_Static` `309.3 us`, `Insert_DynamicColumns`
+`394.4 us`, i.e. ≈ 50 %/44 % of `Mean`), so the ratio is indicative, not a gate.

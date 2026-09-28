@@ -89,6 +89,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists insert_entity;
         drop table if exists merge_entity;
         drop table if exists delete_entity;
+        drop table if exists dynamic_entity;
         drop table if exists eager_note;
         drop table if exists eager_child;
         drop table if exists eager_parent;
@@ -181,6 +182,17 @@ internal sealed class SqlServerTestProvider : ITestProvider
             id int not null primary key,
             name nvarchar(100) null,
             age int null
+        );
+
+        -- Dynamic-columns write fixtures (#104): the defaulted "seeded" column makes a key omitted from
+        -- the store distinguishable from a key bound to a value.
+        create table dynamic_entity
+        (
+            id int not null primary key,
+            name nvarchar(100) null,
+            alpha nvarchar(100) null,
+            beta nvarchar(100) null,
+            seeded nvarchar(100) default N'defaulted'
         );
 
         create table eager_parent

@@ -198,6 +198,18 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (2, (9, 'nine'))
         """,
 
+        "drop table if exists dynamic_entity",
+        """
+        create table dynamic_entity
+        (
+            id Int32,
+            name Nullable(String),
+            alpha Nullable(String),
+            beta Nullable(String),
+            seeded Nullable(String) DEFAULT 'defaulted'
+        ) engine = Memory
+        """,
+
         "drop table if exists insert_entity",
         """
         create table insert_entity

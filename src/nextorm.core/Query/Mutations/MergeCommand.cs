@@ -82,6 +82,7 @@ internal sealed class MergeCommand : MutationCommand
     /// <param name="source">The server-side <c>SELECT</c> supplying the rows (<c>USING (&lt;select&gt;) AS source</c>), or <see langword="null"/> for a <c>VALUES</c> source.</param>
     /// <param name="matchCondition">An explicit <c>ON &lt;condition&gt;</c> over <c>(target, source)</c>, or <see langword="null"/> to match on <see cref="Keys"/>.</param>
     /// <param name="registry">A <see cref="QueryCommand"/> carrier used to render condition expressions (the target entity's command), or <see langword="null"/>.</param>
+    /// <param name="dynamicColumns">The entity store's dynamic columns carried in the source/INSERT/SET, or <see langword="null"/>.</param>
     public MergeCommand(
         Type entityType,
         string tableName,
@@ -94,7 +95,8 @@ internal sealed class MergeCommand : MutationCommand
         IReadOnlyList<IPropertyMetadata>? returningColumns = null,
         QueryCommand? source = null,
         LambdaExpression? matchCondition = null,
-        QueryCommand? registry = null)
+        QueryCommand? registry = null,
+        DynamicColumnSet? dynamicColumns = null)
         : base(SqlStatementType.Merge, entityType)
     {
         TableName = tableName;
@@ -108,6 +110,7 @@ internal sealed class MergeCommand : MutationCommand
         Source = source;
         MatchCondition = matchCondition;
         Registry = registry;
+        DynamicColumns = dynamicColumns;
     }
 
     /// <summary>
@@ -155,4 +158,11 @@ internal sealed class MergeCommand : MutationCommand
 
     /// <summary>The non-key columns assigned from the source on a match, in insert order.</summary>
     public IReadOnlyList<IPropertyMetadata> UpdateColumns { get; }
+
+    /// <summary>
+    /// The entity store's dynamic columns, carried in the derived source, the <c>INSERT</c> branch and the
+    /// matched <c>SET</c>, or <see langword="null"/> when the entity has no
+    /// <see cref="DynamicColumnsAttribute"/> store. They never participate in the <c>ON</c> match.
+    /// </summary>
+    public DynamicColumnSet? DynamicColumns { get; }
 }

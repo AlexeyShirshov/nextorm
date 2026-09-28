@@ -163,6 +163,19 @@ public interface ITestProvider
     /// </summary>
     bool SupportsZeroColumnResult => false;
 
+    /// <summary>
+    /// True when the provider accepts the whole-entity read that materialises a
+    /// <see cref="DynamicColumnsAttribute"/> store, which appends an unqualified <c>*</c> after the
+    /// mapped columns (<c>select id, name, * from t</c>). SQLite, PostgreSQL and SQL Server do;
+    /// MySQL/MariaDB reject an unqualified <c>*</c> mixed with explicit select expressions, so the
+    /// shared dynamic-columns write→read tests skip there instead of failing.
+    /// </summary>
+    bool SupportsDynamicColumnsRead => true;
+
+    /// <summary>Reason reported when <see cref="SupportsDynamicColumnsRead"/> is false.</summary>
+    string DynamicColumnsReadSkipReason =>
+        "This provider cannot read a dynamic-columns store.";
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

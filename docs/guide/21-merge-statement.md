@@ -56,6 +56,28 @@ ctx.MergeInto<IDest>()
 
 `On(condition)` replaces the key match with an arbitrary search condition (`ON <condition>`). A branch builder also accepts a condition (`WhenMatched(condition)`, `WhenNotMatched(condition)`, `WhenNotMatchedBySource(condition)`), rendered as `WHEN ... AND <condition>`; a branch fires only when its condition holds. Conditions use the two-parameter form `(target, source)` — reference the existing row as the first lambda parameter and the incoming source row as the second, for example `On((t, s) => t.Id == s.Id && s.Age > 0)`. On SQL Server a `WHEN NOT MATCHED BY SOURCE` condition may only reference the target row.
 
+**VALUES-derived source restriction.** With a `VALUES` source — an entity or batch passed to `Using(IEnumerable<TEntity>)` — the `On(...)` match condition and every branch condition (`WhenMatched(...)`, `WhenNotMatched(...)`, `WhenNotMatchedBySource(...)`, whatever action ends it: `ThenUpdate`, `ThenDelete` or `ThenDoNothing`) may not reference a mapped source column that is **not part of the derived `VALUES` source**. That source declares the writable mapped columns only, so a database-generated column (identity or computed) has no derived column to name and `ToSql()`/`Merge()` throws `NotSupportedException`:
+
+```csharp
+// unsupported: Total is computed, so the VALUES source declares no Total column
+ctx.MergeInto<IDest>()
+    .Using(new Dest { Name = "a" })
+    .On((t, s) => t.Name == s.Name && s.Total > 0)
+    .WhenMatched().ThenUpdate()
+    .WhenNotMatched().ThenInsert()
+    .ToSql();   // NotSupportedException
+
+// supported: a query source projects the whole row, including Total
+ctx.MergeInto<IDest>()
+    .Using(ctx.From<IDest>())
+    .On((t, s) => t.Name == s.Name && s.Total > 0)
+    .WhenMatched().ThenUpdate()
+    .WhenNotMatched().ThenInsert()
+    .ToSql();
+```
+
+Otherwise reference only columns the `VALUES` source already carries.
+
 | Provider | Full `MERGE` | `THEN DELETE` | `THEN DO NOTHING` | `ON` / `WHEN ... AND` | `WHEN NOT MATCHED BY SOURCE` |
 |---|---|---|---|---|---|
 | SQL Server | yes | yes | — | yes | yes |

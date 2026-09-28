@@ -51,6 +51,88 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
     }
 
+    private static DynamicColumnsEntity DynamicWriteEntity()
+        => new()
+        {
+            Id = 1,
+            Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null },
+        };
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldRenderQuotedOrdinalKeysAndParameters()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
+        // every dynamic key is bracket-quoted even though the global identifier-quoting flag is off.
+        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+            .Values(DynamicWriteEntity())
+            .ToSql())
+            .Should().Contain("(id, [alpha], [mid], [zeta]) values (@p0, @p1, @p2, @p3)");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Update_ShouldRenderQuotedKeysInSet()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        Normalize(ctx.Update<DynamicColumnsEntity>()
+            .Set(DynamicWriteEntity())
+            .Where(x => x.Id == 1)
+            .ToSql())
+            .Should().Contain("set [alpha] = @p0, [mid] = @p1, [zeta] = @p2 where id = 1");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_KeyUpsert_ShouldKeepDynamicKeysOutOfMatchCondition()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql());
+
+        sql.Should().Contain("as source (id, [alpha], [mid], [zeta])");
+        sql.Should().Contain("on target.id = source.id");
+        sql.Should().Contain("then update set target.[alpha] = source.[alpha], target.[mid] = source.[mid], target.[zeta] = source.[zeta]");
+        sql.Should().Contain("insert (id, [alpha], [mid], [zeta]) values (source.id, source.[alpha], source.[mid], source.[zeta])");
+        sql.Should().NotContain("on target.[alpha]");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_FullMerge_ShouldKeepDynamicKeysOutOfMatchCondition()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = Normalize(ctx.MergeInto<DynamicWritableEntity>()
+            .Using(new DynamicWritableEntity { Id = 1, Label = "L", Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null } })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql());
+
+        sql.Should().Contain("as source (id, label, [alpha], [mid], [zeta])");
+        sql.Should().Contain("on target.id = source.id");
+        sql.Should().Contain("then update set target.label = source.label, target.[alpha] = source.[alpha], target.[mid] = source.[mid], target.[zeta] = source.[zeta]");
+        sql.Should().Contain("insert (id, label, [alpha], [mid], [zeta]) values (source.id, source.label, source.[alpha], source.[mid], source.[zeta])");
+        sql.Should().NotContain("on target.[alpha]");
+    }
+
+    [Fact]
+    public void Write_StorelessInsertSqlUnchanged()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+    }
+
     [Fact]
     public void IndexHint_WithIndex_ShouldEmitWithIndex()
     {

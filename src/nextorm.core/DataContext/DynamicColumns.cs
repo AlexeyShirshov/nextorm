@@ -53,7 +53,7 @@ internal sealed class DynamicColumns
         return result;
     }
 
-    private bool IsMapped(string name)
+    internal bool IsMapped(string name)
     {
         var mappedNames = _mappedNames;
         for (var i = 0; i < mappedNames.Length; i++)

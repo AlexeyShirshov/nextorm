@@ -164,6 +164,25 @@ public sealed class DeleteEntity : IDeleteEntity
     public int Age { get; set; }
 }
 
+/// <summary>
+/// Entity whose <see cref="DynamicColumnsAttribute"/> store contributes physical columns to an
+/// INSERT/UPDATE/MERGE. The physical table carries <c>alpha</c>, <c>beta</c> and the defaulted
+/// <c>seeded</c> column, so a key omitted from the store is distinguishable from a key bound to NULL.
+/// </summary>
+[SqlTable("dynamic_entity")]
+public sealed class DynamicColumnsEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    [DynamicColumns]
+    public Dictionary<string, object?> Extra { get; set; } = new();
+}
+
 [SqlTable("eager_parent")]
 public sealed class EagerParent
 {

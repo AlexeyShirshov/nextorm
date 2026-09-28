@@ -274,6 +274,22 @@ internal sealed class QueryPlanner : IQueryPlanner
             }
         }
 
+        // The entity store's dynamic columns are appended after the mapped assignments, each physical key
+        // quoted through the dialect regardless of the global identifier-quoting flag. A present key is
+        // always written; an omitted key leaves the column unchanged (it cannot be cleared by omission).
+        if (command.DynamicColumns is not null)
+        {
+            var dynamicKeys = command.DynamicColumns.RenderKeys(ctx.Dialect);
+            var dynamicNames = command.DynamicColumns.AddValueParameters(0, parameters, parameterProvider, ctx.Dialect);
+            for (var d = 0; d < dynamicKeys.Length; d++)
+            {
+                if (builder.Length > 0)
+                    builder.Append(", ");
+
+                builder.Append(dynamicKeys[d]).Append(" = ").Append(ctx.Dialect.MakeParam(dynamicNames[d]));
+            }
+        }
+
         return (builder.ToString(), parameters);
     }
 

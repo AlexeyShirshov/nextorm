@@ -47,6 +47,69 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
     }
 
+    private static DynamicColumnsEntity DynamicWriteEntity()
+        => new()
+        {
+            Id = 1,
+            Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null },
+        };
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldRenderQuotedOrdinalKeysAndParameters()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
+        // every dynamic key is backtick-quoted even though the global identifier-quoting flag is off.
+        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+            .Values(DynamicWriteEntity())
+            .ToSql())
+            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Update_ShouldRenderQuotedKeysInSet()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        Normalize(ctx.Update<DynamicColumnsEntity>()
+            .Set(DynamicWriteEntity())
+            .Where(x => x.Id == 1)
+            .ToSql())
+            .Should().Contain("set `alpha` = @p0, `mid` = @p1, `zeta` = @p2 where id = 1");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_KeyUpsert_ShouldKeepDynamicKeysOutOfMatchCondition()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql());
+
+        sql.Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+        // MariaDB's upsert match is implicit (ON DUPLICATE KEY), so the dynamic keys must appear only in
+        // the insert list and the update assignments, never as a match key.
+        sql.Should().Contain("on duplicate key update `alpha` = values(`alpha`), `mid` = values(`mid`), `zeta` = values(`zeta`)");
+        sql.Should().NotContain("id = values(id)");
+    }
+
+    [Fact]
+    public void Write_StorelessInsertSqlUnchanged()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+    }
+
     [Fact]
     public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
     {

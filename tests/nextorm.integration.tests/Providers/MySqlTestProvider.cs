@@ -53,6 +53,15 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
+    /// <summary>
+    /// MySQL rejects an unqualified <c>*</c> mixed with explicit select expressions
+    /// (<c>SELECT id, * FROM t</c> is a syntax error; only <c>SELECT id, t.* FROM t</c> is accepted), so
+    /// the whole-entity read that appends the store's <c>*</c> after the mapped columns cannot run.
+    /// </summary>
+    public bool SupportsDynamicColumnsRead => false;
+    public string DynamicColumnsReadSkipReason =>
+        "MySQL rejects an unqualified `*` mixed with explicit select columns, so the whole-entity read that materialises a dynamic-columns store cannot execute.";
+
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
 
     public IDataContext CreateContext() =>
@@ -92,6 +101,7 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists insert_entity",
         "drop table if exists merge_entity",
         "drop table if exists delete_entity",
+        "drop table if exists dynamic_entity",
         "drop table if exists eager_note",
         "drop table if exists eager_child",
         "drop table if exists eager_parent",
@@ -171,6 +181,19 @@ internal sealed class MySqlTestProvider : ITestProvider
             id int not null primary key,
             name varchar(100) null,
             age int null
+        )
+        """,
+
+        // Dynamic-columns write fixtures (#104): the defaulted "seeded" column makes a key omitted from
+        // the store distinguishable from a key bound to a value.
+        """
+        create table dynamic_entity
+        (
+            id int not null primary key,
+            name varchar(100) null,
+            alpha varchar(100) null,
+            beta varchar(100) null,
+            seeded varchar(100) default 'defaulted'
         )
         """,
 

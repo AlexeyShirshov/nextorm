@@ -21,6 +21,7 @@ public sealed partial class InsertBuilder<TEntity>
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
     private readonly List<ColumnAccumulator> _columns = [];
+    private DynamicColumnSet? _dynamicColumns;
     private int _rowCount;
     private ValueMode _mode;
     private QueryCommand? _source;
@@ -637,7 +638,7 @@ public sealed partial class InsertBuilder<TEntity>
         if (_source is not null)
             return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto);
 
-        if (_columns.Count == 0)
+        if (_columns.Count == 0 && _dynamicColumns is null)
         {
             // No writable column means the row is defined entirely by column defaults, so an insert
             // with no values is an all-defaults row rather than a builder that forgot its values.
@@ -657,7 +658,7 @@ public sealed partial class InsertBuilder<TEntity>
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
 
-        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto);
+        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto, dynamicColumns: _dynamicColumns);
     }
 
     private bool HasWritableColumns()

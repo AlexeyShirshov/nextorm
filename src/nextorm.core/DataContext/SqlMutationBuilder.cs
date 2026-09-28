@@ -57,7 +57,7 @@ internal static class SqlMutationBuilder
 
             if (command.Source is not null)
                 RenderSourceInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, sourceSql, sourceParameters, parameters, keywordCase, overrideIdentity, emitConflictDoNothing);
-            else if (command.Columns.Count == 0)
+            else if (command.Columns.Count == 0 && command.DynamicColumns is null)
                 RenderDefaultValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, keywordCase);
             else
                 RenderValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, parameters, keywordCase, parameterProvider, overrideIdentity, emitConflictDoNothing);
@@ -151,7 +151,7 @@ internal static class SqlMutationBuilder
     {
         parameterProvider ??= new DefaultParameterProvider();
 
-        AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns));
+        AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns), command.DynamicColumns);
 
         if (overrideIdentity.Length > 0)
             writer.Append(overrideIdentity);
@@ -165,7 +165,7 @@ internal static class SqlMutationBuilder
 
         writer.Append(SqlKeywords.Of(keywordCase, " values "));
 
-        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider);
+        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
 
         if (emitConflictDoNothing)
             writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
@@ -571,9 +571,9 @@ internal static class SqlMutationBuilder
     {
         writer.Append(SqlKeywords.Of(keywordCase, "insert into "));
         AppendIdentifier(writer, dialect, quoteIdentifiers, ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention));
-        AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns));
+        AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns), command.DynamicColumns);
         writer.Append(SqlKeywords.Of(keywordCase, " values "));
-        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider);
+        AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
 
         if (dialect.SupportsOnConflict)
             writer.Append(dialect.MakeOnConflict(RenderColumns(dialect, quoteIdentifiers, namingConvention, command.Keys), keywordCase));
@@ -581,12 +581,27 @@ internal static class SqlMutationBuilder
             writer.Append(dialect.MakeOnDuplicateKey(keywordCase));
 
         var updates = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.UpdateColumns);
+        var wroteUpdate = false;
         for (var i = 0; i < updates.Length; i++)
         {
-            if (i > 0)
+            if (wroteUpdate)
                 writer.Append(", ");
 
             writer.Append(updates[i]).Append(" = ").Append(dialect.MakeUpsertValueReference(updates[i], keywordCase));
+            wroteUpdate = true;
+        }
+
+        if (command.DynamicColumns is not null)
+        {
+            var dynamicKeys = command.DynamicColumns.RenderKeys(dialect);
+            for (var d = 0; d < dynamicKeys.Length; d++)
+            {
+                if (wroteUpdate)
+                    writer.Append(", ");
+
+                writer.Append(dynamicKeys[d]).Append(" = ").Append(dialect.MakeUpsertValueReference(dynamicKeys[d], keywordCase));
+                wroteUpdate = true;
+            }
         }
 
         // A key upsert returns the written rows through the provider's RETURNING form (PostgreSQL, SQLite
@@ -623,6 +638,16 @@ internal static class SqlMutationBuilder
         var keys = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.Keys);
         var updates = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.UpdateColumns);
 
+        // The store's dynamic keys join the derived-source column list, the INSERT branch and the matched
+        // SET, but never the ON match (which stays on the declared keys). The appended values keep the
+        // column order of AppendValuesRows, which binds them after the mapped columns.
+        if (command.DynamicColumns is not null)
+        {
+            var dynamicKeys = command.DynamicColumns.RenderKeys(dialect);
+            columns = [.. columns, .. dynamicKeys];
+            updates = [.. updates, .. dynamicKeys];
+        }
+
         var returningColumns = RenderColumnsOrNull(dialect, quoteIdentifiers, namingConvention, command.ReturningColumns);
         if (returningColumns is not null && !dialect.SupportsOutput)
             throw new NotSupportedException(
@@ -631,7 +656,7 @@ internal static class SqlMutationBuilder
         var rows = StringBuilderPool.Shared.Get();
         try
         {
-            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider);
+            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
             writer.Append(dialect.MakeMerge(table, columns, keys, updates, rows.ToString(), keywordCase, returningColumns));
         }
         finally
@@ -666,17 +691,22 @@ internal static class SqlMutationBuilder
         var keys = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.Keys);
         var qualifyTarget = dialect.SupportsMergeTargetQualification;
 
+        // The store's dynamic keys extend the derived-source column list; the branches below add them to
+        // their INSERT/SET, while the ON match keeps using only the declared keys.
+        if (command.DynamicColumns is not null)
+            columns = [.. columns, .. command.DynamicColumns.RenderKeys(dialect)];
+
         var rows = StringBuilderPool.Shared.Get();
         try
         {
             writer.Append(SqlKeywords.Of(keywordCase, "merge into ")).Append(table);
-            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters);
+            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, command.DynamicColumns);
             AppendMergeOnKeys(writer, keys, matchConditionSql, keywordCase);
 
             for (var i = 0; i < command.Branches!.Count; i++)
             {
                 var condition = branchConditions is not null && i < branchConditions.Count ? branchConditions[i] : null;
-                AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, command.Branches[i], condition, keywordCase, qualifyTarget);
+                AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, command.Branches[i], condition, keywordCase, qualifyTarget, command.DynamicColumns);
             }
 
             AppendMergeReturning(writer, dialect, quoteIdentifiers, namingConvention, command, keywordCase);
@@ -733,7 +763,8 @@ internal static class SqlMutationBuilder
         KeywordCase keywordCase,
         IParameterProvider parameterProvider,
         string? sourceSql,
-        IReadOnlyList<Parameter>? sourceParameters)
+        IReadOnlyList<Parameter>? sourceParameters,
+        DynamicColumnSet? dynamicColumns)
     {
         if (command.Source is not null)
         {
@@ -748,7 +779,7 @@ internal static class SqlMutationBuilder
         }
         else
         {
-            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider);
+            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, dynamicColumns);
 
             writer.Append(SqlKeywords.Of(keywordCase, " as target using (values ")).Append(rows)
                 .Append(SqlKeywords.Of(keywordCase, ") as source (")).Append(string.Join(", ", columns)).Append(')');
@@ -796,18 +827,22 @@ internal static class SqlMutationBuilder
         MergeBranch branch,
         string? condition,
         KeywordCase keywordCase,
-        bool qualifyTarget)
+        bool qualifyTarget,
+        DynamicColumnSet? dynamicColumns)
     {
         switch (branch.Action)
         {
             case MergeActionKind.Update:
                 AppendMergeWhen(writer, MergeMatchKind.Matched, condition, keywordCase);
                 writer.Append(SqlKeywords.Of(keywordCase, " then update set "));
-                AppendMergeAssignments(writer, dialect, quoteIdentifiers, namingConvention, branch.Columns, qualifyTarget);
+                AppendMergeAssignments(writer, dialect, quoteIdentifiers, namingConvention, branch.Columns, qualifyTarget, dynamicColumns);
                 break;
             case MergeActionKind.Insert:
                 AppendMergeWhen(writer, MergeMatchKind.NotMatchedByTarget, condition, keywordCase);
                 var insertColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, branch.Columns);
+                if (dynamicColumns is not null)
+                    insertColumns = [.. insertColumns, .. dynamicColumns.RenderKeys(dialect)];
+
                 writer.Append(SqlKeywords.Of(keywordCase, " then insert (")).Append(string.Join(", ", insertColumns))
                     .Append(SqlKeywords.Of(keywordCase, ") values ("));
                 for (var i = 0; i < insertColumns.Length; i++)
@@ -851,24 +886,44 @@ internal static class SqlMutationBuilder
 
     // Renders the "target.col = source.col, ..." list of a MERGE update branch. PostgreSQL forbids
     // qualifying the target column, SQL Server requires the target alias; the source is always qualified.
+    // The store's dynamic keys are appended last, each quoted unconditionally through the dialect.
     private static void AppendMergeAssignments(
         StringBuilder writer,
         ISqlDialect dialect,
         bool quoteIdentifiers,
         INamingConvention? namingConvention,
         IReadOnlyList<IPropertyMetadata> columns,
-        bool qualifyTarget)
+        bool qualifyTarget,
+        DynamicColumnSet? dynamicColumns)
     {
         var rendered = RenderColumns(dialect, quoteIdentifiers, namingConvention, columns);
+        var wrote = false;
         for (var i = 0; i < rendered.Length; i++)
         {
-            if (i > 0)
+            if (wrote)
                 writer.Append(", ");
 
             if (qualifyTarget)
                 writer.Append("target.");
 
             writer.Append(rendered[i]).Append(" = source.").Append(rendered[i]);
+            wrote = true;
+        }
+
+        if (dynamicColumns is not null)
+        {
+            var dynamicKeys = dynamicColumns.RenderKeys(dialect);
+            for (var d = 0; d < dynamicKeys.Length; d++)
+            {
+                if (wrote)
+                    writer.Append(", ");
+
+                if (qualifyTarget)
+                    writer.Append("target.");
+
+                writer.Append(dynamicKeys[d]).Append(" = source.").Append(dynamicKeys[d]);
+                wrote = true;
+            }
         }
     }
 
@@ -942,7 +997,8 @@ internal static class SqlMutationBuilder
         int rowCount,
         List<Parameter> parameters,
         KeywordCase keywordCase,
-        IParameterProvider parameterProvider)
+        IParameterProvider parameterProvider,
+        DynamicColumnSet? dynamicColumns = null)
     {
         for (var r = 0; r < rowCount; r++)
         {
@@ -974,6 +1030,19 @@ internal static class SqlMutationBuilder
                     writer.Append(dialect.MakeParam(name));
                 }
             }
+
+            if (dynamicColumns is not null)
+            {
+                var dynamicNames = dynamicColumns.AddValueParameters(r, parameters, parameterProvider, dialect);
+                for (var d = 0; d < dynamicNames.Length; d++)
+                {
+                    if (columns.Count > 0 || d > 0)
+                        writer.Append(", ");
+
+                    writer.Append(dialect.MakeParam(dynamicNames[d]));
+                }
+            }
+
             writer.Append(')');
         }
     }
@@ -1056,16 +1125,32 @@ internal static class SqlMutationBuilder
         ISqlDialect dialect,
         bool quoteIdentifiers,
         INamingConvention? namingConvention,
-        IReadOnlyList<IPropertyMetadata> columns)
+        IReadOnlyList<IPropertyMetadata> columns,
+        DynamicColumnSet? dynamicColumns = null)
     {
         writer.Append(" (");
+        var wrote = false;
         for (var c = 0; c < columns.Count; c++)
         {
-            if (c > 0)
+            if (wrote)
                 writer.Append(", ");
 
             AppendIdentifier(writer, dialect, quoteIdentifiers, ResolveColumnName(columns[c], namingConvention));
+            wrote = true;
         }
+
+        if (dynamicColumns is not null)
+        {
+            for (var d = 0; d < dynamicColumns.Keys.Length; d++)
+            {
+                if (wrote)
+                    writer.Append(", ");
+
+                writer.Append(dialect.QuoteIdentifier(dynamicColumns.Keys[d]));
+                wrote = true;
+            }
+        }
+
         writer.Append(')');
     }
 }

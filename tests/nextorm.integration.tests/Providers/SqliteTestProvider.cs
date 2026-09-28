@@ -112,6 +112,10 @@ internal sealed class SqliteTestProvider : ITestProvider
 
         create table delete_entity (id integer primary key, name text, age int);
 
+        -- Dynamic-columns write fixtures (#104): the defaulted "seeded" column makes a key omitted from
+        -- the store distinguishable from a key bound to a value.
+        create table dynamic_entity (id integer primary key, name text, alpha text, beta text, seeded text default 'defaulted');
+
         create table eager_parent (id integer primary key, name text);
         create table eager_child (id integer primary key, parent_id int not null, name text);
         create table eager_note (id integer primary key, parent_id int not null, text text);

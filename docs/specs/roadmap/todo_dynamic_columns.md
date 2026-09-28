@@ -1,20 +1,23 @@
 # TODO: динамические колонки (dynamic columns store)
 
-> **Статус (2026-09-27, линия `1.0.9-a`):** сторона **чтения** отгружена и верифицирована —
-> коммит `37d3092`, тесты зелёные. Сторона **записи** отложена в GitHub issue
-> [#104](https://github.com/AlexeyShirshov/nextorm/issues/104) (милстоун `1.1`). Публичное
-> ограничение опубликовано в `docs/advanced/limitations.md` и `docs/ru/advanced/limitations.md`.
-> План остаётся частично реализованным.
+> **Статус (2026-09-28, линия `1.0.9-a`):** стороны **чтения и записи** отгружены и
+> верифицированы. Сторона записи реализована для `INSERT`/`UPDATE`/`MERGE` в объёме issue
+> [#104](https://github.com/AlexeyShirshov/nextorm/issues/104) (милстоун `1.1`); отложенные
+> оптимизации/кандидаты остаются открытыми в том же трекинге. Публичное поведение и оставшиеся
+> ограничения опубликованы в `docs/advanced/limitations.md` и `docs/ru/advanced/limitations.md`.
+> План остаётся частично реализованным (см. `Deferred`).
 
 > Tracking issue: [#94](https://github.com/AlexeyShirshov/nextorm/issues/94).
 
 ## Статус
 
-> **2026-09-27, линия `1.0.9-a`:** сторона **чтения** реализована и перенесена из ветки
-> `wip/94-dynamic-columns` (коммит `92fa94f`). Критерии приёмки 1, 3 (для чтения) и 5 закрыты
-> (см. §4, §7). Сторона **записи** (критерии 2 и 4) остаётся **вне области** и задокументирована как
-> нереализованная в `docs/advanced/limitations.md` и `docs/ru/advanced/limitations.md`. Отложенные
-> оптимизации и «кандидаты», ждущие воспроизведения, собраны в разделе `Deferred` ниже.
+> **2026-09-28, линия `1.0.9-a`:** сторона **чтения** реализована и перенесена из ветки
+> `wip/94-dynamic-columns` (коммит `92fa94f`), сторона **записи** реализована в объёме issue
+> [#104](https://github.com/AlexeyShirshov/nextorm/issues/104). Критерии приёмки 1, 2, 3, 5 закрыты
+> (см. §4, §7); критерий 4 (набор ключей как ключ плана) для чтения закрыт схемой, а DML пока не
+> кэшируется. Публичное поведение и оставшиеся ограничения отражены в `docs/advanced/limitations.md`
+> и `docs/ru/advanced/limitations.md`. Отложенные оптимизации и «кандидаты», ждущие воспроизведения,
+> собраны в разделе `Deferred` ниже.
 
 > Рабочий план (design RFC). Источник: сравнение инфраструктуры маппинга linq2db — атрибуты
 > `DynamicColumnsStoreAttribute` / `DynamicColumnAccessorAttribute` и fluent
@@ -34,30 +37,40 @@
   4. набор колонок входит в ключ плана (разные наборы → разные планы);
   5. in-memory — тот же словарь при чтении.
 
-**Реализованный срез:** критерии 1, 3 (для чтения), 5 — сторона **чтения**. Критерии 2 и 4 (write-side
-и план по набору ключей) — отложены, см. §7 и `docs/advanced/limitations.md`.
+**Реализованный срез:** критерии 1, 2, 3 и 5 — стороны **чтения** и **записи**. Критерий 4 (набор
+ключей как ключ плана): для чтения набор определяет схема (не запрос), а DML в этой линии не
+кэшируется — при введении кэша отсортированный набор ключей обязан войти в ключ плана. См. §7 и
+`docs/advanced/limitations.md`.
 
-## 2. Провайдерная матрица (чтение)
+## 2. Провайдерная матрица (чтение и запись)
 
 Поведение не зависит от SQL-функций: колонки читаются из `IDataRecord` по имени (`GetName`/`GetValue`),
 сопоставленные колонки читаются по порядковому номеру, `*` добавляется после них. Диалектного хука не
 нужно. Источники: официальные справочники `SELECT`/`*` каждого движка (PostgreSQL, Microsoft Learn
 T-SQL, MySQL/MariaDB, SQLite, ClickHouse) — все поддерживают список колонок вместе с `*`.
 
+Запись также не зависит от SQL-функций: ключи словаря сортируются порядково и рендерятся физическими
+колонками (`INSERT`/`UPDATE`/`MERGE`), значения связываются параметрами из рантайм-CLR-значения
+(pass-through, без конвертеров/JSON), каждый ключ квотируется `dialect.QuoteIdentifier` независимо от
+глобальной опции `UseQuotedIdentifiers`, а соглашение об именовании пропускается. Поведение общее для
+всех SQL-провайдеров через один внутренний шов на существующем DML-пути; in-memory сторону записи не
+реализует.
+
 | Провайдер | Чтение | Запись | Примечание |
 |---|---|---|---|
-| SQL Server | **да** | отложено | `select <mapped>, *`; идентификаторы квотируются диалектом при включённом quoting |
-| PostgreSQL | **да** | отложено | `select <mapped>, *`; тип значения — из `DbDataReader` |
-| MySQL | **да** | отложено | `select <mapped>, *` |
-| MariaDB | **да** | отложено | наследует MySQL |
-| SQLite | **да** | отложено | `select <mapped>, *`, dynamic typing |
-| ClickHouse | **да** | отложено | колонки таблицы должны существовать |
-| InMemory | **да** | отложено | провайдер возвращает зарегистрированную строку как есть, поэтому возвращается её собственный словарь |
+| SQL Server | **да** | **да (INSERT/UPDATE/MERGE)** | `select <mapped>, *`; запись квотирует динамические ключи диалектом независимо от глобального quoting |
+| PostgreSQL | **да** | **да (INSERT/UPDATE/MERGE)** | `select <mapped>, *`; тип значения — из `DbDataReader`/рантайм-CLR |
+| MySQL | **да** | **да (INSERT/UPDATE/MERGE)** | `select <mapped>, *` |
+| MariaDB | **да** | **да (INSERT/UPDATE/MERGE)** | наследует MySQL |
+| SQLite | **да** | **да (INSERT/UPDATE/MERGE)** | `select <mapped>, *`, dynamic typing |
+| ClickHouse | **да** | **да (INSERT/UPDATE/MERGE)** | колонки таблицы должны существовать |
+| InMemory | **да** | **нет** | провайдер возвращает зарегистрированную строку как есть, поэтому возвращается её собственный словарь; запись не реализована |
 
 **Единообразие провайдеров:** чтение реализовано через общий путь
 (`QueryCommand.QueryPreparer.PrepareColumns` → `SqlBuilder.MakeSelect` → `RowMapperFactory` →
 `RowMaterializerBuilder`/`DynamicColumns`), поэтому все SQL-провайдеры получают его одновременно;
-in-memory — через путь identity-материализации. Запись отложена целиком.
+in-memory — через путь identity-материализации. Запись реализована общим внутренним швом на DML-пути
+(`INSERT`/`UPDATE`/`MERGE`) для всех SQL-провайдеров; in-memory остаётся без стороны записи.
 
 ## 3. C#-аналог и tier
 
@@ -99,7 +112,11 @@ EntityPropertyBuilder<T> EntityPropertyBuilder<T>.DynamicColumnsStore();
 - SQL-gen по провайдерам: `DynamicColumnsStore_ShouldAppendStar` в
   `tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests/SqlGenerationTests.cs` —
   `select id, * from dynamic_entity`.
-- Отложено (не реализовано): join → `NotSupportedException`; запись словаря; план по набору ключей.
+- Сторона записи (`INSERT`/`UPDATE`/`MERGE` из ключей словаря) покрыта unit/SQL-gen и
+  интеграционными SQLite-тестами write→read — стратегия и имена в
+  `docs/specs/status/dynamic-columns-write-104-1.md`.
+- Отложено (не реализовано): join → `NotSupportedException`; план по набору ключей (DML не кэшируется;
+  при введении кэша отсортированный набор ключей обязан войти в ключ).
 
 ## 6. Baseline покрытия
 
@@ -117,31 +134,61 @@ default-члена интерфейсов (`IPropertyMetadata.IsDynamicColumnsSt
 
 ## 7. Статус реализации
 
-**DONE (read-side) / write-side отложен.** Read-side портирован на релизную линию `1.0.9-a`
-из `wip/94-dynamic-columns` (commit `92fa94f`, 2026-09-27); поведение на `1.0.9-a` подтверждено
-тестами и сборкой.
+**DONE (read-side + write-side #104).** Read-side портирован на релизную линию `1.0.9-a` из
+`wip/94-dynamic-columns` (commit `92fa94f`, 2026-09-27). Write-side реализован для
+`INSERT`/`UPDATE`/`MERGE` в объёме issue [#104](https://github.com/AlexeyShirshov/nextorm/issues/104);
+поведение подтверждено тестами и сборкой.
 
-- **Реализовано:** атрибут + fluent + слоты метаданных; исключение хранилища из `Properties`; маркер в
-  select-list; `select <mapped>, *`; материализация не сопоставленных колонок в словарь; in-memory
-  pass-through; план-ключ; XML-доки; build Release 0/0; тесты core/sqlite/5 провайдеров зелёные.
-- **Отложено:** `INSERT`/`UPDATE`/`MERGE` из ключей словаря (нет типа провайдера на ключ и нет
-  change tracking); набор ключей как план-ключ (для чтения набор определяет схема, а не запрос);
-  хранилище при join/проекции/коррелированном подзапросе (сознательно `NotSupportedException`/не
-  собирается); `DynamicColumnAccessor`-доступ по имени.
-- **Решение:** пишем read-side end-to-end, write-side документируем как вне области в
-  `docs/advanced/limitations.md` (+RU); трекинг — issue #94.
+- **Реализовано (read):** атрибут + fluent + слоты метаданных; исключение хранилища из `Properties`;
+  маркер в select-list; `select <mapped>, *`; материализация не сопоставленных колонок в словарь;
+  in-memory pass-through; план-ключ; XML-доки.
+- **Реализовано (write, #104):** ключи словаря рендерятся физическими колонками, значения — связанными
+  параметрами в `INSERT`/`UPDATE`/`MERGE`; порядковая сортировка ключей (детерминированный порядок
+  колонок); квотирование каждого ключа диалектом независимо от глобальной опции
+  `UseQuotedIdentifiers`, соглашение об именовании пропущено (ключ = имя физической колонки);
+  отклонение пустого ключа и ключа с NUL; present-ключ со значением `null` → SQL `NULL`, отсутствующий
+  ключ → колонка опущена (`INSERT` — default, `UPDATE`/`MERGE` — без изменений, очистить нельзя);
+  равенство набора ключей во всех строках многострочного `INSERT`; в `MERGE` динамические колонки
+  только в source/`INSERT`/`SET`, никогда в `ON`; pass-through рантайм-CLR-значения без
+  конвертеров/JSON; store-less DML байт-в-байт прежний.
+- **Отложено:** пер-ключевой `IPropertyValueConverter`/JSON-колонки; change tracking и «очистка
+  опусканием ключа»; сторона записи в in-memory; allow-list ключей; DML-кэш планов (при его введении
+  отсортированный набор ключей должен войти в ключ); хранилище при join/проекции/коррелированном
+  подзапросе (сознательно `NotSupportedException`/не собирается); `DynamicColumnAccessor`-доступ по
+  имени.
+- **Решение:** read-side и write-side (`INSERT`/`UPDATE`/`MERGE`) закрыты end-to-end; оставшиеся
+  пункты документированы как ограничения в `docs/advanced/limitations.md` (+RU); трекинг — issue #104.
 
-## 8. Открытые вопросы (write-side)
+## 8. Открытые вопросы (write-side) — решения
 
-1. Тип словаря на запись: явный `IPropertyValueConverter` на ключ или вывод из CLR-значения.
-2. Как отличать `null` от отсутствия ключа.
-3. Взаимодействие с value converters и JSON-колонками.
-4. Квотирование имён-ключей на запись (allow-list/доверенный источник).
+1. **Тип словаря на запись:** реализован вывод из рантайм-CLR-значения (pass-through); пер-ключевой
+   `IPropertyValueConverter` отложен до подтверждённого типизированного сценария.
+2. **`null` vs отсутствие ключа:** present-ключ со значением `null` пишет SQL `NULL`, отсутствующий
+   ключ опускает колонку. Соглашение зеркалит сторону чтения; семантика «очистить колонку отсутствием
+   ключа» отложена.
+3. **Взаимодействие с value converters и JSON-колонками:** pass-through, без конвертеров/JSON — как и
+   материализация стороны чтения.
+4. **Квотирование имён-ключей:** каждый ключ квотируется диалектом всегда, плюс валидация имени
+   (пустой ключ/NUL отклоняются); allow-list отложен до требования о недоверенном источнике ключей.
 
 ## Deferred
 
 Отложенные оптимизации и «кандидаты» (нужное воспроизведение до промоушена). Каждый пункт —
 с триггером пересмотра; без него работа не берётся.
+
+### Deferred (in-milestone 1.0.9-a)
+
+Принятые в объём милстоуна `1.0.9-a` тест-матричные follow-up стороны записи #104 (инвариант:
+ничего не покидает милстоун — эти пункты не выносятся в отдельную веху).
+
+- **Match condition на настоящей generated-колонке в query-source.** `Merge_QuerySource_OnIdentityKey_ShouldRender`
+  (`tests/nextorm.postgres.tests/MergeSqlGenerationTests.cs:371`,
+  `tests/nextorm.sqlserver.tests/MergeSqlGenerationTests.cs:252`) использует колонку только с `[Key]`,
+  но не настоящую `[DatabaseGenerated(Identity)]`; добавить случай match-condition на реально
+  generated-колонке в query-source.
+- **Ветви generated-колонки у VALUES-source.** Тест generated-колонки у VALUES-source покрывает только
+  `WhenMatched.ThenUpdate`; покрыть также ветви `ThenDelete`/`ThenDoNothing` и ссылку на источник через
+  вложенный/методный вызов (`s.Total.ToString()`, `a && s.Total`).
 
 - **Аллокация `Normalize` на строку** — `src/nextorm.core/DataContext/DynamicColumns.cs:65`
   (`IsMapped` вызывает `Normalize(name)` на каждое немаппированное поле). Оптимизация opt-in:

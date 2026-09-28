@@ -87,6 +87,7 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists insert_entity;
         drop table if exists merge_entity;
         drop table if exists delete_entity;
+        drop table if exists dynamic_entity;
         drop table if exists eager_note;
         drop table if exists eager_child;
         drop table if exists eager_parent;
@@ -165,6 +166,17 @@ internal sealed class PostgresTestProvider : ITestProvider
             id integer primary key,
             name varchar(100),
             age integer
+        );
+
+        -- Dynamic-columns write fixtures (#104): the defaulted "seeded" column makes a key omitted from
+        -- the store distinguishable from a key bound to a value.
+        create table dynamic_entity
+        (
+            id integer primary key,
+            name varchar(100),
+            alpha varchar(100),
+            beta varchar(100),
+            seeded varchar(100) default 'defaulted'
         );
 
         create table eager_parent

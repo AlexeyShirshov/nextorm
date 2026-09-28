@@ -48,6 +48,82 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
     }
 
+    private static DynamicColumnsEntity DynamicWriteEntity()
+        => new()
+        {
+            Id = 1,
+            Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null },
+        };
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldRenderQuotedOrdinalKeysAndParameters()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
+        // every dynamic key is backtick-quoted even though the global identifier-quoting flag is off.
+        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+            .Values(DynamicWriteEntity())
+            .ToSql())
+            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Update_ShouldRenderQuotedKeysInMutation()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        Normalize(ctx.Update<DynamicColumnsEntity>()
+            .Set(DynamicWriteEntity())
+            .Where(x => x.Id == 1)
+            .ToSql())
+            .Should().Contain("update `alpha` = @p0, `mid` = @p1, `zeta` = @p2 where id = 1 settings mutations_sync = 1");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_KeyUpsert_ShouldThrowAndNotDropDynamicColumns()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        // ClickHouse has no engine-level upsert. The unsupported path must reject the whole statement
+        // rather than silently render one without the store's dynamic columns.
+        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_FullMerge_ShouldThrowAndNotDropDynamicColumns()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void Write_StorelessInsertSqlUnchanged()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+    }
+
     [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {

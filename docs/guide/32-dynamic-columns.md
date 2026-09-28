@@ -1,8 +1,9 @@
-# Dynamic columns (read side)
+# Dynamic columns
 
 > A mapped entity can keep the row's unmapped columns in a dictionary whose keys come from the result
-> set (the database schema) rather than from CLR properties. This is the **read side** of the
-> `DynamicColumnsStore` feature; writing the dictionary keys back as columns is not implemented.
+> set (the database schema) rather than from CLR properties — the **read side** — and write that
+> dictionary back into physical columns on `INSERT`, `UPDATE` and `MERGE` — the **write side**. Both
+> sides use the same `DynamicColumnsStore`.
 
 **Prerequisites:** [Querying and projections](01-filtering-where.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md)
 
@@ -58,6 +59,53 @@ case-insensitively and after dropping underscores/lower-casing, so a snake-case 
 its PascalCase property name). The store keys preserve the database column name exactly (the dictionary
 is ordinal); only the skip matching against mapped columns is case-insensitive.
 
+## Writing dynamic columns
+
+The same store is written back on `INSERT`, `UPDATE` and `MERGE`: the dictionary keys become physical
+column names and their values become bound parameters. The store is read from the entity (or from every
+row of a batch) at execution time, so an open-ended set of columns is persisted without a mapped
+property per column:
+
+```csharp
+var product = new Product
+{
+    Id = 7,
+    Name = "Widget",
+    Attributes = new Dictionary<string, object?>
+    {
+        ["weight"] = 1.5m,
+        ["supplier_code"] = "ACME",
+    },
+};
+
+ctx.InsertInto<Product>().Values(product).Insert();
+```
+
+The generated statement (PostgreSQL/SQLite quoting shown; each dialect uses its own):
+
+```sql
+insert into product (Id, Name, "supplier_code", "weight") values (@p0, @p1, @p2, @p3)
+```
+
+The write side is fixed to these semantics:
+
+* **Keys are physical column names.** The key is used as-is — the naming convention is skipped — and
+  every dynamic key is quoted with the dialect's identifier quoting even when the global
+  `UseQuotedIdentifiers` option is off.
+* **Key order is deterministic.** Keys are sorted ordinal (`StringComparer.Ordinal`) before rendering,
+  so the column order does not depend on the dictionary's enumeration order.
+* **`null` versus a missing key.** A present key whose value is `null` writes SQL `NULL`; a key absent
+  from the dictionary is omitted — on `INSERT` the column default applies, and on `UPDATE`/`MERGE` the
+  column is left unchanged (you cannot clear a column by omitting its key).
+* **Multi-row `INSERT`.** Every row must expose the same key set; a mismatch is rejected with
+  `InvalidOperationException`.
+* **`MERGE`.** Dynamic columns go to the source, the `INSERT` branch and the matched `SET`, never into
+  the `ON` condition.
+* **Values bind as runtime CLR values** (pass-through): there is no per-key value converter, no JSON
+  mapping and no fabricated `IPropertyMetadata`.
+* **Invalid keys are rejected.** An empty key or a key containing a NUL character throws
+  `ArgumentException`.
+
 ## Fluent mapping
 
 Use [`DynamicColumnsStore`](xref:NextORM.Core.EntityPropertyBuilder`1.DynamicColumnsStore) when the
@@ -78,14 +126,14 @@ must have a setter.
 The store is engine-independent: the columns come from the result set and their names are read from the
 data reader, so no provider needs a dialect hook.
 
-| Provider | Read | Note |
-|---|---|---|
-| PostgreSQL | yes | `select <mapped>, *`; value types come from the `DbDataReader` |
-| SQL Server | yes | identifiers stay unquoted unless quoting is enabled |
-| MySQL / MariaDB | yes | `select <mapped>, *` |
-| SQLite | yes | `select <mapped>, *` |
-| ClickHouse | yes | the table columns must exist; the store is read like any other result |
-| In-memory | yes | the in-memory provider returns the registered row, so its own `Attributes` dictionary is the one returned |
+| Provider | Read | Write | Note |
+|---|---|---|---|
+| PostgreSQL | yes | yes | `select <mapped>, *`; value types come from the `DbDataReader`/the runtime CLR value |
+| SQL Server | yes | yes | mapped identifiers stay unquoted unless quoting is enabled; dynamic keys are always quoted |
+| MySQL / MariaDB | yes | yes | `select <mapped>, *` |
+| SQLite | yes | yes | `select <mapped>, *`; the write side follows SQLite's dynamic typing |
+| ClickHouse | yes | yes | the table columns must exist; its `MERGE` is rejected independently of the store |
+| In-memory | yes | no | the in-memory provider returns the registered row and does not implement the write side |
 
 ## Constraints
 
@@ -95,15 +143,29 @@ The store only applies to a query over a **single physical source** read as a wh
 the appended `*` would also pull in the joined table's columns. A correlated subquery over the entity
 likewise does not collect the store.
 
-The keys are only as trustworthy as the schema they come from. The store never quotes or renders a key
-into SQL, so it cannot introduce an injection through the column names — the names are produced by the
-database, not by the caller.
+On the read side the keys are only as trustworthy as the schema they come from: the store never
+renders a key into SQL, so it cannot introduce an injection through the column names — the names are
+produced by the database, not by the caller. On the write side the caller supplies the keys, so each one
+is validated (see [Writing dynamic columns](#writing-dynamic-columns)) and quoted with the dialect's
+identifier quoting.
 
 ## Limitations
 
-**Write side is not implemented.** `INSERT`/`UPDATE`/`MERGE` do not render the dictionary keys as
-columns; a value converter or a JSON column is the supported way to persist an open-ended payload
-today. See [Limitations and out-of-scope features](../advanced/limitations.md).
+The write side carries these restrictions:
+
+* **No per-key converters or JSON columns.** A dynamic value binds from its runtime CLR value, mirroring
+  read-side materialisation; to store a converted or JSON payload, map a normal property with a value
+  converter or a JSON column.
+* **No change tracking.** nextorm never tracks the dictionary: every write is an explicit `INSERT`,
+  `UPDATE` or `MERGE`, and only the keys you supply are written.
+* **A column cannot be cleared by omission.** A missing key means "column default" on `INSERT` and
+  "leave unchanged" on `UPDATE`/`MERGE`; write an explicit `null` to set SQL `NULL`.
+* **No key allow-list.** Keys are validated (non-empty, no NUL) and always identifier-quoted, but there
+  is no allow-list of permitted column names.
+* **The in-memory provider does not implement the write side** (its read side returns the registered
+  dictionary as-is).
+
+See [Limitations and out-of-scope features](../advanced/limitations.md).
 
 ## See also
 

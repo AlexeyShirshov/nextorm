@@ -78,3 +78,19 @@ public class DynamicColumnsEntity
     [DynamicColumns]
     public Dictionary<string, object?> Extra { get; set; } = new();
 }
+
+/// <summary>
+/// SQL-generation-only dynamic-columns entity with a non-key mapped column, so the full-MERGE branch
+/// (which needs a column to update independently of the store) can be exercised.
+/// </summary>
+[SqlTable("dynamic_writable_entity")]
+public class DynamicWritableEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("label")]
+    public string? Label { get; set; }
+    [DynamicColumns]
+    public Dictionary<string, object?> Extra { get; set; } = new();
+}

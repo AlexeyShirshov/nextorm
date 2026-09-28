@@ -77,7 +77,8 @@ internal sealed class UpdateCommand : MutationCommand
     /// <param name="keys">The declared key values of the <c>Update(entity)</c> form, or <see langword="null"/> for the predicate form.</param>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain update.</param>
     /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
-    public UpdateCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<UpdateAssignment> assignments, QueryCommand source, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
+    /// <param name="dynamicColumns">The entity store's dynamic columns appended to the <c>SET</c> list, or <see langword="null"/>.</param>
+    public UpdateCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<UpdateAssignment> assignments, QueryCommand source, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null, DynamicColumnSet? dynamicColumns = null)
         : base(SqlStatementType.Update, entityType)
     {
         TableName = tableName;
@@ -87,6 +88,7 @@ internal sealed class UpdateCommand : MutationCommand
         Keys = keys;
         ReturningColumns = returningColumns;
         OutputInto = outputInto;
+        DynamicColumns = dynamicColumns;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -115,4 +117,10 @@ internal sealed class UpdateCommand : MutationCommand
     /// for a plain update. Independent of <see cref="ReturningColumns"/>.
     /// </summary>
     public override OutputIntoClause? OutputInto { get; }
+
+    /// <summary>
+    /// The entity store's dynamic columns, appended to the <c>SET</c> list after the mapped assignments,
+    /// or <see langword="null"/> when the entity has no <see cref="DynamicColumnsAttribute"/> store.
+    /// </summary>
+    public DynamicColumnSet? DynamicColumns { get; }
 }

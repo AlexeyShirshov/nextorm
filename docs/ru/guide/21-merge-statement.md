@@ -56,6 +56,28 @@ ctx.MergeInto<IDest>()
 
 `On(condition)` заменяет матч по ключу произвольным условием совпадения (`ON <condition>`). Билдер ветки тоже принимает условие (`WhenMatched(condition)`, `WhenNotMatched(condition)`, `WhenNotMatchedBySource(condition)`), которое рендерится как `WHEN ... AND <condition>`; ветка срабатывает, только если условие истинно. Условия используют форму с двумя параметрами `(target, source)` — существующая строка это первый параметр лямбды, входящая строка-источник — второй, например `On((t, s) => t.Id == s.Id && s.Age > 0)`. В SQL Server условие `WHEN NOT MATCHED BY SOURCE` может ссылаться только на строку target.
 
+**Ограничение источника, производного от `VALUES`.** При источнике `VALUES` — сущности или батче, переданных в `Using(IEnumerable<TEntity>)` — условие совпадения `On(...)` и условие любой ветки (`WhenMatched(...)`, `WhenNotMatched(...)`, `WhenNotMatchedBySource(...)`, каким бы действием она ни завершалась: `ThenUpdate`, `ThenDelete` или `ThenDoNothing`) не могут ссылаться на отображённую колонку источника, **не входящую в производный источник `VALUES`**. Такой источник объявляет только записываемые отображённые колонки, поэтому генерируемая базой колонка (identity или computed) не имеет производной колонки, и `ToSql()`/`Merge()` бросает `NotSupportedException`:
+
+```csharp
+// не поддерживается: Total — computed, поэтому источник VALUES не объявляет колонку Total
+ctx.MergeInto<IDest>()
+    .Using(new Dest { Name = "a" })
+    .On((t, s) => t.Name == s.Name && s.Total > 0)
+    .WhenMatched().ThenUpdate()
+    .WhenNotMatched().ThenInsert()
+    .ToSql();   // NotSupportedException
+
+// поддерживается: источник-запрос проецирует всю строку, включая Total
+ctx.MergeInto<IDest>()
+    .Using(ctx.From<IDest>())
+    .On((t, s) => t.Name == s.Name && s.Total > 0)
+    .WhenMatched().ThenUpdate()
+    .WhenNotMatched().ThenInsert()
+    .ToSql();
+```
+
+Иначе ссылайтесь только на колонки, которые источник `VALUES` уже несёт.
+
 | Провайдер | Полный `MERGE` | `THEN DELETE` | `THEN DO NOTHING` | `ON` / `WHEN ... AND` | `WHEN NOT MATCHED BY SOURCE` |
 |---|---|---|---|---|---|
 | SQL Server | да | да | — | да | да |

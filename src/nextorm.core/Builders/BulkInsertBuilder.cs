@@ -26,6 +26,7 @@ public sealed class BulkInsertBuilder<TEntity>
     private readonly IEntityMetadata _metadata;
     private readonly BulkInsertOptions _options;
     private readonly bool _keepIdentity;
+    private readonly PropertyInfo? _dynamicStoreProperty;
 
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     private IEnumerable<TEntity>? _syncSource;
@@ -38,6 +39,7 @@ public sealed class BulkInsertBuilder<TEntity>
         _metadata = metadata;
         _options = options;
         _keepIdentity = options.KeepIdentity && HasIdentityColumn(metadata);
+        _dynamicStoreProperty = metadata.DynamicColumnsStore?.PropertyInfo;
     }
 
     /// <summary>The context the bulk insert executes on; used by <see cref="BulkInsertReturningBuilder{TEntity, TResult}"/>.</summary>
@@ -302,13 +304,58 @@ public sealed class BulkInsertBuilder<TEntity>
     /// <param name="columns">The written columns, in order.</param>
     /// <param name="dialect">The active dialect; used to convert a duration to its stored integer form.</param>
     /// <returns>The values, one per written column.</returns>
-    internal static object?[] ToRow(TEntity entity, IReadOnlyList<IPropertyMetadata> columns, ISqlDialect dialect)
+    /// <exception cref="NotSupportedException">The entity carries a non-empty dynamic-columns store.</exception>
+    internal object?[] ToRow(TEntity entity, IReadOnlyList<IPropertyMetadata> columns, ISqlDialect dialect)
     {
+        // The bulk path writes only mapped columns and has no dynamic-column support yet, so a populated
+        // store would be silently dropped. Fail closed instead of writing a truncated row. The store's
+        // declared type is IReadOnlyDictionary<string, object?>, so non-emptiness must be decided through
+        // that interface (or enumeration), not only through the non-generic ICollection shape.
+        if (_dynamicStoreProperty is not null
+            && HasAnyDynamicColumn(_dynamicStoreProperty.GetValue(entity)))
+        {
+            throw new NotSupportedException(
+                $"Bulk insert of dynamic columns is not supported: entity {typeof(TEntity)} has a non-empty dynamic-columns store. Clear the store or use InsertInto<{typeof(TEntity).Name}>().Values(...) instead.");
+        }
+
         var row = new object?[columns.Count];
         for (var i = 0; i < columns.Count; i++)
             row[i] = DurationStorage.ToParameterValue(columns[i].PropertyInfo.GetValue(entity), columns[i], dialect);
 
         return row;
+    }
+
+    /// <summary>
+    /// Whether a dynamic-columns store holds at least one key. Decided through the store's declared
+    /// string-keyed dictionary interface (or, failing a count, by enumerating it) so an implementation
+    /// that is not a non-generic <see cref="System.Collections.ICollection"/> is not mistaken for empty.
+    /// </summary>
+    /// <param name="store">The store value read from the entity, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the store exposes at least one key.</returns>
+    private static bool HasAnyDynamicColumn(object? store)
+    {
+        switch (store)
+        {
+            case null:
+                return false;
+            case System.Collections.ICollection collection:
+                return collection.Count > 0;
+            case IReadOnlyDictionary<string, object?> readOnly:
+                return readOnly.Count > 0;
+            case IDictionary<string, object?> dictionary:
+                return dictionary.Count > 0;
+            case IReadOnlyCollection<KeyValuePair<string, object?>> collection:
+                return collection.Count > 0;
+            case IEnumerable<KeyValuePair<string, object?>> enumerable:
+                // The declared store type guarantees a string-keyed dictionary; the enumeration is the
+                // last-resort probe for a shape that exposes no count, stopping at the first element.
+                foreach (var _ in enumerable)
+                    return true;
+
+                return false;
+            default:
+                return false;
+        }
     }
 
     /// <summary>Projects the synchronous source to ordinal value arrays; only valid when a sync source was supplied.</summary>

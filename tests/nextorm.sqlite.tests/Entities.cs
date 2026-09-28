@@ -76,6 +76,18 @@ public class DynamicColumnsEntity
     public Dictionary<string, object?> Extra { get; set; } = new();
 }
 
+[SqlTable("dynamic_write_entity")]
+public class DynamicWriteEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
+    [DynamicColumns]
+    public Dictionary<string, object?> Extra { get; set; } = new();
+}
+
 [SqlTable("eager_parent")]
 public sealed class EagerParent
 {

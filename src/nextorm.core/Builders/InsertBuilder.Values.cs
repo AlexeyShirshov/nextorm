@@ -152,9 +152,12 @@ public sealed partial class InsertBuilder<TEntity>
             _columns.Add(accumulator);
         }
 
-        if (_columns.Count == 0)
+        var dynamicColumns = DynamicColumnSet.FromEntities(_metadata, list, "INSERT");
+
+        if (_columns.Count == 0 && dynamicColumns is null)
             throw new BuildSqlCommandException($"Entity {typeof(TEntity)} has no writable column to insert.");
 
+        _dynamicColumns = dynamicColumns;
         _rowCount = list.Count;
         UseEntityValidation(list);
         return this;

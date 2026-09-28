@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
@@ -29,6 +30,7 @@ public sealed partial class MergeBuilder<TEntity>
     private readonly IEntityMetadata _metadata;
     private readonly List<ColumnAccumulator> _columns = [];
     private readonly List<MergeBranch> _branches = [];
+    private DynamicColumnSet? _dynamicColumns;
     private IReadOnlyList<TEntity>? _sourceEntities;
     private QueryCommand? _source;
     private int _rowCount;
@@ -207,10 +209,13 @@ public sealed partial class MergeBuilder<TEntity>
             _columns.Add(accumulator);
         }
 
-        if (_columns.Count == 0)
+        var dynamicColumns = DynamicColumnSet.FromEntities(_metadata, list, "MERGE");
+
+        if (_columns.Count == 0 && dynamicColumns is null)
             throw new BuildSqlCommandException($"Entity {typeof(TEntity)} has no writable column to merge.");
 
         _sourceEntities = list;
+        _dynamicColumns = dynamicColumns;
         _rowCount = list.Count;
         return this;
     }
@@ -294,6 +299,110 @@ public sealed partial class MergeBuilder<TEntity>
 
         _matchCondition = condition;
         return this;
+    }
+
+    /// <summary>
+    /// Rejects a match condition that references a mapped source column absent from the VALUES-derived
+    /// source. A VALUES source is built from the writable mapped columns only (identity/computed are
+    /// excluded), so any other mapped column has no matching derived column and must not be rendered as
+    /// <c>source.&lt;column&gt;</c>. Called only on the VALUES path: a query source projects the whole row,
+    /// generated columns included, so the same reference is valid there.
+    /// </summary>
+    /// <param name="condition">The <c>On(...)</c> or branch condition to inspect.</param>
+    /// <exception cref="NotSupportedException">The condition references a column the VALUES source does not declare.</exception>
+    private void ValidateValuesSourceCondition(LambdaExpression condition)
+    {
+        if (FindMissingSourceColumn(condition, _metadata, _columns) is { } missing)
+        {
+            throw new NotSupportedException(
+                $"Property {missing.Name} of {typeof(TEntity)} is not a column of the VALUES-derived merge source; " +
+                "a database-generated column is excluded from the source built from Using(entity)/Using(batch) and cannot be referenced there.");
+        }
+    }
+
+    /// <summary>
+    /// Finds the first mapped property referenced through the source lambda (<c>s</c>, the second
+    /// parameter) that is not among the derived source columns. A non-mapped member (for example a
+    /// dynamic-store key) is ignored.
+    /// </summary>
+    /// <param name="condition">The condition to inspect.</param>
+    /// <param name="metadata">The target entity metadata, resolving a CLR property to its mapped column.</param>
+    /// <param name="columns">The VALUES-derived source columns.</param>
+    /// <returns>The offending property, or <see langword="null"/> when every source reference is a source column.</returns>
+    private static PropertyInfo? FindMissingSourceColumn(LambdaExpression condition, IEntityMetadata metadata, IReadOnlyList<ColumnAccumulator> columns)
+    {
+        if (condition.Parameters.Count < 2)
+            return null;
+
+        var finder = new MissingSourceColumnFinder(condition.Parameters[1], metadata, columns);
+        finder.Visit(condition.Body);
+        return finder.Found;
+    }
+
+    /// <summary>
+    /// Collects the first source-rooted mapped property whose column is absent from the derived source.
+    /// </summary>
+    private sealed class MissingSourceColumnFinder : ExpressionVisitor
+    {
+        private readonly ParameterExpression _source;
+        private readonly IEntityMetadata _metadata;
+        private readonly IReadOnlyList<ColumnAccumulator> _columns;
+
+        public MissingSourceColumnFinder(ParameterExpression source, IEntityMetadata metadata, IReadOnlyList<ColumnAccumulator> columns)
+        {
+            _source = source;
+            _metadata = metadata;
+            _columns = columns;
+        }
+
+        /// <summary>The first offending property, or <see langword="null"/> when none was found.</summary>
+        public PropertyInfo? Found { get; private set; }
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (Found is null
+                && node.Member is PropertyInfo property
+                && IsRootedAtSource(node)
+                && IsMapped(property)
+                && !IsSourceColumn(property))
+            {
+                Found = property;
+            }
+
+            return base.VisitMember(node);
+        }
+
+        // A member access is rooted at the source when walking its receiver chain ends at the source
+        // parameter (so s.Id and s.Nested.Id are source accesses, while t.Id is not).
+        private bool IsRootedAtSource(Expression expression)
+        {
+            while (expression is MemberExpression member)
+                expression = member.Expression!;
+
+            return expression == _source;
+        }
+
+        private bool IsMapped(PropertyInfo property)
+        {
+            foreach (var candidate in _metadata.Properties)
+            {
+                if (candidate.PropertyInfo == property)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool IsSourceColumn(PropertyInfo property)
+        {
+            for (var i = 0; i < _columns.Count; i++)
+            {
+                if (_columns[i].Property.PropertyInfo == property)
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     /// <summary>Updates every non-key writable column from the source when the row already exists.</summary>
@@ -467,7 +576,7 @@ public sealed partial class MergeBuilder<TEntity>
 
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)
     {
-        if (_columns.Count == 0 && _source is null)
+        if (_columns.Count == 0 && _source is null && _dynamicColumns is null)
             throw new InvalidOperationException("No source rows were specified; call Using first.");
         if (_keys is null && _matchCondition is null)
             throw new InvalidOperationException("No match condition was specified; call OnKeys() or On(...).");
@@ -483,6 +592,21 @@ public sealed partial class MergeBuilder<TEntity>
         var columns = new InsertColumn[_columns.Count];
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
+
+        // The VALUES-derived source declares only the writable mapped columns; a condition that reaches a
+        // generated column through the source has no matching derived column. A query source projects the
+        // whole row (generated columns included), so its conditions are left to the provider.
+        if (_source is null)
+        {
+            if (_matchCondition is not null)
+                ValidateValuesSourceCondition(_matchCondition);
+
+            foreach (var branch in _branches)
+            {
+                if (branch.Condition is not null)
+                    ValidateValuesSourceCondition(branch.Condition);
+            }
+        }
 
         if (_branches.Count > 0 || _matchCondition is not null)
         {
@@ -500,7 +624,7 @@ public sealed partial class MergeBuilder<TEntity>
             }
 
             var registry = hasCondition ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
-            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry);
+            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns);
         }
 
         if (_source is not null)
@@ -516,10 +640,10 @@ public sealed partial class MergeBuilder<TEntity>
                 updateColumns.Add(column.Property);
         }
 
-        if (updateColumns.Count == 0)
+        if (updateColumns.Count == 0 && _dynamicColumns is null)
             throw new NotSupportedException($"Entity {typeof(TEntity)} has only key columns; a key upsert needs at least one non-key column to update.");
 
-        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns);
+        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns, dynamicColumns: _dynamicColumns);
     }
 
     /// <summary>Builds the command whose <c>RETURNING</c>/<c>OUTPUT</c> clause returns <paramref name="returningColumns"/>.</summary>
