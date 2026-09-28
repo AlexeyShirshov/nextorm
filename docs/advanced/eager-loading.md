@@ -6,7 +6,7 @@
 
 ## Overview
 
-nextorm has no navigation metadata and does not infer relationships, so a graph is not loaded from a mapper convention. `LoadWith` declares one level of eager loading explicitly: a parent collection member, a factory that builds the child query, and the two key selectors that pair children with parents. The relationship lives on the query, not in the entity metadata.
+nextorm does not infer relationships, so a graph is not loaded from a mapper convention. `LoadWith` declares one level of eager loading explicitly: a parent collection member, a factory that builds the child query, and the two key selectors that pair children with parents — it does not consume relationship metadata. The association lives on the query, not in the entity metadata; for the declared-metadata, single-round-trip alternative see [`JoinInto`](relationships.md).
 
 This is the nextorm equivalent of linq2db `LoadWith` and EF Core `Include`, restricted to the level-one split-query shape.
 
@@ -102,6 +102,6 @@ The load specification is honoured **only** by the list terminals:
 
 `ToCommand()` ignores it deliberately, which is what lets the child query run without recursing into the parent's loader. Every other terminal built on `ToCommand()` — `First`, `Count`, `Any`, a `Select` projection, `ToAsyncEnumerable`, and a `QueryCommand<T>` obtained directly — therefore returns the parent rows **without** touching the child collections. Materialize the parents with `ToList`/`ToListAsync` when the collections must be filled.
 
-## No navigation metadata
+## Relationship metadata and `JoinInto`
 
-`LoadWith` does not create or consume navigation metadata; the association is expressed by the two key selectors at each call site. Relationships are still not inferred from conventions or foreign keys, and are not exposed through entity metadata (tracked as issue [#105](https://github.com/AlexeyShirshov/nextorm/issues/105)). A graph is loaded explicitly, one declared level per call.
+`LoadWith` does not create or consume navigation metadata; the association is expressed by the two key selectors at each call site. nextorm also has a metadata model for **declared** relationships (`HasMany`/`HasOne` or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)) and a single-query loader, [`JoinInto`](relationships.md), which fills one child collection from one `LEFT JOIN` (or `INNER JOIN`) and stitches the denormalized rows back onto the deduplicated parents. Use `JoinInto` when one denormalized round trip is preferable, and `LoadWith` when the split query is; both share the same assignment contract. Relationships are still never inferred from conventions or foreign keys. A graph is loaded explicitly, one declared level per call.

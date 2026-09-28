@@ -301,7 +301,8 @@ internal static class RowMapperFactory
                     Expression.Constant(dynamicColumns),
                     DynamicColumnsReadMI,
                     param,
-                    Expression.Constant(startIndex)));
+                    Expression.Constant(startIndex)),
+                column => Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)));
 
             lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
         }
@@ -416,6 +417,7 @@ internal static class RowMapperFactory
                     signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.Converter is null ? 0 : RuntimeHelpers.GetHashCode(column.Converter));
+                    signature = signature * 31 + (column.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
                 }
             }
         }

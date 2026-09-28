@@ -89,6 +89,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists insert_entity;
         drop table if exists merge_entity;
         drop table if exists delete_entity;
+        drop table if exists eager_note;
         drop table if exists eager_child;
         drop table if exists eager_parent;
 
@@ -191,6 +192,13 @@ internal sealed class SqlServerTestProvider : ITestProvider
             id int not null primary key,
             parent_id int not null,
             name nvarchar(100) null
+        );
+
+        create table eager_note
+        (
+            id int not null primary key,
+            parent_id int not null,
+            text nvarchar(100) null
         );
         """;
 }

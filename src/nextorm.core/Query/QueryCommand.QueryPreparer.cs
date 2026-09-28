@@ -321,24 +321,32 @@ public partial class QueryCommand
                         var args = ctor.Arguments;
                         var argsCount = args.Count;
 
-                        selectList = new SelectExpression[argsCount];
+                        var expanded = new List<SelectExpression>(argsCount);
 
                         var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
                         using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < argsCount; idx++)
                         {
                             if (cancellationToken.IsCancellationRequested)
-                                return (selectList, columnsPlanHash);
+                                return (expanded.ToArray(), columnsPlanHash);
 
-                            SelectExpression selExp;
                             var arg = args[idx];
                             var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                            // An entity-typed projection item (for example Right = p.Item2) is expanded
+                            // into its mapped scalar columns so the SQL row mapper can read them; the
+                            // materializer rebuilds the entity from the group (and produces null when
+                            // every column is SQL NULL, i.e. the missing side of an outer join).
+                            if (cmd._dataContext!.NeedMapping
+                                && TryExpandEntityItem(ctorParam.ParameterType, arg, idx, null, innerQueryVisitor, expanded, cancellationToken))
+                                continue;
+
                             var (durationUnit, durationPrecision) = ResolveDuration(srcMetadata, arg);
                             var converter = ResolveConverter(srcMetadata, arg);
 
-                            selExp = new SelectExpression(ctorParam.ParameterType)
+                            var selExp = new SelectExpression(ctorParam.ParameterType)
                             {
-                                Index = idx,
+                                Index = expanded.Count,
                                 PropertyName = ctorParam.Name!,
                                 Expression = innerQueryVisitor.Visit(arg),
                                 DurationUnit = durationUnit,
@@ -348,19 +356,21 @@ public partial class QueryCommand
                                 IsLobStreaming = TableAliasAccessors.IsStreaming(arg),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
-                            if (!cmd._dontCache && !noHash)
-                                selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                            selectList[idx] = selExp;
-
-                            if (!cmd._dontCache && !noHash) unchecked
-                                {
-
-                                    columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                                }
+                            expanded.Add(selExp);
                         }
 
+                        selectList = expanded.ToArray();
+                        for (var i = 0; i < selectList.Length; i++)
+                            selectList[i].Index = i;
 
-
+                        if (!cmd._dontCache && !noHash) unchecked
+                        {
+                            for (var i = 0; i < selectList.Length; i++)
+                            {
+                                selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
+                                columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                            }
+                        }
                     }
                     else if (TypeFacts.IsSingleColumnProjection(cmd._exp.Body.Type)
                         || bodyIsStreaming
@@ -448,7 +458,18 @@ public partial class QueryCommand
                     if (srcType is null)
                         throw new QueryPreparationException("Lambda expression or source type must exists");
 
-                    if (cmd._dataContext!.NeedMapping)
+                    if (cmd._dataContext!.NeedMapping
+                        && (cmd.ProjectionType ?? srcType).IsAssignableTo(typeof(IProjection))
+                        && TryBuildProjectionSelectList(cmd, noHash, cmd.ProjectionType ?? srcType, cancellationToken, out var projectionColumns))
+                    {
+                        selectList = projectionColumns;
+                        if (!cmd._dontCache && !noHash)
+                            for (var i = 0; i < projectionColumns.Length; i++) unchecked
+                            {
+                                columnsPlanHash = columnsPlanHash * 13 + projectionColumns[i].PlanHashCode;
+                            }
+                    }
+                    else if (cmd._dataContext!.NeedMapping)
                     {
                         DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta);
                         if (entityMeta is not null
@@ -510,6 +531,97 @@ public partial class QueryCommand
             }
 
             return (selectList, columnsPlanHash);
+        }
+
+        /// <summary>
+        /// Builds the projection of a bare join command whose result type is an <see cref="IProjection"/>
+        /// (a <c>JoinedEntityBuilder</c> used without <c>Select</c>): every entity-typed item is expanded
+        /// into its mapped scalar columns, tagged with the item it belongs to so the row materializer can
+        /// rebuild the entities. Returns <see langword="false"/> when the source is not such a projection,
+        /// leaving the caller's existing behaviour untouched.
+        /// </summary>
+        private static bool TryBuildProjectionSelectList(QueryCommand cmd, bool noHash, Type srcType, CancellationToken cancellationToken, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SelectExpression[]? selectList)
+        {
+            selectList = null;
+            if (cmd._joins is not { Length: > 0 } || !srcType.IsAssignableTo(typeof(IProjection)))
+                return false;
+
+            var itemTypes = srcType.GetGenericArguments();
+            var projectionParam = Expression.Parameter(srcType);
+            var output = new List<SelectExpression>(itemTypes.Length);
+
+            for (var i = 0; i < itemTypes.Length; i++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return false;
+
+                var memberName = $"Item{i + 1}";
+                var itemExpression = (Expression)Expression.Property(projectionParam, memberName);
+
+                // The first item of a JoinInto pair command is the query's own source: it renders
+                // against the main table alias, so it must not be re-rooted onto the projection
+                // parameter (that would drop the alias). Later items re-root onto their ItemN.
+                var reRoot = !(i == 0 && cmd.ProjectionType is not null && itemTypes[i] == cmd._srcType);
+
+                // Every item must be a mapped entity; a scalar item cannot be expanded from an entity
+                // source and is left to the caller's existing (rejecting) path rather than materialized
+                // as a wrong shape.
+                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot))
+                    return false;
+            }
+
+            var columns = output.ToArray();
+            for (var i = 0; i < columns.Length; i++)
+            {
+                columns[i].Index = i;
+                if (!cmd._dontCache && !noHash)
+                    columns[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(columns[i]);
+            }
+
+            selectList = columns;
+            return true;
+        }
+
+        /// <summary>
+        /// Expands one entity-typed projection item into its mapped scalar <see cref="SelectExpression"/>s.
+        /// Each column is re-rooted onto <paramref name="itemExpression"/> (so it renders against the
+        /// item's table alias) and tagged with a shared <see cref="ProjectionEntityItem"/>. Returns
+        /// <see langword="false"/> when <paramref name="itemType"/> is not a mapped entity.
+        /// </summary>
+        private static bool TryExpandEntityItem(
+            Type itemType,
+            Expression itemExpression,
+            int slot,
+            PropertyInfo? member,
+            CorrelatedQueryExpressionVisitor? visitor,
+            List<SelectExpression> output,
+            CancellationToken cancellationToken,
+            bool reRoot = true)
+        {
+            if (!DataContextCache.Metadata.TryGetValue(itemType, out var metadata) || metadata.Properties.Count == 0)
+                return false;
+
+            var (columns, completed) = EntitySelectListBuilder.Build(itemType, metadata, cancellationToken);
+            if (!completed)
+                return false;
+
+            var group = new ProjectionEntityItem(slot, itemType, member);
+
+            for (var i = 0; i < columns.Length; i++)
+            {
+                var column = columns[i];
+
+                if (reRoot && column.Expression is LambdaExpression { Parameters.Count: 1 } lambda)
+                    column.Expression = new ReplaceParameterInstanceVisitor(lambda.Parameters[0], itemExpression).Visit(lambda.Body);
+
+                if (visitor is not null)
+                    column.Expression = visitor.Visit(column.Expression!);
+
+                column.ProjectionItem = group;
+                output.Add(column);
+            }
+
+            return true;
         }
 
         // Resolves the declared duration storage unit of a directly projected entity property, so a
@@ -603,7 +715,16 @@ public partial class QueryCommand
 
         private static LambdaExpression? InjectMainSourceFilters(QueryCommand cmd, Type srcType)
         {
-            var filters = GetFilters(cmd, srcType);
+            // An in-memory JoinInto pair command has the Projection<parent, child…> as its source, so a
+            // filter lookup keyed off the source type would miss the parent entity's filters. Resolve
+            // the parent type from the projection's first item and re-root the filter onto Item1, so the
+            // parent filters apply exactly like the SQL path (whose source type is already the parent).
+            var isJoinIntoProjection = cmd.ProjectionType is not null
+                && srcType.IsAssignableTo(typeof(IProjection))
+                && srcType.GetGenericArguments().Length > 0;
+            var filterEntityType = isJoinIntoProjection ? srcType.GetGenericArguments()[0] : srcType;
+
+            var filters = GetFilters(cmd, filterEntityType);
             if (filters.Count == 0)
                 return cmd._condition;
 
@@ -612,10 +733,13 @@ public partial class QueryCommand
                 ? typedCondition.Parameters[0]
                 : Expression.Parameter(srcType);
             Expression? body = condition?.Body;
+            Expression filterTarget = isJoinIntoProjection
+                ? Expression.Property(parameter, "Item1")
+                : parameter;
 
             for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
             {
-                var filterBody = BuildFilterBody(filters[i].Lambda, cmd._dataContext!, parameter);
+                var filterBody = BuildFilterBody(filters[i].Lambda, cmd._dataContext!, filterTarget);
                 body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
             }
 
@@ -647,7 +771,7 @@ public partial class QueryCommand
             join.SetJoinCondition(Expression.Lambda(body, joinCondition.Parameters));
         }
 
-        private static Expression BuildFilterBody(LambdaExpression filter, IDataContext dataContext, ParameterExpression entityParameter)
+        private static Expression BuildFilterBody(LambdaExpression filter, IDataContext dataContext, Expression entityParameter)
         {
             if (filter.Parameters.Count == 0)
                 throw new NotSupportedException($"The query filter registered for the {entityParameter.Type.Name} source declares no entity parameter.");

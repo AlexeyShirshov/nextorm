@@ -43,6 +43,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private Expression<Func<TEntity, bool>>? _having;
     private List<Sorting>? _sorting;
     private List<IEagerLoadSpec<TEntity>>? _loadSpecs;
+    private List<IJoinIntoSpec<TEntity>>? _joinIntos;
     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     private string? _table;
@@ -88,6 +89,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// them so building the command cannot recurse into the loader.
     /// </summary>
     internal IReadOnlyList<IEagerLoadSpec<TEntity>>? LoadSpecs => _loadSpecs;
+    /// <summary>
+    /// The <c>JoinInto</c> declarations applied to this builder, or <c>null</c> when the builder carries
+    /// none. The list terminals execute one denormalized command and stitch the children onto the
+    /// deduplicated parents; the non-list terminals exclude the joins and see the parent only.
+    /// </summary>
+    internal IReadOnlyList<IJoinIntoSpec<TEntity>>? JoinIntos => _joinIntos;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
     /// <summary>
     /// The ordering keys applied by <c>OrderBy</c>/<c>OrderByDescending</c>, or <c>null</c> when the
@@ -196,6 +203,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <returns>The command that produces <typeparamref name="TResult"/> rows.</returns>
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
+        EnsureNoJoinIntos(nameof(Select));
+
         var cmd = _dataProvider.CreateCommand<TResult>(new QueryDefinition
         {
             Exp = exp,
@@ -225,6 +234,16 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         if (Ctes is not null)
             cmd.Ctes = Ctes;
 
+        ApplyCommandOptions(cmd);
+
+        return cmd;
+    }
+    /// <summary>
+    /// Copies the builder's provider-independent modifiers onto an already-created command. Shared by
+    /// <see cref="Select{TResult}"/>, <see cref="ToCommand"/> and the <c>JoinInto</c> pair command.
+    /// </summary>
+    private void ApplyCommandOptions(QueryCommand cmd)
+    {
         cmd.GroupingType = GroupingType;
         cmd.TableHints = TableHints;
         cmd.IndexHints = IndexHints;
@@ -242,10 +261,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
-        // OnCommandCreated(cmd);
-        //RaiseCommandCreated(cmd);
-
-        return cmd;
     }
     /// <summary>
     /// Projects each row with <paramref name="selector"/> and exposes the result as a derived table,
@@ -266,7 +281,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <returns>A builder over the derived table that can be composed further.</returns>
     /// <exception cref="NotSupportedException">A following <c>Join</c>/<c>Apply</c> on the derived source is rejected by the in-memory provider.</exception>
     public EntityBuilder<TResult> As<TResult>(Expression<Func<TEntity, TResult>> selector)
-        => _dataProvider.From(Select(selector));
+    {
+        EnsureNoJoinIntos(nameof(As));
+
+        return _dataProvider.From(Select(selector));
+    }
     /// <summary>
     /// Creates a SELECT command over the entity type without a custom projection, carrying every
     /// modifier set on this builder.
@@ -302,23 +321,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         if (Ctes is not null)
             cmd.Ctes = Ctes;
 
-        cmd.GroupingType = GroupingType;
-        cmd.TableHints = TableHints;
-        cmd.IndexHints = IndexHints;
-        cmd.IndexHintKind = IndexHintKind;
-        cmd.TablesInScopeHints = TablesInScopeHints;
-        cmd.QuoteIdentifiers = QuoteIdentifiers;
-        cmd.NamingConvention = NamingConvention;
-        cmd.KeywordCase = KeywordCase;
-        cmd.Tag = Tag;
-        cmd.CommandTimeout = CommandTimeout;
-        cmd.GroupingSets = GroupingSets;
-        cmd.GroupByWithTotals = GroupByWithTotals;
-        cmd.LimitBy = LimitByClause;
-        cmd.DistinctOn = _distinctOn;
-        cmd.TableSample = _tablesample;
-        cmd.Temporal = _temporal;
-        cmd.RowLock = _rowLock;
+        ApplyCommandOptions(cmd);
 
         // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
@@ -424,6 +427,414 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that fills the <paramref name="collection"/>
+    /// member of every parent when the query is enumerated by a list terminal. The returned builder is a
+    /// copy; the current builder is unchanged.
+    /// <para>
+    /// The join is part of the query: <see cref="ToCommand"/> emits
+    /// <c>... from Parent as t1 left join Child as t2 on &lt;predicate&gt;</c> while still materializing
+    /// <typeparamref name="TEntity"/> rows, so a bare <see cref="ToCommand"/> may repeat a parent once
+    /// per matching child. The parent/child keys are resolved from the declared relationship metadata; a relationship
+    /// that is not declared (or is many-to-many/one-to-one, or uses a composite key) is rejected with
+    /// <see cref="NotSupportedException"/> — use the explicit-key overload instead. The list terminals
+    /// execute one denormalized command and stitch the children onto the deduplicated parents; the
+    /// non-list terminals exclude this join and evaluate the parent only.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The child source.</param>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind or relationship is not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection)
+        => JoinInto(child, predicate, collection, JoinType.Left);
+    /// <summary>
+    /// Declares a typed join to <paramref name="child"/> (see
+    /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, ICollection{TChild}}})"/>)
+    /// that fills the <paramref name="collection"/> member. Only <see cref="JoinType.Inner"/> and
+    /// <see cref="JoinType.Left"/> are accepted; any other kind throws <see cref="NotSupportedException"/>.
+    /// The returned builder is a copy; the current builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The child source.</param>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="joinType">The join kind; <see cref="JoinType.Inner"/> or <see cref="JoinType.Left"/>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind or relationship is not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        JoinType joinType)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentNullException.ThrowIfNull(collection);
+        EnsureJoinIntoSupported(joinType);
+        EnsureJoinIntoSource(nameof(JoinInto));
+
+        var relationship = ResolveJoinIntoRelationship(collection);
+        var spec = new JoinIntoSpec<TEntity, TChild>(child, predicate, collection, relationship, joinType);
+        return AddJoinInto(spec, new JoinExpression(predicate, joinType) { From = GetJoinSource(child) });
+    }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that fills the <paramref name="collection"/>
+    /// member, using the explicit <paramref name="parentKey"/>/<paramref name="childKey"/> selectors
+    /// instead of declared relationship metadata (symmetrical to the <c>LoadWith</c> fallback). The
+    /// returned builder is a copy; the current builder is unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <typeparam name="TKey">The non-nullable key type shared by the two selectors.</typeparam>
+    /// <param name="child">The child source.</param>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="collection">The parent-side collection member the joined children fill.</param>
+    /// <param name="parentKey">Selects the parent key used to group the rows.</param>
+    /// <param name="childKey">Selects the child key used to group the rows.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The key selectors select different types.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild, TKey>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        Expression<Func<TEntity, TKey>> parentKey,
+        Expression<Func<TChild, TKey>> childKey)
+        where TKey : notnull
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentNullException.ThrowIfNull(collection);
+        ArgumentNullException.ThrowIfNull(parentKey);
+        ArgumentNullException.ThrowIfNull(childKey);
+        EnsureJoinIntoSource(nameof(JoinInto));
+        ValidateJoinIntoKeys(parentKey, childKey);
+
+        var spec = new JoinIntoSpec<TEntity, TChild, TKey>(child, predicate, collection, parentKey, childKey, JoinType.Left);
+        return AddJoinInto(spec, new JoinExpression(predicate, JoinType.Left) { From = GetJoinSource(child) });
+    }
+    /// <summary>Validates the <c>JoinInto</c> join kind: only inner and left edges are supported.</summary>
+    private static void EnsureJoinIntoSupported(JoinType joinType)
+    {
+        if (joinType is not (JoinType.Inner or JoinType.Left))
+            throw new NotSupportedException(
+                $"JoinInto supports only {nameof(JoinType.Inner)} and {nameof(JoinType.Left)} joins, not {joinType}.");
+    }
+    /// <summary>Rejects <c>JoinInto</c> over a derived (<c>As</c>) or joined projection source.</summary>
+    private void EnsureJoinIntoSource(string method)
+    {
+        if (_query is not null || typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                $"{method} cannot be applied to a derived (As) or joined projection source.");
+    }
+    /// <summary>
+    /// Finds the declared relationship whose navigation is <paramref name="collection"/> on the parent,
+    /// rejecting the unsupported cardinalities/keys and an undeclared relationship.
+    /// </summary>
+    private IRelationshipMetadata ResolveJoinIntoRelationship<TChild>(
+        Expression<Func<TEntity, ICollection<TChild>>> collection)
+    {
+        var property = JoinIntoSpecHelpers.TryResolveCollectionProperty(collection)
+            ?? throw new NotSupportedException(
+                "JoinInto requires the collection selector to be a property access so the declared relationship can be resolved.");
+
+        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(null);
+        foreach (var relationship in metadata.Relationships)
+        {
+            if (relationship.Navigation is null || !relationship.Navigation.Equals(property))
+                continue;
+
+            if (relationship.Kind is RelationshipKind.ManyToMany or RelationshipKind.OneToOne)
+                throw new NotSupportedException(
+                    $"JoinInto does not support the {relationship.Kind} relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
+
+            if (relationship.RelatedType != typeof(TChild))
+                throw new NotSupportedException(
+                    $"The relationship declared on '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
+
+            if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
+                throw new NotSupportedException(
+                    $"JoinInto does not support a composite key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
+
+            return relationship;
+        }
+
+        throw new NotSupportedException(
+            $"JoinInto on '{typeof(TEntity).Name}.{property.Name}' requires an explicitly declared relationship; " +
+            "declare it with HasMany/HasOne (or [Relationship]) or use the explicit-key JoinInto overload.");
+    }
+    /// <summary>Rejects explicit key selectors whose selected property types do not agree, or that are not member accesses.</summary>
+    private static void ValidateJoinIntoKeys<TChild, TKey>(
+        Expression<Func<TEntity, TKey>> parentKey,
+        Expression<Func<TChild, TKey>> childKey)
+        where TKey : notnull
+    {
+        // A computed key has no stable plan identity, so two distinct selectors would share a cached
+        // plan; reject it rather than fold both into the same key.
+        JoinIntoSpecHelpers.RequireMemberName(parentKey);
+        JoinIntoSpecHelpers.RequireMemberName(childKey);
+
+        var parentType = JoinIntoSpecHelpers.TryResolveKeyType(parentKey);
+        var childType = JoinIntoSpecHelpers.TryResolveKeyType(childKey);
+        if (parentType is null || childType is null)
+            return;
+
+        var keyType = JoinIntoSpecHelpers.Unwrap(typeof(TKey));
+        if (parentType != childType || parentType != keyType)
+            throw new NotSupportedException(
+                $"The JoinInto key selectors must select the same property type ({nameof(TKey)}): " +
+                $"the parent key selects '{parentType.Name}' and the child key selects '{childType.Name}'.");
+    }
+    /// <summary>
+    /// Returns a copy of this builder carrying the join declaration: the join is appended to the rendered
+    /// join list and the spec is appended to the stitching metadata list. Copying keeps the source
+    /// builder unchanged and lets a following <c>Where</c> keep the join.
+    /// </summary>
+    private EntityBuilder<TEntity> AddJoinInto(IJoinIntoSpec<TEntity> spec, JoinExpression join)
+    {
+        if (_joins is { } existing && existing.Exists(j => !j.IsJoinInto))
+            throw new NotSupportedException(
+                "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
+
+        join.IsJoinInto = true;
+        join.JoinIntoIdentity = spec.Identity;
+        var b = Clone();
+        b._joinIntos = _joinIntos is null ? [spec] : [.. _joinIntos, spec];
+        b._joins = _joins is null ? [join] : [.. _joins, join];
+        return b;
+    }
+    /// <summary>
+    /// Rejects projecting a builder that carries a <c>JoinInto</c>. <c>Select</c> keeps the denormalized
+    /// joins without stitching (repeating parents, never grouping children), and <c>As</c> would drop the
+    /// stitching metadata altogether, so both silently produce the wrong shape; only the list terminals
+    /// stitch and they are the supported way to materialize <c>JoinInto</c> collections.
+    /// </summary>
+    private void EnsureNoJoinIntos(string method)
+    {
+        if (_joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                $"JoinInto cannot be combined with {method}; declare JoinInto on a plain entity source and materialize with ToList/ToListAsync.");
+    }
+    /// <summary>
+    /// Returns a copy of this builder without the <c>JoinInto</c> joins (and their stitching metadata),
+    /// so the non-list terminals evaluate the parent only. The source builder is unchanged.
+    /// </summary>
+    internal EntityBuilder<TEntity> WithoutJoinIntos()
+    {
+        if (_joinIntos is not { Count: > 0 } || _joins is null)
+            return this;
+
+        var b = Clone();
+        var kept = new List<JoinExpression>(_joins.Count);
+        foreach (var join in _joins)
+        {
+            if (!join.IsJoinInto)
+                kept.Add(join);
+        }
+
+        b._joins = kept.Count == 0 ? null : kept;
+        b._joinIntos = null;
+        return b;
+    }
+    /// <summary>Builds the parent-only command for the non-list terminals (excludes the <c>JoinInto</c> joins).</summary>
+    internal QueryCommand<TEntity> ToParentCommand() => WithoutJoinIntos().ToCommand();
+    /// <summary>Builds a parent-only projection command for the aggregate terminals (excludes the <c>JoinInto</c> joins).</summary>
+    internal QueryCommand<TResult> SelectParent<TResult>(Expression<Func<TEntity, TResult>> exp) => WithoutJoinIntos().Select(exp);
+    /// <summary>
+    /// Builds the single denormalized command the list terminals execute: one row per
+    /// <c>(parent, child…)</c> pair, materialized through the entity-projection capability. When the
+    /// builder pages parents on a SQL provider the parent subquery carries the limit/offset so the join
+    /// wraps around it; the in-memory provider pages the deduplicated parents instead.
+    /// </summary>
+    internal QueryCommand CreateJoinIntoPairCommand()
+    {
+        var specs = _joinIntos!;
+        var childTypes = new Type[specs.Count];
+        for (var i = 0; i < specs.Count; i++)
+            childTypes[i] = specs[i].ChildEntityType;
+
+        var projectionType = JoinIntoProjectionFactory.Create(typeof(TEntity), childTypes);
+
+        var isSql = _dataProvider.NeedMapping;
+        var sourceType = isSql ? _sourceEntityType ?? typeof(TEntity) : projectionType;
+        LambdaExpression? condition = _condition;
+        var sorting = _sorting?.ToArray();
+        LambdaExpression? group = _group;
+        LambdaExpression? having = _having;
+        FromExpression? from = null;
+
+        // The in-memory provider executes joins through its projection engine, so its command source
+        // type is the projection; a parent-typed WHERE/ORDER BY/GROUP BY/HAVING must be re-rooted onto
+        // the parent item. The SQL provider keeps the parent source type and expands the projection
+        // from metadata instead.
+        if (!isSql)
+        {
+            var projectionParameter = Expression.Parameter(projectionType, "p");
+            var parentItem = Expression.Property(projectionParameter, "Item1");
+
+            if (condition is not null)
+            {
+                var body = new ReplaceTargetParameterVisitor(condition.Parameters[0], parentItem).Visit(condition.Body);
+                condition = Expression.Lambda(body, projectionParameter);
+            }
+
+            if (sorting is not null)
+            {
+                for (var i = 0; i < sorting.Length; i++)
+                {
+                    if (sorting[i].SortExpression is not LambdaExpression { Parameters.Count: 1 } sort)
+                        continue;
+
+                    var body = new ReplaceTargetParameterVisitor(sort.Parameters[0], parentItem).Visit(sort.Body);
+                    sorting[i] = new Sorting(Expression.Lambda(body, projectionParameter)) { Direction = sorting[i].Direction };
+                }
+            }
+
+            if (group is not null)
+            {
+                var body = new ReplaceTargetParameterVisitor(group.Parameters[0], parentItem).Visit(group.Body);
+                group = Expression.Lambda(body, projectionParameter);
+            }
+
+            if (having is not null)
+            {
+                var body = new ReplaceTargetParameterVisitor(having.Parameters[0], parentItem).Visit(having.Body);
+                having = Expression.Lambda(body, projectionParameter);
+            }
+        }
+
+        // Parent paging applies exactly once. On a SQL provider the join wraps around a paged parent
+        // subquery; the in-memory provider pages the deduplicated parents in the stitcher. The pair
+        // command itself must not carry the limit/offset, or the denormalized rows (not parents) page.
+        if (isSql && !Paging.IsEmpty)
+        {
+            from = new FromExpression(ToParentCommand());
+            condition = null;
+        }
+
+        var cmd = _dataProvider.CreateCommand(projectionType, new QueryDefinition
+        {
+            SrcType = sourceType,
+            // Set on both providers: the SQL path uses it to expand the projection's entity items, the
+            // in-memory path uses it to resolve the parent entity behind the Projection<…> source so the
+            // parent's global query filters still apply (QueryPreparer.InjectMainSourceFilters).
+            ProjectionType = projectionType,
+            Condition = condition,
+            IgnoreFilters = _ignoreFilters,
+            Joins = isSql ? _joins?.ToArray() : BuildInMemoryJoinIntos(),
+            Paging = default,
+            Sorting = sorting,
+            Group = group,
+            Having = having,
+            Logger = Logger,
+            IsDistinct = IsDistinct,
+            Final = IsFinal,
+            SampleRatio = SampleRatio,
+            SampleOffset = SampleOffset,
+            Settings = _settings,
+            PreWhere = _preWhere,
+            ArrayJoins = _arrayJoins,
+            Windows = _windows,
+            ArrayJoinKind = _arrayJoinKind,
+            BindArrayJoinElement = _bindArrayJoinElement,
+        });
+
+        cmd.From = from ?? ResolveSource();
+
+        if (Ctes is not null)
+            cmd.Ctes = Ctes;
+
+        ApplyCommandOptions(cmd);
+
+        return cmd;
+    }
+
+    /// <summary>
+    /// Rewrites the <c>JoinInto</c> join conditions for the in-memory provider. Its join engine threads
+    /// an accumulated projection through the joins, so the second and later conditions must read the
+    /// parent through <c>Item1</c> of that projection rather than through the bare parent parameter.
+    /// </summary>
+    private JoinExpression[]? BuildInMemoryJoinIntos()
+    {
+        if (_joins is null || _joinIntos is null)
+            return _joins?.ToArray();
+
+        // By contract every preceding join is a JoinInto: mixing regular joins with JoinIntos is
+        // rejected at declaration time (see AddJoinInto/AddSemiAntiJoin/CreateJoined). The in-memory
+        // join engine threads an accumulated Projection<TEntity, …> through every join, and each
+        // JoinInto appends exactly one item, so the arity of the projection a JoinInto reads is simply
+        // its index in the join list.
+        var joins = new JoinExpression[_joins.Count];
+        var precedingTypes = new List<Type>(_joins.Count);
+
+        for (var i = 0; i < _joins.Count; i++)
+        {
+            var join = _joins[i];
+
+            // The first join already starts from the bare parent (arity 1); every later JoinInto reads
+            // the parent through Item1 of the projection accumulated so far.
+            if (join.IsJoinInto && i > 0 && join.JoinCondition is { Parameters.Count: 2 } condition)
+            {
+                var leftType = JoinIntoProjectionFactory.Create(typeof(TEntity), precedingTypes);
+                var leftParameter = Expression.Parameter(leftType, "l");
+                var rewritten = ReRootJoinCondition(condition, leftParameter);
+                // Re-root the original condition too: the preparer injects the joined entity's global
+                // filters from this field and installs the result as the join condition, so a bare-parent
+                // original would overwrite the re-rooted condition below with the wrong parameter.
+                var original = join.OriginalJoinCondition is { Parameters.Count: 2 } originalCondition
+                    ? ReRootJoinCondition(originalCondition, leftParameter)
+                    : join.OriginalJoinCondition;
+
+                joins[i] = new JoinExpression(rewritten, join.JoinType)
+                {
+                    From = join.From,
+                    EntityType = join.EntityType,
+                    Strictness = join.Strictness,
+                    IsGlobal = join.IsGlobal,
+                    JoinHint = join.JoinHint,
+                    OriginalJoinCondition = original,
+                    IsJoinInto = true,
+                    JoinIntoIdentity = join.JoinIntoIdentity,
+                };
+            }
+            else
+            {
+                joins[i] = join;
+            }
+
+            precedingTypes.Add(JoinSecondType(join));
+        }
+
+        return joins;
+    }
+
+    /// <summary>
+    /// Re-roots a two-parameter join condition onto the projection the in-memory join engine has
+    /// accumulated so far: the left-hand (parent) parameter reads through <c>Item1</c>, exactly like the
+    /// rewritten <see cref="JoinExpression.JoinCondition"/>. Applied to the original condition as well,
+    /// because the preparer injects the joined entity's global filters from that field and installs the
+    /// result as the condition — a bare-parent original would silently overwrite the re-rooted condition.
+    /// </summary>
+    private static LambdaExpression ReRootJoinCondition(LambdaExpression condition, ParameterExpression leftParameter)
+    {
+        var body = new ReplaceTargetParameterVisitor(condition.Parameters[0], Expression.Property(leftParameter, "Item1"))
+            .Visit(condition.Body);
+        return Expression.Lambda(body, leftParameter, condition.Parameters[1]);
+    }
+
+    /// <summary>
+    /// The type the in-memory engine appends to the accumulated projection for <paramref name="join"/>:
+    /// the joined entity from the condition's second parameter, or <see cref="JoinExpression.EntityType"/>
+    /// for a conditionless join.
+    /// </summary>
+    private static Type JoinSecondType(JoinExpression join)
+        => join.JoinCondition is { Parameters.Count: 2 } condition
+            ? condition.Parameters[1].Type
+            : join.EntityType ?? typeof(object);
     /// <summary>
     /// Adds the ClickHouse <c>FINAL</c> modifier to the primary <c>FROM</c> table (a forced merge of a
     /// ReplacingMergeTree/CollapsingMergeTree before the read). Requires a dialect that supports it (see
@@ -632,7 +1043,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Strictness = strictness ?? last.Strictness,
             IsGlobal = isGlobal || last.IsGlobal,
             JoinHint = joinHint ?? last.JoinHint,
-            OriginalJoinCondition = last.OriginalJoinCondition
+            ApplySource = last.ApplySource,
+            OriginalJoinCondition = last.OriginalJoinCondition,
+            // A join modifier on a JoinInto must not degrade it to a regular join: without these the
+            // non-list terminals would stop excluding it and the plan identity would change.
+            IsJoinInto = last.IsJoinInto,
+            JoinIntoIdentity = last.JoinIntoIdentity
         };
 
         b.OnLastJoinReplaced(joins[^1]);
@@ -981,6 +1397,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._sourceEntityType = _sourceEntityType;
         dst._bindArrayJoinElement = _bindArrayJoinElement;
         dst._loadSpecs = _loadSpecs is null ? null : [.. _loadSpecs];
+        dst._joinIntos = _joinIntos is null ? null : [.. _joinIntos];
+        dst._joins = _joins is null ? null : [.. _joins];
     }
     /// <summary>
     /// Copies every piece of query state whose type does not depend on the projection parameter, so it
@@ -1245,6 +1663,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         => JoinCore(query, JoinType.Paste, null);
     private EntityBuilder<TEntity> AddSemiAntiJoin(FromExpression rightSource, LambdaExpression joinCondition, JoinType joinType)
     {
+        if (_joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
+
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
 
@@ -1398,6 +1820,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     private JoinedEntityBuilder<TEntity, TJoinEntity> CreateJoined<TJoinEntity>(JoinExpression join, QueryCommand? query)
     {
+        if (_joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
+
         var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, TablesInScopeHints = TablesInScopeHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         cb.SourceFrom = SourceFrom;
 

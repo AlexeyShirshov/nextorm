@@ -555,6 +555,23 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void CrossApply_WithJoinHint_ShouldKeepTheCorrelatedApply()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
+            .WithJoinHint("NestLoop(t1 t3)")
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        // The hint folds into the statement-level comment; the join modifier must not replace the join
+        // with a copy that loses its correlated apply source, or the lateral derived table would
+        // silently disappear.
+        sql.Should().Be("select /*+ NestLoop(t1 t3) */ t1.id, t3.\"String\" from simple_entity as \"t1\" cross join lateral (select t2.id, t2.somestring as \"String\" from complex_entity as \"t2\"\n"
+            + " where t2.id = cast(t1.id as bigint)) as \"t3\"");
+    }
+
+    [Fact]
     public void OuterApply_ToCorrelatedSubquery_ShouldEmitLeftJoinLateralOnTrue()
     {
         using var ctx = PostgresTestContext.Create();

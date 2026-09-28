@@ -95,6 +95,14 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// the columns already read into declared members. <see langword="null"/> for a computed column.
     /// </summary>
     internal string? PhysicalColumnName { get; set; }
+
+    /// <summary>
+    /// The entity-typed projection item this column was expanded from, or <see langword="null"/> for an
+    /// ordinary column. Columns sharing the same instance form one item, which the row materializer
+    /// rebuilds into an entity instance (and into <see langword="null"/> when every column of the item
+    /// reads as SQL <c>NULL</c>, i.e. the row is on the missing side of an outer join).
+    /// </summary>
+    internal ProjectionEntityItem? ProjectionItem { get; set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     // private readonly IQueryRegistry _queryProvider;
@@ -296,4 +304,32 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
 
     //     return true;
     // }
+}
+
+/// <summary>
+/// Groups the scalar <see cref="SelectExpression"/>s an entity-typed projection item was expanded
+/// into. The preparer tags every expanded column with the shared instance; the row materializer groups
+/// by reference, rebuilds the entity from the group and assigns it to <see cref="Member"/>.
+/// </summary>
+internal sealed class ProjectionEntityItem
+{
+    /// <summary>Initializes a projection item group.</summary>
+    /// <param name="slot">The item's zero-based position in the projection (its argument/member order).</param>
+    /// <param name="entityType">The entity type the group materializes into.</param>
+    /// <param name="member">The projection member the entity is assigned to, or <see langword="null"/> when the position addresses a constructor parameter.</param>
+    public ProjectionEntityItem(int slot, Type entityType, PropertyInfo? member)
+    {
+        Slot = slot;
+        EntityType = entityType;
+        Member = member;
+    }
+
+    /// <summary>The item's zero-based position in the projection.</summary>
+    public int Slot { get; }
+
+    /// <summary>The entity type the group materializes into.</summary>
+    public Type EntityType { get; }
+
+    /// <summary>The projection member the entity is assigned to, or <see langword="null"/> for a constructor position.</summary>
+    public PropertyInfo? Member { get; }
 }

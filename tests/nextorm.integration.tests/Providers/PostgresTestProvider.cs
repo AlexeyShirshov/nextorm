@@ -87,6 +87,7 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists insert_entity;
         drop table if exists merge_entity;
         drop table if exists delete_entity;
+        drop table if exists eager_note;
         drop table if exists eager_child;
         drop table if exists eager_parent;
 
@@ -175,6 +176,13 @@ internal sealed class PostgresTestProvider : ITestProvider
             id integer primary key,
             parent_id integer not null,
             name varchar(100)
+        );
+
+        create table eager_note
+        (
+            id integer primary key,
+            parent_id integer not null,
+            text varchar(100)
         );
         """;
 }

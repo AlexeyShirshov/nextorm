@@ -42,4 +42,12 @@ public interface IEntityMetadata
     /// keep compiling.
     /// </summary>
     IReadOnlyList<IQueryFilterMetadata> Filters => Array.Empty<IQueryFilterMetadata>();
+
+    /// <summary>
+    /// The navigation relationships declared for the entity, in declaration order; empty when none are
+    /// declared. A property that participates in a declared relationship is excluded from
+    /// <see cref="Properties"/> and is reachable only through this list. The default implementation
+    /// returns an empty list so existing external implementations keep compiling.
+    /// </summary>
+    IReadOnlyList<IRelationshipMetadata> Relationships => Array.Empty<IRelationshipMetadata>();
 }

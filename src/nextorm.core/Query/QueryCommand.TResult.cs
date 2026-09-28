@@ -159,6 +159,28 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>A task producing a list of all result rows.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
+
+    /// <inheritdoc/>
+    internal override List<object?> ToObjectList(ReadOnlySpan<object?> @params)
+    {
+        var rows = ToList(@params);
+        var result = new List<object?>(rows.Count);
+        foreach (var row in rows)
+            result.Add(row);
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    internal override async Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
+    {
+        var rows = await ToListAsync(cancellationToken, @params).ConfigureAwait(false);
+        var result = new List<object?>(rows.Count);
+        foreach (var row in rows)
+            result.Add(row);
+
+        return result;
+    }
     /// <summary>Executes the command and materializes every row into an array.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>An array containing all result rows.</returns>

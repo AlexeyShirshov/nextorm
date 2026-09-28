@@ -148,6 +148,8 @@
       href: advanced/integration-efcore.md
     - name: Жадная загрузка дочерних коллекций
       href: advanced/eager-loading.md
+    - name: Связи и однозапросная загрузка
+      href: advanced/relationships.md
     - name: Ограничения и что вне области
       href: advanced/limitations.md
     - name: Краткий справочник API

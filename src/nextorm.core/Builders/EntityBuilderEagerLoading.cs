@@ -211,7 +211,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// value is null cannot be filled and is rejected. Every target is validated before any parent is
     /// mutated, so a read-only null member throws without leaving earlier parents partially populated.
     /// </summary>
-    private void Assign(IReadOnlyList<TEntity> parents, Dictionary<TKey, List<TChild>> grouped)
+    internal void Assign(IReadOnlyList<TEntity> parents, Dictionary<TKey, List<TChild>> grouped)
     {
         if (_collectionSetter is null)
         {

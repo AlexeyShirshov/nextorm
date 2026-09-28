@@ -39,6 +39,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     protected bool _isPrepared;
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     protected Type? _srcType;
+    /// <summary>
+    /// The join-projection result type a <c>JoinInto</c> pair command materializes while its
+    /// <see cref="_srcType"/> stays the parent entity type, or <c>null</c> for an ordinary command.
+    /// </summary>
+    internal Type? ProjectionType { get; init; }
     private bool _dontCache;
     private bool _ignoreFilters;
     internal int ColumnsPlanHash;
@@ -143,6 +148,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _dataContext = dataProvider;
         _exp = definition.Exp;
         _srcType = definition.SrcType;
+        ProjectionType = definition.ProjectionType;
         _condition = definition.Condition;
         _ignoreFilters = definition.IgnoreFilters;
         _joins = definition.Joins;
@@ -176,6 +182,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     {
         Exp = _exp,
         SrcType = _srcType,
+        ProjectionType = ProjectionType,
         Condition = _condition,
         IgnoreFilters = _ignoreFilters,
         Joins = _joins,
@@ -615,5 +622,22 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
         return idx;
     }
+
+    /// <summary>
+    /// Executes the command and returns its rows boxed, so a runtime-built projection command can be
+    /// stitched by <c>JoinInto</c> without a compile-time result type. Overridden by
+    /// <see cref="QueryCommand{TResult}"/>.
+    /// </summary>
+    /// <param name="params">Positional parameter values.</param>
+    /// <returns>The materialized rows, boxed.</returns>
+    internal virtual List<object?> ToObjectList(ReadOnlySpan<object?> @params)
+        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
+
+    /// <summary>Asynchronous counterpart of <see cref="ToObjectList"/>.</summary>
+    /// <param name="params">Positional parameter values.</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <returns>A task producing the materialized rows, boxed.</returns>
+    internal virtual Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
+        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
 
 }

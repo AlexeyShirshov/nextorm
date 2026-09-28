@@ -132,6 +132,17 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     internal LambdaExpression? ApplySource { get; init; }
     /// <summary>Installs the derived query built from <see cref="ApplySource"/> during preparation.</summary>
     internal void SetFrom(FromExpression from) => _from = from;
+    /// <summary>
+    /// Whether this join was added by <c>JoinInto</c> (as opposed to an explicit <c>Join</c>). The flag
+    /// lets the non-list terminals build a parent-only command that excludes the stitching join.
+    /// </summary>
+    internal bool IsJoinInto { get; set; }
+    /// <summary>
+    /// The identity of the <c>JoinInto</c> declaration that added this join, or <see langword="null"/>
+    /// for a regular join. It is folded into the join's plan hash and equality so two distinct
+    /// <c>JoinInto</c> declarations (different child/keys/collection) never share a cached plan.
+    /// </summary>
+    internal JoinIntoIdentity? JoinIntoIdentity { get; set; }
     internal JoinExpression CloneForCache()
     {
         var newFrom = From.CloneForCache();
@@ -145,6 +156,8 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             JoinHint = JoinHint,
             ApplySource = ApplySource,
             OriginalJoinCondition = _originalJoinCondition,
+            IsJoinInto = IsJoinInto,
+            JoinIntoIdentity = JoinIntoIdentity,
         };
     }
     // public override int GetHashCode()

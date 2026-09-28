@@ -24,5 +24,8 @@
     <!-- The SQLite SQL-generation tests build the internal SqlBuilder/SqlBuildContext directly to
          assert the sequential-access locator seam (trailing rowid) without opening a connection. -->
     <InternalsVisibleTo Include="nextorm.sqlite.tests" />
+    <!-- The ClickHouse SQL-generation tests render the internal JoinInto pair command so the
+         parent-paging subquery (not just the denormalized query) is asserted. -->
+    <InternalsVisibleTo Include="nextorm.clickhouse.tests" />
   </ItemGroup>
 </Project>

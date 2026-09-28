@@ -164,3 +164,23 @@ required.
 
 Verdict (final, iteration 2): within noise, **no regression**; baseline numbers above left
 unchanged.
+
+### Iteration 3 (P1 plan/mapper fix re-verification)
+
+BDN `Global total time` **44.55 s**, **7** executed benchmarks, **0** failures — under the 4 min
+budget. (Same benign `Failed to set up priority High ... Permission denied` process warning.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.220 ms | 338.28 KB | -23.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 65.38 ms | 50.02 MB | +7.2% |
+| `Nextorm_Cached` | 2.310 ms | 537.58 KB | +30.4% (high-variance, CI ±191%) |
+| `Prepared_ToList` | 922.8 us | 76.14 KB | -0.1% |
+| `Cached_ToList` | 1,797.4 us | 569.90 KB | +4.1% |
+| `Cached_PlanOnly_Param` | 503.9 us | 493.76 KB | -2.8% |
+| `Nextorm_Cached_ToListAsync` | 2.195 ms | 717.07 KB | +2.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.95** — vs baseline
+**1.87** (+4.1%), far below the 20% threshold; allocated ratio **7.49** (baseline 7.42), unchanged.
+The Cached path adds two type comparisons per projected column during plan lookup (constant per
+command, not per row). Verdict: within noise, **no regression**.

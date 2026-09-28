@@ -59,6 +59,18 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.ProviderType != y.ProviderType) return false;
 
+        // The projection-item grouping decides how the flattened columns are rebuilt into an entity
+        // (and into null on the missing side of an outer join), so it must be part of the plan identity
+        // exactly as it is part of the row-mapper signature. The group is compared by shape (entity type
+        // and slot), not by reference: two separately built but identical projections have distinct
+        // group instances and must still share a cached plan.
+        if (x.ProjectionItem is null != (y.ProjectionItem is null)) return false;
+        if (x.ProjectionItem is { } xItem && y.ProjectionItem is { } yItem)
+        {
+            if (xItem.EntityType != yItem.EntityType) return false;
+            if (xItem.Slot != yItem.Slot) return false;
+        }
+
         if (!ReferenceEquals(x.Converter, y.Converter)) return false;
 
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
@@ -94,6 +106,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             hash.Add(obj.DurationUnit);
 
             hash.Add(obj.ProviderType);
+
+            hash.Add(obj.ProjectionItem is { } item ? item.EntityType.GetHashCode() * 31 + item.Slot : 0);
 
             if (obj.Converter is not null)
                 hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.Converter));
