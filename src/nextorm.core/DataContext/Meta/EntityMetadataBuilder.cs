@@ -280,6 +280,9 @@ public class EntityMetadataBuilder<T>
 
     private static void ValidateDynamicColumnsStore(Type entityType, PropertyInfo property)
     {
+        if (entityType.IsValueType)
+            throw new InvalidOperationException($"A dynamic-columns store is not supported on the value-type entity {entityType.Name}; use a reference type.");
+
         if (property.GetSetMethod() is null)
             throw new InvalidOperationException($"The dynamic-columns store property '{property.Name}' of {entityType.Name} must have a public setter.");
 

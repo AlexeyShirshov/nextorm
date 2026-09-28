@@ -152,6 +152,12 @@ produced by the database, not by the caller. On the write side the caller suppli
 is validated (see [Writing dynamic columns](#writing-dynamic-columns)) and quoted with the dialect's
 identifier quoting.
 
+Two entity-shape rules apply to the store. The entity must be a **reference type**: a value-type
+(`struct`) entity that declares a store is rejected with `InvalidOperationException` when its metadata
+is built, rather than boxing silently - use a class. It must also expose a **public parameterless
+constructor**, because the store is materialised with member-init; a store-bearing entity without one
+is rejected during preparation with `QueryPreparationException`.
+
 ## Limitations
 
 The write side carries these restrictions:
@@ -167,6 +173,13 @@ The write side carries these restrictions:
   is no allow-list of permitted column names.
 * **The in-memory provider does not implement the write side** (its read side returns the registered
   dictionary as-is).
+* **Reference type with a public parameterless constructor.** The store-bearing entity must be a class:
+  a value-type (`struct`) entity is rejected with `InvalidOperationException` when its metadata is built
+  (no silent boxing), and a class without a public parameterless constructor is rejected during
+  preparation with `QueryPreparationException` (see [Constraints](#constraints)).
+* **A `null` or empty store means no dynamic columns.** On a SQL read the store is created from the
+  result set even when it starts `null`; on write a `null` store, or one with no keys, contributes no
+  dynamic columns.
 
 See [Limitations and out-of-scope features](../advanced/limitations.md).
 

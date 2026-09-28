@@ -78,6 +78,31 @@ public sealed class FluentStoreEntity
     public Dictionary<string, object?> Extra { get; set; } = new();
 }
 
+/// <summary>A value-type entity whose store is declared with <see cref="DynamicColumnsAttribute"/>.</summary>
+public struct StructWithDynamicStoreEntity
+{
+    public StructWithDynamicStoreEntity()
+    {
+    }
+
+    public int Id { get; set; }
+
+    [DynamicColumns]
+    public Dictionary<string, object?> Extra { get; set; } = new();
+}
+
+/// <summary>A value-type entity whose store is declared fluently.</summary>
+public struct FluentStructWithDynamicStoreEntity
+{
+    public FluentStructWithDynamicStoreEntity()
+    {
+    }
+
+    public int Id { get; set; }
+
+    public Dictionary<string, object?> Extra { get; set; } = new();
+}
+
 /// <summary>
 /// Unit tests for the dynamic-columns store metadata (see <see cref="DynamicColumnsAttribute"/>): the
 /// accepted dictionary shapes, the rejected store types/setters, the single-store rule and the
@@ -121,6 +146,27 @@ public class DynamicColumnsMetadataTests
         Action act = () => new EntityMetadataBuilder<PrivateSetterStoreEntity>().Build();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*Extra*public setter*");
+    }
+
+    [Fact]
+    public void StructWithStore_RejectsWithClearLimitation()
+    {
+        // Declarative configuration: [DynamicColumns] on a value-type entity must be rejected with the
+        // limitation message, not silently materialized through the boxing of a copy.
+        Action declarative = () => new EntityMetadataBuilder<StructWithDynamicStoreEntity>().Build();
+
+        declarative.Should().Throw<InvalidOperationException>()
+            .WithMessage("*not supported on the value-type entity*StructWithDynamicStoreEntity*use a reference type*");
+
+        // Fluent configuration: DynamicColumnsStore() on a value-type entity reaches the same shared
+        // validation through EntityMetadataBuilder.Build, so the rule is not duplicated.
+        var builder = new EntityMetadataBuilder<FluentStructWithDynamicStoreEntity>();
+        _ = builder.Property(x => x.Extra).DynamicColumnsStore();
+
+        Action fluent = () => builder.Build();
+
+        fluent.Should().Throw<InvalidOperationException>()
+            .WithMessage("*not supported on the value-type entity*FluentStructWithDynamicStoreEntity*use a reference type*");
     }
 
     [Fact]

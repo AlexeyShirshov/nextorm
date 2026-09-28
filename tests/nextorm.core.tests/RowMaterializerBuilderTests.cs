@@ -39,6 +39,22 @@ public class RowMaterializerBuilderTests
         public CtorOnlyShape(Part first) => First = first;
     }
 
+    /// <summary>
+    /// A class that declares a dynamic-columns store but has no public parameterless constructor: the
+    /// store materializes through member-init, which needs one.
+    /// </summary>
+    public sealed class StoreWithoutParameterlessCtor
+    {
+        public StoreWithoutParameterlessCtor(int id) => Id = id;
+
+        public int Id { get; set; }
+
+        public Part? Nested { get; set; }
+
+        [DynamicColumns]
+        public Dictionary<string, object?> Extra { get; set; } = new();
+    }
+
     // The entity item's own columns are mapped by this delegate through BuildCore; every column it is
     // asked for is a scalar of the entity (int here), so no column is ever of the entity type itself.
     private static Func<SelectExpression, Expression> ConstantMap()
@@ -126,6 +142,57 @@ public class RowMaterializerBuilderTests
         shape.Store.Should().Be("store");
         shape.First.Should().NotBeNull();
         shape.Second.Should().Be(0);
+    }
+
+    [Fact]
+    public void StoreWithoutPublicParameterlessCtor_ThrowsQueryPreparationException()
+    {
+        var param = Expression.Parameter(typeof(object), "row");
+        Expression MapDynamic(SelectExpression _, int __, DynamicColumns ___) =>
+            Expression.Constant(new Dictionary<string, object?>(), typeof(object));
+
+        // Ordinary read: BuildCore finds the dynamic-columns store and needs a parameterless
+        // constructor to assemble the entity member by member.
+        var ordinarySelectList = new SelectExpression[]
+        {
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(StoreWithoutParameterlessCtor.Id) },
+            new SelectExpression(typeof(object))
+            {
+                Index = 1,
+                PropertyName = nameof(StoreWithoutParameterlessCtor.Extra),
+                PropertyInfo = typeof(StoreWithoutParameterlessCtor).GetProperty(nameof(StoreWithoutParameterlessCtor.Extra)),
+                IsDynamicColumnsStore = true,
+            },
+        };
+
+        Action ordinary = () => RowMaterializerBuilder.Build(
+            typeof(StoreWithoutParameterlessCtor), param, ordinarySelectList, ignoreColumns: false, ConstantMap(), MapDynamic);
+
+        ordinary.Should().Throw<QueryPreparationException>()
+            .WithMessage("*StoreWithoutParameterlessCtor*no parameterless constructor*");
+
+        // Projection path: the entity is the projection result type, but its constructor arity does not
+        // match the projected items, so the member-init fallback also needs a parameterless constructor
+        // and rejects the shape with the same exception type.
+        var item = new ProjectionEntityItem(
+            0, typeof(Part), typeof(StoreWithoutParameterlessCtor).GetProperty(nameof(StoreWithoutParameterlessCtor.Nested)));
+        var projectionSelectList = new SelectExpression[]
+        {
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), ProjectionItem = item },
+            new SelectExpression(typeof(object))
+            {
+                Index = 1,
+                PropertyName = nameof(StoreWithoutParameterlessCtor.Extra),
+                PropertyInfo = typeof(StoreWithoutParameterlessCtor).GetProperty(nameof(StoreWithoutParameterlessCtor.Extra)),
+                IsDynamicColumnsStore = true,
+            },
+        };
+
+        Action projection = () => RowMaterializerBuilder.Build(
+            typeof(StoreWithoutParameterlessCtor), param, projectionSelectList, ignoreColumns: false, ConstantMap(), MapDynamic);
+
+        projection.Should().Throw<QueryPreparationException>()
+            .WithMessage("*StoreWithoutParameterlessCtor*constructor parameter*item*");
     }
 
     [Fact]
