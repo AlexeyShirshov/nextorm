@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
@@ -12,7 +13,7 @@ namespace NextORM.Core;
 public class EntityMetadataBuilder<T>
 {
     private readonly IList<EntityPropertyBuilder<T>> _props = new List<EntityPropertyBuilder<T>>();
-    private readonly List<(string? Key, LambdaExpression? Lambda)> _filters = new();
+    private readonly List<(string? Key, LambdaExpression? Lambda, Delegate? Func)> _filters = new();
     private readonly List<RelationshipDeclaration> _relationships = new();
     private string? _tableName;
 
@@ -101,22 +102,31 @@ public class EntityMetadataBuilder<T>
 
         if (includeFluent)
         {
-            foreach (var (key, lambda) in _filters)
-                ApplyFilterDeclaration(filters, key, lambda);
+            foreach (var (key, lambda, func) in _filters)
+                ApplyFilterDeclaration(filters, key, lambda, func);
         }
 
         foreach (var attribute in EnumerateFilterAttributes(typeof(T)))
         {
-            if (string.IsNullOrWhiteSpace(attribute.FilterLambda))
+            var hasLambda = !string.IsNullOrWhiteSpace(attribute.FilterLambda);
+            var hasFunc = !string.IsNullOrWhiteSpace(attribute.FilterFunc);
+
+            if (hasLambda && hasFunc)
+                throw new InvalidOperationException($"The {nameof(QueryFilterAttribute)} on {typeof(T).Name} must set either {nameof(QueryFilterAttribute.FilterLambda)} or {nameof(QueryFilterAttribute.FilterFunc)}, not both.");
+
+            if (!hasLambda && !hasFunc)
             {
                 if (string.IsNullOrWhiteSpace(attribute.FilterKey))
-                    throw new InvalidOperationException($"The {nameof(QueryFilterAttribute)} on {typeof(T).Name} must name a static member in {nameof(QueryFilterAttribute.FilterLambda)}.");
+                    throw new InvalidOperationException($"The {nameof(QueryFilterAttribute)} on {typeof(T).Name} must name a static member in {nameof(QueryFilterAttribute.FilterLambda)} or {nameof(QueryFilterAttribute.FilterFunc)}.");
 
-                ApplyFilterDeclaration(filters, attribute.FilterKey, null);
+                ApplyFilterDeclaration(filters, attribute.FilterKey, null, null);
                 continue;
             }
 
-            ApplyFilterDeclaration(filters, attribute.FilterKey, ResolveFilterLambda(attribute.FilterLambda));
+            if (hasLambda)
+                ApplyFilterDeclaration(filters, attribute.FilterKey, ResolveFilterLambda(attribute.FilterLambda), null);
+            else
+                ApplyFilterDeclaration(filters, attribute.FilterKey, null, ResolveFilterFunc(attribute.FilterFunc));
         }
 
         return filters;
@@ -153,24 +163,24 @@ public class EntityMetadataBuilder<T>
         }
     }
 
-    private static void ApplyFilterDeclaration(List<IQueryFilterMetadata> filters, string? key, LambdaExpression? lambda)
+    private static void ApplyFilterDeclaration(List<IQueryFilterMetadata> filters, string? key, LambdaExpression? lambda, Delegate? func)
     {
         if (string.IsNullOrWhiteSpace(key))
         {
-            if (lambda is not null)
-                filters.Add(new QueryFilterMetadata(QueryFilters.AnonymousKey, lambda));
+            if (lambda is not null || func is not null)
+                filters.Add(new QueryFilterMetadata(QueryFilters.AnonymousKey, lambda, func));
             return;
         }
 
         var index = filters.FindIndex(f => string.Equals(f.Key, key, StringComparison.Ordinal));
-        if (lambda is null)
+        if (lambda is null && func is null)
         {
             if (index >= 0)
                 filters.RemoveAt(index);
             return;
         }
 
-        var metadata = new QueryFilterMetadata(key, lambda);
+        var metadata = new QueryFilterMetadata(key, lambda, func);
         if (index >= 0)
             filters[index] = metadata;
         else
@@ -197,6 +207,45 @@ public class EntityMetadataBuilder<T>
 
         return value as LambdaExpression
             ?? throw new InvalidOperationException($"The static member '{memberName}' named by {nameof(QueryFilterAttribute)} on {typeof(T).Name} must return a {nameof(LambdaExpression)}.");
+    }
+
+    // Resolves the builder-function declaration named by QueryFilterAttribute.FilterFunc. Unlike
+    // ResolveFilterLambda the delegate's entity type is not required to be exactly T: an attribute
+    // inherited from a base type resolves its member through the derived type and may return a function
+    // over the base entity, which is applied to the derived source by the usual parameter re-rooting.
+    private static Delegate? ResolveFilterFunc(string? memberName)
+    {
+        if (string.IsNullOrWhiteSpace(memberName))
+            throw new InvalidOperationException($"The {nameof(QueryFilterAttribute)} on {typeof(T).Name} must name a static member in {nameof(QueryFilterAttribute.FilterFunc)}.");
+
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        var members = typeof(T).GetMember(memberName, flags);
+        if (members.Length == 0)
+            throw new InvalidOperationException($"The static member '{memberName}' named by {nameof(QueryFilterAttribute)} was not found on {typeof(T).Name}.");
+
+        var value = members[0] switch
+        {
+            PropertyInfo property => property.GetValue(null),
+            FieldInfo field => field.GetValue(null),
+            MethodInfo method when method.GetParameters().Length == 0 => method.Invoke(null, null),
+            _ => throw new InvalidOperationException($"The member '{memberName}' named by {nameof(QueryFilterAttribute)} on {typeof(T).Name} must be a static field, a static property or a parameterless static method."),
+        };
+
+        if (value is not Delegate func)
+            throw new InvalidOperationException($"The static member '{memberName}' named by {nameof(QueryFilterAttribute)} on {typeof(T).Name} must return a {nameof(Delegate)}.");
+
+        var delegateType = func.GetType();
+        var typeArguments = delegateType.GetGenericArguments();
+        if (!delegateType.IsGenericType
+            || delegateType.GetGenericTypeDefinition() != typeof(Func<,,>)
+            || typeArguments.Length != 3
+            || !typeArguments[0].IsGenericType
+            || typeArguments[0].GetGenericTypeDefinition() != typeof(EntityBuilder<>)
+            || typeArguments[1] != typeof(IDataContext)
+            || typeArguments[2] != typeArguments[0])
+            throw new InvalidOperationException($"The static member '{memberName}' named by {nameof(QueryFilterAttribute)} on {typeof(T).Name} must return a Func<EntityBuilder<TEntity>, IDataContext, EntityBuilder<TEntity>>.");
+
+        return func;
     }
 
     private static IPropertyMetadata? FindAttributeStore(List<IPropertyMetadata> properties)
@@ -582,7 +631,7 @@ public class EntityMetadataBuilder<T>
     {
         ArgumentNullException.ThrowIfNull(filter);
 
-        _filters.Add((null, filter));
+        _filters.Add((null, filter, null));
         return this;
     }
 
@@ -601,7 +650,7 @@ public class EntityMetadataBuilder<T>
     {
         ArgumentNullException.ThrowIfNull(filter);
 
-        _filters.Add((null, filter));
+        _filters.Add((null, filter, null));
         return this;
     }
 
@@ -618,7 +667,55 @@ public class EntityMetadataBuilder<T>
     /// <returns>This builder, for chaining.</returns>
     public EntityMetadataBuilder<T> HasQueryFilter(string filterKey, Expression<Func<T, IDataContext, bool>>? filter)
     {
-        _filters.Add((filterKey, filter));
+        _filters.Add((filterKey, filter, null));
+        return this;
+    }
+
+    // Lower overload priority: the two-parameter function has the same shape as the context-aware
+    // predicate overload, so a `null` argument (which the keyed predicate overload treats as
+    // slot-removal) would otherwise be ambiguous between the two. The function form still binds for a
+    // lambda that returns the builder.
+    /// <summary>
+    /// Declares an anonymous global query filter in the builder-function form. The function receives a
+    /// builder over the entity and the executing <see cref="IDataContext"/>, and must express the filter
+    /// by calling <c>Where</c>; only that predicate is merged into every query in which the entity
+    /// participates. The function is invoked once while the plan is built. Values that must stay
+    /// parameterised (so the plan can be cached) have to be read from the <see cref="IDataContext"/> or
+    /// supplied through <c>SqlFunctions.Parameter&lt;T&gt;(idx)</c>; snapshotting a runtime value into a
+    /// local before the <c>Where</c> call, or changing anything other than <c>Where</c>, is rejected.
+    /// A repeated anonymous call on this builder adds another filter. The mapping is registered once per
+    /// entity type: a later <c>From&lt;T&gt;(...)</c> configuration for the same type is ignored, so the
+    /// first registration wins.
+    /// </summary>
+    /// <param name="filter">The filter function that appends the predicate with <c>Where</c>.</param>
+    /// <returns>This builder, for chaining.</returns>
+    [OverloadResolutionPriority(-1)]
+    public EntityMetadataBuilder<T> HasQueryFilter(Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>> filter)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        _filters.Add((null, null, filter));
+        return this;
+    }
+
+    // Lower overload priority so `HasQueryFilter(key, null)` keeps resolving to the keyed predicate
+    // overload (null removes the named slot) instead of becoming ambiguous with this function overload.
+    /// <summary>
+    /// Declares a named global query filter in the builder-function form: the key occupies a slot so the
+    /// filter can be targeted by the key-based <c>IgnoreFilters</c> overload. A repeated call with the
+    /// same key <b>replaces</b> the earlier filter; passing a <see langword="null"/>
+    /// <paramref name="filter"/> removes the slot. The function receives the executing
+    /// <see cref="IDataContext"/> and must express the filter by calling <c>Where</c>; only that predicate
+    /// is merged. The mapping is registered once per entity type: a later <c>From&lt;T&gt;(...)</c>
+    /// configuration for the same type is ignored, so the first registration wins.
+    /// </summary>
+    /// <param name="filterKey">The filter key; null, empty or whitespace declares an anonymous filter.</param>
+    /// <param name="filter">The filter function that appends the predicate with <c>Where</c>, or <see langword="null"/> to remove the named slot.</param>
+    /// <returns>This builder, for chaining.</returns>
+    [OverloadResolutionPriority(-1)]
+    public EntityMetadataBuilder<T> HasQueryFilter(string filterKey, Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>? filter)
+    {
+        _filters.Add((filterKey, null, filter));
         return this;
     }
 

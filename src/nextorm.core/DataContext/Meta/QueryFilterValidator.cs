@@ -40,7 +40,7 @@ internal static class QueryFilterValidator
     /// <returns>A check that throws on a violating row, or <see langword="null"/> when no filter applies.</returns>
     public static Action<TEntity>? CreateEntityCheck<TEntity>(QueryFilterScope scope, IDataContext dataContext, string operation)
     {
-        var predicates = BuildEntityPredicates<TEntity>(scope, dataContext);
+        var predicates = BuildEntityPredicates<TEntity>(scope, dataContext, operation);
         if (predicates.Count == 0)
             return null;
 
@@ -68,7 +68,7 @@ internal static class QueryFilterValidator
         if (rows.Count == 0)
             return;
 
-        var predicates = BuildEntityPredicates<TEntity>(scope, dataContext);
+        var predicates = BuildEntityPredicates<TEntity>(scope, dataContext, operation);
         if (predicates.Count == 0)
             return;
 
@@ -170,7 +170,7 @@ internal static class QueryFilterValidator
             throw Violation(violation.Value.Key, typeof(TEntity), operation, rowIndex: null);
     }
 
-    private static List<(string Key, Func<TEntity, bool> Predicate)> BuildEntityPredicates<TEntity>(QueryFilterScope scope, IDataContext dataContext)
+    private static List<(string Key, Func<TEntity, bool> Predicate)> BuildEntityPredicates<TEntity>(QueryFilterScope scope, IDataContext dataContext, string operation)
     {
         var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope);
         var predicates = new List<(string, Func<TEntity, bool>)>(filters.Count);
@@ -178,7 +178,11 @@ internal static class QueryFilterValidator
         foreach (var filter in filters)
         {
             if (filter.Lambda is not { Parameters.Count: >= 1 } lambda)
-                continue; // The builder-function form is not supported yet.
+            {
+                if (filter.Func is not null)
+                    throw UnsupportedFunc(filter.Key, typeof(TEntity), operation);
+                continue;
+            }
 
             var parameter = Expression.Parameter(typeof(TEntity), "e");
             var body = RewriteParameters(lambda, dataContext, lambda.Parameters[0], parameter);
@@ -215,7 +219,11 @@ internal static class QueryFilterValidator
         foreach (var filter in filters)
         {
             if (filter.Lambda is not { Parameters.Count: >= 1 } lambda)
-                continue; // The builder-function form is not supported yet.
+            {
+                if (filter.Func is not null)
+                    throw UnsupportedFunc(filter.Key, entityType, operation);
+                continue;
+            }
 
             Expression body = lambda.Body;
             if (lambda.Parameters.Count > 1)
@@ -337,7 +345,11 @@ internal static class QueryFilterValidator
         foreach (var filter in filters)
         {
             if (filter.Lambda is not { Parameters.Count: >= 1 } lambda)
+            {
+                if (filter.Func is not null)
+                    throw UnsupportedFunc(filter.Key, typeof(TEntity), operation);
                 continue;
+            }
 
             Expression body = lambda.Body;
             if (lambda.Parameters.Count > 1)
@@ -412,6 +424,16 @@ internal static class QueryFilterValidator
     private static QueryFilterException Unsupported(string? filterKey, Type entityType, string operation)
         => new(
             $"{operation} on {entityType.Name} cannot validate {FilterKeyText(filterKey)}: the filter reads a field or calls an instance member, which is not supported for in-memory validation. The write is rejected fail-closed (the filter cannot be evaluated). Rewrite the filter to read mapped properties, or disable the filter for this statement with IgnoreFilters.");
+
+    // The builder-function filter is produced at query-plan build from the live context; the write
+    // validator cannot safely evaluate it against a row (it may use bound SqlFunctions.Parameter
+    // placeholders or other plan-time state), so a write with such a filter active is rejected
+    // fail-closed instead of silently skipping the filter and letting a violating row through. The
+    // rejection is a QueryFilterException like every other write-filter failure (the same path runs for
+    // SQL providers, so the message must not claim an in-memory-only restriction).
+    private static QueryFilterException UnsupportedFunc(string? filterKey, Type entityType, string operation)
+        => new(
+            $"{operation} on {entityType.Name} cannot validate {FilterKeyText(filterKey)}: it is declared in the builder-function form (FilterFunc), which is evaluated only at query-plan build and cannot be checked against a written row. Disable the filter for this statement with IgnoreFilters, or declare the filter as a predicate (FilterLambda) instead.");
 
     // A written NULL for a non-nullable value-type column would otherwise unbox into a
     // NullReferenceException; report the rejected write instead.

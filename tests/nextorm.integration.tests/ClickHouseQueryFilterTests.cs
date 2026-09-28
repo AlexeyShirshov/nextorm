@@ -77,4 +77,26 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
 
         ctx.From<QueryFilterEntity>().IgnoreFilters().Where(x => x.Id == id).Select(x => x.TenantId).Single().Should().Be(2);
     }
+
+    // --- PR4: the builder-function (FilterFunc) form, SELECT rows parity on ClickHouse.
+
+    [Fact]
+    public void QueryFilter_Func_Select_AppliesAnonymousAndKeyedFilters()
+    {
+        var ctx = QueryFilterContext(1);
+        var b = NextQueryFilterBase();
+        _sut.DataProvider.InsertInto<QueryFilterFuncEntity>().IgnoreFilters().Values(
+        [
+            new QueryFilterFuncEntity { Id = b, TenantId = 1, IsDeleted = false, Name = "func-active" },
+            new QueryFilterFuncEntity { Id = b - 1, TenantId = 1, IsDeleted = true, Name = "func-deleted" },
+            new QueryFilterFuncEntity { Id = b - 2, TenantId = 2, IsDeleted = false, Name = "func-foreign" },
+        ]).Insert();
+
+        EntityBuilder<QueryFilterFuncEntity> Range() => ctx.From<QueryFilterFuncEntity>().Where(x => x.Id >= b - 2 && x.Id <= b);
+
+        Range().Select(x => x.Id).ToList().Should().BeEquivalentTo([b]);
+        Range().IgnoreFilters().Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 1, b - 2]);
+        Range().IgnoreFilters(["tenant"]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 2]);
+        Range().IgnoreFilters([QueryFilters.AnonymousKey]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 1]);
+    }
 }

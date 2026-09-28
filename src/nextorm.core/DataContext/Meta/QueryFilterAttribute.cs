@@ -19,8 +19,8 @@ public sealed class QueryFilterAttribute : Attribute
     /// <summary>
     /// The optional filter key. When omitted, empty or whitespace the filter is anonymous
     /// (<see cref="QueryFilters.AnonymousKey"/>); a key names the filter so it can be targeted by the
-    /// key-based <c>IgnoreFilters</c>. Repeating a key replaces the earlier filter; a null
-    /// <see cref="FilterLambda"/> on a keyed attribute removes it.
+    /// key-based <c>IgnoreFilters</c>. Repeating a key replaces the earlier filter; a keyed attribute
+    /// that sets neither <see cref="FilterLambda"/> nor <see cref="FilterFunc"/> removes the slot.
     /// </summary>
     public string? FilterKey { get; set; }
 
@@ -30,4 +30,13 @@ public sealed class QueryFilterAttribute : Attribute
     /// <see cref="IDataContext"/>. The member may be a field, a property or a parameterless method.
     /// </summary>
     public string? FilterLambda { get; set; }
+
+    /// <summary>
+    /// The name of a static member of the attributed type that returns the builder-function form of the
+    /// filter as a <c>Func&lt;EntityBuilder&lt;T&gt;, IDataContext, EntityBuilder&lt;T&gt;&gt;</c>. The
+    /// member may be a field, a property or a parameterless method. The function is invoked once while
+    /// the plan is built and only the predicate it adds with <c>Where</c> is merged into the query; a
+    /// declaration must set either <see cref="FilterLambda"/> or <see cref="FilterFunc"/>, not both.
+    /// </summary>
+    public string? FilterFunc { get; set; }
 }

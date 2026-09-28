@@ -24,7 +24,12 @@ internal static class QueryFilterResolver
             return Array.Empty<IQueryFilterMetadata>();
 
         var declared = metadata.Filters;
-        if (declared.Count == 0 || scope.IsEmpty)
+        if (declared.Count == 0)
+            return declared;
+
+        EnsureSingleForm(declared, entityType);
+
+        if (scope.IsEmpty)
             return declared;
 
         // Selective scope: drop the filters it disables, keeping declaration order. The list is only
@@ -50,5 +55,19 @@ internal static class QueryFilterResolver
         }
 
         return kept ?? declared;
+    }
+
+    // A filter must declare exactly one form: a predicate Lambda or a builder-function Func. The built-in
+    // registrations always set one, but a custom IQueryFilterMetadata implementation can report both; the
+    // consumers prefer Lambda, so the Func would be silently ignored. Reject the declaration instead.
+    private static void EnsureSingleForm(IReadOnlyList<IQueryFilterMetadata> filters, Type entityType)
+    {
+        for (var i = 0; i < filters.Count; i++)
+        {
+            var filter = filters[i];
+            if (filter.Lambda is not null && filter.Func is not null)
+                throw new NotSupportedException(
+                    $"The query filter '{filter.Key}' registered for {entityType.Name} reports both a predicate Lambda and a builder-function Func; a filter must declare exactly one form. Return one of them as null.");
+        }
     }
 }

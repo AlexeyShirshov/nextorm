@@ -734,10 +734,9 @@ public partial class QueryCommand
 
             for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
             {
-                if (filters[i].Lambda is not { } filterLambda)
-                    continue; // The builder-function form is not supported yet.
+                if (!TryBuildFilterBody(cmd, filters[i], filterTarget, out var filterBody))
+                    continue;
 
-                var filterBody = BuildFilterBody(filterLambda, cmd._dataContext!, filterTarget);
                 body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
             }
 
@@ -771,14 +770,33 @@ public partial class QueryCommand
 
             for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
             {
-                if (filters[i].Lambda is not { } filterLambda)
-                    continue; // The builder-function form is not supported yet.
+                if (!TryBuildFilterBody(cmd, filters[i], rightParameter, out var filterBody))
+                    continue;
 
-                var filterBody = BuildFilterBody(filterLambda, cmd._dataContext!, rightParameter);
                 body = Expression.AndAlso(body, filterBody);
             }
 
             join.SetJoinCondition(Expression.Lambda(body, joinCondition.Parameters));
+        }
+
+        // Reduces one resolved filter to the body to AND into the source condition. A predicate filter is
+        // used as declared; a builder-function filter is invoked once here (at plan build) and only the
+        // predicate it added is kept. A filter that declares neither form contributes nothing.
+        private static bool TryBuildFilterBody(QueryCommand cmd, IQueryFilterMetadata filter, Expression entityParameter, out Expression body)
+        {
+            LambdaExpression filterLambda;
+            if (filter.Lambda is { } lambda)
+                filterLambda = lambda;
+            else if (filter.Func is not null)
+                filterLambda = QueryFilterFunc.Apply(filter, cmd._dataContext!);
+            else
+            {
+                body = null!;
+                return false;
+            }
+
+            body = BuildFilterBody(filterLambda, cmd._dataContext!, entityParameter);
+            return true;
         }
 
         private static Expression BuildFilterBody(LambdaExpression filter, IDataContext dataContext, Expression entityParameter)

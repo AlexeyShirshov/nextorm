@@ -450,6 +450,123 @@ public abstract partial class CommonTestSuite
 
         act.Should().Throw<QueryFilterException>("the source contains a row the target filter rejects");
     }
+
+    // --- PR4: the builder-function (FilterFunc) form. The function is invoked once at plan build; the
+    // --- injected predicate reads the per-context tenant value and stays a bound parameter. The SELECT
+    // --- rows, the DML target filter and the INSERT ... SELECT source are checked on every provider.
+
+    private void SeedQueryFilterFuncRows(params QueryFilterFuncEntity[] rows)
+        => _sut.DataProvider.InsertInto<QueryFilterFuncEntity>().IgnoreFilters().Values(rows).Insert();
+
+    private static QueryFilterFuncEntity FuncActive(int id, string name)
+        => new() { Id = id, TenantId = 1, IsDeleted = false, Name = name };
+
+    private static QueryFilterFuncEntity FuncSoftDeleted(int id, string name)
+        => new() { Id = id, TenantId = 1, IsDeleted = true, Name = name };
+
+    private static QueryFilterFuncEntity FuncForeignTenant(int id, string name)
+        => new() { Id = id, TenantId = 2, IsDeleted = false, Name = name };
+
+    [Fact]
+    public void QueryFilter_Func_Select_AppliesAnonymousAndKeyedFilters()
+    {
+        var ctx = QueryFilterContext(1);
+        var b = NextQueryFilterBase();
+        SeedQueryFilterFuncRows(FuncActive(b, "func-active"), FuncSoftDeleted(b - 1, "func-deleted"), FuncForeignTenant(b - 2, "func-foreign"));
+
+        EntityBuilder<QueryFilterFuncEntity> Range() => ctx.From<QueryFilterFuncEntity>().Where(x => x.Id >= b - 2 && x.Id <= b);
+
+        Range().Select(x => x.Id).ToList().Should().BeEquivalentTo([b]);
+        Range().IgnoreFilters().Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 1, b - 2]);
+        Range().IgnoreFilters(["tenant"]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 2]);
+        Range().IgnoreFilters([QueryFilters.AnonymousKey]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 1]);
+    }
+
+    [Fact]
+    public void QueryFilter_Func_SecondExecution_SeesChangedContextValue()
+    {
+        var ctx = QueryFilterContext(1);
+        var b = NextQueryFilterBase();
+        SeedQueryFilterFuncRows(FuncActive(b, "func-change-1"), FuncSoftDeleted(b - 1, "func-change-deleted"), FuncForeignTenant(b - 2, "func-change-2"));
+
+        EntityBuilder<QueryFilterFuncEntity> Range() => ctx.From<QueryFilterFuncEntity>().Where(x => x.Id >= b - 2 && x.Id <= b);
+
+        // First execution caches the plan with tenant 1.
+        Range().Select(x => x.Id).ToList().Should().BeEquivalentTo([b]);
+
+        // The same shape on the cached plan must re-read the context and return the tenant-2 row; an
+        // implementation that inlined the first value into the cached plan would keep returning [b].
+        ctx.Properties[QueryFilterFixtures.TenantKey] = 2;
+        Range().Select(x => x.Id).ToList().Should().BeEquivalentTo([b - 2], "the cached plan re-binds the context value");
+
+        ctx.Properties[QueryFilterFixtures.TenantKey] = 1;
+    }
+
+    [Fact]
+    public void QueryFilter_Func_InsertTarget_ThrowsFailClosed()
+    {
+        var ctx = QueryFilterContext(1);
+
+        var act = () => ctx.InsertInto<QueryFilterFuncTargetEntity>()
+            .Values(new QueryFilterFuncTargetEntity { TenantId = 1, IsDeleted = false, Name = "qf-func-ins" })
+            .Insert();
+
+        act.Should().Throw<QueryFilterException>()
+            .WithMessage("*FilterFunc*", "the builder-function target filter cannot be validated (fail-closed)");
+    }
+
+    [Fact]
+    public void QueryFilter_Func_InsertTarget_IgnoreFilters_Inserts()
+    {
+        var ctx = QueryFilterContext(1);
+        var marker = "qf-func-ins-ignored-" + Guid.NewGuid().ToString("N");
+
+        ctx.InsertInto<QueryFilterFuncTargetEntity>()
+            .IgnoreFilters()
+            .Values(new QueryFilterFuncTargetEntity { TenantId = 2, IsDeleted = false, Name = marker })
+            .Insert();
+
+        ctx.From<QueryFilterFuncTargetEntity>().IgnoreFilters().Where(x => x.Name == marker).Select(x => x.TenantId).Single().Should().Be(2);
+    }
+
+    [Fact]
+    public void QueryFilter_Func_UpdateAndDelete_RespectFilter()
+    {
+        var ctx = QueryFilterContext(1);
+        var foreignId = NextQueryFilterBase();
+        SeedQueryFilterFuncRows(FuncForeignTenant(foreignId, "func-target"));
+
+        ctx.Update<QueryFilterFuncEntity>().Set(x => x.Name, "func-updated").Where(x => x.Id == foreignId).Update()
+            .Should().Be(0, "the function tenant filter excludes the foreign row from the update");
+        ctx.DeleteFrom<QueryFilterFuncEntity>().Where(x => x.Id == foreignId).Delete()
+            .Should().Be(0, "the function tenant filter excludes the foreign row from the delete");
+
+        ctx.Update<QueryFilterFuncEntity>().IgnoreFilters().Set(x => x.Name, "func-updated").Where(x => x.Id == foreignId).Update()
+            .Should().Be(1);
+        ctx.DeleteFrom<QueryFilterFuncEntity>().IgnoreFilters().Where(x => x.Id == foreignId).Delete()
+            .Should().Be(1);
+    }
+
+    [Fact]
+    public void QueryFilter_Func_InsertFromQuery_SourceFiltered()
+    {
+        var ctx = QueryFilterContext(1);
+        var b = NextQueryFilterBase();
+        var keepMarker = "qf-func-keep-" + Guid.NewGuid().ToString("N");
+        var dropMarker = "qf-func-drop-" + Guid.NewGuid().ToString("N");
+        SeedQueryFilterFuncRows(FuncActive(b, keepMarker), FuncForeignTenant(b - 1, dropMarker));
+
+        var affected = ctx.InsertInto<QueryFilterFuncSelectTargetEntity>()
+            .Values(
+                ctx.From<QueryFilterFuncEntity>().Where(x => x.Name == keepMarker || x.Name == dropMarker),
+                x => new QueryFilterFuncSelectTargetEntity { TenantId = x.TenantId, IsDeleted = x.IsDeleted, Name = x.Name })
+            .Insert();
+
+        affected.Should().BeGreaterThanOrEqualTo(1);
+        ctx.From<QueryFilterFuncSelectTargetEntity>().Where(x => x.Name == keepMarker).Select(x => x.Id).ToList().Should().ContainSingle();
+        ctx.From<QueryFilterFuncSelectTargetEntity>().IgnoreFilters().Where(x => x.Name == dropMarker).Select(x => x.Id).ToList().Should().BeEmpty(
+            "the source's function filter hides the foreign row before it reaches the target");
+    }
 }
 
 /// <summary>
@@ -580,4 +697,71 @@ public sealed class QueryFilterTargetEntity
 
     public static Expression<Func<QueryFilterTargetEntity, IDataContext, bool>> Tenant()
         => (e, c) => e.TenantId == (int)c.Properties[QueryFilterFixtures.TenantKey];
+}
+
+/// <summary>The builder-function (FilterFunc) SELECT fixture: anonymous soft-delete plus a keyed tenant function.</summary>
+[SqlTable("query_filter_entity")]
+[QueryFilter(FilterLambda = nameof(ActiveOnly))]
+[QueryFilter(FilterKey = "tenant", FilterFunc = nameof(TenantFunc))]
+public sealed class QueryFilterFuncEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant_id")]
+    public int TenantId { get; set; }
+
+    [Column("is_deleted")]
+    public bool IsDeleted { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public static Expression<Func<QueryFilterFuncEntity, bool>> ActiveOnly() => e => !e.IsDeleted;
+
+    public static Func<EntityBuilder<QueryFilterFuncEntity>, IDataContext, EntityBuilder<QueryFilterFuncEntity>> TenantFunc
+        => (b, c) => b.Where(e => e.TenantId == (int)c.Properties[QueryFilterFixtures.TenantKey]);
+}
+
+/// <summary>The builder-function INSERT/MERGE target fixture (keyed tenant function).</summary>
+[SqlTable("query_filter_target")]
+[QueryFilter(FilterKey = "tenant", FilterFunc = nameof(TenantFunc))]
+public sealed class QueryFilterFuncTargetEntity
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant_id")]
+    public int TenantId { get; set; }
+
+    [Column("is_deleted")]
+    public bool IsDeleted { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public static Func<EntityBuilder<QueryFilterFuncTargetEntity>, IDataContext, EntityBuilder<QueryFilterFuncTargetEntity>> TenantFunc
+        => (b, c) => b.Where(e => e.TenantId == (int)c.Properties[QueryFilterFixtures.TenantKey]);
+}
+
+/// <summary>The unfiltered INSERT ... SELECT target for the function-filter source test.</summary>
+[SqlTable("query_filter_target")]
+public sealed class QueryFilterFuncSelectTargetEntity
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("tenant_id")]
+    public int TenantId { get; set; }
+
+    [Column("is_deleted")]
+    public bool IsDeleted { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
 }

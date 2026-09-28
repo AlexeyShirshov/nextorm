@@ -444,6 +444,39 @@ public abstract partial class CommonTestSuite
             }
         }
     }
+
+    // --- D6: a child filter declared in the builder-function form must be folded into the single-query
+    // --- join ON exactly like a predicate child filter.
+
+    [Fact]
+    public void EagerLoading_SingleQuery_ChildFuncFilter_KeepsChildlessParents()
+    {
+        var ctx = _sut.DataProvider;
+        var keep = NextEagerId();
+        var drop = keep + 1;
+
+        ctx.InsertInto<EagerParent>().Values([
+            new EagerParent { Id = keep, Name = "keep" },
+            new EagerParent { Id = drop, Name = "drop" },
+        ]).Insert();
+
+        ctx.InsertInto<EagerChild>().Values([
+            new EagerChild { Id = keep + 100, ParentId = keep, Name = "visible" },
+            new EagerChild { Id = keep + 101, ParentId = keep, Name = "hidden-child" },
+            new EagerChild { Id = keep + 102, ParentId = drop, Name = "hidden-child" },
+        ]).Insert();
+
+        var parents = ctx.From<FuncFilteredEagerParent>()
+            .Where(p => p.Id == keep || p.Id == drop)
+            .LoadWith(p => p.Children, c => c.From<FuncFilteredEagerChild>(), p => p.Id, c => c.ParentId)
+            .AsSingleQuery()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(keep, drop);
+        parents[0].Children.Select(c => c.Id).Should().Equal([keep + 100], "the child's function filter is folded into the join ON");
+        parents[1].Children.Should().BeEmpty("LEFT semantics keep a parent whose only children were filtered out");
+    }
 }
 
 [SqlTable("eager_parent")]
@@ -471,4 +504,35 @@ public sealed class FilteredEagerChild
 
     [Column("name")]
     public string? Name { get; set; }
+}
+
+[SqlTable("eager_parent")]
+public sealed class FuncFilteredEagerParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<FuncFilteredEagerChild> Children { get; } = new List<FuncFilteredEagerChild>();
+}
+
+[SqlTable("eager_child")]
+[QueryFilter(FilterKey = "soft", FilterFunc = nameof(Soft))]
+public sealed class FuncFilteredEagerChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public static Func<EntityBuilder<FuncFilteredEagerChild>, IDataContext, EntityBuilder<FuncFilteredEagerChild>> Soft
+        => (b, _) => b.Where(c => c.Name != "hidden-child");
 }

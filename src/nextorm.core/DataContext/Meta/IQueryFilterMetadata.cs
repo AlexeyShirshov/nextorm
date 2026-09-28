@@ -17,13 +17,16 @@ public interface IQueryFilterMetadata
     /// <summary>
     /// The filter predicate. Its first parameter is the entity; an optional second parameter is the
     /// executing <see cref="IDataContext"/>, so the filter can read per-context state such as a tenant
-    /// identifier. <see langword="null"/> for a builder-function filter (not implemented yet).
+    /// identifier. <see langword="null"/> for a builder-function filter.
     /// </summary>
     LambdaExpression? Lambda { get; }
 
     /// <summary>
     /// The builder-function form of the filter, or <see langword="null"/> for a predicate filter. The
-    /// builder-function form is not implemented yet and always reports <see langword="null"/>.
+    /// value is the function <em>declaration</em> (a <c>Func&lt;EntityBuilder&lt;T&gt;, IDataContext,
+    /// EntityBuilder&lt;T&gt;&gt;</c>), not a ready SQL predicate: it is invoked once while the plan is
+    /// built to produce a predicate, and only the predicate is merged into the query. The default
+    /// implementation returns <see langword="null"/> so existing external implementations keep compiling.
     /// </summary>
-    LambdaExpression? Func => null;
+    Delegate? Func => null;
 }

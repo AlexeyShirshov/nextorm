@@ -225,7 +225,63 @@ ctx.InsertInto<Document>()
     .Insert();
 ```
 
-Форма фильтра-функции (`FilterFunc`) пока не реализована и потому в проверке не участвует.
+Фильтр, объявленный в форме функции билдера (`FilterFunc`), нельзя проверить по записываемой строке — он вычисляется только при построении плана запроса, — поэтому запись, у которой активный фильтр **цели** объявлен функцией, отклоняется (fail-closed), если фильтр не отключён через `IgnoreFilters`; объявите фильтр предикатом (`FilterLambda`), когда запись должна проходить проверку. `INSERT … SELECT` по-прежнему фильтрует свой **источник** как чтение, а `UPDATE` / `DELETE` не затронуты (см. [Фильтры-функции билдера](#фильтры-функции-билдера-filterfunc)).
+
+## Фильтры-функции билдера (`FilterFunc`)
+
+Фильтр можно объявить не предикатом, а **функцией билдера**: `Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>`. nextorm вызывает её **один раз, при построении плана запроса**, передавая живой [`IDataContext`](xref:NextORM.Core.IDataContext); функция вызывает `Where` на свежем билдере, и nextorm сливает **только** этот предикат в `WHERE` основного источника или в `ON` соединения — точно так же, как у фильтра-предиката.
+
+```csharp
+ctx.From<Document>(m => m.HasQueryFilter(
+    (b, c) => b.Where(d => d.TenantId == (int)c.Properties["tenant"])));
+
+// Форма с ключом — функция занимает тот же слот, что и фильтр-предикат.
+ctx.From<Document>(m => m.HasQueryFilter(
+    "tenant", (b, c) => b.Where(d => d.TenantId == (int)c.Properties["tenant"])));
+```
+
+Читайте значение через `IDataContext` **внутри** предиката — или используйте [`SqlFunctions.Parameter<T>(idx)`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) — чтобы оно осталось bound-параметром, а сгенерированный SQL разделялся между контекстами, ровно как у фильтра-предиката. Цепочка вызовов `Where` допускается.
+
+### Атрибут
+
+`QueryFilterAttribute.FilterFunc` называет **статический член** атрибутируемого типа, возвращающий функцию; объявление задаёт либо `FilterLambda`, либо `FilterFunc`, но не оба:
+
+```csharp
+[QueryFilter(FilterKey = "tenant", FilterFunc = nameof(TenantFilter))]
+public sealed class Document
+{
+    public int Id { get; set; }
+    public int TenantId { get; set; }
+
+    public static Func<EntityBuilder<Document>, IDataContext, EntityBuilder<Document>> TenantFilter()
+        => (b, c) => b.Where(d => d.TenantId == (int)c.Properties["tenant"]);
+}
+```
+
+### IgnoreFilters
+
+Форма функции участвует в `IgnoreFilters` точно так же, как фильтр-предикат: у неё тот же ключ (или [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey)), поэтому keyed-, type-only- и intersection-области отключают её одинаково — `IgnoreFilters(["tenant"])`, `IgnoreFilters(typeof(Document))` и all-or-nothing `IgnoreFilters()` равно применяются.
+
+### Функция не должна снимать снапшот runtime-значения
+
+Функция выполняется **только при построении плана**, поэтому runtime-значение нужно читать через `IDataContext` **внутри** предиката. Захват его в локальную переменную до вызова `Where` отклоняется с `NotSupportedException`: значение было бы запечено в кэшированный план (и в in-memory вычисление) и переиспользовано каждым последующим выполнением и каждым другим контекстом, так что попадание в кэш плана молча вернуло бы неверные строки.
+
+```csharp
+// Отклоняется: `tenant` снимается до вызова Where и потому был бы заморожен в плане.
+ctx.From<Document>(m => m.HasQueryFilter((b, c) =>
+{
+    var tenant = (int)c.Properties["tenant"];
+    return b.Where(d => d.TenantId == tenant);
+}));
+```
+
+### Неподдерживаемые случаи
+
+- **Мутации, отличные от `Where`.** Сливается только предикат `Where`, поэтому функция, которая меняет на билдере что-либо ещё — источник, соединение, select, group, сортировку, пагинацию, eager loading или область фильтров, — возвращает другой билдер, либо возвращает билдер без `Where` / `null`, отклоняется с `NotSupportedException`. Выражайте фильтр только через `Where`.
+- **Захваченные коллекции.** Предикат, замыкающий коллекцию — например `ids.Contains(e.Id)`, — захватывает её как runtime-значение и отклоняется с `NotSupportedException`. Функция выполняется только при построении плана, поэтому коллекция не может остаться bound-списком `IN`; объявите фильтр предикатом (`FilterLambda`) или используйте плейсхолдер `SqlFunctions.Parameter<T>(idx)`.
+- **Чужой захваченный контекст.** Предикат, замыкающий `IDataContext`, отличный от переданного функции, отклоняется с `NotSupportedException`: чтение его на общем плане молча вернуло бы значения другого контекста. Читайте параметр `IDataContext` самой функции.
+- **Проверка цели `INSERT` / `MERGE`.** Фильтр-функция вычисляется только при построении плана запроса, поэтому её нельзя проверить по записываемой строке; запись, у которой активный фильтр **цели** объявлен функцией, отклоняется (fail-closed), если фильтр не отключён через `IgnoreFilters`. Объявите фильтр предикатом (`FilterLambda`), когда запись должна проходить проверку.
+- **Фильтры-функции на `FromSql` / сырых источниках** не применяются (сырой SQL передаётся как есть; то же верно и для предикатных фильтров).
 
 ## Провайдер in-memory
 
@@ -240,11 +296,13 @@ public interface IQueryFilterMetadata
 {
     string Key { get; }                    // QueryFilters.AnonymousKey ("") для анонимного фильтра
     LambdaExpression? Lambda { get; }      // предикат либо null для фильтра-функции билдера
-    LambdaExpression? Func => null;        // форма функции билдера (пока не реализована)
+    Delegate? Func { get; }                // объявление функции билдера либо null для фильтра-предиката
 }
 ```
 
-`Key` равен [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey) для анонимного фильтра и объявленному ключу для именованного. `Lambda` несёт предикат; форма `Func` (функция билдера) пока не реализована и всегда возвращает `null`.
+`Key` равен [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey) для анонимного фильтра и объявленному ключу для именованного. Фильтр-предикат отдаёт свой предикат в `Lambda` и `null` в `Func`; фильтр-функция билдера отдаёт `null` в `Lambda` и объявление `Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>` в `Func`. Фильтр, отдающий оба значения не равными `null`, отклоняется.
+
+У `Func` есть реализация по умолчанию, возвращающая `null`, поэтому внешняя реализация, не объявляющая `Func`, продолжает компилироваться. Тип возврата этого члена изменился с `LambdaExpression?` на `Delegate?`, пока член не был выпущен, поэтому реализация, явно объявлявшая прежнюю форму, должна обновить тип возврата; на выпущенных потребителей это не влияет, так как член никогда не поставлялся.
 
 ## Ограничения
 
@@ -257,8 +315,8 @@ public interface IQueryFilterMetadata
 
 Следующее отложено и в этом релизе **недоступно**:
 
-- форма `FilterFunc` — `Func<IQueryable<T>, IDataContext, IQueryable<T>>`;
 - фильтрация **цели** `INSERT` / `MERGE` / `UPSERT` (для неё нет `FROM`) — фильтры цели обеспечиваются проверкой записываемых строк (см. [INSERT и MERGE (проверка)](#insert-и-merge-проверка)); `INSERT … SELECT` уже фильтрует свой **источник**;
-- фильтры на `FromSql` / сырых источниках.
+- фильтры на `FromSql` / сырых источниках;
+- мост EF Core, пробрасывающий keyed-фильтры EF Core 10 (фаза 3).
 
 `UPDATE` и `DELETE` покрыты (см. [UPDATE и DELETE (DML)](#update-и-delete-dml)).

@@ -201,3 +201,32 @@ on a run this variable must not be reported as a regression, and no path touched
 per-row work on the cached path (the filter scope is resolved once per command at plan time). Recorded
 as the cycle's acceptance run; **verdict: regression not confirmed — outlier**, consistent with the
 1.88–2.02 band of the cycle's other runs.
+
+## FilterFunc cached path (D6, #108 PR4)
+
+The builder-function (`FilterFunc`) filter path is **not** covered by the seven acceptance cases; it
+is measured separately by `SqliteBenchmarkQueryFilterFunc` (category `query-filter`). It is a
+focused cached-vs-prepared pair over the same SQL, so the delta is the cached-query overhead (plan
+lookup + `ExtractParams`) for the function form. Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=query-filter
+```
+
+Measured 2026-09-28, same host/config as the baseline above (`Job.ShortRun`, `InProcessEmitToolchain`,
+`MemoryDiagnoser`, **2** executed benchmarks, **0** failures; BDN `Global total time` **12.29 s**).
+
+| Case | Mean | Allocated | Ratio (time) | Alloc ratio |
+|------|------|-----------|--------------|-------------|
+| `FuncFilter_Prepared_ToList` (baseline) | 1.466 ms | 75 KB | 1.00 | 1.00 |
+| `FuncFilter_Cached_ToList` | 4.640 ms | 1078.45 KB | **3.17** | **14.38** |
+
+**Reading.** The func cached path costs **3.17×** the prepared time and **14.38×** the allocation on
+this run, versus **1.87× / 7.42×** for the ordinary `Cached_ToList / Prepared_ToList` pair. The
+difference is real and expected: `GetPreparedQueryCommand` prepares every fresh command (and so
+invokes the builder function once) **before** the plan-cache lookup, which only avoids re-rendering
+SQL and rebuilding the mapper — the function is not memoized per plan. This is recorded as the
+measured cost of the function form; no "no regression" claim is made for this path. `Error` for both
+rows is large on `ShortRun` (`FuncFilter_Cached_ToList` `Error = 2.033 ms`), so the ratio is
+indicative, not a hard gate; any future optimisation (memoizing the injected predicate per plan
+shape) should re-run this focused case.

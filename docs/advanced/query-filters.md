@@ -225,7 +225,63 @@ ctx.InsertInto<Document>()
     .Insert();
 ```
 
-The builder-function filter form (`FilterFunc`) is not implemented yet and therefore takes no part in validation.
+A filter declared in the builder-function form (`FilterFunc`) cannot be validated against a written row — it is evaluated only while a query plan is built — so a write whose active **target** filter is declared as a function is rejected (fail-closed) unless the filter is disabled with `IgnoreFilters`; declare the filter as a predicate (`FilterLambda`) when the write must be validated. `INSERT … SELECT` still filters its **source** as a read, and `UPDATE` / `DELETE` are unaffected (see [Builder-function filters](#builder-function-filters-filterfunc)).
+
+## Builder-function filters (`FilterFunc`)
+
+A filter can also be declared as a **builder function** instead of a predicate: a `Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>`. nextorm invokes it **once, while the query plan is built**, passing the live [`IDataContext`](xref:NextORM.Core.IDataContext); the function calls `Where` on the fresh builder and nextorm merges **only** that predicate into the main source `WHERE` or the join `ON`, exactly like a predicate filter.
+
+```csharp
+ctx.From<Document>(m => m.HasQueryFilter(
+    (b, c) => b.Where(d => d.TenantId == (int)c.Properties["tenant"])));
+
+// Keyed form — the function occupies the same slot as a predicate filter.
+ctx.From<Document>(m => m.HasQueryFilter(
+    "tenant", (b, c) => b.Where(d => d.TenantId == (int)c.Properties["tenant"])));
+```
+
+Read the value through the `IDataContext` **inside** the predicate — or use [`SqlFunctions.Parameter<T>(idx)`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) — so it stays a bound parameter and the generated SQL is shared across contexts, exactly as for a predicate filter. A chain of `Where` calls is allowed.
+
+### Attribute
+
+`QueryFilterAttribute.FilterFunc` names a **static member** of the attributed type that returns the function; a declaration sets either `FilterLambda` or `FilterFunc`, not both:
+
+```csharp
+[QueryFilter(FilterKey = "tenant", FilterFunc = nameof(TenantFilter))]
+public sealed class Document
+{
+    public int Id { get; set; }
+    public int TenantId { get; set; }
+
+    public static Func<EntityBuilder<Document>, IDataContext, EntityBuilder<Document>> TenantFilter()
+        => (b, c) => b.Where(d => d.TenantId == (int)c.Properties["tenant"]);
+}
+```
+
+### IgnoreFilters
+
+The function form takes part in `IgnoreFilters` exactly like a predicate filter: it carries the same key (or [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey)), so keyed, type-only and intersection scopes disable it the same way — `IgnoreFilters(["tenant"])`, `IgnoreFilters(typeof(Document))` and an all-or-nothing `IgnoreFilters()` all apply.
+
+### The function must not snapshot a runtime value
+
+The function runs **only when the plan is built**, so a runtime value must be read through the `IDataContext` **inside** the predicate. Capturing it into a local before the `Where` call is rejected with `NotSupportedException`: the value would be baked into the cached plan (and into the in-memory evaluation) and reused by every later execution and every other context, so a plan-cache hit would silently return the wrong rows.
+
+```csharp
+// Rejected: `tenant` is snapshotted before the Where call, so it would be frozen into the plan.
+ctx.From<Document>(m => m.HasQueryFilter((b, c) =>
+{
+    var tenant = (int)c.Properties["tenant"];
+    return b.Where(d => d.TenantId == tenant);
+}));
+```
+
+### Unsupported cases
+
+- **Non-`Where` mutations.** Only the `Where` predicate is merged, so a function that changes anything else on the builder — source, join, select, group, ordering, paging, eager loading or filter scope — returns a different builder, or returns no `Where` / a `null` builder, is rejected with `NotSupportedException`. Express the filter with `Where` alone.
+- **Captured collections.** A predicate that closes over a collection — for example `ids.Contains(e.Id)` — captures it as a runtime value and is rejected with `NotSupportedException`. The function runs only at plan build, so the collection cannot stay a bound `IN` list; declare the filter as a predicate (`FilterLambda`) or use a `SqlFunctions.Parameter<T>(idx)` placeholder instead.
+- **Foreign captured context.** A predicate that closes over an `IDataContext` other than the one passed to the function is rejected with `NotSupportedException`: reading it on a shared plan would silently return the wrong context's values. Read the function's `IDataContext` parameter instead.
+- **`INSERT` / `MERGE` target validation.** A function filter is evaluated only while a query plan is built, so it cannot be validated against a written row; a write whose active **target** filter is declared as a function is rejected (fail-closed) unless the filter is disabled with `IgnoreFilters`. Declare the filter as a predicate (`FilterLambda`) when the write must be validated.
+- **Filter functions on `FromSql` / raw sources** are not applied (the raw SQL is passed through as written; the same holds for predicate filters).
 
 ## In-memory provider
 
@@ -240,11 +296,13 @@ public interface IQueryFilterMetadata
 {
     string Key { get; }                    // QueryFilters.AnonymousKey ("") for an anonymous filter
     LambdaExpression? Lambda { get; }      // the predicate, or null for a builder-function filter
-    LambdaExpression? Func => null;        // the builder-function form (not implemented yet)
+    Delegate? Func { get; }                // the builder-function declaration, or null for a predicate filter
 }
 ```
 
-`Key` is [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey) for an anonymous filter and the declared key for a named one. `Lambda` carries the predicate; the builder-function form `Func` is not implemented yet and always reports `null`.
+`Key` is [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey) for an anonymous filter and the declared key for a named one. A predicate filter reports its predicate in `Lambda` and `null` in `Func`; a builder-function filter reports `null` in `Lambda` and the `Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>` declaration in `Func`. A filter that reports both non-null is rejected.
+
+`Func` has a default interface implementation returning `null`, so an external implementation that does not declare `Func` keeps compiling. The member's return type changed from `LambdaExpression?` to `Delegate?` while it was unreleased, so an implementation that explicitly declared the earlier shape must update the return type; released consumers are unaffected because the member never shipped.
 
 ## Limitations
 
@@ -257,8 +315,8 @@ public interface IQueryFilterMetadata
 
 The following remain deferred and are **not** available in this release:
 
-- the `FilterFunc` form — `Func<IQueryable<T>, IDataContext, IQueryable<T>>`;
 - filtering the **target** of `INSERT` / `MERGE` / `UPSERT` (there is no `FROM` for it) — target filters are enforced by validating the written rows instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)); `INSERT … SELECT` already filters its **source**;
-- filters on `FromSql` / raw sources.
+- filters on `FromSql` / raw sources;
+- the EF Core bridge that forwards EF Core 10 keyed filters (Phase 3).
 
 `UPDATE` and `DELETE` are covered (see [UPDATE and DELETE (DML)](#update-and-delete-dml)).

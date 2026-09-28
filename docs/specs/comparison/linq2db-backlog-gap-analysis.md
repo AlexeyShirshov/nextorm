@@ -87,7 +87,7 @@ range-типа) и динамическая схема табличных ист
 | `#5904`, `#5937`, `#5941`, `#5940`, `#5865` | eager-load ordering/strategy | **Out-of-scope** |
 | `#5717` | DML `RETURNING`/`OUTPUT` как **композируемый** `IQueryable`-источник | **Частично <span style="color:green">Done</span>** (~~G3~~): PG `INSERT ... RETURNING` как data-modifying CTE |
 | `#4562` | PostgreSQL `Overlaps` (range `&&`) | **<span style="color:green">Реализовано</span>** (G11, 1.0-b.1); плюс range поверх пары скалярных колонок (`[RangeColumns]`) на провайдерах без нативного range → [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types), [Range columns](../../guide/29-range-columns.md) |
-| `#4543` | декларативный `QueryFilter`-атрибут | **Planned** → [`todo_query_filters.md`](../roadmap/todo_query_filters.md) |
+| `#4543` | декларативный `QueryFilter`-атрибут | **Planned** → `todo_query_filters.md` |
 | `#5706`, `#1879`, `#3740`, `#5425` | Oracle-специфика | **Out-of-scope** (нет провайдера) |
 | `#3023`, `#5895`–`#5897` | Sybase/DB2-специфика | **Out-of-scope** |
 | `#4745`, `#5081`, `#5911`, `#5903`, `#5861`, `#5862`, `#5730` | внутренности/SQL-gen/упаковка | **N/A** |
@@ -340,7 +340,7 @@ integration-тест. Подробности — [Duration columns](../../guide/
   Redshift, DuckDB, YDB, Access, SQL CE.
 - **Remote context / gRPC**, **LINQPad-драйвер**, **F#-специфика**.
 - **Change tracking / identity map**.
-- **Query filters** — не out-of-scope, а `Planned` ([`todo_query_filters.md`](../roadmap/todo_query_filters.md)).
+- **Query filters** — не out-of-scope, а `Planned` (`todo_query_filters.md`).
 - **EF Core integration** — не out-of-scope, а `Planned` ([`todo_efcore_integration.md`](../roadmap/todo_efcore_integration.md));
   `linq2db#4044`, `#4611`, `#4666` закрываются ей.
 

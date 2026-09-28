@@ -685,4 +685,221 @@ public class QueryFilterSqlGenerationTests
             File.Delete(path);
         }
     }
+
+    // --- PR4: the builder-function (FilterFunc) form renders the same bound parameter as the
+    // --- context-based predicate form, on both the main source and a join ON condition, and shares
+    // --- its plan key across contexts while the value stays a parameter.
+
+    private const string FuncTenantKey = "qf_func_tenant_sqlgen";
+
+    [SqlTable("qf_func_entity")]
+    public sealed class QfFuncEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+    }
+
+    [SqlTable("qf_func_join_left")]
+    public sealed class QfFuncJoinLeftEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+    }
+
+    [SqlTable("qf_func_join_right")]
+    public sealed class QfFuncJoinRightEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+    }
+
+    [SqlTable("qf_func_parameter_entity")]
+    public sealed class QfFuncParameterEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+    }
+
+    [SqlTable("qf_func_scoped_entity")]
+    public sealed class QfFuncScopedEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+    }
+
+    [SqlTable("qf_func_joininto_parent")]
+    public sealed class QfFuncJoinIntoParentEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        public ICollection<QfFuncJoinIntoChildEntity> Children { get; set; } = new List<QfFuncJoinIntoChildEntity>();
+    }
+
+    [SqlTable("qf_func_joininto_child")]
+    public sealed class QfFuncJoinIntoChildEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("parent_id")]
+        public int ParentId { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+    }
+
+    private static string FuncSelectSql(IDataContext ctx, EntityBuilder<QfFuncEntity> builder)
+    {
+        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            builder.Select(x => x.Id), false, false, CancellationToken.None);
+        return Normalize(prepared.DbCommand.CommandText);
+    }
+
+    [Fact]
+    public void FuncFilter_Select_ShouldRenderBoundParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.Properties[FuncTenantKey] = 1;
+        ctx.From<QfFuncEntity>(b => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[FuncTenantKey])));
+
+        var sql = FuncSelectSql(ctx, ctx.From<QfFuncEntity>());
+
+        sql.Should().Contain("tenant_id = $");
+        sql.Should().NotContain("= 1", "the context value is bound, not inlined into the SQL");
+    }
+
+    [Fact]
+    public void FuncFilter_JoinOn_ShouldRenderBoundParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.Properties[FuncTenantKey] = 1;
+        ctx.From<QfFuncJoinRightEntity>(b => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[FuncTenantKey])));
+
+        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<QfFuncJoinLeftEntity>()
+                .Join(ctx.From<QfFuncJoinRightEntity>(), (l, r) => l.Id == r.Id)
+                .Select(p => p.Item2.TenantId),
+            false, false, CancellationToken.None);
+
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        CountOccurrences(sql, "tenant_id = $").Should().Be(1, "the function filter is injected into the join ON condition");
+        sql.Should().NotContain("= 1", "the context value is bound, not inlined into the ON condition");
+    }
+
+    [Fact]
+    public void FuncFilter_JoinIntoChildOn_ShouldRenderBoundParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.Properties[FuncTenantKey] = 1;
+        ctx.From<QfFuncJoinIntoChildEntity>(b => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[FuncTenantKey])));
+
+        // The JoinInto child's own function filter must be merged into the synthesized join ON condition,
+        // exactly like a predicate child filter.
+        var prepared = (DbPreparedQueryCommand<QfFuncJoinIntoParentEntity>)ctx.GetPreparedQueryCommand(
+            ctx.From<QfFuncJoinIntoParentEntity>(b => b.HasMany(p => p.Children, c => c.ParentId))
+                .JoinInto(
+                    ctx.From<QfFuncJoinIntoChildEntity>(),
+                    (p, c) => p.Id == c.ParentId,
+                    p => p.Children,
+                    p => p.Id,
+                    c => c.ParentId)
+                .ToCommand(),
+            false, false, CancellationToken.None);
+
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        sql.Should().Contain("left join qf_func_joininto_child");
+        CountOccurrences(sql, "tenant_id = $").Should().Be(1, "the child's function filter is injected into the JoinInto ON condition");
+        sql.Should().NotContain("= 1", "the context value is bound, not inlined into the ON condition");
+    }
+
+    [Fact]
+    public void FuncFilter_ParameterPlaceholder_ShouldRenderBoundParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.From<QfFuncParameterEntity>(b => b.HasQueryFilter((eb, _) => eb.Where(e => e.TenantId == SqlFunctions.Parameter<int>(0))));
+
+        var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<QfFuncParameterEntity>().Select(x => x.Id), false, false, CancellationToken.None);
+
+        var sql = Normalize(prepared.DbCommand.CommandText);
+        sql.Should().Contain("tenant_id = $");
+        sql.Should().NotContain("= 0", "the placeholder is bound, not inlined");
+    }
+
+    [Fact]
+    public void FuncFilter_CachedPlan_SecondExecution_ShouldBindChangedValue()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.Properties[FuncTenantKey] = 1;
+        ctx.From<QfFuncEntity>(b => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[FuncTenantKey])));
+
+        // First execution stores the plan with the tenant-1 value.
+        var first = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<QfFuncEntity>().Select(x => x.Id), false, true, CancellationToken.None);
+        first.DbCommand.Parameters.Count.Should().Be(1);
+        first.DbCommand.Parameters[0].Value.Should().Be(1);
+
+        // The same shape executes on the cached plan after the property changed: the value is re-bound per
+        // execution, so an implementation that inlined the first literal would fail the assertion below.
+        ctx.Properties[FuncTenantKey] = 2;
+        var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+            ctx.From<QfFuncEntity>().Select(x => x.Id), false, true, CancellationToken.None);
+        ReferenceEquals(first, second).Should().BeTrue("the second execution must hit the cached plan, so the changed value is observed on it");
+        second.DbCommand.Parameters.Count.Should().Be(1);
+        second.DbCommand.Parameters[0].Value.Should().Be(2, "the cached plan re-reads the context value and binds the second one");
+    }
+
+    [Fact]
+    public void FuncFilter_TwoContexts_ShouldSharePlanKey_AndScopeDistinguishes()
+    {
+        using var ctx1 = SqliteTestContext.Create();
+        using var ctx2 = SqliteTestContext.Create();
+        ctx1.Properties[FuncTenantKey] = 1;
+        ctx2.Properties[FuncTenantKey] = 2;
+        ctx1.From<QfFuncEntity>(b => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[FuncTenantKey])));
+
+        QueryCommand<int> shared1 = ctx1.From<QfFuncEntity>().Select(x => x.Id);
+        QueryCommand<int> shared2 = ctx2.From<QfFuncEntity>().Select(x => x.Id);
+        shared1.PrepareCommand(false, TestContext.Current.CancellationToken);
+        shared2.PrepareCommand(false, TestContext.Current.CancellationToken);
+
+        shared1.GetOrCreatePlanKey(null).Equals(shared2.GetOrCreatePlanKey(null))
+            .Should().BeTrue("the function filter reads the per-context value, which stays out of the plan key");
+
+        QueryCommand<int> unfiltered = ctx1.From<QfFuncEntity>().IgnoreFilters().Select(x => x.Id);
+        unfiltered.PrepareCommand(false, TestContext.Current.CancellationToken);
+        shared1.GetOrCreatePlanKey(null).Equals(unfiltered.GetOrCreatePlanKey(null))
+            .Should().BeFalse("disabling the function filter injects a different condition");
+    }
+
+    [Fact]
+    public void FuncFilter_DifferentDeclaration_ShouldDistinguishPlan()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.Properties[FuncTenantKey] = 1;
+        ctx.From<QfFuncScopedEntity>(b => b
+            .HasQueryFilter("lower", (eb, _) => eb.Where(e => e.Id > 5))
+            .HasQueryFilter("upper", (eb, _) => eb.Where(e => e.Id < 100)));
+
+        QueryCommand<int> lowerIgnored = ctx.From<QfFuncScopedEntity>().IgnoreFilters(["lower"]).Select(x => x.Id);
+        QueryCommand<int> upperIgnored = ctx.From<QfFuncScopedEntity>().IgnoreFilters(["upper"]).Select(x => x.Id);
+        lowerIgnored.PrepareCommand(false, TestContext.Current.CancellationToken);
+        upperIgnored.PrepareCommand(false, TestContext.Current.CancellationToken);
+
+        lowerIgnored.GetOrCreatePlanKey(null).Equals(upperIgnored.GetOrCreatePlanKey(null))
+            .Should().BeFalse("two different function declarations inject different conditions");
+    }
 }

@@ -1580,4 +1580,453 @@ public class QueryFilterTests
         affected.Should().Be(1);
         rows.Should().ContainSingle();
     }
+
+    // --- PR4: the builder-function (FilterFunc) form. The function is invoked once at plan build with
+    // --- the live IDataContext; only the Where predicate it appends is merged, and context reads stay
+    // --- bound parameters so the plan key does not change with the value. A function that returns null,
+    // --- changes state other than Where, or snapshots a runtime value is rejected with
+    // --- NotSupportedException, and a write target with a function filter is rejected fail-closed.
+
+    public sealed class FuncFilterTenantEntity
+    {
+        public int Id { get; set; }
+        public int TenantId { get; set; }
+    }
+
+    [QueryFilter(FilterKey = "tenant", FilterFunc = nameof(TenantFunc))]
+    public sealed class FuncAttributeFilteredEntity
+    {
+        public int Id { get; set; }
+        public int TenantId { get; set; }
+
+        public static Func<EntityBuilder<FuncAttributeFilteredEntity>, IDataContext, EntityBuilder<FuncAttributeFilteredEntity>> TenantFunc
+            => (b, c) => b.Where(e => e.TenantId == (int)c.Properties[TenantKey]);
+    }
+
+    public sealed class FuncKeyedEntity
+    {
+        public int Id { get; set; }
+        public bool IsDeleted { get; set; }
+    }
+
+    public sealed class FuncMetadataEntity
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class FuncNullEntity
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class FuncMutateEntity
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class FuncCaptureEntity
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class FuncParameterEntity
+    {
+        public int Id { get; set; }
+        public int TenantId { get; set; }
+    }
+
+    public sealed class FuncWriteTargetEntity
+    {
+        public int Id { get; set; }
+        public int TenantId { get; set; }
+    }
+
+    public sealed class FuncInsertSourceEntity
+    {
+        public int Id { get; set; }
+        public int TenantId { get; set; }
+    }
+
+    private static void ConfigureFuncTenant(EntityMetadataBuilder<FuncFilterTenantEntity> b)
+        => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[TenantKey]));
+
+    private static void ConfigureFuncWriteTarget(EntityMetadataBuilder<FuncWriteTargetEntity> b)
+        => b.HasQueryFilter("tenant", (eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[TenantKey]));
+
+    private static void ConfigureFuncInsertSource(EntityMetadataBuilder<FuncInsertSourceEntity> b)
+        => b.HasQueryFilter("tenant", (eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[TenantKey]));
+
+    [Fact]
+    public void FuncFilter_ContextValue_ShouldFilterRows()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<FuncFilterTenantEntity>(ConfigureFuncTenant).WithData(
+        [
+            new FuncFilterTenantEntity { Id = 1, TenantId = 1 },
+            new FuncFilterTenantEntity { Id = 2, TenantId = 2 },
+        ]);
+
+        var rows = ctx.From<FuncFilterTenantEntity>().Select(x => x.Id).ToList();
+
+        rows.Should().Equal(1);
+    }
+
+    [Fact]
+    public void FuncFilter_AttributeDeclared_ShouldFilterRows()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<FuncAttributeFilteredEntity>().WithData(
+        [
+            new FuncAttributeFilteredEntity { Id = 1, TenantId = 1 },
+            new FuncAttributeFilteredEntity { Id = 2, TenantId = 2 },
+        ]);
+
+        var rows = ctx.From<FuncAttributeFilteredEntity>().Select(x => x.Id).ToList();
+
+        rows.Should().Equal(1);
+    }
+
+    private static void ConfigureFuncKeyed(InMemoryDataContext ctx)
+        => ctx.From<FuncKeyedEntity>(b => b
+                .HasQueryFilter((eb, _) => eb.Where(e => e.Id < 100))
+                .HasQueryFilter("soft", (eb, _) => eb.Where(e => !e.IsDeleted)))
+            .WithData(
+            [
+                new FuncKeyedEntity { Id = 1 },
+                new FuncKeyedEntity { Id = 2, IsDeleted = true },
+                new FuncKeyedEntity { Id = 600 },
+            ]);
+
+    [Fact]
+    public void FuncFilter_Keyed_SelectiveIgnore_ShouldDisableOnlyNamedFilter()
+    {
+        using var ctx = new InMemoryDataContext();
+        ConfigureFuncKeyed(ctx);
+
+        var withoutSoft = ctx.From<FuncKeyedEntity>().IgnoreFilters(["soft"]).Select(x => x.Id).ToList();
+        var withoutAnonymous = ctx.From<FuncKeyedEntity>().IgnoreFilters([QueryFilters.AnonymousKey]).Select(x => x.Id).ToList();
+
+        withoutSoft.Should().BeEquivalentTo([1, 2], "only the named soft-delete filter is disabled");
+        withoutAnonymous.Should().BeEquivalentTo([1, 600], "only the anonymous Id filter is disabled");
+    }
+
+    [Fact]
+    public void FuncFilter_Keyed_IgnoreAll_ShouldDisableEveryFilter()
+    {
+        using var ctx = new InMemoryDataContext();
+        ConfigureFuncKeyed(ctx);
+
+        var rows = ctx.From<FuncKeyedEntity>().IgnoreFilters().Select(x => x.Id).ToList();
+
+        rows.Should().BeEquivalentTo([1, 2, 600]);
+    }
+
+    [Fact]
+    public void FuncFilter_Keyed_SelectiveIgnore_ShouldAccumulate()
+    {
+        using var ctx = new InMemoryDataContext();
+        ConfigureFuncKeyed(ctx);
+
+        var rows = ctx.From<FuncKeyedEntity>()
+            .IgnoreFilters(["soft"])
+            .IgnoreFilters([QueryFilters.AnonymousKey])
+            .Select(x => x.Id)
+            .ToList();
+
+        rows.Should().BeEquivalentTo([1, 2, 600], "the two selective scopes accumulate");
+    }
+
+    [Fact]
+    public void FuncFilter_Metadata_ShouldExposeFuncAndNullLambda()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<FuncMetadataEntity>(b => b.HasQueryFilter((eb, _) => eb.Where(e => e.Id > 0)));
+
+        var filters = DataContextCache.Metadata[typeof(FuncMetadataEntity)].Filters;
+
+        filters.Should().ContainSingle();
+        filters[0].Lambda.Should().BeNull("a builder-function filter has no predicate lambda");
+        filters[0].Func.Should().NotBeNull("the function declaration is the metadata");
+    }
+
+    [Fact]
+    public void FuncFilter_ReturningNull_ShouldThrowNotSupported()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<FuncNullEntity>(b => b.HasQueryFilter(
+            (Func<EntityBuilder<FuncNullEntity>, IDataContext, EntityBuilder<FuncNullEntity>>)((_, _) => null!)));
+
+        var act = () => ctx.From<FuncNullEntity>().Select(x => x.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*returned a null builder*");
+    }
+
+    [Fact]
+    public void FuncFilter_ChangingNonWhereState_ShouldThrowNotSupported()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<FuncMutateEntity>(b => b.HasQueryFilter((eb, _) => eb.Where(e => e.Id > 0).Distinct()));
+
+        var act = () => ctx.From<FuncMutateEntity>().Select(x => x.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*must only add a Where predicate*");
+    }
+
+    [Fact]
+    public void FuncFilter_CapturingLocal_ShouldThrowNotSupported()
+    {
+        using var ctx = new InMemoryDataContext();
+        var threshold = 5;
+        ctx.From<FuncCaptureEntity>(b => b.HasQueryFilter((eb, _) => eb.Where(e => e.Id > threshold)));
+
+        var act = () => ctx.From<FuncCaptureEntity>().Select(x => x.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*captures the runtime value 'threshold'*");
+    }
+
+    [Fact]
+    public void FuncFilter_ParameterPlaceholder_ShouldFilterInMemory()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<FuncParameterEntity>(b => b.HasQueryFilter((eb, _) => eb.Where(e => e.TenantId == SqlFunctions.Parameter<int>(0))))
+            .WithData(
+            [
+                new FuncParameterEntity { Id = 1, TenantId = 1 },
+                new FuncParameterEntity { Id = 2, TenantId = 2 },
+            ]);
+
+        var rows = ctx.From<FuncParameterEntity>().Select(x => x.Id).ToList(1);
+
+        rows.Should().Equal(1);
+    }
+
+    [Fact]
+    public void Insert_TargetFuncFilter_ShouldThrowQueryFilterFailClosed()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+
+        var act = () => ctx.InsertInto<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
+            .Values(new FuncWriteTargetEntity { Id = 1, TenantId = 1 })
+            .Insert();
+
+        act.Should().Throw<QueryFilterException>()
+            .WithMessage("*FilterFunc*", "a builder-function target filter cannot be validated (fail-closed)");
+    }
+
+    [Fact]
+    public void Insert_TargetFuncFilter_IgnoreFilters_ShouldReachExecution()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+
+        var act = () => ctx.InsertInto<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
+            .IgnoreFilters()
+            .Values(new FuncWriteTargetEntity { Id = 1, TenantId = 1 })
+            .Insert();
+
+        act.Should().Throw<NotSupportedException>()
+            .Which.Message.Should().NotContain("FilterFunc", "IgnoreFilters bypasses the fail-closed write validation");
+    }
+
+    [Fact]
+    public void Merge_TargetFuncFilter_ShouldThrowQueryFilterFailClosed()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+
+        var act = () => ctx.MergeInto<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
+            .Using(new FuncWriteTargetEntity { Id = 1, TenantId = 1 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Merge();
+
+        act.Should().Throw<QueryFilterException>().WithMessage("*FilterFunc*");
+    }
+
+    [Fact]
+    public void Update_KeyForm_FuncFilter_ShouldCarryTargetPredicate()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<FuncWriteTargetEntity>(ConfigureFuncWriteTarget);
+
+        var command = ctx.Update<FuncWriteTargetEntity>().BuildEntityCommand(new FuncWriteTargetEntity { Id = 2 });
+
+        command.Source.PrepareCommand(false, TestContext.Current.CancellationToken);
+        command.Source.PreparedCondition.Should().NotBeNull("the key-form update carries the builder-function filter");
+        command.Source.PreparedCondition!.ToString().Should().Contain("TenantId");
+    }
+
+    [Fact]
+    public void Delete_KeyForm_FuncFilter_ShouldCarryTargetPredicate()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<FuncWriteTargetEntity>(ConfigureFuncWriteTarget);
+
+        var command = ctx.DeleteFrom<FuncWriteTargetEntity>().BuildKeyCommand(new FuncWriteTargetEntity { Id = 2 });
+
+        command.Condition.Should().NotBeNull();
+        command.Condition!.PrepareCommand(false, TestContext.Current.CancellationToken);
+        command.Condition.PreparedCondition.Should().NotBeNull("the key-form delete carries the builder-function filter");
+        command.Condition.PreparedCondition!.ToString().Should().Contain("TenantId");
+    }
+
+    [Fact]
+    public void InsertSelect_SourceFuncFilter_ShouldFilterTheSource()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.Properties[TenantKey] = 1;
+        ctx.From<FuncInsertSourceEntity>(ConfigureFuncInsertSource).WithData(
+        [
+            new FuncInsertSourceEntity { Id = 1, TenantId = 1 },
+            new FuncInsertSourceEntity { Id = 2, TenantId = 2 },
+        ]);
+
+        var source = ctx.From<FuncInsertSourceEntity>().ToCommand();
+        source.PrepareCommand(false, TestContext.Current.CancellationToken);
+
+        source.PreparedCondition.Should().NotBeNull("the INSERT ... SELECT source carries its builder-function filter");
+        source.PreparedCondition!.ToString().Should().Contain("TenantId");
+    }
+
+    // --- D6 review fixes on the builder-function form: the predicate is bound to the IDataContext the
+    // --- function receives (a captured foreign context is rejected), a non-Where mutation applied in
+    // --- place before a Where clone is detected, a metadata implementation declaring both forms is
+    // --- rejected, and a captured collection stays rejected.
+
+    public sealed class FuncTwoContextEntity
+    {
+        public int Id { get; set; }
+        public int TenantId { get; set; }
+    }
+
+    private static void ConfigureFuncTwoContext(EntityMetadataBuilder<FuncTwoContextEntity> b)
+        => b.HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[TenantKey]));
+
+    [Fact]
+    public void FuncFilter_TwoContexts_DifferentTenant_ShouldReadPassedContextAndSharePlan()
+    {
+        using var ctx1 = new InMemoryDataContext();
+        ctx1.Properties[TenantKey] = 1;
+        ctx1.From<FuncTwoContextEntity>(ConfigureFuncTwoContext).WithData(
+        [
+            new FuncTwoContextEntity { Id = 10, TenantId = 1 },
+            new FuncTwoContextEntity { Id = 20, TenantId = 2 },
+        ]);
+
+        using var ctx2 = new InMemoryDataContext();
+        ctx2.Properties[TenantKey] = 2;
+        ctx2.From<FuncTwoContextEntity>(ConfigureFuncTwoContext).WithData(
+        [
+            new FuncTwoContextEntity { Id = 10, TenantId = 1 },
+            new FuncTwoContextEntity { Id = 20, TenantId = 2 },
+        ]);
+
+        var cmd1 = ctx1.From<FuncTwoContextEntity>().Select(x => x.Id);
+        var cmd2 = ctx2.From<FuncTwoContextEntity>().Select(x => x.Id);
+        cmd1.PrepareCommand(false, TestContext.Current.CancellationToken);
+        cmd2.PrepareCommand(false, TestContext.Current.CancellationToken);
+
+        ctx1.From<FuncTwoContextEntity>().Select(x => x.Id).ToList().Should().Equal(10);
+        ctx2.From<FuncTwoContextEntity>().Select(x => x.Id).ToList().Should().Equal(20);
+
+        cmd1.GetOrCreatePlanKey(null).Equals(cmd2.GetOrCreatePlanKey(null))
+            .Should().BeTrue("the function reads the passed context, whose value stays out of the plan key");
+    }
+
+    public sealed class FuncForeignContextEntity
+    {
+        public int Id { get; set; }
+        public int TenantId { get; set; }
+    }
+
+    [Fact]
+    public void FuncFilter_CapturingForeignContext_ShouldThrowNotSupported()
+    {
+        using var executing = new InMemoryDataContext();
+        executing.Properties[TenantKey] = 1;
+        using var foreign = new InMemoryDataContext();
+        foreign.Properties[TenantKey] = 2;
+
+        executing.From<FuncForeignContextEntity>(b => b.HasQueryFilter(
+            (eb, _) => eb.Where(e => e.TenantId == (int)foreign.Properties[TenantKey])));
+
+        var act = () => executing.From<FuncForeignContextEntity>().Select(x => x.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*different IDataContext*", "the closure captured a context other than the one passed to the function");
+    }
+
+    public sealed class FuncInPlaceMutationEntity
+    {
+        public int Id { get; set; }
+    }
+
+    [Fact]
+    public void FuncFilter_MutatingNonWhereStateInPlace_ShouldThrowNotSupported()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<FuncInPlaceMutationEntity>(b => b.HasQueryFilter((eb, _) =>
+        {
+            // The mutation is applied to the input builder, then Where clones it, so comparing the
+            // returned clone against the (already mutated) input would miss it: the snapshot taken before
+            // the call is what detects it.
+            eb.Paging = new Paging { Limit = 5 };
+            return eb.Where(e => e.Id > 0);
+        }));
+
+        var act = () => ctx.From<FuncInPlaceMutationEntity>().Select(x => x.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*must only add a Where predicate*", "an in-place non-Where mutation must be detected");
+    }
+
+    public sealed class FuncCollectionCaptureEntity
+    {
+        public int Id { get; set; }
+    }
+
+    [Fact]
+    public void FuncFilter_CapturingCollection_ShouldThrowNotSupported()
+    {
+        using var ctx = new InMemoryDataContext();
+        var ids = new List<int> { 1, 2 };
+        ctx.From<FuncCollectionCaptureEntity>(b => b.HasQueryFilter((eb, _) => eb.Where(e => ids.Contains(e.Id))));
+
+        var act = () => ctx.From<FuncCollectionCaptureEntity>().Select(x => x.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*captures the runtime value 'ids'*", "a captured collection is a runtime value evaluated at plan build");
+    }
+
+    public sealed class FuncBothFormsEntity
+    {
+        public int Id { get; set; }
+    }
+
+    [Fact]
+    public void FuncFilter_MetadataDeclaringBothLambdaAndFunc_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<FuncBothFormsEntity>(b => b.HasQueryFilter(e => e.Id > 0));
+        var inner = DataContextCache.Metadata[typeof(FuncBothFormsEntity)];
+        var lambda = inner.Filters[0].Lambda!;
+        Func<EntityBuilder<FuncBothFormsEntity>, IDataContext, EntityBuilder<FuncBothFormsEntity>> func
+            = (eb, _) => eb.Where(e => e.Id < 100);
+
+        DataContextCache.Metadata[typeof(FuncBothFormsEntity)] = new EntityMetadata(
+            inner.TableName,
+            inner.Properties,
+            filters: [new QueryFilterMetadata("both", lambda, func)]);
+
+        var act = () => ctx.From<FuncBothFormsEntity>().Select(x => x.Id).ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*both a predicate Lambda and a builder-function Func*", "the two forms are mutually exclusive");
+    }
 }

@@ -209,6 +209,41 @@ public class JoinIntoInMemoryFilterTests
         parents.Single(p => p.Id == 2).Children.Should().BeEmpty();
     }
 
+    private const string FuncTenantKey = "joininto_func_tenant";
+
+    private static InMemoryDataContext CreateFuncFilterContext()
+    {
+        var ctx = new InMemoryDataContext();
+        ctx.Properties[FuncTenantKey] = 1;
+        ctx.From<FuncFilteredJoinParent>(b => b.HasMany(p => p.Children, c => c.ParentId))
+            .WithData([new FuncFilteredJoinParent { Id = 1 }]);
+        // The child declares its filter in the builder-function form, so the JoinInto ON path must run the
+        // function at plan build and merge only its Where predicate, reading the passed context.
+        ctx.From<FuncFilteredJoinChild>(b => b
+                .HasOne(c => c.Parent, c => c.ParentId)
+                .HasQueryFilter((eb, c) => eb.Where(e => e.TenantId == (int)c.Properties[FuncTenantKey])))
+            .WithData(
+            [
+                new FuncFilteredJoinChild { Id = 10, ParentId = 1, TenantId = 1 },
+                new FuncFilteredJoinChild { Id = 11, ParentId = 1, TenantId = 2 },
+            ]);
+
+        return ctx;
+    }
+
+    [Fact]
+    public void ChildFuncFilter_ShouldExcludeFilteredChildren()
+    {
+        using var ctx = CreateFuncFilterContext();
+
+        var parents = ctx.From<FuncFilteredJoinParent>()
+            .JoinInto(ctx.From<FuncFilteredJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal([10], "the child's function filter is applied to the JoinInto ON");
+    }
+
     [Fact]
     public void TwoCommandsFromSharedJoinBuilder_DifferentScopes_ShouldNotLeakFilters()
     {
@@ -291,4 +326,18 @@ public sealed class TwoJoinNote
     public string? Text { get; set; }
     public bool IsDeleted { get; set; }
     public TwoJoinParent? Parent { get; set; }
+}
+
+public sealed class FuncFilteredJoinParent
+{
+    public int Id { get; set; }
+    public ICollection<FuncFilteredJoinChild> Children { get; set; } = new List<FuncFilteredJoinChild>();
+}
+
+public sealed class FuncFilteredJoinChild
+{
+    public int Id { get; set; }
+    public int ParentId { get; set; }
+    public int TenantId { get; set; }
+    public FuncFilteredJoinParent? Parent { get; set; }
 }
