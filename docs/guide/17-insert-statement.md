@@ -503,12 +503,18 @@ SQL Server additionally writes the modified rows into an existing table with `OU
 * **Chunking a large batch.** `InsertInto<T>()` writes one statement; use
   [Bulk insert](22-bulk-insert.md) for a whole set, including optional chunking
   (`MaxBatchSize`/`MaxParameters`/`MaxSqlLength`) and native bulk paths.
+* **Global query filters are not injected into the target.** A filter declared for the entity type is
+  never added to the `INSERT`; instead the written values are validated against the target's active
+  filters before execution and a violation raises `QueryFilterException`. `IgnoreFilters` on the builder
+  disables them from validation too. See
+  [INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation).
 * The in-memory provider is query-only: `INSERT`/`UPDATE`/`DELETE` and the full `MERGE` throw `NotSupportedException`; only the key-upsert merge is applied to the registered sequence in the context.
 
 ## See also
 
 - [Data merging (MERGE / upsert)](21-merge-statement.md)
 - [Bulk insert](22-bulk-insert.md)
+- [Global query filters](../advanced/query-filters.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 - [Provider overview](../providers/overview.md)
 - [API reference](../advanced/api-reference.md)

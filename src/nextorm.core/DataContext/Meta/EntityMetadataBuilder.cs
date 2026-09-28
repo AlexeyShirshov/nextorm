@@ -12,7 +12,7 @@ namespace NextORM.Core;
 public class EntityMetadataBuilder<T>
 {
     private readonly IList<EntityPropertyBuilder<T>> _props = new List<EntityPropertyBuilder<T>>();
-    private readonly List<IQueryFilterMetadata> _filters = new();
+    private readonly List<(string? Key, LambdaExpression? Lambda)> _filters = new();
     private readonly List<RelationshipDeclaration> _relationships = new();
     private string? _tableName;
 
@@ -90,19 +90,91 @@ public class EntityMetadataBuilder<T>
 
     private IReadOnlyList<IQueryFilterMetadata> BuildFilters(bool includeFluent)
     {
+        // Named filters occupy a slot: a repeated key replaces the earlier filter and a null lambda
+        // removes it. Anonymous filters are additive — several anonymous predicates are combined with
+        // `and`. Fluent declarations come first, so an attribute with the same key replaces the fluent
+        // one (the fluent declaration order is the resolution order). Attributes are applied from the
+        // base type down to the most derived one, so a derived declaration always wins a same-key
+        // conflict against a base declaration (`derived overrides base`); a repeated key on the same
+        // type is rejected because attribute order is not guaranteed (see EnumerateFilterAttributes).
         var filters = new List<IQueryFilterMetadata>();
 
         if (includeFluent)
-            filters.AddRange(_filters);
-
-        foreach (var attribute in typeof(T).GetCustomAttributes<QueryFilterAttribute>(true))
         {
-            var lambda = ResolveFilterLambda(attribute.FilterLambda);
-            if (lambda is not null)
-                filters.Add(new QueryFilterMetadata(null, lambda));
+            foreach (var (key, lambda) in _filters)
+                ApplyFilterDeclaration(filters, key, lambda);
+        }
+
+        foreach (var attribute in EnumerateFilterAttributes(typeof(T)))
+        {
+            if (string.IsNullOrWhiteSpace(attribute.FilterLambda))
+            {
+                if (string.IsNullOrWhiteSpace(attribute.FilterKey))
+                    throw new InvalidOperationException($"The {nameof(QueryFilterAttribute)} on {typeof(T).Name} must name a static member in {nameof(QueryFilterAttribute.FilterLambda)}.");
+
+                ApplyFilterDeclaration(filters, attribute.FilterKey, null);
+                continue;
+            }
+
+            ApplyFilterDeclaration(filters, attribute.FilterKey, ResolveFilterLambda(attribute.FilterLambda));
         }
 
         return filters;
+    }
+
+    // Reflection does not guarantee the order of the attributes on one type, so "the last declaration
+    // wins" cannot be made deterministic for two attributes that share a key on the same type. Such a
+    // duplicate is rejected with a metadata exception instead. Attributes are still applied from the base
+    // type down to the most derived one, so a same-key attribute on a derived type deterministically
+    // overrides the inherited one (`derived overrides base`).
+    private static IEnumerable<QueryFilterAttribute> EnumerateFilterAttributes(Type entityType)
+    {
+        var chain = new List<Type>();
+        for (var type = entityType; type is not null && type != typeof(object); type = type.BaseType)
+            chain.Add(type);
+
+        for (var i = chain.Count - 1; i >= 0; i--)
+        {
+            HashSet<string>? keys = null;
+            foreach (var attribute in chain[i].GetCustomAttributes<QueryFilterAttribute>(inherit: false))
+            {
+                // Anonymous declarations (no key, or a whitespace key normalised to the anonymous slot)
+                // are additive, so several on one type are valid; only a repeated named key is ambiguous.
+                if (!string.IsNullOrWhiteSpace(attribute.FilterKey))
+                {
+                    keys ??= new HashSet<string>(StringComparer.Ordinal);
+                    if (!keys.Add(attribute.FilterKey))
+                        throw new InvalidOperationException(
+                            $"The entity type '{chain[i].Name}' declares more than one {nameof(QueryFilterAttribute)} with the filter key '{attribute.FilterKey}'. The runtime does not guarantee attribute declaration order, so a repeated key on the same type has no deterministic winner; declare the key once, or override it on a derived type.");
+                }
+
+                yield return attribute;
+            }
+        }
+    }
+
+    private static void ApplyFilterDeclaration(List<IQueryFilterMetadata> filters, string? key, LambdaExpression? lambda)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            if (lambda is not null)
+                filters.Add(new QueryFilterMetadata(QueryFilters.AnonymousKey, lambda));
+            return;
+        }
+
+        var index = filters.FindIndex(f => string.Equals(f.Key, key, StringComparison.Ordinal));
+        if (lambda is null)
+        {
+            if (index >= 0)
+                filters.RemoveAt(index);
+            return;
+        }
+
+        var metadata = new QueryFilterMetadata(key, lambda);
+        if (index >= 0)
+            filters[index] = metadata;
+        else
+            filters.Add(metadata);
     }
 
     private static LambdaExpression? ResolveFilterLambda(string? memberName)
@@ -497,11 +569,12 @@ public class EntityMetadataBuilder<T>
     }
 
     /// <summary>
-    /// Declares a global query filter that is applied to every query in which the entity participates
-    /// (the primary source, joins and subqueries) unless the query calls <c>IgnoreFilters</c>. A
-    /// repeated call on this builder adds another predicate; the declared filters are combined with
-    /// <c>and</c>. The mapping is registered once per entity type: a later <c>From&lt;T&gt;(...)</c>
-    /// configuration for the same type is ignored, so the first registration wins.
+    /// Declares an anonymous global query filter that is applied to every query in which the entity
+    /// participates (the primary source, joins and subqueries) unless the query calls
+    /// <c>IgnoreFilters</c>. A repeated anonymous call on this builder adds another predicate; the
+    /// declared anonymous filters are combined with <c>and</c>. The mapping is registered once per
+    /// entity type: a later <c>From&lt;T&gt;(...)</c> configuration for the same type is ignored, so the
+    /// first registration wins.
     /// </summary>
     /// <param name="filter">The filter predicate over the entity.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -509,18 +582,18 @@ public class EntityMetadataBuilder<T>
     {
         ArgumentNullException.ThrowIfNull(filter);
 
-        _filters.Add(new QueryFilterMetadata(null, filter));
+        _filters.Add((null, filter));
         return this;
     }
 
     /// <summary>
-    /// Declares a global query filter that is applied to every query in which the entity participates
-    /// (the primary source, joins and subqueries) unless the query calls <c>IgnoreFilters</c>. The
-    /// predicate receives the executing <see cref="IDataContext"/> so it can read per-context state
-    /// such as a tenant identifier. A repeated call on this builder adds another predicate; the
-    /// declared filters are combined with <c>and</c>. The mapping is registered once per entity type:
-    /// a later <c>From&lt;T&gt;(...)</c> configuration for the same type is ignored, so the first
-    /// registration wins.
+    /// Declares an anonymous global query filter that is applied to every query in which the entity
+    /// participates (the primary source, joins and subqueries) unless the query calls
+    /// <c>IgnoreFilters</c>. The predicate receives the executing <see cref="IDataContext"/> so it can
+    /// read per-context state such as a tenant identifier. A repeated anonymous call on this builder
+    /// adds another predicate; the declared anonymous filters are combined with <c>and</c>. The mapping
+    /// is registered once per entity type: a later <c>From&lt;T&gt;(...)</c> configuration for the same
+    /// type is ignored, so the first registration wins.
     /// </summary>
     /// <param name="filter">The filter predicate over the entity and the executing data context.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -528,7 +601,24 @@ public class EntityMetadataBuilder<T>
     {
         ArgumentNullException.ThrowIfNull(filter);
 
-        _filters.Add(new QueryFilterMetadata(null, filter));
+        _filters.Add((null, filter));
+        return this;
+    }
+
+    /// <summary>
+    /// Declares a named global query filter: the key occupies a slot so the filter can be targeted by
+    /// the key-based <c>IgnoreFilters</c> overload. A repeated call with the same key <b>replaces</b>
+    /// the earlier filter; passing a <see langword="null"/> <paramref name="filter"/> removes the slot.
+    /// The predicate receives the executing <see cref="IDataContext"/>. The mapping is registered once
+    /// per entity type: a later <c>From&lt;T&gt;(...)</c> configuration for the same type is ignored, so
+    /// the first registration wins.
+    /// </summary>
+    /// <param name="filterKey">The filter key; null, empty or whitespace declares an anonymous filter.</param>
+    /// <param name="filter">The context-aware filter predicate, or <see langword="null"/> to remove the named slot.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityMetadataBuilder<T> HasQueryFilter(string filterKey, Expression<Func<T, IDataContext, bool>>? filter)
+    {
+        _filters.Add((filterKey, filter));
         return this;
     }
 

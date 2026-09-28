@@ -16,18 +16,20 @@ internal interface IEagerLoadSpec<TEntity>
     /// (no N+1).
     /// </summary>
     /// <param name="context">The data context the child query is built from.</param>
+    /// <param name="parentScope">The parent command's global-query-filter scope, inherited by the child side.</param>
     /// <param name="parents">The already materialized parents, in the order the parent query returned them.</param>
-    void Execute(IDataContext context, IReadOnlyList<TEntity> parents);
+    void Execute(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents);
 
     /// <summary>
     /// Asynchronously loads and assigns the child collection for every parent using two sequential
     /// round trips (no N+1).
     /// </summary>
     /// <param name="context">The data context the child query is built from.</param>
+    /// <param name="parentScope">The parent command's global-query-filter scope, inherited by the child side.</param>
     /// <param name="parents">The already materialized parents, in the order the parent query returned them.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <returns>A task that completes when the children have been loaded and assigned.</returns>
-    Task ExecuteAsync(IDataContext context, IReadOnlyList<TEntity> parents, CancellationToken cancellationToken);
+    Task ExecuteAsync(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents, CancellationToken cancellationToken);
 
     /// <summary>
     /// The parent collection member the specification targets, or <c>null</c> when the collection
@@ -180,7 +182,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
             ?? throw new BuildSqlCommandException(
                 $"The single-query child source for type {typeof(TChild)} could not be resolved.");
 
-        return new EagerLoadJoinIntoSpec<TEntity, TChild, TKey>(this, child.Condition, child.IgnoresFilters);
+        return new EagerLoadJoinIntoSpec<TEntity, TChild, TKey>(this, child.Condition, child.FilterScope);
     }
 
     /// <summary>Whether the member can be assigned from a fresh list.</summary>
@@ -191,43 +193,55 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         _ => false,
     };
 
-    void IEagerLoadSpec<TEntity>.Execute(IDataContext context, IReadOnlyList<TEntity> parents)
+    void IEagerLoadSpec<TEntity>.Execute(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents)
     {
         if (parents.Count == 0)
             return;
 
-        Assign(parents, Load(context, parents));
+        Assign(parents, Load(context, parentScope, parents));
     }
 
-    async Task IEagerLoadSpec<TEntity>.ExecuteAsync(IDataContext context, IReadOnlyList<TEntity> parents, CancellationToken cancellationToken)
+    async Task IEagerLoadSpec<TEntity>.ExecuteAsync(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents, CancellationToken cancellationToken)
     {
         if (parents.Count == 0)
             return;
 
-        Assign(parents, await LoadAsync(context, parents, cancellationToken).ConfigureAwait(false));
+        Assign(parents, await LoadAsync(context, parentScope, parents, cancellationToken).ConfigureAwait(false));
     }
+
+    /// <summary>
+    /// Builds a fresh child builder for one query and folds the parent command's global-query-filter
+    /// scope into the child's own scope, so the split path applies exactly the same union rule as the
+    /// single-query (<c>AsSingleQuery</c>/<c>JoinInto</c>) path: a child's selective scope combines with
+    /// the parent's, <c>All</c> absorbs the union, and <c>null</c>/empty child scopes inherit the parent.
+    /// <see cref="EntityBuilder{TEntity}.WithFilterScope(QueryFilterScope)"/> returns a scoped copy when
+    /// the parent scope is non-empty, so the user's child builder is never mutated and one child cannot
+    /// leak its selective scope to a sibling.
+    /// </summary>
+    private EntityBuilder<TChild> BuildChild(IDataContext context, QueryFilterScope parentScope)
+        => _childQuery(context).WithFilterScope(parentScope);
 
     /// <summary>
     /// Runs one child query per key chunk and returns the children grouped by their key, keeping the
     /// order the child query returned them in.
     /// </summary>
-    private Dictionary<TKey, List<TChild>> Load(IDataContext context, IReadOnlyList<TEntity> parents)
+    private Dictionary<TKey, List<TChild>> Load(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents)
     {
         var grouped = new Dictionary<TKey, List<TChild>>();
         foreach (var chunk in KeyChunks(parents))
-            AddChildren(grouped, _childQuery(context).Where(BuildPredicate(chunk)).ToList());
+            AddChildren(grouped, BuildChild(context, parentScope).Where(BuildPredicate(chunk)).ToList());
 
         return grouped;
     }
 
     /// <summary>Asynchronously runs one child query per key chunk and groups the children by their key.</summary>
-    private async Task<Dictionary<TKey, List<TChild>>> LoadAsync(IDataContext context, IReadOnlyList<TEntity> parents, CancellationToken cancellationToken)
+    private async Task<Dictionary<TKey, List<TChild>>> LoadAsync(IDataContext context, QueryFilterScope parentScope, IReadOnlyList<TEntity> parents, CancellationToken cancellationToken)
     {
         var grouped = new Dictionary<TKey, List<TChild>>();
         foreach (var chunk in KeyChunks(parents))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var children = await _childQuery(context).Where(BuildPredicate(chunk)).ToListAsync(cancellationToken).ConfigureAwait(false);
+            var children = await BuildChild(context, parentScope).Where(BuildPredicate(chunk)).ToListAsync(cancellationToken).ConfigureAwait(false);
             AddChildren(grouped, children);
         }
 
@@ -347,7 +361,7 @@ internal static class EntityBuilderEagerLoading
             return;
 
         foreach (var spec in specs)
-            spec.Execute(builder.DataProvider, parents);
+            spec.Execute(builder.DataProvider, builder.FilterScope, parents);
     }
 
     /// <summary>Asynchronously runs every load specification on <paramref name="builder"/>.</summary>
@@ -365,7 +379,7 @@ internal static class EntityBuilderEagerLoading
         foreach (var spec in specs)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await spec.ExecuteAsync(builder.DataProvider, parents, cancellationToken).ConfigureAwait(false);
+            await spec.ExecuteAsync(builder.DataProvider, builder.FilterScope, parents, cancellationToken).ConfigureAwait(false);
         }
     }
 }
@@ -385,7 +399,7 @@ internal sealed class EagerLoadJoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSp
 {
     private readonly EagerLoadSpec<TEntity, TChild, TKey> _eager;
     private readonly Expression<Func<TEntity, TChild, bool>> _predicate;
-    private readonly bool _ignoreChildFilters;
+    private readonly QueryFilterScope _childFilterScope;
 
     /// <summary>
     /// Initializes the specification, synthesizing the key-equality predicate and merging the optional
@@ -393,15 +407,16 @@ internal sealed class EagerLoadJoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSp
     /// </summary>
     /// <param name="eager">The split-query specification this single-query declaration mirrors.</param>
     /// <param name="childCondition">The child query's own <c>Where</c> condition, or <c>null</c> when it has none.</param>
-    /// <param name="ignoreChildFilters">Whether the child query ignores its own global query filters.</param>
+    /// <param name="childFilterScope">The child query's selective global-query-filter scope.</param>
     public EagerLoadJoinIntoSpec(
         EagerLoadSpec<TEntity, TChild, TKey> eager,
         Expression<Func<TChild, bool>>? childCondition,
-        bool ignoreChildFilters)
+        QueryFilterScope childFilterScope)
     {
         ArgumentNullException.ThrowIfNull(eager);
+        ArgumentNullException.ThrowIfNull(childFilterScope);
         _eager = eager;
-        _ignoreChildFilters = ignoreChildFilters;
+        _childFilterScope = childFilterScope;
 
         var parentParameter = Expression.Parameter(typeof(TEntity), "p");
         var childParameter = Expression.Parameter(typeof(TChild), "c");
@@ -452,7 +467,7 @@ internal sealed class EagerLoadJoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSp
     public JoinIntoIdentity Identity { get; }
 
     /// <inheritdoc/>
-    public bool IgnoreChildFilters => _ignoreChildFilters;
+    public QueryFilterScope ChildFilterScope => _childFilterScope;
 
     /// <inheritdoc/>
     public object? GetParentKey(TEntity parent) => _eager.ParentKeyOf(parent);

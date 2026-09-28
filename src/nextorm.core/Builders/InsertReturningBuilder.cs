@@ -83,6 +83,7 @@ public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutati
     public async Task<TResult> SingleAsync(CancellationToken cancellationToken = default)
     {
         EnsureSingleRow();
+        await _insert.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
         var executor = RequireExecutor();
 
         if (_identityFunction)
@@ -104,6 +105,7 @@ public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutati
     /// <exception cref="NotSupportedException">The provider cannot return the requested value, or the context is read-only.</exception>
     public IReadOnlyList<TResult> ToList()
     {
+        _insert.ValidateFilters();
         var executor = RequireExecutor();
 
         if (_identityFunction)
@@ -125,6 +127,7 @@ public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutati
     /// <exception cref="NotSupportedException">The provider cannot return the requested value, or the context is read-only.</exception>
     public async Task<IReadOnlyList<TResult>> ToListAsync(CancellationToken cancellationToken = default)
     {
+        await _insert.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
         var executor = RequireExecutor();
 
         if (_identityFunction)
@@ -199,6 +202,7 @@ public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutati
 
     private TResult SingleCore()
     {
+        _insert.ValidateFilters();
         var executor = RequireExecutor();
 
         if (_identityFunction)
@@ -218,6 +222,10 @@ public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutati
 
     MutationCommand IOutputIntoMutation.BuildOutputIntoCommand(string targetTable)
         => _insert.BuildOutputIntoCommand(_returningColumns, targetTable);
+
+    void IOutputIntoMutation.ValidateFilters() => _insert.ValidateFilters();
+
+    Task IOutputIntoMutation.ValidateFiltersAsync(CancellationToken cancellationToken) => _insert.ValidateFiltersAsync(cancellationToken);
 
     IDataContext IOutputIntoMutation.DataContext => _insert.DataContext;
 

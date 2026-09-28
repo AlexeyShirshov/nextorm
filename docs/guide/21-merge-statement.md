@@ -120,6 +120,11 @@ var sql = ctx.MergeInto<ISimpleEntity>()
 * **Server-side query source.** `Using(ctx.From<T>().Where(...))` / `Using(QueryCommand<T>)` is accepted by the full-`MERGE` form only; the key-upsert providers fall back to a `VALUES` batch.
 * **Mutations are not prepared or plan-cached.** Optimisation in nextorm targets read-only queries only (`Prepare`, the implicit plan cache, benchmarks); a merge always renders and executes one command per call.
 * **Affected-row count.** `Merge()`/`MergeAsync()` return the number of rows the provider reports.
+* **Global query filters are not injected into the target.** A filter declared for the entity type is
+  never added to the `MERGE`; instead the rows written by the insert branch are validated against the
+  target's active filters before execution and a violation raises `QueryFilterException`. `IgnoreFilters`
+  on the builder disables them from validation too. See
+  [INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation).
 * The in-memory provider is query-only: the full `MERGE` throws `NotSupportedException`; only the key-upsert merge is applied to the registered sequence in the context.
 
 ## See also
@@ -128,6 +133,7 @@ var sql = ctx.MergeInto<ISimpleEntity>()
 - [Data modification (DELETE)](18-delete-statement.md)
 - [Data modification (UPDATE)](19-update-statement.md)
 - [Optimistic concurrency and change tracking](27-optimistic-concurrency.md)
+- [Global query filters](../advanced/query-filters.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 - [Provider overview](../providers/overview.md)
 - [API reference](../advanced/api-reference.md)

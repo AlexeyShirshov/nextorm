@@ -7,7 +7,7 @@
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md:73) и фаза 2
 > расширяемости (этот план). Публичный API → `docs/specs/design/API-NAMING-REVIEW.md`.
 
-## 0. Статус реализации (27.09.2026)
+## 0. Статус реализации (обновлено 28.09.2026)
 
 - **Фаза 1 — shipped** (issue #67, ветка `1.0.9-a`): fluent `HasQueryFilter` (обе перегрузки), атрибут
   `[QueryFilter(FilterLambda = nameof(...))]`, применение к основному источнику/join-ам/подзапросам,
@@ -15,9 +15,16 @@
   parity. Публичный API — `QueryFilterAttribute`, `IQueryFilterMetadata`,
   `EntityMetadataBuilder<T>.HasQueryFilter`, `EntityBuilder<T>.IgnoreFilters`; доки EN+RU —
   [`advanced/query-filters.md`](../../advanced/query-filters.md).
-- **Фаза 2 — отложена:** keyed-фильтры (`HasQueryFilter(string, …)`, `FilterKey`), `FilterFunc`
-  (`IQueryable`-форма), `IgnoreFilters` для отдельного соединённого билдера / по типам / по ключам,
-  фильтры на DML (`INSERT`/`UPDATE`/`DELETE`).
+- **Фаза 2 — PR1–PR3 отгружены, PR4 отложен (актуализировано 28.09.2026, issue
+  [#108](https://github.com/AlexeyShirshov/nextorm/issues/108)):** keyed-фильтры
+  (`HasQueryFilter(string, …)`, `FilterKey`), селективный `IgnoreFilters` (по типам/ключам) и
+  фильтры на DML (`UPDATE`/`DELETE` — 1:1 с linq2db; `INSERT`/`MERGE` — цель без фильтра плюс
+  **валидация** вставляемых строк + `QueryFilterException`). **PR4 `FilterFunc` отложен** — spike
+  (D5) признал форму реализуемой: контракт — fluent
+  `HasQueryFilter([key,] Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>)` плюс атрибут с
+  именем статического члена; предикат должен ссылаться на `IDataContext`/`SqlParameters`, чтобы
+  значения оставались параметризованными; форма «снимок в локальную переменную» запрещена —
+  ломает план-кэш и in-memory. Детали — §11.6, §11.13.
 - **Фаза 3 — отложена:** EF Core bridge (проброс keyed-фильтров EF Core 10).
 
 ## 1. Пункт и цель
@@ -110,11 +117,17 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
 
 ## 6. Критично: план-кэш и per-context scoping
 
+> **Уточнено 28.09.2026 (§11.3).** Пункт 1 ниже («ключ должен включать набор `IgnoreFilters`»)
+> реализован иначе: фильтры инжектятся в `_condition`/`ON` **до** вычисления `WherePlanHash`/
+> `JoinPlanHash`, поэтому эффективный набор уже в ключе; отдельного поля в `QueryPlanEqualityComparer`
+> не добавляем. Disabled-set — состояние команды, а не ключ. Остальные пункты §6 действуют.
+
 Это главный риск (и причина, по которой фича вынесена из [интерцепторов](../../guide/25-interceptors.md) в отдельный план):
 
 1. **Идентичность фильтра в ключе плана.** `QueryPlanEqualityComparer` должен включать набор активных
    фильтров (ключи/хэши лямбд) и набор `IgnoreFilters`. Иначе запрос из контекста A переиспользует
-   план контекста B.
+   план контекста B. *(См. уточнение выше: в реализации это покрывается инжектированными
+   выражениями.)*
 2. **Контекстно-зависимые значения — параметры, не константы.** `dc.TenantId`/`dc.IsSoftDeleteEnabled`
    должны становиться SQL-параметрами с динамическим аксессором (аналог linq2db
    `RegisterDynamicExpressionAccessor`), иначе кэшированный SQL зафиксирует первое значение.
@@ -130,10 +143,8 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
   применение к основному источнику, join-ам и подзапросам; `IgnoreFilters()` / `IgnoreFilters(params Type[])`;
   in-memory; идентичность фильтра в ключе плана; динамические параметры. Закрывает soft-delete и
   multi-tenancy.
-- **Фаза 2:** именованные/keyed-фильтры (`HasQueryFilter(string, …)`, `filterKey`), `FilterFunc`
-  (`IQueryable`-форма), `IgnoreFilters` для отдельного соединённого билдера / по типам / по ключам
-  (`filterKeys` × entityTypes), фильтры на DML (`INSERT`/`UPDATE`/`DELETE`), атрибут на интерфейсных
-  маппингах.
+- **Фаза 2:** keyed-фильтры, селективный `IgnoreFilters` (типы × ключи), DML-фильтры и валидация
+  `INSERT`, `FilterFunc` над `EntityBuilder<T>` — полный дизайн в §11.
 - **Фаза 3:** EF Core bridge — проброс keyed-фильтров EF Core 10 (смежно `todo_efcore_integration.md`).
 - **Вне области:** фильтры на DML (`INSERT`/`UPDATE`/`DELETE`) в MVP — отдельное решение (риск
   неожиданной потери строк); фильтры на `FromSql`/raw-источники.
@@ -153,19 +164,21 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
 - Покрытие: не ниже базового (`MIN_LINE_COVERAGE` = 75%); новые файлы в core учитываются
   `coverage.settings.xml`.
 
-## 9. Открытые вопросы
+## 9. Открытые вопросы — закрыты 28.09.2026 (см. §11)
 
-1. Scope: фильтры только для `SELECT` или и для `UPDATE`/`DELETE` (soft-delete обычно SELECT-only)?
-2. Как именно фильтр попадает в ключ плана: по ключу (для именованных) или по структурному хэшу лямбды
-   (для анонимных)?
-3. Источник контекстных значений: известные свойства `IDataContext` или пользовательский интерфейс
-   `IQueryFilterContext`?
-4. Применять ли фильтры к nav-подгрузкам — N/A (нет навигации/`Include`).
-5. `FilterFunc` (`IQueryable`) — нужен ли вообще, или предиката достаточно (плюс EF Core bridge)?
-6. Взаимодействие с `DataContextCache.Metadata`: как инвалидировать метаданные, если `configEntity`
-   вызван позже с другим фильтром (сейчас — «только первый вызов»).
-7. Именование публичного API согласовать с `API-NAMING-REVIEW.md` (атрибут `QueryFilterAttribute` vs
-   `GlobalFilterAttribute`; метод `HasQueryFilter` vs `Filter`).
+1. **Scope DML** — решён: `UPDATE`/`DELETE` — фильтр в `WHERE`; `INSERT`/`MERGE`/`UPSERT` — цель без
+   фильтра + валидация вставляемых строк (§11.4, §11.5).
+2. **Ключ плана** — решён: отдельного поля нет; эффективный набор фильтров уже в
+   `WherePlanHash`/`JoinPlanHash`, т.к. фильтры инжектятся до хэширования (§11.3).
+3. **Источник контекста** — без изменений: `IDataContext` через `QueryFilterContext` (фаза 1).
+4. **Nav-подгрузки/`JoinInto`** — вне этого цикла (пересечение с работой по навигациям; учесть при
+   интеграции).
+5. **`FilterFunc`** — решён: форма `Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>` (нет
+   `IQueryable`); механизм мержа — spike (§11.6).
+6. **Инвалидация метаданных** — не меняем: process-global, first-registration-wins (ограничение
+   документируется, §11.7).
+7. **Нейминг** — не переименовываем (`QueryFilterAttribute`, `HasQueryFilter`); новые имена внести в
+   `API-NAMING-REVIEW.md`.
 
 ## 10. Файлы к изменению
 
@@ -180,6 +193,205 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
   (+RU), `docs/advanced/limitations.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/providers/overview.md` (+RU), `comparison/linq2db-comparison.md` (EN+RU),
   `comparison/linq2db-backlog-gap-analysis.md`, `specs/design/API-NAMING-REVIEW.md`.
+
+## 11. Фаза 2 — дизайн (согласовано 28.09.2026)
+
+> Сверено с linq2db `Source/LinqToDB/Internal/Linq/Builder/*` (commit `7c5d5b5`) и с кодом nextorm
+> фазы 1. Tracking: #67; workstream 33 в `sql-capabilities-gap-analysis.md`.
+>
+> **Статус (28.09.2026, #108).** **PR1–PR3 отгружены**: keyed-фильтры + `FilterKey`, селективный
+> `IgnoreFilters` (типы/ключи), DML-фильтры (`UPDATE`/`DELETE`, включая key-формы), валидация
+> INSERT/MERGE + `QueryFilterException`; SQL-gen и integration на всех 5 SQL-провайдерах
+> (PostgreSQL/SQL Server/MySQL/MariaDB/ClickHouse) плюс SQLite, доки EN+RU. **PR4 (`FilterFunc`,
+> §11.6) отложен** — spike признал форму реализуемой (см. §0). §11.7 в силе. Follow-ups
+> `_sorting`/`FindProperty` — deferred с триггером (§11.13).
+
+### 11.1 Объём
+Keyed-фильтры; селективный `IgnoreFilters` (типы × ключи); DML-фильтры (1:1 с linq2db + наш opt-out);
+валидация `INSERT` (наш дефект сверх linq2db); `FilterFunc` над `EntityBuilder<T>`.
+
+### 11.2 Публичный API
+
+```csharp
+namespace NextORM.Core;
+
+/// Ключ фильтров, объявленных без явного ключа.
+public static class QueryFilters { public const string AnonymousKey = ""; }
+
+[AttributeUsage(Class | Interface, AllowMultiple = true, Inherited = true)]
+public sealed class QueryFilterAttribute : Attribute
+{
+    public string? FilterKey { get; set; }     // null → анонимный
+    public string? FilterLambda { get; set; }  // имя статического члена (предикат)
+    public string? FilterFunc { get; set; }    // имя статического члена (builder-функция)
+}
+
+// EntityMetadataBuilder<T>
+public EntityMetadataBuilder<T> HasQueryFilter(Expression<Func<T, bool>> filter);
+public EntityMetadataBuilder<T> HasQueryFilter(Expression<Func<T, IDataContext, bool>> filter);
+public EntityMetadataBuilder<T> HasQueryFilter(string filterKey, Expression<Func<T, IDataContext, bool>> filter);
+public EntityMetadataBuilder<T> HasQueryFilter(Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>> filter);
+public EntityMetadataBuilder<T> HasQueryFilter(string filterKey, Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>> filter);
+
+// EntityBuilder<T> и DML-билдеры (UpdateBuilder/DeleteBuilder/UpdateJoinBuilder)
+public EntityBuilder<T> IgnoreFilters();
+public EntityBuilder<T> IgnoreFilters(params Type[] entityTypes);
+public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys);
+public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes);
+
+public interface IQueryFilterMetadata
+{
+    string Key { get; }                  // анонимный → QueryFilters.AnonymousKey
+    LambdaExpression? Lambda { get; }    // null у func-only
+    LambdaExpression? Func => null;      // DIM
+}
+
+public sealed class QueryFilterException : InvalidOperationException { /* валидация DML */ }
+```
+
+Правила:
+- **Анонимные:** `Key == QueryFilters.AnonymousKey`; повторы **множественны и AND** (без регрессии
+  фазы 1); `IgnoreFilters([QueryFilters.AnonymousKey])` гасит все анонимные.
+- **Именованные:** ключ — слот; повтор в одной конфигурации заменяет, `null` удаляет (linq2db);
+  derived-overrides-base — по мере выразимости в process-global модели.
+- **`IgnoreFilters`:** пустой/`null` список ключей не отключает ничего; вызовы накапливаются
+  (объединение).
+
+### 11.3 Пайплайн и план-ключ
+
+- `bool _ignoreFilters` → неизменяемый `QueryFilterScope { bool All; IReadOnlySet<string> Keys;
+  IReadOnlySet<Type> Types; }` на `EntityBuilder<T>`, `QueryCommand` и DML-билдерах.
+- `QueryCommand.QueryPreparer.GetFilters(cmd, type)`: пустой scope → все объявленные; `All` → ни
+  одного; иначе отбрасываем фильтр, если `Types.Contains(type)` **или** (`Keys.Contains(filter.Key)`
+  и (типов нет **или** `Types.Contains(type)`)).
+- Инжект как в фазе 1: основной источник → `_condition`, join → `ON`, подзапрос → при подготовке
+  своего команды.
+- **План-ключ не трогаем:** фильтры инжектятся до `WherePlanHash`/`JoinPlanHash`, поэтому эффективный
+  набор уже в ключе; разные scope с одинаковым SQL делят план. Disabled-set — состояние команды, не
+  поле ключа. Тест: два scope → правильные строки, без кросс-загрязнения; повтор → cache hit.
+
+### 11.4 DML — 1:1 с linq2db
+
+| Операция | Фильтр | Реализация |
+|---|---|---|
+| `SELECT` main/join/subquery | применяется | фаза 1 |
+| `UPDATE` предикат | в `WHERE` | уже: `From<T>().Where(...)` → `RenderPredicate` |
+| `UPDATE` key/entity | в `WHERE` (key ∧ filter) | **добавить** AND фильтров к key-предикату |
+| `DELETE` предикат | в `WHERE` | уже |
+| `DELETE` key/entity | в `WHERE` (key ∧ filter) | **добавить** |
+| `INSERT` value/entity | цель **НЕ** фильтруется | как есть (нет `From<T>`) |
+| `INSERT…SELECT` | источник фильтруется, цель — нет | как есть |
+| `MERGE`/`UPSERT` | цель **НЕ** фильтруется | как есть |
+
+- `IgnoreFilters(scope)` — на `UpdateBuilder`, `DeleteBuilder`, `UpdateJoinBuilder` и key-формах; для
+  предикатной формы прокидывается в `From<T>()`, для key-форм — в составной предикат.
+- План-кэш DML: фильтры уже в prepared condition/составном предикате → в ключе; добавить DML
+  cache-тест.
+
+### 11.5 Валидация `INSERT` (сверх linq2db)
+
+- entity/value и batch: активные фильтры цели (минус scope) проверяются in-memory против вставляемых
+  значений; нарушение → `QueryFilterException` **до** выполнения.
+- `BulkCopy`: строки в памяти — та же проверка.
+- `INSERT…SELECT` и source-derived `MERGE`: pre-check `EXISTS(... NOT filter)` по source; нарушение →
+  исключение, вставка не выполняется; внутри транзакции — иначе документируем гонку (либо требуем
+  транзакцию).
+- `MERGE`/`UPSERT` insert-ветка: те же правила.
+- `IgnoreFilters` исключает фильтры и из валидации; `FilterFunc` участвует (см. §11.6).
+
+### 11.6 `FilterFunc`
+
+- Форма: `Func<EntityBuilder<T>, IDataContext, EntityBuilder<T>>` (nextorm не реализует `IQueryable`).
+- Применение на планировании: билдер поверх source → применить func → слить результат. Where-only
+  merge ≡ предикат; richer (join/select/group) требует wrap источника в derived table.
+- **Обязателен spike** на механизм мержа и поддерживаемый subset; минимально Where-only, richer — по
+  итогам. Требование чистоты (без side-effect'ов).
+- Валидация `FilterFunc` для in-memory строк — по итогам spike.
+
+### 11.7 Ограничения
+
+- Метаданные process-global, first-registration-wins — не меняем (повторный `From<T>(cfg)` теряется).
+- `FilterFunc` subset — по итогам spike.
+- Валидация `INSERT…SELECT` вне транзакции — возможна гонка (документировать).
+- Named slot replace / derived-override — насколько выразимо в process-global модели.
+
+### 11.8 Приёмка (матрица)
+
+| Кейс | SQL (PG/MSSQL/MySQL/MariaDB/CH/SQLite) | In-memory |
+|---|---|---|
+| keyed select / ignore-by-key / derived / null-remove | SQL-gen + `CommonTestSuite` | `QueryFilterTests` |
+| anonymous constant + `IgnoreFilters([AnonymousKey])` | SQL-gen + `CommonTestSuite` | `QueryFilterTests` |
+| `IgnoreFilters` types / keys / intersection / empty | SQL-gen + `CommonTestSuite` | `QueryFilterTests` |
+| scope в план-кэше (различает/шарит) | core cache test | core cache test |
+| `UPDATE`/`DELETE` фильтр в `WHERE` | SQL-gen + `CommonTestSuite` | — |
+| `UPDATE`/`DELETE` key-форма ∧ фильтр | SQL-gen + `CommonTestSuite` | — |
+| `INSERT`/`MERGE` цель без фильтра | SQL-gen + `CommonTestSuite` | — |
+| `INSERT…SELECT` source фильтруется | SQL-gen + `CommonTestSuite` | — |
+| валидация entity/value/batch/bulk | unit + `CommonTestSuite` | in-memory rows |
+| валидация `INSERT…SELECT` (pre-check) | unit + `CommonTestSuite` | — |
+| `FilterFunc` | по итогам spike | по итогам spike |
+
+### 11.9 Тесты
+
+- Core `tests/nextorm.core.tests/QueryFilterTests.cs` — матрица (keyed/ignore/derived/null), DML,
+  валидация, план-кэш.
+- Провайдерные `tests/nextorm.<p>.tests/QueryFilterSqlGenerationTests.cs` — наличие/отсутствие
+  предиката, параметризация, DML.
+- Интеграция `tests/nextorm.integration.tests/CommonTestSuite.QueryFilter*.cs` — soft-delete, tenant,
+  DML, валидация, на PostgreSQL/SQL Server/MySQL/MariaDB/SQLite/ClickHouse.
+- Покрытие ≥ `MIN_LINE_COVERAGE`.
+
+### 11.10 Documentation
+
+- `docs/advanced/query-filters.md` + `docs/ru/advanced/query-filters.md`
+- `docs/advanced/limitations.md` + RU
+- `docs/advanced/api-reference.md` + RU (если перечисляет фильтры)
+- `docs/specs/design/API-NAMING-REVIEW.md` — новые имена
+- `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §33
+- `docs/specs/comparison/linq2db-comparison.md` (EN+RU)
+- (опц.) новый гид `docs/guide/26-query-filters.md` + RU
+
+### 11.11 PR
+
+1. **PR1** — keyed + selective `IgnoreFilters` (SELECT): API, `QueryFilterScope`, интроспекция, тесты.
+2. **PR2** — DML-фильтры (`IgnoreFilters` на DML + key-формы 1:1) + тесты.
+3. **PR3** — валидация `INSERT` (entity/value/batch/bulk + `INSERT…SELECT` pre-check + `MERGE`) +
+   `QueryFilterException`.
+4. **PR4** — `FilterFunc` (после spike).
+
+### 11.12 Файлы (фаза 2)
+
+- Правки: `Builders/EntityBuilder.cs`, `DataContext/Meta/EntityMetadataBuilder.cs`,
+  `DataContext/Meta/QueryFilterAttribute.cs`, `DataContext/Meta/IQueryFilterMetadata.cs`,
+  `DataContext/Meta/Implementation/QueryFilterMetadata.cs`, `Query/QueryCommand.QueryPreparer.cs`
+  (`GetFilters`), `Query/QueryFilterContext.cs`, `Builders/{UpdateBuilder,DeleteBuilder,UpdateJoinBuilder}.cs`,
+  `DataContext/SqlMutationBuilder.cs` и DML-исполнители (hook валидации).
+- Новое: `DataContext/Meta/QueryFilterScope.cs`, `QueryFilterException.cs`, валидатор `INSERT`.
+
+### 11.13 Follow-ups — Deferred + триггер (после PR1–PR3)
+
+Оба пункта найдены в ACT цикла 4b (#108) при переносе статус-файла; зеркало —
+`docs/specs/design/code-smells-review.md`, «Аудит цикла 4b (#108, query filters Фаза 2, 2026-09-28)».
+Открытых P0/P1 нет; обе — 🟡 P2.
+
+- **`_sorting` разделяется по ссылке между клонами `QueryCommand`.** `QueryCommand._sorting`
+  присваивается из `definition.Sorting` без копии (`Query/QueryCommand.cs:163`), тогда как `_joins`
+  уже клонируется (`Query/QueryCommand.cs:161`); `PrepareSorting` пишет `sort.PreparedExpression` на
+  месте по `ref` (`Query/QueryCommand.QueryPreparer.cs:829`), поэтому подготовка одного клона
+  переписывает `PreparedExpression` сортировки исходной команды и соседних клонов — тот же класс,
+  что исправленная утечка `_joins`. **Триггер:** воспроизводимая утечка `PreparedExpression` между
+  командами или любое влияние на фильтры/результаты.
+- **`FindProperty` сравнивает `PropertyInfo` по ссылке в остальных билдерах/трансляторах.**
+  `UpdateBuilder.FindProperty` (`Builders/UpdateBuilder.cs:383`), `DeleteBuilder.FindProperty`
+  (`Builders/DeleteBuilder.cs:279`), `BulkInsertBuilder.FindProperty`
+  (`Builders/BulkInsertBuilder.cs:498`), `UpdateJoinBuilder.FindProperty`
+  (`Builders/UpdateJoinBuilder.cs:215`), `EntityMetadata.FindProperty`
+  (`DataContext/Meta/Implementation/EntityMetadata.cs:42`), `MemberTranslator.FindProperty`
+  (`Visitors/MemberTranslator.cs:109,126`) — только `InsertBuilder` починен в этом цикле
+  (`InsertBuilder.FindProperty`/`SameMember`, `Builders/InsertBuilder.cs:574,590`). Ломается на
+  членах, объявленных в базовом типе и скрытых через `new` (lookup по ссылке не находит
+  метаданные). **Триггер:** запрос/мутация, адресующая base-declared или `new`-hidden свойство,
+  даёт `null`/неверную метаданную.
 
 ## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
 

@@ -26,7 +26,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     protected readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
-    private bool _ignoreFilters;
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
     private LambdaExpression? _group;
     private LimitByClause? _limitBy;
     private DistinctOnClause? _distinctOn;
@@ -103,10 +103,34 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     internal bool SingleQuery => _singleQuery;
     /// <summary>
-    /// Whether <see cref="IgnoreFilters"/> was applied to this builder. Used by single-query eager
-    /// loading to decide the child side's global filters independently of the parent's.
+    /// Whether <see cref="IgnoreFilters()"/> (the all-or-nothing form) was applied to this builder. Used
+    /// by single-query eager loading to decide the child side's global filters independently of the
+    /// parent's.
     /// </summary>
-    internal bool IgnoresFilters => _ignoreFilters;
+    internal bool IgnoresFilters => _filterScope.All;
+    /// <summary>
+    /// The selective global-query-filter scope disabled on this builder. Carried onto every command the
+    /// builder creates so the preparer skips exactly the filters the scope names. Settable internally so
+    /// the join chain can hand the pre-join builder's scope to its joined projection builder.
+    /// </summary>
+    internal QueryFilterScope FilterScope { get => _filterScope; set => _filterScope = value; }
+    /// <summary>
+    /// Returns a builder whose selective filter scope is the union of this builder's scope and
+    /// <paramref name="scope"/>, without mutating this builder. Used by the DML builders to fold their
+    /// own <c>IgnoreFilters</c> state into a retained source builder: mutating that builder in place
+    /// would make repeated terminal builds accumulate a stale scope.
+    /// </summary>
+    /// <param name="scope">The additional scope to disable.</param>
+    /// <returns>This builder when <paramref name="scope"/> is empty, otherwise a scoped copy.</returns>
+    internal EntityBuilder<TEntity> WithFilterScope(QueryFilterScope scope)
+    {
+        if (scope.IsEmpty)
+            return this;
+
+        var copy = Clone();
+        copy._filterScope = copy._filterScope.Union(scope);
+        return copy;
+    }
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
     /// <summary>
     /// The ordering keys applied by <c>OrderBy</c>/<c>OrderByDescending</c>, or <c>null</c> when the
@@ -232,7 +256,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Exp = exp,
             SrcType = _sourceEntityType,
             Condition = _condition,
-            IgnoreFilters = _ignoreFilters,
+            FilterScope = _filterScope,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -320,7 +344,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         {
             SrcType = _sourceEntityType ?? typeof(TEntity),
             Condition = _condition,
-            IgnoreFilters = _ignoreFilters,
+            FilterScope = _filterScope,
             Joins = _joins?.ToArray(),
             Paging = Paging,
             Sorting = _sorting?.ToArray(),
@@ -378,15 +402,73 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return b;
     }
     /// <summary>
-    /// Disables the global query filters declared for the query's entity type (and for every entity
-    /// joined by it), so the query reads the unfiltered rows. The current builder is unchanged; the
-    /// returned builder is a copy with the flag set.
+    /// Disables <b>all</b> global query filters declared for the query's entity type (and for every
+    /// entity joined by it), so the query reads the unfiltered rows. The current builder is unchanged;
+    /// the returned builder is a copy with the all-or-nothing scope set. To disable only some filters,
+    /// use one of the selective overloads.
     /// </summary>
-    /// <returns>A builder that ignores the entity's global query filters.</returns>
+    /// <returns>A builder that ignores every global query filter.</returns>
     public EntityBuilder<TEntity> IgnoreFilters()
     {
         var b = Clone();
-        b._ignoreFilters = true;
+        b._filterScope = b._filterScope.Union(QueryFilterScope.AllFilters);
+        return b;
+    }
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types, leaving the filters of
+    /// other entity types in the query active. A subsequent call accumulates: the returned builder
+    /// carries the union of both scopes. An empty or <see langword="null"/>
+    /// <paramref name="entityTypes"/> disables nothing. The current builder is unchanged.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>A builder that ignores the filters of the given entity types.</returns>
+    public EntityBuilder<TEntity> IgnoreFilters(params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromTypes(entityTypes);
+        if (scope.IsEmpty)
+            return this;
+
+        var b = Clone();
+        b._filterScope = b._filterScope.Union(scope);
+        return b;
+    }
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on every
+    /// entity type in the query. A subsequent call accumulates: the returned builder carries the union
+    /// of both scopes. An empty or <see langword="null"/> <paramref name="filterKeys"/> disables
+    /// nothing (mirroring EF Core). The current builder is unchanged.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>A builder that ignores the named filters.</returns>
+    public EntityBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        var scope = QueryFilterScope.FromKeys(filterKeys);
+        if (scope.IsEmpty)
+            return this;
+
+        var b = Clone();
+        b._filterScope = b._filterScope.Union(scope);
+        return b;
+    }
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. A subsequent call accumulates with the
+    /// union. The key list is the gate: an empty or <see langword="null"/>
+    /// <paramref name="filterKeys"/> disables nothing even when entity types are supplied. The current
+    /// builder is unchanged.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>A builder that ignores the given named filters on the given entity types.</returns>
+    public EntityBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromKeysAndTypes(filterKeys, entityTypes);
+        if (scope.IsEmpty)
+            return this;
+
+        var b = Clone();
+        b._filterScope = b._filterScope.Union(scope);
         return b;
     }
     /// <summary>
@@ -653,6 +735,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         join.IsJoinInto = true;
         join.JoinIntoIdentity = spec.Identity;
+        // A plain JoinInto child that made no selective filter decision leaves the scope null so it keeps
+        // inheriting the parent's whole scope (including a parent IgnoreFilters()); one that disabled
+        // specific filters carries its own scope so the selective disable reaches the child join.
+        join.FilterScope = spec.ChildFilterScope.IsEmpty ? null : spec.ChildFilterScope;
         var b = Clone();
         b._joinIntos = _joinIntos is null ? [spec] : [.. _joinIntos, spec];
         b._joins = _joins is null ? [join] : [.. _joins, join];
@@ -818,11 +904,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             {
                 for (var i = 0; i < existingJoins.Count; i++)
                 {
-                    // The child's own IgnoreFilters() decision, independent of the parent's flag. Made
-                    // explicit here (the stored join leaves it null to inherit the parent's flag on the
-                    // plain JoinInto path), so a parent IgnoreFilters() does not suppress the child's.
-                    var ignoreChildFilters = i < _joinIntos.Count && _joinIntos[i].IgnoreChildFilters;
-                    joins.Add(WithChildIgnoreFilters(existingJoins[i], ignoreChildFilters));
+                    // The child's own selective filter scope, independent of the parent's scope. An empty
+                    // child scope is normalized to null: null and empty both mean "inherit", so the join
+                    // then carries the command's whole scope (including a parent IgnoreFilters()) instead
+                    // of an explicit empty scope that would read as a selective decision.
+                    var childScope = i < _joinIntos.Count ? _joinIntos[i].ChildFilterScope : QueryFilterScope.None;
+                    joins.Add(WithChildFilterScope(existingJoins[i], childScope.IsEmpty ? null : childScope));
                 }
             }
         }
@@ -838,8 +925,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                     From = childSource,
                     IsJoinInto = true,
                     JoinIntoIdentity = spec.Identity,
-                    // The child query's own IgnoreFilters() decision, independent of the parent's flag.
-                    IgnoreFilters = spec.IgnoreChildFilters,
+                    // The child query's own selective filter scope, independent of the parent's scope;
+                    // an empty scope is normalized to null (both mean "inherit").
+                    FilterScope = spec.ChildFilterScope.IsEmpty ? null : spec.ChildFilterScope,
                 });
             }
         }
@@ -848,13 +936,14 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
 
     /// <summary>
-    /// Returns a copy of <paramref name="source"/> carrying the child side's own filter decision, leaving
-    /// the stored join (used by the plain <c>JoinInto</c> path, which inherits the parent's flag) untouched.
+    /// Returns a copy of <paramref name="source"/> carrying the child side's own selective filter scope,
+    /// leaving the stored join (used by the plain <c>JoinInto</c> path, which inherits the parent's scope)
+    /// untouched.
     /// </summary>
     /// <param name="source">The stored join to copy.</param>
-    /// <param name="ignoreChildFilters">Whether the child side ignores its own global query filters.</param>
-    /// <returns>A copy of the join with an explicit child filter decision.</returns>
-    private static JoinExpression WithChildIgnoreFilters(JoinExpression source, bool ignoreChildFilters)
+    /// <param name="childFilterScope">The child side's selective global-query-filter scope, or <see langword="null"/> to inherit.</param>
+    /// <returns>A copy of the join with an explicit child filter scope.</returns>
+    private static JoinExpression WithChildFilterScope(JoinExpression source, QueryFilterScope? childFilterScope)
         => new(source.JoinCondition, source.JoinType)
         {
             From = source.From,
@@ -866,7 +955,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             OriginalJoinCondition = source.OriginalJoinCondition,
             IsJoinInto = source.IsJoinInto,
             JoinIntoIdentity = source.JoinIntoIdentity,
-            IgnoreFilters = ignoreChildFilters,
+            FilterScope = childFilterScope,
         };
 
     /// <summary>
@@ -958,7 +1047,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             // parent's global query filters still apply (QueryPreparer.InjectMainSourceFilters).
             ProjectionType = projectionType,
             Condition = condition,
-            IgnoreFilters = _ignoreFilters,
+            FilterScope = _filterScope,
             Joins = isSql ? joins?.ToArray() : BuildInMemoryJoinIntos(joins),
             Paging = default,
             Sorting = sorting,
@@ -1033,9 +1122,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                     OriginalJoinCondition = original,
                     IsJoinInto = true,
                     JoinIntoIdentity = join.JoinIntoIdentity,
-                    // Preserve the child's own filter decision; dropping it would make the 2nd+ spec
+                    // Preserve the child's own filter scope; dropping it would make the 2nd+ spec
                     // inherit the parent's IgnoreFilters() and silently apply the wrong child filters.
-                    IgnoreFilters = join.IgnoreFilters,
+                    FilterScope = join.FilterScope,
                 };
             }
             else
@@ -1287,8 +1376,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             // non-list terminals would stop excluding it and the plan identity would change.
             IsJoinInto = last.IsJoinInto,
             JoinIntoIdentity = last.JoinIntoIdentity,
-            // Keep the child's own filter decision; a modifier must not silently re-enable or drop it.
-            IgnoreFilters = last.IgnoreFilters
+            // Keep the child's own filter scope; a modifier must not silently re-enable or drop it.
+            FilterScope = last.FilterScope
         };
 
         b.OnLastJoinReplaced(joins[^1]);
@@ -1631,7 +1720,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         CopyProjectionIndependentStateTo(dst);
         dst._condition = _condition;
-        dst._ignoreFilters = _ignoreFilters;
+        dst._filterScope = _filterScope;
         dst._having = _having;
         dst._arrayJoins = _arrayJoins is null ? null : [.. _arrayJoins];
         dst._windows = _windows is null ? null : [.. _windows];
@@ -2074,6 +2163,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, TablesInScopeHints = TablesInScopeHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         cb.SourceFrom = SourceFrom;
+        // The joined builder renders the whole query; carry the pre-join builder's selective filter
+        // scope so an IgnoreFilters call before Join keeps disabling the same filters.
+        cb.FilterScope = _filterScope;
 
         // Overrides on the pre-join builder are already folded into the materialised left command
         // (ResolveJoinBase); carrying them as well would make the joined builder reject its own derived

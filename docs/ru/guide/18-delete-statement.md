@@ -40,6 +40,24 @@ ctx.Delete(new SimpleEntity { Id = 1 });          // delete from simple_entity w
 await ctx.DeleteAsync(new SimpleEntity { Id = 1 });
 ```
 
+## Глобальные фильтры запросов
+
+[Глобальный фильтр запроса](../advanced/query-filters.md), объявленный для удаляемой сущности, подмешивается в `WHERE` инструкции через `and`:
+
+* предикатная форма — `delete from ... where <predicate> and <filter>`;
+* key-форма — `delete from ... where <pk> = @p and <filter>`, поэтому `ctx.Delete(entity)` не удалит ничего, если фильтр отсекает этот ключ.
+
+`All()` — явное удаление всей таблицы, фильтр к нему **не** применяется. Соединённое удаление фильтрует цель (первую таблицу) и все источники соединений. [`DeleteBuilder<TEntity>`](xref:NextORM.Core.DeleteBuilder`1) предоставляет четыре перегрузки `IgnoreFilters` (все, по типу сущности, по ключу фильтра, пересечение ключа и типа); вызов хранит состояние, а повторные вызовы накапливаются:
+
+```csharp
+ctx.DeleteFrom<Document>()
+    .IgnoreFilters(["soft-delete"])   // оставляем ограничение по тенанту, убираем soft-delete
+    .Where(d => d.IsDeleted)
+    .Delete();
+```
+
+Полная матрица — в разделе [UPDATE и DELETE (DML)](../advanced/query-filters.md#update-и-delete-dml).
+
 ## Поддержка провайдерами (сводка)
 
 | Провайдер | `DELETE` | `RETURNING` / `OUTPUT` | `TRUNCATE` | `DELETE ... USING` / join |
@@ -130,7 +148,7 @@ with c as (select id from complex_entity where (id > 0)) delete from complex_ent
 
 * In-memory-контекст только для запросов: `Delete`/`DeleteAsync`/`Truncate` (как и любая другая запись) бросают `NotSupportedException`; запрашивайте собственные коллекции. `INSERT` в in-memory-провайдере тоже вне области по замыслу.
 * `DELETE` не готовится и не кладётся в кэш планов — оптимизация в nextorm нацелена только на read-only запросы (`Prepare`, неявный кэш планов, бенчмарки); мутация всегда рендерит и выполняет одну команду за вызов.
-* Soft delete и глобальных фильтров намеренно нет; полный `MERGE` с произвольными ветками в эту поверхность не входит, а `UPDATE` живёт в своём гайде ([Изменение данных (UPDATE)](19-update-statement.md)).
+* Встроенного поведения soft delete намеренно нет; soft delete выражается [глобальным фильтром запроса](../advanced/query-filters.md) плюс явным `UPDATE`. Полный `MERGE` с произвольными ветками в эту поверхность не входит, а `UPDATE` живёт в своём гайде ([Изменение данных (UPDATE)](19-update-statement.md)).
 
 ## См. также
 

@@ -1,5 +1,7 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NextORM.Integration.Tests;
 
@@ -379,4 +381,94 @@ public abstract partial class CommonTestSuite
         asyncArray.Should().ContainSingle();
         asyncArray[0].Children.Select(c => c.Id).Should().Equal(parent + 100, parent + 101);
     }
+
+    // --- D14a: split vs single eager-load filter-scope inheritance. Alias types over the same
+    // --- eager_parent/eager_child tables carry a named filter, so no other fixture is affected (the
+    // --- first registration per type wins process-wide).
+
+    private static void RegisterFilteredEagerFilters(IDataContext ctx)
+    {
+        ctx.From<FilteredEagerParent>(b => b.HasQueryFilter("soft", (p, _) => p.Name != "hidden"));
+        ctx.From<FilteredEagerChild>(b => b.HasQueryFilter("soft", (c, _) => c.Name != "hidden-child"));
+    }
+
+    [Fact]
+    public void EagerLoading_Split_vs_Single_FilterScope_Inheritance_ShouldMatch()
+    {
+        var ctx = _sut.DataProvider;
+        var visible = NextEagerId();
+        var hidden = visible + 1;
+
+        ctx.InsertInto<EagerParent>().Values([
+            new EagerParent { Id = visible, Name = "visible" },
+            new EagerParent { Id = hidden, Name = "hidden" },
+        ]).Insert();
+        ctx.InsertInto<EagerChild>().Values([
+            new EagerChild { Id = visible + 100, ParentId = visible, Name = "visible-child" },
+            new EagerChild { Id = visible + 101, ParentId = visible, Name = "hidden-child" },
+            new EagerChild { Id = visible + 102, ParentId = hidden, Name = "other-child" },
+        ]).Insert();
+
+        RegisterFilteredEagerFilters(ctx);
+
+        string Run(bool single, bool parentIgnore, bool childIgnore)
+        {
+            var builder = ctx.From<FilteredEagerParent>()
+                .Where(p => p.Id == visible || p.Id == hidden)
+                .LoadWith(
+                    p => p.Children,
+                    c => childIgnore ? c.From<FilteredEagerChild>().IgnoreFilters(["soft"]) : c.From<FilteredEagerChild>(),
+                    p => p.Id,
+                    c => c.ParentId);
+            if (parentIgnore)
+                builder = builder.IgnoreFilters(["soft"]);
+
+            var parents = (single ? builder.AsSingleQuery() : builder).OrderBy(p => p.Id).ToList();
+            // Child order is not part of the contract (the split and join queries have no ORDER BY on the
+            // children), so compare the collections as sorted sets -- "same rows", not same sequence.
+            return string.Join(";", parents.Select(p => p.Id + ":" + string.Join("|", p.Children.Select(c => c.Id).OrderBy(id => id))));
+        }
+
+        // Explicit expectations (so the equivalence below is not vacuous): the parent's key-selective
+        // scope also names the child's soft filter (union), while the child's own ignore stays local.
+        Run(single: false, parentIgnore: false, childIgnore: false).Should().Be($"{visible}:{visible + 100}");
+        Run(single: false, parentIgnore: true, childIgnore: false).Should().Be($"{visible}:{visible + 100}|{visible + 101};{hidden}:{visible + 102}");
+        Run(single: false, parentIgnore: false, childIgnore: true).Should().Be($"{visible}:{visible + 100}|{visible + 101}");
+
+        for (var parentIgnore = 0; parentIgnore < 2; parentIgnore++)
+        {
+            for (var childIgnore = 0; childIgnore < 2; childIgnore++)
+            {
+                Run(false, parentIgnore == 1, childIgnore == 1)
+                    .Should().Be(Run(true, parentIgnore == 1, childIgnore == 1), "split and single must apply the same scope union");
+            }
+        }
+    }
+}
+
+[SqlTable("eager_parent")]
+public sealed class FilteredEagerParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<FilteredEagerChild> Children { get; } = new List<FilteredEagerChild>();
+}
+
+[SqlTable("eager_child")]
+public sealed class FilteredEagerChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
 }

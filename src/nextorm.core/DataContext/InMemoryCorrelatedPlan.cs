@@ -157,7 +157,12 @@ internal static class InMemoryCorrelatedEvaluator
         var resultType = cmd.ResultType
             ?? throw new NotSupportedException("A correlated subquery without a result type is not supported by the in-memory provider.");
 
-        if (context.Data[typeof(TInner)] is IAsyncEnumerable<TInner> and not IEnumerable<TInner>)
+        // The command's source may be a projection rather than the raw entity (an INSERT ... SELECT
+        // pre-check wraps the source query, so `TInner` is the projected row type). Such a source has no
+        // entry of its own in Data; only a raw entity source can be async, so a missing entry is not an
+        // async source and must not throw KeyNotFoundException.
+        if (context.Data.TryGetValue(typeof(TInner), out var sourceData)
+            && sourceData is IAsyncEnumerable<TInner> and not IEnumerable<TInner>)
             throw new NotSupportedException("A correlated subquery over an async source is not supported by the in-memory provider.");
 
         var clone = cmd.CloneForCorrelatedEvaluation();

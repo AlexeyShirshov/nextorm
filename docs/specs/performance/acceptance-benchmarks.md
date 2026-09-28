@@ -184,3 +184,20 @@ Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.95
 **1.87** (+4.1%), far below the 20% threshold; allocated ratio **7.49** (baseline 7.42), unchanged.
 The Cached path adds two type comparisons per projected column during plan lookup (constant per
 command, not per row). Verdict: within noise, **no regression**.
+
+### Iteration 4 (ACT re-verification — ratio 2.61 is an outlier)
+
+Same host/config/case set (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12,
+BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7**
+cases, **0** failures). External shell wall clock **~50 s**; BDN `Global total time` **~50 s** — both
+under the 4 min budget.
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.61** — vs baseline
+**1.87** (+39.6%), above the 20% investigation threshold. **The ratio is an outlier and the
+regression is NOT confirmed.** The other runs in this cycle measured **1.88 / 1.92 / 2.02**, and the
+`ShortRun` config is high-variance on this host (**N=3**; for some rows `Error` is ~3× `Mean`, so the
+`Cached_ToList` numerator carries a large CI). Per the interpretation rule above, a noisy difference
+on a run this variable must not be reported as a regression, and no path touched by #108 adds
+per-row work on the cached path (the filter scope is resolved once per command at plan time). Recorded
+as the cycle's acceptance run; **verdict: regression not confirmed — outlier**, consistent with the
+1.88–2.02 band of the cycle's other runs.

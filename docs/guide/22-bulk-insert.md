@@ -60,6 +60,12 @@ await ctx.BulkInsertInto<IOrder>().Values(ordersStream).BulkInsertAsync(cancella
 
 An empty source writes nothing and returns `0`.
 
+Global query filters are not injected into the bulk write; the rows are validated against the target's
+active filters before they are written (`QueryFilterException` on a violation). A synchronous source is
+validated in full before the first batch; an async source is validated as it streams, so a later
+violation can leave earlier rows written. See
+[INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation).
+
 ## Retargeting the destination table
 
 `Table(name)` / `Table(schema, name)` overrides the entity's mapped table for one write, so a mapped
@@ -299,5 +305,6 @@ On the returned builder:
 
 - [Data modification (INSERT)](17-insert-statement.md)
 - [Data merging (MERGE / upsert)](21-merge-statement.md)
+- [Global query filters](../advanced/query-filters.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 - [Provider overview](../providers/overview.md)

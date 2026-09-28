@@ -25,6 +25,10 @@ public sealed partial class InsertBuilder<TEntity>
     private ValueMode _mode;
     private QueryCommand? _source;
     private IReadOnlyList<IPropertyMetadata>? _selectColumns;
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
+    private Action<QueryFilterScope, IDataContext>? _validate;
+    private Func<QueryFilterScope, IDataContext, CancellationToken, Task>? _validateAsync;
+    private ColumnValidationSnapshot? _columnSnapshot;
 
     private enum ValueMode
     {
@@ -49,10 +53,186 @@ public sealed partial class InsertBuilder<TEntity>
     /// <summary>The number of rows this builder writes.</summary>
     internal int RowCount => _rowCount;
 
+    /// <summary>
+    /// Disables <b>all</b> global query filters declared for the target entity type, so the insert is
+    /// not validated against them. Repeatable: a later call accumulates with the earlier scope.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public InsertBuilder<TEntity> IgnoreFilters()
+    {
+        _filterScope = _filterScope.Union(QueryFilterScope.AllFilters);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types, so the insert is not
+    /// validated against them. An empty or <see langword="null"/> <paramref name="entityTypes"/>
+    /// disables nothing. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public InsertBuilder<TEntity> IgnoreFilters(params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromTypes(entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on the target
+    /// entity type, so the insert is not validated against them. An empty or <see langword="null"/>
+    /// <paramref name="filterKeys"/> disables nothing. Repeatable: a later call accumulates (union) with
+    /// the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public InsertBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        var scope = QueryFilterScope.FromKeys(filterKeys);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
+    /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public InsertBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromKeysAndTypes(filterKeys, entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Validates the rows about to be written against the target entity type's active global query
+    /// filters (minus the <c>IgnoreFilters</c> scope). Called by every execution terminal before the
+    /// statement runs; a violation raises <see cref="QueryFilterException"/>.
+    /// </summary>
+    /// <exception cref="QueryFilterException">A written row violates an active filter, or an active filter reads a column the statement does not write.</exception>
+    internal void ValidateFilters()
+    {
+        if (_validate is not null)
+        {
+            _validate(_filterScope, _dataContext);
+            return;
+        }
+
+        // No values form installed a strategy: an all-defaults insert still writes one row, so validate
+        // it fail-closed against the target filters (every column it references is omitted). A builder
+        // that forgot its values is left for BuildCommand to reject with the clearer message.
+        if (_source is null && _columns.Count == 0 && !HasWritableColumns())
+            QueryFilterValidator.ValidateColumnRows(typeof(TEntity), [], [Array.Empty<object?>()], _filterScope, _dataContext, "INSERT");
+    }
+
+    /// <summary>
+    /// Asynchronously validates the rows about to be written, preferring a genuinely asynchronous
+    /// strategy when one is installed (the <c>INSERT ... SELECT</c> source pre-check). In-memory
+    /// strategies are synchronous and complete immediately.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the source pre-check.</param>
+    /// <returns>A task that completes when validation has passed.</returns>
+    /// <exception cref="QueryFilterException">A written row violates an active filter, or an active filter reads a column the statement does not write.</exception>
+    internal Task ValidateFiltersAsync(CancellationToken cancellationToken)
+    {
+        if (_validateAsync is not null)
+            return _validateAsync(_filterScope, _dataContext, cancellationToken);
+
+        ValidateFilters();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Installs the entity-row validation strategy for the materialised <paramref name="rows"/>.
+    /// </summary>
+    /// <param name="rows">The entity rows about to be written.</param>
+    private void UseEntityValidation(IReadOnlyList<TEntity> rows)
+        => _validate = (scope, context) => QueryFilterValidator.ValidateEntities(rows, scope, context, "INSERT");
+
+    /// <summary>
+    /// Installs the column-value validation strategy over the accumulated columns. The snapshot (the
+    /// written columns and the <c>object?[]</c> matrix) is deliberately <b>not</b> taken here: this runs
+    /// after every <c>Value</c>/<c>Values(column, ...)</c> call, and re-snapshotting the whole matrix on
+    /// each of the <c>rows × columns</c> calls is O(rows × cols²) allocations. It is built once, lazily,
+    /// the first time a terminal validates the statement.
+    /// </summary>
+    private void UseColumnValidation()
+    {
+        _columnSnapshot = null;
+        _validate = ValidateColumnValues;
+    }
+
+    private void ValidateColumnValues(QueryFilterScope scope, IDataContext context)
+    {
+        var snapshot = _columnSnapshot ??= BuildColumnSnapshot();
+        QueryFilterValidator.ValidateColumnRows(typeof(TEntity), snapshot.Columns, snapshot.Rows, scope, context, "INSERT");
+    }
+
+    /// <summary>
+    /// Projects the accumulated columns to the columns that carry a client value (a column whose values
+    /// are all <c>DEFAULT</c>/column references is omitted) and the aligned value matrix.
+    /// </summary>
+    /// <returns>The snapshot, rebuilt only after a mutation invalidates it.</returns>
+    private ColumnValidationSnapshot BuildColumnSnapshot()
+    {
+        if (_rowCount == 0 || _columns.Count == 0)
+            return ColumnValidationSnapshot.Empty;
+
+        var columns = new List<IPropertyMetadata>(_columns.Count);
+        var usable = new List<ColumnAccumulator>(_columns.Count);
+        for (var c = 0; c < _columns.Count; c++)
+        {
+            var accumulator = _columns[c];
+            var allConstants = true;
+            for (var r = 0; r < accumulator.Values.Count; r++)
+            {
+                if (accumulator.Values[r].IsDefault || accumulator.Values[r].IsColumn)
+                {
+                    allConstants = false;
+                    break;
+                }
+            }
+
+            if (allConstants)
+            {
+                columns.Add(accumulator.Property);
+                usable.Add(accumulator);
+            }
+        }
+
+        if (columns.Count == 0)
+            return ColumnValidationSnapshot.Empty;
+
+        var rows = new object?[_rowCount][];
+        for (var r = 0; r < rows.Length; r++)
+        {
+            var row = new object?[columns.Count];
+            for (var c = 0; c < columns.Count; c++)
+                row[c] = usable[c].Values[r].Constant;
+
+            rows[r] = row;
+        }
+
+        return new ColumnValidationSnapshot(columns, rows);
+    }
+
     /// <summary>Executes the insert and returns the number of affected rows.</summary>
     /// <returns>The number of rows inserted, as reported by the provider.</returns>
     public int Insert()
     {
+        ValidateFilters();
         var executor = RequireExecutor();
         return executor.Execute(BuildCommand(null));
     }
@@ -60,10 +240,11 @@ public sealed partial class InsertBuilder<TEntity>
     /// <summary>Asynchronously executes the insert and returns the number of affected rows.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows inserted.</returns>
-    public Task<int> InsertAsync(CancellationToken cancellationToken = default)
+    public async Task<int> InsertAsync(CancellationToken cancellationToken = default)
     {
+        await ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
         var executor = RequireExecutor();
-        return executor.Execute(BuildCommand(null), cancellationToken);
+        return await executor.Execute(BuildCommand(null), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -394,16 +575,29 @@ public sealed partial class InsertBuilder<TEntity>
     {
         foreach (var candidate in _metadata.Properties)
         {
-            if (candidate.PropertyInfo == property)
+            // A base-declared member is reflected differently depending on the type it was read through:
+            // the mapped metadata holds the PropertyInfo reflected on the concrete entity type, while a
+            // selector typed as the entity yields the declaration reflected on the base type, so reference
+            // equality misses it. The member's canonical identity is its declaring type plus metadata
+            // token; ReflectedType is deliberately not part of it.
+            if (SameMember(candidate.PropertyInfo, property))
                 return candidate;
         }
 
         return null;
     }
 
+    private static bool SameMember(PropertyInfo left, PropertyInfo right)
+        => left == right
+            || (left.DeclaringType == right.DeclaringType && left.MetadataToken == right.MetadataToken);
+
     /// <summary>Builds the insert command for use as a side-effecting step of a batch.</summary>
     /// <returns>The insert command.</returns>
-    internal MutationCommand BuildBatchCommand() => BuildCommand(null);
+    internal MutationCommand BuildBatchCommand()
+    {
+        ValidateFilters();
+        return BuildCommand(null);
+    }
 
     /// <summary>Builds the command for a <see cref="Returning()"/> terminal. Internal so the returning builder can reach the parent's state.</summary>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</param>
@@ -506,5 +700,16 @@ public sealed partial class InsertBuilder<TEntity>
     {
         public required IPropertyMetadata Property { get; init; }
         public List<InsertValue> Values { get; } = [];
+    }
+
+    // The written columns and the row-value matrix validated against the target filters. Built lazily
+    // so a chain of Value/Values(column, ...) calls does not rebuild it on every call.
+    private sealed class ColumnValidationSnapshot(IReadOnlyList<IPropertyMetadata> columns, IReadOnlyList<object?[]> rows)
+    {
+        public static readonly ColumnValidationSnapshot Empty = new([], []);
+
+        public IReadOnlyList<IPropertyMetadata> Columns { get; } = columns;
+
+        public IReadOnlyList<object?[]> Rows { get; } = rows;
     }
 }

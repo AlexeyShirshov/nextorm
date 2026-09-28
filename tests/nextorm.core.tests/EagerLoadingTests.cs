@@ -252,7 +252,7 @@ public class EagerLoadingTests
         var broken = new PartiallyReadOnlyParent(null) { Id = 2 };
         IReadOnlyList<PartiallyReadOnlyParent> parents = new[] { filled, broken };
 
-        var act = () => ((IEagerLoadSpec<PartiallyReadOnlyParent>)spec).Execute(context, parents);
+        var act = () => ((IEagerLoadSpec<PartiallyReadOnlyParent>)spec).Execute(context, QueryFilterScope.None, parents);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*not settable*");
         filled.Children.Should().ContainSingle().Which.Should().BeSameAs(sentinel);

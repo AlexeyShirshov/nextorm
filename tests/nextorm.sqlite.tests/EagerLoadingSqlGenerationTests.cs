@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
@@ -268,4 +270,151 @@ public class EagerLoadingSqlGenerationTests
             File.Delete(path);
         }
     }
+
+    // --- D14a: split vs single eager-load filter-scope inheritance. The alias types below map to the
+    // --- same eager_parent/eager_child tables but declare a named filter, so no other test's entity
+    // --- metadata is affected (the first registration per type wins process-wide).
+
+    private static void RegisterFilteredEagerFilters(SqliteDataContext ctx)
+    {
+        ctx.From<FilteredSqlEagerParent>(b => b.HasQueryFilter("soft", (p, _) => p.Name != "zero"));
+        ctx.From<FilteredSqlEagerChild>(b => b.HasQueryFilter("soft", (c, _) => c.Name != "y"));
+    }
+
+    private static string Signature(IReadOnlyList<FilteredSqlEagerParent> parents)
+        => string.Join(";", parents.Select(p => p.Id + ":" + string.Join("|", p.Children.Select(c => c.Id).OrderBy(id => id))));
+
+    [Fact]
+    public void Split_vs_Single_FilterScopeMatrix_ShouldProduceSameRows()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            RegisterFilteredEagerFilters(ctx);
+
+            string Run(bool single, bool parentIgnore, bool childIgnore)
+            {
+                var builder = ctx.From<FilteredSqlEagerParent>()
+                    .LoadWith(
+                        p => p.Children,
+                        c => childIgnore ? c.From<FilteredSqlEagerChild>().IgnoreFilters(["soft"]) : c.From<FilteredSqlEagerChild>(),
+                        p => p.Id,
+                        c => c.ParentId);
+                if (parentIgnore)
+                    builder = builder.IgnoreFilters(["soft"]);
+
+                var parents = (single ? builder.AsSingleQuery() : builder).OrderBy(p => p.Id).ToList();
+                return Signature(parents);
+            }
+
+            // Explicit expectations first (so the equivalence below is not vacuous), then split == single.
+            Run(single: false, parentIgnore: false, childIgnore: false).Should().Be("1:10;2:12");
+            Run(single: false, parentIgnore: true, childIgnore: false).Should().Be("1:10|11;2:12;3:", "the parent's key-selective scope also names the child's soft filter (union)");
+            Run(single: false, parentIgnore: false, childIgnore: true).Should().Be("1:10|11;2:12", "the child's own ignore is local to the child side");
+            Run(single: false, parentIgnore: true, childIgnore: true).Should().Be("1:10|11;2:12;3:");
+
+            for (var parentIgnore = 0; parentIgnore < 2; parentIgnore++)
+            {
+                for (var childIgnore = 0; childIgnore < 2; childIgnore++)
+                {
+                    var split = Run(false, parentIgnore == 1, childIgnore == 1);
+                    var single = Run(true, parentIgnore == 1, childIgnore == 1);
+                    single.Should().Be(split, "the split and single paths must apply the same parent/child scope union");
+                }
+            }
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_ParentIgnoreFilters_ChildStatementDropsTheChildFilter()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            RegisterFilteredEagerFilters(ctx);
+
+            var parents = ctx.From<FilteredSqlEagerParent>()
+                .LoadWith(p => p.Children, c => c.From<FilteredSqlEagerChild>(), p => p.Id, c => c.ParentId)
+                .IgnoreFilters()
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(1, 2, 3);
+            parents.Single(p => p.Id == 1).Children.Select(c => c.Id).Should().Equal(10, 11);
+
+            var childSql = interceptor.Statements.Single(s => s.Contains(" in (", StringComparison.OrdinalIgnoreCase)).ToLowerInvariant();
+            childSql.Should().Contain("eager_child").And.NotContain("'y'", "the parent IgnoreFilters() must drop the child's soft filter too");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Split_ChildIgnoreFilters_KeepsTheParentFilterInTheParentStatement()
+    {
+        var interceptor = new SqlRecordingInterceptor();
+        var (ctx, path) = CreateDb();
+        ctx.AddInterceptor(interceptor);
+        try
+        {
+            ctx.PurgeQueryCache();
+            RegisterFilteredEagerFilters(ctx);
+
+            var parents = ctx.From<FilteredSqlEagerParent>()
+                .LoadWith(p => p.Children, c => c.From<FilteredSqlEagerChild>().IgnoreFilters(["soft"]), p => p.Id, c => c.ParentId)
+                .OrderBy(p => p.Id)
+                .ToList();
+
+            parents.Select(p => p.Id).Should().Equal(new[] { 1, 2 }, "the parent's own soft filter still applies");
+            parents.Single(p => p.Id == 1).Children.Select(c => c.Id).Should().Equal(new[] { 10, 11 }, "the child's soft filter is disabled on the child side only");
+
+            var parentSql = interceptor.Statements[0].ToLowerInvariant();
+            parentSql.Should().Contain("eager_parent").And.Contain("'zero'", "the parent filter is untouched");
+            var childSql = interceptor.Statements.Single(s => s.Contains(" in (", StringComparison.OrdinalIgnoreCase)).ToLowerInvariant();
+            childSql.Should().NotContain("'y'", "the child's own ignore drops its soft filter from the split child statement");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+}
+
+[SqlTable("eager_parent")]
+public sealed class FilteredSqlEagerParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+
+    public ICollection<FilteredSqlEagerChild> Children { get; } = new List<FilteredSqlEagerChild>();
+}
+
+[SqlTable("eager_child")]
+public sealed class FilteredSqlEagerChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
 }

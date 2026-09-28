@@ -40,6 +40,29 @@ ctx.Delete(new SimpleEntity { Id = 1 });          // delete from simple_entity w
 await ctx.DeleteAsync(new SimpleEntity { Id = 1 });
 ```
 
+## Global query filters
+
+A [global query filter](../advanced/query-filters.md) declared for the deleted entity is `and`-ed into the
+statement's `WHERE`:
+
+* predicate form — `delete from ... where <predicate> and <filter>`;
+* key form — `delete from ... where <pk> = @p and <filter>`, so `ctx.Delete(entity)` removes nothing when
+  the filter excludes that key.
+
+`All()` is an explicit full-table delete and is **never** filtered. A joined delete filters the target (the
+first table) and every joined source. [`DeleteBuilder<TEntity>`](xref:NextORM.Core.DeleteBuilder`1) exposes
+the four `IgnoreFilters` overloads (all, by entity type, by filter key, key-and-type intersection); the call
+is stateful and repeated calls accumulate:
+
+```csharp
+ctx.DeleteFrom<Document>()
+    .IgnoreFilters(["soft-delete"])   // keep tenant scoping, drop soft-delete
+    .Where(d => d.IsDeleted)
+    .Delete();
+```
+
+See [UPDATE and DELETE (DML)](../advanced/query-filters.md#update-and-delete-dml) for the full matrix.
+
 ## Provider support at a glance
 
 | Provider | `DELETE` | `RETURNING` / `OUTPUT` | `TRUNCATE` | `DELETE ... USING` / join |
@@ -130,7 +153,7 @@ The `with …` is emitted before the mutation on every provider with a multi-tab
 
 * The in-memory context is query-only: `Delete`/`DeleteAsync`/`Truncate` (like every other write) throw `NotSupportedException`; query your own collections instead. `INSERT` on the in-memory provider is likewise out of scope by design.
 * `DELETE` is not prepared or plan-cached — optimisation in nextorm targets read-only queries only (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one command per call.
-* There is deliberately no soft delete and no global query filter; a full `MERGE` with arbitrary branches is not part of this surface, and `UPDATE` lives in its own guide ([Data modification (UPDATE)](19-update-statement.md)).
+* There is deliberately no built-in soft-delete behaviour; soft delete is expressed with a [global query filter](../advanced/query-filters.md) plus an explicit `UPDATE`. A full `MERGE` with arbitrary branches is not part of this surface, and `UPDATE` lives in its own guide ([Data modification (UPDATE)](19-update-statement.md)).
 
 ## See also
 

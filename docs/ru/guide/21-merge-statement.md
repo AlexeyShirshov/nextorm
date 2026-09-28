@@ -120,6 +120,10 @@ var sql = ctx.MergeInto<ISimpleEntity>()
 * **Источник — серверный запрос.** `Using(ctx.From<T>().Where(...))` / `Using(QueryCommand<T>)` принимает только форма полного `MERGE`; key-upsert-провайдеры откатываются к батчу `VALUES`.
 * **Мутации не готовятся и не кладутся в кэш планов.** Оптимизация в nextorm нацелена только на read-only запросы (`Prepare`, неявный кэш планов, бенчмарки); merge всегда рендерит и выполняет одну команду за вызов.
 * **Число затронутых строк.** `Merge()`/`MergeAsync()` возвращают число строк, которое сообщает провайдер.
+* **Глобальные фильтры запросов не добавляются в цель.** Фильтр, объявленный для типа сущности, никогда не
+  добавляется в `MERGE`; вместо этого строки insert-ветки проверяются на соответствие активным фильтрам
+  цели до выполнения, и нарушение бросает `QueryFilterException`. `IgnoreFilters` на билдере отключает их
+  и от проверки. См. [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
 * In-memory-провайдер только для чтения: полный `MERGE` бросает `NotSupportedException`; только key-upsert merge применяется к зарегистрированной последовательности в контексте.
 
 ## См. также
@@ -128,6 +132,7 @@ var sql = ctx.MergeInto<ISimpleEntity>()
 - [Изменение данных (DELETE)](18-delete-statement.md)
 - [Изменение данных (UPDATE)](19-update-statement.md)
 - [Оптимистичная конкурентность и отслеживание изменений](27-optimistic-concurrency.md)
+- [Глобальные фильтры запросов](../advanced/query-filters.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)

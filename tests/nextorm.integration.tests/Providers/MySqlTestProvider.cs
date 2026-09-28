@@ -95,6 +95,8 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists eager_note",
         "drop table if exists eager_child",
         "drop table if exists eager_parent",
+        "drop table if exists query_filter_target",
+        "drop table if exists query_filter_entity",
 
         "create table simple_entity (id int not null primary key)",
 
@@ -195,6 +197,28 @@ internal sealed class MySqlTestProvider : ITestProvider
             id int not null primary key,
             parent_id int not null,
             text varchar(100) null
+        )
+        """,
+
+        // Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
+        // target table. Both carry the tenant/soft-delete columns the shared suite filters on.
+        """
+        create table query_filter_entity
+        (
+            id int not null primary key,
+            tenant_id int not null,
+            is_deleted tinyint(1) not null,
+            name varchar(100) null
+        )
+        """,
+
+        """
+        create table query_filter_target
+        (
+            id int not null auto_increment primary key,
+            tenant_id int null,
+            is_deleted tinyint(1) not null,
+            name varchar(100) null
         )
         """
     ];

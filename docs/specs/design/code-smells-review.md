@@ -8089,3 +8089,20 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 - **`slopwatch` не установлен** (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx) → паттерн-скан выполнен вручную.
 - **Открытые пункты — только 🟡 P2/ℹ️:** Шаг 5 (заморозка `PublicAPI.*.txt`, issue #53), Находки 9/12/150/151/188/232–236, LOB2. Релиз не блокируют.
 - **Релиз-риск (не код, тест-инфраструктура).** Флейк `SqliteIntegrationTests.Merge_Returning_ShouldReturnWrittenRow` (`SQLite Error 5: database is locked`) под coverage-прогоном (см. `docs/specs/release-1.0.8-b.md` §3.5). CI-гейт: job `publish` `needs: build`, а `build` гоняет `dotnet test --no-build` через `dotnet-coverage collect` (`.github/workflows/dotnet.yml:41-44,103-107`) — повтор флейка на тег-ране даёт exit 2 и **блокирует публикацию**. Минимальный фикс до тега (`SqliteTestProvider` seed): `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=30000;`, либо `[Collection("Sqlite")]` на SQLite-классах для устранения параллельного доступа к общему файлу БД.
+
+## Аудит цикла 4b (#108, query filters Фаза 2, 2026-09-28) — deferred с триггером
+
+**Область.** ACT цикла 4b (#108, глобальные фильтры запросов, Фаза 2) перенёс отложенные пункты из
+удалённого статус-файла `docs/specs/status/query-filters-phase2-4.md` в живые регистры. **Открытых
+P0/P1 нет**; обе находки ниже — 🟡 P2, **deferred с триггером** (не блокируют). Находки 1–236 не
+переоткрываются. Зеркало — `docs/specs/roadmap/todo_query_filters.md` §11.13.
+
+- 🟡 **Находка 237 (P2, общее изменяемое состояние клонов / утечка корректности; НОВАЯ, deferred) — `_sorting` разделяется по ссылке между клонами `QueryCommand`.**
+  **Где:** `QueryCommand._sorting` присваивается из `definition.Sorting` без копии (`Query/QueryCommand.cs:163`), тогда как `_joins` уже клонируется (`Query/QueryCommand.cs:161`); `PrepareSorting` пишет `sort.PreparedExpression` на месте по `ref` (`Query/QueryCommand.QueryPreparer.cs:829`).
+  **Почему:** подготовка одного клона переписывает `PreparedExpression` сортировки исходной команды и соседних клонов — тот же класс, что исправленная утечка `_joins` (`QueryCommand.cs:161`).
+  **Триггер:** воспроизводимая утечка `PreparedExpression` между командами или любое влияние на фильтры/результаты.
+
+- 🟡 **Находка 238 (P2, идентичность члена / латентная корректность; НОВАЯ, deferred) — `FindProperty` сравнивает `PropertyInfo` по ссылке в остальных билдерах и трансляторах.**
+  **Где:** `UpdateBuilder.FindProperty` (`Builders/UpdateBuilder.cs:383`), `DeleteBuilder.FindProperty` (`Builders/DeleteBuilder.cs:279`), `BulkInsertBuilder.FindProperty` (`Builders/BulkInsertBuilder.cs:498`), `UpdateJoinBuilder.FindProperty` (`Builders/UpdateJoinBuilder.cs:215`), `EntityMetadata.FindProperty` (`DataContext/Meta/Implementation/EntityMetadata.cs:42`), `MemberTranslator.FindProperty` (`Visitors/MemberTranslator.cs:109,126`) — только `InsertBuilder` починен в цикле 4b (`InsertBuilder.FindProperty`/`SameMember`, `Builders/InsertBuilder.cs:574,590`).
+  **Почему:** для членов, объявленных в базовом типе и скрытых через `new`, lookup по ссылке не находит метаданные (base-declared / `new`-hidden).
+  **Триггер:** запрос/мутация, адресующая base-declared или `new`-hidden свойство, даёт `null`/неверную метаданную.

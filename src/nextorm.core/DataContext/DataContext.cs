@@ -832,12 +832,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // values must not restart parameter numbering, or their names would collide.
         var (setSql, _) = _planner.RenderAssignments(command, provider, parameters, parameterNamePrefix);
 
-        string? whereSql = null;
-        if (command.Keys is not { Count: > 0 })
-        {
-            var (rendered, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix);
-            whereSql = rendered;
-        }
+        // The source's prepared condition carries the target entity's global filter (injected during
+        // preparation) and, for the predicate form, the user's WHERE. It is rendered in both forms: the
+        // key form ANDs it to the key equalities so the row must match the key and the filter.
+        var (whereSql, _) = _planner.RenderPredicate(command.Source, provider, parameters, parameterNamePrefix);
 
         return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase);
     }

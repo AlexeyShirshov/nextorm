@@ -144,13 +144,39 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// </summary>
     internal JoinIntoIdentity? JoinIntoIdentity { get; set; }
     /// <summary>
-    /// Whether this join's right-hand (child) side ignores its own global query filters, or
-    /// <see langword="null"/> to inherit the command's <see cref="QueryCommand.IgnoreFilters"/>. Set for
-    /// the single-query (<c>AsSingleQuery</c>) child joins so the child's filter decision is independent of
-    /// the parent's <c>IgnoreFilters()</c>; a plain <c>JoinInto</c> leaves it <see langword="null"/> and
-    /// inherits the command's flag.
+    /// The right-hand (child) side's selective global-query-filter scope, or <see langword="null"/> to
+    /// inherit the command's <see cref="QueryCommand.FilterScope"/>. <see langword="null"/> and an empty
+    /// scope are equivalent (both inherit): the effective child scope is always the <b>union</b> of this
+    /// scope and the command's, and <see cref="QueryFilterScope.AllFilters"/> absorbs that union, so a
+    /// parent <c>IgnoreFilters()</c> still disables every child filter and a child
+    /// <c>IgnoreFilters(keys)</c> adds to the parent's selective scope. Set for the single-query
+    /// (<c>AsSingleQuery</c>) child joins and for a <c>JoinInto</c> child that disabled filters; a plain
+    /// join leaves it <see langword="null"/>.
     /// </summary>
-    internal bool? IgnoreFilters { get; init; }
+    internal QueryFilterScope? FilterScope { get; set; }
+    /// <summary>
+    /// Returns the command's own copy-on-write clone used by preparation (see
+    /// <c>QueryPreparer.PrepareJoin</c>). Builders share <see cref="JoinExpression"/> elements by
+    /// reference across clones, so preparation must mutate only this command's copy. The copy bases its
+    /// mutable <see cref="JoinCondition"/> on the pristine <see cref="OriginalJoinCondition"/> (a sibling
+    /// may already have injected its filters into the shared condition) and shares <see cref="From"/>
+    /// rather than deep-cloning it: a derived join's <c>From.SubQuery</c> must stay bound to its data
+    /// context, and preparation only replaces the whole source (<see cref="SetFrom"/>), never mutates it.
+    /// </summary>
+    internal JoinExpression CloneForPreparation()
+        => new(_originalJoinCondition, JoinType)
+        {
+            From = _from,
+            EntityType = EntityType,
+            Strictness = Strictness,
+            IsGlobal = IsGlobal,
+            JoinHint = JoinHint,
+            ApplySource = ApplySource,
+            OriginalJoinCondition = _originalJoinCondition,
+            IsJoinInto = IsJoinInto,
+            JoinIntoIdentity = JoinIntoIdentity,
+            FilterScope = FilterScope,
+        };
     internal JoinExpression CloneForCache()
     {
         var newFrom = From.CloneForCache();
@@ -166,7 +192,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
-            IgnoreFilters = IgnoreFilters,
+            FilterScope = FilterScope,
         };
     }
     // public override int GetHashCode()

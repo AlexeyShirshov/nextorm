@@ -658,7 +658,13 @@ public partial class QueryCommand
 
                 for (var (idx, cnt) = (0, cmd._joins.Length); idx < cnt; idx++)
                 {
-                    var join = cmd._joins[idx];
+                    // Copy-on-write: builders share JoinExpression elements by reference across
+                    // clones, so preparation must mutate only this command's own copy. The copy is
+                    // based on the pristine original condition before any filter injection, so a
+                    // sibling's already-injected filters can never leak in (a plain join whose scope
+                    // disables every filter injects nothing and must stay unfiltered). The _joins array
+                    // itself is per-command, so replacing the element is local to this command.
+                    var join = cmd._joins[idx] = cmd._joins[idx].CloneForPreparation();
 
                     if (join.ApplySource is { } applySource)
                     {
@@ -703,28 +709,17 @@ public partial class QueryCommand
             return joinPlanHash;
         }
 
-        private static IReadOnlyList<IQueryFilterMetadata> GetFilters(Type? entityType, bool ignoreFilters)
-        {
-            if (ignoreFilters || entityType is null)
-                return Array.Empty<IQueryFilterMetadata>();
-
-            return DataContextCache.Metadata.TryGetValue(entityType, out var metadata)
-                ? metadata.Filters
-                : Array.Empty<IQueryFilterMetadata>();
-        }
-
         private static LambdaExpression? InjectMainSourceFilters(QueryCommand cmd, Type srcType)
         {
-            // An in-memory JoinInto pair command has the Projection<parent, child…> as its source, so a
-            // filter lookup keyed off the source type would miss the parent entity's filters. Resolve
-            // the parent type from the projection's first item and re-root the filter onto Item1, so the
-            // parent filters apply exactly like the SQL path (whose source type is already the parent).
-            var isJoinIntoProjection = cmd.ProjectionType is not null
-                && srcType.IsAssignableTo(typeof(IProjection))
+            // A joined query (a regular Join chain or a JoinInto pair) exposes the Projection<T1, …>
+            // type as its lambda parameter while its physical main source is the first table. A filter
+            // lookup keyed off the projection type would miss T1's filters, so resolve the main entity
+            // type from the projection's first item and re-root the filter onto Item1.
+            var isProjectionSource = srcType.IsAssignableTo(typeof(IProjection))
                 && srcType.GetGenericArguments().Length > 0;
-            var filterEntityType = isJoinIntoProjection ? srcType.GetGenericArguments()[0] : srcType;
+            var filterEntityType = isProjectionSource ? srcType.GetGenericArguments()[0] : srcType;
 
-            var filters = GetFilters(filterEntityType, cmd._ignoreFilters);
+            var filters = QueryFilterResolver.GetFilters(filterEntityType, cmd._filterScope);
             if (filters.Count == 0)
                 return cmd._condition;
 
@@ -733,13 +728,16 @@ public partial class QueryCommand
                 ? typedCondition.Parameters[0]
                 : Expression.Parameter(srcType);
             Expression? body = condition?.Body;
-            Expression filterTarget = isJoinIntoProjection
+            Expression filterTarget = isProjectionSource
                 ? Expression.Property(parameter, "Item1")
                 : parameter;
 
             for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
             {
-                var filterBody = BuildFilterBody(filters[i].Lambda, cmd._dataContext!, filterTarget);
+                if (filters[i].Lambda is not { } filterLambda)
+                    continue; // The builder-function form is not supported yet.
+
+                var filterBody = BuildFilterBody(filterLambda, cmd._dataContext!, filterTarget);
                 body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
             }
 
@@ -755,9 +753,16 @@ public partial class QueryCommand
                 return;
 
             var rightType = join.EntityType ?? join.From.SourceType ?? joinCondition.Parameters[1].Type;
-            // A join may carry its own ignore-filters decision (single-query LoadWith); otherwise it
-            // inherits the command's flag, as every regular join has always done.
-            var filters = GetFilters(rightType, join.IgnoreFilters ?? cmd._ignoreFilters);
+            // A join may carry the right-hand (child) side's own selective filter scope (single-query
+            // LoadWith/JoinInto or a JoinInto child that disabled filters). The effective child scope is
+            // always the union of the child's scope and the command's scope: `null` (a plain join) and an
+            // empty child scope both inherit the command's whole scope, while a non-empty child scope adds
+            // to it and All absorbs the union. So a parent IgnoreFilters() disables every child filter, and
+            // a child IgnoreFilters(keys) is not narrowed by a selective parent scope.
+            var scope = join.FilterScope is { } childScope
+                ? childScope.Union(cmd._filterScope)
+                : cmd._filterScope;
+            var filters = QueryFilterResolver.GetFilters(rightType, scope);
             if (filters.Count == 0)
                 return;
 
@@ -766,7 +771,10 @@ public partial class QueryCommand
 
             for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
             {
-                var filterBody = BuildFilterBody(filters[i].Lambda, cmd._dataContext!, rightParameter);
+                if (filters[i].Lambda is not { } filterLambda)
+                    continue; // The builder-function form is not supported yet.
+
+                var filterBody = BuildFilterBody(filterLambda, cmd._dataContext!, rightParameter);
                 body = Expression.AndAlso(body, filterBody);
             }
 
@@ -779,7 +787,7 @@ public partial class QueryCommand
                 throw new NotSupportedException($"The query filter registered for the {entityParameter.Type.Name} source declares no entity parameter.");
 
             var filterEntityParameter = filter.Parameters[0];
-            if (filterEntityParameter.Type != entityParameter.Type)
+            if (!filterEntityParameter.Type.IsAssignableFrom(entityParameter.Type))
                 throw new NotSupportedException($"The query filter registered for {filterEntityParameter.Type.Name} cannot be applied to the {entityParameter.Type.Name} source: the filter's entity parameter type does not match the source type.");
 
             var body = filter.Body;

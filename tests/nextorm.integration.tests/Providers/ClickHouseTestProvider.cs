@@ -206,6 +206,20 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             name Nullable(String),
             age Int32
         ) engine = Memory
+        """,
+
+        // Global query filter fixture (#108 D6): the SELECT side of the shared query filter suite.
+        // ClickHouse does not derive CommonTestSuite, so the SELECT cases are re-pinned by
+        // ClickHouseQueryFilterTests; Memory has no identity key, so ids are written explicitly.
+        "drop table if exists query_filter_entity",
+        """
+        create table query_filter_entity
+        (
+            id Int32,
+            tenant_id Int32,
+            is_deleted Bool,
+            name Nullable(String)
+        ) engine = Memory
         """
     ];
 }

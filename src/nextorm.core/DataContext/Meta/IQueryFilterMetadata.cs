@@ -9,15 +9,21 @@ namespace NextORM.Core;
 public interface IQueryFilterMetadata
 {
     /// <summary>
-    /// The filter key, or <see langword="null"/> for an anonymous filter. Named (keyed) filters are
-    /// introduced in a later phase; an anonymous filter always reports <see langword="null"/>.
+    /// The filter key. A filter declared without a key reports <see cref="QueryFilters.AnonymousKey"/>;
+    /// a named filter reports the key it was registered with.
     /// </summary>
-    string? Key { get; }
+    string Key { get; }
 
     /// <summary>
     /// The filter predicate. Its first parameter is the entity; an optional second parameter is the
     /// executing <see cref="IDataContext"/>, so the filter can read per-context state such as a tenant
-    /// identifier.
+    /// identifier. <see langword="null"/> for a builder-function filter (not implemented yet).
     /// </summary>
-    LambdaExpression Lambda { get; }
+    LambdaExpression? Lambda { get; }
+
+    /// <summary>
+    /// The builder-function form of the filter, or <see langword="null"/> for a predicate filter. The
+    /// builder-function form is not implemented yet and always reports <see langword="null"/>.
+    /// </summary>
+    LambdaExpression? Func => null;
 }

@@ -37,11 +37,134 @@ public sealed partial class MergeBuilder<TEntity>
     private bool _whenNotMatchedInsert;
     private LambdaExpression? _matchCondition;
     private QueryCommand? _registry;
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
 
     internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+    }
+
+    /// <summary>
+    /// Disables <b>all</b> global query filters declared for the target entity type, so the inserted
+    /// side of the merge is not validated against them. Repeatable: a later call accumulates with the
+    /// earlier scope.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters()
+    {
+        _filterScope = _filterScope.Union(QueryFilterScope.AllFilters);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types, so the inserted side of
+    /// the merge is not validated against them. An empty or <see langword="null"/>
+    /// <paramref name="entityTypes"/> disables nothing. Repeatable: a later call accumulates (union)
+    /// with the earlier scope.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters(params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromTypes(entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on the target
+    /// entity type, so the inserted side of the merge is not validated against them. An empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing. Repeatable: a later call
+    /// accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        var scope = QueryFilterScope.FromKeys(filterKeys);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
+    /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromKeysAndTypes(filterKeys, entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Validates the rows written by the merge's insert branch against the target entity type's active
+    /// global query filters. Entity/batch sources are checked in memory; a query source is guarded by a
+    /// server-side pre-check. Called by every execution terminal before the statement runs.
+    /// </summary>
+    /// <exception cref="QueryFilterException">A merged row violates an active filter.</exception>
+    internal void ValidateFilters()
+    {
+        if (_filterScope.All || !HasInsertBranch())
+            return;
+
+        if (_source is QueryCommand<TEntity> typedSource)
+        {
+            QueryFilterValidator.ValidateSource<TEntity, TEntity>(typedSource, null, _filterScope, _dataContext, "MERGE");
+            return;
+        }
+
+        if (_sourceEntities is { } entities)
+            QueryFilterValidator.ValidateEntities(entities, _filterScope, _dataContext, "MERGE");
+    }
+
+    /// <summary>
+    /// Asynchronously validates the rows written by the merge's insert branch. A query source is
+    /// pre-checked with a genuinely asynchronous existence query; entity/batch sources are checked in
+    /// memory and complete immediately.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the source pre-check.</param>
+    /// <returns>A task that completes when validation has passed.</returns>
+    /// <exception cref="QueryFilterException">A merged row violates an active filter.</exception>
+    internal Task ValidateFiltersAsync(CancellationToken cancellationToken)
+    {
+        if (_filterScope.All || !HasInsertBranch())
+            return Task.CompletedTask;
+
+        if (_source is QueryCommand<TEntity> typedSource)
+            return QueryFilterValidator.ValidateSourceAsync<TEntity, TEntity>(typedSource, null, _filterScope, _dataContext, "MERGE", cancellationToken);
+
+        if (_sourceEntities is { } entities)
+            QueryFilterValidator.ValidateEntities(entities, _filterScope, _dataContext, "MERGE");
+
+        return Task.CompletedTask;
+    }
+
+    private bool HasInsertBranch()
+    {
+        if (_whenNotMatchedInsert)
+            return true;
+
+        for (var i = 0; i < _branches.Count; i++)
+        {
+            if (_branches[i].Action == MergeActionKind.Insert)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Uses a single mapped entity as the source row.</summary>
@@ -321,6 +444,8 @@ public sealed partial class MergeBuilder<TEntity>
     /// <returns>The number of rows inserted or updated, as reported by the provider.</returns>
     public int Merge()
     {
+        ValidateFilters();
+
         if (_dataContext is InMemoryDataContext inMemory)
             return MergeInMemory(inMemory);
 
@@ -330,12 +455,14 @@ public sealed partial class MergeBuilder<TEntity>
     /// <summary>Asynchronously executes the merge and returns the number of affected rows.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows inserted or updated.</returns>
-    public Task<int> MergeAsync(CancellationToken cancellationToken = default)
+    public async Task<int> MergeAsync(CancellationToken cancellationToken = default)
     {
-        if (_dataContext is InMemoryDataContext inMemory)
-            return Task.FromResult(MergeInMemory(inMemory));
+        await ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
 
-        return RequireExecutor().Execute(BuildCommand(), cancellationToken);
+        if (_dataContext is InMemoryDataContext inMemory)
+            return MergeInMemory(inMemory);
+
+        return await RequireExecutor().Execute(BuildCommand(), cancellationToken).ConfigureAwait(false);
     }
 
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)

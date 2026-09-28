@@ -505,12 +505,18 @@ SQL Server дополнительно записывает изменённые 
 * **Дробление большого батча.** `InsertInto<T>()` пишет одно утверждение; для всего набора используйте
   [Массовая вставка](22-bulk-insert.md), включая необязательное дробление
   (`MaxBatchSize`/`MaxParameters`/`MaxSqlLength`) и нативные bulk-пути.
+* **Глобальные фильтры запросов не добавляются в цель.** Фильтр, объявленный для типа сущности, никогда
+  не добавляется в `INSERT`; вместо этого записываемые значения проверяются на соответствие активным
+  фильтрам цели до выполнения, и нарушение бросает `QueryFilterException`. `IgnoreFilters` на билдере
+  отключает их и от проверки. См.
+  [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
 * In-memory-провайдер только для чтения: `INSERT`/`UPDATE`/`DELETE` и полный `MERGE` бросают `NotSupportedException`; только key-upsert merge применяется к зарегистрированной последовательности в контексте.
 
 ## См. также
 
 - [Слияние данных (MERGE / upsert)](21-merge-statement.md)
 - [Массовая вставка (bulk)](22-bulk-insert.md)
+- [Глобальные фильтры запросов](../advanced/query-filters.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)

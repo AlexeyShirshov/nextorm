@@ -98,6 +98,20 @@ public class EagerLoadingSingleQueryP1Tests
         public bool IsDeleted { get; set; }
     }
 
+    public sealed class FilteredP1ScopedParent
+    {
+        public int Id { get; set; }
+        public bool IsDeleted { get; set; }
+        public ICollection<FilteredP1ScopedChild> Children { get; set; } = new List<FilteredP1ScopedChild>();
+    }
+
+    public sealed class FilteredP1ScopedChild
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+        public bool IsDeleted { get; set; }
+    }
+
     private static InMemoryDataContext CreateContext()
     {
         var context = new InMemoryDataContext();
@@ -118,6 +132,33 @@ public class EagerLoadingSingleQueryP1Tests
             new P1Parent { Id = 3, Name = "c" },
         });
 
+        return context;
+    }
+
+    /// <summary>
+    /// Seeds the scoped parent/child fixtures: the child declares a named <c>soft</c> filter and an
+    /// anonymous filter, the parent only the named <c>soft</c> one, so a selective scope can be told
+    /// apart from the all-or-nothing scope.
+    /// </summary>
+    private static InMemoryDataContext CreateScopedContext()
+    {
+        var context = new InMemoryDataContext();
+        context.From<FilteredP1ScopedChild>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted)
+                .HasQueryFilter(e => e.Id != 11))
+            .WithData(
+            [
+                new FilteredP1ScopedChild { Id = 10, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 11, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 12, ParentId = 1, IsDeleted = true },
+            ]);
+        context.From<FilteredP1ScopedParent>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted))
+            .WithData(
+            [
+                new FilteredP1ScopedParent { Id = 1 },
+                new FilteredP1ScopedParent { Id = 2, IsDeleted = true },
+            ]);
         return context;
     }
 
@@ -331,7 +372,7 @@ public class EagerLoadingSingleQueryP1Tests
     }
 
     [Fact]
-    public void AsSingleQuery_ParentIgnoreFilters_KeepsChildGlobalFilters()
+    public void AsSingleQuery_ParentIgnoreFilters_ShouldAlsoDisableChildGlobalFilters()
     {
         using var context = new InMemoryDataContext();
         context.From<FilteredP1Child>(b => b.HasQueryFilter(c => !c.IsDeleted)).WithData(new[]
@@ -353,9 +394,10 @@ public class EagerLoadingSingleQueryP1Tests
             .OrderBy(p => p.Id)
             .ToList();
 
-        // Parent filter disabled: the deleted parent reappears. Child filter still applies: child 11 stays out.
+        // A parent IgnoreFilters() is the all-or-nothing scope: it inherits into the child join, so the
+        // deleted parent reappears AND the child's global filter is disabled too (child 11 reappears).
         parents.Select(p => p.Id).Should().Equal(1, 2);
-        parents[0].Children.Select(c => c.Id).Should().Equal(10);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
         parents[1].Children.Select(c => c.Id).Should().Equal(12);
     }
 
@@ -384,6 +426,286 @@ public class EagerLoadingSingleQueryP1Tests
         // Parent filter still applies: only parent 1. Child filter disabled: the deleted child reappears.
         parents.Select(p => p.Id).Should().Equal(1);
         parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+    }
+
+    [Fact]
+    public void AsSingleQuery_ParentSelectiveIgnore_ShouldPreserveScopeOnChildJoinFlagFalse()
+    {
+        using var context = new InMemoryDataContext();
+        context.From<FilteredP1ScopedChild>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted)
+                .HasQueryFilter(e => e.Id != 11))
+            .WithData(
+            [
+                new FilteredP1ScopedChild { Id = 10, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 11, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 12, ParentId = 1, IsDeleted = true },
+            ]);
+        context.From<FilteredP1ScopedParent>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted))
+            .WithData(
+            [
+                new FilteredP1ScopedParent { Id = 1 },
+                new FilteredP1ScopedParent { Id = 2, IsDeleted = true },
+            ]);
+
+        var parents = context.From<FilteredP1ScopedParent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>(), p => p.Id, c => c.ParentId)
+            .AsSingleQuery()
+            .IgnoreFilters(["soft"])
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // The join flag is false (the child did not call IgnoreFilters), so the command's selective scope
+        // must survive: the parent's soft filter is ignored (parent 2 reappears) AND the child's soft
+        // filter is ignored too (child 12 reappears), while the child's anonymous Id filter still applies
+        // (child 11 stays out). A wiped scope would leave the child's soft filter active and drop 12.
+        parents.Select(p => p.Id).Should().Equal(1, 2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 12);
+        parents[1].Children.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AsSingleQuery_ChildAllIgnore_ShouldDominateSelectiveParentScope()
+    {
+        using var context = new InMemoryDataContext();
+        context.From<FilteredP1ScopedChild>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted)
+                .HasQueryFilter(e => e.Id != 11))
+            .WithData(
+            [
+                new FilteredP1ScopedChild { Id = 10, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 11, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 12, ParentId = 1, IsDeleted = true },
+            ]);
+        context.From<FilteredP1ScopedParent>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted))
+            .WithData(
+            [
+                new FilteredP1ScopedParent { Id = 1 },
+                new FilteredP1ScopedParent { Id = 2, IsDeleted = true },
+            ]);
+
+        var parents = context.From<FilteredP1ScopedParent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(), p => p.Id, c => c.ParentId)
+            .AsSingleQuery()
+            .IgnoreFilters(["soft"])
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // The join flag is true: the all-or-nothing child decision ignores every child filter, including
+        // the anonymous Id filter that the parent's selective scope does not name.
+        parents.Select(p => p.Id).Should().Equal(1, 2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11, 12);
+    }
+
+    [Fact]
+    public void AsSingleQuery_ChildSelectiveIgnoreByKey_ShouldApplyToChild()
+    {
+        using var context = new InMemoryDataContext();
+        context.From<FilteredP1ScopedChild>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted)
+                .HasQueryFilter(e => e.Id != 11))
+            .WithData(
+            [
+                new FilteredP1ScopedChild { Id = 10, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 11, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 12, ParentId = 1, IsDeleted = true },
+            ]);
+        context.From<FilteredP1ScopedParent>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted))
+            .WithData(
+            [
+                new FilteredP1ScopedParent { Id = 1 },
+                new FilteredP1ScopedParent { Id = 2, IsDeleted = true },
+            ]);
+
+        var parents = context.From<FilteredP1ScopedParent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(["soft"]), p => p.Id, c => c.ParentId)
+            .AsSingleQuery()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // The parent's own soft filter still applies (parent 2 stays out). The child's key-selective scope
+        // must reach the child join: its soft filter is ignored (child 12 reappears) while the child's
+        // anonymous Id filter is untouched (child 11 stays out).
+        parents.Select(p => p.Id).Should().Equal(1);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 12);
+    }
+
+    [Fact]
+    public void AsSingleQuery_ChildSelectiveIgnoreByType_ShouldApplyToChild()
+    {
+        using var context = new InMemoryDataContext();
+        context.From<FilteredP1ScopedChild>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted)
+                .HasQueryFilter(e => e.Id != 11))
+            .WithData(
+            [
+                new FilteredP1ScopedChild { Id = 10, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 11, ParentId = 1 },
+                new FilteredP1ScopedChild { Id = 12, ParentId = 1, IsDeleted = true },
+            ]);
+        context.From<FilteredP1ScopedParent>(b => b
+                .HasQueryFilter("soft", (e, _) => !e.IsDeleted))
+            .WithData(
+            [
+                new FilteredP1ScopedParent { Id = 1 },
+                new FilteredP1ScopedParent { Id = 2, IsDeleted = true },
+            ]);
+
+        var parents = context.From<FilteredP1ScopedParent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(typeof(FilteredP1ScopedChild)), p => p.Id, c => c.ParentId)
+            .AsSingleQuery()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // A type-only child scope disables every child filter, so all three children come back, while the
+        // parent's own soft filter still applies.
+        parents.Select(p => p.Id).Should().Equal(1);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11, 12);
+    }
+
+    [Fact]
+    public void SplitQuery_ParentIgnoreFilters_ShouldAlsoDisableChildGlobalFilters()
+    {
+        using var context = new InMemoryDataContext();
+        context.From<FilteredP1Child>(b => b.HasQueryFilter(c => !c.IsDeleted)).WithData(new[]
+        {
+            new FilteredP1Child { Id = 10, ParentId = 1 },
+            new FilteredP1Child { Id = 11, ParentId = 1, IsDeleted = true },
+            new FilteredP1Child { Id = 12, ParentId = 2 },
+        });
+        context.From<FilteredP1Parent>(b => b.HasQueryFilter(p => !p.IsDeleted)).WithData(new[]
+        {
+            new FilteredP1Parent { Id = 1 },
+            new FilteredP1Parent { Id = 2, IsDeleted = true },
+        });
+
+        var parents = context.From<FilteredP1Parent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1Child>(), p => p.Id, c => c.ParentId)
+            .IgnoreFilters()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // Split must match single query: a parent IgnoreFilters() inherits into the child command, so the
+        // deleted parent reappears AND the child's global filter is disabled too (child 11 reappears).
+        parents.Select(p => p.Id).Should().Equal(1, 2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+        parents[1].Children.Select(c => c.Id).Should().Equal(12);
+    }
+
+    [Fact]
+    public void SplitQuery_ChildIgnoreFilters_KeepsParentGlobalFilters()
+    {
+        using var context = new InMemoryDataContext();
+        context.From<FilteredP1Child>(b => b.HasQueryFilter(c => !c.IsDeleted)).WithData(new[]
+        {
+            new FilteredP1Child { Id = 10, ParentId = 1 },
+            new FilteredP1Child { Id = 11, ParentId = 1, IsDeleted = true },
+            new FilteredP1Child { Id = 12, ParentId = 2 },
+        });
+        context.From<FilteredP1Parent>(b => b.HasQueryFilter(p => !p.IsDeleted)).WithData(new[]
+        {
+            new FilteredP1Parent { Id = 1 },
+            new FilteredP1Parent { Id = 2, IsDeleted = true },
+        });
+
+        var parents = context.From<FilteredP1Parent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1Child>().IgnoreFilters(), p => p.Id, c => c.ParentId)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // The child's own decision is local to the child side: the parent filter still applies, while the
+        // deleted child reappears.
+        parents.Select(p => p.Id).Should().Equal(1);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+    }
+
+    [Fact]
+    public void SplitQuery_ParentSelectiveIgnore_ShouldPreserveScopeOnChild()
+    {
+        using var context = CreateScopedContext();
+
+        var parents = context.From<FilteredP1ScopedParent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>(), p => p.Id, c => c.ParentId)
+            .IgnoreFilters(["soft"])
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // The parent's selective scope inherits into the split child: the child's soft filter is ignored
+        // (child 12 reappears) while its anonymous Id filter stays (child 11 stays out).
+        parents.Select(p => p.Id).Should().Equal(1, 2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 12);
+        parents[1].Children.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void SplitQuery_ChildAllIgnore_ShouldDominateSelectiveParentScope()
+    {
+        using var context = CreateScopedContext();
+
+        var parents = context.From<FilteredP1ScopedParent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(), p => p.Id, c => c.ParentId)
+            .IgnoreFilters(["soft"])
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(1, 2);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11, 12);
+    }
+
+    [Fact]
+    public void SplitQuery_ChildSelectiveIgnoreByKey_ShouldUnionWithParentAndStayLocal()
+    {
+        using var context = CreateScopedContext();
+
+        var parents = context.From<FilteredP1ScopedParent>()
+            .LoadWith(p => p.Children, c => c.From<FilteredP1ScopedChild>().IgnoreFilters(["soft"]), p => p.Id, c => c.ParentId)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        // The parent's own soft filter still applies (parent 2 stays out); the child's key-selective scope
+        // reaches the child command: its soft filter is ignored (child 12) while the anonymous Id filter
+        // is untouched (child 11 stays out). The sibling collection is unaffected.
+        parents.Select(p => p.Id).Should().Equal(1);
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 12);
+    }
+
+    [Theory]
+    [InlineData(false, false, false)] // no ignore
+    [InlineData(true, false, false)]  // parent All
+    [InlineData(false, true, false)]  // parent selective
+    [InlineData(false, false, true)]  // child selective
+    [InlineData(true, true, false)]   // parent All absorbs child selective
+    [InlineData(false, true, true)]   // union: parent selective + child selective
+    public void SplitQuery_And_SingleQuery_Matrix_ShouldProduceSameRows(bool parentIgnoreAll, bool parentSelective, bool childSelective)
+    {
+        static string Run(bool single, bool parentAll, bool parentSoft, bool childSoft)
+        {
+            using var context = CreateScopedContext();
+
+            var builder = context.From<FilteredP1ScopedParent>()
+                .LoadWith(
+                    p => p.Children,
+                    c => childSoft ? c.From<FilteredP1ScopedChild>().IgnoreFilters(["soft"]) : c.From<FilteredP1ScopedChild>(),
+                    p => p.Id,
+                    c => c.ParentId);
+            if (parentAll)
+                builder = builder.IgnoreFilters();
+            else if (parentSoft)
+                builder = builder.IgnoreFilters(["soft"]);
+
+            var parents = (single ? builder.AsSingleQuery() : builder).OrderBy(p => p.Id).ToList();
+            return string.Join(
+                ";",
+                parents.Select(p => p.Id + ":" + string.Join("|", p.Children.Select(c => c.Id))));
+        }
+
+        var split = Run(single: false, parentIgnoreAll, parentSelective, childSelective);
+        var single = Run(single: true, parentIgnoreAll, parentSelective, childSelective);
+
+        single.Should().Be(split, "the split and single-query paths must apply the same parent/child scope union");
     }
 
     [Fact]
@@ -619,9 +941,11 @@ public class EagerLoadingSingleQueryP1Tests
 
         var parents = builder.OrderBy(p => p.Id).ToList();
 
+        // An all-or-nothing parent IgnoreFilters() inherits into every child join, so it disables the
+        // child filters even when the child did not make its own ignore decision.
         parents.Select(p => p.Id).Should().Equal(parentIgnore ? new[] { 1, 2 } : new[] { 1 });
-        parents[0].Children.Select(c => c.Id).Should().Equal(childIgnore ? new[] { 10, 11 } : new[] { 10 });
-        parents[0].Notes.Select(n => n.Id).Should().Equal(noteIgnore ? new[] { 100, 101 } : new[] { 100 });
+        parents[0].Children.Select(c => c.Id).Should().Equal(childIgnore || parentIgnore ? new[] { 10, 11 } : new[] { 10 });
+        parents[0].Notes.Select(n => n.Id).Should().Equal(noteIgnore || parentIgnore ? new[] { 100, 101 } : new[] { 100 });
     }
 
     [Fact]

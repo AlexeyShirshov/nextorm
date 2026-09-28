@@ -73,10 +73,10 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
     /// <exception cref="NotSupportedException">The provider cannot express <c>RETURNING</c>/<c>OUTPUT</c>, or the context is read-only.</exception>
     public IReadOnlyList<TResult> ToList()
     {
-        _bulk.ValidateSyncSource();
+        var rows = _bulk.ValidateAndMaterializeSync();
 
         var mutation = _bulk.RequireMutationExecutor();
-        var command = _bulk.BuildCommand(_bulk.ProjectSyncRows(), null);
+        var command = _bulk.BuildCommand(_bulk.ProjectRows(rows), null);
         PortableBulkInsertExecutor.EnsurePortableOptionsSupported(command);
 
         var rowsPerBatch = PortableBulkInsertExecutor.RowsPerBatch(command);
@@ -115,7 +115,7 @@ public sealed class BulkInsertReturningBuilder<TEntity, TResult>
 
         return _bulk.AsyncSource is not null
             ? ToListAsyncRowsAsync(_bulk.ProjectAsyncRows(cancellationToken), cancellationToken)
-            : ToListAsyncSyncAsync(_bulk.ProjectSyncRows(), cancellationToken);
+            : ToListAsyncSyncAsync(_bulk.ProjectRows(_bulk.ValidateAndMaterializeSync()), cancellationToken);
     }
 
     private Task<IReadOnlyList<TResult>> ToListAsyncSyncAsync(IEnumerable<object?[]> rows, CancellationToken cancellationToken)

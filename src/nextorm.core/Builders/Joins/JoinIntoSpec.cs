@@ -91,10 +91,11 @@ internal interface IJoinIntoSpec<TEntity>
     JoinIntoIdentity Identity { get; }
 
     /// <summary>
-    /// Whether the child side ignores its own global query filters. Carried onto the synthesized join so
-    /// the child's filter decision is independent of the parent's <c>IgnoreFilters()</c>.
+    /// The child side's selective global-query-filter scope. Carried onto the synthesized join so the
+    /// child's own filter decision (all, by type, by key or a combination) is independent of the parent's
+    /// <c>IgnoreFilters()</c>.
     /// </summary>
-    bool IgnoreChildFilters { get; }
+    QueryFilterScope ChildFilterScope { get; }
 
     /// <summary>Reads the parent key used to deduplicate the denormalized parents.</summary>
     /// <param name="parent">The parent row.</param>
@@ -193,7 +194,7 @@ internal sealed class JoinIntoSpec<TEntity, TChild> : IJoinIntoSpec<TEntity>
     public JoinIntoIdentity Identity { get; }
 
     /// <inheritdoc/>
-    public bool IgnoreChildFilters => Child.IgnoresFilters;
+    public QueryFilterScope ChildFilterScope => Child.FilterScope;
 
     /// <inheritdoc/>
     public object? GetParentKey(TEntity parent) => _parentKey(parent);
@@ -309,7 +310,7 @@ internal sealed class JoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSpec<TEntit
     public JoinIntoIdentity Identity { get; }
 
     /// <inheritdoc/>
-    public bool IgnoreChildFilters => Child.IgnoresFilters;
+    public QueryFilterScope ChildFilterScope => Child.FilterScope;
 
     /// <inheritdoc/>
     public object? GetParentKey(TEntity parent) => _parentKey(parent);

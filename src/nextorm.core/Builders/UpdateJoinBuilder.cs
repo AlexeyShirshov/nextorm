@@ -78,6 +78,60 @@ public sealed class UpdateJoinBuilder<TProjection>
     }
 
     /// <summary>
+    /// Disables <b>all</b> global query filters declared for the target (first) table and for every
+    /// joined table, so the update reads the unfiltered rows. Repeatable: a later call accumulates with
+    /// the earlier scope.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateJoinBuilder<TProjection> IgnoreFilters()
+    {
+        _query = _query.IgnoreFilters();
+        return this;
+    }
+
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types (the target or any joined
+    /// table). An empty or <see langword="null"/> <paramref name="entityTypes"/> disables nothing.
+    /// Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateJoinBuilder<TProjection> IgnoreFilters(params Type[] entityTypes)
+    {
+        _query = _query.IgnoreFilters(entityTypes);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on every
+    /// entity type in the query. An empty or <see langword="null"/> <paramref name="filterKeys"/>
+    /// disables nothing. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateJoinBuilder<TProjection> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        _query = _query.IgnoreFilters(filterKeys);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
+    /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateJoinBuilder<TProjection> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        _query = _query.IgnoreFilters(filterKeys, entityTypes);
+        return this;
+    }
+
+    /// <summary>
     /// Renders the parameterised SQL this builder would execute, without executing it. Useful for
     /// diagnostics and for verifying SQL generation without a database.
     /// </summary>

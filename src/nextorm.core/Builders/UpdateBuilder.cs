@@ -9,7 +9,8 @@ namespace NextORM.Core;
 /// The columns to write are supplied with <see cref="Set{TValue}(Expression{Func{TEntity, TValue}}, TValue)"/>,
 /// <see cref="Set{TValue}(Expression{Func{TEntity, TValue}}, Expression{Func{TEntity, TValue}})"/> or
 /// <see cref="Set(TEntity)"/>; the rows to change are selected with <see cref="Where"/>. Omitting
-/// <see cref="Where"/> updates every row of the table.
+/// <see cref="Where"/> updates every row the target's global query filters allow (disable them with
+/// <c>IgnoreFilters</c> to reach the rest).
 /// <para>
 /// There is deliberately no change tracking: the terminal issues exactly one explicit command and
 /// updates only the columns named in the <c>SET</c> list, never "the changed properties".
@@ -22,6 +23,7 @@ public sealed class UpdateBuilder<TEntity>
     private readonly IEntityMetadata _metadata;
     private readonly List<UpdateAssignment> _assignments = [];
     private EntityBuilder<TEntity>? _filter;
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
 
     internal UpdateBuilder(IDataContext dataContext, IEntityMetadata metadata)
     {
@@ -118,6 +120,69 @@ public sealed class UpdateBuilder<TEntity>
     }
 
     /// <summary>
+    /// Disables <b>all</b> global query filters declared for the target entity type, so the update (in
+    /// every form, including the key form) touches the unfiltered rows. Repeatable: a later call
+    /// accumulates with the earlier scope.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateBuilder<TEntity> IgnoreFilters()
+    {
+        _filterScope = _filterScope.Union(QueryFilterScope.AllFilters);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types. An empty or
+    /// <see langword="null"/> <paramref name="entityTypes"/> disables nothing. Repeatable: a later call
+    /// accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateBuilder<TEntity> IgnoreFilters(params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromTypes(entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on the target
+    /// entity type. An empty or <see langword="null"/> <paramref name="filterKeys"/> disables nothing.
+    /// Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        var scope = QueryFilterScope.FromKeys(filterKeys);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
+    /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public UpdateBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromKeysAndTypes(filterKeys, entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
     /// Switches the builder to a row-returning terminal that materialises the whole updated row through
     /// the provider's <c>RETURNING</c>/<c>OUTPUT</c> form (the equivalent of <c>RETURNING *</c> over the
     /// mapped columns). The predicate form is required: the key form (<c>Update(entity)</c>) does not
@@ -191,7 +256,7 @@ public sealed class UpdateBuilder<TEntity>
         return ExecuteAsync(command, cancellationToken);
     }
 
-    private UpdateCommand BuildEntityCommand(TEntity entity)
+    internal UpdateCommand BuildEntityCommand(TEntity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
         Set(entity);
@@ -215,7 +280,7 @@ public sealed class UpdateBuilder<TEntity>
         if (_assignments.Count == 0)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
-        var source = (_filter ?? _dataContext.From<TEntity>()).ToCommand();
+        var source = FilterSource().ToCommand();
         return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, keys);
     }
 
@@ -232,7 +297,7 @@ public sealed class UpdateBuilder<TEntity>
         if (_assignments.Count == 0)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
-        var source = (_filter ?? _dataContext.From<TEntity>()).ToCommand();
+        var source = FilterSource().ToCommand();
         return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto);
     }
 
@@ -245,9 +310,16 @@ public sealed class UpdateBuilder<TEntity>
         if (_assignments.Count == 0)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
-        var source = (_filter ?? _dataContext.From<TEntity>()).ToCommand();
+        var source = FilterSource().ToCommand();
         return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, new OutputIntoClause(targetTable, outputColumns));
     }
+
+    // The source command that carries the UPDATE's WHERE and drives the assignments. It always carries
+    // the builder's selective filter scope (folded into a copy so the retained source builder is never
+    // mutated), so both the predicate form (where the pre-join Where is the user's condition) and the
+    // key form (where only the injected target filter remains) honor IgnoreFilters.
+    private EntityBuilder<TEntity> FilterSource()
+        => (_filter ?? _dataContext.From<TEntity>()).WithFilterScope(_filterScope);
 
     private void SetAssignment(UpdateAssignment assignment)
     {

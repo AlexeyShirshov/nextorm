@@ -60,6 +60,11 @@ await ctx.BulkInsertInto<IOrder>().Values(ordersStream).BulkInsertAsync(cancella
 
 Пустой набор ничего не пишет и возвращает `0`.
 
+Глобальные фильтры запросов не добавляются в bulk-запись; строки проверяются на соответствие активным
+фильтрам цели до записи (`QueryFilterException` при нарушении). Синхронный источник проверяется целиком
+до первого батча; асинхронный — по мере потока, поэтому при нарушении в поздней строке ранее записанные
+строки остаются. См. [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
+
 ## Перенацеливание целевой таблицы
 
 `Table(name)` / `Table(schema, name)` переопределяет таблицу, замапленную на сущность, для одной
@@ -301,5 +306,6 @@ ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 
 - [Изменение данных (INSERT)](17-insert-statement.md)
 - [Слияние данных (MERGE / upsert)](21-merge-statement.md)
+- [Глобальные фильтры запросов](../advanced/query-filters.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)

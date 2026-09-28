@@ -271,6 +271,7 @@ internal static class SqlMutationBuilder
             // the deleted alias.
             AppendOutputClauses(writer, dialect, quoteIdentifiers, namingConvention, command.OutputInto, returningColumns, deleted: true, keywordCase);
 
+            var wroteWhere = false;
             if (command.Keys is { Count: > 0 } keys)
             {
                 var provider = parameterProvider ?? new DefaultParameterProvider();
@@ -286,12 +287,19 @@ internal static class SqlMutationBuilder
                     parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
                     writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
                 }
+
+                wroteWhere = true;
             }
-            else if (!string.IsNullOrEmpty(whereSql))
+
+            // The key form still carries the target entity's global filter: it is appended after the key
+            // equalities so the row is matched by key AND filter.
+            if (!string.IsNullOrEmpty(whereSql))
             {
-                writer.Append(SqlKeywords.Of(keywordCase, " where ")).Append(whereSql);
+                writer.Append(SqlKeywords.Of(keywordCase, wroteWhere ? " and " : " where ")).Append(whereSql);
+                wroteWhere = true;
             }
-            else if (dialect.DeleteRequiresWhere)
+
+            if (!wroteWhere && dialect.DeleteRequiresWhere)
             {
                 writer.Append(SqlKeywords.Of(keywordCase, " where 1"));
             }
@@ -355,6 +363,7 @@ internal static class SqlMutationBuilder
             // appended at the very end (below). MySQL/MariaDB have neither.
             AppendOutputClauses(writer, dialect, quoteIdentifiers, namingConvention, command.OutputInto, returningColumns, deleted: false, keywordCase);
 
+            var wroteWhere = false;
             if (command.Keys is { Count: > 0 } keys)
             {
                 writer.Append(SqlKeywords.Of(keywordCase, " where "));
@@ -369,12 +378,19 @@ internal static class SqlMutationBuilder
                     parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
                     writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
                 }
+
+                wroteWhere = true;
             }
-            else if (!string.IsNullOrEmpty(whereSql))
+
+            // The key form still carries the target entity's global filter: it is appended after the key
+            // equalities so the row is matched by key AND filter.
+            if (!string.IsNullOrEmpty(whereSql))
             {
-                writer.Append(SqlKeywords.Of(keywordCase, " where ")).Append(whereSql);
+                writer.Append(SqlKeywords.Of(keywordCase, wroteWhere ? " and " : " where ")).Append(whereSql);
+                wroteWhere = true;
             }
-            else if (dialect.UpdateRequiresWhere)
+
+            if (!wroteWhere && dialect.UpdateRequiresWhere)
             {
                 writer.Append(SqlKeywords.Of(keywordCase, " where 1"));
             }

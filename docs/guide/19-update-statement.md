@@ -33,7 +33,8 @@ await ctx.Update<ISimpleEntity>()
   combines the predicates with `and`. Captured variables become parameters, inline literals are emitted
   verbatim, exactly as in a query `WHERE`.
 * `Update()`/`UpdateAsync()` return the affected-row count (`0` when nothing matched). Omitting `Where`
-  updates **every** row of the table.
+  updates **every** row of the table that matches the target's [global query filters](../advanced/query-filters.md)
+  (if any), exactly like a read.
 * `ToSql()` renders the statement without opening a connection.
 
 ## Assignments
@@ -74,6 +75,33 @@ table:
 ```csharp
 ctx.Update<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update simple_entity set archived = @p0
 ```
+
+When the entity declares [global query filters](../advanced/query-filters.md), the predicate still applies,
+so an update without `Where` touches only the filtered rows; call `IgnoreFilters()` on the builder to
+update the unfiltered set. See [UPDATE and DELETE (DML)](../advanced/query-filters.md#update-and-delete-dml).
+
+## Global query filters
+
+A [global query filter](../advanced/query-filters.md) declared for the updated entity is `and`-ed into the
+statement's `WHERE` — with the predicate form, with the key form
+(`WHERE <pk> = @p and <filter>`) and when `Where` is omitted. A row excluded by the filter is not updated.
+
+[`UpdateBuilder<TEntity>`](xref:NextORM.Core.UpdateBuilder`1) and
+[`UpdateJoinBuilder<TProjection>`](xref:NextORM.Core.UpdateJoinBuilder`1) expose the four
+`IgnoreFilters` overloads (all, by entity type, by filter key, and the key-and-type intersection). The
+call is stateful and repeated calls accumulate:
+
+```csharp
+ctx.Update<Document>()
+    .IgnoreFilters(["soft-delete"])   // keep the tenant filter, drop soft-delete
+    .Set(d => d.Archived, true)
+    .Where(d => d.IsDeleted)
+    .Update();
+```
+
+For the multi-table `UpdateJoin`, the target (first table) and every joined source are filtered. `INSERT`
+and `MERGE` do not filter their target. See
+[UPDATE and DELETE (DML)](../advanced/query-filters.md#update-and-delete-dml) for the full matrix.
 
 ## Updating by key
 
@@ -183,7 +211,7 @@ distinct CTE declarations sharing a name on the two sides of a join are rejected
 * Optimistic concurrency (`rowversion`) is a pattern on top of this surface, not a built-in API: put the
   expected token in `Where` and read `0` affected rows as a conflict. See
   [Optimistic concurrency and change tracking](27-optimistic-concurrency.md). Global query filters are
-  **not** part of this surface.
+  honoured (see [Global query filters](#global-query-filters)).
 * The in-memory context is query-only: `Update`/`UpdateAsync` (like every other write) throw
   `NotSupportedException`; query your own collections instead.
 * `UPDATE` is not prepared or plan-cached — optimisation in nextorm targets read-only queries only
