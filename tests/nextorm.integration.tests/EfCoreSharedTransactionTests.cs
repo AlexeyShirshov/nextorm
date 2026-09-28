@@ -1,15 +1,16 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using NextORM.Core;
-using NextORM.Sqlite;
+using NextORM.EntityFrameworkCore;
 
 namespace NextORM.Integration.Tests;
 
 /// <summary>
-/// The headline interop scenario: a nextorm query runs on the very connection and transaction EF Core
-/// owns, sees EF's uncommitted rows, and is unaffected when EF rolls the transaction back. Unlike the
-/// provider-agnostic suite this is SQLite-only, so it needs no container.
+/// The headline interop scenario through the public bridge: a nextorm query runs on the very
+/// connection and transaction EF Core owns, sees EF's uncommitted rows, and stops seeing them once
+/// EF rolls the transaction back. Unlike the server suites this is SQLite-only, so it needs no
+/// container, but it deliberately goes through <c>db.CreateNextOrmContext()</c> rather than building
+/// the provider context by hand.
 /// </summary>
 public sealed class EfCoreSharedTransactionTests
 {
@@ -32,16 +33,15 @@ public sealed class EfCoreSharedTransactionTests
             db.InsertEntities.Add(new EfInsertRow { Name = marker, Age = 5 });
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            using var next = new SqliteDataContext(db.Database.GetDbConnection(), new DataContextBuilder());
-            ((ITransactionManager)next).UseTransaction(efTransaction.GetDbTransaction());
+            using var next = db.CreateNextOrmContext();
 
             // nextorm runs on EF's connection inside EF's uncommitted transaction.
-            next.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().Equal(5);
+            next.From<EfInsertRow>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().Equal(5);
 
             await efTransaction.RollbackAsync(TestContext.Current.CancellationToken);
 
             // The rollback is EF's; nextorm merely observed the same transaction and drops it lazily.
-            next.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().BeEmpty();
+            next.From<EfInsertRow>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().BeEmpty();
         }
         finally
         {

@@ -16,9 +16,12 @@ namespace NextORM.EntityFrameworkCore;
 /// the EF model.
 /// </summary>
 /// <remarks>
-/// The bridge is read-only: nextorm opens a closed borrowed connection on demand and never closes,
-/// commits or rolls back the connection or the transaction it borrowed, so EF keeps ownership of both
-/// for their whole lifetime.
+/// The bridge shares EF Core's connection and, when EF has one active, its transaction: nextorm reads
+/// and writes executed through the returned context participate in that transaction, while EF keeps
+/// ownership of both — the bridge never closes, commits or rolls them back. It is not a
+/// <c>SaveChanges</c> bridge: nextorm DML bypasses EF's change tracker, so rows it writes are unknown
+/// to the tracker. The mapping read from the EF model lives in a process-wide cache, so at most one
+/// mapping per CLR type is kept, and EF's non-relational <c>InMemory</c> provider is not supported.
 /// </remarks>
 public static class EntityFrameworkCoreExtensions
 {
@@ -51,7 +54,7 @@ public static class EntityFrameworkCoreExtensions
 
     /// <summary>
     /// Shared pipeline for every public entry point: resolves the provider, borrows EF's connection and
-    /// current transaction, registers the EF model mapping and builds a read-only nextorm context.
+    /// current transaction, registers the EF model mapping and builds the nextorm context.
     /// </summary>
     internal static IDataContext CreateContext(DbContext dbContext, Action<DataContextBuilder>? configure)
     {

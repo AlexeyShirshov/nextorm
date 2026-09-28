@@ -1,6 +1,6 @@
 # Интеграция с Entity Framework Core
 
-> Запускайте чтения nextorm поверх соединения и транзакции существующего EF Core `DbContext`, переиспользуя маппинг из EF-модели вместо повторного его объявления.
+> Запускайте чтения и запись nextorm поверх соединения и транзакции существующего EF Core `DbContext`, переиспользуя маппинг из EF-модели вместо повторного его объявления.
 
 **Предварительные требования:** [Provider overview](../providers/overview.md) · [Транзакции](../guide/23-transactions.md) · [API reference](api-reference.md)
 
@@ -12,11 +12,11 @@
 - встраивается в транзакцию, открытую EF (`db.Database.CurrentTransaction`), если она есть;
 - читает маппинг таблиц/колонок из EF `IModel`, поэтому классам сущностей не нужны nextorm-атрибуты `[SqlTable]`/`[Column]` (или fluent-конфигурация).
 
-Это позволяет оставить запись, отслеживание изменений и связывание навигаций в EF Core, а аналитические чтения nextorm (окна, CTE, агрегаты) выполнять на том же соединении и в той же транзакции. Мост односторонний: nextorm наблюдает, владеет EF Core.
+Это позволяет оставить запись, отслеживание изменений и связывание навигаций в EF Core, а аналитические чтения nextorm (окна, CTE, агрегаты) выполнять на том же соединении и в той же транзакции. Мост делит это соединение и транзакцию и никогда не коммитит, не откатывает и не закрывает их; владение обоими остаётся за EF Core.
 
 ## Требования
 
-- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) с одним из поддерживаемых провайдеров: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL и MariaDB) или `Microsoft.EntityFrameworkCore.Sqlite`.
+- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) с одним из поддерживаемых провайдеров: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL и MariaDB) или `Microsoft.EntityFrameworkCore.Sqlite`. Pomelo — поддерживаемый провайдер, но совместное использование транзакции EF с MySQL/MariaDB пока не проверено — см. [Общее соединение и транзакция](#общее-соединение-и-транзакция).
 - Пакет `nextorm.entityframeworkcore`; он ссылается на `nextorm.core` и четыре провайдерных пакета, поэтому отдельная ссылка на nextorm-провайдер для маппинга не нужна.
 - Нереляционный провайдер EF `InMemory` не поддерживается (см. [Ограничения](#ограничения)).
 
@@ -166,6 +166,10 @@ await tx.RollbackAsync(ct);
 next.From<Row>().Where(r => r.Name == "pending").ToList(); // пусто
 ```
 
+Путь общего соединения/транзакции проверен end-to-end container-backed интеграционными тестами на **PostgreSQL** и **SQL Server** и локальными тестами на **SQLite**. На PostgreSQL и SQL Server публичный мост `CreateNextOrmContext()` прогоняется против живого сервера: nextorm заимствует тот самый `DbConnection`, которым владеет EF, видит незакоммиченные строки EF внутри открытой транзакции, откат EF их удаляет, `InsertInto` nextorm внутри транзакции EF виден EF и затем коммитится или откатывается вместе с ней, а освобождение nextorm-контекста оставляет соединение EF открытым, а транзакцию EF — активной. На SQLite тесты покрывают видимость незакоммиченных строк EF и их удаление откатом EF. Проверка PostgreSQL и SQL Server требует прогона интеграционной сюиты против поднятых контейнеров (Testcontainers); SQLite-сценарии работают без контейнера.
+
+> **MySQL пока не проверен.** Путь общего соединения/транзакции не доказан на MySQL: у `Pomelo.EntityFrameworkCore.MySql` нет релиза под EF Core 10 (последний 9.0.0 нацелен на EF Core 9), а Oracle `MySql.EntityFrameworkCore` 10.x использует другой ADO.NET-драйвер (`MySql.Data`), имя провайдера которого мост не распознаёт. Считайте совместную работу в транзакции на MySQL отложенной (заблокированной), а не поддержанной, пока не появится MySQL-провайдер, совместимый с EF Core 10, и container-backed тесты не пройдут.
+
 Контракт встраивания, общий с Dapper и сырым ADO.NET, описан в разделе [Транзакции](../guide/23-transactions.md).
 
 ## Отображение модели
@@ -195,7 +199,7 @@ next.From<Row>().Where(r => r.Name == "pending").ToList(); // пусто
 
 ## Ограничения
 
-- **Мост только для чтения.** Интеграция рассчитана на чтение: синхронизации отслеживания изменений и моста `SaveChanges` нет, а мутации nextorm выполнялись бы в обход трекера изменений EF. Пишите через EF Core; возвращённый [`IDataContext`](xref:NextORM.Core.IDataContext) используйте для запросов. Мост DML/`SaveChanges` явно вне области.
+- **Нет моста отслеживания изменений и `SaveChanges`.** Мост работает на соединении EF Core и, если EF открыл транзакцию, внутри неё: чтения и запись nextorm, выполненные там, участвуют в этой транзакции, поэтому `InsertInto` nextorm внутри открытой транзакции EF виден EF и коммитится или откатывается вместе с ней (проверено на PostgreSQL и SQL Server). Это по-прежнему не мост `SaveChanges` — DML nextorm идёт в обход трекера изменений EF, поэтому записанные им строки трекеру неизвестны. Пишите через EF Core, когда нужно отслеживание; возвращённый [`IDataContext`](xref:NextORM.Core.IDataContext) используйте для запросов и для DML, который должен встраиваться в ту же транзакцию.
 - **`ToNextOrm` транслирует ограниченное подмножество операторов.** Любой оператор вне [поддерживаемого набора](#поддерживаемые-операторы) — `Select`/`SelectMany`, `Include`/навигации, `Join`/`GroupJoin`, `GroupBy`, `EF.Property`/`EF.Functions`, `IgnoreQueryFilters`, `AsSplitQuery`, корни с сырым SQL, подзапросы, второй primary `OrderBy` после начала сортировки, `ThenBy` без primary и неверный порядок сортировки/`Distinct`/пагинации — бросает `NotSupportedException`. Ничего не вычисляется в памяти молча; в отличие от `Select`, который в nextorm терминальный и должен применяться после `ToNextOrm(...)`.
 - **Один маппинг CLR на процесс.** Маппинг живёт в процесс-глобальном кэше метаданных nextorm с ключом по `Type`; повторная регистрация идентичного маппинга допустима, но второй `DbContext`, отображающий уже отображённый CLR-тип по-другому, бросает `InvalidOperationException` (очистите `DataContextCache.Metadata`, чтобы сбросить).
 - **EF InMemory не поддерживается.** У `Microsoft.EntityFrameworkCore.InMemory` нет `DbConnection`, и его имя провайдера отклоняется как неподдерживаемое до обращения к соединению. Связываются только реляционные EF-провайдеры.

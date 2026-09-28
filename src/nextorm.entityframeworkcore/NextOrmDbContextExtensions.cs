@@ -7,7 +7,7 @@ namespace NextORM.EntityFrameworkCore;
 
 /// <summary>
 /// Registers the EF Core-to-nextorm bridge on <see cref="DbContextOptionsBuilder"/> and resolves a
-/// read-only nextorm <see cref="IDataContext"/> from a <see cref="DbContext"/> or the DI container.
+/// nextorm <see cref="IDataContext"/> from a <see cref="DbContext"/> or the DI container.
 /// </summary>
 /// <remarks>
 /// The bridge never owns the EF connection or transaction: it borrows both and leaves EF in control, so
@@ -51,7 +51,7 @@ public static class NextOrmDbContextExtensions
     }
 
     /// <summary>
-    /// Creates a read-only nextorm <see cref="IDataContext"/> over <paramref name="dbContext"/>'s
+    /// Creates a nextorm <see cref="IDataContext"/> over <paramref name="dbContext"/>'s
     /// connection, current transaction and model, applying the configuration stored by
     /// <see cref="UseNextOrm"/> when the context's options carry it.
     /// </summary>

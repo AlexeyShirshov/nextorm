@@ -11,7 +11,8 @@
 > **P1 MVP — DONE (2026-09-27, линия `1.0.9-a`).** Пакет `nextorm.entityframeworkcore` отгружен:
 > `CreateNextOrmContext(this DbContext, Action<DataContextBuilder>?)` + `NextOrmModelMapper.Register(IModel)`
 > запускают nextorm поверх соединения EF и его текущей транзакции, а маппинг таблиц и переименованных
-> колонок читается из EF-модели; интеграция **read-only**. Провайдер выбирается по точному
+> колонок читается из EF-модели; чтения и запись nextorm участвуют в общей транзакции EF
+> (PostgreSQL + SQL Server — проверено; MySQL — pending). Провайдер выбирается по точному
 > `ProviderName`; невыразимые фичи отклоняются fail-fast: EF query filters, TPH/TPT/TPC,
 > schema-qualified таблица и конфликтующее повторное сопоставление. Остаются P2 (`UseNextOrm` + DI),
 > P3 (трансляция EF `IQueryable`) и P4 (мост DML/`SaveChanges`); принятые решения — в разделе
@@ -19,7 +20,7 @@
 
 > **P2 (UseNextOrm + DI) и P3 (трансляция EF `IQueryable`) — DONE (2026-09-27, линия `1.0.9-a`).**
 > `UseNextOrm` на `DbContextOptionsBuilder` (+ generic-перегрузка) хранит `Action<DataContextBuilder>?`
-> в `IDbContextOptionsExtension`; `GetNextOrmContext` строит read-only `IDataContext` по сохранённым
+> в `IDbContextOptionsExtension`; `GetNextOrmContext` строит `IDataContext` по сохранённым
 > опциям, а `AddNextOrmFromDbContext<TDbContext>` регистрирует scoped `IDataContext` из `TDbContext`.
 > P3 отгружает `ToNextOrm<T>(DbSet<T>)` и `ToNextOrm<T>(IQueryable<T>, DbContext)` → `EntityBuilder<T>`
 > с ограниченным подмножеством операторов (`Where`; один primary `OrderBy`/`OrderByDescending` +
@@ -29,8 +30,20 @@
 > сырым SQL, подзапросы, второй primary `OrderBy`, `ThenBy` без primary и неверный порядок
 > сортировки/`Distinct`/пагинации — отклоняется `NotSupportedException` без client evaluation;
 > проекция выполняется после `ToNextOrm` средствами nextorm (`Select` терминальный). **P4 (мост
-> DML/`SaveChanges`) — явно вне области:** интеграция read-only, change tracking остаётся за EF Core.
+> DML/`SaveChanges`) — явно вне области:** change tracking и `SaveChanges` остаются за EF Core.
 > Публичные члены — в `docs/specs/design/API-NAMING-REVIEW.md`.
+
+> **#106 shared-transaction/connection: PostgreSQL + SQL Server — VERIFIED; MySQL — PENDING (2026-09-28, `1.0.9-a`).**
+> Container-backed интеграционные тесты публичного моста `CreateNextOrmContext()` подтвердили общее
+> соединение и транзакцию EF↔nextorm на **PostgreSQL** и **SQL Server** (плюс прежний SQLite):
+> nextorm видит незакоммиченные строки EF, откат EF их удаляет, `Dispose` nextorm-контекста не
+> закрывает/не коммитит соединение и транзакцию EF. **MySQL остаётся открытым и заблокирован:**
+> у `Pomelo.EntityFrameworkCore.MySql` нет релиза под EF Core 10 (последний 9.0.0 = EF Core 9), а
+> `MySql.EntityFrameworkCore` 10.x от Oracle использует другой ADO.NET-драйвер (`MySql.Data`), и его
+> `ProviderName` не разрешается текущим switch'ем моста
+> (`src/nextorm.entityframeworkcore/EntityFrameworkCoreExtensions.cs`). Пункт #106 **не закрыт**;
+> милестоун остаётся `1.0.9-a` (MySQL — открыт до появления EF Core 10-совместимого MySQL-провайдера
+> и зелёного container-backed прогона).
 
 ## Пункт и цель
 
@@ -46,7 +59,7 @@
     незакоммиченные строки и откатывается вместе с ней;
   - SQL, построенный nextorm для типа из `db.Model`, ссылается на таблицу/колонки EF-модели (в т.ч.
     переименованные) без nextorm-атрибутов на сущности;
-  - библиотека остаётся read-only: без change tracking/`SaveChanges` в MVP (фаза 4 — opt-in).
+  - change tracking/`SaveChanges` остаются за EF Core (фаза 4 — opt-in мост).
 - Не-цели: миграции, `Include`/навигации, design-time, замена EF.
 
 ## Почему это нужно
@@ -98,7 +111,7 @@
 | `Microsoft.EntityFrameworkCore.SqlServer` | `nextorm.sqlserver` | да | да | да | `SqlServerDataContext` |
 | `Npgsql.EntityFrameworkCore.PostgreSQL` | `nextorm.postgres` | да | да | да | полноценный `BEGIN`/`COMMIT` |
 | `Microsoft.EntityFrameworkCore.Sqlite` | `nextorm.sqlite` | да | да | да | базовый провайдер тестов |
-| `Pomelo.EntityFrameworkCore.MySql` / `MySql.EntityFrameworkCore` | `nextorm.mysql` | да | да | да | имя `ProviderName` зависит от пакета |
+| `Pomelo.EntityFrameworkCore.MySql` / `MySql.EntityFrameworkCore` | `nextorm.mysql` | да | да | да | имя `ProviderName` зависит от пакета; общий соединение/транзакция с EF — **pending** (#106, нет EF Core 10-провайдера) |
 | `MariaDB.EntityFrameworkCore` / Pomelo-MariaDB | `nextorm.mariadb` | да | да | да | имя `ProviderName` уточнить при реализации |
 | ClickHouse EF-провайдер (community) | `nextorm.clickhouse` | да | **нет** | да | HTTP-протокол, транзакций нет (nextorm `ITransactionManager` их тоже отклоняет) |
 | `Microsoft.EntityFrameworkCore.InMemory` | in-memory контекст nextorm | нет | нет | да | только маппинг, соединения нет |
@@ -193,7 +206,7 @@ public static class NextOrmDbContextExtensions
 
 ### Фаза 4: мост DML/`SaveChanges`
 
-- MVP остаётся read-only. Варианты: (a) вне области (документировать); (b) opt-in: `InsertInto` nextorm
+- MVP не добавляет мост `SaveChanges`. Варианты: (a) вне области (документировать); (b) opt-in: `InsertInto` nextorm
   возвращает detached-сущности, интеграция при желании `db.Attach` их (аналог
   `LinqToDBForEFTools.EnableChangeTracker`).
 - Риски: fixup идентификаторов, owned types, concurrency tokens; менять трекер по умолчанию нельзя.
@@ -251,17 +264,17 @@ public static class NextOrmQueryableExtensions
 - **Фаза 1 (MVP): ✅ реализована (2026-09-27, `1.0.9-a`):** проект; `CreateNextOrmContext`;
   `NextOrmModelMapper.Register` из `IModel`; enlist в транзакцию EF; выбор провайдера по точному
   `ProviderName`; unit-тесты SQL-генерации без БД + интеграционные тесты SQLite (модель + соединение +
-  транзакция + владение соединением). Shared-transaction на PostgreSQL/SQL Server/MySQL и SQL Server
-  enlist-тест — см. «Deferred/accepted».
+  транзакция + владение соединением). Shared-transaction/connection на PostgreSQL и SQL Server —
+  **проверено** container-backed тестами (#106); MySQL — **pending** (см. статус #106 выше).
 - **Фаза 2: ✅ реализована (2026-09-27, `1.0.9-a`):** `UseNextOrm` (+generic) хранит опции,
-  `GetNextOrmContext` строит read-only `IDataContext`, `AddNextOrmFromDbContext<TDbContext>`
+  `GetNextOrmContext` строит `IDataContext`, `AddNextOrmFromDbContext<TDbContext>`
   регистрирует scoped `IDataContext`. Контекстно-локальный резолвер маппинга не потребовался —
   действует прежний процесс-глобальный кэш по `Type` (ограничение задокументировано).
 - **Фаза 3: ✅ реализована (2026-09-27, `1.0.9-a`):** `ToNextOrm<T>(DbSet<T>)` /
   `ToNextOrm<T>(IQueryable<T>, DbContext)` → `EntityBuilder<T>` с задокументированным подмножеством
   операторов; неподдерживаемые операторы и узлы бросают `NotSupportedException` без client evaluation.
   Отдельный LINQ-provider-shim не потребовался.
-- **Фаза 4: вне области:** read-only мост; change tracking и `SaveChanges` остаются за EF Core
+- **Фаза 4: вне области:** change tracking и `SaveChanges` остаются за EF Core
   (и задокументировано в [limitations](../../advanced/limitations.md)).
 - **Вне области:** миграции, design-time, `Include`/навигации, замена EF.
 
@@ -292,7 +305,7 @@ public static class NextOrmQueryableExtensions
    `OrderBy`/`OrderByDescending` + `ThenBy`/`ThenByDescending`, `Skip`→Offset, `Take`→Limit,
    `Distinct`; `AsNoTracking`/`AsTracking`/`TagWith` игнорируются) зафиксировано кодом и документацией
    `docs/advanced/integration-efcore.md` EN+RU.
-6. Фаза 4 — **решено**: явный out-of-scope; интеграция read-only, DML/`SaveChanges` остаются за EF Core.
+6. Фаза 4 — **решено**: явный out-of-scope; change tracking/`SaveChanges` остаются за EF Core.
 7. Владение соединением/транзакцией и взаимодействие с `EnsureConnectionOpen`/`Dispose`.
 
 ## Файлы к изменению
@@ -317,12 +330,14 @@ public static class NextOrmQueryableExtensions
 
 - **P1/P2/P3 — отгружены; P4 — вне области.** P2 (`UseNextOrm` + DI) и P3 (трансляция EF
   `IQueryable`) отгружены (см. «Статус»/«Этапы внедрения»); P4 (opt-in мост DML/`SaveChanges`) признан
-  явно вне области — интеграция остаётся read-only.
-- **Shared-transaction тесты на PostgreSQL / SQL Server / MySQL — отложено → [#106](https://github.com/AlexeyShirshov/nextorm/issues/106).**
-  Сюита доказывает enlist nextorm в EF-транзакцию только на SQLite, чьи транзакции connection-scoped
-  и потому не доказывают совместную работу на сервере с session-scoped транзакциями. Предусловие
-  (пакеты `Microsoft.EntityFrameworkCore.SqlServer`, `Npgsql.EntityFrameworkCore.PostgreSQL`,
-  `Pomelo.EntityFrameworkCore.MySql` в CPM + container-backed тесты) и триггер описаны в #106.
+  явно вне области; change tracking/`SaveChanges` остаются за EF Core.
+- **Shared-transaction тесты → [#106](https://github.com/AlexeyShirshov/nextorm/issues/106): PostgreSQL + SQL Server — проверено; MySQL — отложено/заблокировано.**
+  Container-backed тесты публичного моста подтвердили enlist nextorm в EF-транзакцию (и общее соединение)
+  на PostgreSQL и SQL Server; SQLite покрыт локально. MySQL **не закрыт**: у
+  `Pomelo.EntityFrameworkCore.MySql` нет релиза под EF Core 10 (последний 9.0.0 = EF Core 9), а
+  `MySql.EntityFrameworkCore` 10.x использует `MySql.Data` и его `ProviderName` не разрешается switch'ем
+  моста. Пункт #106 остаётся открытым, милестоун `1.0.9-a`; триггер закрытия — EF Core 10-совместимый
+  MySQL-провайдер + зелёный container-backed прогон.
 - **P3-guard: консервативное переотклонение mapped-колонок-массивов/`List<int>`.** `LambdaBodyGuard`
   (`NextOrmQueryableExtensions.cs`) отклоняет member-доступ по типу, а не по маппингу: скалярные
   array/`List<int>`-колонки, которые EF-модель и провайдер умеют транслировать, могут быть отвергнуты
@@ -348,7 +363,7 @@ public static class NextOrmQueryableExtensions
 
 ## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
 
-> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Прогон сабагента `nextorm-design-engineer` по плану (только ревью, без правок). `file:line` — по дереву на момент ревью.
 > Вердикт: **пересмотр — 1 архитектурное противоречие (E2)** + обязательные E1/E3; E4 — осознанно отложено.
 
 - **[DRY]/[KISS] 🟡** E1 — «Core-шов» (`:126-131`) не нужен: `IEntityMetadata`/`IPropertyMetadata` публичны (`DataContext/Meta/IEntityMetadata.cs:10`, `IPropertyMetadata.cs:12`), а `DataContextCache.Metadata` — публично-записываемый `IDictionary<Type,IEntityMetadata>` (`DataContext/DataContextCache.cs:22,30`); интеграция может реализовать публичные интерфейсы и зарегистрировать маппинг напрямую, не добавляя второй (не-генерик) публичный билдер в core. Fix: убрать core-шов из плана.

@@ -1,6 +1,6 @@
 # Entity Framework Core integration
 
-> Run nextorm reads over the connection and transaction of an existing EF Core `DbContext`, reusing the EF model mapping instead of declaring it again.
+> Run nextorm reads and writes over the connection and transaction of an existing EF Core `DbContext`, reusing the EF model mapping instead of declaring it again.
 
 **Prerequisites:** [Provider overview](../providers/overview.md) · [Transactions](../guide/23-transactions.md) · [API reference](api-reference.md)
 
@@ -12,11 +12,11 @@ The `nextorm.entityframeworkcore` package bridges an EF Core `DbContext` to a ne
 - enlists in the transaction EF opened (`db.Database.CurrentTransaction`), if any;
 - reads its table/column mapping from the EF `IModel`, so entity classes need no nextorm `[SqlTable]`/`[Column]` (or fluent) configuration.
 
-This lets you keep writes, change tracking and navigation fixup in EF Core while running nextorm's analytical reads (windows, CTEs, aggregates) on the same connection and transaction. The bridge is one-way: nextorm observes, EF Core owns.
+This lets you keep writes, change tracking and navigation fixup in EF Core while running nextorm's analytical reads (windows, CTEs, aggregates) on the same connection and transaction. The bridge shares that connection and transaction and never commits, rolls back or closes them; EF Core keeps ownership of both.
 
 ## Requirements
 
-- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) with one of the supported providers: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL and MariaDB) or `Microsoft.EntityFrameworkCore.Sqlite`.
+- EF Core **Relational** (`Microsoft.EntityFrameworkCore.Relational`) with one of the supported providers: `Npgsql.EntityFrameworkCore.PostgreSQL`, `Microsoft.EntityFrameworkCore.SqlServer`, `Pomelo.EntityFrameworkCore.MySql` (MySQL and MariaDB) or `Microsoft.EntityFrameworkCore.Sqlite`. Pomelo is a supported provider, but sharing EF's transaction with MySQL/MariaDB is not yet verified — see [Shared connection and transaction](#shared-connection-and-transaction).
 - The `nextorm.entityframeworkcore` package; it references `nextorm.core` and the four provider packages, so no separate nextorm provider reference is needed for the mapping.
 - EF's non-relational `InMemory` provider is not supported (see [Limitations](#limitations)).
 
@@ -166,6 +166,10 @@ await tx.RollbackAsync(ct);
 next.From<Row>().Where(r => r.Name == "pending").ToList(); // empty
 ```
 
+The shared connection/transaction path is verified end-to-end by container-backed integration tests on **PostgreSQL** and **SQL Server**, and by local tests on **SQLite**. On PostgreSQL and SQL Server the public `CreateNextOrmContext()` bridge is exercised against a live server: nextorm borrows the exact `DbConnection` EF owns, sees EF's uncommitted rows inside an open transaction, an EF rollback discards them, a nextorm `InsertInto` run inside EF's transaction is visible to EF and then commits or rolls back with it, and disposing the nextorm context leaves EF's connection open and EF's transaction active. On SQLite the tests cover seeing EF's uncommitted rows and an EF rollback discarding them. Verifying PostgreSQL and SQL Server requires running the integration suite against provisioned containers (Testcontainers); the SQLite cases run without one.
+
+> **MySQL is not yet verified.** The shared connection/transaction path has not been proven on MySQL: `Pomelo.EntityFrameworkCore.MySql` has no EF Core 10 release (its latest 9.0.0 targets EF Core 9), and Oracle's `MySql.EntityFrameworkCore` 10.x uses a different ADO.NET driver (`MySql.Data`) whose provider name the bridge does not resolve. Treat sharing a transaction with MySQL as pending, not supported, until an EF Core 10-compatible MySQL provider is available and the container-backed tests pass.
+
 See [Transactions](../guide/23-transactions.md) for the enlistment contract shared with Dapper and raw ADO.NET.
 
 ## Model mapping
@@ -195,7 +199,7 @@ Provider names are matched exactly (ordinal), so a look-alike name is rejected. 
 
 ## Limitations
 
-- **Read-only bridge.** The integration is designed for reads: there is no change-tracking sync and no `SaveChanges` bridge, and nextorm mutations would run outside EF's change tracker. Write through EF Core; use the returned [`IDataContext`](xref:NextORM.Core.IDataContext) for queries. A DML/`SaveChanges` bridge is explicitly out of scope.
+- **No change-tracking or `SaveChanges` bridge.** The bridge runs on EF Core's connection and, when EF has one open, inside EF's transaction: nextorm reads and writes executed there participate in that transaction, so a nextorm `InsertInto` run inside EF's open transaction is visible to EF and commits or rolls back with it (verified on PostgreSQL and SQL Server). It is still not a `SaveChanges` bridge — nextorm DML bypasses EF's change tracker, so rows it wrote are unknown to the tracker. Write through EF Core when you need tracking; use the returned [`IDataContext`](xref:NextORM.Core.IDataContext) for queries and for DML that should enlist in the same transaction.
 - **`ToNextOrm` translates a bounded operator subset.** Every operator outside the [supported set](#supported-operators) — `Select`/`SelectMany`, `Include`/navigations, `Join`/`GroupJoin`, `GroupBy`, `EF.Property`/`EF.Functions`, `IgnoreQueryFilters`, `AsSplitQuery`, raw-SQL roots, subqueries, a second primary `OrderBy` after sorting has started, `ThenBy` without a primary, and an invalid sort/`Distinct`/paging order — throws `NotSupportedException`. Nothing is silently evaluated in memory; unlike `Select`, which is terminal in nextorm and must be applied after `ToNextOrm(...)`.
 - **One CLR mapping per process.** The mapping lives in nextorm's process-wide metadata cache keyed by `Type`; re-registering the identical mapping is fine, but a second `DbContext` that maps an already-mapped CLR type differently throws `InvalidOperationException` (clear `DataContextCache.Metadata` to reset).
 - **EF InMemory is unsupported.** `Microsoft.EntityFrameworkCore.InMemory` has no `DbConnection` and its provider name is rejected as unsupported before the connection is touched. Only relational EF providers are bridged.
