@@ -118,4 +118,265 @@ public abstract partial class CommonTestSuite
         parents.Should().ContainSingle();
         parents[0].Children.Select(c => c.Id).Should().Equal(childA, childB);
     }
+
+    // --- #107 single-query eager loading (AsSingleQuery) and terminal stitching: cross-provider coverage.
+    // The 1001-key cases force the split path beyond its 1000-key chunk boundary and prove the single-query
+    // path stays one command without falling back to split (no chunked IN list, no N+1).
+
+    private static int _eagerBulkIdSeed = -100_000_000;
+
+    private static int NextEagerBulkBase() => Interlocked.Add(ref _eagerBulkIdSeed, -100_000);
+
+    /// <summary>
+    /// Inserts <paramref name="rows"/> in small batch multi-row inserts: a single 1001-row insert would
+    /// exceed the SQL Server 2100-parameter limit (and SQLite's variable limit) once the child rows carry
+    /// three columns.
+    /// </summary>
+    private static void InsertEagerRows<T>(IDataContext ctx, IReadOnlyList<T> rows)
+    {
+        const int batchSize = 250;
+        for (var offset = 0; offset < rows.Count; offset += batchSize)
+        {
+            var count = Math.Min(batchSize, rows.Count - offset);
+            var batch = new List<T>(count);
+            for (var i = 0; i < count; i++)
+                batch.Add(rows[offset + i]);
+
+            ctx.InsertInto<T>().Values(batch).Insert();
+        }
+    }
+
+    /// <summary>
+    /// Seeds <paramref name="count"/> consecutive parents, each with exactly one child, under fresh id
+    /// blocks so the two wide tests cannot collide. Returns the first and last parent id (inclusive).
+    /// </summary>
+    private (int First, int Last) SeedEagerParentsAndChildren(int count)
+    {
+        var ctx = _sut.DataProvider;
+        var parentBase = NextEagerBulkBase();
+        var childBase = NextEagerBulkBase();
+
+        var parents = new List<EagerParent>(count);
+        var children = new List<EagerChild>(count);
+        for (var i = 0; i < count; i++)
+        {
+            parents.Add(new EagerParent { Id = parentBase + i, Name = "p" + i });
+            children.Add(new EagerChild { Id = childBase + i, ParentId = parentBase + i, Name = "c" + i });
+        }
+
+        InsertEagerRows(ctx, parents);
+        InsertEagerRows(ctx, children);
+
+        return (parentBase, parentBase + count - 1);
+    }
+
+    [Fact]
+    public void EagerLoading_Split_1001Keys_ChunksAndGroupsWithoutNPlusOne()
+    {
+        var (first, last) = SeedEagerParentsAndChildren(1001);
+
+        var interceptor = new CountingQueryInterceptor();
+        ((DataContext)_sut.DataProvider).AddInterceptor(interceptor);
+
+        var parents = _sut.DataProvider.From<EagerParent>()
+            .Where(p => p.Id >= first && p.Id <= last)
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Should().HaveCount(1001);
+        parents.Select(p => p.Id).Should().OnlyHaveUniqueItems();
+        parents.Should().OnlyContain(p => p.Children.Count == 1);
+        parents.SelectMany(p => p.Children).Select(c => c.ParentId).Should().Equal(parents.Select(p => p.Id));
+        // Split chunks the 1001 distinct keys into two child queries (1000 + 1), plus the parent query:
+        // three round trips, never N+1.
+        interceptor.Executing.Should().Be(3);
+        interceptor.Executed.Should().Be(3);
+    }
+
+    [Fact]
+    public void EagerLoading_SingleQuery_1001Keys_OneCommandGroupsWithoutDuplicateParents()
+    {
+        var (first, last) = SeedEagerParentsAndChildren(1001);
+
+        var interceptor = new CountingQueryInterceptor();
+        ((DataContext)_sut.DataProvider).AddInterceptor(interceptor);
+
+        var parents = _sut.DataProvider.From<EagerParent>()
+            .Where(p => p.Id >= first && p.Id <= last)
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
+            .AsSingleQuery()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Should().HaveCount(1001);
+        parents.Select(p => p.Id).Should().OnlyHaveUniqueItems();
+        parents.Should().OnlyContain(p => p.Children.Count == 1);
+        parents.SelectMany(p => p.Children).Select(c => c.ParentId).Should().Equal(parents.Select(p => p.Id));
+        // One denormalized command, no chunked IN list beyond the split chunk size: exactly one round trip.
+        interceptor.Executing.Should().Be(1, "AsSingleQuery must not silently fall back to the chunked split path");
+        interceptor.Executed.Should().Be(1);
+    }
+
+    [Fact]
+    public void EagerLoading_SingleQuery_ChildFilter_KeepsChildlessParents()
+    {
+        var ctx = _sut.DataProvider;
+        var keep = NextEagerId();
+        var drop = keep + 1;
+        var none = keep + 2;
+
+        ctx.InsertInto<EagerParent>().Values([
+            new EagerParent { Id = keep, Name = "keep" },
+            new EagerParent { Id = drop, Name = "drop" },
+            new EagerParent { Id = none, Name = "none" },
+        ]).Insert();
+
+        var keptChild = keep + 100;
+        ctx.InsertInto<EagerChild>().Values([
+            new EagerChild { Id = keptChild, ParentId = keep, Name = "keep" },
+            new EagerChild { Id = keep + 101, ParentId = keep, Name = "drop" },
+            new EagerChild { Id = keep + 102, ParentId = drop, Name = "drop" },
+        ]).Insert();
+
+        var interceptor = new CountingQueryInterceptor();
+        ((DataContext)ctx).AddInterceptor(interceptor);
+
+        var parents = ctx.From<EagerParent>()
+            .Where(p => p.Id == keep || p.Id == drop || p.Id == none)
+            .LoadWith(p => p.Children, c => c.From<EagerChild>().Where(x => x.Name == "keep"), p => p.Id, c => c.ParentId)
+            .AsSingleQuery()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(keep, drop, none);
+        // The child's own Where is folded into the join ON predicate and filters the children.
+        parents[0].Children.Select(c => c.Id).Should().Equal(keptChild);
+        // LEFT semantics: a parent whose only children were filtered out is kept, with an empty collection.
+        parents[1].Children.Should().BeEmpty();
+        parents[2].Children.Should().BeEmpty();
+        interceptor.Executing.Should().Be(1);
+    }
+
+    [Fact]
+    public void EagerLoading_SingleQuery_TwoSpecs_OneCommandWithoutCrossContamination()
+    {
+        // Reuses the JoinInto fixtures (many: two children + two notes; one: a child only) and adds a
+        // note-only parent, so every combination is present to detect cross-assignment between collections.
+        var (many, one, none) = SeedJoinInto();
+
+        _sut.DataProvider.InsertInto<JoinIntoNote>().Values([
+            new JoinIntoNote { Id = none + 200, ParentId = none, Text = "none-n1" },
+        ]).Insert();
+
+        var interceptor = new CountingQueryInterceptor();
+        ((DataContext)_sut.DataProvider).AddInterceptor(interceptor);
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == many || p.Id == one || p.Id == none)
+            .LoadWith(p => p.Children, c => c.From<JoinIntoChild>(), p => p.Id, c => c.ParentId)
+            .LoadWith(p => p.Notes, n => n.From<JoinIntoNote>(), p => p.Id, n => n.ParentId)
+            .AsSingleQuery()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Should().HaveCount(3);
+        parents.Select(p => p.Id).Should().OnlyHaveUniqueItems();
+
+        parents[0].Children.Select(c => c.Id).Should().BeEquivalentTo([many + 100, many + 101]);
+        parents[0].Notes.Select(n => n.Id).Should().BeEquivalentTo([many + 200, many + 201]);
+        parents[1].Children.Select(c => c.Id).Should().BeEquivalentTo([many + 102]);
+        parents[1].Notes.Should().BeEmpty("a child must never leak into the notes collection");
+        parents[2].Children.Should().BeEmpty("a note must never leak into the children collection");
+        parents[2].Notes.Select(n => n.Id).Should().BeEquivalentTo([none + 200]);
+
+        // Both collections are stitched from the same denormalized command.
+        interceptor.Executing.Should().Be(1);
+        interceptor.Executed.Should().Be(1);
+    }
+
+    [Fact]
+    public void EagerLoading_SingleQuery_DuplicateParentKeys_ShareChildren()
+    {
+        var ctx = _sut.DataProvider;
+        var first = NextEagerId();
+        var second = first + 1;
+        var sharedName = "dup-" + first;
+
+        ctx.InsertInto<EagerParent>().Values([
+            new EagerParent { Id = first, Name = sharedName },
+            new EagerParent { Id = second, Name = sharedName },
+        ]).Insert();
+
+        ctx.InsertInto<EagerChild>().Values([
+            new EagerChild { Id = first + 100, ParentId = first, Name = sharedName },
+            new EagerChild { Id = first + 101, ParentId = second, Name = sharedName },
+        ]).Insert();
+
+        // Key on a non-primary, duplicated property: both parents must keep their own identity (distinct
+        // rows) while sharing the children that match the duplicate key. The coalesce keeps TKey
+        // non-nullable (the column is nullable).
+        var parents = ctx.From<EagerParent>()
+            .Where(p => p.Id == first || p.Id == second)
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Name ?? "", c => c.Name ?? "")
+            .AsSingleQuery()
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Should().HaveCount(2);
+        parents.Select(p => p.Id).Should().OnlyHaveUniqueItems();
+        parents.Should().OnlyContain(p => p.Children.Count == 2);
+        parents[0].Children.Select(c => c.Id).Should().BeEquivalentTo([first + 100, first + 101]);
+    }
+
+    [Fact]
+    public async Task EagerLoading_Split_ToArrayAndToArrayAsync_Stitch()
+    {
+        var ctx = _sut.DataProvider;
+        var parent = NextEagerId();
+
+        ctx.InsertInto<EagerParent>().Values([new EagerParent { Id = parent, Name = "array" }]).Insert();
+        ctx.InsertInto<EagerChild>().Values([
+            new EagerChild { Id = parent + 100, ParentId = parent, Name = "a" },
+            new EagerChild { Id = parent + 101, ParentId = parent, Name = "b" },
+        ]).Insert();
+
+        var builder = ctx.From<EagerParent>()
+            .Where(p => p.Id == parent)
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId);
+
+        var array = builder.ToArray();
+        array.Should().ContainSingle();
+        array[0].Children.Select(c => c.Id).Should().Equal(parent + 100, parent + 101);
+
+        var asyncArray = await builder.ToArrayAsync(TestContext.Current.CancellationToken);
+        asyncArray.Should().ContainSingle();
+        asyncArray[0].Children.Select(c => c.Id).Should().Equal(parent + 100, parent + 101);
+    }
+
+    [Fact]
+    public async Task EagerLoading_SingleQuery_ToArrayAndToArrayAsync_Stitch()
+    {
+        var ctx = _sut.DataProvider;
+        var parent = NextEagerId();
+
+        ctx.InsertInto<EagerParent>().Values([new EagerParent { Id = parent, Name = "array" }]).Insert();
+        ctx.InsertInto<EagerChild>().Values([
+            new EagerChild { Id = parent + 100, ParentId = parent, Name = "a" },
+            new EagerChild { Id = parent + 101, ParentId = parent, Name = "b" },
+        ]).Insert();
+
+        var builder = ctx.From<EagerParent>()
+            .Where(p => p.Id == parent)
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
+            .AsSingleQuery();
+
+        var array = builder.ToArray();
+        array.Should().ContainSingle();
+        array[0].Children.Select(c => c.Id).Should().Equal(parent + 100, parent + 101);
+
+        var asyncArray = await builder.ToArrayAsync(TestContext.Current.CancellationToken);
+        asyncArray.Should().ContainSingle();
+        asyncArray[0].Children.Select(c => c.Id).Should().Equal(parent + 100, parent + 101);
+    }
 }

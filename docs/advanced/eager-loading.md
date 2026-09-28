@@ -1,6 +1,6 @@
 # Eager loading child collections (`LoadWith`)
 
-> `LoadWith` fills a parent-side collection with one extra child query per key chunk — two round trips for at most 1000 parents, never N+1 — and stitches the children onto the already materialized parents in memory.
+> `LoadWith` fills a parent-side collection with one extra child query per key chunk — two round trips for at most 1000 parents, never N+1 — and stitches the children onto the already materialized parents in memory. Split is the default; call `AsSingleQuery()` to fetch the parents and every declared collection in one denormalized round trip instead.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Joins](../guide/02-joins.md) · [Correlated queries](../guide/05-subqueries.md)
 
@@ -8,7 +8,7 @@
 
 nextorm does not infer relationships, so a graph is not loaded from a mapper convention. `LoadWith` declares one level of eager loading explicitly: a parent collection member, a factory that builds the child query, and the two key selectors that pair children with parents — it does not consume relationship metadata. The association lives on the query, not in the entity metadata; for the declared-metadata, single-round-trip alternative see [`JoinInto`](relationships.md).
 
-This is the nextorm equivalent of linq2db `LoadWith` and EF Core `Include`, restricted to the level-one split-query shape.
+This is the nextorm equivalent of linq2db `LoadWith` and EF Core `Include`, restricted to level one (no nested loads). Split-query is the default; an opt-in single-query mode (`AsSingleQuery`) issues one denormalized round trip instead.
 
 ## Signature
 
@@ -50,9 +50,35 @@ A query with at most 1000 distinct parent keys therefore issues exactly **two ro
 
 The chunk predicate is an ordinary `IN` list, so it participates in the plan cache and provider parameter binding exactly like a captured-collection `Contains`.
 
+When `ToListAsync`/`ToArrayAsync` is cancelled, the token is checked between key chunks and between multiple `LoadWith` declarations, so a cancelled call stops issuing further child statements.
+
+## Single-query mode (`AsSingleQuery`)
+
+By default `LoadWith` uses the split shape above — two or more round trips, one per key chunk. Call `AsSingleQuery()` on the builder to fetch the parents and every declared collection with **one** denormalized command instead:
+
+```csharp
+var orders = ctx.From<Order>()
+    .Where(o => o.CustomerId == customerId)
+    .LoadWith(o => o.Items, c => c.From<OrderItem>(), o => o.Id, i => i.OrderId)
+    .AsSingleQuery()
+    .ToList();
+```
+
+- **One round trip, no key chunking.** The parent source and each declared child are joined in a single `LEFT JOIN` command. There is no `IN` list and no chunk size, so any number of parents — including more than 1000 distinct keys — is fetched by the same command, and there is no silent fallback to split.
+- **Only the child query's own `Where` is folded in.** A child condition, for example `c => c.From<OrderItem>().Where(i => i.Active)`, is merged into the join `ON` predicate, so it filters the children without dropping childless parents.
+- **Other child-query shapes are rejected.** A single denormalized join cannot apply per-parent modifiers, joins or table-level clauses, so a child query carrying any of `OrderBy`, `Limit`/`Offset`/`Page`, `Distinct`, `GroupBy`, `Having`, `DistinctOn`, `LimitBy`, a join (`Join`/`LeftJoin`/`SemiJoin`/`AntiJoin`/…), `Final`, `PreWhere`, `ArrayJoin`, `TableSample`, `Sample`, `ForSystemTime`, `ForUpdate`/`ForShare`, `Window`, `Settings`, a CTE, a table/index hint or a derived (`As`) source throws [`NotSupportedException`](xref:System.NotSupportedException) as soon as `AsSingleQuery()` is materialized. Split mode honors every one of them; use split (omit `AsSingleQuery`) when the child query needs a shape beyond `Where`.
+- **Parent and child global query filters are independent.** `IgnoreFilters()` on the parent disables **only** the parent's filters — a declared child's filters are still applied to the join, exactly as in split mode. Conversely, `IgnoreFilters()` inside the child query disables only the child's filters while the parent's still apply.
+- **The parent type must declare a mapped key.** Denormalized rows are deduplicated by that key, so a keyless parent type throws [`NotSupportedException`](xref:System.NotSupportedException) with guidance to configure a key or use split mode, which does not require one. Rows that share the same mapped key collapse into one parent; split mode keeps them separate.
+- **The key type must support value equality.** The join predicate is built with the equality operator, so a key type without one — for example a struct with no `==` overload, or a reference type whose `==` would degrade to reference equality — throws [`NotSupportedException`](xref:System.NotSupportedException). Split mode compares keys with the default equality comparer and works for such types.
+- **Assignment and ordering are unchanged.** The same stitcher deduplicates the parents and fills each collection, so the [assignment rule](#assignment-rule) and [ordering guarantees](#ordering-and-deduplication) below hold in both modes.
+- **One plain entity source only.** `AsSingleQuery` cannot be combined with other joins on the same builder; declaring it on a query that already carries a regular (non-`JoinInto`) join throws [`NotSupportedException`](xref:System.NotSupportedException).
+- **Cannot be composed further.** `LoadWith`/`AsSingleQuery` cannot be followed by `Select` or `As` (a projection command has no loader) or by `Join`/`Apply` (a joined builder carries neither the load specifications nor the mode). Each of those compositions throws [`NotSupportedException`](xref:System.NotSupportedException) instead of silently leaving the collections empty; materialize with a stitching terminal first.
+
+Split stays the default: prefer it when the chunked child result is smaller than the denormalized join product, and opt into `AsSingleQuery` when a single round trip matters more.
+
 ## Level one only
 
-Only the declared children are loaded. The child query is a plain `EntityBuilder<TChild>`; it carries no loader of its own and nested `LoadWith` calls are not honoured, so grandchild collections are not populated. Load a second level with a separate query if needed.
+Only the declared children are loaded. The child query is a plain `EntityBuilder<TChild>`; it carries no loader of its own and nested `LoadWith` calls are not honoured, so grandchild collections are not populated. N-level eager loading (level two and deeper) is **not supported** in either split or single-query mode; load a second level with a separate query if needed.
 
 ## Assignment rule
 
@@ -80,7 +106,7 @@ A read-only member is not mapped as a database column, so initializing it does n
 
 - **Parent order is preserved.** Children are assigned to the parents in the order the parent query returned them; the loader never reorders the parents.
 - **Child order follows the child query.** Children keep the order the child statement returned them in, so add an `OrderBy` to `childQuery` when the order matters.
-- **Duplicate parent keys share the data.** Two parents with the same key each receive a collection with the same children (each parent has its own collection instance).
+- **Duplicate parent keys share the data (split).** Two parents with the same key each receive a collection with the same children (each parent has its own collection instance). In single-query mode the mapped parent key is the deduplication identity, so duplicate-key rows collapse into one parent — use split mode when the duplicate rows must stay distinct.
 - **Unmatched children are ignored.** A child whose key matches no parent is never assigned, and a parent whose key has no children gets an empty collection.
 - **Null keys never match.** A parent or child key that is `null` at runtime is skipped; it is never looked up and never crashes the grouping.
 
@@ -96,12 +122,23 @@ ctx.From<Order>()
 
 ## Terminal boundary
 
-The load specification is honoured **only** by the list terminals:
+The load specification is honoured **only** by the four stitching terminals:
 
 - [`ToList()`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) and [`ToListAsync()`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
+- `ToArray()` and `ToArrayAsync()`.
 
-`ToCommand()` ignores it deliberately, which is what lets the child query run without recursing into the parent's loader. Every other terminal built on `ToCommand()` — `First`, `Count`, `Any`, a `Select` projection, `ToAsyncEnumerable`, and a `QueryCommand<T>` obtained directly — therefore returns the parent rows **without** touching the child collections. Materialize the parents with `ToList`/`ToListAsync` when the collections must be filled.
+These run the parent query — plus the split child queries, or the single denormalized command with `AsSingleQuery()` — and stitch the materialized rows into the collections.
+
+Every other terminal evaluates the parent query **only** and does not run eager loading; it issues no child or load query, so the collections keep whatever value the entity was materialized with (usually empty):
+
+- `ToHashSet` / `ToHashSetAsync` and `ToDictionary` / `ToDictionaryAsync`.
+- `First` / `FirstAsync` and `FirstOrDefault` / `FirstOrDefaultAsync`.
+- `Single` / `SingleAsync` and `SingleOrDefault` / `SingleOrDefaultAsync`.
+- `ToEnumerable` and `ToAsyncEnumerable`.
+- `ToCommand` and any `QueryCommand<T>` obtained from it.
+
+`Any` / `AnyAsync` and `Count` / `CountAsync` are **scalar** terminals: they return a single value and never run eager loading either. `ToCommand()` ignoring the specification is deliberate — it is what lets the child query run without recursing into the parent's loader. Materialize the parents with one of the four stitching terminals when the collections must be filled.
 
 ## Relationship metadata and `JoinInto`
 
-`LoadWith` does not create or consume navigation metadata; the association is expressed by the two key selectors at each call site. nextorm also has a metadata model for **declared** relationships (`HasMany`/`HasOne` or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)) and a single-query loader, [`JoinInto`](relationships.md), which fills one child collection from one `LEFT JOIN` (or `INNER JOIN`) and stitches the denormalized rows back onto the deduplicated parents. Use `JoinInto` when one denormalized round trip is preferable, and `LoadWith` when the split query is; both share the same assignment contract. Relationships are still never inferred from conventions or foreign keys. A graph is loaded explicitly, one declared level per call.
+`LoadWith` does not create or consume navigation metadata; the association is expressed by the two key selectors at each call site. nextorm also has a metadata model for **declared** relationships (`HasMany`/`HasOne` or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)) and a single-query loader, [`JoinInto`](relationships.md), which fills one child collection from one `LEFT JOIN` (or `INNER JOIN`) and stitches the denormalized rows back onto the deduplicated parents. Use `JoinInto` when the association is declared as relationship metadata, and `LoadWith` when it is expressed ad hoc by key selectors at the call site; `LoadWith` with `AsSingleQuery()` also reduces to one denormalized query, so the two share the same single-query materialization, assignment contract and ordering guarantees. Relationships are still never inferred from conventions or foreign keys. A graph is loaded explicitly, one declared level per call.

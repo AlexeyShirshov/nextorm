@@ -73,7 +73,21 @@ internal static class JoinIntoStitcher
         return Stitch(builder, specs, rows);
     }
 
-    internal static List<TEntity> Stitch<TEntity>(EntityBuilder<TEntity> builder, IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<object?> rows)
+    /// <summary>
+    /// Deduplicates the parents of the denormalized <paramref name="rows"/> and assigns each child
+    /// collection. The parent identity is the entity's mapped key, or the row reference when the type has
+    /// no key and <paramref name="requireMappedParentKey"/> is <c>false</c>.
+    /// </summary>
+    /// <param name="builder">The builder whose paging applies to the deduplicated parents.</param>
+    /// <param name="specs">The stitching specifications, in declaration order.</param>
+    /// <param name="rows">The denormalized parent/child pairs in result order.</param>
+    /// <param name="requireMappedParentKey">
+    /// Whether the parent type must declare a mapped key. <c>true</c> for single-query eager loading, which
+    /// has no split fallback and would otherwise emit one parent per denormalized row; <c>false</c> for
+    /// plain <c>JoinInto</c>, which keeps the reference-identity fallback.
+    /// </param>
+    /// <returns>The deduplicated parents in first-occurrence order.</returns>
+    internal static List<TEntity> Stitch<TEntity>(EntityBuilder<TEntity> builder, IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<object?> rows, bool requireMappedParentKey = false)
     {
         var parents = new List<TEntity>();
         var parentsByKey = new Dictionary<object, TEntity>();
@@ -81,13 +95,24 @@ internal static class JoinIntoStitcher
         for (var i = 0; i < specs.Count; i++)
             perSpec[i] = new List<(TEntity, object?)>();
 
+        // Parent identity comes from the entity's own key, not from the first JoinInto spec: the specs may
+        // declare different parent keys, and a spec key is not the parent's identity. Resolved before the
+        // row scan so a keyless single-query parent is rejected even when the result is empty.
+        var parentIdentity = JoinIntoSpecHelpers.BuildIdentitySelector<TEntity>();
+
+        // Single-query loading materializes one parent instance per denormalized row, so without a mapped
+        // key the only available identity is the row's reference and the same parent would be emitted once
+        // per child. Require a key there rather than silently returning duplicates. Plain JoinInto keeps
+        // the documented reference-identity fallback (#105), so the same parent instance repeats.
+        if (requireMappedParentKey && parentIdentity is null)
+            throw new NotSupportedException(
+                $"Single-query eager loading requires the parent type '{typeof(TEntity).Name}' to declare a " +
+                "mapped key so the denormalized rows can be deduplicated. Configure a key (for example with " +
+                "HasKey), or use split-query loading (LoadWith without AsSingleQuery), which does not require one.");
+
         var properties = ResolveItemProperties(rows);
         if (properties is not null)
         {
-            // Parent identity comes from the entity's own key, not from the first JoinInto spec: the
-            // specs may declare different parent keys, and a spec key is not the parent's identity.
-            var parentIdentity = JoinIntoSpecHelpers.BuildIdentitySelector<TEntity>();
-
             foreach (var row in rows)
             {
                 if (row is null)

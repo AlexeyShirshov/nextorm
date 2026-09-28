@@ -7,9 +7,10 @@ using NextORM.Core;
 namespace NextORM.Sqlite.Tests;
 
 /// <summary>
-/// Pins the documented <c>JoinInto</c> terminal boundary (#105): only <c>ToList</c>/<c>ToListAsync</c>
-/// stitch the denormalized rows. Every other terminal forwards to the parent-only command, so the
-/// collections stay unfilled and a JOIN that repeats a parent row is not stitched.
+/// Pins the documented <c>JoinInto</c> terminal boundary (#105, extended by #107): the list terminals
+/// (<c>ToList</c>/<c>ToListAsync</c> and <c>ToArray</c>/<c>ToArrayAsync</c>) stitch the denormalized rows.
+/// Every other terminal forwards to the parent-only command, so the collections stay unfilled and a JOIN
+/// that repeats a parent row is not stitched.
 /// </summary>
 public class JoinIntoTerminalBoundaryTests
 {
@@ -56,17 +57,29 @@ public class JoinIntoTerminalBoundaryTests
     }
 
     [Fact]
-    public void ToArrayToHashSetAndToEnumerable_ShouldStayParentOnly()
+    public void ToArray_ShouldStitchTheJoinedCollections()
     {
         var (ctx, path) = CreateDb();
         try
         {
             var array = Joined(ctx).ToArray();
-            array.Should().HaveCount(3, "ToArray drops the JoinInto join and returns parents only");
-            array.Should().OnlyContain(p => p.Children.Count == 0);
 
+            array.Should().HaveCount(3);
+            array.Single(p => p.Id == 1).Children.Select(c => c.Id).Should().Equal(10, 11);
+            array.Single(p => p.Id == 2).Children.Select(c => c.Id).Should().Equal(12);
+            array.Single(p => p.Id == 3).Children.Should().BeEmpty();
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void ToHashSetAndToEnumerable_ShouldStayParentOnly()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
             var set = Joined(ctx).ToHashSet();
-            set.Should().HaveCount(3);
+            set.Should().HaveCount(3, "ToHashSet drops the JoinInto join and returns parents only");
             set.Should().OnlyContain(p => p.Children.Count == 0);
 
             var enumerable = Joined(ctx).ToEnumerable().ToList();

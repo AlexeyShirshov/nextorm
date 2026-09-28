@@ -143,6 +143,14 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// <c>JoinInto</c> declarations (different child/keys/collection) never share a cached plan.
     /// </summary>
     internal JoinIntoIdentity? JoinIntoIdentity { get; set; }
+    /// <summary>
+    /// Whether this join's right-hand (child) side ignores its own global query filters, or
+    /// <see langword="null"/> to inherit the command's <see cref="QueryCommand.IgnoreFilters"/>. Set for
+    /// the single-query (<c>AsSingleQuery</c>) child joins so the child's filter decision is independent of
+    /// the parent's <c>IgnoreFilters()</c>; a plain <c>JoinInto</c> leaves it <see langword="null"/> and
+    /// inherits the command's flag.
+    /// </summary>
+    internal bool? IgnoreFilters { get; init; }
     internal JoinExpression CloneForCache()
     {
         var newFrom = From.CloneForCache();
@@ -158,6 +166,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
+            IgnoreFilters = IgnoreFilters,
         };
     }
     // public override int GetHashCode()

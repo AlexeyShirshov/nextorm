@@ -124,7 +124,7 @@ The rows are a denormalized `(parent, child)` stream; after the query runs, the 
 
 Parent order is the first-occurrence order of the rows; child order follows the statement, so add an `OrderBy` when the order matters. Duplicate child rows are dropped by the child identity.
 
-Parent deduplication and child identity both need a **mapped key** on the respective side. When the parent (or the child) declares no key, the stitcher falls back to **reference identity**: on a SQL provider every denormalized row materializes a fresh instance, so repeated rows are not collapsed and a cartesian product (two child collections) stays duplicated. Give the parent and the child a mapped key (`[Key]`, `Key()`, or the `Id`/`<TypeName>Id` convention) — or use the explicit-key overload with a keyed child — for reliable deduplication. See [Limitations](limitations.md).
+Parent deduplication and child identity both need a **mapped key** on the respective side. When the parent (or the child) declares no key, a plain `JoinInto` query falls back to **reference identity**: on a SQL provider every denormalized row materializes a fresh instance, so repeated rows are not collapsed and a cartesian product (two child collections) stays duplicated. Single-query eager loading ([`LoadWith`](eager-loading.md) with `AsSingleQuery`) has no such fallback — it requires a mapped parent key and rejects a keyless parent — so give the parent and the child a mapped key (`[Key]`, `Key()`, or the `Id`/`<TypeName>Id` convention), or use the explicit-key overload with a keyed child, for reliable deduplication. See [Limitations](limitations.md).
 
 ## Assignment rule
 
@@ -171,11 +171,12 @@ The join modifiers of the underlying join are available. On ClickHouse, [`WithSt
 
 ## Terminal boundary
 
-The join is part of the command and is stitched **only** by the list terminals:
+The join is part of the command and is stitched **only** by the stitching terminals:
 
 - [`ToList()`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) and [`ToListAsync()`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])).
+- `ToArray()` and `ToArrayAsync()`.
 
-[`ToCommand()`](xref:NextORM.Core.EntityBuilder`1.ToCommand) keeps the join but returns only the **denormalized** `(parent, child)` rows, so a bare enumeration may repeat a parent once per matching child. Every other terminal built on the parent command — `First`, `Count`, `Any`, `ToArray`, `ToHashSet`, `ToEnumerable`, `ToAsyncEnumerable`, [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) — excludes the join and returns the **parent only**, with the collections not filled. A `Select` projection or an `As` derived source is rejected with [`NotSupportedException`](xref:System.NotSupportedException): `Select` would keep the join without stitching (repeating parents, never grouping children) and `As` would drop the stitching metadata. Materialize with `ToList`/`ToListAsync` when the collections must be filled.
+[`ToCommand()`](xref:NextORM.Core.EntityBuilder`1.ToCommand) keeps the join but returns only the **denormalized** `(parent, child)` rows, so a bare enumeration may repeat a parent once per matching child. Every other terminal built on the parent command — `First`, `Count`, `Any`, `ToHashSet`, `ToEnumerable`, `ToAsyncEnumerable`, [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) — excludes the join and returns the **parent only**, with the collections not filled. A `Select` projection or an `As` derived source is rejected with [`NotSupportedException`](xref:System.NotSupportedException): `Select` would keep the join without stitching (repeating parents, never grouping children) and `As` would drop the stitching metadata. Materialize with `ToList`/`ToListAsync` when the collections must be filled.
 
 ## In-memory parity
 

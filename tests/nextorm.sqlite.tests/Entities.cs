@@ -98,3 +98,35 @@ public sealed class EagerChild
     [Column("name")]
     public string? Name { get; set; }
 }
+
+[SqlTable("eager_two_parent")]
+public sealed class EagerTwoParent
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("name")]
+    public string? Name { get; set; }
+    public ICollection<EagerTwoChild> Children { get; } = new List<EagerTwoChild>();
+    public ICollection<EagerTwoNote> Notes { get; } = new List<EagerTwoNote>();
+}
+
+[SqlTable("eager_two_child")]
+public sealed class EagerTwoChild
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+}
+
+[SqlTable("eager_two_note")]
+public sealed class EagerTwoNote
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+}

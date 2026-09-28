@@ -171,7 +171,10 @@ public static class EntityBuilderExtensions
     }
 
     /// <summary>
-    /// Executes the query and materializes the matching entities into a list.
+    /// Executes the query and materializes the matching entities into a list. When the builder carries a
+    /// <c>JoinInto</c> declaration or a single-query (<c>AsSingleQuery</c>) eager load, one denormalized
+    /// command is executed and its rows are stitched; otherwise the parent query is executed and any
+    /// split <c>LoadWith</c> children are loaded afterwards.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -179,18 +182,7 @@ public static class EntityBuilderExtensions
     /// <returns>A list containing the matching entities.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static List<TEntity> ToList<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-    {
-        if (builder.JoinIntos is { Count: > 0 })
-        {
-            var joined = JoinIntoStitcher.Execute(builder, @params);
-            EntityBuilderEagerLoading.Execute(builder, joined);
-            return joined;
-        }
-
-        var list = builder.ToParentCommand().ToList(@params);
-        EntityBuilderEagerLoading.Execute(builder, list);
-        return list;
-    }
+        => MaterializeList(builder, @params);
     /// <summary>
     /// Executes the query asynchronously and materializes the matching entities into a list.
     /// </summary>
@@ -208,8 +200,99 @@ public static class EntityBuilderExtensions
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is a list containing the matching entities.</returns>
-    public static async Task<List<TEntity>> ToListAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
+    public static Task<List<TEntity>> ToListAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
+        => MaterializeListAsync(builder, cancellationToken, @params);
+    /// <summary>
+    /// Executes the query and materializes the matching entities into an array, applying the same
+    /// stitching as <see cref="ToList{TEntity}(EntityBuilder{TEntity}, ReadOnlySpan{object?})"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>An array containing the matching entities.</returns>
+    public static TEntity[] ToArray<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
     {
+        if (!UsesStitching(builder))
+            return builder.ToParentCommand().ToArray(@params);
+
+        return [.. MaterializeList(builder, @params)];
+    }
+    /// <summary>
+    /// Executes the query asynchronously and materializes the matching entities into an array, applying the
+    /// same stitching as <see cref="ToListAsync{TEntity}(EntityBuilder{TEntity}, CancellationToken, object[])"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is an array containing the matching entities.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<TEntity[]> ToArrayAsync<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => ToArrayAsync(builder, CancellationToken.None, @params);
+    /// <summary>
+    /// Executes the query asynchronously and materializes the matching entities into an array, applying the
+    /// same stitching as <see cref="ToListAsync{TEntity}(EntityBuilder{TEntity}, CancellationToken, object[])"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is an array containing the matching entities.</returns>
+    public static async Task<TEntity[]> ToArrayAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
+    {
+        if (!UsesStitching(builder))
+            return await builder.ToParentCommand().ToArrayAsync(cancellationToken, @params).ConfigureAwait(false);
+
+        return [.. await MaterializeListAsync(builder, cancellationToken, @params).ConfigureAwait(false)];
+    }
+
+    /// <summary>
+    /// Whether the builder materializes through a stitched result: a <c>JoinInto</c> declaration, a
+    /// single-query (<c>AsSingleQuery</c>) eager-load set, or a split <c>LoadWith</c> set. The
+    /// non-stitching terminals bypass this and evaluate the parent only.
+    /// </summary>
+    private static bool UsesStitching<TEntity>(EntityBuilder<TEntity> builder)
+        => builder.JoinIntos is { Count: > 0 } || builder.LoadSpecs is { Count: > 0 };
+
+    /// <summary>Whether the builder must run its <c>LoadWith</c> collections through the single-query path.</summary>
+    private static bool UsesSingleQueryLoading<TEntity>(EntityBuilder<TEntity> builder)
+        => builder.SingleQuery && builder.LoadSpecs is { Count: > 0 };
+
+    /// <summary>
+    /// Materializes the builder for the list terminals: one stitched command for <c>JoinInto</c> /
+    /// single-query <c>LoadWith</c>, otherwise the parent query followed by the split child loads.
+    /// </summary>
+    private static List<TEntity> MaterializeList<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
+    {
+        if (UsesSingleQueryLoading(builder))
+        {
+            var (specs, joins) = builder.BuildSingleQueryJoins();
+            var rows = builder.CreatePairCommand(specs, joins).ToObjectList(@params);
+            return JoinIntoStitcher.Stitch(builder, specs, rows, requireMappedParentKey: true);
+        }
+
+        if (builder.JoinIntos is { Count: > 0 })
+        {
+            var joined = JoinIntoStitcher.Execute(builder, @params);
+            EntityBuilderEagerLoading.Execute(builder, joined);
+            return joined;
+        }
+
+        var list = builder.ToParentCommand().ToList(@params);
+        EntityBuilderEagerLoading.Execute(builder, list);
+        return list;
+    }
+
+    /// <summary>Asynchronous counterpart of <see cref="MaterializeList{TEntity}"/>.</summary>
+    private static async Task<List<TEntity>> MaterializeListAsync<TEntity>(EntityBuilder<TEntity> builder, CancellationToken cancellationToken, object[] @params)
+    {
+        if (UsesSingleQueryLoading(builder))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (specs, joins) = builder.BuildSingleQueryJoins();
+            var rows = await builder.CreatePairCommand(specs, joins).ToObjectListAsync(@params, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return JoinIntoStitcher.Stitch(builder, specs, rows, requireMappedParentKey: true);
+        }
+
         if (builder.JoinIntos is { Count: > 0 })
         {
             var joined = await JoinIntoStitcher.ExecuteAsync(builder, @params, cancellationToken).ConfigureAwait(false);
@@ -221,33 +304,6 @@ public static class EntityBuilderExtensions
         await EntityBuilderEagerLoading.ExecuteAsync(builder, list, cancellationToken).ConfigureAwait(false);
         return list;
     }
-    /// <summary>
-    /// Executes the query and materializes the matching entities into an array.
-    /// </summary>
-    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <param name="builder">The query builder being extended.</param>
-    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>An array containing the matching entities.</returns>
-    public static TEntity[] ToArray<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => builder.ToParentCommand().ToArray(@params);
-    /// <summary>
-    /// Executes the query asynchronously and materializes the matching entities into an array.
-    /// </summary>
-    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <param name="builder">The query builder being extended.</param>
-    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is an array containing the matching entities.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Task<TEntity[]> ToArrayAsync<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => ToArrayAsync(builder, CancellationToken.None, @params);
-    /// <summary>
-    /// Executes the query asynchronously and materializes the matching entities into an array.
-    /// </summary>
-    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
-    /// <param name="builder">The query builder being extended.</param>
-    /// <param name="cancellationToken">A token used to cancel the operation.</param>
-    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
-    /// <returns>A task whose result is an array containing the matching entities.</returns>
-    public static Task<TEntity[]> ToArrayAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToParentCommand().ToArrayAsync(cancellationToken, @params);
     /// <summary>
     /// Executes the query and materializes the distinct matching entities into a hash set.
     /// </summary>

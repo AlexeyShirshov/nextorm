@@ -703,9 +703,9 @@ public partial class QueryCommand
             return joinPlanHash;
         }
 
-        private static IReadOnlyList<IQueryFilterMetadata> GetFilters(QueryCommand cmd, Type? entityType)
+        private static IReadOnlyList<IQueryFilterMetadata> GetFilters(Type? entityType, bool ignoreFilters)
         {
-            if (cmd._ignoreFilters || entityType is null)
+            if (ignoreFilters || entityType is null)
                 return Array.Empty<IQueryFilterMetadata>();
 
             return DataContextCache.Metadata.TryGetValue(entityType, out var metadata)
@@ -724,7 +724,7 @@ public partial class QueryCommand
                 && srcType.GetGenericArguments().Length > 0;
             var filterEntityType = isJoinIntoProjection ? srcType.GetGenericArguments()[0] : srcType;
 
-            var filters = GetFilters(cmd, filterEntityType);
+            var filters = GetFilters(filterEntityType, cmd._ignoreFilters);
             if (filters.Count == 0)
                 return cmd._condition;
 
@@ -755,7 +755,9 @@ public partial class QueryCommand
                 return;
 
             var rightType = join.EntityType ?? join.From.SourceType ?? joinCondition.Parameters[1].Type;
-            var filters = GetFilters(cmd, rightType);
+            // A join may carry its own ignore-filters decision (single-query LoadWith); otherwise it
+            // inherits the command's flag, as every regular join has always done.
+            var filters = GetFilters(rightType, join.IgnoreFilters ?? cmd._ignoreFilters);
             if (filters.Count == 0)
                 return;
 

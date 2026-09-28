@@ -151,6 +151,50 @@ public class EagerLoadingTests
     }
 
     [Fact]
+    public async Task LoadWith_SplitAsync_PreCancelled_ThrowsWithoutLoadingChildren()
+    {
+        var context = CreateContext();
+        context.From<ParentEntity>().WithData(new[] { new ParentEntity { Id = 1 } });
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = async () => await context.From<ParentEntity>()
+            .LoadWith(p => p.Children, c => c.From<ChildEntity>(), p => p.Id, c => c.ParentId)
+            .ToListAsync(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public void LoadWith_Split_ToArray_StitchesChildren()
+    {
+        var context = CreateContext();
+        context.From<ParentEntity>().WithData(new[] { new ParentEntity { Id = 1 } });
+
+        var parents = context.From<ParentEntity>()
+            .LoadWith(p => p.Children, c => c.From<ChildEntity>(), p => p.Id, c => c.ParentId)
+            .ToArray();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+    }
+
+    [Fact]
+    public async Task LoadWith_Split_ToArrayAsync_StitchesChildren()
+    {
+        var context = CreateContext();
+        context.From<ParentEntity>().WithData(new[] { new ParentEntity { Id = 1 } });
+
+        var parents = await context.From<ParentEntity>()
+            .LoadWith(p => p.Children, c => c.From<ChildEntity>(), p => p.Id, c => c.ParentId)
+            .ToArrayAsync();
+
+        parents.Should().ContainSingle();
+        parents[0].Children.Select(c => c.Id).Should().Equal(10, 11);
+    }
+
+    [Fact]
     public void LoadWith_ToCommand_IgnoresTheLoadSpec()
     {
         var context = CreateContext();

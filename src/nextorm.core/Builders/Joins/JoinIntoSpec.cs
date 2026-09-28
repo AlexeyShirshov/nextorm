@@ -90,6 +90,12 @@ internal interface IJoinIntoSpec<TEntity>
     /// <summary>The declaration identity used by the plan cache.</summary>
     JoinIntoIdentity Identity { get; }
 
+    /// <summary>
+    /// Whether the child side ignores its own global query filters. Carried onto the synthesized join so
+    /// the child's filter decision is independent of the parent's <c>IgnoreFilters()</c>.
+    /// </summary>
+    bool IgnoreChildFilters { get; }
+
     /// <summary>Reads the parent key used to deduplicate the denormalized parents.</summary>
     /// <param name="parent">The parent row.</param>
     /// <returns>The key value.</returns>
@@ -185,6 +191,9 @@ internal sealed class JoinIntoSpec<TEntity, TChild> : IJoinIntoSpec<TEntity>
 
     /// <inheritdoc/>
     public JoinIntoIdentity Identity { get; }
+
+    /// <inheritdoc/>
+    public bool IgnoreChildFilters => Child.IgnoresFilters;
 
     /// <inheritdoc/>
     public object? GetParentKey(TEntity parent) => _parentKey(parent);
@@ -300,6 +309,9 @@ internal sealed class JoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSpec<TEntit
     public JoinIntoIdentity Identity { get; }
 
     /// <inheritdoc/>
+    public bool IgnoreChildFilters => Child.IgnoresFilters;
+
+    /// <inheritdoc/>
     public object? GetParentKey(TEntity parent) => _parentKey(parent);
 
     /// <inheritdoc/>
@@ -340,6 +352,47 @@ internal static class JoinIntoSpecHelpers
     internal static PropertyInfo? TryResolveCollectionProperty<TEntity, TChild>(
         Expression<Func<TEntity, ICollection<TChild>>> collection)
         => StripConvert(collection.Body) is MemberExpression { Member: PropertyInfo property } ? property : null;
+
+    /// <summary>
+    /// Builds the key-equality predicate <c>parentKey == childKey</c> for the single-query join. The
+    /// split path compares keys with the default equality comparer (<c>Contains</c>), which works for
+    /// any type; the joined predicate needs a translatable <c>Equal</c> node, so a key type without an
+    /// equality operator (for example a struct with no <c>==</c> overload, or a reference type whose
+    /// <c>==</c> would degrade to reference equality) is reported instead of silently producing a wrong
+    /// or crashing query.
+    /// </summary>
+    /// <param name="parentKey">The re-rooted parent key expression.</param>
+    /// <param name="childKey">The re-rooted child key expression.</param>
+    /// <param name="keyType">The key type selected by both sides.</param>
+    /// <param name="modeName">The mode name to mention in the rejection.</param>
+    /// <returns>The equality predicate.</returns>
+    /// <exception cref="NotSupportedException">The key type does not support value equality.</exception>
+    internal static Expression BuildKeyEquality(Expression parentKey, Expression childKey, Type keyType, string modeName)
+    {
+        Expression equality;
+        try
+        {
+            equality = Expression.Equal(parentKey, childKey);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new NotSupportedException(
+                $"{modeName} cannot compare the key type '{keyType.Name}' because it does not define an " +
+                $"equality operator, so no join predicate can be built. Use split-query loading (omit {modeName}), " +
+                "which compares keys with the default equality comparer.", ex);
+        }
+
+        // For a reference type without a user-defined equality operator Expression.Equal produces
+        // reference equality, which would compare child/parent instances instead of key values and match
+        // nothing over a join; reject it rather than silently emitting the wrong predicate.
+        if (equality is BinaryExpression { Method: null } && !keyType.IsValueType)
+            throw new NotSupportedException(
+                $"{modeName} cannot compare the reference key type '{keyType.Name}' by value because it does " +
+                $"not define an equality operator, so the join predicate would compare references. Use split-query " +
+                $"loading (omit {modeName}), which compares keys with the default equality comparer.");
+
+        return equality;
+    }
 
     /// <summary>
     /// Resolves the property type selected by a key selector, unwrapping any conversion node, so the
@@ -434,6 +487,25 @@ internal static class JoinIntoSpecHelpers
 
     /// <summary>Unwraps a <see cref="Nullable{T}"/> type to its underlying type.</summary>
     internal static Type Unwrap(Type type) => Nullable.GetUnderlyingType(type) ?? type;
+
+    /// <summary>
+    /// Re-roots <paramref name="body"/> onto <paramref name="replacement"/> by replacing exactly the
+    /// parameter <paramref name="source"/> (matched by reference), leaving same-typed parameters that
+    /// belong to a nested lambda untouched.
+    /// </summary>
+    /// <param name="body">The expression body to rewrite.</param>
+    /// <param name="source">The parameter to replace.</param>
+    /// <param name="replacement">The expression that takes its place.</param>
+    /// <returns>The rewritten expression body.</returns>
+    internal static Expression ReplaceParameter(Expression body, ParameterExpression source, Expression replacement)
+        => new TargetParameterReplacer(source, replacement).Visit(body);
+
+    private sealed class TargetParameterReplacer(ParameterExpression target, Expression replacement) : ExpressionVisitor
+    {
+        /// <inheritdoc/>
+        protected override Expression VisitParameter(ParameterExpression node)
+            => ReferenceEquals(node, target) ? replacement : base.VisitParameter(node);
+    }
 
     private static Expression StripConvert(Expression body)
     {

@@ -7,20 +7,36 @@
 > наборов за один round trip — `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` →
 > `BatchResult.Read<TResult>()`, гейт `ISqlDialect.SupportsBatch` (PostgreSQL, SQL Server, MySQL, MariaDB,
 > SQLite; ClickHouse и in-memory — `NotSupportedException`). Это устраняет только инфраструктурный блокер.
-> Сам eager loading (`LoadWith`/`Include`) **не реализован**: фича перенесена в отдельный майлстоун и
-> остаётся открытой/нереализованной. План ниже — по-прежнему план.
+> Сам eager loading (`LoadWith`/`Include`) на дату этого статуса ещё не был реализован; реализован позже —
+> см. блок «Статус реализации» ниже (issue #107).
 
-> **Статус реализации (27.09.2026, ветка `1.0.9-a`).** Уровень-1 split-query eager loading **поставлен**:
-> `EntityBuilder<TEntity>.LoadWith<TChild,TKey>(collection, childQueryFactory, parentKey, childKey)` —
-> 2 round trip (родительский statement + дочерний `WHERE childKey IN (...)`), без N+1; родительские ключи
-> чанкуются по 1000; дочерние коллекции сшиваются с родителями в памяти. Загрузка учитывается только
-> списочными терминалами `ToList`/`ToListAsync`; `ToCommand()` и прочие терминалы её игнорируют.
-> **Отложено:** вложенность/N-level eager loading и вариант JOIN+дедуп — до появления конкретного
-> потребителя / требования на вложенность (триггер пересмотра). Реализация —
-> `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`; документация —
-> [Eager loading](../../advanced/eager-loading.md). Тесты: core `EagerLoadingTests` (6), integration
-> `CommonTestSuite.EagerLoading` (4 кейса × SQLite/PostgreSQL/SQL Server/MySQL), SQLite
-> `EagerLoadingSqlGenerationTests` (2 round trip + `IN`-список).
+> **Статус реализации (28.09.2026, ветка `1.0.9-a`, issue #107).** Уровень-1 eager loading **поставлен**
+> в двух режимах. По умолчанию — split-query: `EntityBuilder<TEntity>.LoadWith<TChild,TKey>(collection,
+> childQueryFactory, parentKey, childKey)` даёт 2 round trip (родительский statement + дочерний
+> `WHERE childKey IN (...)`), без N+1; родительские ключи чанкуются по 1000; дочерние коллекции
+> сшиваются с родителями в памяти. Опционально `AsSingleQuery()` сводит всё к одной денормализованной
+> команде `LEFT JOIN`: >1000 ключей без чанкового `IN`-списка, без молчаливого отката к split; собственный
+> `Where` дочернего запроса встраивается в предикат соединения, глобальные фильтры применяются.
+> Сшивают четыре терминала: `ToList`/`ToListAsync` и `ToArray`/`ToArrayAsync`; `ToHashSet`,
+> `ToDictionary`, `First`/`FirstOrDefault`, `Single*`, `ToEnumerable`, `ToAsyncEnumerable` и `ToCommand`
+> eager loading не выполняют, а `Any`/`Count` скалярны. Отмена проверяется между чанками и между
+> спецификациями; предварительно отменённый single-query не выполняется.
+> **Границы контракта (приняты, `1.0.9-a`).** Split — режим по умолчанию; opt-in `AsSingleQuery()`
+> требует, чтобы родительский ключ был частью маппинга, а дочерний запрос сводился к `.Where(...)`
+> (прочие формы дочернего запроса отклоняются). `LoadWith`/`AsSingleQuery` не компонуются с
+> `Join`/`As`/`Select`/`ArrayJoin`/`Pivot`/`SelectMany`/`GroupJoin`; N-level eager loading не
+> поддерживается.
+> **Отложено + триггеры:** поддержка ранее отклонённых форм дочернего запроса и дочернего
+> `.IgnoreFilters` в single-query; распространение общего eager-интеграционного набора на ClickHouse;
+> follow-up по памяти/времени (single-query аллоцирует ~1.68x от split) — триггер: конкретный
+> потребитель/регрессия. Вложенность/N-level — отдельное требование; сшивание за пределами `ToArray` —
+> отдельный контракт семантики терминалов.
+> **Долг по тестам:** один white-box тест сохранения режима дублирует поведенческий; в sqlite-тестах
+> предполагается префикс параметра `$p`.
+> Реализация — `src/nextorm.core/Builders/EntityBuilderEagerLoading.cs`; документация —
+> [Eager loading](../../advanced/eager-loading.md). Тесты: core `EagerLoadingTests` +
+> `EagerLoadingSingleQueryTests`, SQLite `EagerLoadingSqlGenerationTests` (split 2 round trip + `IN`,
+> single-query ровно 1 команда), integration `CommonTestSuite.EagerLoading`.
 
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
 > раздел «Engine gaps — verified on `nextorm 1.0.6-alpha`», пункт 9. Связано:

@@ -296,13 +296,22 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     / `OVERRIDING SYSTEM VALUE` is not emitted for a non-identity table, so SQL Server no longer raises
     error 8106 (previously verified on SQL Server; other providers tolerated the call).
     Docs: [Bulk insert](../../guide/22-bulk-insert.md).
-49. **Eager loading of a graph (`LoadWith`) — level one shipped (`1.0.9-a`).** nextorm's navigation
-    properties shipped separately (workstream 13, issue #105, slices A+B — see row 13 above), while an
-    explicit level-one split-query eager load remains available: `EntityBuilder<TEntity>.LoadWith<TChild,TKey>(collection, childQueryFactory,
-    parentKey, childKey)` fills a parent-side `ICollection<TChild>` with two round trips (a parent statement
-    plus a child `WHERE childKey IN (...)` per chunk of at most 1000 parent keys; never N+1) and stitches the
-    children in memory. Only `ToList`/`ToListAsync` honour the declaration; `ToCommand()` and the other
-    terminals ignore it. Nested (level 2+) loads are deferred. EF's `Include` / linq2db's `LoadWith` remain
+49. **Eager loading of a graph (`LoadWith`) — level one shipped in two modes (`1.0.9-a`, issue #107).**
+    nextorm's navigation properties shipped separately (workstream 13, issue #105, slices A+B — see row 13
+    above). `EntityBuilder<TEntity>.LoadWith<TChild,TKey>(collection, childQueryFactory, parentKey, childKey)`
+    fills a parent-side `ICollection<TChild>` and, by default, uses the split shape: a parent statement plus
+    one child `WHERE childKey IN (...)` per chunk of at most 1000 parent keys (never N+1), stitched in memory.
+    The opt-in `AsSingleQuery()` collapses both levels into one denormalized `LEFT JOIN` command — any number
+    of parent keys, no chunked `IN` list and no silent fallback to split — with the child query's own `Where`
+    folded into the join predicate and global query filters still applied. The four stitching terminals
+    `ToList`/`ToListAsync` and `ToArray`/`ToArrayAsync` honour the declaration; `ToCommand()` and the other
+    non-scalar terminals do not run it, while `Any`/`Count` stay scalar. Contract limits: split is the
+    default; `AsSingleQuery()` requires a mapped parent key and a child query reduced to `.Where(...)`
+    (other child shapes are rejected), and `LoadWith`/`AsSingleQuery` cannot be composed with
+    `Join`/`As`/`Select`/`ArrayJoin`/`Pivot`/`SelectMany`/`GroupJoin`. Nested (level 2+) loads, support for
+    the previously-rejected child shapes / child `.IgnoreFilters` in single-query, extending the shared eager
+    integration suite to ClickHouse and a memory-time follow-up (single-query allocates ~1.68x split) are
+    deferred. EF's `Include` / linq2db's `LoadWith` remain
     the conceptual equivalents, without inferred metadata.
     Docs: [Eager loading](../../advanced/eager-loading.md).
     Todo: [`todo_eager_loading.md`](todo_eager_loading.md).
