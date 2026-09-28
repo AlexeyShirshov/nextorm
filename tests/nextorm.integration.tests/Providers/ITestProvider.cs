@@ -165,10 +165,12 @@ public interface ITestProvider
 
     /// <summary>
     /// True when the provider accepts the whole-entity read that materialises a
-    /// <see cref="DynamicColumnsAttribute"/> store, which appends an unqualified <c>*</c> after the
-    /// mapped columns (<c>select id, name, * from t</c>). SQLite, PostgreSQL and SQL Server do;
-    /// MySQL/MariaDB reject an unqualified <c>*</c> mixed with explicit select expressions, so the
-    /// shared dynamic-columns write→read tests skip there instead of failing.
+    /// <see cref="DynamicColumnsAttribute"/> store. The read appends the store's star after the mapped
+    /// columns; a dialect that requires a qualified star (MySQL/MariaDB) qualifies it with the source
+    /// alias (<c>select id, name, `t1`.* from dynamic_entity as `t1`</c>), so every provider that can
+    /// address the FROM alias supports it. Genuine per-feature gaps still skip their own shared tests:
+    /// for example <c>DynamicColumns_FullMerge</c> is skipped where a general multi-branch <c>MERGE</c>
+    /// is unavailable.
     /// </summary>
     bool SupportsDynamicColumnsRead => true;
 

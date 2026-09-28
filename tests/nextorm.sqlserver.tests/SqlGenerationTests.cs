@@ -51,6 +51,16 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
     }
 
+    [Fact]
+    public void OtherDialects_DynamicSql_Unchanged()
+    {
+        // Regression guard for the MySQL-only qualification: SQL Server keeps the bare star.
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
     private static DynamicColumnsEntity DynamicWriteEntity()
         => new()
         {

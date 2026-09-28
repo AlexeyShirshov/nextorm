@@ -39,12 +39,14 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void DynamicColumnsStore_ShouldAppendStar()
+    public void MariaDb_MappedPlusDynamic_QualifiedStar()
     {
         using var ctx = MariaDbTestContext.Create();
         var e = ctx.From<DynamicColumnsEntity>();
 
-        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+        // MariaDB inherits the MySQL dialect and rejects a bare "*" mixed with explicit columns, so the
+        // star is qualified with the FROM alias that the forced alias renders.
+        SqlOf(ctx, e.ToCommand()).Should().Be("select t1.id, `t1`.* from dynamic_entity as `t1`");
     }
 
     private static DynamicColumnsEntity DynamicWriteEntity()

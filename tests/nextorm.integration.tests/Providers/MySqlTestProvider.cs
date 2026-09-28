@@ -54,13 +54,11 @@ internal sealed class MySqlTestProvider : ITestProvider
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
     /// <summary>
-    /// MySQL rejects an unqualified <c>*</c> mixed with explicit select expressions
-    /// (<c>SELECT id, * FROM t</c> is a syntax error; only <c>SELECT id, t.* FROM t</c> is accepted), so
-    /// the whole-entity read that appends the store's <c>*</c> after the mapped columns cannot run.
+    /// MySQL rejects an unqualified <c>*</c> mixed with explicit select expressions, so the
+    /// dynamic-columns read qualifies the appended star with the source alias
+    /// (<c>select t1.id, `t1`.* from dynamic_entity as `t1`</c>) and the whole-entity read can execute.
     /// </summary>
-    public bool SupportsDynamicColumnsRead => false;
-    public string DynamicColumnsReadSkipReason =>
-        "MySQL rejects an unqualified `*` mixed with explicit select columns, so the whole-entity read that materialises a dynamic-columns store cannot execute.";
+    public bool SupportsDynamicColumnsRead => true;
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
 

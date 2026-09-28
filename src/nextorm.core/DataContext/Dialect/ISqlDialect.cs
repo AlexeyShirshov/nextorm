@@ -1686,6 +1686,16 @@ public interface ISqlDialect
     bool SupportsMergeTargetQualification => true;
 
     /// <summary>
+    /// True when the provider rejects a bare <c>*</c> mixed with explicit select expressions and requires
+    /// the star to be qualified with the source alias (MySQL and MariaDB: <c>select id, * from t</c> is a
+    /// syntax error while <c>select id, t.* from t as t</c> is accepted). Consulted only for the
+    /// dynamic-columns store projection, where an unqualified <c>*</c> is appended after the mapped
+    /// columns; the plain whole-row <c>*</c> path is never qualified. Declared as a default interface
+    /// method returning <see langword="false"/> so existing external implementations keep compiling.
+    /// </summary>
+    bool RequiresQualifiedSelectStar => false;
+
+    /// <summary>
     /// Renders the terminator of a general <c>MERGE</c>. Defaults to none; SQL Server requires a
     /// terminating semicolon.
     /// </summary>

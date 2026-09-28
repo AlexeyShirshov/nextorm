@@ -124,13 +124,16 @@ must have a setter.
 ## Provider matrix
 
 The store is engine-independent: the columns come from the result set and their names are read from the
-data reader, so no provider needs a dialect hook.
+data reader, so the materialisation itself needs no dialect hook. The one dialect difference is the star
+form — on MySQL/MariaDB the [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) capability
+`RequiresQualifiedSelectStar` (default `false`, overridden to `true` on MySQL and inherited by MariaDB)
+makes the statement alias-qualify the mapped columns and the star.
 
 | Provider | Read | Write | Note |
 |---|---|---|---|
 | PostgreSQL | yes | yes | `select <mapped>, *`; value types come from the `DbDataReader`/the runtime CLR value |
 | SQL Server | yes | yes | mapped identifiers stay unquoted unless quoting is enabled; dynamic keys are always quoted |
-| MySQL / MariaDB | yes | yes | `select <mapped>, *` |
+| MySQL / MariaDB | yes | yes | ``select t1.<mapped>, `t1`.*``; the mapped columns and the star are alias-qualified |
 | SQLite | yes | yes | `select <mapped>, *`; the write side follows SQLite's dynamic typing |
 | ClickHouse | yes | yes | the table columns must exist; its `MERGE` is rejected independently of the store |
 | In-memory | yes | no | the in-memory provider returns the registered row and does not implement the write side |

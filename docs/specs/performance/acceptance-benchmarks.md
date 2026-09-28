@@ -295,3 +295,38 @@ the static arm dropped from 331.65 KB to 268.37 KB — exactly the store plumbin
 pays). It must not be reported as either a regression or an improvement introduced by #104.
 `Error` on both rows is large on `ShortRun` (`Insert_Static` `309.3 us`, `Insert_DynamicColumns`
 `394.4 us`, i.e. ≈ 50 %/44 % of `Mean`), so the ratio is indicative, not a gate.
+
+## Results 2026-09-28 — issue #110 (dynamic-columns read: qualified star)
+
+Perf acceptance for #110 (the dynamic-columns read must alias-qualify the appended `*` on
+MySQL/MariaDB). Same host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS,
+.NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`,
+`Categories=acceptance`). **7** cases selected, **0** failures. External shell wall clock **45 s**;
+BDN `Global total time` **42.79 s** — both under the 4 min budget. (The host was not fully quiet:
+concurrent `opencode`/`roslyn` processes put the load average around 8–10, so the absolute means are
+higher than the 2026-09-26 baseline across the board and are not individually comparable; the tracked
+cached-vs-prepared ratio is computed within this run.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.736 ms | 339.84 KB | -6.1% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 71.80 ms | 50.02 MB | +17.8% (high-variance row) |
+| `Nextorm_Cached` | 2.249 ms | 539.9 KB | +26.9% (high-variance row) |
+| `Prepared_ToList` | 1,057.4 us | 76.14 KB | +14.5% |
+| `Cached_ToList` | 2,317.4 us | 572.26 KB | +34.1% |
+| `Cached_PlanOnly_Param` | 672.2 us | 496.1 KB | +29.7% |
+| `Nextorm_Cached_ToListAsync` | 2.714 ms | 705.35 KB | +27.0% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.19** — vs documented
+baseline **1.87** (+17.1%) and vs the stated prior figure **2.07** (+5.8%); the corresponding
+allocated ratio is **7.52** (baseline **7.42**). Both time deltas are below the **20%** investigation
+threshold; the `Cached_ToList` row's `Error` (4,836.9 us) is larger than twice its `Mean`, so the
+ratio is indicative only, not a gate.
+
+**No before/after comparison is available or claimed.** The change under acceptance is
+**dialect-gated**: the new `ISqlDialect.RequiresQualifiedSelectStar` capability defaults to `false`
+and is overridden only on MySQL (`MySqlDialect`, inherited by MariaDB), and the extra `hasDynamicStore`
+predicate in `SqlBuilder` is true only when the select list contains an `IsDynamicColumnsStore` item.
+The seven acceptance cases run on SQLite with ordinary queries and carry no dynamic-columns store, so
+neither branch is reachable on the acceptance path. The run is recorded as the cycle's acceptance
+evidence; the deltas above are **not** a regression or an improvement introduced by #110.

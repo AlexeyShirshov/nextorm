@@ -51,12 +51,64 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void DynamicColumnsStore_ShouldAppendStar()
+    public void MySql_MappedPlusDynamic_QualifiedStar()
     {
         using var ctx = MySqlTestContext.Create();
         var e = ctx.From<DynamicColumnsEntity>();
 
-        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+        // MySQL rejects a bare "*" mixed with explicit columns, so the star is qualified with the FROM
+        // alias. The qualifier must be the exact escaped token the FROM renders ("`t1`"), not the raw
+        // "t1" alias name, so the two can never diverge.
+        SqlOf(ctx, e.ToCommand()).Should().Be("select t1.id, `t1`.* from dynamic_entity as `t1`");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_OverNonPhysicalSource_IsRejected()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        // A dynamic-columns store reads the appended "*" through the source alias. A raw table expression
+        // is a non-physical source that renders its own alias inside MakeTableExpression but does not
+        // report it as the FROM out-alias, so on MySQL (RequiresQualifiedSelectStar) the record cannot be
+        // qualified: reject it explicitly instead of emitting an invalid/rejected bare "*".
+        var e = ctx.From<DynamicColumnsEntity>().WithTableExpression("select id from other");
+
+        var act = () => SqlOf(ctx, e.ToCommand());
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*requires an aliased physical FROM source*");
+    }
+
+    [Fact]
+    public void MySql_PlainStar_Unchanged()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        // A query with no explicit columns (here the correlated EXISTS subquery sets IgnoreColumns)
+        // keeps emitting the bare "*"; only the dynamic-store projection is qualified.
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            has = SqlFunctions.Sql.exists(inner.Where(s => s.Id == it.Id))
+        }));
+
+        sql.Should().Contain("exists(select * from simple_entity as `t2`");
+        sql.Should().NotContain(".*");
+    }
+
+    [Fact]
+    public void DynamicJoin_StillRejected()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var joined = ctx.From<DynamicColumnsEntity>()
+            .SemiJoin(ctx.From<ISimpleEntity>(), (e, s) => e.Id == s.Id);
+
+        var act = () => ctx.GetPreparedQueryCommand(joined.ToCommand(), false, false, CancellationToken.None);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*single physical source*");
     }
 
     private static DynamicColumnsEntity DynamicWriteEntity()

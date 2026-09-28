@@ -72,6 +72,17 @@ public class DynamicColumnsTests
     }
 
     [Fact]
+    public void OtherDialects_DynamicSql_Unchanged()
+    {
+        // Regression guard for the MySQL-only qualification: SQLite keeps the bare star and no alias.
+        using var ctx = SqliteTestContext.Create();
+        var sql = ((DbPreparedQueryCommand<DynamicColumnsEntity>)ctx.GetPreparedQueryCommand(
+            ctx.From<DynamicColumnsEntity>().ToCommand(), false, false, CancellationToken.None)).DbCommand.CommandText;
+
+        sql.Replace("\r\n", "\n").Should().Be("select id, name, * from dynamic_entity");
+    }
+
+    [Fact]
     public void ReadEntity_WithDynamicColumnsStore_ShouldSupportTerminals()
     {
         var (ctx, path) = CreateDb();
