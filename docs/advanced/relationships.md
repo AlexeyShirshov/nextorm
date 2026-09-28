@@ -64,6 +64,8 @@ public sealed class Order
 
 [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) declares a join that fills a parent collection when the query is enumerated by a list terminal. It returns a **copy** of the builder, so the source builder is unchanged and declarations chain:
 
+> **Note.** The former child-collection scenario (issue #40) — loading children from a parent+child join — is expressed today by `JoinInto` into a **declared collection property**, as shown below. Projecting children into an arbitrary (anonymous) shape, the historical `NORM.ChildCollection(...)` form, is **not provided**: declare the collection and load it with `JoinInto`, or select the child rows with an explicit join and materialize them yourself.
+
 ```csharp
 var orders = ctx.From<Order>()
     .JoinInto(ctx.From<OrderItem>(), (o, i) => o.Id == i.OrderId, o => o.Items)
