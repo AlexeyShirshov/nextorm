@@ -33,7 +33,7 @@ See [Scalar functions](../../scalar-functions/04-conditionals-and-conversion.md#
 ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), and a query hint renders the
 trailing `OPTION (...)` clause, for example `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); the CTE `maxRecursion`
-option maps to `option (maxrecursion n)`. See [Query hints](../15-query-hints.md).
+option maps to `option (maxrecursion n)`. See [Query hints](../13-query-hints.md).
 
 ## Row locking
 
@@ -63,7 +63,7 @@ renders `with (rowlock, updlock)`. See
 XML document
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
 `WithForJson`/`WithForXml` attach the clause without executing; the two clause kinds are mutually
-exclusive. See [JSON support across providers](../16-json.md).
+exclusive. See [JSON support across providers](../14-json.md).
 
 ## XML data-type methods
 
@@ -113,7 +113,7 @@ See [Scalar functions](../../scalar-functions/07-json-and-xml.md#xml-data-type-m
 `string_split(...)` and `openjson(...)` are exposed through
 [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). See
 [Table-valued functions](../11-table-valued-functions.md) and
-[JSON support across providers](../16-json.md).
+[JSON support across providers](../14-json.md).
 
 ## Temporal tables
 

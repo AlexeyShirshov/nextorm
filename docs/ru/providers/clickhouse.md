@@ -265,7 +265,7 @@ public sealed class TvpRow
   дословно, поэтому кавычки — по диалекту.
 - Терминалы потокового чтения LOB (`ToStream`/`ToTextReader`) отклоняются через `NotSupportedException`:
   у `ClickHouse.Driver` нет потоковых геттеров (см.
-  [Потоковое чтение больших объектов](../guide/30-large-objects.md)).
+  [Потоковое чтение больших объектов](../guide/26-large-objects.md)).
 
 ## См. также
 

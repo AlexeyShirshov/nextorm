@@ -2,7 +2,7 @@
 
 > Replace a query's generated SQL with hand-written text while keeping nextorm's row mapping.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Query reuse: cache vs Prepare](13-query-reuse.md)
+**Prerequisites:** [Querying and projections](../querying/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md)
 
 ## Overview
 
@@ -238,6 +238,8 @@ The statement text is passed through verbatim and is **not** put through the que
 
 > **SQL injection.** `sql` is executed verbatim; the planner never parameterises it. Never concatenate untrusted input into the text — pass values through `ProcedureParameter` and reference them with placeholders.
 
+> **Why `ProcedureParameter` and not a params object?** `WithSql`, `PrepareFromSql` and `FromSql` go through the query planner, so they also accept the planner's params-object convention: a plain object whose public instance properties become named parameters, in property order (`new { id = 1 }`). `ExecuteRaw` deliberately bypasses the planner - the text is sent verbatim and nothing enumerates an object's properties - so a parameter must be declared explicitly, by name. `ProcedureParameter` is that explicit descriptor, and it is a superset of a bare input value: besides `Name` and `Value` it carries the ADO.NET `Direction`, `DbType`, `Size` and `TypeName`, and the table-valued rows of `Table<T>`, so the same shape also serves output and return parameters and `ExecuteProcedure`. An anonymous object could only ever express inputs.
+
 `ProcedureResult` holds the command and its reader open until disposed. On SQL Server **without MARS**, an open reader blocks every other command on the same connection, so dispose the result before issuing another command on the context.
 
 ### Disposal
@@ -419,6 +421,20 @@ public static ProcedureParameter Table<T>(string name, IEnumerable<T> rows);
 public static ProcedureParameter Table<T>(string name, string typeName, IEnumerable<T> rows);
 ```
 
+For example, a scalar set binds a single column and an entity set one column per mapped property:
+
+```csharp
+var ids = ProcedureParameter.Table("ids", new[] { 1, 2, 3 });   // a single int column
+
+var employees = ProcedureParameter.Table("rows", new[]          // one column per mapped property
+{
+    new TvpRow { Id = 1, Name = "alpha" },
+    new TvpRow { Id = 2, Name = "beta" },
+});
+```
+
+The parameter is then passed to `ExecuteRaw`/`ExecuteProcedure` like any other input parameter; the SQL that consumes it is provider-specific (see the table and the per-provider examples below).
+
 * **Row type.** A **scalar** row type (a primitive, `string`, `decimal`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`/`TimeOnly`, `TimeSpan`, `byte[]`, an enum or a nullable of these) binds as a single column. Any other type is treated as a **mapped entity**: the columns are its non-computed mapped properties, in metadata order, **including identity columns** (the same mapping as a bulk insert). A `Range<T>` property maps to two columns and is not supported.
 * **Capability.** [`ISqlDialect.SupportsTableValuedParameters`](xref:NextORM.Core.ISqlDialect.SupportsTableValuedParameters) gates the feature: **SQL Server** binds natively, **PostgreSQL, MySQL/MariaDB and SQLite** emulate with a typed array or a JSON document, **ClickHouse** emulates with a bound `Array(T)`/`Array(Tuple(...))` expanded server-side with `arrayJoin(@p)`, and only the **in-memory context** throws `NotSupportedException`.
 * **`TypeName`** is **SQL Server only** (the user-defined table type). PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse reject it with `ArgumentException`; call `Table(name, rows)` there.
@@ -541,7 +557,7 @@ ClickHouse has no stored procedures, so a table parameter is consumed by `Execut
 
 ## See also
 
-* [Query reuse: cache vs Prepare](13-query-reuse.md) - the `nonStreamUsing` / `storeInCache` trade-offs.
+* [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) - the `nonStreamUsing` / `storeInCache` trade-offs.
 * [Scalar functions](../scalar-functions/index.md) - stay in LINQ instead of dropping to raw SQL.
 * [Provider overview](../providers/overview.md) - parameter placeholder per provider.
 

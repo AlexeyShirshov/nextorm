@@ -59,8 +59,8 @@ full, provider-neutral walkthrough:
 * [Sorting and paging](../04-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
 * [Scalar functions](../../scalar-functions/index.md) — arrays, JSON, UUID, session/info, provider surfaces;
 * [Table-valued functions](../11-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
-* [Query hints](../15-query-hints.md) — table hints, `OPTION (RECOMPILE)`, ClickHouse query modifiers;
-* [JSON support across providers](../16-json.md) — every JSON surface side by side.
+* [Query hints](../13-query-hints.md) — table hints, `OPTION (RECOMPILE)`, ClickHouse query modifiers;
+* [JSON support across providers](../14-json.md) — every JSON surface side by side.
 
 Portable functions that are spelled differently on every database live on
 [`CommonFunctions`](xref:NextORM.Core.CommonFunctions) and are documented with the concept pages:

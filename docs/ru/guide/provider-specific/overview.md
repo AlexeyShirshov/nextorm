@@ -61,8 +61,8 @@
 * [Сортировка и постраничная выборка](../04-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
 * [Скалярные функции](../../scalar-functions/index.md) — массивы, JSON, UUID, session/info, поверхности провайдеров;
 * [Табличные функции](../11-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
-* [Хинты запросов](../15-query-hints.md) — табличные хинты, `OPTION (RECOMPILE)`, модификаторы ClickHouse;
-* [Поддержка JSON в разных провайдерах](../16-json.md) — все поверхности JSON рядом.
+* [Хинты запросов](../13-query-hints.md) — табличные хинты, `OPTION (RECOMPILE)`, модификаторы ClickHouse;
+* [Поддержка JSON в разных провайдерах](../14-json.md) — все поверхности JSON рядом.
 
 Переносимые функции, которые пишутся по-разному в каждой СУБД, живут на
 [`CommonFunctions`](xref:NextORM.Core.CommonFunctions) и документированы на страницах функций:

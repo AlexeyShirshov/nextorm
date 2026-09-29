@@ -24,7 +24,7 @@
 
 1. Multi-tenancy «schema-per-tenant» / «table-per-tenant» без дублирования CLR-типов.
 2. Точка расширения, на которую опирается шардинг (см. `todo_sharding.md`) и будущие query filters
-   (`todo_query_filters.md`), EF Core integration (`todo_efcore_integration.md`).
+   (`todo_query_filters.md`), EF Core integration (shipped — `nextorm.entityframeworkcore`).
 3. Изоляция имени параметра нужна для много-вариантных команд (scatter-gather в шардинге).
 
 ## 3. Текущее состояние (проверено по коду)

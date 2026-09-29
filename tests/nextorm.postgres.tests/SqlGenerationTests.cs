@@ -2861,6 +2861,32 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_CrossApply_ShouldRenderAppliedSource()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, simple
+            .CrossApply(ctx.FromTableFunction(() => Tvf.AllRows()))
+            .Select(p => new { p.Item1.Id, p.Item2.Value }));
+
+        sql.Should().Be("select t1.id, t2.value from simple_entity as \"t1\" cross join lateral all_rows() as \"t2\"");
+    }
+
+    [Fact]
+    public void TableFunction_CrossApply_Correlated_ShouldRenderLateralSubquery()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, simple
+            .CrossApply(s => ctx.FromTableFunction(() => Tvf.ById(s.Id)))
+            .Select(p => new { p.Item1.Id, p.Item2.Value }));
+
+        sql.Should().Be("select t1.id, t3.value from simple_entity as \"t1\" cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as \"t2\") as \"t3\"");
+    }
+
+    [Fact]
     public void BooleanAggregates_ShouldEmit()
     {
         using var ctx = PostgresTestContext.Create();

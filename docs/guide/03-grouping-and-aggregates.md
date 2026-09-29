@@ -209,6 +209,29 @@ Grouping sets are available on SQL Server, PostgreSQL, SQLite and ClickHouse
 ([`SupportsGroupingSets`](xref:NextORM.Core.ISqlDialect.SupportsGroupingSets)); MySQL/MariaDB and the in-memory provider throw
 `NotSupportedException`. An out-of-range index throws [`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException).
 
+## `DISTINCT ON` — one row per key
+
+PostgreSQL's `DISTINCT ON` is the row-picking counterpart of grouping: instead of collapsing each key
+into aggregates, it keys the rows the way `GROUP BY` does but keeps one representative row per key,
+chosen by `ORDER BY`. Use [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) instead of [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) when you need the row itself rather than an aggregate over it:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .DistinctOn(e => e.String)
+    .OrderBy(e => e.String)
+    .Select(e => new { e.Id, e.String })
+    .ToList();
+```
+
+```sql
+select distinct on (somestring) id, somestring from complex_entity order by somestring
+```
+
+The key may be an anonymous type to key on several columns; the leading `ORDER BY` expressions must
+match it. [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) cannot be combined with [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), and only PostgreSQL implements it — every
+other provider rejects it at SQL build time. See [SELECT DISTINCT](07-distinct.md#distinct-on-postgresql)
+for the full surface.
+
 ## Aggregates without grouping
 
 An aggregate over the whole table is a projection without [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
@@ -580,6 +603,7 @@ it as well as `ROLLUP`/`CUBE`.
 
 - [Sorting and paging](04-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) by expression or ordinal.
 - [Joins](02-joins.md) - aggregate over a joined projection.
+- [SELECT DISTINCT](07-distinct.md) - `DISTINCT` and PostgreSQL `DISTINCT ON`.
 - [Querying and projections](../querying/index.md)
 
 ---

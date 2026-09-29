@@ -248,7 +248,7 @@ select id from simple_entity where id = $norm_p0
 ```
 
 Runtime parameters are named `norm_p{index}`; the value `42` is bound to `norm_p0` by the terminal.
-See [Query reuse: cache vs Prepare](13-query-reuse.md) for the lifetime rules.
+See [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) for the lifetime rules.
 
 A captured local is registered **once per statement**, no matter how many times it appears or which
 source it lives in. A local referenced twice in a `WHERE` over a join projection shares a single
@@ -267,6 +267,14 @@ var rows = await dataContext.From<SimpleEntity>()
     .Select(p => new { p.Item1.Id })
     .ToListAsync();
 ```
+
+```sql
+-- SQLite
+select t1.id from simple_entity as 't1' join (select id from complex_entity where nullableint = $v) as 't2' on cast(t1.id as bigint) = t2.id where (t1.id != $v or t2.id != cast($v as bigint))
+```
+
+The three references to `v` — in the subquery and twice in `WHERE` — yield one `$v` parameter, bound
+once.
 
 There is no need to alias a captured local into several variables to give each reference its own
 parameter.

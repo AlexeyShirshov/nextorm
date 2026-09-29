@@ -86,6 +86,13 @@ var rows = dataContext
 with first as (select id from complex_entity where (id > 1)), second as (select id from first) select id from second
 ```
 
+> **Nested CTEs are not hoisted.** A CTE whose body itself carries a `WITH` — a query built as
+> `dataContext.With(...).From(...)` and passed as the body of another `With` — is rendered literally
+> nested (`with o as (with i as (...) select ... from i) select ... from o`) instead of being flattened
+> into the outer `with`. That form is portable to PostgreSQL, SQLite and MySQL/MariaDB but **not** to
+> SQL Server, whose T-SQL forbids `WITH` inside a derived table. Declare the dependency as a **chained**
+> (top-level) CTE instead, as above: nextorm then emits one flat `with i as (...), o as (select ... from i)`.
+
 `From(CteDefinition)` is equivalent to `From(definition.Name)` and is convenient when you kept the scope
 instead of the name:
 
@@ -171,8 +178,8 @@ with recent as (select id from orders where (id > 1000)) update orders as "t1" s
 
 This works on every provider that supports `UPDATE ... FROM`/`JOIN` (and `DELETE ... USING`/join), at any
 join position, and for recursive CTEs. See
-[Data modification (UPDATE)](19-update-statement.md#updating-from-a-join) and
-[Data modification (DELETE)](18-delete-statement.md#delete-based-on-a-join).
+[Data modification (UPDATE)](17-update-statement.md#updating-from-a-join) and
+[Data modification (DELETE)](16-delete-statement.md#delete-based-on-a-join).
 
 ## Recursive CTE: a number series
 
@@ -274,7 +281,7 @@ plan, including a recursive CTE whose body is a `union all` of two fresh command
 * an equivalent recursive CTE built again reuses the cached plan
   (`PlanCacheTests.RecursiveCte_FreshCommand_ShouldReuseCachedPlan`).
 
-See [Query reuse: cache vs Prepare](13-query-reuse.md) for the lifetime and invalidation rules of the
+See [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) for the lifetime and invalidation rules of the
 plan cache.
 
 ## Data-modifying CTE (PostgreSQL)
@@ -289,9 +296,9 @@ every other provider rejects it with `NotSupportedException`.
 The write CTE is documented together with the write surface it belongs to — typed read-back via
 `From`/`FromTable`, a `VALUES` or `INSERT ... SELECT` body, reading an earlier read CTE, and feeding a main
 `INSERT ... SELECT` — in
-[Data modification (INSERT): Data-modifying CTE](17-insert-statement.md#data-modifying-cte-postgresql).
+[Data modification (INSERT): Data-modifying CTE](15-insert-statement.md#data-modifying-cte-postgresql).
 `UPDATE` and `DELETE` bodies are not supported as a CTE body (only `INSERT` is). For the general `UPDATE`
-surface see [Data modification (UPDATE)](19-update-statement.md).
+surface see [Data modification (UPDATE)](17-update-statement.md).
 
 ## Provider differences
 
@@ -310,7 +317,7 @@ surface see [Data modification (UPDATE)](19-update-statement.md).
 * [Set operations](06-set-operations.md) - [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) and friends, used to build a recursive body.
 * [Joins](02-joins.md) - joining a CTE to a table, as in `CommonTestSuite.Cte.cs`.
 * [Raw SQL](12-raw-sql.md) - when the whole statement is hand-written.
-* [Query reuse: cache vs Prepare](13-query-reuse.md) - how CTE plans are cached.
+* [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md) - how CTE plans are cached.
 
 ---
 

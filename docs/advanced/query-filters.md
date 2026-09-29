@@ -311,12 +311,12 @@ public interface IQueryFilterMetadata
 - **Key-form mutations apply filters but do not expose `IgnoreFilters`.** `Update(entity)` and `Delete(entity)` honour the target filter, but their immediate terminal has no fluent `IgnoreFilters`; use the predicate form (`Update<T>().Where(...)` / `DeleteFrom<T>().Where(...)`) when you need to disable a filter on a mutation.
 - **Plan lifetime.** A context value read by a filter is captured as a runtime parameter (plan-cache safe). The prepared plan retains the first `IDataContext` instance for its lifetime (bounded, one per plan shape).
 
-## Not yet (Phase 3)
+## Not yet
 
-The following remain deferred and are **not** available in this release:
+The following are **not** available:
 
-- filtering the **target** of `INSERT` / `MERGE` / `UPSERT` (there is no `FROM` for it) — target filters are enforced by validating the written rows instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)); `INSERT … SELECT` already filters its **source**;
-- filters on `FromSql` / raw sources;
-- the EF Core bridge that forwards EF Core 10 keyed filters (Phase 3).
+- filtering the **target** of `INSERT` / `MERGE` / `UPSERT` (there is no `FROM` for it) — target filters are enforced by validating the written rows instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)); `INSERT … SELECT` already filters its **source** ([#123](https://github.com/AlexeyShirshov/nextorm/issues/123));
+- filters on `FromSql` / raw sources ([#124](https://github.com/AlexeyShirshov/nextorm/issues/124));
+- the EF Core bridge that forwards EF Core 10 keyed filters ([#125](https://github.com/AlexeyShirshov/nextorm/issues/125)).
 
 `UPDATE` and `DELETE` are covered (see [UPDATE and DELETE (DML)](#update-and-delete-dml)).

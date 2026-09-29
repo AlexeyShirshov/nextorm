@@ -2,7 +2,7 @@
 
 > Run nextorm reads and writes over the connection and transaction of an existing EF Core `DbContext`, reusing the EF model mapping instead of declaring it again.
 
-**Prerequisites:** [Provider overview](../providers/overview.md) · [Transactions](../guide/23-transactions.md) · [API reference](api-reference.md)
+**Prerequisites:** [Provider overview](../providers/overview.md) · [Transactions](../guide/21-transactions.md) · [API reference](api-reference.md)
 
 ## Overview
 
@@ -170,7 +170,7 @@ The shared connection/transaction path is verified end-to-end by container-backe
 
 > **MySQL is verified through Oracle's provider.** Because `Pomelo.EntityFrameworkCore.MySql` has no EF Core 10 release (its latest 9.0.0 targets EF Core 9), the container-backed MySQL tests run on EF Core 10 with Oracle's `MySql.EntityFrameworkCore` 10.0.9 and its `MySql.Data` ADO.NET driver. The bridge recognises both provider names — `Pomelo.EntityFrameworkCore.MySql` and `MySql.EntityFrameworkCore`; to serve the second driver, `nextorm.mysql` creates its parameters through the executing command (`command.CreateParameter()`), leaving the normal `MySqlConnector` path unchanged. Sharing EF's transaction with MySQL is therefore verified, not pending. MariaDB is served by Pomelo's provider only.
 
-See [Transactions](../guide/23-transactions.md) for the enlistment contract shared with Dapper and raw ADO.NET.
+See [Transactions](../guide/21-transactions.md) for the enlistment contract shared with Dapper and raw ADO.NET.
 
 ## Model mapping
 
@@ -208,8 +208,8 @@ Provider names are matched exactly (ordinal), so a look-alike name is rejected. 
 
 ## See also
 
-- [Transactions](../guide/23-transactions.md)
-- [Connections and logging](../guide/14-connections-and-logging.md)
+- [Transactions](../guide/21-transactions.md)
+- [Connections](../infrastructure/02-connections.md)
 - [Provider overview](../providers/overview.md)
 - [API reference](api-reference.md)
 

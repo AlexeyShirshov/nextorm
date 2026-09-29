@@ -7950,7 +7950,7 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 
 ## Перенесено из status закрытого потока `stored-procedures` (2026-09-26)
 
-Перенос оставшихся открытых `Deferred + триггер` при удалении `docs/specs/status/stored-procedures-{3,4,5}.md`. Уже отслеживаемое сюда не дублируется: TVP ClickHouse — **отгружено** (план `todo_tvp.md` удалён; issue #73 закрыт), #27 BLOB/CLOB streaming — `todo_streaming_lob.md`, #95 eager loading — `todo_eager_loading.md`.
+Перенос оставшихся открытых `Deferred + триггер` при удалении `docs/specs/status/stored-procedures-{3,4,5}.md`. Уже отслеживаемое сюда не дублируется: TVP ClickHouse — **отгружено** (план `todo_tvp.md` удалён; issue #73 закрыт), #27 BLOB/CLOB streaming и #95 eager loading — **отгружены**, планы `todo_streaming_lob.md`/`todo_eager_loading.md` удалены (2026-09-29).
 
 - **P2 (цикл 1, мёртвый код).** `CommandReaderOwner.CloseReaderAsync` (`src/nextorm.core/DataContext/CommandReaderOwner.cs:49`) не имеет вызовов (Roslyn refs — 0). **Ревизия #27 выполнена (2026-09-27): всё ещё мёртв** — LOB-путь закрывает владельца через `CommandReaderOwner.Dispose`/`DisposeAsync` (`LobStream.cs:110,130`, `LobTextReader.cs:133,154`), раннее закрытие ридера не использует; sync `CloseReader` вызывается только из `ProcedureResult.EnsureOutputsRead`, async-двойника у него нет. Решение: **re-defer** (удаление вне диффа #27, потребовало бы отдельного re-CHECK). Новый триггер: появление async-пути раннего закрытия ридера (async `EnsureOutputsRead`/async-чтение `OutputParameters`) или иного потребителя.
 - **P2 (цикл 1, план-кэш).** Ключ naming-convention кэша строится по экземпляру, а не по типу — размножение кэша на инстанциацию. Триггер: ревизия metadata/mapper-кэша при следующей правке ключей.
@@ -8061,7 +8061,8 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 
 Перенос открытых `Deferred + триггер` при удалении `docs/specs/status/lob-streaming-{1,2,3,4,5}.md`
 (issue #27 закрыт 2026-09-27, следующих циклов потока нет). Вынесенное в #100/#101 не дублируется;
-живой план и зеркало списка — `docs/specs/roadmap/todo_streaming_lob.md` §«Deferred + триггер».
+зеркало списка — этот раздел (план `docs/specs/roadmap/todo_streaming_lob.md` удалён как отгруженный
+2026-09-29).
 Содержимое самих статус-файлов сохранено в разделах «Цикл #27 — …» выше как исторический артефакт
 (упоминания путей `lob-streaming-N.md` в этих записях — исторические).
 
@@ -8075,6 +8076,36 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 - **DRY: четыре in-memory-ветки (ℹ️).** См. Наблюдение C цикла 5; триггер — пятый терминал.
 - **`(object[])parameters` async (ℹ️).** См. Наблюдение A цикла 5; триггер — следующий проход по nullable.
 - **Многоколоночный `ToDataReader` на in-memory — ограничение, не TODO** (нет `DbDataReader`).
+
+## Перенесено из удалённых планов (2026-09-29)
+
+Планы `docs/specs/roadmap/todo_dynamic_columns.md` (#94/#104, read+write shipped),
+`todo_eager_loading.md` (#95, level one shipped), `todo_streaming_lob.md` (#27, closed) и
+`todo_efcore_integration.md` (#61, P1–P3 shipped, P4 out of scope) удалены как отгруженные; открытые
+хвосты ниже (LOB-хвост — в разделе «Перенесено из status закрытого потока `lob-streaming`» выше).
+
+- **Dynamic columns (#104) — Deferred, in-milestone `1.0.9-a` (тест-матрица).** Match-condition на
+  настоящей generated-колонке в query-source (`MergeSqlGenerationTests` PostgreSQL/SQL Server
+  используют колонку только с `[Key]`, не настоящую `[DatabaseGenerated(Identity)]`); у VALUES-source
+  покрыть ветви `ThenDelete`/`ThenDoNothing` и ссылку на источник через вложенный/методный вызов
+  (`s.Total.ToString()`, `a && s.Total`).
+- **Dynamic columns (#104) — оптимизации/кандидаты (нужно воспроизведение до промоушена).**
+  Аллокация `Normalize` на строку (`src/nextorm.core/DataContext/DynamicColumns.cs:65`); скан
+  select-list на детект хранилища при каждой сборке маппера (`RowMaterializerBuilder.cs:52-60`);
+  `StringComparer.Ordinal` в словаре хранилища (`DynamicColumns.cs:43`); требование
+  parameterless-ctor (документировано в `docs/advanced/limitations.md`). Кандидаты — null-forgiving
+  NRE (`RowMaterializerBuilder.cs:178`), порядок/границы «стор последним»
+  (`QueryCommand.QueryPreparer.cs:463-472`, `RowMaterializerBuilder.cs:169`), рендер «голой» `*`
+  (`SqlBuilder.cs:459-492`), `PhysicalColumnName` для range-пар (`EntitySelectListBuilder.cs:69`).
+  Пре-существующий баг выбора самого длинного ctor — `RowMaterializerBuilder.cs:199` (воспроизведён
+  до порта #94, в его объём не входит).
+- **Eager loading (#107, level one shipped).** Отложено: вложенные (level 2+) `LoadWith`; ранее
+  отклонённые формы child-запроса и child `.IgnoreFilters` в single-query; распространение общей
+  eager-интеграции на ClickHouse; аллокационный follow-up single-query (~1.68× split). Docs:
+  `docs/advanced/eager-loading.md`; gap-analysis §4 п.49.
+- **EF Core integration (#61, P1–P3 shipped).** Отложено: P4 (мост DML/`SaveChanges`) — вне области;
+  shared-transaction тесты PostgreSQL/SQL Server/MySQL — [#106](https://github.com/AlexeyShirshov/nextorm/issues/106)
+  (закрыт). Docs: `docs/advanced/integration-efcore.md`.
 
 ## Предрелизный аудит v1.0.8-b (2026-09-27, HEAD `aa5cfa7` + release-prep uncommitted; открытых P0/P1 нет)
 

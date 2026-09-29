@@ -13,7 +13,11 @@ description: "Проектный оверлей nextorm к глобальном�
 ## Политика агентов
 
 - `nextorm-code-auditor`, `nextorm-design-engineer`, `nextorm-*-perf-analyst`
-  **НЕ вызываются**: их инструкции встроены ниже в фазы Plan/Check.
+  **НЕ вызываются как агенты**: их предметные инструкции встроены ниже в фазы Plan/Check.
+- Встраивание **не отменяет** общий §CHECK глобального `pdca-dotnet`: воркфлоу CHECK (шаги 1–13),
+  **загрузка скиллов аудита** (шаг 1, список — §CHECK контракта) и **обязательный скан
+  suppression/slop со счётчиками и ratio** (шаг 4), а также per-finding вывод (шаг 8), выполняются
+  в полном объёме. Оверлей ниже — только проектное **дополнение** к ним, а не сокращённая замена.
 - Записи в регистры (`docs/specs/design/*`) и правки кода/конфигов делает `coder`
   в фазе Do, не оркестратор.
 
@@ -56,6 +60,12 @@ description: "Проектный оверлей nextorm к глобальном�
    в DO не транслируется. Пропущенная ветка — это **дефект PLAN**: гейт 1 не проходит, а при
    обнаружении в CHECK — **loop-back CHECK → PLAN**, а не сноска в отчёте. Слабая постановка
    **повышает** планку PLAN, а не понижает. Контракт: `pdca-dotnet` §PLAN → «PLAN owns the quality of the plan».
+10. **Поиск — ignore-aware; символы — `roslyn`.** Для C#-символов (типы/члены/`refs`/`callers`/overloads/
+    implementations/renames) — только инструмент `roslyn`, не текстовый поиск. Для текста (доки,
+    комментарии, строковые литералы, имена SQL) — `rg`/`git grep` с ограничением по исходникам
+    (`rg -n --glob '*.cs' "<lit>" src tests`). **Никогда `grep -r`/`grep -rn`/`find`** по дереву: они
+    игнорируют `.gitignore` и читают `bin/`/`obj/`/`TestResults/` (≈1.3 GB артефактов под `src`/`tests`),
+    т.е. ~1 GB диска на один вызов. См. `AGENTS.md` → «Searching text».
 
 Выход Plan: severity (🔴/🟡/ℹ️), `file:line`, one-line fix, применимый инвариант
 (1–8); split **fix now** vs **deferred с триггером** (deferred остаётся в текущем
@@ -76,12 +86,38 @@ milestone, см. инвариант 8); lens-префикс
 - **Гайд > 15 подразделов — выделять в отдельный блок.** Когда гайд разрастается
   больше чем на 15 подразделов, его выделяют в отдельный гайд-блок — как это сделано
   с гайдом scalar functions (`docs/scalar-functions/`).
+- **Перенумерация после выноса.** Когда гайд (или его часть) выносится в отдельный
+  раздел/блок либо удаляется, номера оставшихся нумерованных страниц `docs/guide/NN-*`
+  пересчитываются подряд, без пропусков. В том же изменении обновляются все ссылки на
+  переименованные страницы и записи `toc.yml` с обеих сторон (EN+RU); «дырку» в
+  нумерации (например, `30 → 32`) оставлять нельзя.
+
+## DO: применение фиксов (coder)
+
+Фиксы (из PLAN-ревью, из design/type/perf-линз или из CHECK loop-back) применяет `coder` по
+общему «Coder editing discipline» (`pdca-dotnet` §Delegation), с nextorm-конкретикой:
+
+- **Одна ось за шаг**, затем сборка+тесты — не паковать несвязанные рефакторы.
+- **Сборка — гейт:** `dotnet build nextorm.slnx -c Debug` = `0 Warning(s) 0 Error(s)`
+  (`TreatWarningsAsErrors=true`); изменение с warning — не фикс.
+- **CRLF всегда.** После правки любого файла: `perl -pi -e 's/\r?\n/\r\n/g' <file>`;
+  LF-only/смешанные окончания не оставлять.
+- **Тесты до «готово»:** `dotnet test tests/<project> -c Debug`; интеграционные — по
+  `.opencode/skills/running-integration-tests/SKILL.md` (без `DOCKER_HOST` прогон со
+  `Skipped: 376` — это не pass).
+- **CPM:** версии только в `Directory.Packages.props`.
+- **Никаких `git push`/коммитов** без явной просьбы (AGENTS.md).
+- **BDN-артефакты трекаются:** после бенчмарка вернуть `benchmarks/BenchmarkDotNet.Artifacts`.
+- **Без бенчмарк-выводов** (дельты <~20% — шум); числа — на perf-аналитика (`task`).
 
 ## CHECK: nextorm-аудит ⊇ общее ревью (nextorm-code-auditor + dotnet-code-review-agent)
 
 Аудитор — суперсет: сначала общий ревью-проход, затем аудит smells/API. Оба такта
 идут в **Gather** (DeepSeek + команды); **судит сводку `check` (GPT-6 Sol)** в такте 2
 (§CHECK контракта `pdca-dotnet`). Дифф режется по файлам/чанкам и ревьюится отдельно.
+Встраивание — это перенос **содержания**, а не понижение планки: проектные скиллы аудита
+(шаг 1) и измеримые счётчики/ratio (шаг 4) обязательны при любой модели `check` (см. ниже).
+Молча принимать «всё ОК» от слабого `check` запрещено.
 
 Общее ревью (из `dotnet-code-review-agent`), per-finding severity
 Critical/Warning/Suggestion + роутинг специалистам:
@@ -111,6 +147,16 @@ Critical/Warning/Suggestion + роутинг специалистам:
 
 Дополнительно к общему §CHECK:
 
+- **Скиллы аудита обязательны (шаг 1 §CHECK).** Грузятся: `dotnet-csharp-code-smells`,
+  `slopwatch`, `dotnet-api-surface-validation`, `api-design` (+ on-demand:
+  `dotnet-library-api-compat`, `dotnet-editorconfig`, `dotnet-add-analyzers`, `dotnet-api-docs`,
+  `dotnet-csharp-nullable-reference-types`). CHECK без загруженных профильных скиллов — незачётный.
+- **Счётчики обязательны (шаг 4 §CHECK).** Отчёт suppression/slop содержит числа
+  (suppressed vs justified) и ratio (напр. `0/6`, `12/15`), а не «пробежался». Суждение без
+  измеримого артефакта не принимается.
+- **Само-сертификация запрещена.** Если `check` в текущей конфигурации не на strong-модели,
+  CHECK не имеет права закрывать цикл «на слово»: незакрытая строка variant matrix, отсутствие
+  счётчиков/ratio или невыполненный шаг 1 — это **loop-back CHECK → PLAN/DO**, а не запись «done».
 - Не переоткрывать `Отмечено, но менять не рекомендуется` / `Исключения (по решению
   автора)` / «Чистые категории».
 - Optional-`null` референс: `TempTableExtensions.cs`

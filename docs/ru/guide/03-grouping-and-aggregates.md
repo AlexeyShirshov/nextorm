@@ -211,6 +211,29 @@ Grouping sets доступны в SQL Server, PostgreSQL, SQLite и ClickHouse
 ([`SupportsGroupingSets`](xref:NextORM.Core.ISqlDialect.SupportsGroupingSets)); MySQL/MariaDB и провайдер in-memory выбрасывают
 `NotSupportedException`. Индекс вне диапазона выбрасывает [`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException).
 
+## `DISTINCT ON` — одна строка на ключ
+
+PostgreSQL-конструкция `DISTINCT ON` — «выбирающая строку» пара к группировке: вместо свёртки каждого
+ключа в агрегаты она ключует строки так же, как `GROUP BY`, но оставляет по одной представительной
+строке на ключ, выбранной через `ORDER BY`. Используйте [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) вместо [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), когда нужна сама строка, а не агрегат по ней:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .DistinctOn(e => e.String)
+    .OrderBy(e => e.String)
+    .Select(e => new { e.Id, e.String })
+    .ToList();
+```
+
+```sql
+select distinct on (somestring) id, somestring from complex_entity order by somestring
+```
+
+Ключом может быть анонимный тип — тогда ключ составляется из нескольких колонок; ведущие выражения
+`ORDER BY` должны ему соответствовать. [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) нельзя комбинировать с [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), и реализует его
+только PostgreSQL — остальные провайдеры отклоняют его на этапе построения SQL. Полная поверхность —
+в разделе [SELECT DISTINCT](07-distinct.md#distinct-on-postgresql).
+
 ## Агрегаты без группировки
 
 Агрегат по всей таблице — это проекция без [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
@@ -479,7 +502,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 ```sql
 -- ClickHouse
-select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id), countIf((id > 0)), sumIf(id, (id > 0)) from complex_entity
+select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id) from complex_entity
 ```
 
 Упорядоченные агрегаты принимают ключ сортировки как цитируемую лямбду, которая замыкается на параметр
@@ -582,6 +605,7 @@ MySQL/MariaDB и не в провайдере in-memory. `WITH TOTALS` — то�
 
 - [Сортировка и постраничный вывод](04-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) по выражению или порядковому номеру.
 - [Соединения](02-joins.md) - агрегат по соединённой проекции.
+- [SELECT DISTINCT](07-distinct.md) - `DISTINCT` и PostgreSQL `DISTINCT ON`.
 - [Запросы и проекции](../querying/index.md)
 
 ---

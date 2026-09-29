@@ -151,6 +151,7 @@ that selects the provider differs.
 * [Installation](01-installation.md)
 * [Quickstart](02-quickstart.md)
 * [Entities and metadata](03-entities-and-metadata.md)
+* [Logging](../infrastructure/05-logging.md)
 * [Documentation index](../index.md)
 
 ---

@@ -34,7 +34,7 @@ select choose(2, 'a', 'b', 'c') as [Label] from complex_entity
 рендерит завершающую клаузу `OPTION (...)`, например `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); параметр CTE
 `maxRecursion` отображается в `option (maxrecursion n)`. См.
-[Хинты запросов](../15-query-hints.md).
+[Хинты запросов](../13-query-hints.md).
 
 ## Блокировка строк
 
@@ -64,7 +64,7 @@ select id from simple_entity with (updlock)
 XML-документом
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
 `WithForJson`/`WithForXml` присоединяют предложение без выполнения; два вида предложений
-взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../16-json.md).
+взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../14-json.md).
 
 ## Методы типа XML
 
@@ -114,7 +114,7 @@ from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value
 `string_split(...)` и `openjson(...)` доступны через
 [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). См.
 [Табличные функции](../11-table-valued-functions.md) и
-[Поддержка JSON в разных провайдерах](../16-json.md).
+[Поддержка JSON в разных провайдерах](../14-json.md).
 
 ## Temporal-таблицы
 

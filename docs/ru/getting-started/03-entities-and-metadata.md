@@ -60,7 +60,7 @@ select id from simple_entity
 * **`[Key]` и `[DatabaseGenerated]`** - `KeyAttribute` помечает первичный ключ, а
   `DatabaseGeneratedAttribute` - столбец, генерируемый базой данных (`DatabaseGeneratedOption.Identity`
   или `.Computed`). Запросы их игнорируют, но билдер вставки читает их: столбцы identity/computed
-  исключаются из записываемых значений (см. [Изменение данных (INSERT)](../guide/17-insert-statement.md)).
+  исключаются из записываемых значений (см. [Изменение данных (INSERT)](../guide/15-insert-statement.md)).
   Если ключ не объявлен, свойство с именем `Id` или `<TypeName>Id` считается ключом по соглашению.
 * **Бинарные столбцы** - свойство `byte[]` отображается на бинарный столбец (`bytea` в PostgreSQL,
   `varbinary`/`image` в SQL Server, `blob` в SQLite). `byte[]` можно также проецировать напрямую

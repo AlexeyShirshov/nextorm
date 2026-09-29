@@ -44,7 +44,7 @@ surface is gated by [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRan
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). The operators are exposed as static methods named
 after the SQL tokens, so no range member collides with a CLR operator or the full-text `Contains`:
 
-On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../29-range-columns.md); the same operators are then translated over the pair.
+On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../25-range-columns.md); the same operators are then translated over the pair.
 
 | Member | SQL |
 |---|---|
@@ -123,7 +123,7 @@ select jsonb_agg(somestring) from complex_entity
 ```
 
 See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
-[JSON support across providers](../16-json.md).
+[JSON support across providers](../14-json.md).
 
 ## Ordered-set, regression and boolean aggregates
 
@@ -276,7 +276,7 @@ See [Row locking](../../querying/03-provider-specifics.md#row-locking-for-update
 
 For optimistic concurrency, PostgreSQL's `xmin` system column is available too: map it to a `uint`
 property marked computed and compare it in `Where` (equality only) — see
-[Optimistic concurrency and change tracking](../27-optimistic-concurrency.md#postgresql-xmin).
+[Optimistic concurrency and change tracking](../24-optimistic-concurrency.md#postgresql-xmin).
 
 The same `uint` mapping reads PostgreSQL's `oid` and other `uint`-backed system types (for example
 `cid`) into a CLR `uint` property: Npgsql surfaces them as `uint`, so materialising one works. Only
@@ -311,7 +311,7 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 
 The body may be a `VALUES` insert or an `INSERT ... SELECT`, and the mutation may read an earlier read CTE
 (declare it first and use `CteQuery.With(name, insert)`) or feed a main `INSERT ... SELECT`. See
-[Data modification (INSERT): Data-modifying CTE](../17-insert-statement.md#data-modifying-cte-postgresql)
+[Data modification (INSERT): Data-modifying CTE](../15-insert-statement.md#data-modifying-cte-postgresql)
 for the full set of forms; general read CTEs are in
 [Common table expressions](../08-cte.md). Every
 other provider rejects `With(name, insert)` at build time with `NotSupportedException`.

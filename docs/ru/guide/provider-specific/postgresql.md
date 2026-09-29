@@ -44,7 +44,7 @@ select id from complex_entity where (id = any(@p0))
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
 SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
 
-На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../29-range-columns.md); те же операторы транслируются поверх пары.
+На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../25-range-columns.md); те же операторы транслируются поверх пары.
 
 | Член | SQL |
 |---|---|
@@ -123,7 +123,7 @@ select jsonb_agg(somestring) from complex_entity
 ```
 
 См. [JSON и JSONB (PostgreSQL)](../../scalar-functions/index.md) и
-[Поддержка JSON в разных провайдерах](../16-json.md).
+[Поддержка JSON в разных провайдерах](../14-json.md).
 
 ## Упорядоченные, регрессионные и логические агрегаты
 
@@ -278,7 +278,7 @@ select id from simple_entity where (id > 5) for update
 
 Для оптимистичной конкурентности доступна и системная колонка PostgreSQL `xmin`: сопоставьте её свойству
 `uint`, помеченному computed, и сравнивайте в `Where` (только на равенство) — см.
-[Оптимистичную конкурентность и отслеживание изменений](../27-optimistic-concurrency.md#postgresql-xmin).
+[Оптимистичную конкурентность и отслеживание изменений](../24-optimistic-concurrency.md#postgresql-xmin).
 
 То же отображение `uint` читает системные колонки PostgreSQL `oid` и другие системные типы на основе
 `uint` (например, `cid`) в CLR-свойство `uint`: Npgsql представляет их как `uint`, поэтому
@@ -315,7 +315,7 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 Тело может быть `VALUES`-insert или `INSERT ... SELECT`, а мутация может читать более ранний read-CTE
 (объявите его первым и используйте `CteQuery.With(имя, insert)`) либо питать главный `INSERT ... SELECT`.
 Полный набор форм — в разделе
-[Изменение данных (INSERT): Модифицирующий CTE](../17-insert-statement.md#модифицирующий-cte-postgresql);
+[Изменение данных (INSERT): Модифицирующий CTE](../15-insert-statement.md#модифицирующий-cte-postgresql);
 общие (read) CTE — в [Общих табличных выражениях](../08-cte.md). Остальные провайдеры отклоняют
 `With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 

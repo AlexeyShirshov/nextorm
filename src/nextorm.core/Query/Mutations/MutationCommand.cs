@@ -67,8 +67,8 @@ internal abstract class MutationCommand
 /// <summary>
 /// The target of an <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> clause (SQL Server): an existing table
 /// plus the mapped columns written into it by position. nextorm does not declare a table variable from
-/// its own text in phase 1, so the target must already exist with a compatible column shape; emitting a
-/// <c>DECLARE @t TABLE (...)</c> batch is deferred to phase 2.
+/// its own text, so the target must already exist with a compatible column shape; emitting a
+/// <c>DECLARE @t TABLE (...)</c> batch is not supported (see issue #127).
 /// </summary>
 internal sealed class OutputIntoClause
 {

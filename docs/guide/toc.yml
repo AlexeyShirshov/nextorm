@@ -22,44 +22,36 @@
   href: 11-table-valued-functions.md
 - name: Raw SQL
   href: 12-raw-sql.md
-- name: "Query reuse: cache vs Prepare"
-  href: 13-query-reuse.md
-- name: Connections and logging
-  href: 14-connections-and-logging.md
 - name: Query hints
-  href: 15-query-hints.md
+  href: 13-query-hints.md
 - name: JSON support across providers
-  href: 16-json.md
+  href: 14-json.md
 - name: Data modification (INSERT)
-  href: 17-insert-statement.md
+  href: 15-insert-statement.md
 - name: Data modification (DELETE)
-  href: 18-delete-statement.md
+  href: 16-delete-statement.md
 - name: Data modification (UPDATE)
-  href: 19-update-statement.md
+  href: 17-update-statement.md
 - name: Materializing a query into a table
-  href: 20-create-table-as.md
+  href: 18-create-table-as.md
 - name: Data modification (MERGE)
-  href: 21-merge-statement.md
+  href: 19-merge-statement.md
 - name: Bulk insert
-  href: 22-bulk-insert.md
+  href: 20-bulk-insert.md
 - name: Transactions
-  href: 23-transactions.md
+  href: 21-transactions.md
 - name: Duration (TimeSpan) columns
-  href: 24-duration-columns.md
-- name: Interceptors
-  href: 25-interceptors.md
+  href: 22-duration-columns.md
 - name: Executing statements in one batch
-  href: 26-sql-batch.md
+  href: 23-sql-batch.md
 - name: Optimistic concurrency and change tracking
-  href: 27-optimistic-concurrency.md
-- name: Value converters and JSON columns
-  href: 28-value-converters.md
+  href: 24-optimistic-concurrency.md
 - name: Range columns (pair of scalar columns)
-  href: 29-range-columns.md
+  href: 25-range-columns.md
 - name: Streaming large objects (BLOB/CLOB)
-  href: 30-large-objects.md
+  href: 26-large-objects.md
 - name: Dynamic columns
-  href: 32-dynamic-columns.md
+  href: 27-dynamic-columns.md
 - name: Provider-specific SQL
   items:
     - name: Overview

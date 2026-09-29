@@ -46,4 +46,27 @@ public class TransactionTests
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public void TryBeginTransaction_ShouldReturnFalseWithoutThrowing()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var started = ((ITransactionManager)ctx).TryBeginTransaction(out var tx);
+
+        started.Should().BeFalse();
+        tx.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task TryBeginTransactionAsync_ShouldReturnFalseWithoutThrowing()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var (started, tx) = await ((ITransactionManager)ctx)
+            .TryBeginTransactionAsync(TestContext.Current.CancellationToken);
+
+        started.Should().BeFalse();
+        tx.Should().BeNull();
+    }
 }

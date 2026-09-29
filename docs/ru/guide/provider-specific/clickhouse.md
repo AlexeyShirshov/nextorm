@@ -91,7 +91,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-См. [Хинты запросов](../15-query-hints.md#модификаторы-запроса-clickhouse)
+См. [Хинты запросов](../13-query-hints.md#модификаторы-запроса-clickhouse)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` требуют движок таблицы, который их поддерживает, — движок `Memory` отклоняет оба.
 
@@ -234,7 +234,7 @@ var rows = dataContext.From<Event>()
   а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
   `System.Tuple<...>`); `untuple` не поддерживается.
 
-См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../16-json.md)
+См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../14-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Табличные функции

@@ -12,7 +12,7 @@ namespace NextORM.Core;
 /// To also return the rows to the client, use the separate <c>OutputIntoThenOutput(...)</c> form.
 /// </para>
 /// <para>
-/// The target is an explicit table name (nextorm does not declare a table variable in phase 1), and its
+/// The target is an explicit table name (nextorm does not declare the table variable for you), and its
 /// columns must have the same names as the selected output columns: the selected column list is reused as
 /// the target column list.
 /// </para>

@@ -24,24 +24,29 @@
 - [User-defined functions](guide/10-user-defined-functions.md)
 - [Table-valued functions](guide/11-table-valued-functions.md)
 - [Raw SQL](guide/12-raw-sql.md)
-- [Query reuse: cache vs Prepare](guide/13-query-reuse.md)
-- [Connections and logging](guide/14-connections-and-logging.md)
-- [Query hints](guide/15-query-hints.md)
-- [JSON support across providers](guide/16-json.md)
-- [Data modification (INSERT)](guide/17-insert-statement.md)
-- [Data modification (DELETE)](guide/18-delete-statement.md)
-- [Data modification (UPDATE)](guide/19-update-statement.md)
-- [Materializing a query into a table](guide/20-create-table-as.md)
-- [Data merging (MERGE / upsert)](guide/21-merge-statement.md)
-- [Bulk insert](guide/22-bulk-insert.md)
-- [Transactions](guide/23-transactions.md)
-- [Duration (TimeSpan) columns](guide/24-duration-columns.md)
-- [Interceptors](guide/25-interceptors.md)
-- [Executing statements in one batch](guide/26-sql-batch.md)
-- [Optimistic concurrency and change tracking](guide/27-optimistic-concurrency.md)
-- [Value converters and JSON columns](guide/28-value-converters.md)
-- [Range columns (pair of scalar columns)](guide/29-range-columns.md)
-- [Streaming large objects (BLOB/CLOB)](guide/30-large-objects.md)
+- [Query hints](guide/13-query-hints.md)
+- [JSON support across providers](guide/14-json.md)
+- [Data modification (INSERT)](guide/15-insert-statement.md)
+- [Data modification (DELETE)](guide/16-delete-statement.md)
+- [Data modification (UPDATE)](guide/17-update-statement.md)
+- [Materializing a query into a table](guide/18-create-table-as.md)
+- [Data merging (MERGE / upsert)](guide/19-merge-statement.md)
+- [Bulk insert](guide/20-bulk-insert.md)
+- [Transactions](guide/21-transactions.md)
+- [Duration (TimeSpan) columns](guide/22-duration-columns.md)
+- [Executing statements in one batch](guide/23-sql-batch.md)
+- [Optimistic concurrency and change tracking](guide/24-optimistic-concurrency.md)
+- [Range columns (pair of scalar columns)](guide/25-range-columns.md)
+- [Streaming large objects (BLOB/CLOB)](guide/26-large-objects.md)
+- [Dynamic columns](guide/27-dynamic-columns.md)
+
+### Infrastructure
+
+- [Query reuse: cache vs Prepare](infrastructure/01-query-reuse-and-caching.md)
+- [Connections](infrastructure/02-connections.md)
+- [Interceptors](infrastructure/03-interceptors.md)
+- [Value converters and JSON columns](infrastructure/04-value-converters.md)
+- [Logging](infrastructure/05-logging.md)
 
 ### Scalar functions
 
@@ -94,33 +99,6 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 The current status (1.0.8-b) is a prof of concept.
 
-## Roadmap
-
-- [1.0.2-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.2)
-- [1.0.3-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.3)
-- [1.0.4-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.4)
-- [1.0.5-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.5)
-- [1.0.6-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.6)
-- [1.0.7-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
-- [1.0.8-b](https://github.com/AlexeyShirshov/nextorm/milestones/1.0.8-b)
-- [1.0](https://github.com/AlexeyShirshov/nextorm/milestones/1.0)
-- [1.1.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-a.1)
-- [1.1-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-b.1)
-- [1.1-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-rc.1)
-- [1.1](https://github.com/AlexeyShirshov/nextorm/milestones/1.1)
-- [1.2.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.2-a.1)
-- [1.2-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.2-b.1)
-- [1.2-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.2-rc.1)
-- [1.2](https://github.com/AlexeyShirshov/nextorm/milestones/1.2)
-- [1.3.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.3-a.1)
-- [1.3-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.3-b.1)
-- [1.3-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.3-rc.1)
-- [1.3](https://github.com/AlexeyShirshov/nextorm/milestones/1.3)
-- [1.4.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.4-a.1)
-- [1.4-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.4-b.1)
-- [1.4-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.4-rc.1)
-- [1.4](https://github.com/AlexeyShirshov/nextorm/milestones/1.4)
-
 ## Installation
 
 - from cli `dotnet add package nextorm`
@@ -145,7 +123,7 @@ cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/
 [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
-its limitations are covered in the [Query reuse guide](guide/13-query-reuse.md).
+its limitations are covered in the [Query reuse guide](infrastructure/01-query-reuse-and-caching.md).
 
 ## Releases
 
@@ -173,7 +151,7 @@ its limitations are covered in the [Query reuse guide](guide/13-query-reuse.md).
 - [SQL Server 2025 — `regexp_like` / `regexp_replace`](https://github.com/AlexeyShirshov/nextorm/issues/85)
 - [Портативный range как пара колонок — `[RangeColumns]`](https://github.com/AlexeyShirshov/nextorm/issues/86)
 - [Скалярные функции: кросс-провайдерный фасад `SqlFunctions.Sql` и пробелы по провайдерам](https://github.com/AlexeyShirshov/nextorm/issues/87)
-- [Value converters — фаза 2 и JSON-колонки](https://github.com/AlexeyShirshov/nextorm/issues/88)
+- [Value converters и JSON-колонки](https://github.com/AlexeyShirshov/nextorm/issues/88)
 - [In-memory функции, структурный ключ плана запроса, dictionary lookup](https://github.com/AlexeyShirshov/nextorm/issues/89)
 - Новые главы руководства EN + RU: конвертеры значений и JSON-колонки, range-колонки
 - [Спеки, регистры аудита, документация EN + RU](https://github.com/AlexeyShirshov/nextorm/issues/90)

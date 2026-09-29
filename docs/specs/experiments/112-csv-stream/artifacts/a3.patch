@@ -1,0 +1,1292 @@
+diff --git a/docs/advanced/api-reference.md b/docs/advanced/api-reference.md
+index c33bd38..e3e30ba 100644
+--- a/docs/advanced/api-reference.md
++++ b/docs/advanced/api-reference.md
+@@ -81,6 +81,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
+ | [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | Typed query command with terminals ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])), [`WithTag`](xref:NextORM.Core.QueryCommand`1.WithTag(System.String)), [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])), [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), [`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[])), [`WithForXml`](xref:NextORM.Core.QueryCommand`1.WithForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)), [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), [`WithIndex`](xref:NextORM.Core.EntityBuilder`1.WithIndex(System.String[])), [`WithJoinHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinHint(System.String)), [`WithSubQueryHint`](xref:NextORM.Core.EntityBuilder`1.WithSubQueryHint(System.String)), [`WithTablesInScopeHint`](xref:NextORM.Core.EntityBuilder`1.WithTablesInScopeHint(System.String[])), [`WithKeywordCase`](xref:NextORM.Core.EntityBuilder`1.WithKeywordCase(NextORM.Core.KeywordCase)), [`WithCommandTimeout`](xref:NextORM.Core.QueryCommand`1.WithCommandTimeout(System.Int32)), [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)), …). |
+ | [`QueryDefinition`](xref:NextORM.Core.QueryDefinition) | Immutable query shape (projection/entity source, condition, joins, paging, sorting, grouping, logger) taken by the command constructors and [`CreateCommand`](xref:NextORM.Core.DataContextExtensions.CreateCommand``1(NextORM.Core.IDataContext,NextORM.Core.QueryDefinition)). |
+ | [`QueryCommandExtensions`](xref:NextORM.Core.QueryCommandExtensions) | LOB terminals. The single-column [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/[`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object})) and their async forms open the reader with `CommandBehavior.SequentialAccess` and return a `Stream`/`TextReader` that owns the command until disposed; a projection other than exactly one `byte[]`/`string` column throws `InvalidOperationException`. The multi-column [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) and its async/cancellation/token/parameter overloads return a caller-owned [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) over the sequential-access command with no field-count guard, so the caller reads every column and row in ascending ordinal order and disposes the reader. A SQL dialect that does not opt in throws `NotSupportedException`; `ToDataReader` additionally fails closed on a dialect that declares a locator column. The in-memory provider has no dialect and no `DbDataReader`: its scalar terminals materialise the single projected value and return a caller-owned `MemoryStream`/`StringReader` (an empty result or a `NULL` first value yields `Stream.Null`/`TextReader.Null`), while `ToDataReader` stays `NotSupportedException`. The gate is [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess), a default interface member returning `false` that PostgreSQL, SQL Server and SQLite override. On SQLite the query source must additionally expose `rowid` to keep the payload streaming: the dialect declares its trailing locator column through [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`string?`, default `null`; SQLite `"rowid"`), appended after the payload so the payload stays at ordinal `0`; a `view`/`WITHOUT ROWID` source fails with the raw `SqliteException: no such column: rowid`, and the multi-column `ToDataReader` is rejected with `NotSupportedException`. See [Streaming large objects](../guide/30-large-objects.md). |
++| [`CsvExtensions`](xref:NextORM.Core.CsvExtensions) | CSV streaming terminals. `ToCsv`/`ToCsvAsync` on [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) write the `Select` result as RFC-4180 CSV straight into a caller-owned `Stream`, reading rows through a forward-only `DbDataReader` (default access) without materialising a `TResult` per row and without boxing scalars (typed `GetFieldValue<T>` + invariant `ISpanFormattable`). Header row = column names (`includeHeader: false` disables it), delimiter `,`, line terminator CRLF, UTF-8 without BOM; the stream is left open. `null`/`DBNull` => empty field, `byte[]` => Base64, strings as-is, quoting when a field contains `,`, `"`, CR or LF (escaped as `""`); sync and async are byte-identical. Relational providers (SQLite/PostgreSQL/SQL Server/MySQL); the in-memory provider throws `NotSupportedException`. A projected CSV uses `Select(...).ToCsv(...)`. See [Streaming a query to CSV](../guide/33-csv-streaming.md). |
+ | [`PrepareFromSqlMode`](xref:NextORM.Core.PrepareFromSqlMode) | Flags for [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)): `None` (buffered/scalar), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming), `` |
+ | [`PreparedCommandOptions`](xref:NextORM.Core.PreparedCommandOptions) | Non-generic setup of [`DbPreparedQueryCommand<TResult>`](xref:NextORM.Core.DbPreparedQueryCommand`1) (single row, raw SQL, no params, parameter refresh, sequential-access streaming). |
+ | [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) | Prepared command; its default members execute it against a supplied [`IDataContext`](xref:NextORM.Core.IDataContext). |
+diff --git a/docs/guide/13-query-reuse.md b/docs/guide/13-query-reuse.md
+index 779c331..051881e 100644
+--- a/docs/guide/13-query-reuse.md
++++ b/docs/guide/13-query-reuse.md
+@@ -51,6 +51,7 @@ Streaming:
+ | `ToEnumerable(...)` | `IEnumerable<TResult>` |
+ | `CreateAsyncEnumerator(...)` | `IAsyncEnumerator<TResult>` |
+ | `CreateEnumeratorAsync(...)` | `Task<IEnumerator<TResult>>` |
++| `ToCsv(...)` / `ToCsvAsync(...)` | `void` / `Task` (writes RFC-4180 CSV into a `Stream`; see [Streaming a query to CSV](33-csv-streaming.md)) |
+ 
+ The `params object[]` (or `ReadOnlySpan<object?>`) accepted by the terminals carries the runtime values for the [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) placeholders in the query.
+ 
+diff --git a/docs/guide/33-csv-streaming.md b/docs/guide/33-csv-streaming.md
+new file mode 100644
+index 0000000..05313df
+--- /dev/null
++++ b/docs/guide/33-csv-streaming.md
+@@ -0,0 +1,126 @@
++# Streaming a query to CSV
++
++> Write the result of a query to a `Stream` as RFC-4180 CSV, row by row, without materialising a `TResult` per row and without boxing scalar values.
++
++**Prerequisites:** [Projections](../querying/01-projections.md) · [Streaming large objects (BLOB/CLOB)](30-large-objects.md) · [Limitations](../advanced/limitations.md)
++
++## Overview
++
++`ToCsv`/`ToCsvAsync` are [extension methods](xref:NextORM.Core.CsvExtensions) that run a query and write its `Select` result straight into a `Stream` you own. Values are read from a forward-only `DbDataReader` (default access) straight into the output stream, so each row is formatted and written as it is read: a `TResult` is never materialised and scalar values are not boxed. Fields are read through the typed `GetFieldValue<T>` accessors and formatted with the invariant `ISpanFormattable` form, so the output is culture-independent and allocation-light.
++
++The terminals are deliberately small: there are **no format options** beyond `includeHeader` — no delimiter override, no encoding override, no custom field map. The contract is fixed RFC-4180 output (see [Format rules](#format-rules)).
++
++## Terminals
++
++The query-command overloads take the query first and the destination stream second:
++
++```csharp
++public static void ToCsv<TResult>(
++    this QueryCommand<TResult> command,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++
++public static Task ToCsvAsync<TResult>(
++    this QueryCommand<TResult> command,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++```
++
++The entity-builder overloads stream the whole entity — the columns are the entity's mapped columns in mapping order:
++
++```csharp
++public static void ToCsv<TEntity>(
++    this EntityBuilder<TEntity> builder,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++
++public static Task ToCsvAsync<TEntity>(
++    this EntityBuilder<TEntity> builder,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++```
++
++A projected CSV goes through `Select(...)`: `Select` returns a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), so use the query-command overload. `ToCsv` on the [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) overload is shorthand for "write every mapped column of the entity".
++
++`ToCsvAsync` has an `Async` suffix because a synchronous twin exists (AGENTS.md naming rule).
++
++## Usage
++
++```csharp
++using var ctx = new DataContextBuilder().UsePostgres(connectionString).CreateDataContext();
++
++using var output = File.Create("orders.csv");
++
++// Projected CSV: Select(...) returns QueryCommand<TResult>.
++ctx.From<Order>()
++    .Where(x => x.Total > 100)
++    .Select(x => new { x.Id, x.Customer, x.Total })
++    .ToCsv(output);
++```
++
++The async form opens the reader asynchronously and takes a cancellation token:
++
++```csharp
++await using var output = File.Create("orders.csv");
++
++await ctx.From<Order>()
++    .Where(x => x.Total > 100)
++    .Select(x => new { x.Id, x.Customer, x.Total })
++    .ToCsvAsync(output, includeHeader: true, cancellationToken);
++```
++
++To export the whole entity, call the builder overload directly:
++
++```csharp
++await using var output = File.Create("orders.csv");
++await ctx.From<Order>().ToCsvAsync(output, cancellationToken: cancellationToken);
++```
++
++Disable the header row with `includeHeader: false`:
++
++```csharp
++ctx.From<Order>()
++    .Select(x => new { x.Id, x.Customer })
++    .ToCsv(output, includeHeader: false);
++```
++
++## Format rules
++
++* **Header row.** The first row holds the projected column names (the `Select` alias or the mapped column name). Disable it with `includeHeader: false`.
++* **Delimiter** is `,`; **line terminator** is CRLF (`\r\n`), including after the last row.
++* **Encoding** is UTF-8 **without** a byte-order mark.
++* **Invariant formatting.** Values are formatted with the invariant culture; numbers, dates and `Guid`s do not follow the current culture.
++* **`null`/`DBNull`** become an empty field.
++* **`byte[]`** is written as Base64.
++* **Strings** are written as-is.
++* **Quoting.** A field is quoted when it contains `,`, `"`, CR or LF; an embedded `"` is escaped by doubling it (`""`). A field that needs no quoting is written unquoted.
++* **Sync and async are byte-identical.** `ToCsv` and `ToCsvAsync` produce exactly the same bytes for the same query and options.
++
++## Providers
++
++| Provider | `ToCsv` / `ToCsvAsync` |
++|---|---|
++| PostgreSQL | supported |
++| SQL Server | supported |
++| SQLite | supported |
++| MySQL | supported |
++| In-memory | `NotSupportedException` |
++
++CSV streaming is verified by integration tests on **SQLite, PostgreSQL, SQL Server and MySQL**. The terminal requires a relational provider that exposes a `DbDataReader`; the in-memory provider has none and throws `NotSupportedException`. On every provider the ordinary buffered projection is unaffected — if CSV streaming is unavailable, materialise the rows with a normal terminal and format them yourself.
++
++## Ownership and disposal
++
++The destination `Stream` is **yours**. The terminal writes into it and leaves it **open** (it is never disposed or closed); you decide how to flush, truncate or dispose it. The underlying `DbDataReader` and the per-call `DbCommand` are created for the call and released when the call returns (sync) or when the returned `Task` completes (async). The [`DataContext`](xref:NextORM.Core.DataContext) itself is **not** closed and can serve further queries.
++
++Because bytes are written as rows are read, a failure partway through leaves the destination stream holding a partial CSV document; the caller owns that stream and can discard or truncate it. The cancellation token cancels opening the reader and the read loop, surfacing as an exception.
++
++## See also
++
++* [`ToStream`](xref:NextORM.Core.QueryCommandExtensions) — read a single LOB column as a `Stream`
++* [Streaming large objects (BLOB/CLOB)](30-large-objects.md)
++* [Projections](../querying/01-projections.md)
++* [Limitations and out-of-scope features](../advanced/limitations.md)
+diff --git a/docs/guide/toc.yml b/docs/guide/toc.yml
+index fa6a0e4..2258b2b 100644
+--- a/docs/guide/toc.yml
++++ b/docs/guide/toc.yml
+@@ -60,6 +60,8 @@
+   href: 30-large-objects.md
+ - name: Dynamic columns
+   href: 32-dynamic-columns.md
++- name: Streaming CSV to a stream
++  href: 33-csv-streaming.md
+ - name: Provider-specific SQL
+   items:
+     - name: Overview
+diff --git a/docs/ru/advanced/api-reference.md b/docs/ru/advanced/api-reference.md
+index 6247242..ec242e3 100644
+--- a/docs/ru/advanced/api-reference.md
++++ b/docs/ru/advanced/api-reference.md
+@@ -81,6 +81,7 @@
+ | [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | Типизированная команда запроса с терминалами ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])), [`WithTag`](xref:NextORM.Core.QueryCommand`1.WithTag(System.String)), [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])), [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), [`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[])), [`WithForXml`](xref:NextORM.Core.QueryCommand`1.WithForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)), [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), [`WithIndex`](xref:NextORM.Core.EntityBuilder`1.WithIndex(System.String[])), [`WithJoinHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinHint(System.String)), [`WithSubQueryHint`](xref:NextORM.Core.EntityBuilder`1.WithSubQueryHint(System.String)), [`WithTablesInScopeHint`](xref:NextORM.Core.EntityBuilder`1.WithTablesInScopeHint(System.String[])), [`WithKeywordCase`](xref:NextORM.Core.EntityBuilder`1.WithKeywordCase(NextORM.Core.KeywordCase)), [`WithCommandTimeout`](xref:NextORM.Core.QueryCommand`1.WithCommandTimeout(System.Int32)), [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)), …). |
+ | [`QueryDefinition`](xref:NextORM.Core.QueryDefinition) | Неизменяемая форма запроса (проекция/тип-источник, условие, соединения, пагинация, сортировка, группировка, логгер), принимаемая конструкторами команд и [`CreateCommand`](xref:NextORM.Core.DataContextExtensions.CreateCommand``1(NextORM.Core.IDataContext,NextORM.Core.QueryDefinition)). |
+ | [`QueryCommandExtensions`](xref:NextORM.Core.QueryCommandExtensions) | LOB-терминалы. Одностолбцовые [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/[`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object})) и их асинхронные формы открывают reader с `CommandBehavior.SequentialAccess` и возвращают `Stream`/`TextReader`, владеющий командой до освобождения; проекция, отличная от ровно одной колонки `byte[]`/`string`, бросает `InvalidOperationException`. Многоколоночный [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) и его асинхронные/с токеном/параметрические перегрузки возвращают принадлежащий вызывающему [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) поверх sequential-access команды без проверки числа полей, поэтому вызывающий читает все колонки и строки в порядке возрастания порядкового номера и освобождает reader. SQL-диалект, не включивший поддержку, бросает `NotSupportedException`; `ToDataReader` дополнительно падает fail-closed на диалекте, объявившем столбец-локатор. У провайдера in-memory нет ни диалекта, ни `DbDataReader`: его скалярные терминалы материализуют единственное спроецированное значение и возвращают принадлежащий вызывающему `MemoryStream`/`StringReader` (пустой результат или `NULL` в первом значении дают `Stream.Null`/`TextReader.Null`), а `ToDataReader` остаётся `NotSupportedException`. Гейт — [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess), default-член интерфейса, возвращающий `false`, который переопределяют PostgreSQL, SQL Server и SQLite. В SQLite источник запроса дополнительно должен раскрывать `rowid`, чтобы payload оставался потоковым: диалект объявляет завершающий столбец-локатор через [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`string?`, по умолчанию `null`; в SQLite `"rowid"`), добавляемый после payload, так что payload остаётся на позиции `0`; источник `view`/`WITHOUT ROWID` падает с сырым `SqliteException: no such column: rowid`, а многоколоночный `ToDataReader` отклоняется с `NotSupportedException`. См. [Потоковое чтение больших объектов](../guide/30-large-objects.md). |
++| [`CsvExtensions`](xref:NextORM.Core.CsvExtensions) | Терминалы потоковой записи CSV. `ToCsv`/`ToCsvAsync` на [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) и [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) пишут результат `Select` как CSV по RFC-4180 прямо в принадлежащий вызывающему `Stream`; строки читаются через forward-only `DbDataReader` (режим доступа по умолчанию) без материализации `TResult` на каждую строку и без упаковки скаляров (типизированный `GetFieldValue<T>` + инвариантный `ISpanFormattable`). Строка заголовка = имена колонок (`includeHeader: false` отключает её), разделитель `,`, окончание строки CRLF, UTF-8 без BOM; поток остаётся открытым. `null`/`DBNull` => пустое поле, `byte[]` => Base64, строки как есть, квотирование при `,`, `"`, CR или LF (экранируется как `""`); sync и async побайтово идентичны. Реляционные провайдеры (SQLite/PostgreSQL/SQL Server/MySQL); провайдер in-memory бросает `NotSupportedException`. Спроецированный CSV использует `Select(...).ToCsv(...)`. См. [Потоковая запись запроса в CSV](../guide/33-csv-streaming.md). |
+ | [`PrepareFromSqlMode`](xref:NextORM.Core.PrepareFromSqlMode) | Флаги для [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)): `None` (буферизованное/скалярное), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming), `` |
+ | [`PreparedCommandOptions`](xref:NextORM.Core.PreparedCommandOptions) | Необобщённая настройка [`DbPreparedQueryCommand<TResult>`](xref:NextORM.Core.DbPreparedQueryCommand`1) (одна строка, сырой SQL, отсутствие параметров, обновление параметров, потоковое sequential-access чтение). |
+ | [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) | Подготовленная команда; её члены по умолчанию выполняют её против переданного [`IDataContext`](xref:NextORM.Core.IDataContext). |
+diff --git a/docs/ru/guide/13-query-reuse.md b/docs/ru/guide/13-query-reuse.md
+index 20d96db..f0223a5 100644
+--- a/docs/ru/guide/13-query-reuse.md
++++ b/docs/ru/guide/13-query-reuse.md
+@@ -51,6 +51,7 @@
+ | `ToEnumerable(...)` | `IEnumerable<TResult>` |
+ | `CreateAsyncEnumerator(...)` | `IAsyncEnumerator<TResult>` |
+ | `CreateEnumeratorAsync(...)` | `Task<IEnumerator<TResult>>` |
++| `ToCsv(...)` / `ToCsvAsync(...)` | `void` / `Task` (пишет CSV по RFC-4180 в `Stream`; см. [Потоковая запись запроса в CSV](33-csv-streaming.md)) |
+ 
+ `params object[]` (или `ReadOnlySpan<object?>`), принимаемые терминалами, несут значения времени выполнения для плейсхолдеров [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) в запросе.
+ 
+diff --git a/docs/ru/guide/33-csv-streaming.md b/docs/ru/guide/33-csv-streaming.md
+new file mode 100644
+index 0000000..f5ebddb
+--- /dev/null
++++ b/docs/ru/guide/33-csv-streaming.md
+@@ -0,0 +1,126 @@
++# Потоковая запись запроса в CSV
++
++> Записывайте результат запроса в `Stream` как CSV по RFC-4180, строка за строкой, без материализации `TResult` на каждую строку и без упаковки скалярных значений.
++
++**Предварительные требования:** [Проекции](../querying/01-projections.md) · [Потоковое чтение больших объектов (BLOB/CLOB)](30-large-objects.md) · [Ограничения](../advanced/limitations.md)
++
++## Обзор
++
++`ToCsv`/`ToCsvAsync` — это [extension-методы](xref:NextORM.Core.CsvExtensions), которые выполняют запрос и пишут его результат `Select` прямо в принадлежащий вам `Stream`. Значения читаются из forward-only `DbDataReader` (режим доступа по умолчанию) прямо в поток-приёмник, поэтому каждая строка форматируется и записывается по мере чтения: `TResult` не материализуется, а скалярные значения не упаковываются. Поля читаются типизированными аксессорами `GetFieldValue<T>` и форматируются через инвариантный `ISpanFormattable`, поэтому вывод не зависит от культуры и экономен по аллокациям.
++
++Терминалы намеренно узкие: помимо `includeHeader` **никаких опций формата** нет — ни переопределения разделителя, ни кодировки, ни собственной карты полей. Контракт фиксирован — вывод RFC-4180 (см. [Правила формата](#правила-формата)).
++
++## Терминалы
++
++Перегрузки для команды запроса принимают запрос первым, а поток-приёмник вторым:
++
++```csharp
++public static void ToCsv<TResult>(
++    this QueryCommand<TResult> command,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++
++public static Task ToCsvAsync<TResult>(
++    this QueryCommand<TResult> command,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++```
++
++Перегрузки для построителя сущности стримят сущность целиком — колонками становятся её отображённые колонки в порядке маппинга:
++
++```csharp
++public static void ToCsv<TEntity>(
++    this EntityBuilder<TEntity> builder,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++
++public static Task ToCsvAsync<TEntity>(
++    this EntityBuilder<TEntity> builder,
++    Stream output,
++    bool includeHeader = true,
++    CancellationToken cancellationToken = default);
++```
++
++Спроецированный CSV идёт через `Select(...)`: `Select` возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), поэтому используйте перегрузку для команды запроса. `ToCsv` на [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) — это сокращение «записать все отображённые колонки сущности».
++
++У `ToCsvAsync` есть суффикс `Async`, потому что существует синхронный двойник (правило именования AGENTS.md).
++
++## Использование
++
++```csharp
++using var ctx = new DataContextBuilder().UsePostgres(connectionString).CreateDataContext();
++
++using var output = File.Create("orders.csv");
++
++// Спроецированный CSV: Select(...) возвращает QueryCommand<TResult>.
++ctx.From<Order>()
++    .Where(x => x.Total > 100)
++    .Select(x => new { x.Id, x.Customer, x.Total })
++    .ToCsv(output);
++```
++
++Асинхронная форма открывает reader асинхронно и принимает токен отмены:
++
++```csharp
++await using var output = File.Create("orders.csv");
++
++await ctx.From<Order>()
++    .Where(x => x.Total > 100)
++    .Select(x => new { x.Id, x.Customer, x.Total })
++    .ToCsvAsync(output, includeHeader: true, cancellationToken);
++```
++
++Чтобы выгрузить сущность целиком, вызывайте перегрузку построителя напрямую:
++
++```csharp
++await using var output = File.Create("orders.csv");
++await ctx.From<Order>().ToCsvAsync(output, cancellationToken: cancellationToken);
++```
++
++Отключите строку заголовка через `includeHeader: false`:
++
++```csharp
++ctx.From<Order>()
++    .Select(x => new { x.Id, x.Customer })
++    .ToCsv(output, includeHeader: false);
++```
++
++## Правила формата
++
++* **Строка заголовка.** Первая строка содержит имена спроецированных колонок (псевдоним `Select` или отображённое имя колонки). Отключается через `includeHeader: false`.
++* **Разделитель** — `,`; **окончание строки** — CRLF (`\r\n`), в том числе после последней строки.
++* **Кодировка** — UTF-8 **без** byte-order mark.
++* **Инвариантное форматирование.** Значения форматируются в инвариантной культуре; числа, даты и `Guid` не зависят от текущей культуры.
++* **`null`/`DBNull`** становятся пустым полем.
++* **`byte[]`** записывается как Base64.
++* **Строки** записываются как есть.
++* **Квотирование.** Поле берётся в кавычки, если содержит `,`, `"`, CR или LF; внутренняя `"` экранируется удвоением (`""`). Поле, не требующее квотирования, пишется без кавычек.
++* **Sync и async побайтово идентичны.** `ToCsv` и `ToCsvAsync` дают ровно те же байты для одного и того же запроса и опций.
++
++## Провайдеры
++
++| Провайдер | `ToCsv` / `ToCsvAsync` |
++|---|---|
++| PostgreSQL | поддерживается |
++| SQL Server | поддерживается |
++| SQLite | поддерживается |
++| MySQL | поддерживается |
++| In-memory | `NotSupportedException` |
++
++Потоковая запись CSV проверена интеграционными тестами на **SQLite, PostgreSQL, SQL Server и MySQL**. Терминал требует реляционного провайдера, предоставляющего `DbDataReader`; у провайдера in-memory его нет, и он бросает `NotSupportedException`. У каждого провайдера обычная буферизованная проекция не затрагивается — если потоковая запись CSV недоступна, материализуйте строки обычным терминалом и отформатируйте их сами.
++
++## Владение и освобождение
++
++Поток-приёмник `Stream` принадлежит **вам**. Терминал пишет в него и оставляет его **открытым** (никогда не освобождает и не закрывает); вы решаете, как его сбросить, усечь или освободить. Нижележащие `DbDataReader` и per-call `DbCommand` создаются на вызов и освобождаются, когда вызов возвращается (sync) или когда завершается возвращённый `Task` (async). Сам [`DataContext`](xref:NextORM.Core.DataContext) при этом **не** закрывается и может обслуживать дальнейшие запросы.
++
++Поскольку байты пишутся по мере чтения строк, сбой в середине оставляет в потоке-приёмнике частичный CSV-документ; этим потоком владеет вызывающий, и он может его отбросить или усечь. Токен отмены отменяет открытие reader'а и цикл чтения, проявляясь исключением.
++
++## См. также
++
++* [`ToStream`](xref:NextORM.Core.QueryCommandExtensions) — чтение одной LOB-колонки как `Stream`
++* [Потоковое чтение больших объектов (BLOB/CLOB)](30-large-objects.md)
++* [Проекции](../querying/01-projections.md)
++* [Ограничения и возможности вне области охвата](../advanced/limitations.md)
+diff --git a/docs/ru/toc.yml b/docs/ru/toc.yml
+index 27af573..30b7781 100644
+--- a/docs/ru/toc.yml
++++ b/docs/ru/toc.yml
+@@ -76,6 +76,8 @@
+       href: guide/30-large-objects.md
+     - name: Динамические колонки
+       href: guide/32-dynamic-columns.md
++    - name: Потоковая запись CSV в поток
++      href: guide/33-csv-streaming.md
+     - name: Специфичный для провайдеров SQL
+       items:
+         - name: Обзор
+diff --git a/docs/specs/design/API-NAMING-REVIEW.md b/docs/specs/design/API-NAMING-REVIEW.md
+index b3c4d6f..a5cdea9 100644
+--- a/docs/specs/design/API-NAMING-REVIEW.md
++++ b/docs/specs/design/API-NAMING-REVIEW.md
+@@ -5199,6 +5199,11 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
+ | `TableParameterValue` — члены трансляции — реализовано (2026-09-26) | `IReadOnlyList<TableParameterColumn> GetColumns(DataContext)`, `void WriteJson(Utf8JsonWriter, DataContext)`, `string WriteJson(DataContext)`, `Array ToArray(DataContext)`; `TableParameterColumn.Name`/`.ClrType`/`.GetValue(object)`. Заменили шесть `protected`-хелперов `DataContext` (удалены) — провайдеры используют носитель. |
+ | `ISqlDialect.SupportsTableValuedParameters` — реализовано (2026-09-26) | DIM (default `false`) + `SqlDialectBase` virtual; `true` — SQL Server (нативно, `SqlDbType.Structured` + `TypeName`), PostgreSQL/MySQL (MariaDB наследует)/SQLite (эмуляция) и ClickHouse (эмуляция связанным `Array(T)`/`Array(Tuple(...))` + `arrayJoin(@p)`, `TypeName` → `ArgumentException`); `false` — in-memory. |
+ | `ToStream` / `ToStreamAsync` — реализовано (2026-09-27) | Терминалы на `QueryCommand<T>` (не `EntityBuilder<T>`); sync — `params ReadOnlySpan<object?>`, async — `params object?[]`; `storeInCache: false`, `CommandBehavior.SequentialAccess`; владеют reader'ом + per-call `DbCommand` до `Dispose`. PostgreSQL/SQL Server; прочие — `NotSupportedException`. #27, фаза 1. |
++| `CsvExtensions` — реализовано (2026-09-29) | Новый статический класс в `NextORM.Core` с терминалами `ToCsv`/`ToCsvAsync` на `QueryCommand<TResult>` и `EntityBuilder<TEntity>`; запись результата `Select` как RFC-4180 CSV прямо в вызывающий `Stream`, `storeInCache: false` + relational reader (non-sequential); in-memory не поддерживается, читатель/per-call `DbCommand` освобождаются по завершении вызова. |
++| `ToCsv<TResult>(QueryCommand<TResult>, Stream, bool includeHeader = true, CancellationToken = default)` — реализовано (2026-09-29) | Sync-терминал; без материализации `TResult` на строку и без упаковки скаляров (типизированный `GetFieldValue<T>` + инвариантный `ISpanFormattable`); заголовок, разделитель `,`, CRLF, UTF-8 без BOM; `null`/`DBNull` → пустое поле, `byte[]` → Base64, квотирование с `""`; поток остаётся открытым. |
++| `ToCsvAsync<TResult>(QueryCommand<TResult>, Stream, bool includeHeader = true, CancellationToken = default) -> Task` — реализовано (2026-09-29) | Async-двойник; суффикс корректен по AGENTS.md (sync-пара есть); байты идентичны sync-форме. |
++| `ToCsv<TEntity>(EntityBuilder<TEntity>, Stream, bool includeHeader = true, CancellationToken = default)` — реализовано (2026-09-29) | Перегрузка для построителя: стримит сущность целиком (все отображённые колонки в порядке маппинга). |
++| `ToCsvAsync<TEntity>(EntityBuilder<TEntity>, Stream, bool includeHeader = true, CancellationToken = default) -> Task` — реализовано (2026-09-29) | Async-двойник перегрузки для построителя. |
+ | `ToTextReader` / `ToTextReaderAsync` — реализовано (2026-09-27) | То же для CLOB/текста; ровно один `byte[]`/`string`-столбец, иначе `InvalidOperationException`. #27, фаза 1. |
+ 
+ **Async-суффикс.** `ExecuteProcedureAsync`/`ExecuteRawAsync`/`ToStreamAsync`/`ToTextReaderAsync` получают суффикс только потому, что у каждого есть sync-близнец (правило AGENTS.md); иначе суффикса бы не было.
+diff --git a/docs/specs/status/csv-stream-1.md b/docs/specs/status/csv-stream-1.md
+new file mode 100644
+index 0000000..ba0900b
+--- /dev/null
++++ b/docs/specs/status/csv-stream-1.md
+@@ -0,0 +1,48 @@
++# Status: csv-stream — cycle 1
++
++## Goal
++Add a CSV streaming terminal: write a `Select` result as RFC-4180 CSV directly into a caller-supplied `Stream`, without materializing a `TResult` per row and without boxing values. Public surface over `QueryCommand<TResult>` and `EntityBuilder<TEntity>`.
++
++## Acceptance criteria (all verified)
++1. `CsvExtensions.ToCsv`/`ToCsvAsync` over `QueryCommand<TResult>` and `EntityBuilder<TEntity>` (`src/nextorm.core/Query/CsvExtensions.cs`).
++2. Header = column names (disable via `includeHeader:false`); delimiter `,`; CRLF; UTF-8 without BOM; output stream left open.
++3. Invariant formatting; `DBNull` -> empty field; `byte[]` -> Base64; RFC-4180 quoting.
++4. Sync and async byte-identical.
++5. In-memory throws `NotSupportedException`; `output==null` -> `ArgumentNullException`; non-writable -> `ArgumentException`.
++6. No `TResult` materialization and no per-row boxing (typed `GetFieldValue<T>` + one-time bound constrained `ISpanFormattable` formatter).
++7. `dotnet build nextorm.slnx -c Release` = 0 warnings / 0 errors.
++
++## Frozen contract
++Public (namespace `NextORM.Core`, class `CsvExtensions`): `ToCsv<TResult>(QueryCommand<TResult>, Stream, bool includeHeader = true, CancellationToken = default)`, `ToCsvAsync<TResult>(...)`, `ToCsv<TEntity>(EntityBuilder<TEntity>, ...)`, `ToCsvAsync<TEntity>(...)`.
++Internal: `CsvWriter.Write/WriteAsync(DbDataReader, Stream, bool, CancellationToken)`; `DataContext.OpenQueryReader/OpenQueryReaderAsync` (plain non-sequential reader seam).
++
++## Test strategy
++Unit (`tests/nextorm.core.tests`): `CsvWriterTests` via `System.Data.DataTableReader` (types, DBNull, quoting, header, CRLF/no-BOM, invariant under de-DE, sync==async); `CsvExtensionsTests` (in-memory throws sync+async both overloads; null/non-writable guards).
++Integration (`tests/nextorm.integration.tests/CommonTestSuite.Csv.cs`): 5 tests on `complex_entity`/`BinaryEntity` across SQLite, PostgreSQL, SQL Server, MySQL.
++
++## Docs plan (done)
++New EN+RU `docs/guide/33-csv-streaming.md`; toc entries; `13-query-reuse` terminal table; `api-reference` EN+RU; `API-NAMING-REVIEW.md` planned-names rows. Public pages free of specs links.
++
++## Decisions
++- Perf measurement: NOT needed as a gate. Argument: new opt-in terminal; reuses the reader seam; touches neither plan cache nor executor/materializer; `storeInCache:false` is local, `QueryCommand.Cache` never mutated. Informational benchmark deferred+trigger.
++- Reconnaissance: NOT needed. During DO the plan's base (`ToDataReader`) was found to reject SQLite/MySQL/ClickHouse; replaced with an internal non-sequential `OpenQueryReader` seam, so CSV works on all relational providers.
++- Unit execution mode: parallel in one tree.
++- Provider scope: verified SQLite/PostgreSQL/SQL Server/MySQL; ClickHouse/MariaDB untested and not claimed in docs; in-memory throws `NotSupportedException`.
++
++## Done
++- Code: `src/nextorm.core/Query/CsvWriter.cs`, `src/nextorm.core/Query/CsvExtensions.cs`, internal seam in `src/nextorm.core/DataContext/DataContext.cs`.
++- Tests: 22 unit CSV (core total 894) + 5 integration CSV x 4 providers.
++- Docs EN+RU.
++- Build Release 0/0. Merged coverage: `CsvWriter` line 98.97% / branch 100%; `CsvExtensions` line 97.06% / branch 100%.
++
++## Verified (CHECK-2)
++build 0/0; unit 894/894 and CSV 22/22; integration 20/20 cross-provider (transient container/network flake on the combined first pass, per-provider retries green); coverage >=85/75; per-row path box-free; docs<->code consistent.
++
++## Deferred + trigger
++- ClickHouse/MariaDB execution tests (trigger: requested / before claiming support).
++- Format/options overload (delimiter/encoding/date format) (trigger: user report).
++- `ToList` vs `ToCsv` benchmark (trigger: reviewer challenge / before 1.0.9 tag).
++- Coverage tooling watch: reportgenerator folding can misreport `CsvExtensions` branch; re-run the CI coverage job on merge to `main`.
++
++## Next plan
++Flow complete for issue #112; no further cycle of this task planned.
+diff --git a/src/nextorm.core/DataContext/DataContext.cs b/src/nextorm.core/DataContext/DataContext.cs
+index 52df945..b37825a 100644
+--- a/src/nextorm.core/DataContext/DataContext.cs
++++ b/src/nextorm.core/DataContext/DataContext.cs
+@@ -341,6 +341,46 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
+         return await _executor.OpenLobReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
+     }
+ 
++    /// <summary>
++    /// Prepares <paramref name="queryCommand"/> without sequential access and opens a forward-only
++    /// reader over the plain provider path. Unlike <see cref="OpenLobReader{TResult}"/>, no dialect
++    /// locator column is appended and no sequential-access capability is required, so this works on
++    /// every relational provider.
++    /// </summary>
++    /// <typeparam name="TResult">The projected result type.</typeparam>
++    /// <param name="queryCommand">The command to prepare and execute.</param>
++    /// <param name="parameters">The positional parameter values bound to the query.</param>
++    /// <param name="cancellationToken">Cancels preparation and opening the reader.</param>
++    /// <returns>An owner of the open reader and its per-call command.</returns>
++    internal CommandReaderOwner OpenQueryReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> parameters, CancellationToken cancellationToken)
++    {
++        cancellationToken.ThrowIfCancellationRequested();
++        var prepared = PrepareQueryReaderCommand(queryCommand, cancellationToken);
++        return _executor.OpenLobReader(prepared, parameters);
++    }
++
++    /// <summary>Asynchronously prepares <paramref name="queryCommand"/> without sequential access and opens a reader over it.</summary>
++    /// <typeparam name="TResult">The projected result type.</typeparam>
++    /// <param name="queryCommand">The command to prepare and execute.</param>
++    /// <param name="parameters">The positional parameter values bound to the query.</param>
++    /// <param name="cancellationToken">Cancels preparation and opening the reader.</param>
++    /// <returns>A task producing an owner of the open reader and its per-call command.</returns>
++    internal async Task<CommandReaderOwner> OpenQueryReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? parameters, CancellationToken cancellationToken)
++    {
++        cancellationToken.ThrowIfCancellationRequested();
++        var prepared = PrepareQueryReaderCommand(queryCommand, cancellationToken);
++        return await _executor.OpenLobReaderAsync(prepared, parameters, cancellationToken).ConfigureAwait(false);
++    }
++
++    private DbPreparedQueryCommand<TResult> PrepareQueryReaderCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
++    {
++        ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
++
++        // Same preparation flags as PrepareLobCommand (no enumerator, no cache) but with sequential
++        // access off: the SQL gains no locator column and the reader behavior stays Default.
++        return (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(queryCommand, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
++    }
++
+     private DbPreparedQueryCommand<TResult> PrepareLobCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+     {
+         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
+diff --git a/src/nextorm.core/Query/CsvExtensions.cs b/src/nextorm.core/Query/CsvExtensions.cs
+new file mode 100644
+index 0000000..09bfb9f
+--- /dev/null
++++ b/src/nextorm.core/Query/CsvExtensions.cs
+@@ -0,0 +1,88 @@
++namespace NextORM.Core;
++
++/// <summary>
++/// Terminal operators that stream a query to RFC 4180 CSV. Available on relational providers only;
++/// the in-memory provider throws <see cref="NotSupportedException"/> because it has no <see cref="System.Data.Common.DbDataReader"/>.
++/// </summary>
++public static class CsvExtensions
++{
++    /// <summary>Writes the command's rows as RFC 4180 CSV to <paramref name="output"/>.</summary>
++    /// <typeparam name="TResult">The projected result type.</typeparam>
++    /// <param name="command">The command to run.</param>
++    /// <param name="output">The writable stream that receives the CSV; it is left open.</param>
++    /// <param name="includeHeader">Whether to write a header line built from the reader's column names.</param>
++    /// <param name="cancellationToken">A token that cancels the read.</param>
++    /// <remarks>Relational providers only; the in-memory provider throws <see cref="NotSupportedException"/>.</remarks>
++    public static void ToCsv<TResult>(this QueryCommand<TResult> command, Stream output, bool includeHeader = true, CancellationToken cancellationToken = default)
++    {
++        ArgumentNullException.ThrowIfNull(command);
++        ArgumentNullException.ThrowIfNull(output);
++        EnsureWritable(output);
++
++        if (command.DataContext is not DataContext db)
++            throw new NotSupportedException("CSV export requires a database provider; the in-memory provider has no DbDataReader.");
++
++        using var reader = new LobDataReader(db.OpenQueryReader(command, ReadOnlySpan<object?>.Empty, cancellationToken), cancellationToken);
++        CsvWriter.Write(reader, output, includeHeader, cancellationToken);
++    }
++
++    /// <summary>Asynchronously writes the command's rows as RFC 4180 CSV to <paramref name="output"/>.</summary>
++    /// <typeparam name="TResult">The projected result type.</typeparam>
++    /// <param name="command">The command to run.</param>
++    /// <param name="output">The writable stream that receives the CSV; it is left open.</param>
++    /// <param name="includeHeader">Whether to write a header line built from the reader's column names.</param>
++    /// <param name="cancellationToken">A token that cancels the read.</param>
++    /// <returns>A task that completes when all rows are written.</returns>
++    /// <remarks>Relational providers only; the in-memory provider throws <see cref="NotSupportedException"/>.</remarks>
++    public static async Task ToCsvAsync<TResult>(this QueryCommand<TResult> command, Stream output, bool includeHeader = true, CancellationToken cancellationToken = default)
++    {
++        ArgumentNullException.ThrowIfNull(command);
++        ArgumentNullException.ThrowIfNull(output);
++        EnsureWritable(output);
++
++        if (command.DataContext is not DataContext db)
++            throw new NotSupportedException("CSV export requires a database provider; the in-memory provider has no DbDataReader.");
++
++        await using var reader = new LobDataReader(await db.OpenQueryReaderAsync(command, null, cancellationToken).ConfigureAwait(false), cancellationToken);
++        await CsvWriter.WriteAsync(reader, output, includeHeader, cancellationToken).ConfigureAwait(false);
++    }
++
++    /// <summary>Writes the entity builder's rows as RFC 4180 CSV to <paramref name="output"/>.</summary>
++    /// <typeparam name="TEntity">The entity type.</typeparam>
++    /// <param name="builder">The builder whose command is run.</param>
++    /// <param name="output">The writable stream that receives the CSV; it is left open.</param>
++    /// <param name="includeHeader">Whether to write a header line built from the reader's column names.</param>
++    /// <param name="cancellationToken">A token that cancels the read.</param>
++    /// <remarks>Relational providers only; the in-memory provider throws <see cref="NotSupportedException"/>.</remarks>
++    public static void ToCsv<TEntity>(this EntityBuilder<TEntity> builder, Stream output, bool includeHeader = true, CancellationToken cancellationToken = default)
++    {
++        ArgumentNullException.ThrowIfNull(builder);
++        ArgumentNullException.ThrowIfNull(output);
++        EnsureWritable(output);
++
++        builder.ToCommand().ToCsv(output, includeHeader, cancellationToken);
++    }
++
++    /// <summary>Asynchronously writes the entity builder's rows as RFC 4180 CSV to <paramref name="output"/>.</summary>
++    /// <typeparam name="TEntity">The entity type.</typeparam>
++    /// <param name="builder">The builder whose command is run.</param>
++    /// <param name="output">The writable stream that receives the CSV; it is left open.</param>
++    /// <param name="includeHeader">Whether to write a header line built from the reader's column names.</param>
++    /// <param name="cancellationToken">A token that cancels the read.</param>
++    /// <returns>A task that completes when all rows are written.</returns>
++    /// <remarks>Relational providers only; the in-memory provider throws <see cref="NotSupportedException"/>.</remarks>
++    public static async Task ToCsvAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream output, bool includeHeader = true, CancellationToken cancellationToken = default)
++    {
++        ArgumentNullException.ThrowIfNull(builder);
++        ArgumentNullException.ThrowIfNull(output);
++        EnsureWritable(output);
++
++        await builder.ToCommand().ToCsvAsync(output, includeHeader, cancellationToken).ConfigureAwait(false);
++    }
++
++    private static void EnsureWritable(Stream output)
++    {
++        if (!output.CanWrite)
++            throw new ArgumentException("The output stream must be writable.", nameof(output));
++    }
++}
+diff --git a/src/nextorm.core/Query/CsvWriter.cs b/src/nextorm.core/Query/CsvWriter.cs
+new file mode 100644
+index 0000000..00199bb
+--- /dev/null
++++ b/src/nextorm.core/Query/CsvWriter.cs
+@@ -0,0 +1,208 @@
++using System.Data.Common;
++using System.Globalization;
++using System.Reflection;
++using System.Text;
++
++namespace NextORM.Core;
++
++/// <summary>
++/// Streams a <see cref="DbDataReader"/> to RFC 4180 CSV without materializing the rows. Fields are
++/// CRLF terminated, quoted only when needed, and the output stream is left open.
++/// </summary>
++internal static class CsvWriter
++{
++    /// <summary>Writes every row of <paramref name="reader"/> to <paramref name="output"/> as CSV.</summary>
++    internal static void Write(DbDataReader reader, Stream output, bool includeHeader, CancellationToken cancellationToken)
++    {
++        ArgumentNullException.ThrowIfNull(reader);
++        ArgumentNullException.ThrowIfNull(output);
++
++        using var writer = CreateWriter(output);
++        WriteCore(reader, writer, includeHeader, cancellationToken);
++    }
++
++    /// <summary>Asynchronously writes every row of <paramref name="reader"/> to <paramref name="output"/> as CSV.</summary>
++    internal static async Task WriteAsync(DbDataReader reader, Stream output, bool includeHeader, CancellationToken cancellationToken)
++    {
++        ArgumentNullException.ThrowIfNull(reader);
++        ArgumentNullException.ThrowIfNull(output);
++
++        await using var writer = CreateWriter(output);
++        await WriteCoreAsync(reader, writer, includeHeader, cancellationToken).ConfigureAwait(false);
++    }
++
++    private static void WriteCore(DbDataReader reader, TextWriter writer, bool includeHeader, CancellationToken cancellationToken)
++    {
++        var fieldCount = reader.FieldCount;
++        var formatters = CreateFormatters(reader, fieldCount);
++
++        if (includeHeader)
++        {
++            for (var i = 0; i < fieldCount; i++)
++            {
++                if (i > 0)
++                    writer.Write(',');
++                WriteField(writer, reader.GetName(i));
++            }
++
++            writer.Write("\r\n");
++        }
++
++        while (reader.Read())
++        {
++            cancellationToken.ThrowIfCancellationRequested();
++
++            for (var i = 0; i < fieldCount; i++)
++            {
++                if (i > 0)
++                    writer.Write(',');
++
++                if (reader.IsDBNull(i))
++                    continue;
++
++                WriteField(writer, formatters[i].Format(reader, i));
++            }
++
++            writer.Write("\r\n");
++        }
++    }
++
++    private static async Task WriteCoreAsync(DbDataReader reader, TextWriter writer, bool includeHeader, CancellationToken cancellationToken)
++    {
++        var fieldCount = reader.FieldCount;
++        var formatters = CreateFormatters(reader, fieldCount);
++
++        if (includeHeader)
++        {
++            for (var i = 0; i < fieldCount; i++)
++            {
++                if (i > 0)
++                    await writer.WriteAsync(',').ConfigureAwait(false);
++                await WriteFieldAsync(writer, reader.GetName(i)).ConfigureAwait(false);
++            }
++
++            await writer.WriteAsync("\r\n").ConfigureAwait(false);
++        }
++
++        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
++        {
++            cancellationToken.ThrowIfCancellationRequested();
++
++            for (var i = 0; i < fieldCount; i++)
++            {
++                if (i > 0)
++                    await writer.WriteAsync(',').ConfigureAwait(false);
++
++                if (await reader.IsDBNullAsync(i, cancellationToken).ConfigureAwait(false))
++                    continue;
++
++                await WriteFieldAsync(writer, formatters[i].Format(reader, i)).ConfigureAwait(false);
++            }
++
++            await writer.WriteAsync("\r\n").ConfigureAwait(false);
++        }
++    }
++
++    private static ICsvFieldFormatter[] CreateFormatters(DbDataReader reader, int fieldCount)
++    {
++        var formatters = new ICsvFieldFormatter[fieldCount];
++        for (var i = 0; i < fieldCount; i++)
++            formatters[i] = CreateFormatter(reader.GetFieldType(i));
++
++        return formatters;
++    }
++
++    private static ICsvFieldFormatter CreateFormatter(Type fieldType)
++        => (ICsvFieldFormatter)Activator.CreateInstance(typeof(CsvFieldFormatter<>).MakeGenericType(fieldType))!;
++
++    private static StreamWriter CreateWriter(Stream output)
++        => new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), bufferSize: 1024, leaveOpen: true);
++
++    private static void WriteField(TextWriter writer, string value)
++    {
++        if (value.Length == 0)
++            return;
++
++        if (!NeedsQuoting(value))
++        {
++            writer.Write(value);
++            return;
++        }
++
++        writer.Write('"');
++        writer.Write(value.Replace("\"", "\"\""));
++        writer.Write('"');
++    }
++
++    private static async Task WriteFieldAsync(TextWriter writer, string value)
++    {
++        if (value.Length == 0)
++            return;
++
++        if (!NeedsQuoting(value))
++        {
++            await writer.WriteAsync(value).ConfigureAwait(false);
++            return;
++        }
++
++        await writer.WriteAsync('"').ConfigureAwait(false);
++        await writer.WriteAsync(value.Replace("\"", "\"\"")).ConfigureAwait(false);
++        await writer.WriteAsync('"').ConfigureAwait(false);
++    }
++
++    private static bool NeedsQuoting(string value)
++        => value.AsSpan().IndexOfAny([',', '"', '\r', '\n']) >= 0;
++}
++
++/// <summary>Formats one column of a <see cref="DbDataReader"/> row into its CSV text representation.</summary>
++internal interface ICsvFieldFormatter
++{
++    /// <summary>Formats the value at <paramref name="ordinal"/>, which the caller has already checked for NULL.</summary>
++    string Format(DbDataReader reader, int ordinal);
++}
++
++/// <summary>Typed <see cref="ICsvFieldFormatter"/> that reads a column without boxing or per-row reflection.</summary>
++internal sealed class CsvFieldFormatter<T> : ICsvFieldFormatter
++{
++    /// <inheritdoc/>
++    public string Format(DbDataReader reader, int ordinal)
++        => CsvValueFormatter<T>.Format(reader.GetFieldValue<T>(ordinal));
++}
++
++/// <summary>
++/// Closed-generic per-column-type formatter. The <see cref="ISpanFormattable"/> check and the delegate
++/// binding happen once per closed <typeparamref name="T"/> in the static initializer; the per-row path
++/// goes through the strongly-typed <see cref="Formatter"/> delegate, so value types are never boxed.
++/// </summary>
++internal static class CsvValueFormatter<T>
++{
++    private static readonly Func<T, string> Formatter = CreateFormatter();
++
++    public static string Format(T value) => Formatter(value);
++
++    private static Func<T, string> CreateFormatter()
++    {
++        if (typeof(T) == typeof(string))
++            return static v => (string)(object)v!;
++        if (typeof(T) == typeof(byte[]))
++            return static v => Convert.ToBase64String((byte[])(object)v!);
++        if (typeof(ISpanFormattable).IsAssignableFrom(typeof(T)))
++        {
++            var method = typeof(CsvValueFormatter<T>).GetMethod(
++                nameof(FormatSpan), BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(typeof(T));
++            return (Func<T, string>)method.CreateDelegate(typeof(Func<T, string>));
++        }
++
++        return static v => v?.ToString() ?? string.Empty;
++    }
++
++    private static string FormatSpan<TValue>(TValue value)
++        where TValue : ISpanFormattable
++    {
++        Span<char> buffer = stackalloc char[128];
++        if (value.TryFormat(buffer, out int written, default, CultureInfo.InvariantCulture))
++            return new string(buffer[..written]);
++
++        return value.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty;
++    }
++}
+diff --git a/tests/nextorm.core.tests/CsvExtensionsTests.cs b/tests/nextorm.core.tests/CsvExtensionsTests.cs
+new file mode 100644
+index 0000000..548c240
+--- /dev/null
++++ b/tests/nextorm.core.tests/CsvExtensionsTests.cs
+@@ -0,0 +1,157 @@
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Core.Tests;
++
++/// <summary>
++/// The <c>ToCsv</c>/<c>ToCsvAsync</c> terminals. The in-memory provider has no
++/// <see cref="System.Data.Common.DbDataReader"/>, so every overload fails closed with
++/// <see cref="NotSupportedException"/>; argument validation happens before the provider seam.
++/// </summary>
++public class CsvExtensionsTests
++{
++    private static InMemoryDataContext ContextWithRow()
++    {
++        var ctx = new InMemoryDataContext();
++        ctx.From<SimpleEntity>().WithData(new[] { new SimpleEntity { Id = 1 } });
++        return ctx;
++    }
++
++    // --- In-memory provider: no reader, so every overload is rejected. ---
++
++    [Fact]
++    public void QueryCommand_ToCsv_InMemory_ShouldThrowNotSupported()
++    {
++        using var ctx = ContextWithRow();
++        var command = ctx.From<SimpleEntity>().Select(x => new { x.Id });
++        using var output = new MemoryStream();
++
++        var act = () => command.ToCsv(output);
++
++        act.Should().Throw<NotSupportedException>();
++    }
++
++    [Fact]
++    public async Task QueryCommand_ToCsvAsync_InMemory_ShouldThrowNotSupported()
++    {
++        using var ctx = ContextWithRow();
++        var command = ctx.From<SimpleEntity>().Select(x => new { x.Id });
++        using var output = new MemoryStream();
++
++        var act = async () => await command.ToCsvAsync(output);
++
++        await act.Should().ThrowAsync<NotSupportedException>();
++    }
++
++    [Fact]
++    public void EntityBuilder_ToCsv_InMemory_ShouldThrowNotSupported()
++    {
++        using var ctx = ContextWithRow();
++        using var output = new MemoryStream();
++
++        var act = () => ctx.From<SimpleEntity>().ToCsv(output);
++
++        act.Should().Throw<NotSupportedException>();
++    }
++
++    [Fact]
++    public async Task EntityBuilder_ToCsvAsync_InMemory_ShouldThrowNotSupported()
++    {
++        using var ctx = ContextWithRow();
++        using var output = new MemoryStream();
++
++        var act = async () => await ctx.From<SimpleEntity>().ToCsvAsync(output);
++
++        await act.Should().ThrowAsync<NotSupportedException>();
++    }
++
++    // --- Argument validation: null output / non-writable output precede execution. ---
++
++    [Fact]
++    public void QueryCommand_ToCsv_NullOutput_ShouldThrowArgumentNull()
++    {
++        using var ctx = ContextWithRow();
++        var command = ctx.From<SimpleEntity>().Select(x => new { x.Id });
++
++        var act = () => command.ToCsv(null!);
++
++        act.Should().Throw<ArgumentNullException>();
++    }
++
++    [Fact]
++    public async Task QueryCommand_ToCsvAsync_NullOutput_ShouldThrowArgumentNull()
++    {
++        using var ctx = ContextWithRow();
++        var command = ctx.From<SimpleEntity>().Select(x => new { x.Id });
++
++        var act = async () => await command.ToCsvAsync(null!);
++
++        await act.Should().ThrowAsync<ArgumentNullException>();
++    }
++
++    [Fact]
++    public void EntityBuilder_ToCsv_NullOutput_ShouldThrowArgumentNull()
++    {
++        using var ctx = ContextWithRow();
++
++        var act = () => ctx.From<SimpleEntity>().ToCsv(null!);
++
++        act.Should().Throw<ArgumentNullException>();
++    }
++
++    [Fact]
++    public async Task EntityBuilder_ToCsvAsync_NullOutput_ShouldThrowArgumentNull()
++    {
++        using var ctx = ContextWithRow();
++
++        var act = async () => await ctx.From<SimpleEntity>().ToCsvAsync(null!);
++
++        await act.Should().ThrowAsync<ArgumentNullException>();
++    }
++
++    [Fact]
++    public void QueryCommand_ToCsv_NonWritableOutput_ShouldThrowArgument()
++    {
++        using var ctx = ContextWithRow();
++        var command = ctx.From<SimpleEntity>().Select(x => new { x.Id });
++        using var output = new MemoryStream(new byte[0], writable: false);
++
++        var act = () => command.ToCsv(output);
++
++        act.Should().Throw<ArgumentException>();
++    }
++
++    [Fact]
++    public async Task QueryCommand_ToCsvAsync_NonWritableOutput_ShouldThrowArgument()
++    {
++        using var ctx = ContextWithRow();
++        var command = ctx.From<SimpleEntity>().Select(x => new { x.Id });
++        using var output = new MemoryStream(new byte[0], writable: false);
++
++        var act = async () => await command.ToCsvAsync(output);
++
++        await act.Should().ThrowAsync<ArgumentException>();
++    }
++
++    [Fact]
++    public void EntityBuilder_ToCsv_NonWritableOutput_ShouldThrowArgument()
++    {
++        using var ctx = ContextWithRow();
++        using var output = new MemoryStream(new byte[0], writable: false);
++
++        var act = () => ctx.From<SimpleEntity>().ToCsv(output);
++
++        act.Should().Throw<ArgumentException>();
++    }
++
++    [Fact]
++    public async Task EntityBuilder_ToCsvAsync_NonWritableOutput_ShouldThrowArgument()
++    {
++        using var ctx = ContextWithRow();
++        using var output = new MemoryStream(new byte[0], writable: false);
++
++        var act = async () => await ctx.From<SimpleEntity>().ToCsvAsync(output);
++
++        await act.Should().ThrowAsync<ArgumentException>();
++    }
++}
+diff --git a/tests/nextorm.core.tests/CsvWriterTests.cs b/tests/nextorm.core.tests/CsvWriterTests.cs
+new file mode 100644
+index 0000000..14d27e0
+--- /dev/null
++++ b/tests/nextorm.core.tests/CsvWriterTests.cs
+@@ -0,0 +1,197 @@
++using System.Data;
++using System.Globalization;
++using System.Text;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Core.Tests;
++
++/// <summary>
++/// Coverage for the internal <see cref="CsvWriter"/> streaming formatter. A real
++/// <see cref="DataTableReader"/> stands in for a provider reader, so the RFC 4180 rules, the
++/// invariant formatting and the sync/async parity are pinned without a database.
++/// </summary>
++public class CsvWriterTests
++{
++    private static string Write(DataTable table, bool includeHeader = true)
++    {
++        using var output = new MemoryStream();
++        using var reader = new DataTableReader(table);
++        CsvWriter.Write(reader, output, includeHeader, CancellationToken.None);
++        return Encoding.UTF8.GetString(output.ToArray());
++    }
++
++    private static async Task<string> WriteAsync(DataTable table, bool includeHeader = true)
++    {
++        using var output = new MemoryStream();
++        using var reader = new DataTableReader(table);
++        await CsvWriter.WriteAsync(reader, output, includeHeader, CancellationToken.None);
++        return Encoding.UTF8.GetString(output.ToArray());
++    }
++
++    private static DataTable Table(params (string Name, Type Type, object? Value)[] columns)
++    {
++        var table = new DataTable();
++        foreach (var column in columns)
++            table.Columns.Add(column.Name, column.Type);
++        table.Rows.Add(columns.Select(c => c.Value ?? DBNull.Value).ToArray());
++        return table;
++    }
++
++    [Fact]
++    public void Types_ShouldFormatExactCsvWithHeaderAndCrlf()
++    {
++        var table = Table(
++            ("S", typeof(string), "hello"),
++            ("I", typeof(int), 42),
++            ("D", typeof(decimal), 12.34m),
++            ("F", typeof(double), 2.5),
++            ("T", typeof(DateTime), new DateTime(2026, 1, 2, 3, 4, 5)),
++            ("G", typeof(Guid), new Guid("11111111-2222-3333-4444-555555555555")),
++            ("B", typeof(bool), true),
++            ("Y", typeof(byte[]), new byte[] { 1, 2, 3 }));
++
++        var csv = Write(table);
++
++        csv.Should().Be(
++            "S,I,D,F,T,G,B,Y\r\n" +
++            "hello,42,12.34,2.5,01/02/2026 03:04:05,11111111-2222-3333-4444-555555555555,True,AQID\r\n");
++    }
++
++    [Fact]
++    public void DBNull_ShouldProduceEmptyFields()
++    {
++        var table = Table(
++            ("A", typeof(int), null),
++            ("B", typeof(string), null),
++            ("C", typeof(decimal), null));
++
++        var csv = Write(table);
++
++        csv.Should().Be("A,B,C\r\n,,\r\n");
++    }
++
++    [Fact]
++    public void SpecialCharacters_ShouldQuoteAndEscapePerRfc4180()
++    {
++        var table = Table(
++            ("H1", typeof(string), "a,b"),
++            ("H2", typeof(string), "a\"b"),
++            ("H3", typeof(string), "a\rb"),
++            ("H4", typeof(string), "a\nb"));
++
++        var csv = Write(table);
++
++        csv.Should().Be("H1,H2,H3,H4\r\n\"a,b\",\"a\"\"b\",\"a\rb\",\"a\nb\"\r\n");
++    }
++
++    [Fact]
++    public void EmptyStringAndNull_ShouldBothBeEmptyFields()
++    {
++        var table = Table(
++            ("V1", typeof(string), ""),
++            ("V2", typeof(string), null));
++
++        var csv = Write(table);
++
++        csv.Should().Be("V1,V2\r\n,\r\n");
++    }
++
++    [Fact]
++    public void IncludeHeaderFalse_ShouldStartWithDataLine()
++    {
++        var table = Table(
++            ("S", typeof(string), "hello"),
++            ("I", typeof(int), 42));
++
++        var csv = Write(table, includeHeader: false);
++
++        csv.Should().Be("hello,42\r\n");
++    }
++
++    [Fact]
++    public void NoBom_AndAllLinesCrlfTerminated()
++    {
++        var table = Table(("S", typeof(string), "x"), ("I", typeof(int), 1));
++
++        using var output = new MemoryStream();
++        using var reader = new DataTableReader(table);
++        CsvWriter.Write(reader, output, includeHeader: true, CancellationToken.None);
++
++        output.ToArray()[0].Should().NotBe(0xEF);
++        Encoding.UTF8.GetString(output.ToArray()).Should().Be("S,I\r\nx,1\r\n");
++    }
++
++    [Fact]
++    public async Task SyncAndAsync_ShouldBeByteIdentical()
++    {
++        var table = Table(
++            ("S", typeof(string), "a,b"),
++            ("I", typeof(int), 7),
++            ("N", typeof(string), null));
++
++        var sync = Write(table);
++        var async = await WriteAsync(table);
++
++        async.Should().Be(sync);
++    }
++
++    [Fact]
++    public void OutputStream_ShouldRemainOpenAndWritable()
++    {
++        var table = Table(("S", typeof(string), "hello"));
++        using var output = new MemoryStream();
++        using (var reader = new DataTableReader(table))
++        {
++            CsvWriter.Write(reader, output, includeHeader: true, CancellationToken.None);
++        }
++
++        output.CanWrite.Should().BeTrue();
++        var lengthAfterWrite = output.Length;
++        output.WriteByte(0x21);
++
++        output.Length.Should().Be(lengthAfterWrite + 1);
++    }
++
++    [Fact]
++    public void InvariantCulture_Decimal_ShouldUsePeriodUnderDeDe()
++    {
++        var original = CultureInfo.CurrentCulture;
++        var originalDefault = CultureInfo.DefaultThreadCurrentCulture;
++        try
++        {
++            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
++            CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("de-DE");
++
++            var csv = Write(Table(("D", typeof(decimal), 12.34m)));
++
++            csv.Should().Be("D\r\n12.34\r\n");
++        }
++        finally
++        {
++            CultureInfo.CurrentCulture = original;
++            CultureInfo.DefaultThreadCurrentCulture = originalDefault;
++        }
++    }
++
++    [Fact]
++    public void InvariantCulture_Double_ShouldUsePeriodUnderDeDe()
++    {
++        var original = CultureInfo.CurrentCulture;
++        var originalDefault = CultureInfo.DefaultThreadCurrentCulture;
++        try
++        {
++            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
++            CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("de-DE");
++
++            var csv = Write(Table(("F", typeof(double), 2.5)));
++
++            csv.Should().Be("F\r\n2.5\r\n");
++        }
++        finally
++        {
++            CultureInfo.CurrentCulture = original;
++            CultureInfo.DefaultThreadCurrentCulture = originalDefault;
++        }
++    }
++}
+diff --git a/tests/nextorm.integration.tests/CommonTestSuite.Csv.cs b/tests/nextorm.integration.tests/CommonTestSuite.Csv.cs
+new file mode 100644
+index 0000000..aa55679
+--- /dev/null
++++ b/tests/nextorm.integration.tests/CommonTestSuite.Csv.cs
+@@ -0,0 +1,153 @@
++using System.Text;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Integration.Tests;
++
++/// <summary>
++/// Shared coverage for the CSV streaming terminal (<c>ToCsv</c>/<c>ToCsvAsync</c>). The terminal
++/// streams any relational query as RFC 4180 CSV: header on by default, CRLF-separated lines, UTF-8
++/// without a BOM, invariant value formatting, <c>DBNull</c> rendered as an empty field and the
++/// output stream left open. Unlike the LOB terminals it is available on every relational provider;
++/// only the in-memory provider rejects it with <see cref="NotSupportedException"/>.
++/// </summary>
++/// <remarks>
++/// The facts run against the <c>complex_entity</c> fixture because every CommonTestSuite provider
++/// (SQLite, PostgreSQL, SQL Server and MySQL) creates and seeds it. Rows 1/2 carry the non-null
++/// strings <c>dadfasd</c>/<c>xxx</c>, and row 3's <c>somestring</c> is NULL for the empty-field check.
++/// </remarks>
++public abstract partial class CommonTestSuite
++{
++    private const long CsvIdA = 1;
++    private const long CsvIdB = 2;
++    private const long CsvNullId = 3;
++    private const string CsvTextA = "dadfasd";
++    private const string CsvTextB = "xxx";
++
++    private static string CsvText(MemoryStream stream) => Encoding.UTF8.GetString(stream.ToArray());
++
++    private static string[] CsvLines(string csv)
++        => csv.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
++
++    [Fact]
++    public void Csv_Projection_ShouldWriteHeaderAndRows()
++    {
++        using var ms = new MemoryStream();
++
++        _sut.ComplexEntity
++            .Where(it => it.Id >= CsvIdA && it.Id <= CsvIdB)
++            .OrderBy(it => it.Id)
++            .Select(it => new { it.Id, it.String })
++            .ToCsv(ms, cancellationToken: TestContext.Current.CancellationToken);
++
++        var bytes = ms.ToArray();
++        var text = CsvText(ms);
++
++        // UTF-8 without a BOM: the first bytes must not be the EF BB BF preamble.
++        var hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
++        hasBom.Should().BeFalse("the CSV output must be UTF-8 without a BOM");
++
++        // CRLF line endings.
++        text.Should().Contain("\r\n");
++        text.Replace("\r\n", string.Empty).Should().NotContain("\n");
++
++        // Header + one line per seeded row.
++        var lines = CsvLines(text);
++        lines.Should().HaveCount(3);
++
++        // The header has one non-empty (possibly provider-aliased) name per projected column.
++        var header = lines[0].Split(',');
++        header.Should().HaveCount(2);
++        header.Should().OnlyContain(name => name.Length > 0);
++
++        text.Should().Contain(CsvTextA);
++        text.Should().Contain(CsvTextB);
++    }
++
++    [Fact]
++    public async Task Csv_SyncAndAsync_ShouldBeIdentical()
++    {
++        using var syncStream = new MemoryStream();
++        _sut.ComplexEntity
++            .Where(it => it.Id >= CsvIdA && it.Id <= CsvIdB)
++            .OrderBy(it => it.Id)
++            .Select(it => new { it.Id, it.String })
++            .ToCsv(syncStream, cancellationToken: TestContext.Current.CancellationToken);
++
++        using var asyncStream = new MemoryStream();
++        await _sut.ComplexEntity
++            .Where(it => it.Id >= CsvIdA && it.Id <= CsvIdB)
++            .OrderBy(it => it.Id)
++            .Select(it => new { it.Id, it.String })
++            .ToCsvAsync(asyncStream, cancellationToken: TestContext.Current.CancellationToken);
++
++        asyncStream.ToArray().Should().Equal(syncStream.ToArray());
++    }
++
++    [Fact]
++    public void Csv_Null_ShouldBeEmptyField()
++    {
++        using var ms = new MemoryStream();
++
++        _sut.ComplexEntity
++            .Where(it => it.Id == CsvNullId)
++            .Select(it => new { it.Id, it.String })
++            .ToCsv(ms, cancellationToken: TestContext.Current.CancellationToken);
++
++        var lines = CsvLines(CsvText(ms));
++        lines.Should().HaveCount(2);
++
++        var fields = lines[1].Split(',');
++        fields.Should().HaveCount(2);
++        fields.Should().Contain(field => field.Length == 0, "a DBNull column must render as an empty field");
++    }
++
++    [Fact]
++    public void Csv_IncludeHeaderFalse_ShouldOmitHeader()
++    {
++        using var ms = new MemoryStream();
++
++        _sut.ComplexEntity
++            .Where(it => it.Id >= CsvIdA && it.Id <= CsvIdB)
++            .OrderBy(it => it.Id)
++            .Select(it => new { it.Id, it.String })
++            .ToCsv(ms, includeHeader: false, cancellationToken: TestContext.Current.CancellationToken);
++
++        // Exactly one line per row: no header line, and the first line already carries data.
++        var lines = CsvLines(CsvText(ms));
++        lines.Should().HaveCount(2);
++        lines[0].Should().Contain(CsvTextA);
++        lines[1].Should().Contain(CsvTextB);
++    }
++
++    [Fact]
++    public void Csv_EntityBuilder_ShouldStreamWholeEntity()
++    {
++        using var ms = new MemoryStream();
++
++        // Exercises the EntityBuilder<TEntity> overload: no Select, the builder projects every
++        // mapped column itself. BinaryEntity is a concrete class (a pure interface entity cannot be
++        // materialized) on the binary_entity table seeded by every provider; row 2's data is NULL.
++        _sut.BinaryEntity
++            .Where(it => it.Id >= 1 && it.Id <= 2)
++            .OrderBy(it => it.Id)
++            .ToCsv(ms, cancellationToken: TestContext.Current.CancellationToken);
++
++        var text = CsvText(ms);
++        var lines = CsvLines(text);
++        lines.Should().HaveCount(3);
++
++        // Whole-entity projection: the mapped Id + Data columns, same arity on every line.
++        var header = lines[0].Split(',');
++        var first = lines[1].Split(',');
++        var second = lines[2].Split(',');
++
++        header.Should().HaveCount(2);
++        first.Should().HaveCount(2);
++        second.Should().HaveCount(2);
++
++        // Data is formatted as base64; the NULL row renders as an empty second field.
++        first[1].Should().Be(Convert.ToBase64String([0x01, 0x02, 0x03, 0x04]));
++        second[1].Should().BeEmpty("a DBNull column must render as an empty field");
++    }
++}
