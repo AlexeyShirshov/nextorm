@@ -228,13 +228,17 @@ select t1.id, t2.id from simple_entity as "t1" join (select id from complex_enti
 
 ```csharp
 // DataContext и роль IRawCommandExecutor на IDataContext
-public ProcedureResult ExecuteRaw(string sql, IReadOnlyList<ProcedureParameter> parameters);
+public ProcedureResult ExecuteRaw(string sql, params IReadOnlyList<ProcedureParameter> parameters);
+
+// async: у развёрнутой формы нет токена; CancellationToken передаётся коллекционной формой
+public Task<ProcedureResult> ExecuteRawAsync(string sql, params IReadOnlyList<ProcedureParameter> parameters);
 public Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default);
 
-// перегрузки без параметров для IDataContext
-public static ProcedureResult ExecuteRaw(this IDataContext dataContext, string sql);
+// перегрузка без параметров для асинхронного IDataContext
 public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContext, string sql, CancellationToken cancellationToken = default);
 ```
+
+Поскольку `parameters` — это `params`-коллекция, встроенный аргумент принимается в двух эквивалентных формах: развёрнутой `ExecuteRaw(sql, new ProcedureParameter("min", 0))` и коллекционной `ExecuteRaw(sql, [new ProcedureParameter("min", 0)])`. `ExecuteProcedure(name, new ProcedureParameter("a", 1))` работает так же. Параметр `params` обязан быть последним (CS0231), поэтому у асинхронных двойников без токена работает развёрнутый вызов `ExecuteRawAsync(sql, new ProcedureParameter(...))`, а для передачи `CancellationToken` нужна коллекционная форма `ExecuteRawAsync(sql, [p1, p2], cancellationToken)` — совмещать их нельзя. `ExecuteProcedureAsync` ведёт себя так же.
 
 Текст инструкции передаётся дословно и **не** проходит через планировщик запросов, поэтому он никогда не переиспользует кэш планов; кэш мапперов результатов ведётся по **форме результата** (упорядоченные имена столбцов читателя и тип результата), а не по тексту SQL, поэтому произвольные инструкции не разрастаются в кэше.
 
@@ -295,9 +299,10 @@ public sealed class RawOrder
     public string? Name { get; set; }
 }
 
+// развёрнутая params-форма; коллекционная [new ProcedureParameter("min", 0)] эквивалентна
 using var result = dataContext.ExecuteRaw(
     "select name, id from raw_orders where id > @min order by id",
-    [new ProcedureParameter("min", 0)]);
+    new ProcedureParameter("min", 0));
 
 IReadOnlyList<RawOrder> orders = result.Read<RawOrder>();
 ```
@@ -318,7 +323,7 @@ IReadOnlyList<int> second = result.Read<int>();  // [2]
 
 ### Асинхронное выполнение
 
-`ExecuteRawAsync` открывает читатель асинхронно; `ReadAsync<T>()` возвращает `IAsyncEnumerable<T>` по строкам текущего набора. `await using` асинхронно освобождает результат.
+`ExecuteRawAsync` открывает читатель асинхронно; `ReadAsync<T>()` возвращает `IAsyncEnumerable<T>` по строкам текущего набора. `await using` асинхронно освобождает результат. Параметр `params` обязан быть последним, поэтому `CancellationToken` нельзя совместить с развёрнутой формой: передавайте токен коллекционной формой `ExecuteRawAsync(sql, [p1, p2], cancellationToken)` либо используйте развёрнутую форму без токена `ExecuteRawAsync(sql, new ProcedureParameter(...))`.
 
 ```csharp
 await using var result = await dataContext.ExecuteRawAsync(
@@ -373,11 +378,13 @@ var returnValue = result.ReturnValue;         // same snapshot
 
 ```csharp
 // DataContext и роль IRawCommandExecutor на IDataContext
-public ProcedureResult ExecuteProcedure(string name, IReadOnlyList<ProcedureParameter> parameters);
+public ProcedureResult ExecuteProcedure(string name, params IReadOnlyList<ProcedureParameter> parameters);
+
+// async: у развёрнутой формы нет токена; CancellationToken передаётся коллекционной формой
+public Task<ProcedureResult> ExecuteProcedureAsync(string name, params IReadOnlyList<ProcedureParameter> parameters);
 public Task<ProcedureResult> ExecuteProcedureAsync(string name, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default);
 
-// удобные перегрузки без параметров для IDataContext
-public static ProcedureResult ExecuteProcedure(this IDataContext dataContext, string name);
+// перегрузка без параметров для асинхронного IDataContext
 public static Task<ProcedureResult> ExecuteProcedureAsync(this IDataContext dataContext, string name, CancellationToken cancellationToken = default);
 ```
 
@@ -567,4 +574,4 @@ using (var result = dataContext.ExecuteRaw(
 
 Source: `src/nextorm.core/Query/QueryCommandExtensions.cs:7`, `src/nextorm.core/Builders/EntityExtensions.cs:5`, `src/nextorm.core/Query/RawSqlOverride.cs:3`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:634`, `src/nextorm.core/DataContext/DataContextExtensions.cs` (`FromSql`), `src/nextorm.core/DataContext/SqlSourceRenderer.cs` (`MakeRawSqlSource`);
 `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:671`, `:698`, `:713`;
-`src/nextorm.core/DataContext/ProcedureParameter.cs`, `src/nextorm.core/DataContext/ProcedureResult.cs`, `src/nextorm.core/DataContext/Roles/IRawCommandExecutor.cs`, `src/nextorm.core/DataContext/DataContext.cs` (`ExecuteRaw`, `ExecuteProcedure`), `src/nextorm.core/DataContext/DataContextExtensions.cs` (перегрузки `ExecuteRaw`/`ExecuteProcedure`), `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` (`SupportsStoredProcedures`, `SupportsTableValuedParameters`), `tests/nextorm.sqlite.tests/RawCommandTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Raw.cs`, `tests/nextorm.integration.tests/CommonTestSuite.StoredProcedures.cs`, `src/nextorm.core/DataContext/TableParameterValue.cs`, `src/nextorm.core/DataContext/TableParameterBinder.cs`, `src/nextorm.core/DataContext/ProcedureParameter.cs` (`Table<T>`), `src/nextorm.sqlserver/SqlServerDataContext.cs`, `src/nextorm.postgres/PostgresDataContext.cs`, `src/nextorm.mysql/MySqlDataContext.cs`, `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`, `tests/nextorm.clickhouse.tests/TableValuedParameterTests.cs`, `tests/nextorm.integration.tests/ClickHouseTableValuedParameterTests.cs`.
+`src/nextorm.core/DataContext/ProcedureParameter.cs`, `src/nextorm.core/DataContext/ProcedureResult.cs`, `src/nextorm.core/DataContext/Roles/IRawCommandExecutor.cs` (`ExecuteRaw`/`ExecuteRawAsync`/`ExecuteProcedure`/`ExecuteProcedureAsync`, включая expanded-перегрузки с `params`), `src/nextorm.core/DataContext/DataContext.cs` (конкретные реализации тех же перегрузок сырых команд), `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` (`SupportsStoredProcedures`, `SupportsTableValuedParameters`), `tests/nextorm.sqlite.tests/RawCommandTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Raw.cs`, `tests/nextorm.integration.tests/CommonTestSuite.StoredProcedures.cs`, `src/nextorm.core/DataContext/TableParameterValue.cs`, `src/nextorm.core/DataContext/TableParameterBinder.cs`, `src/nextorm.core/DataContext/ProcedureParameter.cs` (`Table<T>`), `src/nextorm.sqlserver/SqlServerDataContext.cs`, `src/nextorm.postgres/PostgresDataContext.cs`, `src/nextorm.mysql/MySqlDataContext.cs`, `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`, `tests/nextorm.clickhouse.tests/TableValuedParameterTests.cs`, `tests/nextorm.integration.tests/ClickHouseTableValuedParameterTests.cs`.

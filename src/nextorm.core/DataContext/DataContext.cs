@@ -653,7 +653,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <c>T</c> (for example <c>int?</c>) to observe a <c>NULL</c>.
     /// </para>
     /// </remarks>
-    public ProcedureResult ExecuteRaw(string sql, IReadOnlyList<ProcedureParameter> parameters)
+    public ProcedureResult ExecuteRaw(string sql, params IReadOnlyList<ProcedureParameter> parameters)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -680,6 +680,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var owner = await _executor.OpenReaderAsync(sql, parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
         return new ProcedureResult(this, owner);
     }
+
+    /// <summary>
+    /// Asynchronously executes <paramref name="sql"/> with <paramref name="parameters"/>, using
+    /// <see cref="CancellationToken.None"/>. Convenience overload of
+    /// <see cref="ExecuteRawAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/> for
+    /// callers whose static type is the concrete context.
+    /// </summary>
+    /// <param name="sql">The command text to execute.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    public Task<ProcedureResult> ExecuteRawAsync(string sql, params IReadOnlyList<ProcedureParameter> parameters)
+        => ExecuteRawAsync(sql, parameters, CancellationToken.None);
 
     /// <summary>
     /// Executes the stored procedure <paramref name="name"/> with <paramref name="parameters"/> and
@@ -716,7 +728,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/>, empty or whitespace.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The provider has no stored procedures (<c>ISqlDialect.SupportsStoredProcedures</c> is <c>false</c>).</exception>
-    public ProcedureResult ExecuteProcedure(string name, IReadOnlyList<ProcedureParameter> parameters)
+    public ProcedureResult ExecuteProcedure(string name, params IReadOnlyList<ProcedureParameter> parameters)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -748,6 +760,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var owner = await _executor.OpenReaderAsync(name, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
         return new ProcedureResult(this, owner);
     }
+
+    /// <summary>
+    /// Asynchronously executes the stored procedure <paramref name="name"/> with
+    /// <paramref name="parameters"/>, using <see cref="CancellationToken.None"/>. Convenience overload
+    /// of <see cref="ExecuteProcedureAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>
+    /// for callers whose static type is the concrete context.
+    /// </summary>
+    /// <param name="name">The procedure name, passed to the provider as-is.</param>
+    /// <param name="parameters">The procedure parameters (input, output, input/output and return value).</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    public Task<ProcedureResult> ExecuteProcedureAsync(string name, params IReadOnlyList<ProcedureParameter> parameters)
+        => ExecuteProcedureAsync(name, parameters, CancellationToken.None);
 
     private void ThrowIfStoredProceduresUnsupported()
     {

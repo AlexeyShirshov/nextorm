@@ -32,20 +32,6 @@ public static class DataContextExtensions
         => (QueryCommand)Activator.CreateInstance(typeof(QueryCommand<>).MakeGenericType(resultType), dataContext, definition)!;
 
     /// <summary>
-    /// Executes a raw command text without parameters. Convenience overload of
-    /// <see cref="IRawCommandExecutor.ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/>.
-    /// </summary>
-    /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="sql">The command text to execute.</param>
-    /// <returns>The result, which must be disposed to release the reader and command.</returns>
-    /// <exception cref="NotSupportedException">The context does not support raw SQL execution.</exception>
-    public static ProcedureResult ExecuteRaw(this IDataContext dataContext, string sql)
-    {
-        ArgumentNullException.ThrowIfNull(dataContext);
-        return dataContext.ExecuteRaw(sql, Array.Empty<ProcedureParameter>());
-    }
-
-    /// <summary>
     /// Asynchronously executes a raw command text without parameters. Convenience overload of
     /// <see cref="IRawCommandExecutor.ExecuteRawAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>.
     /// </summary>
@@ -58,20 +44,6 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         return dataContext.ExecuteRawAsync(sql, Array.Empty<ProcedureParameter>(), cancellationToken);
-    }
-
-    /// <summary>
-    /// Executes a stored procedure without parameters. Convenience overload of
-    /// <see cref="IRawCommandExecutor.ExecuteProcedure(string, IReadOnlyList{ProcedureParameter})"/>.
-    /// </summary>
-    /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="name">The procedure name, passed to the provider as-is.</param>
-    /// <returns>The result, which must be disposed to release the reader and command.</returns>
-    /// <exception cref="NotSupportedException">The context does not support stored procedures.</exception>
-    public static ProcedureResult ExecuteProcedure(this IDataContext dataContext, string name)
-    {
-        ArgumentNullException.ThrowIfNull(dataContext);
-        return dataContext.ExecuteProcedure(name, Array.Empty<ProcedureParameter>());
     }
 
     /// <summary>

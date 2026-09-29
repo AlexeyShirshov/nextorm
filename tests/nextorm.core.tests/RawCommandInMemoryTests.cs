@@ -48,4 +48,52 @@ public class RawCommandInMemoryTests
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
+
+    [Fact]
+    public void ExecuteRaw_ExpandedForm_SingleParameter_ThrowsNotSupported()
+    {
+        using IDataContext context = new InMemoryDataContext();
+
+        var act = () => context.ExecuteRaw("select @p as value", new ProcedureParameter("p", 1));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_ExpandedForm_SingleParameter_NoToken_ThrowsNotSupported()
+    {
+        using IDataContext context = new InMemoryDataContext();
+
+        var act = async () =>
+        {
+            Func<string, IReadOnlyList<ProcedureParameter>, Task<ProcedureResult>> rawAsync = context.ExecuteRawAsync;
+            await rawAsync("select @p as value", [new ProcedureParameter("p", 1)]);
+        };
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
+
+    [Fact]
+    public void ExecuteProcedure_ExpandedForm_ThrowsNotSupported()
+    {
+        using IDataContext context = new InMemoryDataContext();
+
+        var act = () => context.ExecuteProcedure("my_proc", new ProcedureParameter("p", 1));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task ExecuteProcedureAsync_ExpandedForm_NoToken_ThrowsNotSupported()
+    {
+        using IDataContext context = new InMemoryDataContext();
+
+        var act = async () =>
+        {
+            Func<string, IReadOnlyList<ProcedureParameter>, Task<ProcedureResult>> procedureAsync = context.ExecuteProcedureAsync;
+            await procedureAsync("my_proc", [new ProcedureParameter("p", 1)]);
+        };
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
 }

@@ -42,7 +42,7 @@ public interface IRawCommandExecutor
     /// <param name="sql">The command text to execute.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
     /// <returns>The result, which must be disposed to release the reader and command.</returns>
-    ProcedureResult ExecuteRaw(string sql, IReadOnlyList<ProcedureParameter> parameters)
+    ProcedureResult ExecuteRaw(string sql, params IReadOnlyList<ProcedureParameter> parameters)
         => throw new NotSupportedException($"{GetType().Name} does not support raw SQL execution.");
 
     /// <summary>
@@ -55,6 +55,17 @@ public interface IRawCommandExecutor
     /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
     Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default)
         => Task.FromException<ProcedureResult>(new NotSupportedException($"{GetType().Name} does not support raw SQL execution."));
+
+    /// <summary>
+    /// Asynchronously executes <paramref name="sql"/> with <paramref name="parameters"/>, using
+    /// <see langword="default"/> for the cancellation token. Convenience overload of
+    /// <see cref="ExecuteRawAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="sql">The command text to execute.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    Task<ProcedureResult> ExecuteRawAsync(string sql, params IReadOnlyList<ProcedureParameter> parameters)
+        => ExecuteRawAsync(sql, parameters, default);
 
     /// <summary>
     /// Executes the stored procedure <paramref name="name"/> with <paramref name="parameters"/> and
@@ -70,7 +81,7 @@ public interface IRawCommandExecutor
     /// <see cref="ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/>). A return value is
     /// populated only where the provider has one (SQL Server).
     /// </remarks>
-    ProcedureResult ExecuteProcedure(string name, IReadOnlyList<ProcedureParameter> parameters)
+    ProcedureResult ExecuteProcedure(string name, params IReadOnlyList<ProcedureParameter> parameters)
         => throw new NotSupportedException($"{GetType().Name} does not support stored procedures.");
 
     /// <summary>
@@ -84,4 +95,16 @@ public interface IRawCommandExecutor
     /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
     Task<ProcedureResult> ExecuteProcedureAsync(string name, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default)
         => Task.FromException<ProcedureResult>(new NotSupportedException($"{GetType().Name} does not support stored procedures."));
+
+    /// <summary>
+    /// Asynchronously executes the stored procedure <paramref name="name"/> with
+    /// <paramref name="parameters"/>, using <see langword="default"/> for the cancellation token.
+    /// Convenience overload of
+    /// <see cref="ExecuteProcedureAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>.
+    /// </summary>
+    /// <param name="name">The procedure name, passed to the provider as-is.</param>
+    /// <param name="parameters">The procedure parameters (input, output, input/output and return value).</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    Task<ProcedureResult> ExecuteProcedureAsync(string name, params IReadOnlyList<ProcedureParameter> parameters)
+        => ExecuteProcedureAsync(name, parameters, default);
 }

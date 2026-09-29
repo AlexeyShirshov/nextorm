@@ -226,13 +226,17 @@ and SQLite omits the derived-table alias when the source is not joined.
 
 ```csharp
 // DataContext, and the IRawCommandExecutor role on IDataContext
-public ProcedureResult ExecuteRaw(string sql, IReadOnlyList<ProcedureParameter> parameters);
+public ProcedureResult ExecuteRaw(string sql, params IReadOnlyList<ProcedureParameter> parameters);
+
+// async: the expanded form has no token; pass a CancellationToken with the collection form
+public Task<ProcedureResult> ExecuteRawAsync(string sql, params IReadOnlyList<ProcedureParameter> parameters);
 public Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default);
 
-// parameterless convenience overloads for IDataContext
-public static ProcedureResult ExecuteRaw(this IDataContext dataContext, string sql);
+// parameterless async convenience overload for IDataContext
 public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContext, string sql, CancellationToken cancellationToken = default);
 ```
+
+Because `parameters` is a `params` collection, an inline argument is accepted in two equivalent shapes: the expanded form `ExecuteRaw(sql, new ProcedureParameter("min", 0))` and the collection form `ExecuteRaw(sql, [new ProcedureParameter("min", 0)])`. `ExecuteProcedure(name, new ProcedureParameter("a", 1))` does the same. A `params` parameter must be last (CS0231), so on the async twins the token-less expanded call `ExecuteRawAsync(sql, new ProcedureParameter(...))` works, while passing a `CancellationToken` requires the collection form `ExecuteRawAsync(sql, [p1, p2], cancellationToken)` — the two cannot be combined. `ExecuteProcedureAsync` behaves identically.
 
 The statement text is passed through verbatim and is **not** put through the query planner, so it never reuses the plan cache; the result mapper is cached by **result shape** (the reader's ordered column names and the result type), not by SQL text, so arbitrary statements do not grow the mapper cache.
 
@@ -293,9 +297,10 @@ public sealed class RawOrder
     public string? Name { get; set; }
 }
 
+// expanded params form; the collection form [new ProcedureParameter("min", 0)] is equivalent
 using var result = dataContext.ExecuteRaw(
     "select name, id from raw_orders where id > @min order by id",
-    [new ProcedureParameter("min", 0)]);
+    new ProcedureParameter("min", 0));
 
 IReadOnlyList<RawOrder> orders = result.Read<RawOrder>();
 ```
@@ -316,7 +321,7 @@ IReadOnlyList<int> second = result.Read<int>();  // [2]
 
 ### Async
 
-`ExecuteRawAsync` opens the reader asynchronously; `ReadAsync<T>()` returns an `IAsyncEnumerable<T>` over the rows of the current set. `await using` disposes the result asynchronously.
+`ExecuteRawAsync` opens the reader asynchronously; `ReadAsync<T>()` returns an `IAsyncEnumerable<T>` over the rows of the current set. `await using` disposes the result asynchronously. A `params` parameter must be last, so a `CancellationToken` cannot be combined with the expanded form: pass the token with the collection form `ExecuteRawAsync(sql, [p1, p2], cancellationToken)`, or use the token-less expanded form `ExecuteRawAsync(sql, new ProcedureParameter(...))`.
 
 ```csharp
 await using var result = await dataContext.ExecuteRawAsync(
@@ -371,11 +376,13 @@ A stored procedure is invoked by name with the dedicated API, which sends the co
 
 ```csharp
 // DataContext, and the IRawCommandExecutor role on IDataContext
-public ProcedureResult ExecuteProcedure(string name, IReadOnlyList<ProcedureParameter> parameters);
+public ProcedureResult ExecuteProcedure(string name, params IReadOnlyList<ProcedureParameter> parameters);
+
+// async: the expanded form has no token; pass a CancellationToken with the collection form
+public Task<ProcedureResult> ExecuteProcedureAsync(string name, params IReadOnlyList<ProcedureParameter> parameters);
 public Task<ProcedureResult> ExecuteProcedureAsync(string name, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default);
 
-// parameterless convenience overloads for IDataContext
-public static ProcedureResult ExecuteProcedure(this IDataContext dataContext, string name);
+// parameterless async convenience overload for IDataContext
 public static Task<ProcedureResult> ExecuteProcedureAsync(this IDataContext dataContext, string name, CancellationToken cancellationToken = default);
 ```
 
@@ -565,4 +572,4 @@ ClickHouse has no stored procedures, so a table parameter is consumed by `Execut
 
 Source: `src/nextorm.core/Query/QueryCommandExtensions.cs:7`, `src/nextorm.core/Builders/EntityExtensions.cs:5`, `src/nextorm.core/Query/RawSqlOverride.cs:3`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:634`, `src/nextorm.core/DataContext/DataContextExtensions.cs` (`FromSql`), `src/nextorm.core/DataContext/SqlSourceRenderer.cs` (`MakeRawSqlSource`);
 `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:671`, `:698`, `:713`;
-`src/nextorm.core/DataContext/ProcedureParameter.cs`, `src/nextorm.core/DataContext/ProcedureResult.cs`, `src/nextorm.core/DataContext/Roles/IRawCommandExecutor.cs`, `src/nextorm.core/DataContext/DataContext.cs` (`ExecuteRaw`, `ExecuteProcedure`), `src/nextorm.core/DataContext/DataContextExtensions.cs` (`ExecuteRaw`/`ExecuteProcedure` overloads), `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` (`SupportsStoredProcedures`, `SupportsTableValuedParameters`), `tests/nextorm.sqlite.tests/RawCommandTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Raw.cs`, `tests/nextorm.integration.tests/CommonTestSuite.StoredProcedures.cs`, `src/nextorm.core/DataContext/TableParameterValue.cs`, `src/nextorm.core/DataContext/TableParameterBinder.cs`, `src/nextorm.core/DataContext/ProcedureParameter.cs` (`Table<T>`), `src/nextorm.sqlserver/SqlServerDataContext.cs`, `src/nextorm.postgres/PostgresDataContext.cs`, `src/nextorm.mysql/MySqlDataContext.cs`, `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`, `tests/nextorm.clickhouse.tests/TableValuedParameterTests.cs`, `tests/nextorm.integration.tests/ClickHouseTableValuedParameterTests.cs`.
+`src/nextorm.core/DataContext/ProcedureParameter.cs`, `src/nextorm.core/DataContext/ProcedureResult.cs`, `src/nextorm.core/DataContext/Roles/IRawCommandExecutor.cs` (`ExecuteRaw`/`ExecuteRawAsync`/`ExecuteProcedure`/`ExecuteProcedureAsync`, including the expanded `params` overloads), `src/nextorm.core/DataContext/DataContext.cs` (concrete implementations of the same raw-command overloads), `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` (`SupportsStoredProcedures`, `SupportsTableValuedParameters`), `tests/nextorm.sqlite.tests/RawCommandTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Raw.cs`, `tests/nextorm.integration.tests/CommonTestSuite.StoredProcedures.cs`, `src/nextorm.core/DataContext/TableParameterValue.cs`, `src/nextorm.core/DataContext/TableParameterBinder.cs`, `src/nextorm.core/DataContext/ProcedureParameter.cs` (`Table<T>`), `src/nextorm.sqlserver/SqlServerDataContext.cs`, `src/nextorm.postgres/PostgresDataContext.cs`, `src/nextorm.mysql/MySqlDataContext.cs`, `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`, `tests/nextorm.clickhouse.tests/TableValuedParameterTests.cs`, `tests/nextorm.integration.tests/ClickHouseTableValuedParameterTests.cs`.

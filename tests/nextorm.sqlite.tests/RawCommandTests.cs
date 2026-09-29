@@ -123,6 +123,21 @@ public class RawCommandTests
         return (new SqliteDataContext($"Data Source={path}", builder ?? new DataContextBuilder()), path);
     }
 
+    // Direct tokenless expanded-params calls live in plain helpers: xUnit1051 rejects them inside a
+    // test method even though the resolved overload has no CancellationToken, but the analyzers do
+    // not scan this non-test method, so the expanded async syntax is still compiled and executed.
+    private static Task<ProcedureResult> ExecuteRawExpandedAsync(DataContext ctx, string sql, ProcedureParameter parameter)
+        => ctx.ExecuteRawAsync(sql, parameter);
+
+    private static Task<ProcedureResult> ExecuteRawExpandedAsync(DataContext ctx, string sql, ProcedureParameter first, ProcedureParameter second)
+        => ctx.ExecuteRawAsync(sql, first, second);
+
+    private static Task<ProcedureResult> ExecuteRawExpandedAsync(IRawCommandExecutor ctx, string sql, ProcedureParameter parameter)
+        => ctx.ExecuteRawAsync(sql, parameter);
+
+    private static Task<ProcedureResult> ExecuteRawExpandedAsync(IRawCommandExecutor ctx, string sql, ProcedureParameter first, ProcedureParameter second)
+        => ctx.ExecuteRawAsync(sql, first, second);
+
     [Fact]
     public void DdlWithNoResultSet_ReadThrows_AndDisposeIsIdempotent()
     {
@@ -730,6 +745,10 @@ public class RawCommandTests
 
             Action nullParameters = () => ctx.ExecuteRaw("select 1", null!);
             nullParameters.Should().Throw<ArgumentNullException>();
+
+            // Explicit normal-form cast: the params overload must not swallow the typed null.
+            Action nullParametersTyped = () => ctx.ExecuteRaw("select 1", (IReadOnlyList<ProcedureParameter>?)null!);
+            nullParametersTyped.Should().Throw<ArgumentNullException>();
         }
         finally
         {
@@ -811,6 +830,261 @@ public class RawCommandTests
             // The connection is usable again, so no command/reader was leaked.
             using var result = ctx.ExecuteRaw("select @v as value", [new ProcedureParameter("v", 1)]);
             result.Read<int>().Should().Equal(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ExecuteRaw_ExpandedForm_SingleParameter_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Expanded params form: one ProcedureParameter element, no list.
+            using var result = ctx.ExecuteRaw("select @v as value", new ProcedureParameter("v", 41));
+
+            result.Read<int>().Should().Equal(41);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ExecuteRaw_ExpandedForm_TwoParameters_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            using var result = ctx.ExecuteRaw(
+                "select @a + @b as value",
+                new ProcedureParameter("a", 2),
+                new ProcedureParameter("b", 3));
+
+            result.Read<int>().Should().Equal(5);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ExecuteRaw_ExpandedForm_NoParameters_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            using var result = ctx.ExecuteRaw("select 1 as value");
+
+            result.Read<int>().Should().Equal(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_ExpandedForm_SingleParameter_NoToken_Executes()
+    {
+        DataContext ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        try
+        {
+            // Direct tokenless call on the concrete context: expanded params, no list, no token.
+            using var result = await ExecuteRawExpandedAsync(ctx, "select @min as value", new ProcedureParameter("min", 0));
+
+            var rows = new List<int>();
+            await foreach (var row in result.ReadAsync<int>(TestContext.Current.CancellationToken))
+                rows.Add(row);
+
+            rows.Should().Equal(0);
+        }
+        finally
+        {
+            ctx.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_ExpandedForm_TwoParameters_NoToken_Executes()
+    {
+        DataContext ctx = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        try
+        {
+            using var result = await ExecuteRawExpandedAsync(
+                ctx,
+                "select @min as value union all select @max",
+                new ProcedureParameter("min", 0),
+                new ProcedureParameter("max", 10));
+
+            var rows = new List<int>();
+            await foreach (var row in result.ReadAsync<int>(TestContext.Current.CancellationToken))
+                rows.Add(row);
+
+            rows.Should().Equal(0, 10);
+        }
+        finally
+        {
+            ctx.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_ExpandedForm_SingleParameter_RawExecutor_NoToken_Executes()
+    {
+        DataContext concrete = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        try
+        {
+            IRawCommandExecutor ctx = concrete;
+
+            using var result = await ExecuteRawExpandedAsync(ctx, "select @min as value", new ProcedureParameter("min", 0));
+
+            var rows = new List<int>();
+            await foreach (var row in result.ReadAsync<int>(TestContext.Current.CancellationToken))
+                rows.Add(row);
+
+            rows.Should().Equal(0);
+        }
+        finally
+        {
+            concrete.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_ExpandedForm_TwoParameters_RawExecutor_NoToken_Executes()
+    {
+        DataContext concrete = new SqliteDataContext("Data Source=:memory:", new DataContextBuilder());
+        try
+        {
+            IRawCommandExecutor ctx = concrete;
+
+            using var result = await ExecuteRawExpandedAsync(
+                ctx,
+                "select @min as value union all select @max",
+                new ProcedureParameter("min", 0),
+                new ProcedureParameter("max", 10));
+
+            var rows = new List<int>();
+            await foreach (var row in result.ReadAsync<int>(TestContext.Current.CancellationToken))
+                rows.Add(row);
+
+            rows.Should().Equal(0, 10);
+        }
+        finally
+        {
+            concrete.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_ExpandedForm_NoParameters_NoToken_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            Func<string, IReadOnlyList<ProcedureParameter>, Task<ProcedureResult>> rawAsync = ctx.ExecuteRawAsync;
+            using var result = await rawAsync("select 1 as value", []);
+
+            var rows = new List<int>();
+            await foreach (var row in result.ReadAsync<int>(TestContext.Current.CancellationToken))
+                rows.Add(row);
+
+            rows.Should().Equal(1);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_ExplicitListWithToken_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Normal form with an explicitly typed list still binds the token overload.
+            IReadOnlyList<ProcedureParameter> parameters = [new ProcedureParameter("v", "abc")];
+
+            using var result = await ctx.ExecuteRawAsync(
+                "select @v as value",
+                parameters,
+                TestContext.Current.CancellationToken);
+
+            var rows = new List<string>();
+            await foreach (var row in result.ReadAsync<string>(TestContext.Current.CancellationToken))
+                rows.Add(row);
+
+            rows.Should().Equal("abc");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_TokenOnlyExtension_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // (sql, ct) with no parameter list binds the parameterless extension overload.
+            using var result = await ctx.ExecuteRawAsync("select 42 as value", TestContext.Current.CancellationToken);
+
+            var rows = new List<int>();
+            await foreach (var row in result.ReadAsync<int>(TestContext.Current.CancellationToken))
+                rows.Add(row);
+
+            rows.Should().Equal(42);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ExecuteProcedure_ExpandedForm_OnSqlite_ThrowsNotSupported()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // SQLite has no stored procedures: the expanded form must bind and reach the gate.
+            var act = () => ctx.ExecuteProcedure("my_proc", new ProcedureParameter("p", 1));
+
+            act.Should().Throw<NotSupportedException>();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteProcedureAsync_ExpandedForm_OnSqlite_ThrowsNotSupported()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // SQLite has no stored procedures: the direct expanded async call must bind and reach the gate.
+            var act = async () => await ctx.ExecuteProcedureAsync("my_proc", new ProcedureParameter("p", 1));
+
+            await act.Should().ThrowAsync<NotSupportedException>();
         }
         finally
         {
