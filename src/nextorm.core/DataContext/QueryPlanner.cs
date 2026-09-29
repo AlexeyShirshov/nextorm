@@ -24,7 +24,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly ILogger? _logger;
     private readonly Type _contextType;
     private readonly Func<SelectExpression, Expression, Expression> _mapColumn;
-    private readonly Func<string, object?, DbParameter> _createParam;
+    private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
     private readonly Func<string, DbCommand> _createCommand;
     private readonly ILogger? _resultSetEnumeratorLogger;
     private readonly bool _logSensitiveData;
@@ -487,7 +487,7 @@ internal sealed class QueryPlanner : IQueryPlanner
                 for (var i = 0; i < parameterList.Count; i++)
                 {
                     var p = parameterList[i];
-                    dbCommand.Parameters.Add(_createParam(p.Name, p.Value));
+                    dbCommand.Parameters.Add(_createParam(dbCommand, p.Name, p.Value));
                 }
             }
 

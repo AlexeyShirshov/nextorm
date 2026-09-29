@@ -18,8 +18,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 {
     private readonly IDataContext _context;
     private readonly IConnectionManager _connectionManager;
-    private readonly Func<string, object?, DbParameter> _createParam;
-    private readonly Func<ProcedureParameter, DbParameter> _createProcedureParam;
+    private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
+    private readonly Func<string, object?, DbParameter> _createParamSimple;
+    private readonly Func<DbCommand, ProcedureParameter, DbParameter> _createProcedureParam;
     private readonly ILogger? _logger;
     private readonly bool _logParams;
     private readonly bool _logSensitiveData;
@@ -31,8 +32,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     internal QueryExecutor(
         IDataContext context,
         IConnectionManager connectionManager,
-        Func<string, object?, DbParameter> createParam,
-        Func<ProcedureParameter, DbParameter> createProcedureParam,
+        Func<DbCommand, string, object?, DbParameter> createParam,
+        Func<string, object?, DbParameter> createParamSimple,
+        Func<DbCommand, ProcedureParameter, DbParameter> createProcedureParam,
         LoggingOptions logging,
         Func<bool> isDisposed,
         Func<DbTransaction?> currentTransaction,
@@ -41,6 +43,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _context = context;
         _connectionManager = connectionManager;
         _createParam = createParam;
+        _createParamSimple = createParamSimple;
         _createProcedureParam = createProcedureParam;
         _logger = logging.Logger;
         _logParams = logging.LogParams;
@@ -48,7 +51,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _isDisposed = isDisposed;
         _currentTransaction = currentTransaction;
         _interceptors = interceptors;
-        _batchRunner = new BatchRunner(connectionManager, createParam, currentTransaction, isDisposed, logging, context.CommandTimeout);
+        _batchRunner = new BatchRunner(connectionManager, createParam, createParamSimple, currentTransaction, isDisposed, logging, context.CommandTimeout);
     }
 
     // The interception helpers below are the single place the command lifecycle events are raised.
@@ -266,19 +269,19 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     // Per-call binding state carried by value so the command builder allocates no closure on the
     // mutation/scalar hot path. The binder delegates are static and capture nothing, so they are
     // cached once for the process.
-    private readonly record struct MutationParameterState(IReadOnlyList<Parameter> Parameters, Func<string, object?, DbParameter> CreateParam);
-    private readonly record struct ProcedureParameterState(IReadOnlyList<ProcedureParameter> Parameters, Func<ProcedureParameter, DbParameter> CreateParam);
+    private readonly record struct MutationParameterState(IReadOnlyList<Parameter> Parameters, Func<DbCommand, string, object?, DbParameter> CreateParam);
+    private readonly record struct ProcedureParameterState(IReadOnlyList<ProcedureParameter> Parameters, Func<DbCommand, ProcedureParameter, DbParameter> CreateParam);
 
     private static readonly Action<DbCommand, MutationParameterState> BindMutationParameters = static (cmd, state) =>
     {
         for (var i = 0; i < state.Parameters.Count; i++)
-            cmd.Parameters.Add(state.CreateParam(state.Parameters[i].Name, state.Parameters[i].Value));
+            cmd.Parameters.Add(state.CreateParam(cmd, state.Parameters[i].Name, state.Parameters[i].Value));
     };
 
     private static readonly Action<DbCommand, ProcedureParameterState> BindProcedureParameters = static (cmd, state) =>
     {
         for (var i = 0; i < state.Parameters.Count; i++)
-            cmd.Parameters.Add(state.CreateParam(state.Parameters[i]));
+            cmd.Parameters.Add(state.CreateParam(cmd, state.Parameters[i]));
     };
 
     /// <summary>
@@ -291,7 +294,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
     /// <summary>
     /// Creates a fresh <see cref="DbCommand"/> for a raw/procedure command, binding each descriptor
-    /// through the provider's <see cref="DataContext.CreateProcedureParameter(ProcedureParameter)"/> hook.
+    /// through the provider's command-aware
+    /// <see cref="DataContext.CreateProcedureParameter(DbCommand, ProcedureParameter)"/> hook.
     /// </summary>
     private DbCommand CreateRawCommand(string commandText, IReadOnlyList<ProcedureParameter> parameters, CommandType commandType)
         => CreateCommand(commandText, new ProcedureParameterState(parameters, _createProcedureParam), BindProcedureParameters, commandType);

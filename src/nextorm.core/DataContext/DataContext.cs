@@ -83,6 +83,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // (F6). Binding the abstract method keeps the provider override on the dispatch path, and a
         // field avoids allocating a delegate per command.
         _createParam = CreateParam;
+        _createParamSimple = CreateParam;
         _createProcedureParam = CreateProcedureParameter;
 
         // The execution axis receives everything through its constructor (connection role, parameter
@@ -91,6 +92,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             this,
             _connectionManager,
             _createParam,
+            _createParamSimple,
             _createProcedureParam,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
             () => _disposed,
@@ -108,8 +110,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             _interceptors);
     }
 
-    private readonly Func<string, object?, DbParameter> _createParam;
-    private readonly Func<ProcedureParameter, DbParameter> _createProcedureParam;
+    private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
+    private readonly Func<string, object?, DbParameter> _createParamSimple;
+    private readonly Func<DbCommand, ProcedureParameter, DbParameter> _createProcedureParam;
 
     /// <summary>
     /// Whether prepared plans may be stored in and reused from the plan cache. Initialized from
@@ -398,6 +401,20 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     public abstract DbParameter CreateParam(string name, object? value);
 
     /// <summary>
+    /// Creates a provider-specific parameter from the <paramref name="command"/> the parameter is
+    /// bound to. The default delegates to <see cref="CreateParam(string, object?)"/>, preserving every
+    /// provider's current behaviour; a provider whose ADO driver rejects parameters minted by another
+    /// driver (for example MySQL with <c>MySql.Data</c> vs <c>MySqlConnector</c>) overrides this to
+    /// call <c>command.CreateParameter()</c>.
+    /// </summary>
+    /// <param name="command">The executing command the parameter will be added to.</param>
+    /// <param name="name">The parameter name, without the provider's prefix.</param>
+    /// <param name="value">The parameter value, or <see langword="null"/>.</param>
+    /// <returns>A new database parameter.</returns>
+    protected internal virtual DbParameter CreateParam(DbCommand command, string name, object? value)
+        => CreateParam(name, value);
+
+    /// <summary>
     /// Creates a provider-specific parameter from a <see cref="ProcedureParameter"/> descriptor: it
     /// delegates name/value to <see cref="CreateParam(string, object?)"/> and then applies the
     /// descriptor's <see cref="ParameterDirection"/>, <see cref="System.Data.DbType"/> and size.
@@ -431,6 +448,20 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         var dbParameter = CreateParam(parameter.Name, parameter.Value);
 
+        return ApplyProcedureParameterMetadata(dbParameter, parameter);
+    }
+
+    /// <summary>
+    /// Applies a descriptor's non-default <see cref="ParameterDirection"/>, <see cref="System.Data.DbType"/>
+    /// and size to an already-minted provider parameter. Shared by the command-unaware
+    /// <see cref="CreateProcedureParameter(ProcedureParameter)"/> and the provider command-aware override
+    /// (<c>MySqlDataContext</c>) so both procedure paths apply the same metadata rule.
+    /// </summary>
+    /// <param name="dbParameter">The provider parameter to configure.</param>
+    /// <param name="parameter">The descriptor carrying the metadata.</param>
+    /// <returns><paramref name="dbParameter"/>, configured from <paramref name="parameter"/>.</returns>
+    protected static DbParameter ApplyProcedureParameterMetadata(DbParameter dbParameter, ProcedureParameter parameter)
+    {
         if (parameter.Direction != ParameterDirection.Input)
             dbParameter.Direction = parameter.Direction;
 
@@ -442,6 +473,21 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         return dbParameter;
     }
+
+    /// <summary>
+    /// Command-aware variant of <see cref="CreateProcedureParameter(ProcedureParameter)"/> used by the
+    /// raw/procedure execution paths: it receives the command the parameter will be added to, so a
+    /// provider whose ADO driver rejects a parameter minted by another driver can mint it through
+    /// <c>command.CreateParameter()</c>. The default delegates to the command-unaware overload,
+    /// preserving every provider's existing behavior; <c>MySqlDataContext</c> overrides it.
+    /// </summary>
+    /// <param name="command">The executing command the parameter will be added to.</param>
+    /// <param name="parameter">The parameter descriptor.</param>
+    /// <returns>A new database parameter configured from <paramref name="parameter"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="parameter"/>.<see cref="ProcedureParameter.Name"/> is <see langword="null"/>, empty or whitespace.</exception>
+    /// <exception cref="NotSupportedException">The descriptor requests a structured parameter type the provider does not support.</exception>
+    protected internal virtual DbParameter CreateProcedureParameter(DbCommand command, ProcedureParameter parameter)
+        => CreateProcedureParameter(parameter);
 
     /// <summary>
     /// Maps a projected column to a reader accessor. Providers whose reader does not widen CLR

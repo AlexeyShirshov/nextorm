@@ -330,3 +330,102 @@ predicate in `SqlBuilder` is true only when the select list contains an `IsDynam
 The seven acceptance cases run on SQLite with ordinary queries and carry no dynamic-columns store, so
 neither branch is reachable on the acceptance path. The run is recorded as the cycle's acceptance
 evidence; the deltas above are **not** a regression or an improvement introduced by #110.
+
+## Results 2026-09-29 — issue #106 cycle 2 (D6: parameter-creation path)
+
+D6 changed the parameter-creation seam: the execution layer now receives
+`DataContext.CreateParam` as `Func<DbCommand, string, object?, DbParameter>` (the executing
+command is passed in), and `nextorm.mysql` mints its parameters through
+`command.CreateParameter()` so a `MySql.Data` connection gets `MySql.Data` parameters and a
+`MySqlConnector` connection gets `MySqlConnector` parameters. The public command-unaware
+`GetDbCommand` overload forwards its factory straight into the shared binding core with no
+capturing adapter (the earlier adapter was removed). Evidence: (a) the seven-case acceptance
+suite as query-path protection, (b) the current-tree `ParamsAllocationBenchmark` re-measure
+below.
+
+### Acceptance run (query-path protection)
+
+Command and host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS,
+.NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`,
+`InProcessEmitToolchain`, `Categories=acceptance`). **7** cases selected, **0** failures.
+External shell wall clock **52.23 s**; BDN `Global total time` **49.39 s** — both under the
+4 min budget. The host was **not quiet**: concurrent `opencode`/`roslyn`/`VBCSCompiler`
+processes held the load average around 6–12 on 8 logical cores, so every absolute mean is
+inflated and the cached-vs-prepared ratio is dominated by run noise.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 3.951 ms | 339.84 KB | +35.5% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 111.9 ms | 50.01 MB | +83.6% (high-variance row) |
+| `Nextorm_Cached` | 3.064 ms | 539.9 KB | +72.9% (high-variance row) |
+| `Prepared_ToList` | 2,065.7 us | 76.14 KB | +123.6% |
+| `Cached_ToList` | 2,844.4 us | 572.26 KB | +64.7% |
+| `Cached_PlanOnly_Param` | 934.3 us | 496.11 KB | +80.2% |
+| `Nextorm_Cached_ToListAsync` | 3.417 ms | 716.29 KB | +59.9% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.38** — vs
+documented baseline **1.87** (-26%) and vs the stated prior figure **2.07** (-33%); the
+corresponding allocated ratio is **7.52** (baseline **7.42**, unchanged). The time ratio is
+*below* baseline because `Prepared_ToList` itself measured ≈2.2× its baseline
+(2,065.7 us vs 923.8 us, `Error = 12,403.8 us`), so the ratio is compressed by host noise,
+not improved by D6. A second run of the same command on the same host measured a ratio of
+**3.89** (`Prepared_ToList` 1.372 ms, `Cached_ToList` 5.343 ms, `Cached_ToList`
+`Error = 22,596 us`) — a symmetric outlier in the other direction. The two runs
+(**1.38 / 3.89**) bracket the documented 1.87–2.07 band and confirm the host's `ShortRun`
+variance rather than a code change. **No regression can be established from the time ratio
+on this host; the allocated ratio is unchanged at 7.52, and no path touched by D6 adds
+per-row work** (the delegate carries one extra `DbCommand` argument and MySQL mints through
+`command.CreateParameter()`, both per-command, not per-row).
+
+### Parameter path — `ParamsAllocationBenchmark` (current tree, re-measured)
+
+Command (14 executed benchmarks, 0 failures; BDN `Global total time` **1 m 53 s**):
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *ParamsAllocation*
+```
+
+The D6 refactor removed the capturing adapter the public overload formerly built from the
+command-unaware factory: `GetDbCommand(span, factory, conn, tx)` now calls
+`GetDbCommandCore` with the factory as its `legacy` delegate, which the core invokes
+directly — the same way the internal command-aware overloads pass their `aware` factory. The
+public arm therefore carries **0 B/op extra** over the core/internal path. The benchmark
+binds the SQLite 2-arg factory once (`_createParam = _dbCtx.CreateParam`, no closure) and
+both `GetDbCommand_*` arms call the public overload. Mean in ns and `Allocated` per
+benchmark operation (BDN's unit; each of these arms loops 100 times internally) as BDN
+prints it:
+
+| Arm | Mean | Allocated (BDN, per op) |
+|-----|------|-------------------------|
+| `GetDbCommand_1Arg_Params` | 2,638.7 ns | 5,600 B |
+| `GetDbCommand_1Arg_ReusedArray` | 1,740.1 ns | 2,400 B |
+| `Nextorm_Any_1Arg_Params` | 996,486 ns | 87,209 B |
+| `Nextorm_Any_1Arg_ReusedArray` | 1,133,708 ns | 84,009 B |
+| `Nextorm_Any_2Arg_Params` | 1,190,554 ns | 124,009 B |
+| `Nextorm_Any_2Arg_ReusedArray` | 1,108,541 ns | 120,009 B |
+
+**Allocation.** The public arm allocates exactly the parameter array plus the boxed value
+and nothing else: `GetDbCommand_1Arg_Params` 5,600 B per 100-iteration op = 100 × (`object[1]`
+32 B + boxed `int` 24 B), while `GetDbCommand_1Arg_ReusedArray` (2,400 B = 100 × boxed
+`int` 24 B) drops the array and keeps only the box. A per-call capturing adapter would add a
+reference object on top of that; its absence is what "0 B/op extra" means here. This is
+**not a "byte-identical" claim**: the current-tree numbers match the earlier D2 run on every
+arm except one BDN rounding step — `Nextorm_Any_2Arg_Params` 124,018 B → **124,009 B**
+(−9 B, 0.007 %) and `EntityAnyCommand_BuildAndPrepare` 7,417 B → **7,418 B** (+1 B). The
+public 3-arg arm's allocation is unchanged (`5,600 B`), so removing the adapter changed no
+allocation.
+
+Raw times are host-noise-dominated (`Error ≈ Mean` or larger on several rows) and are not
+used to claim a regression or an improvement.
+
+For MySQL specifically (not exercised by this SQLite-based benchmark): `MySqlConnector`'s
+`MySqlCommand.CreateParameter()` returns `new MySqlParameter()`, the same allocation the
+previous `new MySqlParameter(name, value ?? DBNull.Value)` performed, and D6 only adds a
+`DbCommand` argument to an already-bound delegate — no per-call allocation on the MySQL
+path either.
+
+**Verdict: no regression** — the query-path acceptance is 7/7 with the allocated ratio
+unchanged (7.52 vs 7.42), and the current-tree parameter-path allocations match the earlier
+D2 run within BDN's one-unit rounding (no "byte-identical" claim); the MySQL
+`command.CreateParameter()` swap is allocation-neutral. The noisy acceptance time ratio
+(1.38 / 3.89) is reported as such and is not used to claim an improvement or a regression.

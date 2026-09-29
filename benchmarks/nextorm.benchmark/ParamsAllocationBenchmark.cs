@@ -72,8 +72,11 @@ public class ParamsAllocationBenchmark
 
         ((IConnectionManager)_db).EnsureConnectionOpen();
         _conn = _dbCtx.GetConnection();
-        // Bound once, mirroring production: GetDbCommand now takes parameter creation as a
-        // delegate rather than the context, so the arms below must not allocate one per call.
+        // Bound once, mirroring production: GetDbCommand takes parameter creation as a delegate,
+        // so the arms below never allocate a factory per call. SQLite's default ignores the
+        // executing command, so the benchmark binds the public 2-arg factory directly; the core
+        // forwards that delegate to the shared binding core without a capturing adapter, so the
+        // public GetDbCommand arm carries no extra closure over the command-aware internal path.
         _createParam = _dbCtx.CreateParam;
         _dbCmd = (DbPreparedQueryCommand<bool>)_cmd1;
     }
@@ -158,10 +161,14 @@ public class ParamsAllocationBenchmark
     }
 
     // ---- No DB: GetDbCommand param application only -----------------------------
+    // Both arms call the public (factory, conn) overload; it forwards the command-unaware
+    // factory straight into the shared binding core, so the measured cost is the parameter
+    // lifecycle only — no capturing closure on top (allocation matches the internal path).
 
     [Benchmark]
     public void GetDbCommand_1Arg_Params()
     {
+        // Fresh object[] each iteration: the params-array cost the span signature removes.
         for (var i = 0; i < Iterations; i++)
             _sink += _dbCmd.GetDbCommand(new object[] { i }, _createParam, _conn).Parameters.Count;
     }
@@ -169,6 +176,7 @@ public class ParamsAllocationBenchmark
     [Benchmark]
     public void GetDbCommand_1Arg_ReusedArray()
     {
+        // Reused array isolates the factory/parameter cost from the array allocation.
         var args = _args1;
         for (var i = 0; i < Iterations; i++)
         {

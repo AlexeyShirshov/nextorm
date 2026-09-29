@@ -28,7 +28,7 @@ public static class EntityFrameworkCoreExtensions
     private const string SupportedProvidersMessage =
         "Supported EF Core providers are: Npgsql.EntityFrameworkCore.PostgreSQL (PostgreSQL), " +
         "Microsoft.EntityFrameworkCore.SqlServer, Pomelo.EntityFrameworkCore.MySql (MySQL and MariaDB), " +
-        "and Microsoft.EntityFrameworkCore.Sqlite.";
+        "MySql.EntityFrameworkCore (MySQL only), and Microsoft.EntityFrameworkCore.Sqlite.";
 
     /// <summary>
     /// Creates a nextorm <see cref="IDataContext"/> over the EF Core connection of
@@ -98,7 +98,8 @@ public static class EntityFrameworkCoreExtensions
     /// </summary>
     /// <remarks>
     /// Matching is exact (ordinal) on purpose: a substring match used to accept look-alike names. Only
-    /// the four shipped EF providers are recognised.
+    /// the shipped EF providers are recognised, including both MySQL EF providers (Pomelo and Oracle's
+    /// <c>MySql.EntityFrameworkCore</c>).
     /// </remarks>
     private static SupportedProvider ResolveProvider(string? providerName)
     {
@@ -110,6 +111,7 @@ public static class EntityFrameworkCoreExtensions
             "Npgsql.EntityFrameworkCore.PostgreSQL" => SupportedProvider.Postgres,
             "Microsoft.EntityFrameworkCore.SqlServer" => SupportedProvider.SqlServer,
             "Pomelo.EntityFrameworkCore.MySql" => SupportedProvider.MySql,
+            "MySql.EntityFrameworkCore" => SupportedProvider.MySql,
             "Microsoft.EntityFrameworkCore.Sqlite" => SupportedProvider.Sqlite,
             _ => throw new InvalidOperationException(
                 $"The EF Core provider '{providerName}' is not supported. {SupportedProvidersMessage}"),

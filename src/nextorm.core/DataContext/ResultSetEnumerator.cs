@@ -22,7 +22,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     // delegate. Neither is the concrete DataContext, so the enumerator no longer depends on the
     // context type (F6). The delegate is handed over once per enumeration, not built per call.
     private IConnectionManager? _connectionManager;
-    private Func<string, object?, DbParameter>? _createParam;
+    private Func<DbCommand, string, object?, DbParameter>? _createParam;
     private Func<DbTransaction?>? _currentTransaction;
     private InterceptorHooks? _interceptors;
     private IDataContext? _context;
@@ -206,7 +206,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
-    internal void InitEnumerator(IConnectionManager connectionManager, Func<string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
+    internal void InitEnumerator(IConnectionManager connectionManager, Func<DbCommand, string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
     {
         _cancellationToken = cancellationToken;
         _params = @params;

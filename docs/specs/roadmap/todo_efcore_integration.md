@@ -12,7 +12,7 @@
 > `CreateNextOrmContext(this DbContext, Action<DataContextBuilder>?)` + `NextOrmModelMapper.Register(IModel)`
 > запускают nextorm поверх соединения EF и его текущей транзакции, а маппинг таблиц и переименованных
 > колонок читается из EF-модели; чтения и запись nextorm участвуют в общей транзакции EF
-> (PostgreSQL + SQL Server — проверено; MySQL — pending). Провайдер выбирается по точному
+> (PostgreSQL + SQL Server + MySQL — проверено). Провайдер выбирается по точному
 > `ProviderName`; невыразимые фичи отклоняются fail-fast: EF query filters, TPH/TPT/TPC,
 > schema-qualified таблица и конфликтующее повторное сопоставление. Остаются P2 (`UseNextOrm` + DI),
 > P3 (трансляция EF `IQueryable`) и P4 (мост DML/`SaveChanges`); принятые решения — в разделе
@@ -33,17 +33,16 @@
 > DML/`SaveChanges`) — явно вне области:** change tracking и `SaveChanges` остаются за EF Core.
 > Публичные члены — в `docs/specs/design/API-NAMING-REVIEW.md`.
 
-> **#106 shared-transaction/connection: PostgreSQL + SQL Server — VERIFIED; MySQL — PENDING (2026-09-28, `1.0.9-a`).**
+> **#106 shared-transaction/connection: PostgreSQL + SQL Server + MySQL — VERIFIED (2026-09-29, `1.0.9-a`).**
 > Container-backed интеграционные тесты публичного моста `CreateNextOrmContext()` подтвердили общее
-> соединение и транзакцию EF↔nextorm на **PostgreSQL** и **SQL Server** (плюс прежний SQLite):
+> соединение и транзакцию EF↔nextorm на **PostgreSQL**, **SQL Server** и **MySQL** (плюс прежний SQLite):
 > nextorm видит незакоммиченные строки EF, откат EF их удаляет, `Dispose` nextorm-контекста не
-> закрывает/не коммитит соединение и транзакцию EF. **MySQL остаётся открытым и заблокирован:**
-> у `Pomelo.EntityFrameworkCore.MySql` нет релиза под EF Core 10 (последний 9.0.0 = EF Core 9), а
-> `MySql.EntityFrameworkCore` 10.x от Oracle использует другой ADO.NET-драйвер (`MySql.Data`), и его
-> `ProviderName` не разрешается текущим switch'ем моста
-> (`src/nextorm.entityframeworkcore/EntityFrameworkCoreExtensions.cs`). Пункт #106 **не закрыт**;
-> милестоун остаётся `1.0.9-a` (MySQL — открыт до появления EF Core 10-совместимого MySQL-провайдера
-> и зелёного container-backed прогона).
+> закрывает/не коммитит соединение и транзакцию EF. MySQL проверен на EF Core 10 через провайдер Oracle
+> `MySql.EntityFrameworkCore` 10.0.9 (ADO.NET-драйвер `MySql.Data`) — Pomelo под EF Core 10 по-прежнему
+> недоступен (последний 9.0.0 = EF Core 9). Мост распознаёт оба `ProviderName`
+> (`Pomelo.EntityFrameworkCore.MySql` и `MySql.EntityFrameworkCore`), а `nextorm.mysql` создаёт параметры
+> через выполняемую команду (`command.CreateParameter()`), поэтому работают оба драйвера; обычный путь
+> `MySqlConnector` не изменился. Пункт #106 **закрыт**.
 
 ## Пункт и цель
 
@@ -111,7 +110,7 @@
 | `Microsoft.EntityFrameworkCore.SqlServer` | `nextorm.sqlserver` | да | да | да | `SqlServerDataContext` |
 | `Npgsql.EntityFrameworkCore.PostgreSQL` | `nextorm.postgres` | да | да | да | полноценный `BEGIN`/`COMMIT` |
 | `Microsoft.EntityFrameworkCore.Sqlite` | `nextorm.sqlite` | да | да | да | базовый провайдер тестов |
-| `Pomelo.EntityFrameworkCore.MySql` / `MySql.EntityFrameworkCore` | `nextorm.mysql` | да | да | да | имя `ProviderName` зависит от пакета; общий соединение/транзакция с EF — **pending** (#106, нет EF Core 10-провайдера) |
+| `Pomelo.EntityFrameworkCore.MySql` / `MySql.EntityFrameworkCore` | `nextorm.mysql` | да | да | да | имя `ProviderName` зависит от пакета; общее соединение/транзакция с EF — **проверено** (#106: MySQL на EF Core 10 через Oracle `MySql.EntityFrameworkCore` 10.0.9 / драйвер `MySql.Data`; Pomelo под EF Core 10 пока недоступен) |
 | `MariaDB.EntityFrameworkCore` / Pomelo-MariaDB | `nextorm.mariadb` | да | да | да | имя `ProviderName` уточнить при реализации |
 | ClickHouse EF-провайдер (community) | `nextorm.clickhouse` | да | **нет** | да | HTTP-протокол, транзакций нет (nextorm `ITransactionManager` их тоже отклоняет) |
 | `Microsoft.EntityFrameworkCore.InMemory` | in-memory контекст nextorm | нет | нет | да | только маппинг, соединения нет |
@@ -265,7 +264,7 @@ public static class NextOrmQueryableExtensions
   `NextOrmModelMapper.Register` из `IModel`; enlist в транзакцию EF; выбор провайдера по точному
   `ProviderName`; unit-тесты SQL-генерации без БД + интеграционные тесты SQLite (модель + соединение +
   транзакция + владение соединением). Shared-transaction/connection на PostgreSQL и SQL Server —
-  **проверено** container-backed тестами (#106); MySQL — **pending** (см. статус #106 выше).
+  **проверено** container-backed тестами (#106); MySQL — **проверено** (см. статус #106 выше).
 - **Фаза 2: ✅ реализована (2026-09-27, `1.0.9-a`):** `UseNextOrm` (+generic) хранит опции,
   `GetNextOrmContext` строит `IDataContext`, `AddNextOrmFromDbContext<TDbContext>`
   регистрирует scoped `IDataContext`. Контекстно-локальный резолвер маппинга не потребовался —
@@ -331,13 +330,13 @@ public static class NextOrmQueryableExtensions
 - **P1/P2/P3 — отгружены; P4 — вне области.** P2 (`UseNextOrm` + DI) и P3 (трансляция EF
   `IQueryable`) отгружены (см. «Статус»/«Этапы внедрения»); P4 (opt-in мост DML/`SaveChanges`) признан
   явно вне области; change tracking/`SaveChanges` остаются за EF Core.
-- **Shared-transaction тесты → [#106](https://github.com/AlexeyShirshov/nextorm/issues/106): PostgreSQL + SQL Server — проверено; MySQL — отложено/заблокировано.**
+- **Shared-transaction тесты → [#106](https://github.com/AlexeyShirshov/nextorm/issues/106): PostgreSQL + SQL Server + MySQL — проверено.**
   Container-backed тесты публичного моста подтвердили enlist nextorm в EF-транзакцию (и общее соединение)
-  на PostgreSQL и SQL Server; SQLite покрыт локально. MySQL **не закрыт**: у
-  `Pomelo.EntityFrameworkCore.MySql` нет релиза под EF Core 10 (последний 9.0.0 = EF Core 9), а
-  `MySql.EntityFrameworkCore` 10.x использует `MySql.Data` и его `ProviderName` не разрешается switch'ем
-  моста. Пункт #106 остаётся открытым, милестоун `1.0.9-a`; триггер закрытия — EF Core 10-совместимый
-  MySQL-провайдер + зелёный container-backed прогон.
+  на PostgreSQL, SQL Server и MySQL; SQLite покрыт локально. MySQL прогнан на EF Core 10 через Oracle
+  `MySql.EntityFrameworkCore` 10.0.9 (`MySql.Data`), т.к. Pomelo под EF Core 10 недоступен; мост
+  распознаёт оба `ProviderName` (`Pomelo.EntityFrameworkCore.MySql` и `MySql.EntityFrameworkCore`), а
+  `nextorm.mysql` создаёт параметры через выполняемую команду, поэтому работают оба драйвера. Пункт #106
+  **закрыт**.
 - **P3-guard: консервативное переотклонение mapped-колонок-массивов/`List<int>`.** `LambdaBodyGuard`
   (`NextOrmQueryableExtensions.cs`) отклоняет member-доступ по типу, а не по маппингу: скалярные
   array/`List<int>`-колонки, которые EF-модель и провайдер умеют транслировать, могут быть отвергнуты

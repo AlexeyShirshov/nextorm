@@ -19,6 +19,7 @@ namespace NextORM.Core;
 internal sealed class BatchRunner
 {
     private readonly IConnectionManager _connectionManager;
+    private readonly Func<DbCommand, string, object?, DbParameter> _createParamAware;
     private readonly Func<string, object?, DbParameter> _createParam;
     private readonly Func<DbTransaction?> _currentTransaction;
     private readonly Func<bool> _isDisposed;
@@ -29,6 +30,7 @@ internal sealed class BatchRunner
 
     internal BatchRunner(
         IConnectionManager connectionManager,
+        Func<DbCommand, string, object?, DbParameter> createParamAware,
         Func<string, object?, DbParameter> createParam,
         Func<DbTransaction?> currentTransaction,
         Func<bool> isDisposed,
@@ -36,6 +38,7 @@ internal sealed class BatchRunner
         int? commandTimeout)
     {
         _connectionManager = connectionManager;
+        _createParamAware = createParamAware;
         _createParam = createParam;
         _currentTransaction = currentTransaction;
         _isDisposed = isDisposed;
@@ -242,7 +245,7 @@ internal sealed class BatchRunner
         {
             var parameters = plan.Statements[i].Parameters;
             for (var p = 0; p < parameters.Count; p++)
-                cmd.Parameters.Add(_createParam(parameters[p].Name, parameters[p].Value));
+                cmd.Parameters.Add(_createParamAware(cmd, parameters[p].Name, parameters[p].Value));
         }
 
         if (_logParams) LogBatch(plan);

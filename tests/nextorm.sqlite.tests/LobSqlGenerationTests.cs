@@ -53,7 +53,7 @@ public class LobSqlGenerationTests
             ctx.GetType(),
             new ProviderHooks(
                 (column, param) => param,
-                (name, value) => new SqliteParameter(name, value ?? DBNull.Value),
+                (_, name, value) => new SqliteParameter(name, value ?? DBNull.Value),
                 sql => new SqliteCommand(sql)),
             new LoggingOptions(null),
             new InterceptorHooks([], []));
