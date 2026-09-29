@@ -74,6 +74,10 @@
 
 ### Advanced
 
+- [Global query filters](advanced/query-filters.md)
+- [Entity Framework Core integration](advanced/integration-efcore.md)
+- [Eager loading child collections](advanced/eager-loading.md)
+- [Relationships and single-query loading](advanced/relationships.md)
 - [Limitations and out-of-scope features](advanced/limitations.md)
 - [API reference](advanced/api-reference.md)
 
@@ -97,7 +101,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.8-b) is a prof of concept.
+The current status (1.0.9-a) is a prof of concept.
 
 ## Installation
 
@@ -126,6 +130,18 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](infrastructure/01-query-reuse-and-caching.md).
 
 ## Releases
+
+### 1.0.9-a
+
+- [Навигационные свойства и связи: декларативные O2M/M2O, `JoinInto`, дочерние коллекции](https://github.com/AlexeyShirshov/nextorm/issues/105)
+- [Eager loading графа — `LoadWith`/`Include` (split- и single-query, `AsSingleQuery`)](https://github.com/AlexeyShirshov/nextorm/issues/95)
+- [Глобальные фильтры запросов (fluent + атрибут, keyed, selective `IgnoreFilters`, DML и INSERT/MERGE-валидация)](https://github.com/AlexeyShirshov/nextorm/issues/67)
+- [Интеграция с EF Core — пакет `nextorm.entityframeworkcore` (`UseNextOrm`, DI, shared transactions)](https://github.com/AlexeyShirshov/nextorm/issues/61)
+- [Динамические колонки (store): чтение и запись, INSERT/UPDATE/MERGE рендерят ключи словаря как колонки](https://github.com/AlexeyShirshov/nextorm/issues/94)
+- [Потоковое чтение LOB: серверный чанкинг (MySQL/MariaDB), аксессоры именованных колонок и стрим-проекции](https://github.com/AlexeyShirshov/nextorm/issues/100)
+- [`As<TResult>` — проекция join в пользовательский тип и снятие потолка арности](https://github.com/AlexeyShirshov/nextorm/issues/76)
+- Новые страницы EN + RU: «Связи», «Eager loading», «Глобальные фильтры запросов», «Интеграция с EF Core», «Логирование», глава 27 «Динамические колонки»; перенумерация глав руководства
+- [Глава 24 — уточнён диапазон MySQL/MariaDB `TIME`](https://github.com/AlexeyShirshov/nextorm/issues/102)
 
 ### 1.0.8-b
 

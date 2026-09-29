@@ -74,6 +74,10 @@
 
 ### Продвинутое
 
+- [Глобальные фильтры запросов](advanced/query-filters.md)
+- [Интеграция с Entity Framework Core](advanced/integration-efcore.md)
+- [Жадная загрузка дочерних коллекций](advanced/eager-loading.md)
+- [Связи и однозапросная загрузка](advanced/relationships.md)
 - [Ограничения и что вне области](advanced/limitations.md)
 - [Краткий справочник API](advanced/api-reference.md)
 
