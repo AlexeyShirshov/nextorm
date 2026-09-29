@@ -59,7 +59,7 @@
 
 ## Coverage
 - `coverage.settings.xml` includes only `nextorm.{core,sqlite,postgres,sqlserver}`.
-- CI threshold `MIN_LINE_COVERAGE=75` hard-fails only on `main`; other branches warn. Reproduce with the `dotnet-coverage collect` → `reportgenerator` steps in `.github/workflows/dotnet.yml`.
+- CI thresholds `MIN_LINE_COVERAGE=85` and `MIN_BRANCH_COVERAGE=75` (both, `dotnet-coverage`/`reportgenerator`) hard-fail only on `main`; other branches warn. Reproduce with the `dotnet-coverage collect` → `reportgenerator` steps in `.github/workflows/dotnet.yml`.
 
 ## Docs
 - DocFX is a local tool: `dotnet docfx docs/docfx.json`. `docs/api/` and `docs/_site/` are generated and gitignored; article pages are hand-written.

@@ -1,0 +1,4 @@
+key	rc	wall_sec	cost	files	tests	overlap	skills
+a1	0	1254	0.214725	37	3	19/37	нет
+a2	0	2514	0.268319	43	8	17/43	implementing-todo-features
+a3	0	4716	0.095524	37	8	15/37	pdca-dotnet,nextorm-pdca,running-integration-tests

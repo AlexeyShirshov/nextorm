@@ -24,7 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      MIN_LINE_COVERAGE: 75
+      MIN_LINE_COVERAGE: 85
+      MIN_BRANCH_COVERAGE: 75
 
     steps:
       - uses: actions/checkout@v7
@@ -49,17 +50,23 @@ jobs:
             -targetdir:tests/coverage/report \
             -reporttypes:"Html;TextSummary;Cobertura" \
             -riskhotspotassemblyfilters:"+nextorm.*"
-      - name: Enforce line coverage threshold
+      - name: Enforce coverage thresholds
         run: |
-          LINE=$(grep -oP 'Line coverage: \K[0-9.]+' tests/coverage/report/Summary.txt)
+          SUMMARY=tests/coverage/report/Summary.txt
+          LINE=$(grep -oP 'Line coverage: \K[0-9.]+' "$SUMMARY")
+          BRANCH=$(grep -oP 'Branch coverage: \K[0-9.]+' "$SUMMARY")
           echo "Line coverage: ${LINE}% (threshold: ${MIN_LINE_COVERAGE}%)"
-          if awk -v c="$LINE" -v min="$MIN_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }'; then
+          echo "Branch coverage: ${BRANCH}% (threshold: ${MIN_BRANCH_COVERAGE}%)"
+          FAIL=0
+          awk -v c="$LINE" -v min="$MIN_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }' || FAIL=1
+          awk -v c="$BRANCH" -v min="$MIN_BRANCH_COVERAGE" 'BEGIN { exit (c + 0 < min) }' || FAIL=1
+          if [ "$FAIL" -eq 0 ]; then
             echo "Coverage OK"
           elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            echo "::error::Line coverage ${LINE}% is below the ${MIN_LINE_COVERAGE}% threshold"
+            echo "::error::Coverage below threshold (line ${LINE}% < ${MIN_LINE_COVERAGE}% or branch ${BRANCH}% < ${MIN_BRANCH_COVERAGE}%)"
             exit 1
           else
-            echo "::warning::Line coverage ${LINE}% is below the ${MIN_LINE_COVERAGE}% threshold (hard-fails on main only)"
+            echo "::warning::Coverage below threshold (line ${LINE}% < ${MIN_LINE_COVERAGE}% or branch ${BRANCH}% < ${MIN_BRANCH_COVERAGE}%); hard-fails on main only"
           fi
       - name: Coverage summary
         if: always()
@@ -73,12 +80,15 @@ jobs:
 
               echo "## Line coverage: ${LINE}% (threshold: ${MIN_LINE_COVERAGE}%)"
               echo
-              echo "Branch coverage: ${BRANCH}%"
+              echo "## Branch coverage: ${BRANCH}% (threshold: ${MIN_BRANCH_COVERAGE}%)"
               echo
-              if awk -v c="$LINE" -v min="$MIN_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }'; then
-                echo "Coverage threshold: **OK**"
+              LINE_OK=1; BRANCH_OK=1
+              awk -v c="$LINE" -v min="$MIN_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }' || LINE_OK=0
+              awk -v c="$BRANCH" -v min="$MIN_BRANCH_COVERAGE" 'BEGIN { exit (c + 0 < min) }' || BRANCH_OK=0
+              if [ "$LINE_OK" -eq 1 ] && [ "$BRANCH_OK" -eq 1 ]; then
+                echo "Coverage thresholds: **OK**"
               else
-                echo "Coverage threshold: **FAILED**"
+                echo "Coverage thresholds: **FAILED** (line: $([ "$LINE_OK" -eq 1 ] && echo ok || echo low); branch: $([ "$BRANCH_OK" -eq 1 ] && echo ok || echo low))"
               fi
               echo
               echo "| Assembly | Line coverage |"

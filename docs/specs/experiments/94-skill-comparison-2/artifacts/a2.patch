@@ -1,0 +1,2081 @@
+diff --git a/docs/advanced/api-reference.md b/docs/advanced/api-reference.md
+index e04ac3c..615c8db 100644
+--- a/docs/advanced/api-reference.md
++++ b/docs/advanced/api-reference.md
+@@ -41,7 +41,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
+ 
+ | Type | Description |
+ |---|---|
+-| [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | Fluent, immutable query builder for a mapped entity type. Per-query source overrides: [`WithTableName`](xref:NextORM.Core.EntityBuilder`1.WithTableName(System.String)), [`WithSchema`](xref:NextORM.Core.EntityBuilder`1.WithSchema(System.String)), [`WithDatabase`](xref:NextORM.Core.EntityBuilder`1.WithDatabase(System.String)), [`WithServer`](xref:NextORM.Core.EntityBuilder`1.WithServer(System.String)) and [`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) (see [Per-query source overrides](../querying/02-query-sources.md#per-query-source-overrides)). |
++| [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | Fluent, immutable query builder for a mapped entity type. Per-query source overrides: [`WithTableName`](xref:NextORM.Core.EntityBuilder`1.WithTableName(System.String)), [`WithSchema`](xref:NextORM.Core.EntityBuilder`1.WithSchema(System.String)), [`WithDatabase`](xref:NextORM.Core.EntityBuilder`1.WithDatabase(System.String)), [`WithServer`](xref:NextORM.Core.EntityBuilder`1.WithServer(System.String)) and [`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) (see [Per-query source overrides](../querying/02-query-sources.md#per-query-source-overrides)). Reads runtime-schema columns into the store with [`WithDynamicColumns`](xref:NextORM.Core.EntityBuilder`1.WithDynamicColumns(System.String[])) (see [Dynamic columns](../getting-started/03-entities-and-metadata.md#dynamic-columns-runtime-schema)). |
+ | [`EntityBuilderExtensions`](xref:NextORM.Core.EntityBuilderExtensions) | Terminal operators of [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) ([`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0}))/[`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object}))/[`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0}))/[`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0}))/[`Last`](xref:NextORM.Core.EntityBuilderExtensions.Last``1(NextORM.Core.EntityBuilder{``0}))/[`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0}))/aggregates/`To*`/[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))) as extension methods. |
+ | [`InsertBuilder<TEntity>`](xref:NextORM.Core.InsertBuilder`1) | Fluent `INSERT ... VALUES`/`INSERT ... SELECT` builder started with [`InsertInto<TEntity>`](xref:NextORM.Core.DataContextExtensions.InsertInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): [`Value`](xref:NextORM.Core.InsertBuilder`1.Value``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},``0))/[`Values`](xref:NextORM.Core.InsertBuilder`1.Values(`0)) — plus the batch overloads `Values(source, mapping)` (an `IEnumerable` source inserts client-side values, an `EntityBuilder<TSource>` source renders a server-side `INSERT ... SELECT`), `Values(scalar[])`, `Values(column, values)`, the selector-less scalar `Value(value)` and [`SqlDefault.Value`](xref:NextORM.Core.SqlDefault.Value) for a column default —/[`Insert`](xref:NextORM.Core.InsertBuilder`1.Insert)/[`Returning`](xref:NextORM.Core.InsertBuilder`1.Returning)/[`ReturningIdentity`](xref:NextORM.Core.InsertBuilder`1.ReturningIdentity``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))/[`ReturningIdentity<TKey>()`](xref:NextORM.Core.InsertBuilder`1.ReturningIdentity``1)/[`ReturningKey`](xref:NextORM.Core.InsertBuilder`1.ReturningKey``1)/[`ToSql`](xref:NextORM.Core.InsertBuilder`1.ToSql). See [Data modification](../guide/17-insert-statement.md). |
+ | [`InsertReturningBuilder<TEntity,TResult>`](xref:NextORM.Core.InsertReturningBuilder`2) | Row-returning terminal created with [`Returning`](xref:NextORM.Core.InsertBuilder`1.Returning)/[`Returning`](xref:NextORM.Core.InsertBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})): [`Single`](xref:NextORM.Core.InsertReturningBuilder`2.Single)/[`SingleAsync`](xref:NextORM.Core.InsertReturningBuilder`2.SingleAsync(System.Threading.CancellationToken)) return one row and [`ToList`](xref:NextORM.Core.InsertReturningBuilder`2.ToList)/[`ToListAsync`](xref:NextORM.Core.InsertReturningBuilder`2.ToListAsync(System.Threading.CancellationToken)) return every row, materialised through the provider's `RETURNING`/`OUTPUT`. The same builder exposes SQL Server `OutputInto`/`OutputIntoThenOutput` (see the next row). See [Returning the inserted rows](../guide/17-insert-statement.md#returning-the-inserted-rows). |
+@@ -62,8 +62,8 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
+ | [`BatchExtensions`](xref:NextORM.Core.BatchExtensions) / [`BatchBuilder`](xref:NextORM.Core.BatchBuilder) / [`BatchQuery<TResult>`](xref:NextORM.Core.BatchQuery`1) / [`BatchResult`](xref:NextORM.Core.BatchResult) | Executes several statements as one batch (one round trip, one server session): `ctx.Batch()` → side-effecting steps — `CreateTempTable`/`CreateTable` (materialisations) and `Insert`/`Update`/`Delete`/`Truncate` (DML, taking `InsertBuilder`/`UpdateBuilder`/`DeleteBuilder`/`TruncateBuilder`) — then the result-bearing queries. For a single result, `Query<TResult>` returns the `BatchQuery<TResult>` terminal (`ToList`/`ToListAsync`/`ToAsyncEnumerable`/`ToSql`). For several results, `AddQuery<TResult>` chains any number and `Execute()`/`ExecuteAsync(CancellationToken = default)` run the batch once and return an eager, non-disposable [`BatchResult`](xref:NextORM.Core.BatchResult) — `ResultSetCount` and `Read<TResult>()` (sets read sequentially, each once, type-checked) — while [`BatchBuilder.ToSql()`](xref:NextORM.Core.BatchBuilder.ToSql) renders the whole batch without executing it (it requires at least one result step). Gated by [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.SupportsBatch); ClickHouse and the in-memory context throw. See [Executing statements in one batch](../guide/26-sql-batch.md#multiple-result-sets). |
+ | [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) | Fluent builder for an alias/table source that has no entity type ([`TableAlias`](xref:NextORM.Core.TableAlias) mode). |
+ | [`JoinedEntityBuilder<T1,T2>`](xref:NextORM.Core.JoinedEntityBuilder`2) … [`JoinedEntityBuilder<T1..T8>`](xref:NextORM.Core.JoinedEntityBuilder`8) | Accumulated join builders; arity 2 through 8. |
+-| [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) | Fluent entity-metadata configuration used by `IDataContext.From<T>(...)`; [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1.Property(System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) returns an [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1) with `HasColumnName`/`Key`/`Identity`/`Computed`/`Duration`/`DecimalPrecision`/`Collation`/`HasConversion`/`JsonColumn`. |
+-| [`IPropertyMetadata`](xref:NextORM.Core.IPropertyMetadata) | Read-only mapping metadata for one property (`PropertyInfo`, `ColumnName`, `IsKey`, `IsIdentity`, `IsComputed`, `DurationUnit`/`DurationPrecision`, `DecimalPrecision`/`DecimalScale`, `Collation`, `Converter`). |
++| [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) | Fluent entity-metadata configuration used by `IDataContext.From<T>(...)`; [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1.Property(System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) returns an [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1) with `HasColumnName`/`Key`/`Identity`/`Computed`/`Duration`/`DecimalPrecision`/`Collation`/`HasConversion`/`JsonColumn`/`DynamicColumns`. |
++| [`IPropertyMetadata`](xref:NextORM.Core.IPropertyMetadata) | Read-only mapping metadata for one property (`PropertyInfo`, `ColumnName`, `IsKey`, `IsIdentity`, `IsComputed`, `DurationUnit`/`DurationPrecision`, `DecimalPrecision`/`DecimalScale`, `Collation`, `Converter`, `IsDynamicColumnsStore`). |
+ | [`INamingConvention`](xref:NextORM.Core.INamingConvention) | Translates auto-derived table/column names (see `DataContextBuilder.UseNamingConvention`); built-in [`SnakeCaseNamingConvention`](xref:NextORM.Core.SnakeCaseNamingConvention) maps `SimpleEntity` to `simple_entity` and `FirstName` to `first_name`. |
+ | [`Projection<T1,T2>`](xref:NextORM.Core.Projection`2) … [`Projection<T1..T8>`](xref:NextORM.Core.Projection`8) | Result shape of a joined query; exposes `Item1`…`` |
+ | [`IProjection`](xref:NextORM.Core.IProjection) / [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection) | Markers for accumulated join projections (arity 8 is not extendable). |
+@@ -108,6 +108,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
+ | [`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) | Maps a static method (or its declaring type) to a table-valued function used as a `FROM` source. Optional `WithClause`/`CallClause`/`VerbatimArguments` and, for a caller-declared result schema, [`ResultSchema`](xref:NextORM.Core.SqlTableFunctionAttribute.ResultSchema) ([`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema)). |
+ | [`DurationAttribute`](xref:NextORM.Core.DurationAttribute) | Declares how a `TimeSpan` property is stored (`[Duration(DurationUnit.Seconds)]`), plus the native `Precision`; ignored where the provider has a native duration type. See [Duration columns](../guide/24-duration-columns.md). |
+ | [`CollationAttribute`](xref:NextORM.Core.CollationAttribute) | Declares the database collation of a mapped property (`[Collation("C")]`); applied to the column in collation-sensitive query operations on providers with [`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation). See [Column collation](../scalar-functions/01-string-functions.md#column-collation). |
++| [`DynamicColumnsAttribute`](xref:NextORM.Core.DynamicColumnsAttribute) | Declares the entity's dynamic-columns store: a property of type `IDictionary<string, object?>` that holds the table's runtime-schema columns. Read with [`EntityBuilder.WithDynamicColumns`](xref:NextORM.Core.EntityBuilder`1.WithDynamicColumns(System.String[])); written as columns by insert/update/merge. Fluent equivalent: [`EntityPropertyBuilder<T>.DynamicColumns`](xref:NextORM.Core.EntityPropertyBuilder`1.DynamicColumns). See [Dynamic columns](../getting-started/03-entities-and-metadata.md#dynamic-columns-runtime-schema). |
+ | [`DecimalPrecisionAttribute`](xref:NextORM.Core.DecimalPrecisionAttribute) | Declares the decimal precision/scale of a mapped property (`[DecimalPrecision(12, 4)]`), read as [`IPropertyMetadata.DecimalPrecision`](xref:NextORM.Core.IPropertyMetadata.DecimalPrecision)/[`DecimalScale`](xref:NextORM.Core.IPropertyMetadata.DecimalScale); used where a provider needs the declared pair (SQL Server and ClickHouse table-valued parameter columns). The pair is validated against the type actually bound for the column, as precision `1..38` and `0 <= scale <= precision`. A bound provider type of `decimal` is required: a non-decimal model mapped through a value converter to `decimal` is accepted, while a decimal model mapped to a non-decimal representation (a converter to `string` or a `JsonColumn` mapping) is rejected. An out-of-range pair throws `ArgumentOutOfRangeException` (parameter `precision`/`scale`); a non-decimal bound type, or a pair declaring only one of precision/scale, throws `InvalidOperationException`. The fluent equivalent is [`EntityPropertyBuilder<T>.DecimalPrecision`](xref:NextORM.Core.EntityPropertyBuilder`1.DecimalPrecision(System.Int32,System.Int32)). See [Raw SQL](../guide/12-raw-sql.md#table-valued-parameters). |
+ | [`DurationUnit`](xref:NextORM.Core.DurationUnit) | Storage unit of a `TimeSpan` column on a provider without a native type: `Ticks`, `Microseconds`, `Milliseconds`, `Seconds`, `Minutes`, `Hours`, `Days`. |
+ | [`ValueConverterAttribute`](xref:NextORM.Core.ValueConverterAttribute) | Declares the [`IPropertyValueConverter`](xref:NextORM.Core.IPropertyValueConverter) applied to a property (`[ValueConverter(typeof(MyConverter))]`). See [Value converters](../guide/28-value-converters.md). |
+diff --git a/docs/getting-started/03-entities-and-metadata.md b/docs/getting-started/03-entities-and-metadata.md
+index bbb1cb2..397493a 100644
+--- a/docs/getting-started/03-entities-and-metadata.md
++++ b/docs/getting-started/03-entities-and-metadata.md
+@@ -294,6 +294,61 @@ extension on [`IDataContext`](xref:NextORM.Core.IDataContext), so it works wheth
+ interface. Independently of entities, [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) can also wrap a subquery
+ (`dataContext.From(innerQuery)`) or another entity builder (`dataContext.From(entity)`).
+ 
++## Dynamic columns (runtime schema)
++
++A mapped entity can expose the table's "extra" columns - those that have no CLR property - through a
++single dictionary. Mark an `IDictionary<string, object?>` property with
++[`DynamicColumnsAttribute`](xref:NextORM.Core.DynamicColumnsAttribute) or the fluent
++[`DynamicColumns()`](xref:NextORM.Core.EntityPropertyBuilder`1.DynamicColumns):
++
++```csharp
++[SqlTable("events")]
++public class EventRow
++{
++    [Key] public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns] public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++```
++
++The store is not a physical column: it is never projected by itself and is excluded from the mapped
++property set (read it as [`IEntityMetadata.DynamicColumnsStore`](xref:NextORM.Core.IEntityMetadata.DynamicColumnsStore)
++and [`IPropertyMetadata.IsDynamicColumnsStore`](xref:NextORM.Core.IPropertyMetadata.IsDynamicColumnsStore)).
++
++To read the runtime columns, list them on the entity query with
++[`WithDynamicColumns`](xref:NextORM.Core.EntityBuilder`1.WithDynamicColumns(System.String[])); the names
++are discovered from the schema at run time (for example from `INFORMATION_SCHEMA`). The set is part of
++the plan key, so two queries with different sets never share a cached plan. `WithDynamicColumns` applies
++only to an entity query without an explicit `Select` projection.
++
++```csharp
++var row = dataContext.From<EventRow>()
++    .Where(x => x.Id == 1)
++    .WithDynamicColumns("region", "score")
++    .First();
++// row.Extra["region"], row.Extra["score"]
++```
++
++The identifiers are always quoted with the provider's delimiter (`"..."` on PostgreSQL/SQLite, `[...]`
++on SQL Server, `` `...` `` on MySQL/MariaDB/ClickHouse), so a runtime name cannot inject SQL - still only
++pass names from a trusted source.
++
++On write the keys of the store are rendered as columns by `INSERT`, `UPDATE` and `MERGE`:
++
++```csharp
++await dataContext.InsertInto<EventRow>().Values(new EventRow
++{
++    Id = 1, Name = "n",
++    Extra = new Dictionary<string, object?> { ["region"] = "eu", ["score"] = 5 },
++}).InsertAsync();
++```
++
++A key that collides with a declared column is ignored (the declared property wins); for a multi-row
++write the column set is the union of the rows' keys and a row missing a key writes `NULL`.
++
++The in-memory provider has no columnar row, so it returns the source entity's own store unchanged. Bulk
++insert does not write dynamic columns.
++
+ ## Quoted identifiers
+ 
+ By default table and column names are emitted verbatim (see [Provider differences](#provider-differences)),
+diff --git a/docs/ru/advanced/api-reference.md b/docs/ru/advanced/api-reference.md
+index 2fd9c26..37a91df 100644
+--- a/docs/ru/advanced/api-reference.md
++++ b/docs/ru/advanced/api-reference.md
+@@ -41,7 +41,7 @@
+ 
+ | Тип | Описание |
+ |---|---|
+-| [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | Fluent, неизменяемый построитель запросов для отображённого типа сущности. Переопределение источника на запрос: [`WithTableName`](xref:NextORM.Core.EntityBuilder`1.WithTableName(System.String)), [`WithSchema`](xref:NextORM.Core.EntityBuilder`1.WithSchema(System.String)), [`WithDatabase`](xref:NextORM.Core.EntityBuilder`1.WithDatabase(System.String)), [`WithServer`](xref:NextORM.Core.EntityBuilder`1.WithServer(System.String)) и [`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) (см. [Переопределение источника для запроса](../querying/02-query-sources.md#переопределение-источника-для-запроса)). |
++| [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | Fluent, неизменяемый построитель запросов для отображённого типа сущности. Переопределение источника на запрос: [`WithTableName`](xref:NextORM.Core.EntityBuilder`1.WithTableName(System.String)), [`WithSchema`](xref:NextORM.Core.EntityBuilder`1.WithSchema(System.String)), [`WithDatabase`](xref:NextORM.Core.EntityBuilder`1.WithDatabase(System.String)), [`WithServer`](xref:NextORM.Core.EntityBuilder`1.WithServer(System.String)) и [`WithTableExpression`](xref:NextORM.Core.EntityBuilder`1.WithTableExpression(System.String)) (см. [Переопределение источника для запроса](../querying/02-query-sources.md#переопределение-источника-для-запроса)). Читает колонки схемы времени выполнения в хранилище через [`WithDynamicColumns`](xref:NextORM.Core.EntityBuilder`1.WithDynamicColumns(System.String[])) (см. [Динамические колонки](../getting-started/03-entities-and-metadata.md#динамические-колонки-схема-во-время-выполнения)). |
+ | [`EntityBuilderExtensions`](xref:NextORM.Core.EntityBuilderExtensions) | Терминальные операторы [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) ([`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0}))/[`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object}))/[`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0}))/[`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0}))/[`Last`](xref:NextORM.Core.EntityBuilderExtensions.Last``1(NextORM.Core.EntityBuilder{``0}))/[`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0}))/агрегаты/`To*`/[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))) в виде extension-методов. |
+ | [`InsertBuilder<TEntity>`](xref:NextORM.Core.InsertBuilder`1) | Fluent-построитель `INSERT ... VALUES`/`INSERT ... SELECT`, запускаемый через [`InsertInto<TEntity>`](xref:NextORM.Core.DataContextExtensions.InsertInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): [`Value`](xref:NextORM.Core.InsertBuilder`1.Value``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},``0))/[`Values`](xref:NextORM.Core.InsertBuilder`1.Values(`0)) — плюс batch-перегрузки `Values(source, mapping)` (источник `IEnumerable` пишет значения на клиенте, источник `EntityBuilder<TSource>` рендерит серверный `INSERT ... SELECT`), `Values(scalar[])`, `Values(column, values)`, скалярный без селектора `Value(value)` и [`SqlDefault.Value`](xref:NextORM.Core.SqlDefault.Value) для дефолта колонки —/[`Insert`](xref:NextORM.Core.InsertBuilder`1.Insert)/[`Returning`](xref:NextORM.Core.InsertBuilder`1.Returning)/[`ReturningIdentity`](xref:NextORM.Core.InsertBuilder`1.ReturningIdentity``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))/[`ReturningIdentity<TKey>()`](xref:NextORM.Core.InsertBuilder`1.ReturningIdentity``1)/[`ReturningKey`](xref:NextORM.Core.InsertBuilder`1.ReturningKey``1)/[`ToSql`](xref:NextORM.Core.InsertBuilder`1.ToSql). См. [Изменение данных](../guide/17-insert-statement.md). |
+ | [`InsertReturningBuilder<TEntity,TResult>`](xref:NextORM.Core.InsertReturningBuilder`2) | Терминал возврата строк, создаваемый через [`Returning`](xref:NextORM.Core.InsertBuilder`1.Returning)/[`Returning`](xref:NextORM.Core.InsertBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})): [`Single`](xref:NextORM.Core.InsertReturningBuilder`2.Single)/[`SingleAsync`](xref:NextORM.Core.InsertReturningBuilder`2.SingleAsync(System.Threading.CancellationToken)) возвращают одну строку, а [`ToList`](xref:NextORM.Core.InsertReturningBuilder`2.ToList)/[`ToListAsync`](xref:NextORM.Core.InsertReturningBuilder`2.ToListAsync(System.Threading.CancellationToken)) — все строки, материализованные через `RETURNING`/`OUTPUT` провайдера. Тот же билдер даёт SQL Server `OutputInto`/`OutputIntoThenOutput` (см. следующую строку). См. [Возврат вставленных строк](../guide/17-insert-statement.md#возврат-вставленных-строк). |
+@@ -62,8 +62,8 @@
+ | [`BatchExtensions`](xref:NextORM.Core.BatchExtensions) / [`BatchBuilder`](xref:NextORM.Core.BatchBuilder) / [`BatchQuery<TResult>`](xref:NextORM.Core.BatchQuery`1) / [`BatchResult`](xref:NextORM.Core.BatchResult) | Выполняет несколько утверждений одним батчем (один round trip, одна серверная сессия): `ctx.Batch()` → шаги с побочным эффектом — `CreateTempTable`/`CreateTable` (материализации) и `Insert`/`Update`/`Delete`/`Truncate` (DML, принимают `InsertBuilder`/`UpdateBuilder`/`DeleteBuilder`/`TruncateBuilder`) — затем результат-несущие запросы. Для одного результата `Query<TResult>` возвращает терминал `BatchQuery<TResult>` (`ToList`/`ToListAsync`/`ToAsyncEnumerable`/`ToSql`). Для нескольких результатов `AddQuery<TResult>` связывает сколько угодно запросов, а `Execute()`/`ExecuteAsync(CancellationToken = default)` выполняют батч один раз и возвращают нетерпеливый неосвобождаемый [`BatchResult`](xref:NextORM.Core.BatchResult) — `ResultSetCount` и `Read<TResult>()` (наборы читаются последовательно, по одному разу, с проверкой типа), — а [`BatchBuilder.ToSql()`](xref:NextORM.Core.BatchBuilder.ToSql) рендерит весь батч без выполнения (требует хотя бы одного результат-несущего шага). Гейтится [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.SupportsBatch); ClickHouse и in-memory-контекст бросают. См. [Выполнение утверждений одним батчем](../guide/26-sql-batch.md#несколько-наборов-результатов). |
+ | [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) | Fluent-построитель для источника псевдонима/таблицы без типа сущности (режим [`TableAlias`](xref:NextORM.Core.TableAlias)). |
+ | [`JoinedEntityBuilder<T1,T2>`](xref:NextORM.Core.JoinedEntityBuilder`2) … [`JoinedEntityBuilder<T1..T8>`](xref:NextORM.Core.JoinedEntityBuilder`8) | Накопительные построители соединений; арность от 2 до 8. |
+-| [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) | Fluent-конфигурация метаданных сущности, используемая `IDataContext.From<T>(...)`; [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1.Property(System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) возвращает [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1) с `HasColumnName`/`Key`/`Identity`/`Computed`/`Duration`/`DecimalPrecision`/`Collation`/`HasConversion`/`JsonColumn`. |
+-| [`IPropertyMetadata`](xref:NextORM.Core.IPropertyMetadata) | Read-only метаданные маппинга одного свойства (`PropertyInfo`, `ColumnName`, `IsKey`, `IsIdentity`, `IsComputed`, `DurationUnit`/`DurationPrecision`, `DecimalPrecision`/`DecimalScale`, `Collation`, `Converter`). |
++| [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) | Fluent-конфигурация метаданных сущности, используемая `IDataContext.From<T>(...)`; [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1.Property(System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) возвращает [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1) с `HasColumnName`/`Key`/`Identity`/`Computed`/`Duration`/`DecimalPrecision`/`Collation`/`HasConversion`/`JsonColumn`/`DynamicColumns`. |
++| [`IPropertyMetadata`](xref:NextORM.Core.IPropertyMetadata) | Read-only метаданные маппинга одного свойства (`PropertyInfo`, `ColumnName`, `IsKey`, `IsIdentity`, `IsComputed`, `DurationUnit`/`DurationPrecision`, `DecimalPrecision`/`DecimalScale`, `Collation`, `Converter`, `IsDynamicColumnsStore`). |
+ | [`INamingConvention`](xref:NextORM.Core.INamingConvention) | Транслирует автоматически построенные имена таблиц/столбцов (см. `DataContextBuilder.UseNamingConvention`); встроенный [`SnakeCaseNamingConvention`](xref:NextORM.Core.SnakeCaseNamingConvention) отображает `SimpleEntity` на `simple_entity`, а `FirstName` на `first_name`. |
+ | [`Projection<T1,T2>`](xref:NextORM.Core.Projection`2) … [`Projection<T1..T8>`](xref:NextORM.Core.Projection`8) | Форма результата соединённого запроса; предоставляет `Item1`…`` |
+ | [`IProjection`](xref:NextORM.Core.IProjection) / [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection) | Маркеры для накопленных проекций соединений (арность 8 не расширяема). |
+@@ -108,6 +108,7 @@
+ | [`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) | Отображает статический метод (или его объявляющий тип) на табличную функцию, используемую как источник `FROM`. Необязательные `WithClause`/`CallClause`/`VerbatimArguments` и, для объявленной вызывающим схемы результата, [`ResultSchema`](xref:NextORM.Core.SqlTableFunctionAttribute.ResultSchema) ([`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema)). |
+ | [`DurationAttribute`](xref:NextORM.Core.DurationAttribute) | Объявляет, как хранится свойство `TimeSpan` (`[Duration(DurationUnit.Seconds)]`), и точность нативного типа `Precision`; игнорируется там, где у провайдера есть нативный тип длительности. См. [Колонки-длительности](../guide/24-duration-columns.md). |
+ | [`DurationUnit`](xref:NextORM.Core.DurationUnit) | Единица хранения колонки `TimeSpan` на провайдере без нативного типа: `Ticks`, `Microseconds`, `Milliseconds`, `Seconds`, `Minutes`, `Hours`, `Days`. |
++| [`DynamicColumnsAttribute`](xref:NextORM.Core.DynamicColumnsAttribute) | Объявляет хранилище динамических колонок сущности: свойство типа `IDictionary<string, object?>`, которое держит колонки схемы времени выполнения. Читается через [`EntityBuilder.WithDynamicColumns`](xref:NextORM.Core.EntityBuilder`1.WithDynamicColumns(System.String[])); пишется колонками при insert/update/merge. Fluent-эквивалент — [`EntityPropertyBuilder<T>.DynamicColumns`](xref:NextORM.Core.EntityPropertyBuilder`1.DynamicColumns). См. [Динамические колонки](../getting-started/03-entities-and-metadata.md#динамические-колонки-схема-во-время-выполнения). |
+ | [`DecimalPrecisionAttribute`](xref:NextORM.Core.DecimalPrecisionAttribute) | Объявляет точность/масштаб decimal отображённого свойства (`[DecimalPrecision(12, 4)]`), читается как [`IPropertyMetadata.DecimalPrecision`](xref:NextORM.Core.IPropertyMetadata.DecimalPrecision)/[`DecimalScale`](xref:NextORM.Core.IPropertyMetadata.DecimalScale); используется там, где провайдеру нужна объявленная пара (столбцы табличных параметров SQL Server и ClickHouse). Пара валидируется относительно типа, фактически связываемого для столбца, как precision `1..38` и `0 <= scale <= precision`. Требуется связанный провайдерный тип `decimal`: не-`decimal` модель, отображённая через конвертер значений в `decimal`, принимается, а `decimal`-модель, отображённая в не-`decimal` представление (конвертер в `string` или отображение `JsonColumn`), отклоняется. Пара вне диапазона бросает `ArgumentOutOfRangeException` (параметр `precision`/`scale`); не-`decimal` связанный тип или пара с объявлением только одного из precision/scale бросает `InvalidOperationException`. Fluent-эквивалент — [`EntityPropertyBuilder<T>.DecimalPrecision`](xref:NextORM.Core.EntityPropertyBuilder`1.DecimalPrecision(System.Int32,System.Int32)). См. [Сырой SQL](../guide/12-raw-sql.md#табличные-параметры). |
+ | [`ValueConverterAttribute`](xref:NextORM.Core.ValueConverterAttribute) | Объявляет [`IPropertyValueConverter`](xref:NextORM.Core.IPropertyValueConverter) для свойства (`[ValueConverter(typeof(MyConverter))]`). См. [Конвертеры значений](../guide/28-value-converters.md). |
+ | [`JsonColumnAttribute`](xref:NextORM.Core.JsonColumnAttribute) | Объявляет свойство, хранимое в JSON-колонке и сериализуемое через `System.Text.Json` (`[JsonColumn]`, необязательный `Storage`). См. [Конвертеры значений](../guide/28-value-converters.md). |
+diff --git a/docs/ru/getting-started/03-entities-and-metadata.md b/docs/ru/getting-started/03-entities-and-metadata.md
+index e89275a..e5af177 100644
+--- a/docs/ru/getting-started/03-entities-and-metadata.md
++++ b/docs/ru/getting-started/03-entities-and-metadata.md
+@@ -275,6 +275,62 @@ var query = dataContext.From("complex_entity")
+ 
+ [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) доступен и на конкретном [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`), и как расширение на [`IDataContext`](xref:NextORM.Core.IDataContext), поэтому работает независимо от того, используется контекст через конкретный тип или через интерфейс. Независимо от сущностей, [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) также может обернуть подзапрос (`dataContext.From(innerQuery)`) или другой построитель сущности (`dataContext.From(entity)`).
+ 
++## Динамические колонки (схема во время выполнения)
++
++Отображённая сущность может отдать «лишние» колонки таблицы - те, у которых нет CLR-свойства, - через
++один словарь. Пометьте свойство `IDictionary<string, object?>` атрибутом
++[`DynamicColumnsAttribute`](xref:NextORM.Core.DynamicColumnsAttribute) или fluent-методом
++[`DynamicColumns()`](xref:NextORM.Core.EntityPropertyBuilder`1.DynamicColumns):
++
++```csharp
++[SqlTable("events")]
++public class EventRow
++{
++    [Key] public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns] public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++```
++
++Хранилище - не физическая колонка: само по себе оно не проецируется и исключено из набора
++отображённых свойств (доступно как [`IEntityMetadata.DynamicColumnsStore`](xref:NextORM.Core.IEntityMetadata.DynamicColumnsStore)
++и [`IPropertyMetadata.IsDynamicColumnsStore`](xref:NextORM.Core.IPropertyMetadata.IsDynamicColumnsStore)).
++
++Чтобы прочитать колонки во время выполнения, перечислите их в запросе сущности через
++[`WithDynamicColumns`](xref:NextORM.Core.EntityBuilder`1.WithDynamicColumns(System.String[])); имена
++берутся из схемы во время выполнения (например, из `INFORMATION_SCHEMA`). Набор входит в ключ плана,
++поэтому два запроса с разными наборами никогда не делят один кэшированный план. `WithDynamicColumns`
++применим только к запросу сущности без явной проекции `Select`.
++
++```csharp
++var row = dataContext.From<EventRow>()
++    .Where(x => x.Id == 1)
++    .WithDynamicColumns("region", "score")
++    .First();
++// row.Extra["region"], row.Extra["score"]
++```
++
++Идентификаторы всегда квотируются делимитером провайдера (`"..."` на PostgreSQL/SQLite, `[...]`
++на SQL Server, `` `...` `` на MySQL/MariaDB/ClickHouse), поэтому имя во время выполнения не может
++внедрить SQL - но всё равно передавайте только имена из доверенного источника.
++
++На запись ключи хранилища рендерятся колонками в `INSERT`, `UPDATE` и `MERGE`:
++
++```csharp
++await dataContext.InsertInto<EventRow>().Values(new EventRow
++{
++    Id = 1, Name = "n",
++    Extra = new Dictionary<string, object?> { ["region"] = "eu", ["score"] = 5 },
++}).InsertAsync();
++```
++
++Ключ, совпадающий с объявленной колонкой, игнорируется (побеждает объявленное свойство); при записи
++нескольких строк набор колонок - это объединение ключей строк, а отсутствующий в строке ключ пишет
++`NULL`.
++
++У провайдера in-memory нет колоночной строки, поэтому он возвращает словарь исходной сущности без
++изменений. Массовая вставка не пишет динамические колонки.
++
+ ## Квотирование идентификаторов
+ 
+ По умолчанию имена таблиц и столбцов выводятся дословно (см. [Различия провайдеров](#различия-провайдеров)),
+diff --git a/docs/specs/comparison/linq2db-backlog-gap-analysis.md b/docs/specs/comparison/linq2db-backlog-gap-analysis.md
+index 2fc8153..b6a1fa5 100644
+--- a/docs/specs/comparison/linq2db-backlog-gap-analysis.md
++++ b/docs/specs/comparison/linq2db-backlog-gap-analysis.md
+@@ -384,7 +384,7 @@ statement/table/index).
+ | `MappingSchema` (несколько/именованные схемы) | один `IEntityMetadata` на тип; scope-override | **Planned** ([`todo_mapping_scope.md`](../roadmap/todo_mapping_scope.md)) |
+ | Value converters (`IValueConverter`/`SetConverter`) | `ValueConverter<,>`/`[ValueConverter]`/`HasConversion` ([Value converters](../../guide/28-value-converters.md)) | **Паритет** |
+ | Command timeout (`UseCommandTimeout`/`WithCommandTimeout`) | `DataContextBuilder.UseCommandTimeout(int)` + per-query `WithCommandTimeout(int)` ([Connections and logging](../../guide/14-connections-and-logging.md)) | **Done** (issue #93) |
+-| Dynamic columns (`DynamicColumnsStore`/`DynamicColumnAccessor`) | нет | **Gap** → [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md) |
++| Dynamic columns (`DynamicColumnsStore`/`DynamicColumnAccessor`) | `[DynamicColumns]`/`DynamicColumns()` store + `WithDynamicColumns(...)` read, keys written by insert/update/merge, always-quoted identifiers ([Dynamic columns](../../getting-started/03-entities-and-metadata.md#dynamic-columns-runtime-schema)) | **<span style="color:green">Done</span>** (issue #94) |
+ | `BulkCopyOptions`-флаги (`CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers`/`BulkCopyType`/parallel) | `BulkInsertOptions.CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` (SQL Server native; остальные пути — явный `NotSupportedException`) | **Частичный паритет** (ClickHouse parallel/`WithoutSession` — отложены, `BulkCopyType` не опция, `UseInternalTransaction` — by design; см. [Массовая вставка](../../guide/22-bulk-insert.md)) |
+ | Управление кэшем (`Query<T>.ClearCache`, `DisableQueryCache`, `CacheSlidingExpiration`) | `DataContextCache.Clear()` / `UseQueryCache(false)` / `UseCacheSlidingExpiration(ttl)` | **<span style="color:green">Done</span>** → [Query reuse: cache controls](../../guide/13-query-reuse.md#cache-controls) |
+ | Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
+@@ -420,7 +420,7 @@ statement/table/index).
+ | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
+ | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); ~~G17~~ — **<span style="color:green">реализовано</span>** (интерфейсные коллекции + явный отказ от неподдерживаемого индексера → [Filtering](../../guide/01-filtering-where.md#captured-collection-lookup-dictcolumn)); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); G14 — проверить |
+ | P2 | Слепое пятно shipped-`LinqExtensions` (§4): ~~`TagQuery`~~ — **<span style="color:green">реализовано</span>** ([`WithTag`](../../guide/15-query-hints.md), комментарий `/* tag */` сразу после `SELECT`); ~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ — **<span style="color:green">реализовано</span>** (issue #96); source override — **<span style="color:green">реализовано</span>** (per-query `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) |
+-| P2 | Инфраструктурные Gap (§4): command timeout, bulk copy options, query cache controls — **<span style="color:green">реализовано</span>**; [`todo_dynamic_columns.md`](../roadmap/todo_dynamic_columns.md) |
++| P2 | Инфраструктурные Gap (§4): command timeout, bulk copy options, query cache controls и dynamic columns — **<span style="color:green">реализовано</span>** (dynamic columns — [Dynamic columns](../../getting-started/03-entities-and-metadata.md#dynamic-columns-runtime-schema), issue #94) |
+ | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
+ 
+ ## 7. Статус сравнения (обновлено `2026-09-25`)
+@@ -478,7 +478,9 @@ overrides](../../querying/02-query-sources.md#per-query-source-overrides)). Пл
+ linq2db (Data Connection System / Mapping / Query Processing). Паритет подтверждён по соединениям,
+ транзакциям, интерсепторам, трассировке/логированию, async, value converters и `Prepare()`. Найдены и
+ заведены ещё четыре Gap: command timeout, dynamic columns, bulk copy options, query cache controls
+-(планы закрытых удалены после выпуска; `todo_dynamic_columns.md` остаётся).
++(планы закрытых удалены после выпуска; dynamic columns закрыт в issue #94 — см.
++[Dynamic columns](../../getting-started/03-entities-and-metadata.md#dynamic-columns-runtime-schema),
++`todo_dynamic_columns.md` удалён).
+ 
+ ## See also
+ 
+diff --git a/docs/specs/design/API-NAMING-REVIEW.md b/docs/specs/design/API-NAMING-REVIEW.md
+index 8b86b9a..ef842d0 100644
+--- a/docs/specs/design/API-NAMING-REVIEW.md
++++ b/docs/specs/design/API-NAMING-REVIEW.md
+@@ -5158,7 +5158,7 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
+ 
+ ## Закрытие планов (26.09.2026)
+ 
+-После выпуска всех фич в `1.0.8-b` удалены рабочие планы `docs/specs/roadmap/todo_bulk_copy_options.md`, `todo_command_timeout.md`, `todo_hint_variants.md`, `todo_query_cache_controls.md`, `todo_query_tag.md`, `todo_source_override.md` (tracking issues #92/#93/#96/#97/#98/#99 закрыты), а также `docs/specs/roadmap/todo_stored_procedures.md` (#70 закрыт) и `docs/specs/roadmap/todo_output_into.md` (#15 закрыт). Инлайновые упоминания этих файлов в записях выше — исторические артефакты проходов аудита; живой трекинг ведут этот реестр и `sql-capabilities-gap-analysis.md`. Оставшиеся планы: `todo_dynamic_columns.md` (#94) и `todo_eager_loading.md` (#95 — out of scope).
++После выпуска всех фич в `1.0.8-b` удалены рабочие планы `docs/specs/roadmap/todo_bulk_copy_options.md`, `todo_command_timeout.md`, `todo_hint_variants.md`, `todo_query_cache_controls.md`, `todo_query_tag.md`, `todo_source_override.md` (tracking issues #92/#93/#96/#97/#98/#99 закрыты), а также `docs/specs/roadmap/todo_stored_procedures.md` (#70 закрыт) и `docs/specs/roadmap/todo_output_into.md` (#15 закрыт). Инлайновые упоминания этих файлов в записях выше — исторические артефакты проходов аудита; живой трекинг ведут этот реестр и `sql-capabilities-gap-analysis.md`. Оставшийся план: `todo_eager_loading.md` (#95 — out of scope); `todo_dynamic_columns.md` (#94) выпущен и удалён (см. [Dynamic columns](../../getting-started/03-entities-and-metadata.md#dynamic-columns-runtime-schema)).
+ 
+ **TVP (issue #73) — закрыт (2026-09-26).** Удалён план `docs/specs/roadmap/todo_tvp.md`; статусы потока `docs/specs/status/tvp-1.md`/`tvp-2.md` удалены как закрытый поток, а независимый `Deferred + триггер` (`ValueConverter<*, TimeSpan>` на провайдерах без нативной длительности) перенесён в `docs/specs/roadmap/sql-capabilities-gap-analysis.md` item 18. Верификация: release build **0 warnings / 0 errors**; интеграция **1936** тестов, **0** падений, **92** capability-skip; покрытие line **86.3%** (29648/34328); DocFX **0 warnings / 0 errors**. Перф-замер **не требуется**: чтение метаданных и валидация precision/scale — per-column/one-time в `TableParameterBinder.BuildColumns` (`src/nextorm.core/DataContext/TableParameterBinder.cs:27-46`), не на per-row пути; query-path acceptance-набор неприменим.
+ 
+@@ -5282,3 +5282,27 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
+ - **Публичные доки EN+RU.** Обновлены в релизной дельте (новая глава 30 «Streaming large objects (BLOB/CLOB)» EN+RU; провайдерные страницы, `querying`, `advanced/api-reference`, `providers/overview`, `advanced/limitations` — обе ветки); новых P1-доков нет, ссылок на `docs/specs/**` из публичных доков нет.
+ - **Шаг 5 (заморозка `PublicAPI.*.txt`, issue #53) — P2, вне скоупа.** `find -name 'PublicAPI*.txt'` — **0**; `PublicApiAnalyzers`/ApiCompat/API-approval-теста нет.
+ - **Регистрация к заморозке (LOB1).** 8 сигнатур фазы 1 (`ToStream`/`ToStreamAsync`/`ToTextReader`/`ToTextReaderAsync`) + 4 фазы 2 (`ToDataReader`/`ToDataReaderAsync<TResult>`) + `ISqlDialect.SupportsSequentialAccess` + `ISqlDialect.LobLocatorColumn`; прочие секции (MR1, CTAS8, DRS1, BAT1, DOI1, QCC1 и т. д.) — без изменений.
++
++## Аудит 28.09.2026 — dynamic-columns store (issue #94): `DynamicColumnsAttribute`, `EntityPropertyBuilder<T>.DynamicColumns()`, DIM `IPropertyMetadata.IsDynamicColumnsStore`/`IEntityMetadata.DynamicColumnsStore`, `EntityBuilder<TEntity>.WithDynamicColumns(params string[])` (uncommitted working tree; P0 — нет; P1 по именам — нет; P1 доковый — DC1; P2 — DC2 (Шаг 5))
++
++**Область.** Публичная дельта #94 (issue [#94](https://github.com/AlexeyShirshov/nextorm/issues/94), план `docs/specs/roadmap/todo_dynamic_columns.md` удалён после выпуска):
++
++| Имя | Комментарий |
++|---|---|
++| `DynamicColumnsAttribute` (`src/nextorm.core/DynamicColumnsAttribute.cs:16`) — реализовано | Новый публичный `sealed`-атрибут; `[AttributeUsage(Property, AllowMultiple=false, Inherited=true)]`. `<summary>` + `<remarks>` (cref на `WithDynamicColumns`/`DynamicColumns()`). |
++| `EntityPropertyBuilder<T>.DynamicColumns()` (`src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:93`) — реализовано | Fluent-двойник атрибута; `<summary>` + `<returns>` + `<exception>`. Имя без `With` — как у соседей `RangeColumns`/`Collation`/`Duration`. |
++| `IPropertyMetadata.IsDynamicColumnsStore` (`:139`) — реализовано | DIM `=> false` (source-compatible), `<summary>` с обоснованием дефолта. |
++| `IEntityMetadata.DynamicColumnsStore` (`:27`) — реализовано | DIM `=> null` (source-compatible), `<summary>` с обоснованием дефолта. |
++| `EntityBuilder<TEntity>.WithDynamicColumns(params string[])` (`src/nextorm.core/Builders/EntityBuilder.cs:1567`) — реализовано | Query-модификатор; `<summary>` + `<param>` + `<returns>` + `<exception>`. Имя с `With` — как у `WithQuotedIdentifiers`/`WithNamingConvention`. |
++
++**P0 — нет.** Новый публичный тип один (`DynamicColumnsAttribute`, `sealed`); BCL-конфликтов/аббревиатур нет; core Release `0/0` при `TreatWarningsAsErrors=true` (CA1716/CA1724 не сработали). `DynamicColumnsStore`/`IsDynamicColumnsStore` следуют уже принятой паре `TableName`/`IsTableNameAuto`; `DynamicColumns()`/`WithDynamicColumns` согласованы с fluent-конвенциями двух билдеров.
++
++**P1 по именам — нет.** Extend-only: DIM-члены аддитивны/источник-совместимы; `DynamicColumnsAttribute`/`WithDynamicColumns` — новые имена, существующие члены не переименованы и не сменили подпись.
++
++**DC1 (P1, доковый) — новый.** Публичная фича **не отражена** в публичных доках: `rg -ni 'dynamic.?column' docs --glob '!specs/**'` и по `docs/ru/**` — **0** совпадений (единственные вхождения — `docs/specs/**`). `AGENTS.md` требует обновлять `docs/**` (EN) и `docs/ru/**` (RU) в том же изменении. **Стало:** страница/секция в `docs/guide/**` + RU-зеркало (атрибут/fluent, `WithDynamicColumns`, всегда-квотирование и «доверенный allow-list», участие набора в план-ключе, in-memory passthrough), строка в `docs/advanced/api-reference.md` (+RU). Маршрут — `nextorm-design-engineer`/DOC-поток.
++
++**DC2 (P2, трекинг Шага 5) — новый.** `find -name 'PublicAPI*.txt'` — **0**; `PublicApiAnalyzers`/ApiCompat/API-approval-теста нет. При заморозке внести сигнатуры: `DynamicColumnsAttribute` (тип + ctor по умолчанию); `EntityPropertyBuilder<T>.DynamicColumns()`; `IPropertyMetadata.IsDynamicColumnsStore`; `IEntityMetadata.DynamicColumnsStore`; `EntityBuilder<TEntity>.WithDynamicColumns(params string[])`.
++
++**Проверка (28.09.2026).** `dotnet build src/nextorm.core/nextorm.core.csproj -c Release --no-incremental` — **0 warnings / 0 errors** (`GenerateDocumentationFile=true` + `TreatWarningsAsErrors=true`, `NoWarn` — 0 ⇒ CS1591 покрыт). `find -name 'PublicAPI*.txt'` — **0**.
++
++**Итог.** P0 — **нет**; P1 по **именам** — **нет**; P1 **доковый — DC1** (публичные доки EN+RU не обновлены); P2 — **DC2** (Шаг 5). Существующие секции реестра не переоткрываются.
+diff --git a/docs/specs/design/code-smells-review.md b/docs/specs/design/code-smells-review.md
+index 3db987f..23671a0 100644
+--- a/docs/specs/design/code-smells-review.md
++++ b/docs/specs/design/code-smells-review.md
+@@ -8089,3 +8089,47 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
+ - **`slopwatch` не установлен** (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx) → паттерн-скан выполнен вручную.
+ - **Открытые пункты — только 🟡 P2/ℹ️:** Шаг 5 (заморозка `PublicAPI.*.txt`, issue #53), Находки 9/12/150/151/188/232–236, LOB2. Релиз не блокируют.
+ - **Релиз-риск (не код, тест-инфраструктура).** Флейк `SqliteIntegrationTests.Merge_Returning_ShouldReturnWrittenRow` (`SQLite Error 5: database is locked`) под coverage-прогоном (см. `docs/specs/release-1.0.8-b.md` §3.5). CI-гейт: job `publish` `needs: build`, а `build` гоняет `dotnet test --no-build` через `dotnet-coverage collect` (`.github/workflows/dotnet.yml:41-44,103-107`) — повтор флейка на тег-ране даёт exit 2 и **блокирует публикацию**. Минимальный фикс до тега (`SqliteTestProvider` seed): `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=30000;`, либо `[Collection("Sqlite")]` на SQLite-классах для устранения параллельного доступа к общему файлу БД.
++
++---
++
++## 🔎 Точечный аудит 28.09.2026 — dynamic-columns store (issue #94), uncommitted working tree; 🔴 — 0, 🟡 — 2 (Находки 237–238), ℹ️ — наблюдения A–G
++
++**Область (uncommitted).** Новая публичная поверхность: `DynamicColumnsAttribute` (`src/nextorm.core/DynamicColumnsAttribute.cs:16`, `sealed`), `EntityPropertyBuilder<T>.DynamicColumns()` (`DataContext/Meta/EntityPropertyBuilder.cs:93`), DIM `IPropertyMetadata.IsDynamicColumnsStore => false` (`:139`) и `IEntityMetadata.DynamicColumnsStore => null` (`:27`), `EntityBuilder<TEntity>.WithDynamicColumns(params string[])` (`Builders/EntityBuilder.cs:1567`). Internal: `DynamicColumnsFacts` (`DataContext/Meta/DynamicColumnsFacts.cs`), `DynamicColumnMetadata` (`DataContext/Meta/Implementation/DynamicColumnMetadata.cs`), член `QueryCommand.DynamicColumns` (`Query/QueryCommand.cs:326`), `SelectExpression.DynamicColumnName`/`DynamicStoreProperty` (`Expressions/SelectExpression.cs:80,88`), `EntitySelectListBuilder.Build(..., dynamicColumns)` (`DataContext/EntitySelectListBuilder.cs:28`), `RowMaterializerBuilder.BuildDynamicMemberInit`/`BuildDynamicStore` (`:173,208`), dynamic-ветка `RowMapperFactory.MapColumn` (`:44`), `InMemoryDataContext.MapColumn` (`:264`), валидация `InMemoryQueryBuilder` (`:54`), DML `InsertBuilder.cs:443`/`MergeBuilder.cs:415`/`UpdateBuilder.cs:107`/`SqlMutationBuilder.cs:1024,1054`. Публичная сторона — `API-NAMING-REVIEW.md` (DC1/DC2). Находки 1–236 не переоткрываются.
++
++**База (этот проход).** `dotnet build src/nextorm.core/nextorm.core.csproj -c Release --no-incremental` — **0 warnings / 0 errors** (`TreatWarningsAsErrors=true`, `GenerateDocumentationFile=true`, `NoWarn` — 0 ⇒ CS1591 гейтится). Подавления `src/` — **6** `SuppressMessage` (все с `Justification`) + **5** парных `#pragma warning disable`/`restore` = **11/11** (0 неоправданных), новых в файлах фичи — **0**. `Skip=`, пустые `catch`, `NoWarn`, `async void` — **0**; новых `Task.Delay`/`Thread.Sleep` — **0** (baseline 2 + 3 пре-существующие). EOL: все новые/правленые файлы — **CRLF 100 %**. `slopwatch` локально не установлен (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен **вручную**. `.editorconfig` — те же **7** инертных `dotnet_diagnostic.*.severity = silent` (6 `S*` без `SonarAnalyzer` + `CA2254`, пре-существующее). `find -name 'PublicAPI*.txt'` — **0** (Шаг 5).
++
++**Скан по разделам `dotnet-csharp-code-smells`:**
++
++| # | Категория | Вердикт |
++|---|-----------|---------|
++| 1. `IDisposable` | ✅ Новых disposable-полей/локальных нет: `DynamicColumnMetadata` — иммутабельный синтетический metadata-объект без ресурсов; `DynamicColumnsFacts` — статические хелперы. CA2000/CA2213/CA1816 не затронуты. |
++| 2. Подавления | ✅ **0** новых; баланс **11/11**. |
++| 3. LINQ на горячем пути | ✅ Читающий путь — без LINQ (`EntitySelectListBuilder`/`RowMaterializerBuilder` — индексированные циклы). Единственный LINQ — `WithDynamicColumns` (`EntityBuilder.cs:1570` `.Where(...).ToArray()`), холодная конфигурация билдера; DML-путь — `foreach` без LINQ, см. наблюдение F. |
++| 4. God-классы/методы | ℹ️ `EntityBuilder.cs` 2286 → **2324**, `InsertBuilder.cs` 510 → **529** — оба уже >500 до фичи (не новое пересечение); `SqlMutationBuilder.cs` 1066 — пре-существующая Находка 110 не переоткрывается. Новые методы <30 строк. |
++| 5. Хэш-ключи/равенство | ✅ План-ключ корректен: `SelectExpressionPlanEqualityComparer` сравнивает и хэширует `DynamicColumnName` (`:52,86`); `QueryPlanEqualityComparer.Equals` сравнивает `SelectList` (`:137`); `QueryCommand.Clone` несёт и `_selectList` (`:20`), и `DynamicColumns` (`:103`); mapper-signature `RowMapperFactory` включает `DynamicColumnName` (`:320`). Тест `Select_DifferentDynamicSets_ProduceDifferentPlans` подтверждает. |
++| 6. События/исключения | ✅ Новых подписок нет; отказы — `ArgumentException`/`NotSupportedException`/`QueryPreparationException`/`InvalidOperationException` с actionable-текстами. Пустых `catch` нет. |
++| 7. NRT/возвратный тип | ✅ `WithDynamicColumns` — non-null builder; DIM возвращают `false`/`null` осознанно (документировано, source-compatible). `DynamicColumnsFacts.IsStoreType` — doc-drift, см. наблюдение E. Build `0/0`. |
++
++### 🟡 Находка 237 (P2, DRY/дублирование; ОТКРЫТА) — `AppendDynamicColumns` дословно продублирован в `InsertBuilder` и `MergeBuilder`, `UpdateBuilder.AppendDynamicAssignments` — третья почти-копия
++
++**Было/есть.** `src/nextorm.core/Builders/InsertBuilder.cs:443-458` и `src/nextorm.core/Builders/MergeBuilder.cs:415-426` — идентичные тела: `FindStore` → `BuildDynamicRows` → цикл `new ColumnAccumulator { Property = new DynamicColumnMetadata(store.PropertyInfo, key) }` → `accumulator.Values.Add(InsertValue.FromConstant(values[i]))` → `_columns.Add(accumulator)`. `src/nextorm.core/Builders/UpdateBuilder.cs:107-114` повторяет ту же связку `FindStore` + `BuildDynamicRows` + `DynamicColumnMetadata`, но кладёт значения в `SetAssignment(UpdateAssignment.FromConstant(...))`. Три места несут одно знание о том, как store-ключи превращаются в DML-колонки.
++
++**Стало (рекомендация, маршрут `nextorm-design-engineer`).** Вынести построение `(key, DynamicColumnMetadata, values)` в один helper `DynamicColumnsFacts` (напр. `BuildWriteColumns<TEntity>(...)`), оставив каждому билдеру только упаковку в свой `ColumnAccumulator`/`UpdateAssignment`. Стоимость — 0 публичных членов (всё `internal`).
++
++### 🟡 Находка 238 (P2, контракт/валидация; ОТКРЫТА) — дубликаты имён в `WithDynamicColumns` не отсеиваются: `Dictionary.Add` бросает `ArgumentException` при материализации
++
++**Было/есть.** `WithDynamicColumns` (`src/nextorm.core/Builders/EntityBuilder.cs:1569-1571`) фильтрует только пустые/`null`-имена, но не дедуплицирует: `WithDynamicColumns("region", "region")` проходит. `EntitySelectListBuilder.Build` (`DataContext/EntitySelectListBuilder.cs:89-104`) создаёт по колонке на каждый вход, SQL получает `select ..., "region", "region"`, а `RowMaterializerBuilder.BuildDynamicStore` (`DataContext/RowMaterializerBuilder.cs:208-222`) рендерит по `ElementInit(DictionaryAddMI, ...)` на колонку — `Dictionary<string,object?>.Add` на втором ключе бросает `ArgumentException: An item with the same key has already been added`. Валидации/теста нет; сценарий достижим, если имена приходят из доверенного, но не дедуплицированного allow-list'а.
++
++**Стало (рекомендация, маршрут `nextorm-design-engineer`).** Дедуплицировать в `WithDynamicColumns` (`Distinct(StringComparer.Ordinal)`) либо бросать `ArgumentException` на дубликат — по образцу фильтра пустых имён; добавить негативный тест.
++
++### ℹ️ Наблюдения (фикс не требуется)
++
++- **A. Подавления/слоп/EOL/XML-doc — чисто.** Новых `SuppressMessage`/`#pragma`/`NoWarn`/`Skip=`/пустых `catch`/`async void` — **0**; соотношение **11/11**; все новые/правленые файлы CRLF; XML-doc публичных членов полон (CS1591 гейтится, core Release `0/0`).
++- **B. Optional `= null` — 0 новых публичных.** Единственный новый сигнатурный `= null` — `internal static EntitySelectListBuilder.Build(..., IReadOnlyList<string>? dynamicColumns = null)` (`DataContext/EntitySelectListBuilder.cs:28`); по таксономии обратного аудита 24.09.2026 это группа E (внутренняя поверхность), не actionable. Находка 188 (16 публичных `CreateTableOptions? = null`) не расширяется.
++- **C. Plan-cache/hash — безопасно** (см. таблицу §5; тест `Select_DifferentDynamicSets_ProduceDifferentPlans`, `tests/nextorm.postgres.tests/DynamicColumnsSqlGenerationTests.cs:62`). План-ключ опирается на пересобранный `SelectList`; dynamic-ветка обходит общий per-type `SelectListCache` (`QueryCommand.QueryPreparer.cs:449-471`), поэтому набор не «протекает» между командами.
++- **D. Positive: `WithDynamicColumns` наследует план-ключ через `ColumnsPlanHash`.** Отдельного поля в `QueryPlanEqualityComparer.Equals` для `DynamicColumns` нет и не требуется: он сравнивает `SelectList`, куда набор попал через `DynamicColumnName`.
++- **E. `DynamicColumnsFacts.IsStoreType` — doc-drift (internal).** XML-doc (`DataContext/Meta/DynamicColumnsFacts.cs:11-14`) обещает «`IDictionary<string,object?>` **или более широкий тип, например `object`**», но реализация `typeof(IDictionary<string, object?>).IsAssignableFrom(type)` (`:15-16`) для `object` даёт `false`. Либо снять «or a wider type such as object» из дока, либо честно поддержать `object` (тогда `InMemoryDataContext.MapColumn` обязан резолвить индексер в рантайме, а не `Expression.Property(store, "Item", ...)`).
++- **F. Аллокации/рефлексия на пути сборки DML (не горячий read-путь).** `DynamicColumnsFacts.BuildDynamicRows` (`:44-83`) читает store через `PropertyInfo.GetValue` **на каждую строку** и аллоцирует `object?[]` на каждый ключ; для `InsertBuilder.Values(list)` это O(rows × keys) рефлексии. Путь однократный на команду (не на исполнение), поэтому не нумеруется; ср. Находка 138 (bulk-проекция), не переоткрывается. Дубль предиката «dynamic ⇒ всегда квотировать» в `SqlMutationBuilder.RenderColumnReference` (`:1024-1030`) и `AppendColumnList` (`:1054-1063`) — мелкий DRY, можно свести в один helper.
++- **G. `EntityMetadata` сообщение о двух store'ах называет `DeclaringType` второго свойства** (`DataContext/Meta/Implementation/EntityMetadata.cs:25`), не первого/не сам факт — косметика диагностики.
++
++**Итог.** 🔴 — **0**; 🟡 — **2** (Находки 237 DRY, 238 контракт/валидация); ℹ️ — A–G. Публичная сторона uncommitted/alpha, заморозка (Шаг 5, issue #53) открыта.
+diff --git a/docs/specs/design/solid-review.md b/docs/specs/design/solid-review.md
+index 04a7cab..1a12b5e 100644
+--- a/docs/specs/design/solid-review.md
++++ b/docs/specs/design/solid-review.md
+@@ -1397,3 +1397,105 @@ IN-путь деградирует мягко (`Visitors/InValuesTranslator.cs:5
+ `dotnet test tests/nextorm.sqlite.tests -c Debug --filter "FullyQualifiedName~DictionaryLookup"` — **9/9**;
+ полный `nextorm.sqlite.tests` — **463/463**; `nextorm.core.tests` — **327/327**; `~DictionaryLookup` по
+ postgres/sqlserver/mysql/mariadb/clickhouse — по **2/2**, core — **1/1**. Контейнерная интеграция не перезапускалась.
++
++## Приложение C. Точечное ревью 28.09.2026 — dynamic-columns store (issue #94) (design / type / perf; uncommitted working tree)
++
++**Область.** `src/nextorm.core/DataContext/Meta/DynamicColumnsFacts.cs`,
++`DataContext/Meta/Implementation/DynamicColumnMetadata.cs`, `DataContext/RowMaterializerBuilder.cs`,
++`DataContext/RowMapperFactory.cs`, `DataContext/InMemoryDataContext.cs`, `DataContext/EntitySelectListBuilder.cs`,
++`Expressions/SelectExpression.cs`, `Expressions/SelectExpressionPlanEqualityComparer.cs`,
++`Builders/{EntityBuilder,InsertBuilder,UpdateBuilder,MergeBuilder}.cs`, `DataContext/SqlMutationBuilder.cs`,
++`DataContext/SqlSourceRenderer.cs`. Публичная дельта и её аудит — `API-NAMING-REVIEW.md` (DC1/DC2);
++поведенческий аудит того же дерева — `code-smells-review.md` (Находки 237–238 и наблюдения A–G).
++
++**Метод (analyzing-dotnet-performance).** Сканы по 14 файлам фичи: `.Substring` **0**,
++`.IndexOf("…")` **0**, `.StartsWith/.EndsWith("…")` **0**, `.Contains("…")` **0**, `.ToLower/.ToUpper` **0**,
++`static readonly Dictionary<` **0** (FrozenDictionary — тоже **0**), `new List/Dictionary/HashSet<` **22**,
++LINQ (`Select/Where/OrderBy/GroupBy/Cast/Take/Aggregate`) **6** (все — холодная конфигурация билдера либо
++`Where`-предикат, не материализация строк), `params` **11**, `PropertyInfo.GetValue` **6** (из них 1 —
++чтение store на строку, см. F-DC4), `Cache = false` (общий `QueryCommand`) **0**. Горячий read-путь —
++индексированные циклы без LINQ; SQL-чтение идёт через скомпилированный делегат
++(`RowMapperFactory.Build` → `lambda.Compile()`), а не через этот код. Структурная «обратная проверка»:
++незапечатанных классов в области — **3/10**, все три пре-существующие публичные (`EntityBuilder<TEntity>`,
++`EntityBuilder`, `InMemoryDataContext` — точки расширения, не пересечение #94); новых — **0**.
++
++### 🟡 F-DC1 (DRY/KISS, исправлено) — `BuildDynamicRows` имел единственного потребителя и промежуточную копию
++
++**Место (до).** `DataContext/Meta/DynamicColumnsFacts.cs`: `BuildDynamicColumns` (`:44-52`) вызывал
++`BuildDynamicRows`, который строил `List<(string Key, object?[] Values)>` (`:90-102`), после чего результат
++поэлементно копировался во второй `List<(DynamicColumnMetadata, object?[])>`. `roslyn refs` по
++`BuildDynamicRows` — ровно **1** потребитель (сам `BuildDynamicColumns`); промежуточная коллекция и лишний
++`internal`-член — нарушение invariant 1 (абстракция без второго потребителя) и invariant 2 (лишний концепт).
++**Стало.** Один проход строит union-ключей и сразу `(new DynamicColumnMetadata(store.PropertyInfo, key), values)`
++(`src/nextorm.core/DataContext/Meta/DynamicColumnsFacts.cs:49-88`); `BuildDynamicRows` удалён. Поведение
++(first-seen union, пропуск объявленных колонок, `null` для отсутствующего ключа) сохранено дословно; минус
++один промежуточный `List` на путь сборки DML.
++
++### 🟡 F-DC2 (DRY, исправлено) — предикат «dynamic ⇒ всегда квотировать» дублировался в двух сайтах
++
++**Место (до).** `DataContext/SqlMutationBuilder.cs`: `RenderColumnReference` (`:1024-1033`) и
++`AppendColumnList` (`:1051-1063`) независимо повторяли `quoteIdentifiers || <column> is DynamicColumnMetadata`
++вместе с комментарием-обоснованием. Знание «имя dynamic-колонки из рантайм-схемы всегда квотируется» имело
++две копии — рассинхрон дал бы колонку, эмитируемую сырым именем.
++**Стало.** Единый источник — `RenderColumnName(dialect, quoteIdentifiers, name, property)`
++(`src/nextorm.core/DataContext/SqlMutationBuilder.cs:1030-1033`); `RenderColumnReference` (`:1024-1025`) и
++`AppendColumnList` (`:1057`) вызывают его. `AppendIdentifier` (таблицы/сырые имена без `IPropertyMetadata`)
++не тронут; сгенерированный SQL не изменился (подтверждено SQL-gen тестами всех 5 провайдеров).
++
++### ✅ F-DC3 (TYPE, нарушений нет) — типы и возвраты спроектированы верно
++
++`DynamicColumnMetadata` — `internal sealed` (`DataContext/Meta/Implementation/DynamicColumnMetadata.cs:11`),
++иммутабельный (`PropertyInfo`/`ColumnName` только-чтение), без ресурсов; `DynamicColumnsFacts` —
++`internal static`; `DynamicColumnsAttribute` — `public sealed`. Новых пар `IFoo`/`Foo` и новых интерфейсов
++нет; `SelectExpression.DynamicColumnName`/`DynamicStoreProperty` — `internal`-свойства
++(`Expressions/SelectExpression.cs:83,89`), не публичная поверхность. Возвраты `List<…>` — только из
++`internal`-методов (`BuildDynamicColumns`), публичный контракт не затронут. `Span`/`Memory`/`ValueTask` в
++фиче не используются (синхронный build-путь). DIM `IPropertyMetadata.IsDynamicColumnsStore => false` и
++`IEntityMetadata.DynamicColumnsStore => null` — осознанно source-compatible (обоснование в XML-doc).
++
++### ℹ️ F-DC4 (PERF, отложено) — reflection-чтение store и `object?[]` на ключ в сборке DML
++
++`DynamicColumnsFacts.BuildDynamicColumns` (`:59`) читает store через `PropertyInfo.GetValue` **на каждую
++строку**, плюс аллоцирует `object?[]` на каждый ключ (`:78`) и `HashSet` на declared/seen (`:54-55`). Для
++`InsertBuilder.Values(list)`/`MergeBuilder` это O(rows × keys) рефлексии. Путь однократный на команду
++(сборка), не на исполнение; read-путь SQL идёт через скомпилированный делегат, а in-memory — через
++переписанное дерево, поэтому бенчмарк-вердикт не выносится (invariant 3). Та же природа, что Находка 138
++(bulk-проекция), не переоткрывается. Смежное: `RowMaterializerBuilder.BuildDynamicStore`
++(`DataContext/RowMaterializerBuilder.cs:208-222`) инстанцирует `Dictionary` параметрлесс-конструктором через
++`ListInit`, т.е. без начальной ёмкости; число dynamic-колонок мало, замера нет — не менялось.
++Маршрут при необходимости — `nextorm-db-perf-analyst`/`nextorm-inmemory-perf-analyst`.
++
++### ℹ️ F-DC5 (DRY, отложено — не чистить без триггера) — `AppendDynamicColumns` в `InsertBuilder`/`MergeBuilder`
++
++`src/nextorm.core/Builders/InsertBuilder.cs:443-457` и `src/nextorm.core/Builders/MergeBuilder.cs:415-429`
++дублируют упаковку «`BuildDynamicColumns` → свой `ColumnAccumulator` → `InsertValue.FromConstant`»;
++`UpdateBuilder.AppendDynamicAssignments` (`Builders/UpdateBuilder.cs:107-115`) — третий вариант через
++`SetAssignment`. Это **не** дублирование знания: само знание «store-ключи → DML-колонки» уже вынесено в
++`DynamicColumnsFacts.BuildDynamicColumns`; остаётся per-builder обвязка над собственным вложенным
++`ColumnAccumulator` (в `InsertBuilder` и `MergeBuilder` это разные типы). Полная дедупликация требует
++generic/callback-параметра и добавляет концепты (invariant 2) без устранения цикла, поэтому отложена;
++пересекается с Находкой 237 (`code-smells-review.md`), не переоткрывается. Триггер — третий билдер с тем же
++`ColumnAccumulator`, либо выход пути на горячий контур.
++
++### Сверка с `code-smells-review.md` (28.09.2026)
++
++- **Находка 238 (дубликаты имён в `WithDynamicColumns`) — уже закрыта в текущем дереве.** `WithDynamicColumns`
++  (`src/nextorm.core/Builders/EntityBuilder.cs:1576-1581`) отсеивает дубликаты через `HashSet<string>(Ordinal)`
++  и бросает `ArgumentException`; регистр описывает более раннюю ревизию (`:1569-1571` без дедупликации) —
++  запись устарела. Кода не касался.
++- **Наблюдение E (`IsStoreType` doc-drift) — уже закрыто.** XML-doc
++  (`DataContext/Meta/DynamicColumnsFacts.cs:11-14`) больше не обещает «or a wider type such as object»;
++  формулировка совпадает с реализацией `typeof(IDictionary<string, object?>).IsAssignableFrom(type)`.
++- **Наблюдение F (дубль предиката квотирования) — закрыто F-DC2.**
++- **`SelectExpressionPlanEqualityComparer`** сравнивает/хэширует `DynamicColumnName`
++  (`Expressions/SelectExpressionPlanEqualityComparer.cs:52,86`), но не `DynamicStoreProperty`. Безопасно:
++  store однозначно определяется типом сущности, который уже входит в план-ключ; правки не требует.
++
++**Проверка (28.09.2026).** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors** (baseline тоже
++0/0). `dotnet test tests/nextorm.core.tests -c Debug --filter "FullyQualifiedName~DynamicColumnsTests"` — **4/4**;
++полный `nextorm.core.tests` — **574/574**. `~DynamicColumnsSqlGenerationTests`: postgres **10/10**,
++sqlite **2/2**, sqlserver **2/2**, mysql **2/2**, clickhouse **2/2**. `DOCKER_HOST=… dotnet test
++tests/nextorm.integration.tests -c Debug` — **2142 total / 1987 passed / 0 failed / 155 skipped**
++(скипы — декларированные capability-пропуски провайдеров, не «podman недоступен»);
++`~DynamicColumnsIntegrationTests` — **3/3** (класс — SQLite-only, контейнер не нужен). EOL правленых
++файлов — CRLF.
+diff --git a/docs/specs/roadmap/todo_dynamic_columns.md b/docs/specs/roadmap/todo_dynamic_columns.md
+deleted file mode 100644
+index 4edf38c..0000000
+--- a/docs/specs/roadmap/todo_dynamic_columns.md
++++ /dev/null
+@@ -1,76 +0,0 @@
+-# TODO: динамические колонки (dynamic columns store)
+-
+-> Tracking issue: [#94](https://github.com/AlexeyShirshov/nextorm/issues/94).
+-
+-> Рабочий план (design RFC). Источник: сравнение инфраструктуры маппинга linq2db — атрибуты
+-> `DynamicColumnsStoreAttribute` / `DynamicColumnAccessorAttribute` и fluent
+-> `DynamicColumnsStore()` / `DynamicPropertyAccessors()`. В nextorm маппинг фиксирован набором
+-> объявленных свойств; неизвестные колонки не читаются и не пишутся.
+-
+-## 1. Пункт и цель
+-
+-- **Фича:** сущность может отдать «лишние» колонки строки в словарь (`IDictionary<string, object?>`), ключи
+-  которого определяются схемой во время выполнения, а не CLR-свойствами; на запись ключи словаря
+-  рендерятся колонками.
+-- **Критерий приёмки:**
+-  1. свойство-хранилище помечается атрибутом/fluent и наполняется при чтении всеми колонками, не
+-     сопоставленными объявленным членам;
+-  2. `INSERT`/`UPDATE`/`MERGE` записывают ключи словаря как колонки;
+-  3. имена колонок квотируются (инъекция исключена, только доверенный источник/allow-list);
+-  4. набор колонок входит в ключ плана (разные наборы → разные планы);
+-  5. in-memory — тот же словарь при чтении.
+-- **Возможный статус:** если признаётся вне scope (nextorm не `ITable<T>`-ORM), зафиксировать это в
+-  `limitations.md` и закрыть пункт решением.
+-
+-## 2. Провайдерная матрица
+-
+-Поведение не зависит от SQL-функций: колонки читаются из `IDataRecord` по имени и рендерятся
+-идентификаторами.
+-
+-| Провайдер | Чтение | Запись | Примечание |
+-|---|---|---|---|
+-| SQL Server | да | да | идентификаторы квотировать `[...]` |
+-| PostgreSQL | да | да | `"..."`; тип значения — из `DbDataReader` |
+-| MySQL / MariaDB | да | да | `` `...` `` |
+-| SQLite | да | да | `"..."`, dynamic typing |
+-| ClickHouse | да | да | `` `...` ``; таблица фиксирована, колонки должны существовать |
+-| InMemory | да | да | словарь строки |
+-
+-## 3. C#-аналог и tier
+-
+-Аналог linq2db: `DynamicColumnsStoreAttribute` + `DynamicColumnAccessorAttribute`, fluent
+-`EntityMappingBuilder<T>.DynamicColumnsStore(...)` / `DynamicPropertyAccessors(...)`. Tier **b**:
+-новый атрибут + слот в метаданных + поддержка в row reader / mutation builder. Имена согласовать с
+-`docs/specs/design/API-NAMING-REVIEW.md`.
+-
+-## 4. Публичный API (предложение)
+-
+-```csharp
+-[AttributeUsage(AttributeTargets.Property)]
+-public sealed class DynamicColumnsAttribute : Attribute;
+-```
+-
+-- Свойство с атрибутом объявляет хранилище динамических колонок; доступна fluent-настройка через
+-  `EntityMappingBuilder<T>`.
+-- Требования к поведению — критерии приёмки §1. Внутренняя реализация (метаданные, чтение, запись,
+-  ключ плана) — на усмотрение исполнителя.
+-
+-## 5. План тестов
+-
+-- Core/in-memory: чтение лишних колонок в словарь; запись словаря.
+-- SQL-gen: `SELECT`/`INSERT`/`UPDATE` включают динамические колонки с квотированием; разные наборы →
+-  разные планы.
+-- Интеграция (опционально): PostgreSQL/SQLite round-trip.
+-
+-## 6. Область изменений
+-
+-- Затрагивается слой метаданных, материализация строк при чтении, построители мутаций
+-  (INSERT/UPDATE/MERGE) и ключ плана; конкретный набор файлов определяет исполнитель.
+-- Доки: публичный гайд (+RU) и `limitations.md` (+RU) при изменении поведения.
+-
+-## 7. Открытые вопросы
+-
+-1. В scope ли вообще (нет `ITable<T>`, нет change tracking)? Решение зафиксировать.
+-2. Тип словаря: `IDictionary<string, object?>` vs типизированный `Dictionary<string, T>`.
+-3. Запись: какие ключи писать по умолчанию (все) и как отличать null от отсутствия.
+-4. Взаимодействие с value converters и JSON-колонками.
+diff --git a/src/nextorm.core/Builders/EntityBuilder.cs b/src/nextorm.core/Builders/EntityBuilder.cs
+index d31beb3..c498009 100644
+--- a/src/nextorm.core/Builders/EntityBuilder.cs
++++ b/src/nextorm.core/Builders/EntityBuilder.cs
+@@ -132,6 +132,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     /// <summary>Hints applied to every physical table in the command's scope, or <c>null</c> when there are none.</summary>
+     internal IReadOnlyList<string>? TablesInScopeHints { get; set; }
+     /// <summary>
++    /// The runtime-schema columns to read into the entity's dynamic-columns store, or <c>null</c> when
++    /// none were requested. Set through <see cref="WithDynamicColumns(string[])"/>. Applies to an entity
++    /// query without an explicit projection.
++    /// </summary>
++    internal IReadOnlyList<string>? DynamicColumns { get; set; }
++    /// <summary>
+     /// Per-query override of identifier quoting (<c>null</c> inherits the context default). Set through
+     /// <see cref="WithQuotedIdentifiers"/>.
+     /// </summary>
+@@ -188,6 +194,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     /// <returns>The command that produces <typeparamref name="TResult"/> rows.</returns>
+     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
+     {
++        if (DynamicColumns is { Count: > 0 })
++            throw new NotSupportedException(
++                "WithDynamicColumns applies only to an entity query without an explicit Select projection; read the store through a member-init projection instead.");
++
+         var cmd = _dataProvider.CreateCommand<TResult>(new QueryDefinition
+         {
+             Exp = exp,
+@@ -277,6 +287,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+         cmd.IndexHints = IndexHints;
+         cmd.IndexHintKind = IndexHintKind;
+         cmd.TablesInScopeHints = TablesInScopeHints;
++        cmd.DynamicColumns = DynamicColumns;
+         cmd.QuoteIdentifiers = QuoteIdentifiers;
+         cmd.NamingConvention = NamingConvention;
+         cmd.KeywordCase = KeywordCase;
+@@ -913,6 +924,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+         dst.IndexHints = IndexHints;
+         dst.IndexHintKind = IndexHintKind;
+         dst.TablesInScopeHints = TablesInScopeHints;
++        dst.DynamicColumns = DynamicColumns;
+         dst._subQueryHint = _subQueryHint;
+         dst.QuoteIdentifiers = QuoteIdentifiers;
+         dst.NamingConvention = NamingConvention;
+@@ -1540,6 +1552,39 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+         return b;
+     }
+     /// <summary>
++    /// Reads <paramref name="columnNames"/> — columns of the entity's table that have no mapped
++    /// property, discovered from the schema at run time — into the entity's dynamic-columns store
++    /// (the property marked with <see cref="DynamicColumnsAttribute"/> or
++    /// <see cref="EntityPropertyBuilder{T}.DynamicColumns()"/>). The names are always quoted with the
++    /// provider's identifier delimiter, so only pass trusted values (for example names read from
++    /// <c>INFORMATION_SCHEMA</c>). The set participates in the plan key: two queries with different
++    /// sets never share a cached plan. The entity must declare a store and the query must not use an
++    /// explicit <c>Select</c> projection.
++    /// </summary>
++    /// <param name="columnNames">The physical column names to read; never empty.</param>
++    /// <returns>A builder that reads the named columns into the store.</returns>
++    /// <exception cref="ArgumentException">No non-blank column name was supplied.</exception>
++    public EntityBuilder<TEntity> WithDynamicColumns(params string[] columnNames)
++    {
++        var names = columnNames is { Length: > 0 }
++            ? columnNames.Where(c => !string.IsNullOrWhiteSpace(c)).ToArray()
++            : [];
++
++        if (names.Length == 0)
++            throw new ArgumentException("At least one non-blank dynamic column name is required.", nameof(columnNames));
++
++        var seen = new HashSet<string>(StringComparer.Ordinal);
++        foreach (var name in names)
++        {
++            if (!seen.Add(name))
++                throw new ArgumentException($"Dynamic column '{name}' is listed more than once.", nameof(columnNames));
++        }
++
++        var b = Clone();
++        b.DynamicColumns = names;
++        return b;
++    }
++    /// <summary>
+     /// Attaches an index hint to the primary physical table, asking the planner to consider
+     /// <paramref name="indexes"/> (<c>USE INDEX</c> on MySQL/MariaDB, <c>INDEXED BY</c> on SQLite,
+     /// <c>WITH (INDEX(...))</c> on SQL Server). Requires a dialect that supports index hints (see
+diff --git a/src/nextorm.core/Builders/InsertBuilder.Values.cs b/src/nextorm.core/Builders/InsertBuilder.Values.cs
+index 2c04f1f..13537fc 100644
+--- a/src/nextorm.core/Builders/InsertBuilder.Values.cs
++++ b/src/nextorm.core/Builders/InsertBuilder.Values.cs
+@@ -123,7 +123,7 @@ public sealed partial class InsertBuilder<TEntity>
+ 
+         foreach (var property in _metadata.Properties)
+         {
+-            if (property.IsIdentity || property.IsComputed)
++            if (property.IsIdentity || property.IsComputed || property.IsDynamicColumnsStore)
+                 continue;
+ 
+             if (property.RangeColumns is not null)
+@@ -149,6 +149,8 @@ public sealed partial class InsertBuilder<TEntity>
+             _columns.Add(accumulator);
+         }
+ 
++        AppendDynamicColumns(list);
++
+         if (_columns.Count == 0)
+             throw new BuildSqlCommandException($"Entity {typeof(TEntity)} has no writable column to insert.");
+ 
+diff --git a/src/nextorm.core/Builders/InsertBuilder.cs b/src/nextorm.core/Builders/InsertBuilder.cs
+index 9d77bdf..6ccf3e8 100644
+--- a/src/nextorm.core/Builders/InsertBuilder.cs
++++ b/src/nextorm.core/Builders/InsertBuilder.cs
+@@ -429,7 +429,7 @@ public sealed partial class InsertBuilder<TEntity>
+     {
+         foreach (var column in _columns)
+         {
+-            if (column.Property.PropertyInfo == property.PropertyInfo)
++            if (column.Property.PropertyInfo == property.PropertyInfo && column.Property.ColumnName == property.ColumnName)
+                 return column;
+         }
+ 
+@@ -438,6 +438,24 @@ public sealed partial class InsertBuilder<TEntity>
+         return accumulator;
+     }
+ 
++    // Appends one column per dynamic-column key found in the entities' stores (the union across rows,
++    // first-seen order). A key that has no value in a given row writes SQL NULL.
++    private void AppendDynamicColumns(IReadOnlyList<TEntity> entities)
++    {
++        var store = DynamicColumnsFacts.FindStore(_metadata);
++        if (store is null)
++            return;
++
++        foreach (var (property, values) in DynamicColumnsFacts.BuildDynamicColumns(entities, store, _metadata))
++        {
++            var accumulator = new ColumnAccumulator { Property = property };
++            for (var i = 0; i < values.Length; i++)
++                accumulator.Values.Add(InsertValue.FromConstant(values[i]));
++
++            _columns.Add(accumulator);
++        }
++    }
++
+     private InsertCommand BuildCommand(IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
+     {
+         if (_source is not null)
+diff --git a/src/nextorm.core/Builders/MergeBuilder.cs b/src/nextorm.core/Builders/MergeBuilder.cs
+index 83b32f7..4773f09 100644
+--- a/src/nextorm.core/Builders/MergeBuilder.cs
++++ b/src/nextorm.core/Builders/MergeBuilder.cs
+@@ -74,7 +74,7 @@ public sealed partial class MergeBuilder<TEntity>
+ 
+         foreach (var property in _metadata.Properties)
+         {
+-            if (property.IsIdentity || property.IsComputed)
++            if (property.IsIdentity || property.IsComputed || property.IsDynamicColumnsStore)
+                 continue;
+ 
+             var accumulator = new ColumnAccumulator { Property = property };
+@@ -84,6 +84,8 @@ public sealed partial class MergeBuilder<TEntity>
+             _columns.Add(accumulator);
+         }
+ 
++        AppendDynamicColumns(list);
++
+         if (_columns.Count == 0)
+             throw new BuildSqlCommandException($"Entity {typeof(TEntity)} has no writable column to merge.");
+ 
+@@ -410,6 +412,22 @@ public sealed partial class MergeBuilder<TEntity>
+             $"{_dataContext.GetType().Name} does not support data modification. Use a database-backed context (SQLite, PostgreSQL, SQL Server, MySQL or MariaDB); the in-memory provider supports only the key-upsert form and ClickHouse has no DML upsert.");
+     }
+ 
++    private void AppendDynamicColumns(IReadOnlyList<TEntity> entities)
++    {
++        var store = DynamicColumnsFacts.FindStore(_metadata);
++        if (store is null)
++            return;
++
++        foreach (var (property, values) in DynamicColumnsFacts.BuildDynamicColumns(entities, store, _metadata))
++        {
++            var accumulator = new ColumnAccumulator { Property = property };
++            for (var i = 0; i < values.Length; i++)
++                accumulator.Values.Add(InsertValue.FromConstant(values[i]));
++
++            _columns.Add(accumulator);
++        }
++    }
++
+     private sealed class ColumnAccumulator
+     {
+         public required IPropertyMetadata Property { get; init; }
+diff --git a/src/nextorm.core/Builders/UpdateBuilder.cs b/src/nextorm.core/Builders/UpdateBuilder.cs
+index 67bf626..04f66d1 100644
+--- a/src/nextorm.core/Builders/UpdateBuilder.cs
++++ b/src/nextorm.core/Builders/UpdateBuilder.cs
+@@ -84,7 +84,7 @@ public sealed class UpdateBuilder<TEntity>
+ 
+         foreach (var property in _metadata.Properties)
+         {
+-            if (property.IsKey || property.IsIdentity || property.IsComputed)
++            if (property.IsKey || property.IsIdentity || property.IsComputed || property.IsDynamicColumnsStore)
+                 continue;
+ 
+             if (property.RangeColumns is not null)
+@@ -98,9 +98,22 @@ public sealed class UpdateBuilder<TEntity>
+             SetAssignment(UpdateAssignment.FromConstant(property, property.PropertyInfo.GetValue(entity)));
+         }
+ 
++        AppendDynamicAssignments(entity);
++
+         return this;
+     }
+ 
++    // Assigns one column per key of the entity's dynamic-columns store, preserving store order.
++    private void AppendDynamicAssignments(TEntity entity)
++    {
++        var store = DynamicColumnsFacts.FindStore(_metadata);
++        if (store is null)
++            return;
++
++        foreach (var (property, values) in DynamicColumnsFacts.BuildDynamicColumns([entity], store, _metadata))
++            SetAssignment(UpdateAssignment.FromConstant(property, values[0]));
++    }
++
+     /// <summary>
+     /// Restricts the update to the rows satisfying <paramref name="predicate"/>. The predicate is
+     /// translated by the same expression pipeline as a <c>SELECT</c> <c>WHERE</c>; captured variables
+@@ -253,7 +266,8 @@ public sealed class UpdateBuilder<TEntity>
+     {
+         for (var i = 0; i < _assignments.Count; i++)
+         {
+-            if (_assignments[i].Property.PropertyInfo == assignment.Property.PropertyInfo)
++            if (_assignments[i].Property.PropertyInfo == assignment.Property.PropertyInfo
++                && _assignments[i].Property.ColumnName == assignment.Property.ColumnName)
+             {
+                 _assignments[i] = assignment;
+                 return;
+diff --git a/src/nextorm.core/DataContext/EntitySelectListBuilder.cs b/src/nextorm.core/DataContext/EntitySelectListBuilder.cs
+index 8ac86e6..593a745 100644
+--- a/src/nextorm.core/DataContext/EntitySelectListBuilder.cs
++++ b/src/nextorm.core/DataContext/EntitySelectListBuilder.cs
+@@ -12,18 +12,26 @@ internal static class EntitySelectListBuilder
+ {
+     /// <summary>
+     /// Builds one <see cref="SelectExpression"/> per mapped property (two for a
+-    /// <see cref="Range{T}"/> pair), in declaration order. The caller owns plan-hash computation and
+-    /// caching; the returned columns carry only the shape metadata.
++    /// <see cref="Range{T}"/> pair), in declaration order, followed by one per requested dynamic
++    /// column. The caller owns plan-hash computation and caching; the returned columns carry only the
++    /// shape metadata.
+     /// </summary>
+     /// <param name="srcType">The entity type whose properties are projected.</param>
+     /// <param name="entityMeta">The resolved metadata of <paramref name="srcType"/>.</param>
+     /// <param name="cancellationToken">Stops the loop early when preparation is cancelled.</param>
++    /// <param name="dynamicColumns">
++    /// The runtime-schema column names to read into the entity's dynamic-columns store, or
++    /// <see langword="null"/>/empty when the store is not read. The entity must declare a store with
++    /// <see cref="DynamicColumnsAttribute"/> or the fluent <c>DynamicColumns()</c>.
++    /// </param>
+     /// <returns>The built columns and whether the loop ran to completion; a cancelled build must not be cached by the caller.</returns>
+-    internal static (SelectExpression[] Columns, bool Completed) Build(Type srcType, IEntityMetadata entityMeta, CancellationToken cancellationToken)
++    /// <exception cref="QueryPreparationException">Dynamic columns were requested but the entity declares no store.</exception>
++    internal static (SelectExpression[] Columns, bool Completed) Build(Type srcType, IEntityMetadata entityMeta, CancellationToken cancellationToken, IReadOnlyList<string>? dynamicColumns = null)
+     {
+         var p = Expression.Parameter(srcType);
+         var props = entityMeta.Properties;
+-        var columns = new List<SelectExpression>(props.Count);
++        var columns = new List<SelectExpression>(props.Count + (dynamicColumns?.Count ?? 0));
++        var store = entityMeta.DynamicColumnsStore;
+ 
+         for (var idx = 0; idx < props.Count; idx++)
+         {
+@@ -73,6 +81,29 @@ internal static class EntitySelectListBuilder
+             });
+         }
+ 
++        if (dynamicColumns is { Count: > 0 })
++        {
++            if (store is null)
++                throw new QueryPreparationException(
++                    $"Dynamic columns were requested for {srcType.Name}, but it declares no dynamic-columns store. "
++                    + $"Mark a property of {srcType.Name} with [DynamicColumns] or map it with .DynamicColumns().");
++
++            for (var i = 0; i < dynamicColumns.Count; i++)
++            {
++                if (cancellationToken.IsCancellationRequested)
++                    return (columns.ToArray(), false);
++
++                var name = dynamicColumns[i];
++                columns.Add(new SelectExpression(typeof(object))
++                {
++                    Index = columns.Count,
++                    PropertyName = name,
++                    DynamicColumnName = name,
++                    DynamicStoreProperty = store.PropertyInfo,
++                });
++            }
++        }
++
+         return (columns.ToArray(), true);
+     }
+ }
+diff --git a/src/nextorm.core/DataContext/InMemoryDataContext.cs b/src/nextorm.core/DataContext/InMemoryDataContext.cs
+index 7f42b4c..b408e45 100644
+--- a/src/nextorm.core/DataContext/InMemoryDataContext.cs
++++ b/src/nextorm.core/DataContext/InMemoryDataContext.cs
+@@ -261,6 +261,19 @@ public partial class InMemoryDataContext : IDataContext
+     /// <returns>The column expression with the parameter substituted.</returns>
+     public Expression MapColumn(SelectExpression column, Expression param)
+     {
++        // A dynamic column reads the value out of the source entity's own store: the in-memory provider has
++        // no columnar row, so the store is the only place a runtime-schema value can come from.
++        if (column.DynamicColumnName is { } dynamicColumnName)
++        {
++            var storeProperty = column.DynamicStoreProperty!;
++            if (!storeProperty.DeclaringType!.IsAssignableFrom(param.Type))
++                storeProperty = param.Type.GetProperty(storeProperty.Name) ?? storeProperty;
++
++            var store = Expression.Property(param, storeProperty);
++            var item = Expression.Property(store, "Item", Expression.Constant(dynamicColumnName));
++            return Expression.Convert(item, typeof(object));
++        }
++
+         var replace = new ReplaceParameterExpressionVisitor(param);
+         return InMemoryScalarFunctionRewriter.Rewrite(replace.Visit(column.Expression)!);
+         //return Expression.PropertyOrField(param, column.PropertyName!);
+diff --git a/src/nextorm.core/DataContext/InMemoryQueryBuilder.cs b/src/nextorm.core/DataContext/InMemoryQueryBuilder.cs
+index 4dddd88..47954dd 100644
+--- a/src/nextorm.core/DataContext/InMemoryQueryBuilder.cs
++++ b/src/nextorm.core/DataContext/InMemoryQueryBuilder.cs
+@@ -51,6 +51,18 @@ internal static class InMemoryQueryBuilder
+         if (queryCommand.ArrayJoinExpressions is { Count: > 0 })
+             throw new NotSupportedException("The ARRAY JOIN clause is not supported by the in-memory provider.");
+ 
++        // The in-memory provider has no per-command column projection to append dynamic columns to; it
++        // returns the source entity's own store as is. Requesting dynamic columns still requires the
++        // entity to declare a store, so the surface fails the same way as on the SQL providers.
++        if (queryCommand.DynamicColumns is { Count: > 0 } && queryCommand.EntityType is { } dynamicEntityType)
++        {
++            if (!DataContextCache.Metadata.TryGetValue(dynamicEntityType, out var dynamicMetadata)
++                || DynamicColumnsFacts.FindStore(dynamicMetadata) is null)
++                throw new QueryPreparationException(
++                    $"Dynamic columns were requested for {dynamicEntityType.Name}, but it declares no dynamic-columns store. "
++                    + $"Mark a property of {dynamicEntityType.Name} with [DynamicColumns] or map it with .DynamicColumns().");
++        }
++
+         if (queryCommand.Cache && storeInCache)
+         {
+             queryPlan = new QueryPlan(queryCommand, null);
+diff --git a/src/nextorm.core/DataContext/Meta/DynamicColumnsFacts.cs b/src/nextorm.core/DataContext/Meta/DynamicColumnsFacts.cs
+new file mode 100644
+index 0000000..083fa61
+--- /dev/null
++++ b/src/nextorm.core/DataContext/Meta/DynamicColumnsFacts.cs
+@@ -0,0 +1,98 @@
++namespace NextORM.Core;
++
++/// <summary>
++/// Shared facts about the dynamic-columns store property: which CLR types can hold it and the
++/// actionable error raised for the rest. Used by both the attribute (reflection) and the fluent
++/// mapping path so the two cannot drift apart.
++/// </summary>
++internal static class DynamicColumnsFacts
++{
++    /// <summary>
++    /// Whether <paramref name="type"/> can receive the materialized
++    /// <see cref="Dictionary{TKey,TValue}"/> of <see cref="string"/> to <see cref="object"/>:
++    /// <see cref="IDictionary{TKey,TValue}"/> or a type implementing it.
++    /// </summary>
++    internal static bool IsStoreType(Type type)
++        => typeof(IDictionary<string, object?>).IsAssignableFrom(type);
++
++    /// <summary>Throws when <paramref name="type"/> cannot hold the dynamic-columns store.</summary>
++    /// <param name="type">The declared store property type.</param>
++    /// <param name="propertyName">The property name, for the message.</param>
++    /// <param name="entityName">The entity name, for the message.</param>
++    internal static void ValidateStoreType(Type type, string propertyName, string entityName)
++    {
++        if (!IsStoreType(type))
++            throw new InvalidOperationException(
++                $"Property '{propertyName}' of {entityName} is mapped as a dynamic-columns store but its type {type} "
++                + "cannot receive the values; declare it as IDictionary<string, object?>.");
++    }
++
++    /// <summary>Returns the entity's dynamic-columns store metadata, or <see langword="null"/> when it declares none.</summary>
++    /// <param name="metadata">The entity metadata to scan.</param>
++    internal static IPropertyMetadata? FindStore(IEntityMetadata metadata) => metadata.DynamicColumnsStore;
++
++    /// <summary>
++    /// Computes the dynamic columns to write for <paramref name="entities"/>: each key paired with the
++    /// synthetic <see cref="DynamicColumnMetadata"/> that renders it and its per-row values. Shared by
++    /// the insert, update and merge builders so their dynamic-column handling cannot drift apart.
++    /// </summary>
++    /// <remarks>
++    /// Reads the store of every row and computes the union of its keys in first-seen order, together
++    /// with the per-row values (a row without the key writes <see langword="null"/>). Keys that collide
++    /// with a declared column are skipped: the declared property is authoritative.
++    /// </remarks>
++    /// <typeparam name="TEntity">The entity type whose stores are read.</typeparam>
++    /// <param name="entities">The rows being written.</param>
++    /// <param name="store">The store property metadata.</param>
++    /// <param name="metadata">The entity metadata supplying the declared column names.</param>
++    /// <returns>One entry per dynamic column, in first-seen order.</returns>
++    internal static List<(DynamicColumnMetadata Property, object?[] Values)> BuildDynamicColumns<TEntity>(IReadOnlyList<TEntity> entities, IPropertyMetadata store, IEntityMetadata metadata)
++    {
++        var rows = entities.Count;
++        var stores = new IDictionary<string, object?>?[rows];
++        var keys = new List<string>();
++        var seen = new HashSet<string>(StringComparer.Ordinal);
++        var declared = CollectDeclaredColumns(metadata);
++
++        for (var i = 0; i < rows; i++)
++        {
++            if (store.PropertyInfo.GetValue(entities[i]) is not IDictionary<string, object?> dictionary)
++            {
++                stores[i] = null;
++                continue;
++            }
++
++            stores[i] = dictionary;
++            foreach (var key in dictionary.Keys)
++            {
++                if (declared.Contains(key) || !seen.Add(key))
++                    continue;
++
++                keys.Add(key);
++            }
++        }
++
++        var columns = new List<(DynamicColumnMetadata Property, object?[] Values)>(keys.Count);
++        foreach (var key in keys)
++        {
++            var values = new object?[rows];
++            for (var i = 0; i < rows; i++)
++            {
++                values[i] = stores[i] is { } dictionary && dictionary.TryGetValue(key, out var value) ? value : null;
++            }
++
++            columns.Add((new DynamicColumnMetadata(store.PropertyInfo, key), values));
++        }
++
++        return columns;
++    }
++
++    private static HashSet<string> CollectDeclaredColumns(IEntityMetadata metadata)
++    {
++        var columns = new HashSet<string>(StringComparer.Ordinal);
++        foreach (var property in metadata.Properties)
++            columns.Add(property.ColumnName);
++
++        return columns;
++    }
++}
+diff --git a/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs b/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs
+index b0c889f..d116fba 100644
+--- a/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs
++++ b/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs
+@@ -70,11 +70,20 @@ public class EntityMetadataBuilder<T>
+             var valueConverterAttr = prop.GetCustomAttribute<ValueConverterAttribute>(true) ?? intProp?.GetCustomAttribute<ValueConverterAttribute>(true);
+             var jsonColumnAttr = prop.GetCustomAttribute<JsonColumnAttribute>(true) ?? intProp?.GetCustomAttribute<JsonColumnAttribute>(true);
+             var rangeColumnsAttr = prop.GetCustomAttribute<RangeColumnsAttribute>(true) ?? intProp?.GetCustomAttribute<RangeColumnsAttribute>(true);
++            var dynamicColumnsAttr = prop.GetCustomAttribute<DynamicColumnsAttribute>(true) ?? intProp?.GetCustomAttribute<DynamicColumnsAttribute>(true);
+             var generated = generatedAttr?.DatabaseGeneratedOption ?? DatabaseGeneratedOption.None;
+ 
+             if (valueConverterAttr is not null && jsonColumnAttr is not null)
+                 throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} cannot be mapped with both {nameof(ValueConverterAttribute)} and {nameof(JsonColumnAttribute)}.");
+ 
++            if (dynamicColumnsAttr is not null)
++            {
++                if (valueConverterAttr is not null || jsonColumnAttr is not null || rangeColumnsAttr is not null)
++                    throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} cannot be a dynamic-columns store together with a value/JSON converter or a range-column pair.");
++
++                DynamicColumnsFacts.ValidateStoreType(prop.PropertyType, prop.Name, entityType.Name);
++            }
++
+             if (rangeColumnsAttr is not null)
+             {
+                 if (valueConverterAttr is not null || jsonColumnAttr is not null)
+@@ -115,6 +124,7 @@ public class EntityMetadataBuilder<T>
+                 Collation = collationAttr?.Name,
+                 Converter = converter,
+                 RangeColumns = rangeColumnsAttr?.ToMetadata(),
++                IsDynamicColumnsStore = dynamicColumnsAttr is not null,
+             });
+         }
+ 
+@@ -161,6 +171,9 @@ public class EntityMetadataBuilder<T>
+         {
+             foreach (var p in props)
+             {
++                if (p.IsDynamicColumnsStore)
++                    continue;
++
+                 if (string.Equals(p.PropertyInfo.Name, candidate, StringComparison.OrdinalIgnoreCase))
+                 {
+                     ((PropertyMetadata)p).IsKey = true;
+diff --git a/src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs b/src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs
+index e9b48b2..2829081 100644
+--- a/src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs
++++ b/src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs
+@@ -22,6 +22,7 @@ public class EntityPropertyBuilder<T>
+     private IPropertyValueConverter? _converter;
+     private JsonColumnOptions? _jsonOptions;
+     private RangeColumnsMetadata? _rangeColumns;
++    private bool _isDynamicColumnsStore;
+ 
+     /// <summary>
+     /// Creates a builder for the property selected by <paramref name="propertySelector"/>.
+@@ -79,6 +80,23 @@ public class EntityPropertyBuilder<T>
+         return this;
+     }
+ 
++    /// <summary>
++    /// Marks the selected property as the entity's dynamic-columns store. The property type must
++    /// implement <see cref="IDictionary{TKey,TValue}"/> of <see cref="string"/> to <see cref="object"/>;
++    /// it is never projected as a declared column, is filled on read from the columns named by
++    /// <see cref="EntityBuilder{TEntity}.WithDynamicColumns(string[])"/>, and its keys are written as
++    /// columns by insert/update/merge.
++    /// </summary>
++    /// <returns>This builder, for chaining.</returns>
++    /// <exception cref="InvalidOperationException">The property is already mapped as a
++    /// <see cref="Range{T}"/> column pair or with a value/JSON converter.</exception>
++    public EntityPropertyBuilder<T> DynamicColumns()
++    {
++        EnsureNoRangeColumns(nameof(DynamicColumns));
++        _isDynamicColumnsStore = true;
++        return this;
++    }
++
+     /// <summary>
+     /// Declares the unit in which a <see cref="System.TimeSpan"/> property is stored on a provider
+     /// without a native duration type. Providers with a native type (PostgreSQL <c>interval</c>,
+@@ -254,7 +272,13 @@ public class EntityPropertyBuilder<T>
+         if (_rangeColumns is not null && !RangeTypeFacts.IsRange(pi.PropertyType))
+             throw new InvalidOperationException($"Property '{pi.Name}' is mapped with RangeColumns but its type {pi.PropertyType} is not Range<T>.");
+         DecimalPrecisionRules.Validate(converter?.ProviderType ?? pi.PropertyType, pi.Name, _decimalPrecision, _decimalScale);
+-        var r = new PropertyMetadata() { ColumnName = _rangeColumns?.LowerColumn ?? _columnName ?? pi.Name, PropertyInfo = pi, IsColumnNameAuto = _rangeColumns is null && _columnName is null, IsKey = _isKey, IsIdentity = _isIdentity, IsComputed = _isComputed, DurationUnit = _durationUnit, DurationPrecision = _durationPrecision, DecimalPrecision = _decimalPrecision, DecimalScale = _decimalScale, Collation = _collation, Converter = converter, RangeColumns = _rangeColumns };
++        if (_isDynamicColumnsStore)
++        {
++            if (converter is not null)
++                throw new InvalidOperationException($"Property '{pi.Name}' cannot be both a dynamic-columns store and value/JSON converted.");
++            DynamicColumnsFacts.ValidateStoreType(pi.PropertyType, pi.Name, typeof(T).Name);
++        }
++        var r = new PropertyMetadata() { ColumnName = _rangeColumns?.LowerColumn ?? _columnName ?? pi.Name, PropertyInfo = pi, IsColumnNameAuto = _rangeColumns is null && _columnName is null, IsKey = _isKey, IsIdentity = _isIdentity, IsComputed = _isComputed, DurationUnit = _durationUnit, DurationPrecision = _durationPrecision, DecimalPrecision = _decimalPrecision, DecimalScale = _decimalScale, Collation = _collation, Converter = converter, RangeColumns = _rangeColumns, IsDynamicColumnsStore = _isDynamicColumnsStore };
+         return r;
+     }
+ 
+diff --git a/src/nextorm.core/DataContext/Meta/IEntityMetadata.cs b/src/nextorm.core/DataContext/Meta/IEntityMetadata.cs
+index a94e4a7..614dea4 100644
+--- a/src/nextorm.core/DataContext/Meta/IEntityMetadata.cs
++++ b/src/nextorm.core/DataContext/Meta/IEntityMetadata.cs
+@@ -10,13 +10,22 @@ namespace NextORM.Core;
+ public interface IEntityMetadata
+ {
+     /// <summary>
+-    /// The mapped properties of the entity, in the order they were declared or discovered.
++    /// The mapped properties of the entity, in the order they were declared or discovered. The
++    /// dynamic-columns store (when one is declared) is <b>not</b> included: it is not a physical column
++    /// and is exposed separately through <see cref="DynamicColumnsStore"/>.
+     /// </summary>
+     IReadOnlyList<IPropertyMetadata> Properties { get; }
+     /// <summary>
+     /// The mapped table name, or <see langword="null"/> when the entity is not table-mapped.
+     /// </summary>
+     string? TableName { get; }
++    /// <summary>
++    /// The entity's dynamic-columns store property, or <see langword="null"/> when it declares none.
++    /// Declared with <see cref="DynamicColumnsAttribute"/> or set fluently with
++    /// <see cref="EntityPropertyBuilder{T}.DynamicColumns()"/>. The default implementation returns
++    /// <see langword="null"/> so existing external implementations keep compiling.
++    /// </summary>
++    IPropertyMetadata? DynamicColumnsStore => null;
+ 
+     /// <summary>
+     /// Whether <see cref="TableName"/> was derived from the CLR type name rather than declared with
+diff --git a/src/nextorm.core/DataContext/Meta/IPropertyMetadata.cs b/src/nextorm.core/DataContext/Meta/IPropertyMetadata.cs
+index 41432da..b0b5854 100644
+--- a/src/nextorm.core/DataContext/Meta/IPropertyMetadata.cs
++++ b/src/nextorm.core/DataContext/Meta/IPropertyMetadata.cs
+@@ -125,4 +125,16 @@ public interface IPropertyMetadata
+     /// compiling.
+     /// </summary>
+     IPropertyValueConverter? Converter => null;
++
++    /// <summary>
++    /// Whether the property is the entity's dynamic-columns store (an
++    /// <see cref="IDictionary{TKey,TValue}"/> of <see cref="string"/> to <see cref="object"/>) rather
++    /// than a physical column. Declared with <see cref="DynamicColumnsAttribute"/> or set fluently with
++    /// <see cref="EntityPropertyBuilder{T}.DynamicColumns()"/>. A store property is never projected as a
++    /// declared column; the columns named by
++    /// <see cref="EntityBuilder{TEntity}.WithDynamicColumns(string[])"/> are materialized into it on read
++    /// and its keys are written as columns on insert/update/merge. The default implementation returns
++    /// <see langword="false"/> so existing external implementations keep compiling.
++    /// </summary>
++    bool IsDynamicColumnsStore => false;
+ }
+diff --git a/src/nextorm.core/DataContext/Meta/Implementation/DynamicColumnMetadata.cs b/src/nextorm.core/DataContext/Meta/Implementation/DynamicColumnMetadata.cs
+new file mode 100644
+index 0000000..7542cd0
+--- /dev/null
++++ b/src/nextorm.core/DataContext/Meta/Implementation/DynamicColumnMetadata.cs
+@@ -0,0 +1,27 @@
++using System.Reflection;
++
++namespace NextORM.Core;
++
++/// <summary>
++/// Synthetic property metadata for one dynamic column written from the keys of an entity's
++/// dynamic-columns store. It carries only the physical column name; the value comes from the store, so
++/// it has no CLR member and no converter. The DML renderers only read <see cref="ColumnName"/> and
++/// <see cref="IPropertyMetadata.IsColumnNameAuto"/>, so this is enough to render the identifier.
++/// </summary>
++internal sealed class DynamicColumnMetadata : IPropertyMetadata
++{
++    /// <summary>Creates the metadata for the dynamic column <paramref name="columnName"/> of a store backed by <paramref name="storeProperty"/>.</summary>
++    /// <param name="storeProperty">The entity's store property; carried as the member identity.</param>
++    /// <param name="columnName">The physical column name (a key of the store).</param>
++    public DynamicColumnMetadata(PropertyInfo storeProperty, string columnName)
++    {
++        PropertyInfo = storeProperty;
++        ColumnName = columnName;
++    }
++
++    /// <inheritdoc/>
++    public PropertyInfo PropertyInfo { get; }
++
++    /// <inheritdoc/>
++    public string ColumnName { get; }
++}
+diff --git a/src/nextorm.core/DataContext/Meta/Implementation/EntityMetadata.cs b/src/nextorm.core/DataContext/Meta/Implementation/EntityMetadata.cs
+index 47049db..f37a31c 100644
+--- a/src/nextorm.core/DataContext/Meta/Implementation/EntityMetadata.cs
++++ b/src/nextorm.core/DataContext/Meta/Implementation/EntityMetadata.cs
+@@ -9,16 +9,38 @@ internal class EntityMetadata : IEntityMetadata
+ 
+     public EntityMetadata(string? tableName, IReadOnlyList<IPropertyMetadata> propertiesMetas, bool isTableNameAuto = false)
+     {
+-        _propertiesMeta = propertiesMetas;
+         TableName = tableName;
+         IsTableNameAuto = isTableNameAuto;
+ 
++        // The dynamic-columns store is not a physical column: it is pulled out of the property list (so
++        // every column iteration — projections, DML, bulk, returning — skips it for free) and exposed
++        // through DynamicColumnsStore.
++        var store = default(IPropertyMetadata);
++        var indexed = default(List<IPropertyMetadata>);
++        for (var i = 0; i < propertiesMetas.Count; i++)
++        {
++            if (propertiesMetas[i].IsDynamicColumnsStore)
++            {
++                if (store is not null)
++                    throw new InvalidOperationException(
++                        $"{propertiesMetas[i].PropertyInfo.DeclaringType?.Name} declares more than one dynamic-columns store property; only one is allowed.");
++
++                store = propertiesMetas[i];
++                continue;
++            }
++
++            (indexed ??= new List<IPropertyMetadata>(propertiesMetas.Count)).Add(propertiesMetas[i]);
++        }
++
++        _propertiesMeta = indexed ?? propertiesMetas;
++        DynamicColumnsStore = store;
++
+         // Indexed once at construction: property resolution runs per projected column and per
+         // comparison operand, so the linear scan is on the prepare hot path.
+-        var byInfo = new Dictionary<PropertyInfo, IPropertyMetadata>(propertiesMetas.Count);
+-        for (var i = 0; i < propertiesMetas.Count; i++)
++        var byInfo = new Dictionary<PropertyInfo, IPropertyMetadata>(_propertiesMeta.Count);
++        for (var i = 0; i < _propertiesMeta.Count; i++)
+         {
+-            var property = propertiesMetas[i];
++            var property = _propertiesMeta[i];
+             byInfo.TryAdd(property.PropertyInfo, property);
+         }
+ 
+@@ -28,6 +50,7 @@ internal class EntityMetadata : IEntityMetadata
+     public IReadOnlyList<IPropertyMetadata> Properties => _propertiesMeta;
+     public string? TableName { get; }
+     public bool IsTableNameAuto { get; }
++    public IPropertyMetadata? DynamicColumnsStore { get; }
+ 
+     /// <summary>Looks up a mapped property by its CLR member; <see langword="null"/> when it is not mapped.</summary>
+     internal IPropertyMetadata? FindProperty(PropertyInfo property)
+diff --git a/src/nextorm.core/DataContext/Meta/Implementation/PropertyMetadata.cs b/src/nextorm.core/DataContext/Meta/Implementation/PropertyMetadata.cs
+index 8272846..1851af4 100644
+--- a/src/nextorm.core/DataContext/Meta/Implementation/PropertyMetadata.cs
++++ b/src/nextorm.core/DataContext/Meta/Implementation/PropertyMetadata.cs
+@@ -17,4 +17,5 @@ internal class PropertyMetadata : IPropertyMetadata
+     public string? Collation { get; init; }
+     public IPropertyValueConverter? Converter { get; init; }
+     public RangeColumnsMetadata? RangeColumns { get; init; }
++    public bool IsDynamicColumnsStore { get; init; }
+ }
+diff --git a/src/nextorm.core/DataContext/RowMapperFactory.cs b/src/nextorm.core/DataContext/RowMapperFactory.cs
+index 378755b..62f0ca6 100644
+--- a/src/nextorm.core/DataContext/RowMapperFactory.cs
++++ b/src/nextorm.core/DataContext/RowMapperFactory.cs
+@@ -41,6 +41,17 @@ internal static class RowMapperFactory
+     /// </param>
+     public static Expression MapColumn(SelectExpression column, Expression param, bool supportsNativeDuration = true, ISqlDialect? dialect = null)
+     {
++        // A dynamic column has no CLR type to read: its value is boxed as object. DBNull maps to a null
++        // entry in the store.
++        if (column.DynamicColumnName is not null)
++        {
++            var dynamicIndex = Expression.Constant(column.Index);
++            return Expression.Condition(
++                Expression.Call(param, IsDBNullMI, dynamicIndex),
++                Expression.Constant(null, typeof(object)),
++                Expression.Call(param, GetValueMI, dynamicIndex));
++        }
++
+         var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+ 
+         var converter = ResolveConverter(column.Converter, dialect);
+@@ -306,6 +317,7 @@ internal static class RowMapperFactory
+                     signature = signature * 31 + (column.Nullable ? 1 : 0);
+                     signature = signature * 31 + (column.DefaultOnNull ? 1 : 0);
+                     signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
++                    signature = signature * 31 + (column.DynamicColumnName?.GetHashCode() ?? 0);
+                     signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
+                     signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);
+                     signature = signature * 31 + (column.Converter is null ? 0 : RuntimeHelpers.GetHashCode(column.Converter));
+diff --git a/src/nextorm.core/DataContext/RowMaterializerBuilder.cs b/src/nextorm.core/DataContext/RowMaterializerBuilder.cs
+index 72a1ab3..cc9fa59 100644
+--- a/src/nextorm.core/DataContext/RowMaterializerBuilder.cs
++++ b/src/nextorm.core/DataContext/RowMaterializerBuilder.cs
+@@ -38,6 +38,10 @@ internal static class RowMaterializerBuilder
+         if (ignoreColumns)
+             return Expression.New(ctorInfo);
+ 
++        var dynamicColumns = CollectDynamicColumns(selectList);
++        if (dynamicColumns.Length > 0)
++            return BuildDynamicMemberInit(resultType, selectList, dynamicColumns, mapColumn);
++
+         var hasRangePairs = false;
+         for (var i = 0; i < selectList.Length; i++)
+         {
+@@ -137,6 +141,86 @@ internal static class RowMaterializerBuilder
+         return Expression.MemberInit(Expression.New(ctorInfo), bindings);
+     }
+ 
++    private static readonly MethodInfo DictionaryAddMI = typeof(Dictionary<string, object?>).GetMethod(nameof(Dictionary<string, object?>.Add), [typeof(string), typeof(object)])!;
++
++    private static SelectExpression[] CollectDynamicColumns(SelectExpression[] selectList)
++    {
++        var count = 0;
++        for (var i = 0; i < selectList.Length; i++)
++        {
++            if (selectList[i].DynamicColumnName is not null)
++                count++;
++        }
++
++        if (count == 0)
++            return [];
++
++        var result = new SelectExpression[count];
++        var index = 0;
++        for (var i = 0; i < selectList.Length; i++)
++        {
++            if (selectList[i].DynamicColumnName is not null)
++                result[index++] = selectList[i];
++        }
++
++        return result;
++    }
++
++    // A row that carries dynamic columns cannot bind its store from a single projected column: the store
++    // is one dictionary assembled from every dynamic column. Dynamic columns therefore force the
++    // member-init path (the store property is set once from the collected values) and require a
++    // parameterless constructor.
++    private static Expression BuildDynamicMemberInit(
++        Type resultType,
++        SelectExpression[] selectList,
++        SelectExpression[] dynamicColumns,
++        Func<SelectExpression, Expression> mapColumn)
++    {
++        var parameterlessCtor = resultType.GetConstructor(Type.EmptyTypes)
++            ?? throw new QueryPreparationException(
++                $"The entity {resultType.Name} reads dynamic columns, which are materialized through a member-init and require a public parameterless constructor.");
++
++        var bindings = new List<MemberBinding>(selectList.Length);
++        for (var i = 0; i < selectList.Length; i++)
++        {
++            var column = selectList[i];
++            if (column.DynamicColumnName is not null || column.RangeColumnRole == RangeColumnRole.Upper)
++                continue;
++
++            var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
++
++            if (column.RangeColumnRole == RangeColumnRole.Lower)
++            {
++                var upper = FindUpper(selectList, i, column.PropertyInfo);
++                bindings.Add(Expression.Bind(propInfo, BuildRangeValue(column, upper, mapColumn)));
++                continue;
++            }
++
++            bindings.Add(Expression.Bind(propInfo, mapColumn(column)));
++        }
++
++        var storeProperty = dynamicColumns[0].DynamicStoreProperty!;
++        bindings.Add(Expression.Bind(storeProperty, BuildDynamicStore(dynamicColumns, mapColumn)));
++
++        return Expression.MemberInit(Expression.New(parameterlessCtor), bindings);
++    }
++
++    private static Expression BuildDynamicStore(SelectExpression[] dynamicColumns, Func<SelectExpression, Expression> mapColumn)
++    {
++        var elements = new ElementInit[dynamicColumns.Length];
++        for (var i = 0; i < dynamicColumns.Length; i++)
++        {
++            var column = dynamicColumns[i];
++            var value = mapColumn(column);
++            if (value.Type != typeof(object))
++                value = Expression.Convert(value, typeof(object));
++
++            elements[i] = Expression.ElementInit(DictionaryAddMI, Expression.Constant(column.DynamicColumnName), value);
++        }
++
++        return Expression.ListInit(Expression.New(typeof(Dictionary<string, object?>)), elements);
++    }
++
+     private static SelectExpression FindUpper(SelectExpression[] selectList, int lowerIndex, PropertyInfo? owner)
+     {
+         for (var i = lowerIndex + 1; i < selectList.Length; i++)
+diff --git a/src/nextorm.core/DataContext/SqlMutationBuilder.cs b/src/nextorm.core/DataContext/SqlMutationBuilder.cs
+index a40f391..028f213 100644
+--- a/src/nextorm.core/DataContext/SqlMutationBuilder.cs
++++ b/src/nextorm.core/DataContext/SqlMutationBuilder.cs
+@@ -1022,10 +1022,15 @@ internal static class SqlMutationBuilder
+             : property.ColumnName;
+ 
+     internal static string RenderColumnReference(ISqlDialect dialect, bool quoteIdentifiers, IPropertyMetadata property, INamingConvention? namingConvention)
+-    {
+-        var name = ResolveColumnName(property, namingConvention);
+-        return quoteIdentifiers ? dialect.QuoteIdentifier(name) : name;
+-    }
++        => RenderColumnName(dialect, quoteIdentifiers, ResolveColumnName(property, namingConvention), property);
++
++    // A dynamic column's name comes from the runtime schema, so it is always quoted (never emitted
++    // verbatim) regardless of the command-level quoting flag: the delimiter is what makes a runtime
++    // name safe. Declared columns respect the opt-in quoting flag.
++    private static string RenderColumnName(ISqlDialect dialect, bool quoteIdentifiers, string name, IPropertyMetadata property)
++        => quoteIdentifiers || property is DynamicColumnMetadata
++            ? dialect.QuoteIdentifier(name)
++            : name;
+ 
+     private static void AppendIdentifier(StringBuilder writer, ISqlDialect dialect, bool quoteIdentifiers, string name)
+     {
+@@ -1048,7 +1053,8 @@ internal static class SqlMutationBuilder
+             if (c > 0)
+                 writer.Append(", ");
+ 
+-            AppendIdentifier(writer, dialect, quoteIdentifiers, ResolveColumnName(columns[c], namingConvention));
++            var column = columns[c];
++            writer.Append(RenderColumnName(dialect, quoteIdentifiers, ResolveColumnName(column, namingConvention), column));
+         }
+         writer.Append(')');
+     }
+diff --git a/src/nextorm.core/DataContext/SqlSourceRenderer.cs b/src/nextorm.core/DataContext/SqlSourceRenderer.cs
+index f7e51f1..a1366a1 100644
+--- a/src/nextorm.core/DataContext/SqlSourceRenderer.cs
++++ b/src/nextorm.core/DataContext/SqlSourceRenderer.cs
+@@ -995,6 +995,16 @@ internal static class SqlSourceRenderer
+ 
+     internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
+     {
++        // A dynamic column has no CLR projection to translate: it is a raw identifier supplied from the
++        // runtime schema. It is always quoted with the provider delimiter, so a runtime name cannot
++        // inject SQL; only trusted names (for example from INFORMATION_SCHEMA) should be passed.
++        if (selExp.DynamicColumnName is { } dynamicColumnName)
++        {
++            if (ctx.ParamMode) return (false, string.Empty);
++
++            return (false, ctx.Dialect.QuoteIdentifier(dynamicColumnName));
++        }
++
+         using var visitor = ctx.CreateColumnVisitor(entityType, 0, dontNeedAlias);
+         visitor.RangeColumnRole = selExp.RangeColumnRole;
+         visitor.Visit(selExp.Expression);
+diff --git a/src/nextorm.core/DynamicColumnsAttribute.cs b/src/nextorm.core/DynamicColumnsAttribute.cs
+new file mode 100644
+index 0000000..8a56d4c
+--- /dev/null
++++ b/src/nextorm.core/DynamicColumnsAttribute.cs
+@@ -0,0 +1,16 @@
++namespace NextORM.Core;
++
++/// <summary>
++/// Declares that a property holds the dynamic-columns store of the entity: the columns of the row that
++/// are not mapped to declared properties. The property type must implement
++/// <see cref="IDictionary{TKey,TValue}"/> of <see cref="string"/> to <see cref="object"/>.
++/// </summary>
++/// <remarks>
++/// On read the columns named by <see cref="EntityBuilder{TEntity}.WithDynamicColumns(string[])"/> are
++/// materialized into the store instead of a CLR property; on write the store's keys are rendered as
++/// columns. The key set participates in the query plan, so two queries with different dynamic-column
++/// sets never share a cached plan. The fluent equivalent is
++/// <see cref="EntityPropertyBuilder{T}.DynamicColumns()"/>.
++/// </remarks>
++[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
++public sealed class DynamicColumnsAttribute : Attribute;
+diff --git a/src/nextorm.core/Expressions/SelectExpression.cs b/src/nextorm.core/Expressions/SelectExpression.cs
+index b6c11a1..5ac36d5 100644
+--- a/src/nextorm.core/Expressions/SelectExpression.cs
++++ b/src/nextorm.core/Expressions/SelectExpression.cs
+@@ -73,6 +73,20 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
+     /// for an ordinary column. Read by the entity materializer to rebuild the range value.
+     /// </summary>
+     internal RangeColumnsMetadata? RangeColumns { get; set; }
++
++    /// <summary>
++    /// The physical column name read into the entity's dynamic-columns store, or <see langword="null"/>
++    /// for an ordinary column. A dynamic column has no target property and no expression; the renderer
++    /// emits the quoted identifier and the materializer writes the value into
++    /// <see cref="DynamicStoreProperty"/>.
++    /// </summary>
++    internal string? DynamicColumnName { get; set; }
++
++    /// <summary>
++    /// The entity's dynamic-columns store property receiving <see cref="DynamicColumnName"/>, or
++    /// <see langword="null"/> when this is not a dynamic column.
++    /// </summary>
++    internal PropertyInfo? DynamicStoreProperty { get; set; }
+     // public List<QueryCommand>? ReferencedQueries { get; set; }
+     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
+     // private readonly IQueryRegistry _queryProvider;
+diff --git a/src/nextorm.core/Expressions/SelectExpressionPlanEqualityComparer.cs b/src/nextorm.core/Expressions/SelectExpressionPlanEqualityComparer.cs
+index fc9ca93..337c94c 100644
+--- a/src/nextorm.core/Expressions/SelectExpressionPlanEqualityComparer.cs
++++ b/src/nextorm.core/Expressions/SelectExpressionPlanEqualityComparer.cs
+@@ -49,6 +49,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
+ 
+         if (x.PropertyName != y.PropertyName) return false;
+ 
++        if (x.DynamicColumnName != y.DynamicColumnName) return false;
++
+         if (x.DefaultOnNull != y.DefaultOnNull) return false;
+ 
+         if (x.DurationUnit != y.DurationUnit) return false;
+@@ -81,6 +83,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
+ 
+             hash.Add(obj.PropertyName);
+ 
++            hash.Add(obj.DynamicColumnName);
++
+             hash.Add(obj.DefaultOnNull);
+ 
+             hash.Add(obj.DurationUnit);
+diff --git a/src/nextorm.core/Query/QueryCommand.Clone.cs b/src/nextorm.core/Query/QueryCommand.Clone.cs
+index 8366632..13153af 100644
+--- a/src/nextorm.core/Query/QueryCommand.Clone.cs
++++ b/src/nextorm.core/Query/QueryCommand.Clone.cs
+@@ -98,6 +98,9 @@ public partial class QueryCommand
+         dst.TablesInScopeHints = TablesInScopeHints;
+         dst.ForJsonClause = ForJsonClause;
+         dst.ForXmlClause = ForXmlClause;
++        // The dynamic-column set is part of the plan key (folded into ColumnsPlanHash by preparation), so
++        // the cached clone must carry it; otherwise GetCacheVersion's Debug.Assert would fail.
++        dst.DynamicColumns = DynamicColumns;
+ 
+         dst._queryPlanComparer = _queryPlanComparer;
+         dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;
+diff --git a/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs b/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
+index bbeabcd..aaa27fb 100644
+--- a/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
++++ b/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
+@@ -301,6 +301,10 @@ public partial class QueryCommand
+             {
+                 if (cmd._exp is not null)
+                 {
++                    if (cmd.DynamicColumns is { Count: > 0 })
++                        throw new NotSupportedException(
++                            "WithDynamicColumns applies only to an entity query without an explicit Select projection.");
++
+                     // Resolve the projection source metadata once: it is consulted for every projected
+                     // column (duration unit, converter), so the shared lookup is not repeated per column.
+                     IEntityMetadata? srcMetadata = srcType is not null && DataContextCache.Metadata.TryGetValue(srcType, out var resolvedSource)
+@@ -442,7 +446,30 @@ public partial class QueryCommand
+ 
+                     if (cmd._dataContext!.NeedMapping)
+                     {
+-                        if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
++                        // A command that reads runtime-schema columns into an entity store has a
++                        // per-command column set, so its projection must not go through the shared
++                        // per-type SelectListCache (which is keyed by type alone). The per-column plan
++                        // hashes are folded in so the set is part of the plan key.
++                        if (cmd.DynamicColumns is { Count: > 0 })
++                        {
++                            if (!DataContextCache.Metadata.TryGetValue(srcType, out var dynamicEntityMeta))
++                                throw new QueryPreparationException(
++                                    $"Table name is not registered for type {srcType}. Materialize the entity first (for example with From<{srcType.Name}>()).");
++
++                            var (dynamicColumns, dynamicCompleted) = EntitySelectListBuilder.Build(srcType, dynamicEntityMeta, cancellationToken, cmd.DynamicColumns);
++                            if (!dynamicCompleted)
++                                return (dynamicColumns, columnsPlanHash);
++
++                            selectList = dynamicColumns;
++
++                            if (!cmd._dontCache && !noHash)
++                                for (var i = 0; i < selectList.Length; i++) unchecked
++                                    {
++                                        selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
++                                        columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
++                                    }
++                        }
++                        else if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
+                         {
+                             if (DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta))
+                             {
+diff --git a/src/nextorm.core/Query/QueryCommand.cs b/src/nextorm.core/Query/QueryCommand.cs
+index 71ae680..97e9133 100644
+--- a/src/nextorm.core/Query/QueryCommand.cs
++++ b/src/nextorm.core/Query/QueryCommand.cs
+@@ -316,6 +316,14 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
+     /// <summary>Whether <see cref="PreparedPreWhere"/> contains a top-level value-list whose shape is refreshed per run.</summary>
+     internal bool HasPreWhereInValues;
+     internal bool IgnoreColumns { get; set; }
++    /// <summary>
++    /// The runtime-schema columns read into the entity's dynamic-columns store (in addition to the
++    /// declared mapped columns), or <see langword="null"/> when the command reads only declared
++    /// columns. Set through <c>WithDynamicColumns</c>; the set is folded into the plan key so two
++    /// commands with different sets never share a cached plan. Applied only to an entity query without
++    /// an explicit projection.
++    /// </summary>
++    internal IReadOnlyList<string>? DynamicColumns { get; set; }
+     /// <summary>The commands referenced by correlated subqueries in this command's expressions, in registration order; empty until preparation registers one.</summary>
+     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
+     /// <summary>The sort columns declared for the query, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
+diff --git a/tests/nextorm.clickhouse.tests/DynamicColumnsSqlGenerationTests.cs b/tests/nextorm.clickhouse.tests/DynamicColumnsSqlGenerationTests.cs
+new file mode 100644
+index 0000000..24b5358
+--- /dev/null
++++ b/tests/nextorm.clickhouse.tests/DynamicColumnsSqlGenerationTests.cs
+@@ -0,0 +1,47 @@
++using System.ComponentModel.DataAnnotations;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.ClickHouse.Tests;
++
++[SqlTable("dynamic_event")]
++public class DynamicEvent
++{
++    [Key]
++    public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns]
++    public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++
++public class DynamicColumnsSqlGenerationTests
++{
++    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
++
++    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
++
++    [Fact]
++    public void Select_DynamicColumns_UseBacktickQuoting()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++
++        SqlOf(ctx, ctx.From<DynamicEvent>().WithDynamicColumns("region").ToCommand())
++            .Should().Be("select Id, Name, `region` from dynamic_event");
++    }
++
++    [Fact]
++    public void Insert_DynamicColumns_UseBacktickQuoting()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++        var entity = new DynamicEvent
++        {
++            Id = 1,
++            Name = "n",
++            Extra = new Dictionary<string, object?> { ["region"] = "eu" },
++        };
++
++        Normalize(ctx.InsertInto<DynamicEvent>().Values(entity).ToSql())
++            .Should().Contain("(Id, Name, `region`)");
++    }
++}
+diff --git a/tests/nextorm.core.tests/DynamicColumnsTests.cs b/tests/nextorm.core.tests/DynamicColumnsTests.cs
+new file mode 100644
+index 0000000..5087a1c
+--- /dev/null
++++ b/tests/nextorm.core.tests/DynamicColumnsTests.cs
+@@ -0,0 +1,66 @@
++using FluentAssertions;
++
++namespace NextORM.Core.Tests;
++
++public class DynamicEntity
++{
++    public int Id { get; set; }
++    [DynamicColumns]
++    public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++
++public class NoStoreEntity
++{
++    public int Id { get; set; }
++}
++
++public class DynamicColumnsTests
++{
++    [Fact]
++    public void InMemoryRead_ReturnsTheEntityStore()
++    {
++        using var ctx = new InMemoryDataContext();
++        var store = new Dictionary<string, object?> { ["region"] = "eu" };
++        ctx.Data[typeof(DynamicEntity)] = new[] { new DynamicEntity { Id = 1, Extra = store } };
++
++        var row = ctx.From<DynamicEntity>().WithDynamicColumns("region").ToList().Single();
++
++        row.Extra.Should().BeSameAs(store);
++    }
++
++    [Fact]
++    public void InMemoryRead_WithoutStore_ShouldThrow()
++    {
++        using var ctx = new InMemoryDataContext();
++        ctx.Data[typeof(NoStoreEntity)] = new[] { new NoStoreEntity { Id = 1 } };
++
++        var act = () => ctx.From<NoStoreEntity>().WithDynamicColumns("region").ToList();
++
++        act.Should().Throw<QueryPreparationException>().WithMessage("*dynamic-columns store*");
++    }
++
++    [Fact]
++    public void InMemoryRead_ExplicitProjectionWithStore_ShouldThrow()
++    {
++        using var ctx = new InMemoryDataContext();
++        ctx.Data[typeof(DynamicEntity)] = new[] { new DynamicEntity { Id = 1 } };
++
++        var act = () => ctx.From<DynamicEntity>().WithDynamicColumns("region").Select(x => new { x.Id }).ToList();
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*without an explicit Select*");
++    }
++
++    [Fact]
++    public void FluentMapping_DeclaresTheStore()
++    {
++        using var ctx = new InMemoryDataContext();
++        ctx.Data[typeof(DynamicEntity)] = new[] { new DynamicEntity { Id = 1 } };
++
++        var row = ctx.From<DynamicEntity>(b => b.Property(x => x.Extra).DynamicColumns())
++            .WithDynamicColumns("region")
++            .ToList()
++            .Single();
++
++        row.Extra.Should().BeEmpty();
++    }
++}
+diff --git a/tests/nextorm.integration.tests/DynamicColumnsIntegrationTests.cs b/tests/nextorm.integration.tests/DynamicColumnsIntegrationTests.cs
+new file mode 100644
+index 0000000..b34b8f8
+--- /dev/null
++++ b/tests/nextorm.integration.tests/DynamicColumnsIntegrationTests.cs
+@@ -0,0 +1,72 @@
++using System.ComponentModel.DataAnnotations;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Integration.Tests;
++
++[SqlTable("dynamic_event")]
++public class DynamicEvent
++{
++    [Key]
++    public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns]
++    public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++
++/// <summary>
++/// Round-trips the dynamic-columns store against a real database. SQLite is the provider that needs no
++/// container, so the test always runs; the SQL-generation tests cover the other providers' quoting.
++/// </summary>
++[Collection("Sqlite")]
++public sealed class DynamicColumnsIntegrationTests : ProviderTestSuite
++{
++    protected override ITestProvider Provider => SqliteTestProvider.Instance;
++
++    [Fact]
++    public void Read_DynamicColumns_FillsTheStore()
++    {
++        var row = _sut.DataProvider.From<DynamicEvent>()
++            .Where(x => x.Id == 1)
++            .WithDynamicColumns("region", "score")
++            .ToList()
++            .Single();
++
++        row.Name.Should().Be("a");
++        row.Extra.Should().ContainKey("region").WhoseValue.Should().Be("eu");
++        row.Extra["score"].Should().Be(5L);
++    }
++
++    [Fact]
++    public void Read_WithoutDynamicColumns_LeavesTheStoreEmpty()
++    {
++        var row = _sut.DataProvider.From<DynamicEvent>()
++            .Where(x => x.Id == 1)
++            .ToList()
++            .Single();
++
++        row.Extra.Should().BeEmpty();
++    }
++
++    [Fact]
++    public void Insert_Entity_WritesStoreKeysAsColumns()
++    {
++        var entity = new DynamicEvent
++        {
++            Id = 3,
++            Name = "c",
++            Extra = new Dictionary<string, object?> { ["region"] = "ap", ["score"] = 1 },
++        };
++
++        _sut.DataProvider.InsertInto<DynamicEvent>().Values(entity).Insert().Should().Be(1);
++
++        var row = _sut.DataProvider.From<DynamicEvent>()
++            .Where(x => x.Id == 3)
++            .WithDynamicColumns("region", "score")
++            .ToList()
++            .Single();
++
++        row.Extra["region"].Should().Be("ap");
++        row.Extra["score"].Should().Be(1L);
++    }
++}
+diff --git a/tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs b/tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs
+index a9bde18..a192e6b 100644
+--- a/tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs
++++ b/tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs
+@@ -111,5 +111,8 @@ internal sealed class SqliteTestProvider : ITestProvider
+         create table merge_entity (id integer primary key, name text, age int);
+ 
+         create table delete_entity (id integer primary key, name text, age int);
++
++        create table dynamic_event (id integer primary key, name text, region text, score int);
++        insert into dynamic_event (id, name, region, score) values (1, 'a', 'eu', 5), (2, 'b', 'us', 9);
+         """;
+ }
+diff --git a/tests/nextorm.mysql.tests/DynamicColumnsSqlGenerationTests.cs b/tests/nextorm.mysql.tests/DynamicColumnsSqlGenerationTests.cs
+new file mode 100644
+index 0000000..7cc42c5
+--- /dev/null
++++ b/tests/nextorm.mysql.tests/DynamicColumnsSqlGenerationTests.cs
+@@ -0,0 +1,47 @@
++using System.ComponentModel.DataAnnotations;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.MySql.Tests;
++
++[SqlTable("dynamic_event")]
++public class DynamicEvent
++{
++    [Key]
++    public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns]
++    public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++
++public class DynamicColumnsSqlGenerationTests
++{
++    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
++
++    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
++
++    [Fact]
++    public void Select_DynamicColumns_UseBacktickQuoting()
++    {
++        using var ctx = MySqlTestContext.Create();
++
++        SqlOf(ctx, ctx.From<DynamicEvent>().WithDynamicColumns("region").ToCommand())
++            .Should().Be("select Id, Name, `region` from dynamic_event");
++    }
++
++    [Fact]
++    public void Insert_DynamicColumns_UseBacktickQuoting()
++    {
++        using var ctx = MySqlTestContext.Create();
++        var entity = new DynamicEvent
++        {
++            Id = 1,
++            Name = "n",
++            Extra = new Dictionary<string, object?> { ["region"] = "eu" },
++        };
++
++        Normalize(ctx.InsertInto<DynamicEvent>().Values(entity).ToSql())
++            .Should().Contain("(Id, Name, `region`)");
++    }
++}
+diff --git a/tests/nextorm.postgres.tests/DynamicColumnsSqlGenerationTests.cs b/tests/nextorm.postgres.tests/DynamicColumnsSqlGenerationTests.cs
+new file mode 100644
+index 0000000..a2bba5a
+--- /dev/null
++++ b/tests/nextorm.postgres.tests/DynamicColumnsSqlGenerationTests.cs
+@@ -0,0 +1,157 @@
++using System.ComponentModel.DataAnnotations;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Postgres.Tests;
++
++[SqlTable("dynamic_event")]
++public class DynamicEvent
++{
++    [Key]
++    public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns]
++    public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++
++[SqlTable("no_store_entity")]
++public class NoStoreEntity
++{
++    [Key]
++    public int Id { get; set; }
++}
++
++public class DynamicColumnsSqlGenerationTests
++{
++    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
++
++    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
++
++    [Fact]
++    public void Select_DynamicColumns_AppendsQuotedIdentifiers()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var e = ctx.From<DynamicEvent>();
++
++        SqlOf(ctx, e.WithDynamicColumns("region", "score").ToCommand())
++            .Should().Be("select Id, Name, \"region\", \"score\" from dynamic_event");
++    }
++
++    [Fact]
++    public void Select_DynamicColumns_AreQuotedEvenWhenContextIsNot()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var e = ctx.From<DynamicEvent>();
++
++        var sql = SqlOf(ctx, e.WithDynamicColumns("weird \"name\"").ToCommand());
++
++        sql.Should().Contain("\"weird \"\"name\"\"\"");
++    }
++
++    [Fact]
++    public void Select_NoDynamicColumns_DoesNotProjectTheStore()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var e = ctx.From<DynamicEvent>();
++
++        SqlOf(ctx, e.ToCommand()).Should().Be("select Id, Name from dynamic_event");
++    }
++
++    [Fact]
++    public void Select_DifferentDynamicSets_ProduceDifferentPlans()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var e = ctx.From<DynamicEvent>();
++
++        var first = SqlOfCached(ctx, e.WithDynamicColumns("a").ToCommand());
++        var second = SqlOfCached(ctx, e.WithDynamicColumns("a", "b").ToCommand());
++        var firstAgain = SqlOfCached(ctx, e.WithDynamicColumns("a").ToCommand());
++
++        first.Should().Be("select Id, Name, \"a\" from dynamic_event");
++        second.Should().Be("select Id, Name, \"a\", \"b\" from dynamic_event");
++        firstAgain.Should().Be("select Id, Name, \"a\" from dynamic_event");
++    }
++
++    private static string SqlOfCached<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None)).DbCommand.CommandText);
++
++    [Fact]
++    public void Select_WithoutAStore_ShouldThrow()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var act = () => SqlOf(ctx, ctx.From<NoStoreEntity>().WithDynamicColumns("a").ToCommand());
++
++        act.Should().Throw<QueryPreparationException>().WithMessage("*dynamic-columns store*");
++    }
++
++    [Fact]
++    public void WithDynamicColumns_ExplicitProjection_ShouldThrow()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var act = () => SqlOf(ctx, ctx.From<DynamicEvent>().WithDynamicColumns("a").Select(x => new { x.Id }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*without an explicit Select*");
++    }
++
++    [Fact]
++    public void WithDynamicColumns_DuplicateName_ShouldThrow()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var act = () => ctx.From<DynamicEvent>().WithDynamicColumns("a", "a");
++
++        act.Should().Throw<ArgumentException>().WithMessage("*more than once*");
++    }
++
++    [Fact]
++    public void Insert_Entity_StoreKeysBecomeQuotedColumns()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var entity = new DynamicEvent
++        {
++            Id = 1,
++            Name = "n",
++            Extra = new Dictionary<string, object?> { ["region"] = "eu", ["score"] = 5 },
++        };
++
++        var sql = ctx.InsertInto<DynamicEvent>().Values(entity).ToSql();
++
++        Normalize(sql).Should().Be("insert into dynamic_event (Id, Name, \"region\", \"score\") values (@p0, @p1, @p2, @p3)");
++    }
++
++    [Fact]
++    public void Update_Entity_StoreKeysBecomeQuotedSetColumns()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var entity = new DynamicEvent
++        {
++            Id = 1,
++            Extra = new Dictionary<string, object?> { ["region"] = "eu" },
++        };
++
++        var sql = ctx.Update<DynamicEvent>().Set(entity).Where(x => x.Id == 1).ToSql();
++
++        Normalize(sql).Should().Be("update dynamic_event set Name = @p0, \"region\" = @p1 where Id = 1");
++    }
++
++    [Fact]
++    public void Merge_Entity_StoreKeysBecomeQuotedColumns()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var entity = new DynamicEvent
++        {
++            Id = 1,
++            Name = "n",
++            Extra = new Dictionary<string, object?> { ["region"] = "eu" },
++        };
++
++        var sql = ctx.MergeInto<DynamicEvent>()
++            .Using(entity)
++            .OnKeys()
++            .WhenMatchedUpdate()
++            .WhenNotMatchedInsert()
++            .ToSql();
++
++        Normalize(sql).Should().Contain("\"region\"");
++    }
++}
+diff --git a/tests/nextorm.sqlite.tests/DynamicColumnsSqlGenerationTests.cs b/tests/nextorm.sqlite.tests/DynamicColumnsSqlGenerationTests.cs
+new file mode 100644
+index 0000000..7ed916c
+--- /dev/null
++++ b/tests/nextorm.sqlite.tests/DynamicColumnsSqlGenerationTests.cs
+@@ -0,0 +1,47 @@
++using System.ComponentModel.DataAnnotations;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Sqlite.Tests;
++
++[SqlTable("dynamic_event")]
++public class DynamicEvent
++{
++    [Key]
++    public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns]
++    public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++
++public class DynamicColumnsSqlGenerationTests
++{
++    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
++
++    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
++
++    [Fact]
++    public void Select_DynamicColumns_UseDoubleQuoteQuoting()
++    {
++        using var ctx = SqliteTestContext.Create();
++
++        SqlOf(ctx, ctx.From<DynamicEvent>().WithDynamicColumns("region").ToCommand())
++            .Should().Be("select Id, Name, \"region\" from dynamic_event");
++    }
++
++    [Fact]
++    public void Insert_DynamicColumns_UseDoubleQuoteQuoting()
++    {
++        using var ctx = SqliteTestContext.Create();
++        var entity = new DynamicEvent
++        {
++            Id = 1,
++            Name = "n",
++            Extra = new Dictionary<string, object?> { ["region"] = "eu" },
++        };
++
++        Normalize(ctx.InsertInto<DynamicEvent>().Values(entity).ToSql())
++            .Should().Contain("(Id, Name, \"region\")");
++    }
++}
+diff --git a/tests/nextorm.sqlserver.tests/DynamicColumnsSqlGenerationTests.cs b/tests/nextorm.sqlserver.tests/DynamicColumnsSqlGenerationTests.cs
+new file mode 100644
+index 0000000..10d5c73
+--- /dev/null
++++ b/tests/nextorm.sqlserver.tests/DynamicColumnsSqlGenerationTests.cs
+@@ -0,0 +1,47 @@
++using System.ComponentModel.DataAnnotations;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.SqlServer.Tests;
++
++[SqlTable("dynamic_event")]
++public class DynamicEvent
++{
++    [Key]
++    public int Id { get; set; }
++    public string? Name { get; set; }
++    [DynamicColumns]
++    public IDictionary<string, object?> Extra { get; set; } = new Dictionary<string, object?>();
++}
++
++public class DynamicColumnsSqlGenerationTests
++{
++    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
++
++    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
++
++    [Fact]
++    public void Select_DynamicColumns_UseBracketQuoting()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        SqlOf(ctx, ctx.From<DynamicEvent>().WithDynamicColumns("region").ToCommand())
++            .Should().Be("select Id, Name, [region] from dynamic_event");
++    }
++
++    [Fact]
++    public void Insert_DynamicColumns_UseBracketQuoting()
++    {
++        using var ctx = SqlServerTestContext.Create();
++        var entity = new DynamicEvent
++        {
++            Id = 1,
++            Name = "n",
++            Extra = new Dictionary<string, object?> { ["region"] = "eu" },
++        };
++
++        Normalize(ctx.InsertInto<DynamicEvent>().Values(entity).ToSql())
++            .Should().Be("insert into dynamic_event (Id, Name, [region]) values (@p0, @p1, @p2)");
++    }
++}
