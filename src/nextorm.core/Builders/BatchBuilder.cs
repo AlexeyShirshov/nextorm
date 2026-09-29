@@ -187,6 +187,30 @@ public sealed class BatchBuilder
     }
 
     /// <summary>
+    /// Adds a verbatim, side-effecting raw SQL statement to the batch. The text is rendered exactly as
+    /// given — placeholders are not rewritten — and carries no parameters, so a value that must vary
+    /// cannot be captured from an expression tree. Useful for statements the command model does not
+    /// cover, such as SQL Server <c>INSERT ... EXEC</c> or scripts touching a session-scoped
+    /// <c>#temp</c> table. It must be added before the result-bearing queries. The text is executed
+    /// verbatim and binds no parameters, so pass only trusted SQL — never concatenate untrusted user
+    /// input into a raw statement.
+    /// </summary>
+    /// <param name="sql">The statement text; it runs before the result-bearing queries.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="sql"/> is <see langword="null"/>, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">A result-bearing query has already been added; add raw statements before <see cref="Query{TResult}"/>/<see cref="AddQuery{TResult}"/>.</exception>
+    /// <remarks>The batch must still end with at least one result-bearing query.</remarks>
+    public BatchBuilder Raw(string sql)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+        if (_hasResult)
+            throw new InvalidOperationException("A result-bearing query has already been added; add raw statements before Query()/AddQuery().");
+
+        _steps.Add(BatchStepSpec.ForRaw(sql));
+        return this;
+    }
+
+    /// <summary>
     /// Adds the sole result-bearing query and returns the batch terminal. It must be the last statement:
     /// any further statement would throw. To carry more than one result use
     /// <see cref="AddQuery{TResult}"/> and <see cref="Execute"/> instead.

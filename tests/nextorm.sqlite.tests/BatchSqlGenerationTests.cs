@@ -120,4 +120,90 @@ public class BatchSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void Batch_RawThenQuery_ShouldRenderRawVerbatimBeforeSelect()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.Batch()
+            .Raw("drop table if exists archive")
+            .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .ToSql();
+
+        sql.Should().Be("drop table if exists archive; select id from simple_entity");
+    }
+
+    [Fact]
+    public void Batch_MultipleRawThenQuery_ShouldRenderInInsertionOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.Batch()
+            .Raw("create table raw_a (id integer)")
+            .Raw("create table raw_b (id integer)")
+            .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .ToSql();
+
+        sql.Should().Be("create table raw_a (id integer); create table raw_b (id integer); select id from simple_entity");
+    }
+
+    [Fact]
+    public void Batch_RawAfterResultQuery_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var afterQuery = ctx.Batch();
+        afterQuery.Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
+        var actAfterQuery = () => afterQuery.Raw("drop table if exists archive");
+
+        actAfterQuery.Should().Throw<InvalidOperationException>();
+
+        var afterAddQuery = ctx.Batch();
+        afterAddQuery.AddQuery(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
+        var actAfterAddQuery = () => afterAddQuery.Raw("drop table if exists archive");
+
+        actAfterAddQuery.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Batch_RawOnly_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var batch = ctx.Batch();
+        batch.Raw("drop table if exists archive");
+
+        // A raw-only batch carries no result-bearing query, so it is rejected when rendered: ToSql()
+        // throws InvalidOperationException (and Execute()/ExecuteAsync() via the same guard).
+        var act = () => batch.ToSql();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Batch_RawNullOrWhitespace_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var actNull = () => ctx.Batch().Raw(null!);
+        var actWhitespace = () => ctx.Batch().Raw("  ");
+
+        actNull.Should().Throw<ArgumentException>();
+        actWhitespace.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Batch_RawPlaceholderText_ShouldRenderVerbatim()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // Raw binds no parameters, so placeholder-looking text must survive byte-for-byte: `@p`, `{0}`
+        // and `$1` are emitted as written rather than being rewritten into the batch's parameter scheme.
+        var sql = ctx.Batch()
+            .Raw("select @p as v, {0}, $1")
+            .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .ToSql();
+
+        sql.Should().Be("select @p as v, {0}, $1; select id from simple_entity");
+    }
 }

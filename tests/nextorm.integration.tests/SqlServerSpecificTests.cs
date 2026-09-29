@@ -448,6 +448,62 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void Batch_RawCreateTableAndInsert_ShouldReadTempTableInTheSameBatch()
+    {
+        // Issue #119: a raw side-effecting step (DDL/DML with no command model) followed by a result
+        // query in one batch, with no explicit transaction, must stay on the same session so the
+        // #temp table created by the first step is visible to the last one.
+        var name = "#raw_" + Guid.NewGuid().ToString("N");
+        var ctx = _sut.DataProvider;
+
+        var rows = ctx.Batch()
+            .Raw($"create table {name} (id int not null)")
+            .Raw($"insert into {name} (id) select id from simple_entity where id <= 3")
+            .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows.Select(r => r.Id).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void Batch_RawInsertExecStoredProcedure_ShouldReadTempTableInTheSameBatch()
+    {
+        // Issue #119, exact scenario: a stored procedure's result is spooled through a session-scoped
+        // #temp table by a verbatim INSERT ... EXEC step and read by the batch's result query — all in
+        // one batch, with no explicit transaction. The proc is created and dropped outside the batch.
+        var ctx = _sut.DataProvider;
+
+        using (ctx.ExecuteRaw(
+            "if object_id('dbo.nextorm_batch_raw_proc','P') is not null drop procedure dbo.nextorm_batch_raw_proc;"))
+        {
+        }
+
+        try
+        {
+            using (ctx.ExecuteRaw(
+                "create procedure dbo.nextorm_batch_raw_proc as select id from simple_entity where id <= 2"))
+            {
+            }
+
+            var rows = ctx.Batch()
+                .Raw("create table #r (id int not null)")
+                .Raw("insert into #r (id) exec dbo.nextorm_batch_raw_proc")
+                .Query(ctx.From("#r").Select(t => new { Id = t.GetInt32("id") }))
+                .ToList();
+
+            rows.Should().HaveCount(2);
+            rows.Select(r => r.Id).Should().Equal(1, 2);
+        }
+        finally
+        {
+            using (ctx.ExecuteRaw("drop procedure if exists dbo.nextorm_batch_raw_proc"))
+            {
+            }
+        }
+    }
+
+    [Fact]
     public void SqlServerStringFunctions_ShouldCompute()
     {
         var r = _sut.SimpleEntity

@@ -84,7 +84,7 @@ select id, total from __nextorm_temp_xxxxxxxx
 
 ## Building a batch directly
 
-`ctx.Batch()` returns a `BatchBuilder` for more than one statement, a side-effecting DML step, or an explicit order.
+`ctx.Batch()` returns a `BatchBuilder` for more than one statement, a side-effecting DML or raw SQL step, or an explicit order.
 
 Materialisation + read:
 
@@ -141,6 +141,7 @@ select id, status from orders
 
 * `CreateTempTable(name, source, options?)` and `CreateTable(name, source, options?)` add materialisations, in order, any number. Options can be passed as `CreateTableOptions` or as a `CreateTableOptionsBuilder` callback (`o => o.DropExisting()`); a persistent `CreateTable` with `DropExisting` prepends a `DROP TABLE IF EXISTS` so the step replaces an existing table.
 * `Insert(insert)`, `Update(update)`, `Delete(delete)` and `Truncate(truncate)` add a side-effecting DML statement, in order, any number. They take the same builders as `ctx.InsertInto<T>()`, `ctx.Update<T>()`, `ctx.DeleteFrom<T>()` and `ctx.Truncate<T>()`; the builder's terminal (`Insert()`, `Update()`, …) is never called — the batch runs it.
+* `Raw(sql)` adds a verbatim, side-effecting SQL step, in order, any number: the text is emitted unchanged and no parameters are bound. It follows the same ordering rule as the other side-effecting steps — it must precede `Query`/`AddQuery` (see [Raw steps](#raw-steps)).
 * `Query<TResult>(query)` adds the single result-bearing query and returns the terminal; it must be the last statement. A second `Query`, or any statement after `Query`, throws `InvalidOperationException`. To carry several result sets use `AddQuery<TResult>` and `Execute`/`ExecuteAsync` instead (see [Multiple result sets](#multiple-result-sets)).
 * Every statement must be built from the batch's own context; a statement bound to a different `IDataContext` is rejected with `ArgumentException`.
 
@@ -154,6 +155,22 @@ select id, total into #recent_orders from orders
  where (total > @b0_minTotal);
 select id, total from #recent_orders
 ```
+
+## Raw steps
+
+`Raw(sql)` adds a **verbatim, side-effecting** step: the string is emitted exactly as given, placeholders are **not** rewritten, and no parameters are bound — it is the escape hatch for DDL or provider-specific statements the typed builders do not model. It is added before the result-bearing `Query`/`AddQuery`, like any other side-effecting step: adding a `Raw` step after `Query` or after the first `AddQuery` throws `InvalidOperationException`, and the batch must still end with at least one result-bearing query — a batch of `Raw` steps alone is rejected. The text is executed verbatim and binds no parameters, so pass only trusted SQL — never concatenate untrusted user input into a `Raw` string.
+
+`Raw` participates in `ToSql()`, and in the multi-result `AddQuery`/`Execute` form it is one of the side-effecting steps that precede the queries. SQL Server can read a stored-procedure result through a temp table in one batch, without a transaction:
+
+```csharp
+var rows = ctx.Batch()
+    .Raw("create table #r (id int, total decimal(18,2))")
+    .Raw("insert into #r (id, total) exec dbo.MyProc @p = 42")
+    .Query(ctx.From("#r").Select(t => new { Id = t.GetInt32("id") }))
+    .ToList();
+```
+
+`INSERT … EXEC` cannot be nested (a procedure that itself runs `INSERT … EXEC` fails), and the procedure must return a **single** result set whose columns match `#r` — the text is passed through unchanged, so NextORM cannot validate either constraint. `Raw` binds no parameters: `@p = 42` above is a trusted literal in the T-SQL text, not a bound parameter, and any value that must vary has to be inlined by the caller.
 
 ## Multiple result sets
 
@@ -212,9 +229,9 @@ The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.Su
 
 ## Limitations
 
-* A batch ends with one or more result-bearing queries — one added with the `Query<TResult>` terminal, several with `AddQuery<TResult>` and `Execute`/`ExecuteAsync` — and they are the last statements. The statements before them are side-effecting — materialisations and DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`) — which return no columns.
+* A batch ends with one or more result-bearing queries — one added with the `Query<TResult>` terminal, several with `AddQuery<TResult>` and `Execute`/`ExecuteAsync` — and they are the last statements. The statements before them are side-effecting — materialisations, DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`) and raw SQL steps — which return no columns.
 * Multi-result execution is **sequential and eager**: `BatchResult.Read<TResult>()` returns the sets in the order the queries were added, each set may be read once, and every set is fully buffered in memory before `Execute()`/`ExecuteAsync()` returns — there is no streaming and no random access. Only the single-result `BatchQuery<TResult>` terminal streams, through `ToAsyncEnumerable`.
-* A mutation added to a batch may not request returned rows: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted. Multi-table `UpdateJoin`/`DeleteJoin` and `Merge` are not batch steps. Raw SQL/DDL has no command model.
+* A mutation added to a batch may not request returned rows: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted. Multi-table `UpdateJoin`/`DeleteJoin` and `Merge` are not batch steps. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
 * `ToSql()` shows the `;`-joined text without executing: on the single-result `BatchQuery<TResult>` terminal and on `BatchBuilder` for the multi-result `AddQuery`/`Execute` form (`BatchBuilder.ToSql()` renders the whole batch and requires at least one result step). On a `DbBatch` provider the statements are still sent as separate commands of one batch when the batch executes.
 * Batch execution is **not** routed through the query interceptors: their events carry a `DbCommand`, while a `DbBatch` command is a `DbBatchCommand`.
 * `SqlFunctions.Parameter` runtime placeholders cannot be used in a batched query; capture the value in a local variable instead (as in any query rendered as a source). Captured variables become parameters automatically.
