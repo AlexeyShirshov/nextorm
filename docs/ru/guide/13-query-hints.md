@@ -8,9 +8,21 @@
 
 [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) возвращает новую команду с одним или несколькими
 хинтами уровня инструкции. Хинты зависят от провайдера: команда хранит обычные строки, а активный
-[`ISqlDialect`](xref:NextORM.Core.ISqlDialect) решает, где и как их отрисовать. Повторный вызов накапливает хинты:
+[`ISqlDialect`](xref:NextORM.Core.ISqlDialect) решает, где и как их отрисовать. Метод принимает
+`params string[]`, поэтому один или несколько хинтов можно передать одним вызовом или накопить
+повторными вызовами; обе формы эквивалентны:
 
 ```csharp
+// один вызов с несколькими аргументами:
+var rows = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id, c.RequiredString })
+    .Hint("recompile", "fast 10")
+    .ToList();
+```
+
+```csharp
+// эквивалентная форма из двух вызовов:
 var rows = dataContext.From<IComplexEntity>()
     .Where(c => c.Id > 1)
     .Select(c => new { c.Id, c.RequiredString })

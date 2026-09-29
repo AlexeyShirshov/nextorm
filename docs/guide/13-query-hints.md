@@ -8,9 +8,21 @@
 
 [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) returns a new command carrying one or more
 statement-level hints. Hints are provider specific: the command stores plain strings and the active
-[`ISqlDialect`](xref:NextORM.Core.ISqlDialect) decides where and how they are rendered. A repeated call accumulates:
+[`ISqlDialect`](xref:NextORM.Core.ISqlDialect) decides where and how they are rendered. The method takes
+`params string[]`, so one or more hints can be passed in a single call or accumulated across repeated
+calls; the two forms are equivalent:
 
 ```csharp
+// one call with several arguments:
+var rows = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id, c.RequiredString })
+    .Hint("recompile", "fast 10")
+    .ToList();
+```
+
+```csharp
+// equivalent two-call form:
 var rows = dataContext.From<IComplexEntity>()
     .Where(c => c.Id > 1)
     .Select(c => new { c.Id, c.RequiredString })

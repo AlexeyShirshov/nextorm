@@ -601,6 +601,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QueryHint_MultipleArguments_ShouldEmitBothHintsJoinedBySpace()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+
+        sql.Should().Be("select /*+ recompile fast 10 */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryHint_MultipleArguments_ShouldMatchSequentialCalls()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var multi = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+        var sequential = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile").Hint("fast 10"));
+
+        multi.Should().Be(sequential);
+    }
+
+    [Fact]
     public void QueryHint_WithCte_ShouldPlaceHintAfterTheTopLevelSelect()
     {
         using var ctx = MySqlTestContext.Create();

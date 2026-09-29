@@ -826,6 +826,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QueryHint_MultipleArguments_ShouldEmitBothHintsInOrder()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+
+        sql.Should().EndWith(" option (recompile, fast 10)");
+    }
+
+    [Fact]
+    public void QueryHint_MultipleArguments_ShouldMatchSequentialCalls()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var multi = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+        var sequential = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile").Hint("fast 10"));
+
+        multi.Should().Be(sequential);
+    }
+
+    [Fact]
     public void WithForJson_ShouldEmitClause()
     {
         using var ctx = SqlServerTestContext.Create();
