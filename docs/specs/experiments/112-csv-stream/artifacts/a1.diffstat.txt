@@ -1,0 +1,22 @@
+ .../skills/implementing-todo-features/SKILL.md     |  21 +-
+ .opencode/skills/nextorm-pdca/SKILL.md             |   6 +
+ .../skills/running-integration-tests/SKILL.md      |  16 ++
+ AGENTS.md                                          |   7 +-
+ docs/advanced/api-reference.md                     |   3 +-
+ docs/guide/31-csv-streaming.md                     | 123 +++++++++++
+ docs/guide/toc.yml                                 |   2 +
+ docs/ru/advanced/api-reference.md                  |   3 +-
+ docs/ru/guide/31-csv-streaming.md                  | 123 +++++++++++
+ docs/ru/toc.yml                                    |   2 +
+ .../Builders/EntityBuilderExtensions.cs            |  50 +++++
+ src/nextorm.core/DataContext/CsvOptions.cs         |  73 ++++++
+ src/nextorm.core/DataContext/CsvWriter.cs          | 245 +++++++++++++++++++++
+ src/nextorm.core/DataContext/DataContext.cs        |  40 ++++
+ src/nextorm.core/DataContext/QueryExecutor.cs      |  40 ++++
+ src/nextorm.core/DataContext/QueryPlanner.cs       |  15 +-
+ src/nextorm.core/Query/QueryCommandExtensions.cs   | 133 +++++++++++
+ tests/nextorm.core.tests/CsvTerminalTests.cs       |  70 ++++++
+ tests/nextorm.core.tests/CsvWriterTests.cs         | 158 +++++++++++++
+ .../CommonTestSuite.Csv.cs                         |  89 ++++++++
+ tests/nextorm.sqlite.tests/CsvTerminalTests.cs     | 212 ++++++++++++++++++
+ 21 files changed, 1417 insertions(+), 14 deletions(-)

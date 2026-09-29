@@ -86,6 +86,14 @@ var rows = dataContext
 with first as (select id from complex_entity where (id > 1)), second as (select id from first) select id from second
 ```
 
+> **Вложенные CTE не поднимаются.** Тело CTE, само несущее `WITH` — запрос, построенный как
+> `dataContext.With(...).From(...)` и переданный телом другого `With`, — рендерится буквально
+> вложенным (`with o as (with i as (...) select ... from i) select ... from o`), а не разворачивается
+> в общий `with`. Такая форма переносима на PostgreSQL, SQLite и MySQL/MariaDB, но **не** на
+> SQL Server, чей T-SQL запрещает `WITH` внутри derived table. Объявляйте зависимость **цепочкой**
+> (объявления верхнего уровня), как выше: тогда nextorm печатает один плоский
+> `with i as (...), o as (select ... from i)`.
+
 `From(CteDefinition)` эквивалентен `From(definition.Name)` и удобен, когда вы сохранили область видимости,
 а не имя:
 
@@ -172,8 +180,8 @@ with recent as (select id from orders where (id > 1000)) update orders as "t1" s
 ```
 
 Это работает на каждом провайдере с `UPDATE ... FROM`/`JOIN` (и `DELETE ... USING`/join), на любой
-позиции join, и для рекурсивных CTE. См. [Data modification (UPDATE)](19-update-statement.md#обновление-из-join)
-и [Data modification (DELETE)](18-delete-statement.md#удаление-по-соединению).
+позиции join, и для рекурсивных CTE. См. [Data modification (UPDATE)](17-update-statement.md#обновление-из-join)
+и [Data modification (DELETE)](16-delete-statement.md#удаление-по-соединению).
 
 ## Рекурсивный CTE: числовая последовательность
 
@@ -275,7 +283,7 @@ with recent as (select id from complex_entity where (id > $threshold)) select id
 * эквивалентный рекурсивный CTE, построенный снова, переиспользует кэшированный план
   (`PlanCacheTests.RecursiveCte_FreshCommand_ShouldReuseCachedPlan`).
 
-См. [Переиспользование запросов: кэш против Prepare](13-query-reuse.md) о времени жизни и правилах
+См. [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md) о времени жизни и правилах
 инвалидации кэша планов.
 
 ## Модифицирующий CTE (PostgreSQL)
@@ -290,8 +298,8 @@ PostgreSQL — единственный поддерживаемый прова�
 Write-CTE документируется вместе с поверхностью записи, к которой принадлежит — типизированное чтение через
 `From`/`FromTable`, тело `VALUES` или `INSERT ... SELECT`, чтение более раннего read-CTE и питание
 главного `INSERT ... SELECT` — в разделе
-[Изменение данных (INSERT): Модифицирующий CTE](17-insert-statement.md#модифицирующий-cte-postgresql).
-Тела `UPDATE` и `DELETE` в качестве тела CTE не поддерживаются (только `INSERT`). Общая поверхность `UPDATE` — в [Изменении данных (UPDATE)](19-update-statement.md).
+[Изменение данных (INSERT): Модифицирующий CTE](15-insert-statement.md#модифицирующий-cte-postgresql).
+Тела `UPDATE` и `DELETE` в качестве тела CTE не поддерживаются (только `INSERT`). Общая поверхность `UPDATE` — в [Изменении данных (UPDATE)](17-update-statement.md).
 
 ## Различия между провайдерами
 
@@ -310,7 +318,7 @@ Write-CTE документируется вместе с поверхность�
 * [Операции над множествами](06-set-operations.md) — [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) и другие, используются для построения рекурсивного тела.
 * [Соединения](02-joins.md) — соединение CTE с таблицей, как в `CommonTestSuite.Cte.cs`.
 * [Необработанный SQL](12-raw-sql.md) — когда вся инструкция написана вручную.
-* [Переиспользование запросов: кэш против Prepare](13-query-reuse.md) — как кэшируются планы CTE.
+* [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md) — как кэшируются планы CTE.
 
 ---
 

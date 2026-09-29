@@ -20,6 +20,10 @@ namespace NextORM.Integration.Tests;
 /// the mode matters.
 /// </para>
 /// <para>
+/// It also measures the two issue-#100 candidates against the same baseline: a fixed-buffer
+/// <c>GetBytes</c>/<c>GetChars</c> loop and server-side paging with <c>SUBSTRING(col, @pos, @len)</c>.
+/// </para>
+/// <para>
 /// Out-of-band probe: it only runs when <c>NEXTORM_LOB_PROBE=1</c> is set, so the normal integration
 /// suite does not pay for the extra seeds and the repeated multi-megabyte reads.
 /// </para>
@@ -82,6 +86,17 @@ public sealed class LobCapabilityProbeTests
         var textOnSmall = MeasureText(connectionString, table, id: 1, sequential: true, smallText);
         var textOffSmall = MeasureText(connectionString, table, id: 1, sequential: false, smallText);
 
+        // Issue #100 candidates: a chunked GetBytes/GetChars loop and server-side SUBSTRING paging.
+        var binaryBytes = MeasureBinaryGetBytes(connectionString, table, id: 2, large);
+        var binaryBytesSmall = MeasureBinaryGetBytes(connectionString, table, id: 1, small);
+        var textChars = MeasureTextGetChars(connectionString, table, id: 2, largeText);
+        var textCharsSmall = MeasureTextGetChars(connectionString, table, id: 1, smallText);
+
+        var binaryPage = MeasureBinarySubstring(connectionString, table, id: 2, large);
+        var binaryPageSmall = MeasureBinarySubstring(connectionString, table, id: 1, small);
+        var textPage = MeasureTextSubstring(connectionString, table, id: 2, largeText);
+        var textPageSmall = MeasureTextSubstring(connectionString, table, id: 1, smallText);
+
         var lines = new List<string>
         {
             $"# LOB capability probe [{provider}]; driver MySqlConnector 2.6.2; runtime {Environment.Version}",
@@ -92,11 +107,19 @@ public sealed class LobCapabilityProbeTests
         AppendLine(lines, provider, "BLOB GetStream", "off", binaryOffSmall, binaryOff);
         AppendLine(lines, provider, "CLOB GetTextReader", "on", textOnSmall, textOn);
         AppendLine(lines, provider, "CLOB GetTextReader", "off", textOffSmall, textOff);
+        AppendLine(lines, provider, "BLOB GetBytes loop", "on", binaryBytesSmall, binaryBytes);
+        AppendLine(lines, provider, "CLOB GetChars loop", "on", textCharsSmall, textChars);
+        AppendLine(lines, provider, "BLOB SUBSTRING page", "-", binaryPageSmall, binaryPage);
+        AppendLine(lines, provider, "CLOB SUBSTRING page", "-", textPageSmall, textPage);
 
         lines.Add($"[{provider}] VERDICT BLOB GetStream     seq=on : {Verdict(binaryOnSmall, binaryOn)}");
         lines.Add($"[{provider}] VERDICT BLOB GetStream     seq=off: {Verdict(binaryOffSmall, binaryOff)}");
         lines.Add($"[{provider}] VERDICT CLOB GetTextReader seq=on : {Verdict(textOnSmall, textOn)}");
         lines.Add($"[{provider}] VERDICT CLOB GetTextReader seq=off: {Verdict(textOffSmall, textOff)}");
+        lines.Add($"[{provider}] VERDICT BLOB GetBytes loop     : {Verdict(binaryBytesSmall, binaryBytes)}");
+        lines.Add($"[{provider}] VERDICT CLOB GetChars loop     : {Verdict(textCharsSmall, textChars)}");
+        lines.Add($"[{provider}] VERDICT BLOB SUBSTRING page    : {Verdict(binaryPageSmall, binaryPage)}");
+        lines.Add($"[{provider}] VERDICT CLOB SUBSTRING page    : {Verdict(textPageSmall, textPage)}");
 
         lock (LogGate)
         {
@@ -138,6 +161,254 @@ public sealed class LobCapabilityProbeTests
         if (oneMiB.Allocated <= 0 || eightMiB.Allocated <= 0)
             return double.NaN;
         return (double)eightMiB.Allocated / oneMiB.Allocated;
+    }
+
+    /// <summary>
+    /// Candidate (a) for BLOB: <see cref="DbDataReader.GetBytes(int, long, byte[]?, int, int)"/> in a
+    /// fixed 64 KiB buffer loop. MySqlConnector treats <c>dataOffset</c> as an absolute column offset
+    /// (it does not advance internally), so the offset is advanced by the returned byte count.
+    /// </summary>
+    private static ProbeResult MeasureBinaryGetBytes(string connectionString, string table, int id, byte[] expected)
+    {
+        var expectedHash = Hash(expected);
+        var buffer = new byte[BufferChars];
+
+        try
+        {
+            using var connection = new MySqlConnection(connectionString);
+            connection.Open();
+
+            (long Length, ulong Hash) ReadOnce()
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = $"select data from {table} where id = @id";
+                command.Parameters.AddWithValue("@id", id);
+                using var reader = command.ExecuteReader(CommandBehavior.SequentialAccess);
+                if (!reader.Read())
+                    throw new InvalidOperationException("the seeded row was not returned");
+
+                long length = 0;
+                var hash = FnvOffset;
+                long offset = 0;
+                int read;
+                while ((read = (int)reader.GetBytes(0, offset, buffer, 0, buffer.Length)) > 0)
+                {
+                    for (var i = 0; i < read; i++)
+                        hash = Fnv(hash, buffer[i]);
+                    length += read;
+                    offset += read;
+                }
+
+                return (length, hash);
+            }
+
+            return RunSamples(ReadOnce, expected.Length, expectedHash);
+        }
+        catch (Exception exception)
+        {
+            return new ProbeResult(-1, false, $"{exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Candidate (a) for CLOB: <see cref="DbDataReader.GetChars(int, long, char[]?, int, int)"/> in a
+    /// fixed 64 KiB buffer loop.
+    /// </summary>
+    private static ProbeResult MeasureTextGetChars(string connectionString, string table, int id, string expected)
+    {
+        var expectedHash = Hash(expected);
+        var buffer = new char[BufferChars];
+
+        try
+        {
+            using var connection = new MySqlConnection(connectionString);
+            connection.Open();
+
+            (long Length, ulong Hash) ReadOnce()
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = $"select body from {table} where id = @id";
+                command.Parameters.AddWithValue("@id", id);
+                using var reader = command.ExecuteReader(CommandBehavior.SequentialAccess);
+                if (!reader.Read())
+                    throw new InvalidOperationException("the seeded row was not returned");
+
+                long length = 0;
+                var hash = FnvOffset;
+                long offset = 0;
+                int read;
+                while ((read = (int)reader.GetChars(0, offset, buffer, 0, buffer.Length)) > 0)
+                {
+                    for (var i = 0; i < read; i++)
+                        hash = Fnv(hash, (byte)buffer[i]);
+                    length += read;
+                    offset += read;
+                }
+
+                return (length, hash);
+            }
+
+            return RunSamples(ReadOnce, expected.Length, expectedHash);
+        }
+        catch (Exception exception)
+        {
+            return new ProbeResult(-1, false, $"{exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Candidate (b) for BLOB: server-side paging with
+    /// <c>SELECT SUBSTRING(data, @pos, @len) FROM t WHERE id = @id</c> in a 64 KiB page loop (MySQL
+    /// <c>SUBSTRING</c> positions are 1-based and byte-counted for binary values).
+    /// </summary>
+    private static ProbeResult MeasureBinarySubstring(string connectionString, string table, int id, byte[] expected)
+    {
+        var expectedHash = Hash(expected);
+        var buffer = new byte[BufferChars];
+
+        try
+        {
+            using var connection = new MySqlConnection(connectionString);
+            connection.Open();
+
+            (long Length, ulong Hash) ReadOnce()
+            {
+                long length = 0;
+                var hash = FnvOffset;
+                long position = 1;
+
+                while (true)
+                {
+                    using var command = connection.CreateCommand();
+                    command.CommandText = $"select substring(data, @pos, @len) from {table} where id = @id";
+                    command.Parameters.AddWithValue("@pos", position);
+                    command.Parameters.AddWithValue("@len", (long)buffer.Length);
+                    command.Parameters.AddWithValue("@id", id);
+                    using var reader = command.ExecuteReader(CommandBehavior.SequentialAccess);
+                    if (!reader.Read())
+                        throw new InvalidOperationException("the seeded row was not returned");
+
+                    var read = (int)reader.GetBytes(0, 0, buffer, 0, buffer.Length);
+                    for (var i = 0; i < read; i++)
+                        hash = Fnv(hash, buffer[i]);
+                    length += read;
+
+                    if (read < buffer.Length)
+                        break;
+                    position += buffer.Length;
+                }
+
+                return (length, hash);
+            }
+
+            return RunSamples(ReadOnce, expected.Length, expectedHash);
+        }
+        catch (Exception exception)
+        {
+            return new ProbeResult(-1, false, $"{exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Candidate (b) for CLOB: server-side paging with
+    /// <c>SELECT SUBSTRING(body, @pos, @len) FROM t WHERE id = @id</c> in a 64 KiB page loop (the
+    /// seeded text is ASCII, so character and byte counts coincide).
+    /// </summary>
+    private static ProbeResult MeasureTextSubstring(string connectionString, string table, int id, string expected)
+    {
+        var expectedHash = Hash(expected);
+        var buffer = new char[BufferChars];
+
+        try
+        {
+            using var connection = new MySqlConnection(connectionString);
+            connection.Open();
+
+            (long Length, ulong Hash) ReadOnce()
+            {
+                long length = 0;
+                var hash = FnvOffset;
+                long position = 1;
+
+                while (true)
+                {
+                    using var command = connection.CreateCommand();
+                    command.CommandText = $"select substring(body, @pos, @len) from {table} where id = @id";
+                    command.Parameters.AddWithValue("@pos", position);
+                    command.Parameters.AddWithValue("@len", (long)buffer.Length);
+                    command.Parameters.AddWithValue("@id", id);
+                    using var reader = command.ExecuteReader(CommandBehavior.SequentialAccess);
+                    if (!reader.Read())
+                        throw new InvalidOperationException("the seeded row was not returned");
+
+                    var read = (int)reader.GetChars(0, 0, buffer, 0, buffer.Length);
+                    for (var i = 0; i < read; i++)
+                        hash = Fnv(hash, (byte)buffer[i]);
+                    length += read;
+
+                    if (read < buffer.Length)
+                        break;
+                    position += buffer.Length;
+                }
+
+                return (length, hash);
+            }
+
+            return RunSamples(ReadOnce, expected.Length, expectedHash);
+        }
+        catch (Exception exception)
+        {
+            return new ProbeResult(-1, false, $"{exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Warms up the read twice, then reports the best-of-<see cref="Samples"/>
+    /// <see cref="GC.GetAllocatedBytesForCurrentThread"/> delta and whether the last read matched the
+    /// expected FNV-1a hash.
+    /// </summary>
+    private static ProbeResult RunSamples(
+        Func<(long Length, ulong Hash)> readOnce, long expectedLength, ulong expectedHash)
+    {
+        readOnce();
+        readOnce();
+
+        var best = long.MaxValue;
+        (long Length, ulong Hash) last = default;
+        for (var i = 0; i < Samples; i++)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            last = readOnce();
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (allocated < best)
+                best = allocated;
+        }
+
+        var correct = last.Length == expectedLength && last.Hash == expectedHash;
+        return new ProbeResult(
+            best, correct,
+            correct ? null : $"length={last.Length}/{expectedLength} hash={last.Hash}/{expectedHash}");
+    }
+
+    private const ulong FnvOffset = 14695981039346656037UL;
+    private const ulong FnvPrime = 1099511628211UL;
+
+    private static ulong Fnv(ulong hash, byte value) => (hash ^ value) * FnvPrime;
+
+    private static ulong Hash(byte[] data)
+    {
+        var hash = FnvOffset;
+        foreach (var value in data)
+            hash = Fnv(hash, value);
+        return hash;
+    }
+
+    private static ulong Hash(string text)
+    {
+        var hash = FnvOffset;
+        foreach (var value in text)
+            hash = Fnv(hash, (byte)value);
+        return hash;
     }
 
     private static ProbeResult MeasureBinary(

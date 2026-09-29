@@ -502,6 +502,12 @@ public class MySqlDialect : SqlDialectBase
 
     /// <summary>MySQL/MariaDB accept a column list on <c>CREATE TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelectColumnList => true;
+
+    /// <summary>
+    /// MySQL and MariaDB (through the inherited dialect) reject a bare <c>*</c> mixed with explicit
+    /// select expressions, so a dynamic-columns read qualifies the appended star with the source alias.
+    /// </summary>
+    public override bool RequiresQualifiedSelectStar => true;
 }
 
 internal sealed class MySqlIifRenderer : IIifRenderer

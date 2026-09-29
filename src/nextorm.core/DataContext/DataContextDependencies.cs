@@ -20,7 +20,7 @@ internal readonly record struct LoggingOptions(
 /// </summary>
 internal readonly record struct ProviderHooks(
     Func<SelectExpression, Expression, Expression> MapColumn,
-    Func<string, object?, DbParameter> CreateParam,
+    Func<DbCommand, string, object?, DbParameter> CreateParam,
     Func<string, DbCommand> CreateCommand);
 
 /// <summary>

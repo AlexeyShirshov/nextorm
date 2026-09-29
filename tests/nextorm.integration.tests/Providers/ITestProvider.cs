@@ -163,6 +163,21 @@ public interface ITestProvider
     /// </summary>
     bool SupportsZeroColumnResult => false;
 
+    /// <summary>
+    /// True when the provider accepts the whole-entity read that materialises a
+    /// <see cref="DynamicColumnsAttribute"/> store. The read appends the store's star after the mapped
+    /// columns; a dialect that requires a qualified star (MySQL/MariaDB) qualifies it with the source
+    /// alias (<c>select id, name, `t1`.* from dynamic_entity as `t1`</c>), so every provider that can
+    /// address the FROM alias supports it. Genuine per-feature gaps still skip their own shared tests:
+    /// for example <c>DynamicColumns_FullMerge</c> is skipped where a general multi-branch <c>MERGE</c>
+    /// is unavailable.
+    /// </summary>
+    bool SupportsDynamicColumnsRead => true;
+
+    /// <summary>Reason reported when <see cref="SupportsDynamicColumnsRead"/> is false.</summary>
+    string DynamicColumnsReadSkipReason =>
+        "This provider cannot read a dynamic-columns store.";
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

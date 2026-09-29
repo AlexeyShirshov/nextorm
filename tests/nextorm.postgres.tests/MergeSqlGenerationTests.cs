@@ -366,4 +366,53 @@ public class MergeSqlGenerationTests
             .ToSql()
             .Should().Be("merge into merge_entity as target using (select id, name, age, total from merge_entity\n where (id > cast(@min as bigint))) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
     }
+
+    [Fact]
+    public void Merge_QuerySource_OnIdentityKey_ShouldRender()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // A query source projects the identity column, so an explicit On(...) over it is valid: the
+        // guard only rejects a column the VALUES-derived source does not declare.
+        ctx.MergeInto<IMergeEntity>()
+            .Using(ctx.From<IMergeEntity>())
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql()
+            .Should().Be("merge into merge_entity as target using (select id, name, age, total from merge_entity) as source on target.id = source.id when matched then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
+    }
+
+    [Fact]
+    public void Merge_ValuesSource_WhenMatchedGeneratedColumn_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // Total is computed and excluded from the VALUES-derived source, so a branch condition that
+        // reaches it through the source has no matching derived column.
+        var act = () => ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .OnKeys()
+            .WhenMatched((t, s) => s.Total > 0).ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*is not a column of the VALUES-derived merge source*");
+    }
+
+    [Fact]
+    public void Merge_QuerySource_WhenMatchedGeneratedColumn_ShouldRender()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The same generated column is a projected column of the query source, so on that path the
+        // condition renders instead of being rejected.
+        ctx.MergeInto<IMergeEntity>()
+            .Using(ctx.From<IMergeEntity>())
+            .OnKeys()
+            .WhenMatched((t, s) => s.Total > 0).ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql()
+            .Should().Be("merge into merge_entity as target using (select id, name, age, total from merge_entity) as source on target.id = source.id when matched and (source.total > 0) then update set name = source.name, age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age)");
+    }
 }

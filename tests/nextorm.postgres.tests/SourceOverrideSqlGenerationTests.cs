@@ -69,4 +69,17 @@ public class SourceOverrideSqlGenerationTests
         SqlOf(ctx, e.WithTableExpression("select id from other").Select(x => new { x.Id }))
             .Should().Be("select id from (select id from other) as \"t1\"");
     }
+
+    [Fact]
+    public void WithTableExpression_DynamicColumnsStore_KeepsBareStar()
+    {
+        // Reachability probe for the audit: a dynamic-columns store *can* be read from a non-physical
+        // source (a raw table expression). PostgreSQL does not require a qualified star, so it must keep
+        // the unchanged bare "*" instead of throwing or qualifying.
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>().WithTableExpression("select id from other");
+
+        SqlOf(ctx, e.ToCommand())
+            .Should().Be("select id, * from (select id from other) as \"t1\"");
+    }
 }

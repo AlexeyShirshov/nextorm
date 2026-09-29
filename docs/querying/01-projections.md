@@ -297,7 +297,7 @@ Output:
 |---------|
 | true |
 
-When that single column is a `byte[]` or `string`, it can be read as a stream instead of being materialised: `ToStream`/`ToTextReader` (and their async forms) open the provider's LOB accessors for that one column — see [Streaming large objects](../guide/30-large-objects.md).
+When that single column is a `byte[]` or `string`, it can be read as a stream instead of being materialised: `ToStream`/`ToTextReader` (and their async forms) open the provider's LOB accessors for that one column — see [Streaming large objects](../guide/26-large-objects.md).
 
 ## Nested entity and calculated columns over a projection
 

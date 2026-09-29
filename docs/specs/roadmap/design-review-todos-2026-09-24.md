@@ -47,32 +47,32 @@
 
 | # | Файл | Вердикт | Находок | Блокеров |
 |---|---|---|---|---|
-| 1 | `todo_sqlserver_function_gaps.md` | **файл удалён (shipped)** | — | — |
-| 2 | `todo_postgres_function_gaps.md` | **файл удалён (shipped)** | — | — |
-| 3 | `todo_sqlite_function_gaps.md` | **файл удалён (shipped)** | — | — |
-| 4 | `todo_cross_provider_scalar_functions.md` | **файл удалён (shipped)** | — | — |
-| 5 | `todo_mysql_function_gaps.md` | **файл удалён (shipped)** | — | — |
-| 6 | `todo_mariadb_function_gaps.md` | **файл удалён (shipped)** | — | — |
-| 7 | `todo_clickhouse_function_gaps.md` | **файл удалён (shipped)** | — | — |
+| 1 | `todo_sqlserver_function_gaps.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 2 | `todo_postgres_function_gaps.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 3 | `todo_sqlite_function_gaps.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 4 | `todo_cross_provider_scalar_functions.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 5 | `todo_mysql_function_gaps.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 6 | `todo_mariadb_function_gaps.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 7 | `todo_clickhouse_function_gaps.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
 | 8 | `todo_clickhouse_aggregate_function_state.md` | не готов к ревью | 5 | 1 (полнота) |
 | 9 | `todo_query_filters.md` | нужен пересмотр | 9 | 3 |
 | 10 | `todo_batch_dml.md` | **файл удалён** | — | — |
 | 11 | `todo_output_into.md` | пересмотрено 2026-09-26 | 7 | 2 |
-| 12 | `todo_dynamic_result_schema.md` | **файл удалён (shipped)** | — | — |
+| 12 | `todo_dynamic_result_schema.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
 | 13 | `todo_stored_procedures.md` | пересмотрено 2026-09-26 | 9 | 1 |
 | 14 | `todo_tvp.md` | пересмотрено 2026-09-26 | 8 | 2 |
 | 15 | `todo_sharding.md` | нужен пересмотр | 10 | 1 |
-| 16 | `todo_json_column_mapping.md` | **файл удалён (shipped)** | — | — |
+| 16 | `todo_json_column_mapping.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
 | 17 | `todo_interface_poco.md` | дизайн-здоров | 5 | 0 |
 | 18 | `todo_mapping_scope.md` | нужен пересмотр | 12 | 1 |
 | 19 | `todo_join_projection_mapping.md` | дизайн-здоров | 4 | 0 |
-| 20 | `todo_timespan_columns.md` | **файл удалён (shipped)** | — | — |
-| 21 | `todo_value_converters.md` | **файл удалён (shipped)** | — | — |
-| 22 | `todo_streaming_lob.md` | пересмотрено 2026-09-26 | 9 | 1 |
+| 20 | `todo_timespan_columns.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 21 | `todo_value_converters.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 22 | `todo_streaming_lob.md` | **файл удалён (<span style="color:green">shipped</span>, #27, 2026-09-29)** | 9 | 1 |
 | 23 | `todo_json_streaming.md` | нужен пересмотр | 9 | 1 (корректность) |
-| 24 | `todo_efcore_integration.md` | пересмотр | 8 | 1 (архитектура) |
-| 25 | `todo_interceptors.md` | **файл удалён (shipped)** | — | — |
-| 26 | `todo_postgres_ranges.md` | **файл удалён (shipped)** | — | — |
+| 24 | `todo_efcore_integration.md` | **файл удалён (<span style="color:green">shipped</span>, #61, 2026-09-29)** | 8 | 1 (архитектура) |
+| 25 | `todo_interceptors.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
+| 26 | `todo_postgres_ranges.md` | **файл удалён (<span style="color:green">shipped</span>)** | — | — |
 | 27 | `todo_public_api_freeze.md` | пересмотр шагов 2/4 | 10 | 2 |
 | | **Итого** | | **~197** | **~30** |
 
@@ -103,12 +103,12 @@
 
 - `todo_mapping_scope.md`
   - `QueryPlanner.cs:509-519` `_fromCache` process-wide не scope-aware.
-- `todo_streaming_lob.md`
-  - `:86-92` терминал на `EntityBuilder<TResult>`, но `Select` возвращает `QueryCommand<TResult>` (`EntityBuilder.cs:170`).
+- ~~`todo_streaming_lob.md`~~ — **файл удалён (<span style="color:green">shipped</span>, #27, 2026-09-29)**; отложенный хвост — `code-smells-review.md` §«Перенесено из status закрытого потока `lob-streaming`».
+  - `:86-92` (историческое) терминал на `EntityBuilder<TResult>`, но `Select` возвращает `QueryCommand<TResult>` (`EntityBuilder.cs:170`).
 - `todo_json_streaming.md`
   - `:96-104` JSON-writer обходит провайдерскую политику чтения (корректность).
-- `todo_efcore_integration.md`
-  - `:93` противоречие авто-регистрации провайдеров (ссылки на провайдеры vs их отсутствие).
+- ~~`todo_efcore_integration.md`~~ — **файл удалён (<span style="color:green">shipped</span>, #61, 2026-09-29)**.
+  - `:93` (историческое) противоречие авто-регистрации провайдеров (ссылки на провайдеры vs их отсутствие).
 
 ### PG ranges / заморозка API
 
@@ -125,6 +125,6 @@
 - При починке реестровых ссылок: `API-NAMING-REVIEW.md:4653` (BAT6) и `code-smells-review.md:6740`
   указывают на удалённый `todo_batch_dml.md`.
 - **Пересмотрено 26.09.2026:** планы `todo_output_into` (фаза 2), `todo_stored_procedures`, `todo_tvp`
-  и `todo_streaming_lob` унифицированы вокруг #70 «Фаза 0 — Основа» (дескриптор параметра, владелец
+  и `todo_streaming_lob` (позже удалён) унифицированы вокруг #70 «Фаза 0 — Основа» (дескриптор параметра, владелец
   reader'а с отдельной `DbCommand` на вызов, общий helper навигации result-set'ов, мапперы произвольного
   `T`); #25 (несколько result-set'ов) слит в #70 фазу 4.

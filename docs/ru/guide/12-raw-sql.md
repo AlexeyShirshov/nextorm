@@ -2,7 +2,7 @@
 
 > Заменяйте генерируемый SQL запроса вручную написанным текстом, сохраняя сопоставление строк nextorm.
 
-**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Переиспользование запросов: кэш против Prepare](13-query-reuse.md)
+**Предварительные требования:** [Запросы и проекции](../querying/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md)
 
 ## Обзор
 
@@ -240,6 +240,8 @@ public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContex
 
 > **SQL-инъекции.** `sql` выполняется дословно; планировщик не параметризует его. Никогда не конкатенируйте недоверенный ввод в текст — передавайте значения через `ProcedureParameter` и ссылайтесь на них плейсхолдерами.
 
+> **Почему `ProcedureParameter`, а не params-объект?** `WithSql`, `PrepareFromSql` и `FromSql` проходят через планировщик, поэтому принимают и его конвенцию params-объекта: обычный объект, публичные свойства которого становятся именованными параметрами, в порядке свойств (`new { id = 1 }`). `ExecuteRaw` намеренно обходит планировщик — текст отправляется дословно, и свойства объекта никто не перебирает, — поэтому параметр задаётся явно, по имени. `ProcedureParameter` — этот явный дескриптор, и он является надмножеством простого входного значения: помимо `Name` и `Value` он несёт ADO.NET `Direction`, `DbType`, `Size` и `TypeName`, а также табличные строки `Table<T>`, поэтому та же форма обслуживает выходные и возвращаемые параметры и `ExecuteProcedure`. Анонимный объект мог бы выражать только входные значения.
+
 `ProcedureResult` удерживает команду и её читатель открытыми до освобождения. В SQL Server **без MARS** открытый читатель блокирует любые другие команды на том же соединении, поэтому освободите результат перед следующей командой в контексте.
 
 ### Освобождение ресурсов
@@ -421,6 +423,20 @@ public static ProcedureParameter Table<T>(string name, IEnumerable<T> rows);
 public static ProcedureParameter Table<T>(string name, string typeName, IEnumerable<T> rows);
 ```
 
+Например, скалярный набор связывается с одним столбцом, а набор сущностей — по одному столбцу на отображаемое свойство:
+
+```csharp
+var ids = ProcedureParameter.Table("ids", new[] { 1, 2, 3 });   // один столбец int
+
+var employees = ProcedureParameter.Table("rows", new[]          // по столбцу на отображаемое свойство
+{
+    new TvpRow { Id = 1, Name = "alpha" },
+    new TvpRow { Id = 2, Name = "beta" },
+});
+```
+
+Далее параметр передаётся в `ExecuteRaw`/`ExecuteProcedure` как любой другой входной параметр; SQL, потребляющий его, зависит от провайдера (см. таблицу и примеры по провайдерам ниже).
+
 * **Тип строки.** **Скалярный** тип строки (примитив, `string`, `decimal`, `Guid`, `DateTime`/`DateTimeOffset`/`DateOnly`/`TimeOnly`, `TimeSpan`, `byte[]`, перечисление или nullable от них) связывается с одним столбцом. Любой другой тип считается **отображаемой сущностью**: столбцы — это её невычисляемые отображаемые свойства в порядке метаданных, **включая identity-столбцы** (то же отображение, что и у bulk insert). Свойство `Range<T>` отображается на два столбца и не поддерживается.
 * **Capability.** Признак [`ISqlDialect.SupportsTableValuedParameters`](xref:NextORM.Core.ISqlDialect.SupportsTableValuedParameters) включает возможность: **SQL Server** связывает нативно, **PostgreSQL, MySQL/MariaDB и SQLite** эмулируют типизированным массивом или JSON-документом, **ClickHouse** эмулирует связанным `Array(T)`/`Array(Tuple(...))`, разворачиваемым на сервере через `arrayJoin(@p)`, а `NotSupportedException` бросает только **in-memory**.
 * **`TypeName`** — **только SQL Server** (пользовательский табличный тип). PostgreSQL, MySQL/MariaDB, SQLite и ClickHouse отклоняют его через `ArgumentException`; там вызывайте `Table(name, rows)`.
@@ -543,7 +559,7 @@ using (var result = dataContext.ExecuteRaw(
 
 ## См. также
 
-* [Переиспользование запросов: кэш против Prepare](13-query-reuse.md) — компромиссы `nonStreamUsing` / `storeInCache`.
+* [Переиспользование запросов: кэш против Prepare](../infrastructure/01-query-reuse-and-caching.md) — компромиссы `nonStreamUsing` / `storeInCache`.
 * [Скалярные функции](../scalar-functions/index.md) — оставайтесь в LINQ вместо перехода к необработанному SQL.
 * [Обзор провайдеров](../providers/overview.md) — заполнитель параметра для каждого провайдера.
 

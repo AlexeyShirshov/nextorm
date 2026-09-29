@@ -22,6 +22,7 @@ public sealed partial class InsertBuilder<TEntity>
 
         GetOrAddColumn(ResolveWritableColumn(column, nameof(column))).Values.Add(InsertValue.FromConstant(value));
         _rowCount = 1;
+        UseColumnValidation();
         return this;
     }
 
@@ -43,6 +44,7 @@ public sealed partial class InsertBuilder<TEntity>
 
         GetOrAddColumn(ResolveWritableColumn(column, nameof(column))).Values.Add(InsertValue.FromDefault());
         _rowCount = 1;
+        UseColumnValidation();
         return this;
     }
 
@@ -87,6 +89,7 @@ public sealed partial class InsertBuilder<TEntity>
         }
 
         _rowCount = 1;
+        UseColumnValidation();
         return this;
     }
 
@@ -149,10 +152,14 @@ public sealed partial class InsertBuilder<TEntity>
             _columns.Add(accumulator);
         }
 
-        if (_columns.Count == 0)
+        var dynamicColumns = DynamicColumnSet.FromEntities(_metadata, list, "INSERT");
+
+        if (_columns.Count == 0 && dynamicColumns is null)
             throw new BuildSqlCommandException($"Entity {typeof(TEntity)} has no writable column to insert.");
 
+        _dynamicColumns = dynamicColumns;
         _rowCount = list.Count;
+        UseEntityValidation(list);
         return this;
     }
 
@@ -191,6 +198,7 @@ public sealed partial class InsertBuilder<TEntity>
         }
 
         _rowCount = list.Count;
+        UseColumnValidation();
         return this;
     }
 
@@ -221,6 +229,8 @@ public sealed partial class InsertBuilder<TEntity>
         _source = query;
         _selectColumns = columns;
         _rowCount = 1;
+        _validate = (scope, context) => QueryFilterValidator.ValidateSource<TEntity, TResult>(query, columns, scope, context, "INSERT");
+        _validateAsync = (scope, context, cancellationToken) => QueryFilterValidator.ValidateSourceAsync<TEntity, TResult>(query, columns, scope, context, "INSERT", cancellationToken);
         return this;
     }
 
@@ -241,6 +251,7 @@ public sealed partial class InsertBuilder<TEntity>
         accumulator.Values.Add(ToInsertValue(value));
         _columns.Add(accumulator);
         _rowCount = 1;
+        UseColumnValidation();
         return this;
     }
 
@@ -267,6 +278,7 @@ public sealed partial class InsertBuilder<TEntity>
 
         _columns.Add(accumulator);
         _rowCount = list.Count;
+        UseColumnValidation();
         return this;
     }
 
@@ -308,6 +320,7 @@ public sealed partial class InsertBuilder<TEntity>
             accumulator.Values.Add(InsertValue.FromConstant(list[i]));
 
         _columns.Add(accumulator);
+        UseColumnValidation();
         return this;
     }
 

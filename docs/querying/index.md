@@ -16,7 +16,7 @@ public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> 
 The lambda is not executed - it is translated into the `SELECT` list of the generated statement.
 [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) returns a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1); the terminal ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
 [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) executes it. See [Sorting and paging](../guide/04-sorting-and-paging.md)
-for the terminals and their async forms. When the projection is a single `byte[]`/`string` column it can instead be streamed with `ToStream`/`ToTextReader` — see [Streaming large objects](../guide/30-large-objects.md).
+for the terminals and their async forms. When the projection is a single `byte[]`/`string` column it can instead be streamed with `ToStream`/`ToTextReader` — see [Streaming large objects](../guide/26-large-objects.md).
 
 Rules that apply to every projection:
 

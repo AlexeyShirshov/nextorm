@@ -1,6 +1,6 @@
 ---
 name: implementing-todo-features
-description: Close an unchecked backlog item (a per-feature docs/specs/roadmap/todo_*.md, indexed by docs/specs/roadmap/sql-capabilities-gap-analysis.md) end-to-end — save a work plan to docs/specs/roadmap/todo_<feature>.md first, map the function across every provider (mandatory provider x form matrix), pick the closest C# analog, add the SqlFunctions.Sql / provider *Functions surface, run nextorm-code-auditor and nextorm-design-engineer, add tests, keep line coverage >= MIN_LINE_COVERAGE, and update docs EN+RU plus specs. Use when adding a missing SQL function/aggregate/operator or LINQ operator, when the user says "нереализованный функционал", "закрыть TODO", "добавить функцию", "SqlFunctions.Sql", "провайдерный пробел", "план фичи", or picks a blocked/`[ ]` item from todo_*.
+description: Close an unchecked backlog item (a per-feature docs/specs/roadmap/todo_*.md, indexed by docs/specs/roadmap/sql-capabilities-gap-analysis.md) end-to-end — save a work plan to docs/specs/roadmap/todo_<feature>.md first, map the function across every provider (mandatory provider x form matrix), pick the closest C# analog, add the SqlFunctions.Sql / provider *Functions surface, run nextorm-code-auditor and nextorm-design-engineer, add tests, keep line/branch coverage >= MIN_LINE_COVERAGE / MIN_BRANCH_COVERAGE, and update docs EN+RU plus specs. Use when adding a missing SQL function/aggregate/operator or LINQ operator, when the user says "нереализованный функционал", "закрыть TODO", "добавить функцию", "SqlFunctions.Sql", "провайдерный пробел", "план фичи", or picks a blocked/`[ ]` item from todo_*.
 ---
 
 # Implementing a TODO feature across providers
@@ -27,10 +27,13 @@ Cross-provider context: `docs/specs/roadmap/sql-capabilities-gap-analysis.md`,
 This step answers **which providers can express the construct, and under what native name/form** —
 a coverage question, not a "who already implemented it" question. A function that exists on only one
 provider today can still have an obvious analog on the others (`current_user` / `CURRENT_USER` /
-`current_user()` / `currentUser()`). Search the engine before designing anything:
+`current_user()` / `currentUser()`). Search the engine before designing anything. Resolve C# symbols with the `roslyn` tool (e.g.
+`members NextORM.Core.Query.SqlFunctions` / `refs` / `implementations` — see `AGENTS.md` -> "C#
+semantic analysis"); use text search only for SQL/CLR names, never shell `grep -r`/`find`:
 
 ```bash
-rg -n "<function-or-operator>" src/nextorm.core src/nextorm.sqlite src/nextorm.postgres src/nextorm.sqlserver src/nextorm.mysql src/nextorm.mariadb src/nextorm.clickhouse
+# plain-text pass (SQL/CLR token): ripgrep respects .gitignore, so it skips bin/obj/TestResults
+rg -n --glob '*.cs' "<function-or-operator>" src
 ```
 
 Build a **provider × form matrix** with a row for **every** provider (`PostgreSQL`, `SQL Server`,
@@ -40,7 +43,7 @@ step and goes verbatim into the work plan (step 3). A "sibling findings" section
 provider — or that lists only surfaces *within* one provider (e.g. `PostgresFunctions` vs
 `ExtendedScalarFunctionTranslator`) — has **not** done this step.
 
-The `rg` scan above only finds what nextorm has **already** wired; it cannot tell you that SQL Server
+The text search above only finds what nextorm has **already** wired; it cannot tell you that SQL Server
 spells the same thing `DB_NAME()` or that ClickHouse has `currentDatabase()`. So the matrix has to be
 filled from the **providers' own documentation**, not from the nextorm codebase:
 
@@ -68,7 +71,7 @@ Check, in this order:
 3. Translators: `src/nextorm.core/Visitors/` — `BuiltinFunctionTranslator`, `AdvancedAggregateTranslator`,
    `ExtendedScalarFunctionTranslator`, `ArraySqlTranslator`, `JsonSqlTranslator`,
    `StringFunctionTranslator` / `MathFunctionTranslator` / `DateTimeFunctionTranslator`, `WindowFunctionTranslator`.
-4. Tests and docs: grep `tests/**` and `docs/**` for the SQL name.
+4. Tests and docs: search `tests/**` and `docs/**` for the SQL name (`rg -n --glob '*.cs' "<name>" tests`; `rg -n "<name>" docs`) — never `grep -r`.
 
 Decision (apply to **every** row of the matrix, not just the origin provider):
 - Same semantics on ≥2 providers → the function belongs on the **cross-provider `CommonFunctions`**
@@ -81,7 +84,7 @@ Decision (apply to **every** row of the matrix, not just the origin provider):
   function** ("ClickHouse has no session-user concept"), never by a family umbrella such as
   `SupportsExtendedScalarFunctions` — an umbrella flag is not evidence that a specific function is
   inexpressible.
-- **Red flag / post-check:** `rg "<function-name>" src/nextorm.*/*Dialect.cs`. If a function that ≥2
+- **Red flag / post-check:** `rg -n --glob '*Dialect.cs' "<function-name>" src`. If a function that ≥2
   providers can express matches only one dialect, this step was done wrong — redo the matrix before
   writing code.
 
@@ -113,10 +116,16 @@ style (Russian H2/H3 is fine, match the neighbouring `todo_*` files). It must co
 - The step-1 **provider × form matrix — one row for every provider, `—` + reason where unsupported,
   filled from the providers' own documentation (which source was consulted per provider)** — and the
   "Единообразие провайдеров" decision (which providers get it, which are gated off and why). A
-  prose-only "sibling findings" section, or a matrix built only from grepping nextorm, is not accepted.
+  prose-only "sibling findings" section, or a matrix built only from text-searching nextorm, is not accepted.
 - Closest C# analog and the chosen implementation tier (a/b/c) with a one-line justification.
 - Dialect plan: `Supports*`/`Make*` hooks, per provider, and the base defaults.
 - Public API additions (exact signatures) and any XML-doc/register impact.
+- **Variant matrix (edges).** For any change that touches an execution path, a table over the relevant
+  axes with an explicit decision per row — `test` / `guard` / `deliberately out of scope`:
+  entity/value type (`class`/`struct`), missing parameterless ctor, `null`/uninitialized state,
+  explicit projection vs whole entity, join/correlated subquery, quoting on/off, and every provider.
+  Each row is a concrete case, not a general phrase; a happy-path-only list is not accepted. This is
+  where the branches that the coverage gate and happy-path tests miss get caught.
 - Test plan: SQL-generation, integration `CommonTestSuite.*`, in-memory, and the coverage baseline
   (line/branch before the change).
 - Docs/specs files to touch.
@@ -226,10 +235,18 @@ dotnet tool run reportgenerator \
 ```
 
 Read `tests/coverage/report/Summary.txt` and report the before/after line and branch numbers.
-Threshold is `MIN_LINE_COVERAGE=75` (hard-fails only on `main`; warns elsewhere).
+Thresholds are `MIN_LINE_COVERAGE=85` **and** `MIN_BRANCH_COVERAGE=75` (fail only on `main`; warn elsewhere).
 `coverage.settings.xml` includes only `nextorm.{core,sqlite,postgres,sqlserver}` — a
 ClickHouse/MySQL-only feature will not move the number, so state that explicitly and still add the
 SQL-generation tests.
+
+A green **line** number does not prove the new branches are exercised:
+- report the **branch** delta, not only lines;
+- run **mutation testing** on the changed types (Stryker.NET, `dotnet stryker` scoped to the touched
+  assembly/type); every surviving mutant on new code must be killed or explicitly justified;
+- if mutation tooling is not installed, say so explicitly and list the branches that remain untested —
+  never imply coverage you did not measure.
+- close every row of the step-3 variant matrix as a test, a guard, or a documented out-of-scope decision.
 
 ## 8. Docs and specs
 
@@ -250,7 +267,7 @@ SQL-generation tests.
   `docs/advanced/api-reference.md` (+RU).
 - Specs: `docs/specs/roadmap/sql-capabilities-gap-analysis.md`; on a public-API change
   `docs/specs/design/API-NAMING-REVIEW.md`; on auditor findings `docs/specs/design/code-smells-review.md`.
-- On any public rename, grep both trees first: `rg -n "<old-name>" docs` (AGENTS.md).
+- On any public rename, search both trees first: `rg -n "<old-name>" docs docs/ru` (or `git grep`; never `grep -r`) — AGENTS.md.
 - Optional validation: `dotnet docfx docs/docfx.json`.
 
 ## Definition of done
@@ -258,16 +275,20 @@ SQL-generation tests.
 - [ ] Work plan `docs/specs/roadmap/todo_<feature>.md` written (or the existing todo updated) before
       coding and kept current, including the step-1 provider × form matrix with a row for every provider,
       filled from the providers' own documentation (state the source consulted per provider), not only
-      from grepping nextorm.
+      from text-searching nextorm.
 - [ ] All capable providers updated with their native spelling via `Make*`; the rest gated with a
-      `Supports*` flag justified per function. Post-check: `rg "<name>" src/nextorm.*/*Dialect.cs`
+      `Supports*` flag justified per function. Post-check: `rg -n --glob '*Dialect.cs' "<name>" src`
       matches more than the origin dialect, or the single match is explained by the matrix.
 - [ ] Implementation tier chosen by the ladder (native CLR -> `CommonFunctions` -> `[SqlFunction]`),
       with the dialect hook wired in every case.
 - [ ] Public surface has XML docs; `dotnet build nextorm.slnx -c Release` is 0/0.
 - [ ] `nextorm-code-auditor` and `nextorm-design-engineer` run; findings applied and persisted in the registers.
 - [ ] SQL-generation tests + integration/core tests added and green.
-- [ ] Coverage before/after reported; line coverage did not drop below the previous value / 75.
+- [ ] Coverage before/after reported (line **and branch**); line coverage did not drop below the
+      previous value / 75; mutation testing run on the changed types (or its absence stated with the
+      list of untested branches).
+- [ ] Step-3 **variant matrix is closed**: every row is a test, a guard, or a documented out-of-scope
+      decision — no row silently omitted.
 - [ ] Item status in its `docs/specs/roadmap/todo_*.md` / gap-analysis §4, docs EN+RU and specs updated: the new
       functionality is documented in an existing guide section, or in a **new** guide page (+ RU mirror +
       `toc.yml`) when it cannot be clustered; provisional work-plan file deleted.

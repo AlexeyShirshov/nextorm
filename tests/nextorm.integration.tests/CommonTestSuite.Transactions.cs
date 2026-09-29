@@ -90,4 +90,70 @@ public abstract partial class CommonTestSuite
 
         tx.Rollback();
     }
+
+    [Fact]
+    public void TryBeginTransaction_WhenNone_ShouldStart()
+    {
+        Assert.SkipUnless(Provider.SupportsTransactions, "This provider does not support transactions.");
+
+        var ctx = _sut.DataProvider;
+        var transactions = (ITransactionManager)ctx;
+
+        var started = transactions.TryBeginTransaction(out var tx);
+
+        started.Should().BeTrue();
+        tx.Should().NotBeNull();
+        transactions.CurrentTransaction.Should().BeSameAs(tx);
+        tx!.Rollback();
+        tx.Dispose();
+    }
+
+    [Fact]
+    public void TryBeginTransaction_WhenActive_ShouldReturnTheActiveOne()
+    {
+        Assert.SkipUnless(Provider.SupportsTransactions, "This provider does not support transactions.");
+
+        var ctx = _sut.DataProvider;
+        var transactions = (ITransactionManager)ctx;
+        using var tx = transactions.BeginTransaction();
+
+        var started = transactions.TryBeginTransaction(out var returned);
+
+        started.Should().BeFalse();
+        returned.Should().BeSameAs(tx);
+        tx.Rollback();
+    }
+
+    [Fact]
+    public async Task TryBeginTransactionAsync_WhenNone_ShouldStart()
+    {
+        Assert.SkipUnless(Provider.SupportsTransactions, "This provider does not support transactions.");
+
+        var ctx = _sut.DataProvider;
+        var transactions = (ITransactionManager)ctx;
+
+        var (started, tx) = await transactions.TryBeginTransactionAsync(TestContext.Current.CancellationToken);
+
+        started.Should().BeTrue();
+        tx.Should().NotBeNull();
+        transactions.CurrentTransaction.Should().BeSameAs(tx);
+        tx!.Rollback();
+        tx.Dispose();
+    }
+
+    [Fact]
+    public async Task TryBeginTransactionAsync_WhenActive_ShouldReturnTheActiveOne()
+    {
+        Assert.SkipUnless(Provider.SupportsTransactions, "This provider does not support transactions.");
+
+        var ctx = _sut.DataProvider;
+        var transactions = (ITransactionManager)ctx;
+        using var tx = transactions.BeginTransaction();
+
+        var (started, returned) = await transactions.TryBeginTransactionAsync(TestContext.Current.CancellationToken);
+
+        started.Should().BeFalse();
+        returned.Should().BeSameAs(tx);
+        tx.Rollback();
+    }
 }

@@ -164,3 +164,268 @@ required.
 
 Verdict (final, iteration 2): within noise, **no regression**; baseline numbers above left
 unchanged.
+
+### Iteration 3 (P1 plan/mapper fix re-verification)
+
+BDN `Global total time` **44.55 s**, **7** executed benchmarks, **0** failures — under the 4 min
+budget. (Same benign `Failed to set up priority High ... Permission denied` process warning.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.220 ms | 338.28 KB | -23.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 65.38 ms | 50.02 MB | +7.2% |
+| `Nextorm_Cached` | 2.310 ms | 537.58 KB | +30.4% (high-variance, CI ±191%) |
+| `Prepared_ToList` | 922.8 us | 76.14 KB | -0.1% |
+| `Cached_ToList` | 1,797.4 us | 569.90 KB | +4.1% |
+| `Cached_PlanOnly_Param` | 503.9 us | 493.76 KB | -2.8% |
+| `Nextorm_Cached_ToListAsync` | 2.195 ms | 717.07 KB | +2.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.95** — vs baseline
+**1.87** (+4.1%), far below the 20% threshold; allocated ratio **7.49** (baseline 7.42), unchanged.
+The Cached path adds two type comparisons per projected column during plan lookup (constant per
+command, not per row). Verdict: within noise, **no regression**.
+
+### Iteration 4 (ACT re-verification — ratio 2.61 is an outlier)
+
+Same host/config/case set (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12,
+BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7**
+cases, **0** failures). External shell wall clock **~50 s**; BDN `Global total time` **~50 s** — both
+under the 4 min budget.
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.61** — vs baseline
+**1.87** (+39.6%), above the 20% investigation threshold. **The ratio is an outlier and the
+regression is NOT confirmed.** The other runs in this cycle measured **1.88 / 1.92 / 2.02**, and the
+`ShortRun` config is high-variance on this host (**N=3**; for some rows `Error` is ~3× `Mean`, so the
+`Cached_ToList` numerator carries a large CI). Per the interpretation rule above, a noisy difference
+on a run this variable must not be reported as a regression, and no path touched by #108 adds
+per-row work on the cached path (the filter scope is resolved once per command at plan time). Recorded
+as the cycle's acceptance run; **verdict: regression not confirmed — outlier**, consistent with the
+1.88–2.02 band of the cycle's other runs.
+
+## FilterFunc cached path (D6, #108 PR4)
+
+The builder-function (`FilterFunc`) filter path is **not** covered by the seven acceptance cases; it
+is measured separately by `SqliteBenchmarkQueryFilterFunc` (category `query-filter`). It is a
+focused cached-vs-prepared pair over the same SQL, so the delta is the cached-query overhead (plan
+lookup + `ExtractParams`) for the function form. Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=query-filter
+```
+
+Measured 2026-09-28, same host/config as the baseline above (`Job.ShortRun`, `InProcessEmitToolchain`,
+`MemoryDiagnoser`, **2** executed benchmarks, **0** failures; BDN `Global total time` **12.29 s**).
+
+| Case | Mean | Allocated | Ratio (time) | Alloc ratio |
+|------|------|-----------|--------------|-------------|
+| `FuncFilter_Prepared_ToList` (baseline) | 1.466 ms | 75 KB | 1.00 | 1.00 |
+| `FuncFilter_Cached_ToList` | 4.640 ms | 1078.45 KB | **3.17** | **14.38** |
+
+**Reading.** The func cached path costs **3.17×** the prepared time and **14.38×** the allocation on
+this run, versus **1.87× / 7.42×** for the ordinary `Cached_ToList / Prepared_ToList` pair. The
+difference is real and expected: `GetPreparedQueryCommand` prepares every fresh command (and so
+invokes the builder function once) **before** the plan-cache lookup, which only avoids re-rendering
+SQL and rebuilding the mapper — the function is not memoized per plan. This is recorded as the
+measured cost of the function form; no "no regression" claim is made for this path. `Error` for both
+rows is large on `ShortRun` (`FuncFilter_Cached_ToList` `Error = 2.033 ms`), so the ratio is
+indicative, not a hard gate; any future optimisation (memoizing the injected predicate per plan
+shape) should re-run this focused case.
+
+## Results 2026-09-28 — issue #104 (dynamic-columns write side)
+
+Perf acceptance for #104 measured on the same host/config/case set as the baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`). This is the re-run after the
+DML static-arm fix below. **7** cases selected, **0** failures. External shell wall clock
+**45.79 s**; BDN `Global total time` **44.49 s** — both under the 4 min budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.191 ms | 339.84 KB | -24.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 59.59 ms | 50.01 MB | -2.2% |
+| `Nextorm_Cached` | 1.932 ms | 539.92 KB | +9.0% (high-variance row) |
+| `Prepared_ToList` | 956.1 us | 76.14 KB | +3.5% |
+| `Cached_ToList` | 1,802.9 us | 572.25 KB | +4.4% |
+| `Cached_PlanOnly_Param` | 500.5 us | 496.11 KB | -3.4% |
+| `Nextorm_Cached_ToListAsync` | 2.153 ms | 705.35 KB | +0.7% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.89** — vs documented
+baseline **1.87** (+0.9%) and vs the stated prior figure **2.07** (-8.6%); the corresponding
+allocated ratio is **7.52** (baseline **7.42**, +1.3%). Both time deltas are below the **20%**
+investigation threshold, so no >20% growth flag is raised. Verdict: within noise, no regression.
+
+## DML benchmark: static vs dynamic-columns insert (#104 write side)
+
+Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkDynamicInsert*
+```
+
+Same host/config as above (`Job.ShortRun`, `InProcessEmitToolchain`, `MemoryDiagnoser`); **2**
+executed benchmarks, **0** failures (the logged `Failed to set up priority High ... Permission
+denied` is the known benign BDN process warning, not a benchmark failure). BDN `Global total time`
+**14.95 s**; external shell wall clock **16.69 s**.
+
+Each measured invocation is a real per-call `InsertInto<T>().Values(...).Insert()` build (store
+key extraction + ordinal sort) + SQL render + execute against a benchmark-owned SQLite database,
+inside a transaction that is rolled back, so the dynamic-key work is inside the measurement and
+the statement actually runs.
+
+Both arms execute the **same region** over the **same table** (`dynamic_insert_bench`), but on
+**different entity types**: `Insert_Static` uses `StaticInsertEntity`, which has only the two
+mapped columns (`id`, `name`) and **no `[DynamicColumns]` store at all**; `Insert_DynamicColumns`
+uses `DynamicInsertEntity` (mapped `id`/`name` plus a store) and populates two store keys (`age`,
+`city`). This matters: an earlier revision of this benchmark used the store-carrying entity in
+**both** arms (with an empty store on the "static" side), so the `FromEntities` / `MappedNames` /
+`ReadKeys` store plumbing still ran in the baseline arm and understated the real dynamic-path
+overhead — that figure is superseded by the numbers below.
+
+| Case | Mean | Allocated | Ratio (time) | Alloc ratio |
+|------|------|-----------|--------------|-------------|
+| `Insert_Static` | 614.2 us | 268.37 KB | 1.00 | 1.00 |
+| `Insert_DynamicColumns` | 892.0 us | 485.56 KB | **1.45** | **1.81** |
+
+**Caveat — this is not a before/after regression comparison.** The `Insert_Static` arm is the
+**store-less** baseline (the byte-identity-guarded mapped-only path), not a pre-#104 revision of
+the dynamic-columns path. With a genuinely store-less baseline the DML figure now quantifies the
+**true overhead of the dynamic-columns form relative to the static form**: **1.45×** time and
+**1.81×** allocation on this run (the dynamic arm's `Allocated` is unchanged at 485.56 KB, while
+the static arm dropped from 331.65 KB to 268.37 KB — exactly the store plumbing it no longer
+pays). It must not be reported as either a regression or an improvement introduced by #104.
+`Error` on both rows is large on `ShortRun` (`Insert_Static` `309.3 us`, `Insert_DynamicColumns`
+`394.4 us`, i.e. ≈ 50 %/44 % of `Mean`), so the ratio is indicative, not a gate.
+
+## Results 2026-09-28 — issue #110 (dynamic-columns read: qualified star)
+
+Perf acceptance for #110 (the dynamic-columns read must alias-qualify the appended `*` on
+MySQL/MariaDB). Same host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS,
+.NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`,
+`Categories=acceptance`). **7** cases selected, **0** failures. External shell wall clock **45 s**;
+BDN `Global total time` **42.79 s** — both under the 4 min budget. (The host was not fully quiet:
+concurrent `opencode`/`roslyn` processes put the load average around 8–10, so the absolute means are
+higher than the 2026-09-26 baseline across the board and are not individually comparable; the tracked
+cached-vs-prepared ratio is computed within this run.)
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.736 ms | 339.84 KB | -6.1% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 71.80 ms | 50.02 MB | +17.8% (high-variance row) |
+| `Nextorm_Cached` | 2.249 ms | 539.9 KB | +26.9% (high-variance row) |
+| `Prepared_ToList` | 1,057.4 us | 76.14 KB | +14.5% |
+| `Cached_ToList` | 2,317.4 us | 572.26 KB | +34.1% |
+| `Cached_PlanOnly_Param` | 672.2 us | 496.1 KB | +29.7% |
+| `Nextorm_Cached_ToListAsync` | 2.714 ms | 705.35 KB | +27.0% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.19** — vs documented
+baseline **1.87** (+17.1%) and vs the stated prior figure **2.07** (+5.8%); the corresponding
+allocated ratio is **7.52** (baseline **7.42**). Both time deltas are below the **20%** investigation
+threshold; the `Cached_ToList` row's `Error` (4,836.9 us) is larger than twice its `Mean`, so the
+ratio is indicative only, not a gate.
+
+**No before/after comparison is available or claimed.** The change under acceptance is
+**dialect-gated**: the new `ISqlDialect.RequiresQualifiedSelectStar` capability defaults to `false`
+and is overridden only on MySQL (`MySqlDialect`, inherited by MariaDB), and the extra `hasDynamicStore`
+predicate in `SqlBuilder` is true only when the select list contains an `IsDynamicColumnsStore` item.
+The seven acceptance cases run on SQLite with ordinary queries and carry no dynamic-columns store, so
+neither branch is reachable on the acceptance path. The run is recorded as the cycle's acceptance
+evidence; the deltas above are **not** a regression or an improvement introduced by #110.
+
+## Results 2026-09-29 — issue #106 cycle 2 (D6: parameter-creation path)
+
+D6 changed the parameter-creation seam: the execution layer now receives
+`DataContext.CreateParam` as `Func<DbCommand, string, object?, DbParameter>` (the executing
+command is passed in), and `nextorm.mysql` mints its parameters through
+`command.CreateParameter()` so a `MySql.Data` connection gets `MySql.Data` parameters and a
+`MySqlConnector` connection gets `MySqlConnector` parameters. The public command-unaware
+`GetDbCommand` overload forwards its factory straight into the shared binding core with no
+capturing adapter (the earlier adapter was removed). Evidence: (a) the seven-case acceptance
+suite as query-path protection, (b) the current-tree `ParamsAllocationBenchmark` re-measure
+below.
+
+### Acceptance run (query-path protection)
+
+Command and host/config/case set as the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS,
+.NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`,
+`InProcessEmitToolchain`, `Categories=acceptance`). **7** cases selected, **0** failures.
+External shell wall clock **52.23 s**; BDN `Global total time` **49.39 s** — both under the
+4 min budget. The host was **not quiet**: concurrent `opencode`/`roslyn`/`VBCSCompiler`
+processes held the load average around 6–12 on 8 logical cores, so every absolute mean is
+inflated and the cached-vs-prepared ratio is dominated by run noise.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 3.951 ms | 339.84 KB | +35.5% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 111.9 ms | 50.01 MB | +83.6% (high-variance row) |
+| `Nextorm_Cached` | 3.064 ms | 539.9 KB | +72.9% (high-variance row) |
+| `Prepared_ToList` | 2,065.7 us | 76.14 KB | +123.6% |
+| `Cached_ToList` | 2,844.4 us | 572.26 KB | +64.7% |
+| `Cached_PlanOnly_Param` | 934.3 us | 496.11 KB | +80.2% |
+| `Nextorm_Cached_ToListAsync` | 3.417 ms | 716.29 KB | +59.9% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.38** — vs
+documented baseline **1.87** (-26%) and vs the stated prior figure **2.07** (-33%); the
+corresponding allocated ratio is **7.52** (baseline **7.42**, unchanged). The time ratio is
+*below* baseline because `Prepared_ToList` itself measured ≈2.2× its baseline
+(2,065.7 us vs 923.8 us, `Error = 12,403.8 us`), so the ratio is compressed by host noise,
+not improved by D6. A second run of the same command on the same host measured a ratio of
+**3.89** (`Prepared_ToList` 1.372 ms, `Cached_ToList` 5.343 ms, `Cached_ToList`
+`Error = 22,596 us`) — a symmetric outlier in the other direction. The two runs
+(**1.38 / 3.89**) bracket the documented 1.87–2.07 band and confirm the host's `ShortRun`
+variance rather than a code change. **No regression can be established from the time ratio
+on this host; the allocated ratio is unchanged at 7.52, and no path touched by D6 adds
+per-row work** (the delegate carries one extra `DbCommand` argument and MySQL mints through
+`command.CreateParameter()`, both per-command, not per-row).
+
+### Parameter path — `ParamsAllocationBenchmark` (current tree, re-measured)
+
+Command (14 executed benchmarks, 0 failures; BDN `Global total time` **1 m 53 s**):
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *ParamsAllocation*
+```
+
+The D6 refactor removed the capturing adapter the public overload formerly built from the
+command-unaware factory: `GetDbCommand(span, factory, conn, tx)` now calls
+`GetDbCommandCore` with the factory as its `legacy` delegate, which the core invokes
+directly — the same way the internal command-aware overloads pass their `aware` factory. The
+public arm therefore carries **0 B/op extra** over the core/internal path. The benchmark
+binds the SQLite 2-arg factory once (`_createParam = _dbCtx.CreateParam`, no closure) and
+both `GetDbCommand_*` arms call the public overload. Mean in ns and `Allocated` per
+benchmark operation (BDN's unit; each of these arms loops 100 times internally) as BDN
+prints it:
+
+| Arm | Mean | Allocated (BDN, per op) |
+|-----|------|-------------------------|
+| `GetDbCommand_1Arg_Params` | 2,638.7 ns | 5,600 B |
+| `GetDbCommand_1Arg_ReusedArray` | 1,740.1 ns | 2,400 B |
+| `Nextorm_Any_1Arg_Params` | 996,486 ns | 87,209 B |
+| `Nextorm_Any_1Arg_ReusedArray` | 1,133,708 ns | 84,009 B |
+| `Nextorm_Any_2Arg_Params` | 1,190,554 ns | 124,009 B |
+| `Nextorm_Any_2Arg_ReusedArray` | 1,108,541 ns | 120,009 B |
+
+**Allocation.** The public arm allocates exactly the parameter array plus the boxed value
+and nothing else: `GetDbCommand_1Arg_Params` 5,600 B per 100-iteration op = 100 × (`object[1]`
+32 B + boxed `int` 24 B), while `GetDbCommand_1Arg_ReusedArray` (2,400 B = 100 × boxed
+`int` 24 B) drops the array and keeps only the box. A per-call capturing adapter would add a
+reference object on top of that; its absence is what "0 B/op extra" means here. This is
+**not a "byte-identical" claim**: the current-tree numbers match the earlier D2 run on every
+arm except one BDN rounding step — `Nextorm_Any_2Arg_Params` 124,018 B → **124,009 B**
+(−9 B, 0.007 %) and `EntityAnyCommand_BuildAndPrepare` 7,417 B → **7,418 B** (+1 B). The
+public 3-arg arm's allocation is unchanged (`5,600 B`), so removing the adapter changed no
+allocation.
+
+Raw times are host-noise-dominated (`Error ≈ Mean` or larger on several rows) and are not
+used to claim a regression or an improvement.
+
+For MySQL specifically (not exercised by this SQLite-based benchmark): `MySqlConnector`'s
+`MySqlCommand.CreateParameter()` returns `new MySqlParameter()`, the same allocation the
+previous `new MySqlParameter(name, value ?? DBNull.Value)` performed, and D6 only adds a
+`DbCommand` argument to an already-bound delegate — no per-call allocation on the MySQL
+path either.
+
+**Verdict: no regression** — the query-path acceptance is 7/7 with the allocated ratio
+unchanged (7.52 vs 7.42), and the current-tree parameter-path allocations match the earlier
+D2 run within BDN's one-unit rounding (no "byte-identical" claim); the MySQL
+`command.CreateParameter()` swap is allocation-neutral. The noisy acceptance time ratio
+(1.38 / 3.89) is reported as such and is not used to claim an improvement or a regression.

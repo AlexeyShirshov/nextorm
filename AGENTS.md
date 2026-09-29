@@ -14,6 +14,11 @@
 - Bulk renames: use `rename <symbol> <newName>` (dry-run) and add `apply=true` once the diff looks right — do not edit files one by one.
 - Diagnostics after edits: `dotnet build` (see Build & toolchain). `MSBuildWorkspace` cold start is slow on this solution, so prefer one invocation per analysis over per-file calls.
 
+### Searching text (ignore-aware only)
+- Plain text (docs, comments, string literals, SQL/CLR names in prose) is searched with ignore-aware tools only: the built-in `grep` tool (ripgrep) or `rg`, or — cheapest — `git grep` (tracked files only). Scope to sources: `rg -n --glob '*.cs' '<literal>' src tests` or `git grep -n '<literal>' -- 'src/**' 'tests/**'`.
+- **Never run shell `grep -r`, `grep -rn`, `grep -R` or `find` over the tree.** They ignore `.gitignore` and walk `bin/`, `obj/` and `TestResults/` — on a built worktree ~1.3 GB of artifacts under `src`/`tests` — so one call reads ~1 GB from disk instead of a few MB. Search hygiene, not style.
+- This does not replace `roslyn`: any C# symbol/overload/partial/using question goes to the `roslyn` tool (above), never to text search.
+
 ## Todos
 - Keep the todo list current: call `todowrite` after **each** completed step (and again when starting the next one), not just at the beginning and the end.
 - The right-hand sidebar refreshes only when `todowrite` runs, so batching updates leaves it stale for many turns and the session loses its progress indicator.
@@ -59,11 +64,12 @@
 
 ## Coverage
 - `coverage.settings.xml` includes only `nextorm.{core,sqlite,postgres,sqlserver}`.
-- CI threshold `MIN_LINE_COVERAGE=75` hard-fails only on `main`; other branches warn. Reproduce with the `dotnet-coverage collect` → `reportgenerator` steps in `.github/workflows/dotnet.yml`.
+- CI thresholds `MIN_LINE_COVERAGE=85` and `MIN_BRANCH_COVERAGE=75` (both, `dotnet-coverage`/`reportgenerator`) hard-fail only on `main`; other branches warn. Reproduce with the `dotnet-coverage collect` → `reportgenerator` steps in `.github/workflows/dotnet.yml`.
 
 ## Docs
 - DocFX is a local tool: `dotnet docfx docs/docfx.json`. `docs/api/` and `docs/_site/` are generated and gitignored; article pages are hand-written.
-- Renaming a public type or method requires updating both `docs/**` and `docs/ru/**` (prose, samples, source paths, curated API reference) in the same change. Grep both trees for the old name first.
+- Renaming a public type or method requires updating both `docs/**` and `docs/ru/**` (prose, samples, source paths, curated API reference) in the same change. Search both trees for the old name first (`rg -n "<old-name>" docs docs/ru`, or `git grep` — never `grep -r`).
+- Moving a guide page into a separate section (or deleting one) leaves a gap in the numbered `docs/guide/NN-*.md` series: renumber the remaining pages consecutively, and update every link and `toc.yml` entry in both `docs/**` and `docs/ru/**` in the same change — never leave a hole (e.g. `30 → 32`).
 - Public docs (`docs/**`, `docs/ru/**`, root `readme.md`) must **not link to `docs/specs/**`**: specs are internal, excluded from the DocFX build and never published. No hyperlinks, no relative `.md` links, no GitHub `blob` links to specs from article pages or the readme — keep the reasoning inline or point to a public page.
 
 ## Benchmarks

@@ -21,6 +21,11 @@ public sealed record QueryDefinition
     public LambdaExpression? Exp { get; init; }
     /// <summary>Entity type of the query when there is no projection lambda.</summary>
     public Type? SrcType { get; init; }
+    /// <summary>
+    /// The join-projection result type a <c>JoinInto</c> list command materializes while
+    /// <see cref="SrcType"/> remains the parent entity type, or <c>null</c> for an ordinary command.
+    /// </summary>
+    internal Type? ProjectionType { get; init; }
     /// <summary>Optional predicate applied as a <c>WHERE</c> clause.</summary>
     public LambdaExpression? Condition { get; init; }
     /// <summary>Joins accumulated by the builder.</summary>
@@ -37,6 +42,19 @@ public sealed record QueryDefinition
     public ILogger? Logger { get; init; }
     /// <summary>Whether the query was marked <c>DISTINCT</c>.</summary>
     public bool IsDistinct { get; init; }
+    /// <summary>
+    /// Whether the query disables any global query filter declared for its entity type, either through
+    /// the all-or-nothing form or a selective <see cref="FilterScope"/>. Only a fallback for a
+    /// definition that carries no <see cref="FilterScope"/>: with <see langword="true"/> it means every
+    /// filter is disabled.
+    /// </summary>
+    public bool IgnoreFilters { get; init; }
+    /// <summary>
+    /// The selective query-filter scope when one was configured, or <see langword="null"/> to fall back
+    /// to the all-or-nothing <see cref="IgnoreFilters"/> flag. Set by the selective
+    /// <c>IgnoreFilters</c> overloads.
+    /// </summary>
+    internal QueryFilterScope? FilterScope { get; init; }
     /// <summary>Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse).</summary>
     public bool GroupByWithTotals { get; init; }
     /// <summary>Optional <c>LIMIT n BY expr</c> clause (ClickHouse).</summary>

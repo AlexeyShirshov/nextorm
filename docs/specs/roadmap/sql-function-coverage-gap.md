@@ -22,7 +22,7 @@ provider-vs-provider matrix): here the unit is the individual function.
   raw fragment; that escape hatch is deliberately **not** counted as coverage.
 * nextorm is a query builder with a *curated* function catalog, not an exhaustive mirror of every
   vendor function. Niche families (administration, metadata, permissions, encryption, spatial,
-  network, Lua/exec) are marked **out of scope** and are not proposed for implementation.
+  network, Lua/exec) are marked **<span style="color:orange">out of scope</span>** and are not proposed for implementation.
 
 ### How to read the lists
 
@@ -44,7 +44,7 @@ not exposed by the query surface; it may still be reachable through a `[SqlFunct
 fragment, which is deliberately not counted as coverage. Re-verify against the vendor page before
 acting on any single entry.
 
-## Summary: actionable set (all shipped)
+## Summary: actionable set (<span style="color:green">all shipped</span>)
 
 Every row below has shipped; the per-provider sections now list only the **still-missing remainder** of
 each vendor catalogue (in scope) plus the out-of-scope families. The design-RFC work plans were folded
@@ -52,13 +52,13 @@ into the guides and deleted.
 
 | Provider | Shipped surface | Docs |
 |---|---|---|
-| **Cross-provider** | `SqlFunctions.Sql` string library (`left`, `right`, `lpad`, `rpad`, `repeat`, `reverse`, `space`, `concat_ws`, `translate`, `ascii`, `char`), the length pair (`bit_length`, `octet_length`) and the angle functions (`cot`, `degrees`, `radians`, `pi`); `Math.Acos`/`Asin`/`Atan`/`Atan2`; remainder, base-10 logarithm, power and generic string formatting stay on the portable CLR methods (`%`, `Math.Log10`, `Math.Pow`, `string.Format`) | [Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions) (gap-analysis §4.36; regex translation shipped earlier, §5.35) |
-| **PostgreSQL** | extended scalar + string library, `sha224`/`sha384`/`sha512`, the regexp family (`regexp_substr` included), `age`, `date_bin`, `make_time`/`make_timestamp` (`make_date` via `date_from_parts`), `current_setting`/`set_config`, the sequence functions (`nextval`/`setval`/`currval`/`lastval`), native JSON/JSONB (`json_array`, SQL/JSON `json_exists`/`json_query`/`json_value`), native arrays, `generate_series`/`unnest`, the statistical/boolean/bit aggregates, `num_nulls`/`num_nonnulls`, `mode`, `percentile_cont`/`disc`, `ts_*` full-text | [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql) / [JSON and JSONB](../../guide/16-json.md) (gap-analysis §4.37) |
-| **SQL Server** | `ISqlServerFunctions` + `SqlServerFunctions` T-SQL scalar library (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `FORMAT`, `NCHAR`, `UNICODE`, the `ACOS`/`ASIN`/`ATAN`/`ATN2`/`SQUARE` math set, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/`JSON_PATH_EXISTS`); `ASCII`/`CHAR`/`TRANSLATE`/`REVERSE`/`SPACE`/`CONCAT_WS` and `COT`/`DEGREES`/`RADIANS`/`PI` via the portable surface | [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (gap-analysis §4.38) |
-| **MySQL** | `SqlFunctions.MySql` (`FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`, `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the `JSON_*` mutation family, `UUID_TO_BIN`/`BIN_TO_UUID`); `LAST_DAY` via `end_of_month` | [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md) (gap-analysis §4.39, #80) |
-| **MariaDB** | the MySQL surface plus `REGEXP_INSTR`/`REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT`, the `NEXT VALUE FOR`/`NEXTVAL`/`SETVAL`/`LASTVAL` sequences | [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb) (gap-analysis §4.40, #79) |
-| **SQLite** | `SqlFunctions.Sqlite`: core scalars (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), the JSON1 family, the date helpers (`timediff`/`unixepoch`/`julianday`) and the math extension | [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (gap-analysis §4.41) |
-| **ClickHouse** | `SqlFunctions.ClickHouse`: UTF-8 case/trim/regexp/search strings, date helpers (`formatDateTime`/`parseDateTime*`, `now`/`today`/`yesterday`), the array/map set operations, the bitmap aggregates (`groupBitmap*`/`sumMap*`), the hash family and `generateULID` | [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md) (gap-analysis §4.42, #78) |
+| **Cross-provider** | `SqlFunctions.Sql` string library (`left`, `right`, `lpad`, `rpad`, `repeat`, `reverse`, `space`, `concat_ws`, `translate`, `ascii`, `char`), the length pair (`bit_length`, `octet_length`) and the angle functions (`cot`, `degrees`, `radians`, `pi`); `Math.Acos`/`Asin`/`Atan`/`Atan2`; remainder, base-10 logarithm, power and generic string formatting stay on the portable CLR methods (`%`, `Math.Log10`, `Math.Pow`, `string.Format`) | [Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions) (gap-analysis §5.36; regex translation shipped earlier, §5.35) |
+| **PostgreSQL** | extended scalar + string library, `sha224`/`sha384`/`sha512`, the regexp family (`regexp_substr` included), `age`, `date_bin`, `make_time`/`make_timestamp` (`make_date` via `date_from_parts`), `current_setting`/`set_config`, the sequence functions (`nextval`/`setval`/`currval`/`lastval`), native JSON/JSONB (`json_array`, SQL/JSON `json_exists`/`json_query`/`json_value`), native arrays, `generate_series`/`unnest`, the statistical/boolean/bit aggregates, `num_nulls`/`num_nonnulls`, `mode`, `percentile_cont`/`disc`, `ts_*` full-text | [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql) / [JSON and JSONB](../../guide/14-json.md) (gap-analysis §5.37) |
+| **SQL Server** | `ISqlServerFunctions` + `SqlServerFunctions` T-SQL scalar library (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `FORMAT`, `NCHAR`, `UNICODE`, the `ACOS`/`ASIN`/`ATAN`/`ATN2`/`SQUARE` math set, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/`JSON_PATH_EXISTS`); `ASCII`/`CHAR`/`TRANSLATE`/`REVERSE`/`SPACE`/`CONCAT_WS` and `COT`/`DEGREES`/`RADIANS`/`PI` via the portable surface | [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (gap-analysis §5.38) |
+| **MySQL** | `SqlFunctions.MySql` (`FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`, `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the `JSON_*` mutation family, `UUID_TO_BIN`/`BIN_TO_UUID`); `LAST_DAY` via `end_of_month` | [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md) (gap-analysis §5.39, #80) |
+| **MariaDB** | the MySQL surface plus `REGEXP_INSTR`/`REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT`, the `NEXT VALUE FOR`/`NEXTVAL`/`SETVAL`/`LASTVAL` sequences | [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb) (gap-analysis §5.40, #79) |
+| **SQLite** | `SqlFunctions.Sqlite`: core scalars (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), the JSON1 family, the date helpers (`timediff`/`unixepoch`/`julianday`) and the math extension | [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (gap-analysis §5.41) |
+| **ClickHouse** | `SqlFunctions.ClickHouse`: UTF-8 case/trim/regexp/search strings, date helpers (`formatDateTime`/`parseDateTime*`, `now`/`today`/`yesterday`), the array/map set operations, the bitmap aggregates (`groupBitmap*`/`sumMap*`), the hash family and `generateULID` | [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md) (gap-analysis §5.42, #78) |
 
 ---
 
@@ -87,7 +87,7 @@ form (SQL Server renders `REGEXP_LIKE`/`REGEXP_REPLACE`, the match needing a 170
 `string.Format`/`x.ToString(fmt)` translate through the provider's format functions where
 `ISqlDialect.StringFormats` is present (all providers here).
 
-**Shipped as portable wrappers** (`SqlFunctions.Sql`, rendered natively where the provider can express
+**<span style="color:green">Shipped</span> as portable wrappers** (`SqlFunctions.Sql`, rendered natively where the provider can express
 them — see
 [Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions)):
 `left`, `right`, `lpad`, `rpad`, `repeat`, `reverse`, `space`, `concat_ws`, `translate`, `ascii`,
@@ -152,7 +152,7 @@ statistical/boolean/bit aggregates, `num_nulls`/`num_nonnulls`, `mode`, `percent
   `pg_postmaster_start_time`, `pg_current_logfile`, and the `pg_*` introspection family.
 * **Binary string:** `get_bit`/`set_bit`, `get_byte`/`set_byte`, `bit_count`, `crc32`/`crc32c`,
   `convert_from`/`convert_to`.
-* **out of scope:** network (`host`, `masklen`, `broadcast`, `family`, `netmask`, `set_masklen`, `abbrev`,
+* **<span style="color:orange">out of scope</span>:** network (`host`, `masklen`, `broadcast`, `family`, `netmask`, `set_masklen`, `abbrev`,
   `inet_*`, `macaddr8_set7bit`), range/multirange, geometric, enum, `pg_*` metadata/permission helpers,
   XML (`xml*`, `xpath`, `xmltable`, ...), `ts_stat` is present but the debug/parse family is not.
 
@@ -191,10 +191,10 @@ statistical/boolean/bit aggregates, `num_nulls`/`num_nonnulls`, `mode`, `percent
 * **Aggregate:** `ANY_VALUE`, `APPROX_COUNT_DISTINCT`, `CHECKSUM_AGG`, `GROUPING_ID`, `PRODUCT`.
 * **Analytic:** `APPROX_PERCENTILE_CONT`, `APPROX_PERCENTILE_DISC`.
 * **Cryptographic:** `CRYPT_GEN_RANDOM`; `HASHBYTES` is shipped, and the `ENCRYPTBY*`/`DECRYPTBY*`/
-  `SIGNBY*`/`VERIFYSIGNEDBY*`/`CERT*`/`KEY_*` family is **out of scope**.
+  `SIGNBY*`/`VERIFYSIGNEDBY*`/`CERT*`/`KEY_*` family is **<span style="color:orange">out of scope</span>**.
 * **System:** `COMPRESS`/`DECOMPRESS`, `SESSION_CONTEXT`, `SESSION_ID`, `CURRENT_TIMEZONE(_ID)`,
   `XACT_STATE`, `@@ROWCOUNT`/`@@ERROR`/`ERROR_*`, `HOST_NAME`/`HOST_ID` (`NEWSEQUENTIALID` is shipped).
-* **out of scope:** security/identity (`SUSER_*`, `HAS_PERMS_BY_NAME`, `IS_MEMBER`, ...), metadata
+* **<span style="color:orange">out of scope</span>:** security/identity (`SUSER_*`, `HAS_PERMS_BY_NAME`, `IS_MEMBER`, ...), metadata
   (`OBJECT_*`, `COLUMNPROPERTY`, `INDEXPROPERTY`, `sys.*`), system-statistical (`@@CPU_BUSY`, ...),
   collation, rowset (`OPENROWSET`/`OPENQUERY`), cursor, AI (`AI_*`), vector (`VECTOR_*`),
   text/image (`TEXTPTR`/`TEXTVALID`).
@@ -209,7 +209,7 @@ through `string_agg`; `last_day` through `end_of_month`; `date_add`/`date_diff`;
 `json_set`, `isjson` via `json_valid`); `current_user`/`session_user`/`schema`/`database`/`version`;
 `iif`→`if`; `greatest`/`least`/`nullif`/`coalesce`.
 
-**Native surface (shipped, [#80](https://github.com/AlexeyShirshov/nextorm/issues/80)):**
+**Native surface (<span style="color:green">shipped</span>, [#80](https://github.com/AlexeyShirshov/nextorm/issues/80)):**
 `SqlFunctions.MySql` (`MySqlFunctions`, gated per name by `ISqlDialect.MySqlFunctions`) renders
 `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`,
 `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the JSON mutation family
@@ -250,7 +250,7 @@ subsets below are the still-missing remainder of the full MySQL catalogue.
 * **Miscellaneous:** `UUID` (MySQL is v1-only, so `gen_random_uuid`/`uuidv7` are gated off),
   `UUID_SHORT`, `IS_UUID`, `SLEEP`, `ANY_VALUE` (≈`any_agg`), `GROUPING`, `VALUES`, `NAME_CONST`, `DEFAULT`
   (`BIN_TO_UUID`/`UUID_TO_BIN`, `INET_ATON`/`INET_NTOA` are shipped).
-* **out of scope:** spatial (`ST_*`, `MBR*`, `Point`/`Polygon`/..., `ST_AsGeoJSON`), full-text is partially
+* **<span style="color:orange">out of scope</span>:** spatial (`ST_*`, `MBR*`, `Point`/`Polygon`/..., `ST_AsGeoJSON`), full-text is partially
   covered through `contains`/`freetext`.
 
 ---
@@ -260,7 +260,7 @@ subsets below are the still-missing remainder of the full MySQL catalogue.
 MariaDB is a superset of MySQL: **every MySQL gap above applies** — except `ANY_VALUE`, which MariaDB
 gates off (`SupportsAnyValueAggregate` is `false`) — and the MySQL-compatible members
 (`JSON_VALUE`, `REGEXP_*`, `group_concat`, ..., where present) behave the same. The MariaDB-specific
-additions below are **shipped ([#79](https://github.com/AlexeyShirshov/nextorm/issues/79))** on the
+additions below are **<span style="color:green">shipped</span> ([#79](https://github.com/AlexeyShirshov/nextorm/issues/79))** on the
 shared `SqlFunctions.MySql` surface, gated per name so MySQL rejects them: `REGEXP_INSTR`/
 `REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`,
 `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT` and the
@@ -281,7 +281,7 @@ missing:
 * **Miscellaneous:** `_rowid`, `COLUMN_*` dynamic-column functions, `WSREP_*` (Galera), `VEC_*` (vector),
   the `SYS.*` helper schema.
 * **UUID:** `UUID_v4`/`UUID_v7` **are implemented** (`gen_random_uuid`/`uuidv7`).
-* **out of scope:** geographic/spatial (same as MySQL).
+* **<span style="color:orange">out of scope</span>:** geographic/spatial (same as MySQL).
 
 ---
 
@@ -292,7 +292,7 @@ missing:
 `iif`/`nullif`/`max`/`min` (for `greatest`/`least`); `version`→`sqlite_version()`; date arithmetic and
 date-part extraction through `strftime`/`date`.
 
-**Shipped:** the SQLite-only surface `SqlFunctions.Sqlite` (`SqliteFunctions`, gated by
+**<span style="color:green">Shipped</span>:** the SQLite-only surface `SqlFunctions.Sqlite` (`SqliteFunctions`, gated by
 `ISqlDialect.SqliteFunctions`; other providers reject) covers the core scalars
 (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`,
 `soundex`, `octet_length`, `if`/`ifnull`); the JSON1 family (`json`/`jsonb`, `json_extract` and the
@@ -304,7 +304,7 @@ date helpers `timediff`/`unixepoch`/`julianday`; and the math-extension function
 
 **Missing:**
 
-* **Core scalar (out of scope):** `changes`, `last_insert_rowid`, `likelihood`/`likely`, `load_extension`,
+* **Core scalar (<span style="color:orange">out of scope</span>):** `changes`, `last_insert_rowid`, `likelihood`/`likely`, `load_extension`,
   `sqlite_compileoption_get`/`sqlite_compileoption_used`, `sqlite_offset`, `sqlite_source_id`,
   `total_changes`, `unistr`/`unistr_quote`, `zeroblob`, `json_error_position`.
 * **Aggregate:** `median`, `percentile`/`percentile_cont`/`percentile_disc`, `total`.
@@ -327,7 +327,7 @@ date-conversion/parts surface, the table functions `numbers`/`numbers_mt`/`zeros
 `generateRandom`/`generate_series`/`url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`,
   and `lagInFrame`/`leadInFrame`/`multi_if`.
 
-**Native surface (shipped, [#78](https://github.com/AlexeyShirshov/nextorm/issues/78)):**
+**Native surface (<span style="color:green">shipped</span>, [#78](https://github.com/AlexeyShirshov/nextorm/issues/78)):**
 `SqlFunctions.ClickHouse` renders the UTF-8 case/trim/regexp/search strings (`lowerUTF8`/`upperUTF8`,
 `trimLeft`/`trimRight`/`trimBoth`, `replaceRegexpOne`/`replaceRegexpAll`, `match`/`extract`/`extractAll`,
 `splitByString`/`splitByRegexp`/`splitByWhitespace`), the date helpers (`formatDateTime`, `parseDateTime*`,

@@ -12,7 +12,7 @@ namespace NextORM.Core;
 /// To also return the rows to the client, use the separate <c>OutputIntoThenOutput(...)</c> form.
 /// </para>
 /// <para>
-/// The target is an explicit table name (nextorm does not declare a table variable in phase 1), and its
+/// The target is an explicit table name (nextorm does not declare the table variable for you), and its
 /// columns must have the same names as the selected output columns: the selected column list is reused as
 /// the target column list.
 /// </para>
@@ -31,14 +31,21 @@ public sealed class OutputIntoBuilder
     /// <summary>Executes the statement and returns the number of rows written into the target.</summary>
     /// <returns>The number of affected rows, as reported by the provider.</returns>
     /// <exception cref="NotSupportedException">The provider cannot express <c>OUTPUT ... INTO</c>, or the context is read-only.</exception>
-    public int Execute() => RequireExecutor().Execute(BuildCommand());
+    public int Execute()
+    {
+        _mutation.ValidateFilters();
+        return RequireExecutor().Execute(BuildCommand());
+    }
 
     /// <summary>Asynchronously executes the statement and returns the number of rows written into the target.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of affected rows.</returns>
     /// <exception cref="NotSupportedException">The provider cannot express <c>OUTPUT ... INTO</c>, or the context is read-only.</exception>
-    public Task<int> ExecuteAsync(CancellationToken cancellationToken = default)
-        => RequireExecutor().Execute(BuildCommand(), cancellationToken);
+    public async Task<int> ExecuteAsync(CancellationToken cancellationToken = default)
+    {
+        await _mutation.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
+        return await RequireExecutor().Execute(BuildCommand(), cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Renders the parameterised SQL this statement would execute, without executing it. Useful for
@@ -78,4 +85,26 @@ internal interface IOutputIntoMutation
 
     /// <summary>The context the mutation executes on.</summary>
     IDataContext DataContext { get; }
+
+    /// <summary>
+    /// Validates the written rows against the target entity's active global query filters. The default
+    /// is a no-op: an UPDATE/DELETE enforces its filters in the <c>WHERE</c> clause, so only the insert
+    /// builder overrides it.
+    /// </summary>
+    void ValidateFilters()
+    {
+    }
+
+    /// <summary>
+    /// Asynchronously validates the written rows against the target entity's active global query
+    /// filters. The default delegates to <see cref="ValidateFilters"/> and completes immediately; the
+    /// insert builder overrides it to run its <c>INSERT ... SELECT</c> pre-check asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the validation.</param>
+    /// <returns>A task that completes when validation has passed.</returns>
+    Task ValidateFiltersAsync(CancellationToken cancellationToken)
+    {
+        ValidateFilters();
+        return Task.CompletedTask;
+    }
 }

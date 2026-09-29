@@ -52,6 +52,27 @@ var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
+## Именование производной таблицы через `As`
+
+`As<TResult>(...)` оборачивает проекцию в производную таблицу в `FROM`: он проецирует каждую строку
+в именованный тип и возвращает построитель по результату, поэтому спроецированные члены можно
+соединять, фильтровать и проецировать дальше. Поскольку производная таблица сбрасывает счётчик
+арности соединения, именно так продолжают композицию после соединения, в том числе за
+восьмитабличным потолком:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+    .Where(d => d.OrderId > 100)
+    .Select(d => new { d.OrderId, d.CustomerName })
+    .ToList();
+```
+
+После `As` видны только спроецированные члены, а in-memory-провайдер отклоняет `Join` по
+производной таблице с `NotSupportedException`. Полный оператор описан в разделе
+[Соединения](02-joins.md#именование-промежуточной-проекции-as).
+
 ## Скалярный подзапрос в SELECT
 
 Вызов терминала для одной строки ([`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})), [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0}))) внутри

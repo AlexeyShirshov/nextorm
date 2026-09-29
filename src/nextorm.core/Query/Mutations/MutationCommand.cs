@@ -67,8 +67,8 @@ internal abstract class MutationCommand
 /// <summary>
 /// The target of an <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> clause (SQL Server): an existing table
 /// plus the mapped columns written into it by position. nextorm does not declare a table variable from
-/// its own text in phase 1, so the target must already exist with a compatible column shape; emitting a
-/// <c>DECLARE @t TABLE (...)</c> batch is deferred to phase 2.
+/// its own text, so the target must already exist with a compatible column shape; emitting a
+/// <c>DECLARE @t TABLE (...)</c> batch is not supported (see issue #127).
 /// </summary>
 internal sealed class OutputIntoClause
 {
@@ -164,7 +164,8 @@ internal sealed class InsertCommand : MutationCommand
     /// <param name="keepIdentity">Whether explicit values are written to identity columns.</param>
     /// <param name="tableSchema">The schema (or database) that qualifies <paramref name="tableName"/>, or <see langword="null"/>.</param>
     /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
-    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false, string? tableSchema = null, OutputIntoClause? outputInto = null)
+    /// <param name="dynamicColumns">The entity store's dynamic columns written after the mapped ones, or <see langword="null"/>.</param>
+    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false, string? tableSchema = null, OutputIntoClause? outputInto = null, DynamicColumnSet? dynamicColumns = null)
         : base(SqlStatementType.Insert, entityType)
     {
         TableName = tableName;
@@ -179,6 +180,7 @@ internal sealed class InsertCommand : MutationCommand
         KeepIdentity = keepIdentity;
         TableSchema = tableSchema;
         OutputInto = outputInto;
+        DynamicColumns = dynamicColumns;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -231,4 +233,11 @@ internal sealed class InsertCommand : MutationCommand
     /// <see langword="false"/> because identity columns are excluded from the written set.
     /// </summary>
     public bool KeepIdentity { get; }
+
+    /// <summary>
+    /// The entity store's dynamic columns, written after the mapped columns, or <see langword="null"/>
+    /// when the entity has no <see cref="DynamicColumnsAttribute"/> store. Every key is a physical column
+    /// name quoted through <see cref="ISqlDialect.QuoteIdentifier"/>; the store-less path is unchanged.
+    /// </summary>
+    public DynamicColumnSet? DynamicColumns { get; }
 }

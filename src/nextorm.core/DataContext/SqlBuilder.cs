@@ -76,7 +76,13 @@ internal readonly struct SqlBuilder
 
             var joins = cmd.Joins;
             var hasJoins = joins?.Length > 0;
-            var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0;
+            // A dynamic-columns store projection appends an unqualified "*" after the mapped columns. On
+            // MySQL/MariaDB that is a syntax error unless the star is qualified with the source alias, so
+            // such a dialect needs the source aliased even without joins (see RequiresQualifiedSelectStar).
+            var hasDynamicStore = !cmd.IgnoreColumns && selectList is not null
+                && Array.Exists(selectList, static item => item.IsDynamicColumnsStore);
+            var needAlias = hasJoins || _ctx.QueryProvider.OuterReferences?.Count > 0
+                || (hasDynamicStore && _ctx.Dialect.RequiresQualifiedSelectStar);
 
             // Tables-in-scope hints are structural on SQL Server (a WITH(...) on every physical table)
             // and part of the statement-level comment elsewhere. A dialect that supports neither rejects
@@ -90,6 +96,10 @@ internal readonly struct SqlBuilder
             // Join/subquery/tables-in-scope hints on an inline-comment dialect are folded into one
             // statement-level /*+ ... */ comment rather than rendered structurally.
             var inlineHints = _ctx.Dialect.SupportsInlineHints ? CollectInlineHints(cmd) : null;
+
+            // The alias assigned to the FROM source (null for non-aliased or non-physical sources); the
+            // dynamic-columns star uses it to qualify the appended "*" on dialects that require it.
+            string? fromAlias = null;
 
             if (from is not null)
             {
@@ -106,7 +116,7 @@ internal readonly struct SqlBuilder
                 if (cmd.RowLock is { } lockClause && _ctx.Dialect.Lock is { UsesTableHints: true } lockHint)
                     tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode, lockClause.Wait, _ctx.KeywordCase));
 
-                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints));
+                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind, scopeHints), out fromAlias);
                 if (!_ctx.ParamMode)
                 {
                     sqlBuilder!.Append(Kw(" from ")).Append(fromStr);
@@ -456,6 +466,33 @@ internal readonly struct SqlBuilder
                 for (var i = 0; i < selectListCount; i++)
                 {
                     var item = selectList[i];
+                    if (item.IsDynamicColumnsStore)
+                    {
+                        if (!_ctx.ParamMode)
+                        {
+                            // MySQL/MariaDB reject an unqualified "*" next to explicit columns, so the
+                            // star is qualified with the FROM alias on dialects that require it. Other
+                            // dialects and the plain-star path keep emitting the bare "*".
+                            if (_ctx.Dialect.RequiresQualifiedSelectStar)
+                            {
+                                // The qualifier must be the same token the FROM rendered (see
+                                // SqlSourceRenderer's MakeTableAlias call), escaping included. Fail closed:
+                                // the flag is set only for dialects that cannot emit a bare star, so a
+                                // source without an alias is a bug, not a reason to silently fall back to
+                                // SQL that would be rejected (or, worse, accepted against the wrong source).
+                                if (fromAlias is null)
+                                    throw new BuildSqlCommandException(
+                                        "A dynamic-columns store projection requires an aliased physical FROM source on this dialect.");
+
+                                selectBuilder!.Append(_ctx.Dialect.Escape(fromAlias)).Append(".*, ");
+                            }
+                            else
+                                selectBuilder!.Append("*").Append(", ");
+                        }
+
+                        continue;
+                    }
+
                     var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, !needAlias, renameAware: true);
 
                     if (!_ctx.ParamMode)

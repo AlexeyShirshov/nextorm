@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
@@ -29,6 +30,7 @@ public sealed partial class MergeBuilder<TEntity>
     private readonly IEntityMetadata _metadata;
     private readonly List<ColumnAccumulator> _columns = [];
     private readonly List<MergeBranch> _branches = [];
+    private DynamicColumnSet? _dynamicColumns;
     private IReadOnlyList<TEntity>? _sourceEntities;
     private QueryCommand? _source;
     private int _rowCount;
@@ -37,11 +39,134 @@ public sealed partial class MergeBuilder<TEntity>
     private bool _whenNotMatchedInsert;
     private LambdaExpression? _matchCondition;
     private QueryCommand? _registry;
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
 
     internal MergeBuilder(IDataContext dataContext, IEntityMetadata metadata)
     {
         _dataContext = dataContext;
         _metadata = metadata;
+    }
+
+    /// <summary>
+    /// Disables <b>all</b> global query filters declared for the target entity type, so the inserted
+    /// side of the merge is not validated against them. Repeatable: a later call accumulates with the
+    /// earlier scope.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters()
+    {
+        _filterScope = _filterScope.Union(QueryFilterScope.AllFilters);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types, so the inserted side of
+    /// the merge is not validated against them. An empty or <see langword="null"/>
+    /// <paramref name="entityTypes"/> disables nothing. Repeatable: a later call accumulates (union)
+    /// with the earlier scope.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters(params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromTypes(entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on the target
+    /// entity type, so the inserted side of the merge is not validated against them. An empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing. Repeatable: a later call
+    /// accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        var scope = QueryFilterScope.FromKeys(filterKeys);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
+    /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public MergeBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromKeysAndTypes(filterKeys, entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Validates the rows written by the merge's insert branch against the target entity type's active
+    /// global query filters. Entity/batch sources are checked in memory; a query source is guarded by a
+    /// server-side pre-check. Called by every execution terminal before the statement runs.
+    /// </summary>
+    /// <exception cref="QueryFilterException">A merged row violates an active filter.</exception>
+    internal void ValidateFilters()
+    {
+        if (_filterScope.All || !HasInsertBranch())
+            return;
+
+        if (_source is QueryCommand<TEntity> typedSource)
+        {
+            QueryFilterValidator.ValidateSource<TEntity, TEntity>(typedSource, null, _filterScope, _dataContext, "MERGE");
+            return;
+        }
+
+        if (_sourceEntities is { } entities)
+            QueryFilterValidator.ValidateEntities(entities, _filterScope, _dataContext, "MERGE");
+    }
+
+    /// <summary>
+    /// Asynchronously validates the rows written by the merge's insert branch. A query source is
+    /// pre-checked with a genuinely asynchronous existence query; entity/batch sources are checked in
+    /// memory and complete immediately.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the source pre-check.</param>
+    /// <returns>A task that completes when validation has passed.</returns>
+    /// <exception cref="QueryFilterException">A merged row violates an active filter.</exception>
+    internal Task ValidateFiltersAsync(CancellationToken cancellationToken)
+    {
+        if (_filterScope.All || !HasInsertBranch())
+            return Task.CompletedTask;
+
+        if (_source is QueryCommand<TEntity> typedSource)
+            return QueryFilterValidator.ValidateSourceAsync<TEntity, TEntity>(typedSource, null, _filterScope, _dataContext, "MERGE", cancellationToken);
+
+        if (_sourceEntities is { } entities)
+            QueryFilterValidator.ValidateEntities(entities, _filterScope, _dataContext, "MERGE");
+
+        return Task.CompletedTask;
+    }
+
+    private bool HasInsertBranch()
+    {
+        if (_whenNotMatchedInsert)
+            return true;
+
+        for (var i = 0; i < _branches.Count; i++)
+        {
+            if (_branches[i].Action == MergeActionKind.Insert)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Uses a single mapped entity as the source row.</summary>
@@ -84,10 +209,13 @@ public sealed partial class MergeBuilder<TEntity>
             _columns.Add(accumulator);
         }
 
-        if (_columns.Count == 0)
+        var dynamicColumns = DynamicColumnSet.FromEntities(_metadata, list, "MERGE");
+
+        if (_columns.Count == 0 && dynamicColumns is null)
             throw new BuildSqlCommandException($"Entity {typeof(TEntity)} has no writable column to merge.");
 
         _sourceEntities = list;
+        _dynamicColumns = dynamicColumns;
         _rowCount = list.Count;
         return this;
     }
@@ -171,6 +299,110 @@ public sealed partial class MergeBuilder<TEntity>
 
         _matchCondition = condition;
         return this;
+    }
+
+    /// <summary>
+    /// Rejects a match condition that references a mapped source column absent from the VALUES-derived
+    /// source. A VALUES source is built from the writable mapped columns only (identity/computed are
+    /// excluded), so any other mapped column has no matching derived column and must not be rendered as
+    /// <c>source.&lt;column&gt;</c>. Called only on the VALUES path: a query source projects the whole row,
+    /// generated columns included, so the same reference is valid there.
+    /// </summary>
+    /// <param name="condition">The <c>On(...)</c> or branch condition to inspect.</param>
+    /// <exception cref="NotSupportedException">The condition references a column the VALUES source does not declare.</exception>
+    private void ValidateValuesSourceCondition(LambdaExpression condition)
+    {
+        if (FindMissingSourceColumn(condition, _metadata, _columns) is { } missing)
+        {
+            throw new NotSupportedException(
+                $"Property {missing.Name} of {typeof(TEntity)} is not a column of the VALUES-derived merge source; " +
+                "a database-generated column is excluded from the source built from Using(entity)/Using(batch) and cannot be referenced there.");
+        }
+    }
+
+    /// <summary>
+    /// Finds the first mapped property referenced through the source lambda (<c>s</c>, the second
+    /// parameter) that is not among the derived source columns. A non-mapped member (for example a
+    /// dynamic-store key) is ignored.
+    /// </summary>
+    /// <param name="condition">The condition to inspect.</param>
+    /// <param name="metadata">The target entity metadata, resolving a CLR property to its mapped column.</param>
+    /// <param name="columns">The VALUES-derived source columns.</param>
+    /// <returns>The offending property, or <see langword="null"/> when every source reference is a source column.</returns>
+    private static PropertyInfo? FindMissingSourceColumn(LambdaExpression condition, IEntityMetadata metadata, IReadOnlyList<ColumnAccumulator> columns)
+    {
+        if (condition.Parameters.Count < 2)
+            return null;
+
+        var finder = new MissingSourceColumnFinder(condition.Parameters[1], metadata, columns);
+        finder.Visit(condition.Body);
+        return finder.Found;
+    }
+
+    /// <summary>
+    /// Collects the first source-rooted mapped property whose column is absent from the derived source.
+    /// </summary>
+    private sealed class MissingSourceColumnFinder : ExpressionVisitor
+    {
+        private readonly ParameterExpression _source;
+        private readonly IEntityMetadata _metadata;
+        private readonly IReadOnlyList<ColumnAccumulator> _columns;
+
+        public MissingSourceColumnFinder(ParameterExpression source, IEntityMetadata metadata, IReadOnlyList<ColumnAccumulator> columns)
+        {
+            _source = source;
+            _metadata = metadata;
+            _columns = columns;
+        }
+
+        /// <summary>The first offending property, or <see langword="null"/> when none was found.</summary>
+        public PropertyInfo? Found { get; private set; }
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (Found is null
+                && node.Member is PropertyInfo property
+                && IsRootedAtSource(node)
+                && IsMapped(property)
+                && !IsSourceColumn(property))
+            {
+                Found = property;
+            }
+
+            return base.VisitMember(node);
+        }
+
+        // A member access is rooted at the source when walking its receiver chain ends at the source
+        // parameter (so s.Id and s.Nested.Id are source accesses, while t.Id is not).
+        private bool IsRootedAtSource(Expression expression)
+        {
+            while (expression is MemberExpression member)
+                expression = member.Expression!;
+
+            return expression == _source;
+        }
+
+        private bool IsMapped(PropertyInfo property)
+        {
+            foreach (var candidate in _metadata.Properties)
+            {
+                if (candidate.PropertyInfo == property)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool IsSourceColumn(PropertyInfo property)
+        {
+            for (var i = 0; i < _columns.Count; i++)
+            {
+                if (_columns[i].Property.PropertyInfo == property)
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     /// <summary>Updates every non-key writable column from the source when the row already exists.</summary>
@@ -321,6 +553,8 @@ public sealed partial class MergeBuilder<TEntity>
     /// <returns>The number of rows inserted or updated, as reported by the provider.</returns>
     public int Merge()
     {
+        ValidateFilters();
+
         if (_dataContext is InMemoryDataContext inMemory)
             return MergeInMemory(inMemory);
 
@@ -330,17 +564,19 @@ public sealed partial class MergeBuilder<TEntity>
     /// <summary>Asynchronously executes the merge and returns the number of affected rows.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the number of rows inserted or updated.</returns>
-    public Task<int> MergeAsync(CancellationToken cancellationToken = default)
+    public async Task<int> MergeAsync(CancellationToken cancellationToken = default)
     {
-        if (_dataContext is InMemoryDataContext inMemory)
-            return Task.FromResult(MergeInMemory(inMemory));
+        await ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
 
-        return RequireExecutor().Execute(BuildCommand(), cancellationToken);
+        if (_dataContext is InMemoryDataContext inMemory)
+            return MergeInMemory(inMemory);
+
+        return await RequireExecutor().Execute(BuildCommand(), cancellationToken).ConfigureAwait(false);
     }
 
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)
     {
-        if (_columns.Count == 0 && _source is null)
+        if (_columns.Count == 0 && _source is null && _dynamicColumns is null)
             throw new InvalidOperationException("No source rows were specified; call Using first.");
         if (_keys is null && _matchCondition is null)
             throw new InvalidOperationException("No match condition was specified; call OnKeys() or On(...).");
@@ -356,6 +592,21 @@ public sealed partial class MergeBuilder<TEntity>
         var columns = new InsertColumn[_columns.Count];
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
+
+        // The VALUES-derived source declares only the writable mapped columns; a condition that reaches a
+        // generated column through the source has no matching derived column. A query source projects the
+        // whole row (generated columns included), so its conditions are left to the provider.
+        if (_source is null)
+        {
+            if (_matchCondition is not null)
+                ValidateValuesSourceCondition(_matchCondition);
+
+            foreach (var branch in _branches)
+            {
+                if (branch.Condition is not null)
+                    ValidateValuesSourceCondition(branch.Condition);
+            }
+        }
 
         if (_branches.Count > 0 || _matchCondition is not null)
         {
@@ -373,7 +624,7 @@ public sealed partial class MergeBuilder<TEntity>
             }
 
             var registry = hasCondition ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
-            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry);
+            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns);
         }
 
         if (_source is not null)
@@ -389,10 +640,10 @@ public sealed partial class MergeBuilder<TEntity>
                 updateColumns.Add(column.Property);
         }
 
-        if (updateColumns.Count == 0)
+        if (updateColumns.Count == 0 && _dynamicColumns is null)
             throw new NotSupportedException($"Entity {typeof(TEntity)} has only key columns; a key upsert needs at least one non-key column to update.");
 
-        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns);
+        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns, dynamicColumns: _dynamicColumns);
     }
 
     /// <summary>Builds the command whose <c>RETURNING</c>/<c>OUTPUT</c> clause returns <paramref name="returningColumns"/>.</summary>

@@ -4,6 +4,8 @@
   href: getting-started/
 - name: Guide
   href: guide/
+- name: Infrastructure
+  href: infrastructure/
 - name: Querying
   href: querying/
 - name: Scalar functions

@@ -25,4 +25,29 @@ public interface IEntityMetadata
     /// mapping as declared) so existing external implementations keep compiling.
     /// </summary>
     bool IsTableNameAuto => false;
+
+    /// <summary>
+    /// The property that receives the entity's unmapped columns when a row is read, or
+    /// <see langword="null"/> when the entity has none. Declared with
+    /// <see cref="DynamicColumnsAttribute"/> or <see cref="EntityPropertyBuilder{T}.DynamicColumnsStore"/>.
+    /// The store is excluded from <see cref="Properties"/>; use this member to reach it. The default
+    /// implementation returns <see langword="null"/> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    IPropertyMetadata? DynamicColumnsStore => null;
+
+    /// <summary>
+    /// The global query filters declared for the entity, in declaration order; empty when none are
+    /// declared. The default implementation returns an empty list so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    IReadOnlyList<IQueryFilterMetadata> Filters => Array.Empty<IQueryFilterMetadata>();
+
+    /// <summary>
+    /// The navigation relationships declared for the entity, in declaration order; empty when none are
+    /// declared. A property that participates in a declared relationship is excluded from
+    /// <see cref="Properties"/> and is reachable only through this list. The default implementation
+    /// returns an empty list so existing external implementations keep compiling.
+    /// </summary>
+    IReadOnlyList<IRelationshipMetadata> Relationships => Array.Empty<IRelationshipMetadata>();
 }

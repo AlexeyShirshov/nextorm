@@ -102,7 +102,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// attaches the command to <paramref name="conn"/>.
     /// </summary>
     /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
-    /// <param name="createParam">Creates a provider parameter when the command has no matching one yet.</param>
+    /// <param name="createParam">Creates a provider parameter from its name and value; the executing command is not passed, preserving the command-unaware contract.</param>
     /// <param name="conn">The connection the returned command must be attached to.</param>
     /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
     public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
@@ -113,7 +113,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// <paramref name="transaction"/> (or clears it when <see langword="null"/>).
     /// </summary>
     /// <param name="params">The positional parameter values to bind, or <see langword="null"/> for none.</param>
-    /// <param name="createParam">Creates a provider parameter when the command has no matching one yet.</param>
+    /// <param name="createParam">Creates a provider parameter from its name and value; the executing command is not passed, preserving the command-unaware contract.</param>
     /// <param name="conn">The connection the returned command must be attached to.</param>
     /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
     /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
@@ -125,13 +125,71 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// <see cref="ParamMap"/> so subsequent executions skip the provider's parameter lookup, and
     /// attaches the command to <paramref name="conn"/> and <paramref name="transaction"/>.
     /// </summary>
+    /// <remarks>
+    /// Public compatibility overload: the command-unaware <paramref name="createParam"/> is forwarded to
+    /// the shared core as its legacy factory; the core execution paths instead call the internal
+    /// command-aware overloads below. Forwarding the delegate directly means this public path allocates
+    /// no capturing adapter per call.
+    /// </remarks>
     /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
-    /// <param name="createParam">Creates a provider parameter when the command has no matching one yet.</param>
+    /// <param name="createParam">Creates a provider parameter from its name and value; the executing command is not passed, preserving the command-unaware contract.</param>
     /// <param name="conn">The connection the returned command must be attached to.</param>
     /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
     /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
     public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
+        => GetDbCommandCore(@params, null, createParam, conn, transaction);
+
+    /// <summary>
+    /// Command-aware variant used by the core execution paths: <paramref name="createParam"/> receives
+    /// the command the parameter is added to, so a connection whose ADO driver rejects foreign
+    /// parameters can mint one through <c>command.CreateParameter()</c>.
+    /// </summary>
+    /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
+    /// <param name="createParam">Creates a provider parameter bound to the executing command.</param>
+    /// <param name="conn">The connection the returned command must be attached to.</param>
+    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
+    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
+    internal DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<DbCommand, string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
+        => GetDbCommandCore(@params, createParam, null, conn, transaction);
+
+    /// <summary>
+    /// Command-aware variant used by the core execution paths; see
+    /// <see cref="GetDbCommand(ReadOnlySpan{object?}, Func{DbCommand, string, object?, DbParameter}, DbConnection, DbTransaction?)"/>.
+    /// </summary>
+    /// <param name="params">The positional parameter values to bind, or <see langword="null"/> for none.</param>
+    /// <param name="createParam">Creates a provider parameter bound to the executing command.</param>
+    /// <param name="conn">The connection the returned command must be attached to.</param>
+    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
+    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
+    internal DbCommand GetDbCommand(object[]? @params, Func<DbCommand, string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
+        => GetDbCommandCore(@params is null ? ReadOnlySpan<object?>.Empty : @params, createParam, null, conn, transaction);
+
+    /// <summary>
+    /// Shared binding core for both the command-unaware public overloads and the command-aware
+    /// execution-path overloads. Exactly one of <paramref name="aware"/> and <paramref name="legacy"/>
+    /// is non-null: <paramref name="legacy"/> is the public 2-arg factory, invoked directly so the
+    /// public path allocates no capturing adapter; <paramref name="aware"/> receives the executing
+    /// command so a connection whose ADO driver rejects foreign parameters can mint one through
+    /// <c>command.CreateParameter()</c>.
+    /// </summary>
+    /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
+    /// <param name="aware">The command-aware factory, or <see langword="null"/> on the public path.</param>
+    /// <param name="legacy">The command-unaware factory, or <see langword="null"/> on the execution path.</param>
+    /// <param name="conn">The connection the returned command must be attached to.</param>
+    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
+    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
+    internal DbCommand GetDbCommandCore(ReadOnlySpan<object?> @params, Func<DbCommand, string, object?, DbParameter>? aware, Func<string, object?, DbParameter>? legacy, DbConnection conn, DbTransaction? transaction)
     {
+        // Real runtime guard, not a Debug.Assert: the invariant must also hold in Release, where a
+        // malformed call must fail loudly instead of silently dereferencing the wrong (or a null)
+        // factory for every parameter.
+        if ((aware is null) == (legacy is null))
+        {
+            throw new ArgumentException(
+                "Exactly one of the command-aware and legacy parameter factories must be supplied.",
+                aware is null ? nameof(legacy) : nameof(aware));
+        }
+
         var cmd = DbCommand;
         var parameters = DbCommandParams;//cmd.Parameters;
 
@@ -191,7 +249,9 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                     // }
 
                     ParamMap[i] = parameters.Count;
-                    parameters.Add(createParam(paramName!, @params[i]));
+                    parameters.Add(aware is not null
+                        ? aware(cmd, paramName!, @params[i])
+                        : legacy!(paramName!, @params[i]));
                 }
             }
         }

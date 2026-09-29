@@ -137,7 +137,11 @@ select id from app.rows_between($lo, $hi)
 
 ## Join, filter and sort a TVF
 
-A TVF is a normal source, so it can be joined to a table and read through the `t1`/`t2` projection:
+A TVF is a normal source, so it can sit on either side of a join. The two sources are exposed as
+`p.Item1`/`p.Item2` in the order they are declared: a TVF on the left is read through `p.Item1`, one
+on the right through `p.Item2`.
+
+A TVF as the left-hand source, joined to a table:
 
 ```csharp
 var rows = dataContext
@@ -151,6 +155,67 @@ var rows = dataContext
 -- SQLite
 select t1.value, t2.somestring as 'String' from all_rows() as 't1' join complex_entity as 't2' on t1.id = t2.id
 ```
+
+The reverse — a table on the left, the TVF on the right — behaves the same, and is the shape used once
+the function takes a column of the outer row (see [Applying a TVF](#applying-a-tvf)):
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .Join(dataContext.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQLite
+select t1.id, t2.value from simple_entity as 't1' join all_rows() as 't2' on t2.id = cast(t1.id as bigint)
+-- SQL Server / PostgreSQL differ only in identifier quoting ([t2] / "t2")
+```
+
+The `cast` is the regular join-time type unification: `Tvf.AllRows().Id` is `long` while
+`ISimpleEntity.Id` is `int`.
+
+### Applying a TVF
+
+[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) accept a TVF as the applied source too (see [APPLY and LATERAL](02-joins.md#apply-and-lateral)). Without a lambda the function is applied once:
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .CrossApply(dataContext.FromTableFunction(() => Tvf.AllRows()))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t2.value from simple_entity as "t1" cross join lateral all_rows() as "t2"
+```
+
+Building the function inside the lambda correlates it with the outer row: the captured column becomes
+an outer reference and the function is called once per left-hand row.
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .CrossApply(s => dataContext.FromTableFunction(() => Tvf.ById(s.Id)))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+-- PostgreSQL
+select t1.id, t3.value from simple_entity as "t1" cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
+```
+
+`OuterApply` is the left-preserving twin: it keeps left-hand rows for which the function returns no
+rows, projecting `null`s. Applying any source needs a lateral-capable provider — SQLite, ClickHouse
+and the in-memory provider reject it ([`SupportsApply`](xref:NextORM.Core.ISqlDialect.SupportsApply)).
 
 Filtering, sorting and grouping behave as usual:
 
@@ -549,17 +614,17 @@ The column types come from the provider's CLR-to-SQL type mapping (`byte`→`UIn
 
 ## See also
 
-* [Joins](02-joins.md) - joining a TVF to a table or another TVF.
+* [Joins](02-joins.md) - joining a TVF to a table or another TVF, and applying it with `CrossApply`/`OuterApply` ([APPLY and LATERAL](02-joins.md#apply-and-lateral)).
 * [User-defined functions](10-user-defined-functions.md) - the scalar equivalent.
-* [Insert statement](17-insert-statement.md) - a TVF (`unnest`, `generate_series`) as an `INSERT ... SELECT` source.
+* [Insert statement](15-insert-statement.md) - a TVF (`unnest`, `generate_series`) as an `INSERT ... SELECT` source.
 * [Provider overview](../providers/overview.md) - the TVF alias requirement per provider.
 
 ---
 
-Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/DataContext/DataContextExtensions.cs:117`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:121`;
+Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:39`, `src/nextorm.core/DataContext/DataContextExtensions.cs:1127`, `src/nextorm.core/DataContext/InMemoryQueryBuilder.cs:132`;
 `tests/nextorm.integration.tests/CommonTestSuite.Tvf.cs:34`, `:47`, `:61`, `:76`;
-`tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
-generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
-`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`, `:1477`;
-`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1015`, `:1031`, `:1047`, `:1063`, `:1079`, `:1095`, `:1111`.
+`tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:5`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:2399`, `:2421`, `:2434`, `:2448`, `:2462`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1740`, `:1749`, `:1762`, `:1776`, `:1790`, `:1803`, `:1816`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:1638`, `:1748`, `:2801`, `:2810`, `:2823`, `:2837`, `:2851`, `:2864`, `:2877`;
+`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1474`, `:1501`, `:1527`, `:1556`, `:1668`, `:1694`.

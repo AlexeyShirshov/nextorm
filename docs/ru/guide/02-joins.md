@@ -27,6 +27,8 @@
    `JoinedEntityBuilder<T1..T8>`. `JoinedEntityBuilder` намеренно не предоставляет дальнейших методов
    [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})), а `Projection<T1..T8>` не реализует
    [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), поэтому девятое соединение не компилируется.
+   Потолок можно снять, назвав накопленную проекцию через
+   [`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) (см. [Именование промежуточной проекции](#именование-промежуточной-проекции-as)).
 2. **Накопленная проекция адресуется как `p.Item1`, `p.Item2`, … `p.Item8`.** После первого соединения
    условие получает эту проекцию вместо обычной сущности, поэтому цепочка соединений ссылается на
    уже соединённые таблицы через `p.tN`.
@@ -253,6 +255,10 @@ var rows = await dataContext.From<ISimpleEntity>()
     .ToListAsync();
 ```
 
+```sql
+select t1.id, t2.requiredstring from simple_entity as 't1' join (select id, requiredstring, b as 'Boolean' from complex_entity where id = 3) as 't2' on cast(t1.id as bigint) = t2.id
+```
+
 ## Производный запрос как первичный источник
 
 `QueryCommand<T>` может быть и **первичным** источником `FROM`, а присоединяемая таблица пишется второй:
@@ -360,6 +366,35 @@ var sql = e[0]
     .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id,
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
+
+## Именование промежуточной проекции: `As`
+
+[`As`](xref:NextORM.Core.EntityBuilder`1.As``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) проецирует каждую соединённую строку в именованный тип и предоставляет результат как
+производную таблицу, поэтому последующий `Join` начинается с именованных членов, а не с `p.Item1`,
+`p.Item2`, …:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+    .Join(dataContext.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+    .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id })
+    .ToList();
+```
+
+```sql
+select t3.OrderId, t3.CustomerName, t4.id as 'Third' from (select t1.id as 'OrderId', t2.somestring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id
+```
+
+`As` объявлен один раз на `EntityBuilder<T>` и наследуется каждым `JoinedEntityBuilder<T1..Tn>`,
+поэтому per-arity перегрузки нет. Поскольку результат — производная таблица, это также снимает
+восьмитабличный потолок времени компиляции: `.As(...)` сбрасывает счётчик арности, и следующий
+`Join` возвращает новый `JoinedEntityBuilder<TResult, …>`.
+
+После `As` видны только спроецированные члены, а проекция становится границей материализации,
+поэтому столбцы более ранних источников недоступны в последующих соединениях. In-memory-провайдер
+компилирует соединения в делегаты и не может соединять производный источник, поэтому `Join` после
+`As` выбрасывает `NotSupportedException`.
 
 ## Захваченные параметры в соединении
 
@@ -476,7 +511,8 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 
 - [Подзапросы](05-subqueries.md) - присоединённый `QueryCommand<T>` — это производная таблица.
 - [Группировка и агрегаты](03-grouping-and-aggregates.md) - агрегат по соединению.
-- [Хинты запросов](15-query-hints.md) - хинты уровня инструкции, например SQL Server `OPTION (RECOMPILE)`.
+- [Хинты запросов](13-query-hints.md) - хинты уровня инструкции, например SQL Server `OPTION (RECOMPILE)`.
+- [Связи и однозапросная загрузка (`JoinInto`)](../advanced/relationships.md) - объявленные метаданные связей и однозапросный загрузчик дочерней коллекции.
 - [Специфичный для провайдеров SQL](provider-specific/overview.md) - полный каталог конструкций, доступных только у отдельных провайдеров.
 - [Запросы и проекции](../querying/index.md)
 

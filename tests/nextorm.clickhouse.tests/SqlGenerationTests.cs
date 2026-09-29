@@ -40,6 +40,101 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DynamicColumnsStore_ShouldAppendStar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    [Fact]
+    public void OtherDialects_DynamicSql_Unchanged()
+    {
+        // Regression guard for the MySQL-only qualification: ClickHouse keeps the bare star.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    private static DynamicColumnsEntity DynamicWriteEntity()
+        => new()
+        {
+            Id = 1,
+            Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null },
+        };
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldRenderQuotedOrdinalKeysAndParameters()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
+        // every dynamic key is backtick-quoted even though the global identifier-quoting flag is off.
+        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+            .Values(DynamicWriteEntity())
+            .ToSql())
+            .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Update_ShouldRenderQuotedKeysInMutation()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        Normalize(ctx.Update<DynamicColumnsEntity>()
+            .Set(DynamicWriteEntity())
+            .Where(x => x.Id == 1)
+            .ToSql())
+            .Should().Contain("update `alpha` = @p0, `mid` = @p1, `zeta` = @p2 where id = 1 settings mutations_sync = 1");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_KeyUpsert_ShouldThrowAndNotDropDynamicColumns()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        // ClickHouse has no engine-level upsert. The unsupported path must reject the whole statement
+        // rather than silently render one without the store's dynamic columns.
+        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_FullMerge_ShouldThrowAndNotDropDynamicColumns()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void Write_StorelessInsertSqlUnchanged()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+    }
+
+    [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -2749,6 +2844,51 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
 
         sql.Should().Be("select t1.id, t2.id as `SId` from (select id, somestring as `String` from complex_entity) as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as Int64)\n where (t1.id > 5)");
+    }
+
+    [Fact]
+    public void AsThenJoin_ShouldRenderDerivedTable()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.`OrderId`, t3.`CustomerName`, t4.id as `Third` from (select t1.id as `OrderId`, t2.somestring as `CustomerName` from simple_entity as `t1` join complex_entity as `t2` on cast(t1.id as Int64) = t2.id) as `t3` join complex_entity as `t4` on cast(t3.`OrderId` as Int64) = t4.id");
+    }
+
+    [Fact]
+    public void AsThenWhere_ShouldFilterDerivedTable()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Where(d => d.OrderId > 0)
+            .Select(d => new { d.OrderId, d.CustomerName }));
+
+        sql.Should().Contain("from (select t1.id as");
+        sql.Should().Contain("where (t3");
+        sql.Should().Contain("OrderId");
+        sql.Should().Contain("CustomerName");
+    }
+
+    [Fact]
+    public void AsThenJoin_SameTypedSources_ShouldUseDistinctAliases()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
+            .As(p => new { A = p.Item1.Id, B = p.Item2.Id })
+            .Join(ctx.From<ISimpleEntity>(), (d, s3) => d.B == s3.Id)
+            .Select(p => new { p.Item1.A, p.Item1.B, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.`A`, t3.`B`, t4.id as `Third` from (select t1.id as `A`, t2.id as `B` from simple_entity as `t1` join simple_entity as `t2` on t1.id = t2.id) as `t3` join simple_entity as `t4` on t3.`B` = t4.id");
     }
 
     [Fact]

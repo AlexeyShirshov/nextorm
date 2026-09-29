@@ -4,7 +4,10 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="MySql.EntityFrameworkCore" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="System.Linq.Async" />
     <PackageReference Include="Testcontainers.ClickHouse" />
     <PackageReference Include="Testcontainers.MsSql" />
@@ -29,6 +32,7 @@
     <ProjectReference Include="..\..\src\nextorm.mysql\nextorm.mysql.csproj" />
     <ProjectReference Include="..\..\src\nextorm.mariadb\nextorm.mariadb.csproj" />
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.entityframeworkcore\nextorm.entityframeworkcore.csproj" />
   </ItemGroup>
 
 </Project>

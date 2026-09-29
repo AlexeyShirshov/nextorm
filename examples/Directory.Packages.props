@@ -12,7 +12,7 @@
       double as a real consumer of what ships on nuget.org. Bump this after a release is published,
       to the version that was actually pushed (the git tag without the leading v).
     -->
-    <NextOrmVersion>1.0.7-b</NextOrmVersion>
+    <NextOrmVersion>1.0.8-b</NextOrmVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -338,7 +338,7 @@ row data, so the projection is discarded and only existence is tested.
 
 * [Querying and projections](../querying/index.md)
 * [Filtering (WHERE)](01-filtering-where.md)
-* [Query reuse: cache vs Prepare](13-query-reuse.md)
+* [Query reuse: cache vs Prepare](../infrastructure/01-query-reuse-and-caching.md)
 * [Provider overview](../providers/overview.md)
 
 ---

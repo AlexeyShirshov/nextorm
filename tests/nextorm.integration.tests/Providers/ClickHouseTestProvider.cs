@@ -198,6 +198,18 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (2, (9, 'nine'))
         """,
 
+        "drop table if exists dynamic_entity",
+        """
+        create table dynamic_entity
+        (
+            id Int32,
+            name Nullable(String),
+            alpha Nullable(String),
+            beta Nullable(String),
+            seeded Nullable(String) DEFAULT 'defaulted'
+        ) engine = Memory
+        """,
+
         "drop table if exists insert_entity",
         """
         create table insert_entity
@@ -205,6 +217,20 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             id Int64 DEFAULT 0,
             name Nullable(String),
             age Int32
+        ) engine = Memory
+        """,
+
+        // Global query filter fixture (#108 D6): the SELECT side of the shared query filter suite.
+        // ClickHouse does not derive CommonTestSuite, so the SELECT cases are re-pinned by
+        // ClickHouseQueryFilterTests; Memory has no identity key, so ids are written explicitly.
+        "drop table if exists query_filter_entity",
+        """
+        create table query_filter_entity
+        (
+            id Int32,
+            tenant_id Int32,
+            is_deleted Bool,
+            name Nullable(String)
         ) engine = Memory
         """
     ];

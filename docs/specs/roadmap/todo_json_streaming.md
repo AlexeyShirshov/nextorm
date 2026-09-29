@@ -2,7 +2,7 @@
 > Tracking issue: [#39](https://github.com/AlexeyShirshov/nextorm/issues/39).
 
 > Рабочий план (design RFC). Источник: обсуждение потоковой выдачи результата `Select` в виде
-> JSON. **Не путать** с [`todo_streaming_lob.md`](todo_streaming_lob.md) (issue #27): там речь о
+> JSON. **Не путать** с LOB-стримингом (issue #27, план удалён после выпуска): там речь о
 > чтении одного LOB-значения как `Stream`/`TextReader`, здесь — о сериализации строк результата в
 > JSON без материализации `TResult`.
 
@@ -193,7 +193,7 @@ naming policy). Компиляция один раз на форму.
 - **Не закрывает `Stream`** и не откатывает частично записанный JSON при исключении — задокументировать.
 - **Публичный API** (`JsonStreamOptions`, `IJsonStreamWriter`, терминалы) — обновить
   `docs/specs/design/API-NAMING-REVIEW.md`; при заморозке поверхности — `PublicAPI.*`.
-- **Коллизия имён** с LOB-`ToStream` (`todo_streaming_lob.md`) снята выбором `WriteJson`/`WriteJsonAsync`.
+- **Коллизия имён** с LOB-`ToStream` (issue #27) снята выбором `WriteJson`/`WriteJsonAsync`.
 
 ## Этапы внедрения
 

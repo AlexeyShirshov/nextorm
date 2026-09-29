@@ -33,7 +33,11 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
     /// <returns>The materialized row.</returns>
     /// <exception cref="InvalidOperationException">The merge touched no row, or more than one; use <see cref="ToList"/>.</exception>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
-    public TResult Single() => FirstOrThrow(RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn));
+    public TResult Single()
+    {
+        _merge.ValidateFilters();
+        return FirstOrThrow(RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn));
+    }
 
     /// <summary>Asynchronously executes the merge and returns the single merged row.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
@@ -41,19 +45,29 @@ public sealed class MergeReturningBuilder<TEntity, TResult>
     /// <exception cref="InvalidOperationException">The merge touched no row, or more than one; use <see cref="ToListAsync"/>.</exception>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
     public async Task<TResult> SingleAsync(CancellationToken cancellationToken = default)
-        => FirstOrThrow(await RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn, cancellationToken).ConfigureAwait(false));
+    {
+        await _merge.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
+        return FirstOrThrow(await RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn, cancellationToken).ConfigureAwait(false));
+    }
 
     /// <summary>Executes the merge and returns every merged row.</summary>
     /// <returns>The materialized rows, in result-set order.</returns>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
-    public IReadOnlyList<TResult> ToList() => RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn);
+    public IReadOnlyList<TResult> ToList()
+    {
+        _merge.ValidateFilters();
+        return RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn);
+    }
 
     /// <summary>Asynchronously executes the merge and returns every merged row.</summary>
     /// <param name="cancellationToken">Cancels execution.</param>
     /// <returns>A task producing the materialized rows, in result-set order.</returns>
     /// <exception cref="NotSupportedException">The provider cannot return merged rows, or the context is read-only.</exception>
     public async Task<IReadOnlyList<TResult>> ToListAsync(CancellationToken cancellationToken = default)
-        => await RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn, cancellationToken).ConfigureAwait(false);
+    {
+        await _merge.ValidateFiltersAsync(cancellationToken).ConfigureAwait(false);
+        return await RequireExecutor().ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn, cancellationToken).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Renders the parameterised SQL this builder would execute, without executing it. Useful for

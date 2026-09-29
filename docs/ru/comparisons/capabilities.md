@@ -80,7 +80,7 @@
 | Отслеживание изменений / identity map | no (по замыслу) | partial | yes |
 | Миграции | no | partial (schema API; миграции через сторонние) | yes |
 | Генерация по существующей БД | no (маппинг объявляется в коде) | yes | yes |
-| Интеграция с EF Core | no | yes | n/a |
+| Интеграция с EF Core | yes (read-only MVP, `nextorm.entityframeworkcore`) | yes | n/a |
 | Провайдеры | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | SQL Server, PostgreSQL, MySQL/MariaDB, Oracle, SQLite, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE | SQL Server, PostgreSQL, MySQL, SQLite, Oracle и другие |
 
 ## См. также

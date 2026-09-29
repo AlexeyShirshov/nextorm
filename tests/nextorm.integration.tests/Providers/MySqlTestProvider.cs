@@ -53,6 +53,13 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool SupportsLobStreaming => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
+    /// <summary>
+    /// MySQL rejects an unqualified <c>*</c> mixed with explicit select expressions, so the
+    /// dynamic-columns read qualifies the appended star with the source alias
+    /// (<c>select t1.id, `t1`.* from dynamic_entity as `t1`</c>) and the whole-entity read can execute.
+    /// </summary>
+    public bool SupportsDynamicColumnsRead => true;
+
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
 
     public IDataContext CreateContext() =>
@@ -92,6 +99,12 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists insert_entity",
         "drop table if exists merge_entity",
         "drop table if exists delete_entity",
+        "drop table if exists dynamic_entity",
+        "drop table if exists eager_note",
+        "drop table if exists eager_child",
+        "drop table if exists eager_parent",
+        "drop table if exists query_filter_target",
+        "drop table if exists query_filter_entity",
 
         "create table simple_entity (id int not null primary key)",
 
@@ -166,6 +179,67 @@ internal sealed class MySqlTestProvider : ITestProvider
             id int not null primary key,
             name varchar(100) null,
             age int null
+        )
+        """,
+
+        // Dynamic-columns write fixtures (#104): the defaulted "seeded" column makes a key omitted from
+        // the store distinguishable from a key bound to a value.
+        """
+        create table dynamic_entity
+        (
+            id int not null primary key,
+            name varchar(100) null,
+            alpha varchar(100) null,
+            beta varchar(100) null,
+            seeded varchar(100) default 'defaulted'
+        )
+        """,
+
+        """
+        create table eager_parent
+        (
+            id int not null primary key,
+            name varchar(100) null
+        )
+        """,
+
+        """
+        create table eager_child
+        (
+            id int not null primary key,
+            parent_id int not null,
+            name varchar(100) null
+        )
+        """,
+
+        """
+        create table eager_note
+        (
+            id int not null primary key,
+            parent_id int not null,
+            text varchar(100) null
+        )
+        """,
+
+        // Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
+        // target table. Both carry the tenant/soft-delete columns the shared suite filters on.
+        """
+        create table query_filter_entity
+        (
+            id int not null primary key,
+            tenant_id int not null,
+            is_deleted tinyint(1) not null,
+            name varchar(100) null
+        )
+        """,
+
+        """
+        create table query_filter_target
+        (
+            id int not null auto_increment primary key,
+            tenant_id int null,
+            is_deleted tinyint(1) not null,
+            name varchar(100) null
         )
         """
     ];

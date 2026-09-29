@@ -339,7 +339,7 @@ select exists(select * from simple_entity where id = 100)
 
 * [Запросы и проекции](../querying/index.md)
 * [Фильтрация (WHERE)](01-filtering-where.md)
-* [Повторное использование запросов: cache и Prepare](13-query-reuse.md)
+* [Повторное использование запросов: cache и Prepare](../infrastructure/01-query-reuse-and-caching.md)
 * [Обзор провайдеров](../providers/overview.md)
 
 ---

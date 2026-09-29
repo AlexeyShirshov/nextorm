@@ -7950,7 +7950,7 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 
 ## Перенесено из status закрытого потока `stored-procedures` (2026-09-26)
 
-Перенос оставшихся открытых `Deferred + триггер` при удалении `docs/specs/status/stored-procedures-{3,4,5}.md`. Уже отслеживаемое сюда не дублируется: TVP ClickHouse — **отгружено** (план `todo_tvp.md` удалён; issue #73 закрыт), #27 BLOB/CLOB streaming — `todo_streaming_lob.md`, #95 eager loading — `todo_eager_loading.md`.
+Перенос оставшихся открытых `Deferred + триггер` при удалении `docs/specs/status/stored-procedures-{3,4,5}.md`. Уже отслеживаемое сюда не дублируется: TVP ClickHouse — **отгружено** (план `todo_tvp.md` удалён; issue #73 закрыт), #27 BLOB/CLOB streaming и #95 eager loading — **отгружены**, планы `todo_streaming_lob.md`/`todo_eager_loading.md` удалены (2026-09-29).
 
 - **P2 (цикл 1, мёртвый код).** `CommandReaderOwner.CloseReaderAsync` (`src/nextorm.core/DataContext/CommandReaderOwner.cs:49`) не имеет вызовов (Roslyn refs — 0). **Ревизия #27 выполнена (2026-09-27): всё ещё мёртв** — LOB-путь закрывает владельца через `CommandReaderOwner.Dispose`/`DisposeAsync` (`LobStream.cs:110,130`, `LobTextReader.cs:133,154`), раннее закрытие ридера не использует; sync `CloseReader` вызывается только из `ProcedureResult.EnsureOutputsRead`, async-двойника у него нет. Решение: **re-defer** (удаление вне диффа #27, потребовало бы отдельного re-CHECK). Новый триггер: появление async-пути раннего закрытия ридера (async `EnsureOutputsRead`/async-чтение `OutputParameters`) или иного потребителя.
 - **P2 (цикл 1, план-кэш).** Ключ naming-convention кэша строится по экземпляру, а не по типу — размножение кэша на инстанциацию. Триггер: ревизия metadata/mapper-кэша при следующей правке ключей.
@@ -8061,7 +8061,8 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 
 Перенос открытых `Deferred + триггер` при удалении `docs/specs/status/lob-streaming-{1,2,3,4,5}.md`
 (issue #27 закрыт 2026-09-27, следующих циклов потока нет). Вынесенное в #100/#101 не дублируется;
-живой план и зеркало списка — `docs/specs/roadmap/todo_streaming_lob.md` §«Deferred + триггер».
+зеркало списка — этот раздел (план `docs/specs/roadmap/todo_streaming_lob.md` удалён как отгруженный
+2026-09-29).
 Содержимое самих статус-файлов сохранено в разделах «Цикл #27 — …» выше как исторический артефакт
 (упоминания путей `lob-streaming-N.md` в этих записях — исторические).
 
@@ -8076,6 +8077,36 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 - **`(object[])parameters` async (ℹ️).** См. Наблюдение A цикла 5; триггер — следующий проход по nullable.
 - **Многоколоночный `ToDataReader` на in-memory — ограничение, не TODO** (нет `DbDataReader`).
 
+## Перенесено из удалённых планов (2026-09-29)
+
+Планы `docs/specs/roadmap/todo_dynamic_columns.md` (#94/#104, read+write shipped),
+`todo_eager_loading.md` (#95, level one shipped), `todo_streaming_lob.md` (#27, closed) и
+`todo_efcore_integration.md` (#61, P1–P3 shipped, P4 out of scope) удалены как отгруженные; открытые
+хвосты ниже (LOB-хвост — в разделе «Перенесено из status закрытого потока `lob-streaming`» выше).
+
+- **Dynamic columns (#104) — Deferred, in-milestone `1.0.9-a` (тест-матрица).** Match-condition на
+  настоящей generated-колонке в query-source (`MergeSqlGenerationTests` PostgreSQL/SQL Server
+  используют колонку только с `[Key]`, не настоящую `[DatabaseGenerated(Identity)]`); у VALUES-source
+  покрыть ветви `ThenDelete`/`ThenDoNothing` и ссылку на источник через вложенный/методный вызов
+  (`s.Total.ToString()`, `a && s.Total`).
+- **Dynamic columns (#104) — оптимизации/кандидаты (нужно воспроизведение до промоушена).**
+  Аллокация `Normalize` на строку (`src/nextorm.core/DataContext/DynamicColumns.cs:65`); скан
+  select-list на детект хранилища при каждой сборке маппера (`RowMaterializerBuilder.cs:52-60`);
+  `StringComparer.Ordinal` в словаре хранилища (`DynamicColumns.cs:43`); требование
+  parameterless-ctor (документировано в `docs/advanced/limitations.md`). Кандидаты — null-forgiving
+  NRE (`RowMaterializerBuilder.cs:178`), порядок/границы «стор последним»
+  (`QueryCommand.QueryPreparer.cs:463-472`, `RowMaterializerBuilder.cs:169`), рендер «голой» `*`
+  (`SqlBuilder.cs:459-492`), `PhysicalColumnName` для range-пар (`EntitySelectListBuilder.cs:69`).
+  Пре-существующий баг выбора самого длинного ctor — `RowMaterializerBuilder.cs:199` (воспроизведён
+  до порта #94, в его объём не входит).
+- **Eager loading (#107, level one shipped).** Отложено: вложенные (level 2+) `LoadWith`; ранее
+  отклонённые формы child-запроса и child `.IgnoreFilters` в single-query; распространение общей
+  eager-интеграции на ClickHouse; аллокационный follow-up single-query (~1.68× split). Docs:
+  `docs/advanced/eager-loading.md`; gap-analysis §4 п.49.
+- **EF Core integration (#61, P1–P3 shipped).** Отложено: P4 (мост DML/`SaveChanges`) — вне области;
+  shared-transaction тесты PostgreSQL/SQL Server/MySQL — [#106](https://github.com/AlexeyShirshov/nextorm/issues/106)
+  (закрыт). Docs: `docs/advanced/integration-efcore.md`.
+
 ## Предрелизный аудит v1.0.8-b (2026-09-27, HEAD `aa5cfa7` + release-prep uncommitted; открытых P0/P1 нет)
 
 **Вердикт: release-blocking P0/P1 по коду нет; релиз 1.0.8-b кодом не блокируется.** Скоуп — милстоун 1.0.8-b (10 issues: #25, #27, #70, #73, #92, #93, #96–#99) поверх тега `v1.0.7-b`; незакоммиченного pg-xid-потока (`uint`/`xid`/`xmin`) в дереве на момент аудита нет (`git diff` по `SelectExpression.cs`/`PostgresDataContext.cs`/диалектам пуст) — к релизу он не относится в любом случае. `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors** (`TreatWarningsAsErrors=true`).
@@ -8089,3 +8120,20 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 - **`slopwatch` не установлен** (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx) → паттерн-скан выполнен вручную.
 - **Открытые пункты — только 🟡 P2/ℹ️:** Шаг 5 (заморозка `PublicAPI.*.txt`, issue #53), Находки 9/12/150/151/188/232–236, LOB2. Релиз не блокируют.
 - **Релиз-риск (не код, тест-инфраструктура).** Флейк `SqliteIntegrationTests.Merge_Returning_ShouldReturnWrittenRow` (`SQLite Error 5: database is locked`) под coverage-прогоном (см. `docs/specs/release-1.0.8-b.md` §3.5). CI-гейт: job `publish` `needs: build`, а `build` гоняет `dotnet test --no-build` через `dotnet-coverage collect` (`.github/workflows/dotnet.yml:41-44,103-107`) — повтор флейка на тег-ране даёт exit 2 и **блокирует публикацию**. Минимальный фикс до тега (`SqliteTestProvider` seed): `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=30000;`, либо `[Collection("Sqlite")]` на SQLite-классах для устранения параллельного доступа к общему файлу БД.
+
+## Аудит цикла 4b (#108, query filters Фаза 2, 2026-09-28) — deferred с триггером
+
+**Область.** ACT цикла 4b (#108, глобальные фильтры запросов, Фаза 2) перенёс отложенные пункты из
+удалённого статус-файла `docs/specs/status/query-filters-phase2-4.md` в живые регистры. **Открытых
+P0/P1 нет**; обе находки ниже — 🟡 P2, **deferred с триггером** (не блокируют). Находки 1–236 не
+переоткрываются. Зеркало — `docs/specs/roadmap/todo_query_filters.md` §11.13.
+
+- 🟡 **Находка 237 (P2, общее изменяемое состояние клонов / утечка корректности; НОВАЯ, deferred) — `_sorting` разделяется по ссылке между клонами `QueryCommand`.**
+  **Где:** `QueryCommand._sorting` присваивается из `definition.Sorting` без копии (`Query/QueryCommand.cs:163`), тогда как `_joins` уже клонируется (`Query/QueryCommand.cs:161`); `PrepareSorting` пишет `sort.PreparedExpression` на месте по `ref` (`Query/QueryCommand.QueryPreparer.cs:829`).
+  **Почему:** подготовка одного клона переписывает `PreparedExpression` сортировки исходной команды и соседних клонов — тот же класс, что исправленная утечка `_joins` (`QueryCommand.cs:161`).
+  **Триггер:** воспроизводимая утечка `PreparedExpression` между командами или любое влияние на фильтры/результаты.
+
+- 🟡 **Находка 238 (P2, идентичность члена / латентная корректность; НОВАЯ, deferred) — `FindProperty` сравнивает `PropertyInfo` по ссылке в остальных билдерах и трансляторах.**
+  **Где:** `UpdateBuilder.FindProperty` (`Builders/UpdateBuilder.cs:383`), `DeleteBuilder.FindProperty` (`Builders/DeleteBuilder.cs:279`), `BulkInsertBuilder.FindProperty` (`Builders/BulkInsertBuilder.cs:498`), `UpdateJoinBuilder.FindProperty` (`Builders/UpdateJoinBuilder.cs:215`), `EntityMetadata.FindProperty` (`DataContext/Meta/Implementation/EntityMetadata.cs:42`), `MemberTranslator.FindProperty` (`Visitors/MemberTranslator.cs:109,126`) — только `InsertBuilder` починен в цикле 4b (`InsertBuilder.FindProperty`/`SameMember`, `Builders/InsertBuilder.cs:574,590`).
+  **Почему:** для членов, объявленных в базовом типе и скрытых через `new`, lookup по ссылке не находит метаданные (base-declared / `new`-hidden).
+  **Триггер:** запрос/мутация, адресующая base-declared или `new`-hidden свойство, даёт `null`/неверную метаданную.

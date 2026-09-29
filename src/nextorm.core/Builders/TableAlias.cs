@@ -43,6 +43,49 @@ public class TableAlias
     /// <summary>Reads <paramref name="columnName"/> as a byte array in a query expression.</summary>
     /// <param name="columnName">Name of the column to read.</param>
     public byte[] GetBytes(string columnName) => [];
+    /// <summary>
+    /// Selects <paramref name="columnName"/> as a streaming binary column in a query expression. This
+    /// member is a query-expression marker only: the expression visitor recognises the call by its
+    /// <see cref="System.Reflection.MethodInfo"/> and never invokes it. The projected column is read by
+    /// the <c>ToStream</c> terminal (a single LOB column) or by a row projection consumed by
+    /// <c>ToAsyncEnumerable</c>, both of which open the provider's <c>GetStream</c> accessor instead of
+    /// buffering the value. Invoking the member outside such a query throws.
+    /// </summary>
+    /// <param name="columnName">Name of the binary column to stream.</param>
+    /// <returns>Never returns; the call is only valid inside a query expression.</returns>
+    /// <exception cref="NotSupportedException">Always thrown when the member is invoked directly rather than translated by a streaming terminal.</exception>
+    /// <remarks>
+    /// The resulting stream is valid only until the enumerator advances to the next row
+    /// (<c>MoveNext</c>): the underlying reader is owned by the enumerator/command, so the value must
+    /// be consumed before the next step. On SQLite the command appends a trailing <c>rowid</c>
+    /// locator, so the source must be a rowid-bearing table; a provider without sequential access
+    /// throws <see cref="NotSupportedException"/> when the query is executed.
+    /// </remarks>
+    public Stream GetStream(string columnName)
+        => throw new NotSupportedException(
+            $"TableAlias.{nameof(GetStream)} is a query-expression marker: it selects a streaming binary column and is translated by the ToStream terminal or by a row projection consumed by ToAsyncEnumerable. It cannot be invoked directly.");
+    /// <summary>
+    /// Selects <paramref name="columnName"/> as a streaming text column in a query expression. This
+    /// member is a query-expression marker only: the expression visitor recognises the call by its
+    /// <see cref="System.Reflection.MethodInfo"/> and never invokes it. The projected column is read by
+    /// the <c>ToTextReader</c> terminal (a single LOB column) or by a row projection consumed by
+    /// <c>ToAsyncEnumerable</c>, both of which open the provider's <c>GetTextReader</c> accessor instead
+    /// of buffering the value. Invoking the member outside such a query throws.
+    /// </summary>
+    /// <param name="columnName">Name of the text column to stream.</param>
+    /// <returns>Never returns; the call is only valid inside a query expression.</returns>
+    /// <exception cref="NotSupportedException">Always thrown when the member is invoked directly rather than translated by a streaming terminal.</exception>
+    /// <remarks>
+    /// The resulting reader is valid only until the enumerator advances to the next row
+    /// (<c>MoveNext</c>): the underlying reader is owned by the enumerator/command, so the value must
+    /// be consumed before the next step. A provider without sequential access throws
+    /// <see cref="NotSupportedException"/> when the query is executed. Chunked character reads
+    /// (<c>GetChars</c>) are intentionally not exposed yet: they need the provider's buffer/offset
+    /// overload, which is tracked separately (#100).
+    /// </remarks>
+    public TextReader GetTextReader(string columnName)
+        => throw new NotSupportedException(
+            $"TableAlias.{nameof(GetTextReader)} is a query-expression marker: it selects a streaming text column and is translated by the ToTextReader terminal or by a row projection consumed by ToAsyncEnumerable. It cannot be invoked directly.");
     /// <summary>Reads <paramref name="columnName"/> as a nullable 32-bit integer (<c>null</c> for a NULL value).</summary>
     /// <param name="columnName">Name of the column to read.</param>
     public int? GetNullableInt32(string columnName) => 0;
@@ -108,6 +151,22 @@ public class TableColumn
     public string? AsNullableString { get; }
     /// <summary>The column value read as a byte array.</summary>
     public byte[] AsBytes { get; } = null!;
+    /// <summary>The column value read as a read-only <see cref="Stream"/> (streaming projection).</summary>
+    /// <remarks>
+    /// The returned stream is valid only until the enumerator advances to the next row
+    /// (<c>MoveNext</c>): the underlying reader is owned by the enumerator/command, so the value must
+    /// be consumed before the next step. A provider without sequential access throws
+    /// <see cref="NotSupportedException"/> when the query is executed.
+    /// </remarks>
+    public Stream AsStream { get; } = null!;
+    /// <summary>The column value read as a read-only <see cref="TextReader"/> (streaming projection).</summary>
+    /// <remarks>
+    /// The returned reader is valid only until the enumerator advances to the next row
+    /// (<c>MoveNext</c>): the underlying reader is owned by the enumerator/command, so the value must
+    /// be consumed before the next step. A provider without sequential access throws
+    /// <see cref="NotSupportedException"/> when the query is executed.
+    /// </remarks>
+    public TextReader AsTextReader { get; } = null!;
     /// <summary>The column value read as a nullable byte array (<c>null</c> for a NULL value).</summary>
     public byte[]? AsNullableBytes { get; }
 }

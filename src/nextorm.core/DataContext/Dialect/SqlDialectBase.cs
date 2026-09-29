@@ -938,6 +938,9 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>true</c>; PostgreSQL overrides it because a <c>MERGE</c> target column must not be qualified.</summary>
     public virtual bool SupportsMergeTargetQualification => true;
 
+    /// <summary>Defaults to <c>false</c>; MySQL/MariaDB override it because they reject a bare <c>*</c> mixed with explicit select expressions.</summary>
+    public virtual bool RequiresQualifiedSelectStar => false;
+
     /// <summary>Renders the terminator of a general <c>MERGE</c>; defaults to none, SQL Server requires <c>;</c>.</summary>
     public virtual string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
 

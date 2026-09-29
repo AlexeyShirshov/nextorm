@@ -10,9 +10,11 @@ namespace NextORM.Core;
 /// that walks the whole expression. The provider is part of the key because the reader accessor
 /// depends on the provider's column mapping policy (see <c>DataContext.MapColumnExpression</c>),
 /// and two providers can generate identical SQL for the same result type (for example
-/// <c>select * from t</c>).
+/// <c>select * from t</c>). <see cref="Streaming"/> is the streaming discriminator: a projection
+/// that contains a streaming LOB accessor must never reuse the buffered mapper compiled for the
+/// same SQL shape, and vice versa.
 /// </summary>
-internal readonly record struct MapperCacheKey(Type ProviderType, Type ResultType, string Sql, int ColumnsSignature, bool OneColumn);
+internal readonly record struct MapperCacheKey(Type ProviderType, Type ResultType, string Sql, int ColumnsSignature, bool OneColumn, bool Streaming);
 
 /// <summary>
 /// Key for a raw-command (<c>ExecuteRaw</c>) row mapper. Unlike <see cref="MapperCacheKey"/> it does

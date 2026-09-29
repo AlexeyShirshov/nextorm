@@ -49,6 +49,11 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
         if (x.IsGlobal != y.IsGlobal) return false;
         if (!string.Equals(x.JoinHint, y.JoinHint, StringComparison.Ordinal)) return false;
 
+        // A JoinInto join carries the identity of its declaration (child type, keys, collection, kind),
+        // which the rendered condition/source alone cannot distinguish. Distinct declarations must not
+        // share a cached plan even when they render the same SQL.
+        if (!Equals(x.JoinIntoIdentity, y.JoinIntoIdentity)) return false;
+
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.JoinCondition, y.JoinCondition)) return false;
 
@@ -75,6 +80,9 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
             hash.Add(obj.IsGlobal);
 
             hash.Add(obj.JoinHint);
+
+            if (obj.JoinIntoIdentity is { } identity)
+                hash.Add(identity.GetHashCode());
 
             hash.Add(obj.JoinCondition, _queryProvider.GetExpressionPlanEqualityComparer());
 

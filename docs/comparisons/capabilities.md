@@ -81,7 +81,7 @@ construct.
 | Change tracking / identity map | no (by design) | partial | yes |
 | Migrations | no | partial (schema API; migrations via third-party) | yes |
 | Database-first scaffolding | no (mappings declared in code) | yes | yes |
-| EF Core integration | no | yes | n/a |
+| EF Core integration | yes (read-only MVP, `nextorm.entityframeworkcore`) | yes | n/a |
 | Providers | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | SQL Server, PostgreSQL, MySQL/MariaDB, Oracle, SQLite, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE | SQL Server, PostgreSQL, MySQL, SQLite, Oracle, and more |
 
 ## See also

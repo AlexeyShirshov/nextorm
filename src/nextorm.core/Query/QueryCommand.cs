@@ -39,7 +39,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     protected bool _isPrepared;
     /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     protected Type? _srcType;
+    /// <summary>
+    /// The join-projection result type a <c>JoinInto</c> pair command materializes while its
+    /// <see cref="_srcType"/> stays the parent entity type, or <c>null</c> for an ordinary command.
+    /// </summary>
+    internal Type? ProjectionType { get; init; }
     private bool _dontCache;
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
     internal int SortingPlanHash;
@@ -142,8 +148,17 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _dataContext = dataProvider;
         _exp = definition.Exp;
         _srcType = definition.SrcType;
+        ProjectionType = definition.ProjectionType;
         _condition = definition.Condition;
-        _joins = definition.Joins;
+        _filterScope = definition.FilterScope ?? (definition.IgnoreFilters ? QueryFilterScope.AllFilters : QueryFilterScope.None);
+        // Own a private array: the clone boundaries (CreateSelf/CreateSelfForClone, the with-derived
+        // commands built from Definition and the DML/paging clones) hand the source's _joins here, and
+        // preparation writes the prepared copy back into the array (PrepareJoin). Sharing the array
+        // would let one command's preparation rewrite a source's or sibling's joins while it is already
+        // prepared, so a later re-render (storeInCache:false) read the sibling's injected conditions.
+        // The elements stay shared by design: they are immutable apart from preparation, which replaces
+        // the element with a copy instead of mutating it.
+        _joins = definition.Joins is { } joins ? (JoinExpression[])joins.Clone() : null;
         Paging = definition.Paging;
         _sorting = definition.Sorting;
         _groupExp = definition.Group;
@@ -174,7 +189,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     {
         Exp = _exp,
         SrcType = _srcType,
+        ProjectionType = ProjectionType,
         Condition = _condition,
+        IgnoreFilters = !_filterScope.IsEmpty,
+        FilterScope = _filterScope,
         Joins = _joins,
         Paging = Paging,
         Sorting = _sorting,
@@ -229,6 +247,50 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => !_dontCache;
         set => _dontCache = !value;
+    }
+    /// <summary>
+    /// Whether the command disables any global query filter declared for its entity type: <see langword="true"/>
+    /// both when every filter is disabled (the all-or-nothing form) and when a selective scope disables
+    /// only some filters. Setting it is all-or-nothing — <see langword="true"/> disables every filter and
+    /// <see langword="false"/> clears the scope — because a <see langword="bool"/> cannot express a
+    /// selective disable; use the builder's selective <c>IgnoreFilters</c> overloads for that. The
+    /// authoritative state is <see cref="FilterScope"/>. Assigning a different value discards the current
+    /// preparation, because the injected filters and the prepared condition change.
+    /// </summary>
+    public bool IgnoreFilters
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => !_filterScope.IsEmpty;
+        set => SetFilterScope(value ? QueryFilterScope.AllFilters : QueryFilterScope.None);
+    }
+    /// <summary>
+    /// The selective query-filter scope disabled for this command. Part of the command's state (not of
+    /// the plan key: the injected condition already captures the effective filter set), so equal scopes
+    /// share a cached plan and different scopes do not. Assigning a different scope invalidates the
+    /// current preparation, because the injected filters — and therefore the prepared condition and its
+    /// plan hashes — change.
+    /// </summary>
+    internal QueryFilterScope FilterScope
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _filterScope;
+        set => SetFilterScope(value);
+    }
+    /// <summary>
+    /// Installs a selective filter scope, discarding the current preparation when it actually changes.
+    /// Without the discard an already-prepared command would keep the condition built for the previous
+    /// scope (and its memoized plan key), silently reusing the wrong filtered plan.
+    /// </summary>
+    private void SetFilterScope(QueryFilterScope scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        if (ReferenceEquals(_filterScope, scope) || _filterScope.Equals(scope))
+            return;
+
+        _filterScope = scope;
+
+        if (_isPrepared)
+            ResetPreparation();
     }
     internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }
@@ -605,5 +667,22 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
         return idx;
     }
+
+    /// <summary>
+    /// Executes the command and returns its rows boxed, so a runtime-built projection command can be
+    /// stitched by <c>JoinInto</c> without a compile-time result type. Overridden by
+    /// <see cref="QueryCommand{TResult}"/>.
+    /// </summary>
+    /// <param name="params">Positional parameter values.</param>
+    /// <returns>The materialized rows, boxed.</returns>
+    internal virtual List<object?> ToObjectList(ReadOnlySpan<object?> @params)
+        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
+
+    /// <summary>Asynchronous counterpart of <see cref="ToObjectList"/>.</summary>
+    /// <param name="params">Positional parameter values.</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <returns>A task producing the materialized rows, boxed.</returns>
+    internal virtual Task<List<object?>> ToObjectListAsync(object[] @params, CancellationToken cancellationToken)
+        => throw new NotSupportedException("Only a typed query command can be executed for JoinInto stitching.");
 
 }

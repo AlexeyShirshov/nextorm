@@ -89,6 +89,12 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists insert_entity;
         drop table if exists merge_entity;
         drop table if exists delete_entity;
+        drop table if exists dynamic_entity;
+        drop table if exists eager_note;
+        drop table if exists eager_child;
+        drop table if exists eager_parent;
+        drop table if exists query_filter_target;
+        drop table if exists query_filter_entity;
 
         create table simple_entity (id int not null primary key);
 
@@ -176,6 +182,55 @@ internal sealed class SqlServerTestProvider : ITestProvider
             id int not null primary key,
             name nvarchar(100) null,
             age int null
+        );
+
+        -- Dynamic-columns write fixtures (#104): the defaulted "seeded" column makes a key omitted from
+        -- the store distinguishable from a key bound to a value.
+        create table dynamic_entity
+        (
+            id int not null primary key,
+            name nvarchar(100) null,
+            alpha nvarchar(100) null,
+            beta nvarchar(100) null,
+            seeded nvarchar(100) default N'defaulted'
+        );
+
+        create table eager_parent
+        (
+            id int not null primary key,
+            name nvarchar(100) null
+        );
+
+        create table eager_child
+        (
+            id int not null primary key,
+            parent_id int not null,
+            name nvarchar(100) null
+        );
+
+        create table eager_note
+        (
+            id int not null primary key,
+            parent_id int not null,
+            text nvarchar(100) null
+        );
+
+        -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
+        -- target table. Both carry the tenant/soft-delete columns the shared suite filters on.
+        create table query_filter_entity
+        (
+            id int not null primary key,
+            tenant_id int not null,
+            is_deleted bit not null,
+            name nvarchar(100) null
+        );
+
+        create table query_filter_target
+        (
+            id int identity(1,1) primary key,
+            tenant_id int null,
+            is_deleted bit not null,
+            name nvarchar(100) null
         );
         """;
 }

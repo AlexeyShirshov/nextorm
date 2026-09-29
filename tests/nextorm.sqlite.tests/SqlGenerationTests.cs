@@ -108,6 +108,84 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select \"id\" from \"simple_entity\"");
     }
 
+    private static DynamicColumnsEntity DynamicWriteEntity()
+        => new()
+        {
+            Id = 1,
+            Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null },
+        };
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldRenderQuotedOrdinalKeysAndParameters()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
+        // every dynamic key is double-quoted even though the global identifier-quoting flag is off.
+        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+            .Values(DynamicWriteEntity())
+            .ToSql())
+            .Should().Contain("(id, name, \"alpha\", \"mid\", \"zeta\") values ($p0, $p1, $p2, $p3, $p4)");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Update_ShouldRenderQuotedKeysInSet()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        Normalize(ctx.Update<DynamicColumnsEntity>()
+            .Set(DynamicWriteEntity())
+            .Where(x => x.Id == 1)
+            .ToSql())
+            .Should().Contain("set name = $p0, \"alpha\" = $p1, \"mid\" = $p2, \"zeta\" = $p3 where id = 1");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_KeyUpsert_ShouldKeepDynamicKeysOutOfMatchCondition()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql());
+
+        sql.Should().Contain("(id, name, \"alpha\", \"mid\", \"zeta\") values ($p0, $p1, $p2, $p3, $p4)");
+        sql.Should().Contain("on conflict (id) do update set name = excluded.name, \"alpha\" = excluded.\"alpha\", \"mid\" = excluded.\"mid\", \"zeta\" = excluded.\"zeta\"");
+        sql.Should().NotContain("on conflict (\"alpha\")");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_FullMerge_ShouldThrowAndNotDropDynamicColumns()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // SQLite has no full MERGE. The unsupported path must reject the whole statement rather than
+        // silently render a MERGE without the store's dynamic columns.
+        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void Write_StorelessInsertSqlUnchanged()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values ($p0, $p1, $p2)");
+    }
+
     [Fact]
     public void QuotedIdentifiers_CommandOverride_ShouldEnable()
     {
@@ -2943,6 +3021,50 @@ public class SqlGenerationTests
 
         sql.Should().Contain("join (select id from complex_entity) as 't2'");
         sql.Should().Contain("on t1.id = t2.id");
+    }
+
+    [Fact]
+    public void AsThenJoin_ShouldRenderDerivedTable()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.OrderId, t3.CustomerName, t4.id as 'Third' from (select t1.id as 'OrderId', t2.somestring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id");
+    }
+
+    [Fact]
+    public void AsThenWhere_ShouldFilterDerivedTable()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Where(d => d.OrderId > 0)
+            .Select(d => new { d.OrderId, d.CustomerName }));
+
+        // The single derived source is the only scope, so the outer projection columns are unqualified;
+        // the pushed-down filter still references the derived alias.
+        sql.Should().Be("select OrderId, CustomerName from (select t1.id as 'OrderId', t2.somestring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3'\n where (t3.OrderId > 0)");
+    }
+
+    [Fact]
+    public void AsThenJoin_SameTypedSources_ShouldUseDistinctAliases()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
+            .As(p => new { A = p.Item1.Id, B = p.Item2.Id })
+            .Join(ctx.From<ISimpleEntity>(), (d, s3) => d.B == s3.Id)
+            .Select(p => new { p.Item1.A, p.Item1.B, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.A, t3.B, t4.id as 'Third' from (select t1.id as 'A', t2.id as 'B' from simple_entity as 't1' join simple_entity as 't2' on t1.id = t2.id) as 't3' join simple_entity as 't4' on t3.B = t4.id");
     }
 
 }

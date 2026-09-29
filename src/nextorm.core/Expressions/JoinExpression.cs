@@ -80,7 +80,19 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// <summary>The kind of join.</summary>
     public JoinType JoinType { get; } = joinType;
     /// <summary>The <c>ON</c> condition, or <c>null</c> when the join has none (cross and apply joins).</summary>
-    public LambdaExpression? JoinCondition { get; } = joinCondition;
+    public LambdaExpression? JoinCondition { get; private set; } = joinCondition;
+    private LambdaExpression? _originalJoinCondition = joinCondition;
+    internal LambdaExpression? OriginalJoinCondition
+    {
+        get => _originalJoinCondition;
+        init => _originalJoinCondition = value;
+    }
+    /// <summary>
+    /// Replaces the <c>ON</c> condition during preparation, after the joined entity's global query
+    /// filters have been combined into it.
+    /// </summary>
+    /// <param name="condition">The condition to install.</param>
+    internal void SetJoinCondition(LambdaExpression condition) => JoinCondition = condition;
     /// <summary>
     /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set through the fluent
     /// <c>WithStrictness</c> modifier, which copies the join rather than mutating it; defaults to
@@ -120,13 +132,68 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     internal LambdaExpression? ApplySource { get; init; }
     /// <summary>Installs the derived query built from <see cref="ApplySource"/> during preparation.</summary>
     internal void SetFrom(FromExpression from) => _from = from;
+    /// <summary>
+    /// Whether this join was added by <c>JoinInto</c> (as opposed to an explicit <c>Join</c>). The flag
+    /// lets the non-list terminals build a parent-only command that excludes the stitching join.
+    /// </summary>
+    internal bool IsJoinInto { get; set; }
+    /// <summary>
+    /// The identity of the <c>JoinInto</c> declaration that added this join, or <see langword="null"/>
+    /// for a regular join. It is folded into the join's plan hash and equality so two distinct
+    /// <c>JoinInto</c> declarations (different child/keys/collection) never share a cached plan.
+    /// </summary>
+    internal JoinIntoIdentity? JoinIntoIdentity { get; set; }
+    /// <summary>
+    /// The right-hand (child) side's selective global-query-filter scope, or <see langword="null"/> to
+    /// inherit the command's <see cref="QueryCommand.FilterScope"/>. <see langword="null"/> and an empty
+    /// scope are equivalent (both inherit): the effective child scope is always the <b>union</b> of this
+    /// scope and the command's, and <see cref="QueryFilterScope.AllFilters"/> absorbs that union, so a
+    /// parent <c>IgnoreFilters()</c> still disables every child filter and a child
+    /// <c>IgnoreFilters(keys)</c> adds to the parent's selective scope. Set for the single-query
+    /// (<c>AsSingleQuery</c>) child joins and for a <c>JoinInto</c> child that disabled filters; a plain
+    /// join leaves it <see langword="null"/>.
+    /// </summary>
+    internal QueryFilterScope? FilterScope { get; set; }
+    /// <summary>
+    /// Returns the command's own copy-on-write clone used by preparation (see
+    /// <c>QueryPreparer.PrepareJoin</c>). Builders share <see cref="JoinExpression"/> elements by
+    /// reference across clones, so preparation must mutate only this command's copy. The copy bases its
+    /// mutable <see cref="JoinCondition"/> on the pristine <see cref="OriginalJoinCondition"/> (a sibling
+    /// may already have injected its filters into the shared condition) and shares <see cref="From"/>
+    /// rather than deep-cloning it: a derived join's <c>From.SubQuery</c> must stay bound to its data
+    /// context, and preparation only replaces the whole source (<see cref="SetFrom"/>), never mutates it.
+    /// </summary>
+    internal JoinExpression CloneForPreparation()
+        => new(_originalJoinCondition, JoinType)
+        {
+            From = _from,
+            EntityType = EntityType,
+            Strictness = Strictness,
+            IsGlobal = IsGlobal,
+            JoinHint = JoinHint,
+            ApplySource = ApplySource,
+            OriginalJoinCondition = _originalJoinCondition,
+            IsJoinInto = IsJoinInto,
+            JoinIntoIdentity = JoinIntoIdentity,
+            FilterScope = FilterScope,
+        };
     internal JoinExpression CloneForCache()
     {
         var newFrom = From.CloneForCache();
 
-        if (newFrom == From) return this;
-
-        return new JoinExpression(JoinCondition, JoinType) { From = newFrom!, EntityType = EntityType, Strictness = Strictness, IsGlobal = IsGlobal, JoinHint = JoinHint, ApplySource = ApplySource };
+        return new JoinExpression(JoinCondition, JoinType)
+        {
+            From = newFrom!,
+            EntityType = EntityType,
+            Strictness = Strictness,
+            IsGlobal = IsGlobal,
+            JoinHint = JoinHint,
+            ApplySource = ApplySource,
+            OriginalJoinCondition = _originalJoinCondition,
+            IsJoinInto = IsJoinInto,
+            JoinIntoIdentity = JoinIntoIdentity,
+            FilterScope = FilterScope,
+        };
     }
     // public override int GetHashCode()
     // {

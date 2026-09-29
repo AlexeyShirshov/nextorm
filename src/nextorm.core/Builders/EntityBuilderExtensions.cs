@@ -29,7 +29,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>An asynchronous sequence over the matching entities.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IAsyncEnumerable<TEntity> ToAsyncEnumerable<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params) => builder.ToCommand().ToAsyncEnumerable(cancellationToken, @params);
+    public static IAsyncEnumerable<TEntity> ToAsyncEnumerable<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params) => builder.ToParentCommand().ToAsyncEnumerable(cancellationToken, @params);
     /// <summary>
     /// Executes the query and returns the matching entities as a synchronous sequence.
     /// </summary>
@@ -38,7 +38,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A sequence over the matching entities.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IEnumerable<TEntity> ToEnumerable<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => builder.ToCommand().ToEnumerable(@params);
+    public static IEnumerable<TEntity> ToEnumerable<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => builder.ToParentCommand().ToEnumerable(@params);
 
     /// <summary>
     /// Determines whether the query matches at least one row.
@@ -59,7 +59,7 @@ public static class EntityBuilderExtensions
     public static bool Any<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => AnyCore(builder, @params);
     private static bool AnyCore<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
     {
-        var cmd = builder.ToCommand();
+        var cmd = builder.ToParentCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
         var preparedCommand = builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
@@ -84,7 +84,7 @@ public static class EntityBuilderExtensions
     /// <returns>A task whose result is true if the query matches at least one row; otherwise, false.</returns>
     public static async Task<bool> AnyAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
     {
-        var cmd = builder.ToCommand();
+        var cmd = builder.ToParentCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(builder.DataProvider, cmd);
         var preparedCommand = builder.DataProvider.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
@@ -99,7 +99,7 @@ public static class EntityBuilderExtensions
     /// <returns>The command that evaluates EXISTS for the query.</returns>
     public static QueryCommand<bool> AnyCommand<TEntity>(this EntityBuilder<TEntity> builder)
     {
-        var cmd = builder.ToCommand();
+        var cmd = builder.ToParentCommand();
         var queryCommand = builder.DataProvider.CreateCommand<bool>(new QueryDefinition
         {
             Exp = (TableAlias _) => SqlFunctions.Sql.exists(cmd),
@@ -117,7 +117,7 @@ public static class EntityBuilderExtensions
     /// <returns>A command that requests at most one row.</returns>
     public static QueryCommand<TEntity?> FirstOrFirstOrDefaultCommand<TEntity>(this EntityBuilder<TEntity> builder)
     {
-        var cmd = builder.ToCommand();
+        var cmd = builder.ToParentCommand();
         cmd.Paging.Limit = 1;
         cmd.SingleRow = true;
 #pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
@@ -134,7 +134,7 @@ public static class EntityBuilderExtensions
     /// <returns>A command that requests at most one row.</returns>
     public static QueryCommand<TResult?> FirstOrFirstOrDefaultCommand<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = builder.Select(exp);
+        var cmd = builder.SelectParent(exp);
         cmd.Paging.Limit = 1;
         cmd.SingleRow = true;
 #pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
@@ -151,7 +151,7 @@ public static class EntityBuilderExtensions
     /// <returns>A command that requests at most two rows.</returns>
     public static QueryCommand<TResult?> SingleOrSingleOrDefaultCommand<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = builder.Select(exp);
+        var cmd = builder.SelectParent(exp);
         cmd.Paging.Limit = 2;
 #pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
         return cmd;
@@ -165,13 +165,16 @@ public static class EntityBuilderExtensions
     /// <returns>A command that requests at most two rows.</returns>
     public static QueryCommand<TEntity> SingleOrSingleOrDefaultCommand<TEntity>(this EntityBuilder<TEntity> builder)
     {
-        var cmd = builder.ToCommand();
+        var cmd = builder.ToParentCommand();
         cmd.Paging.Limit = 2;
         return cmd;
     }
 
     /// <summary>
-    /// Executes the query and materializes the matching entities into a list.
+    /// Executes the query and materializes the matching entities into a list. When the builder carries a
+    /// <c>JoinInto</c> declaration or a single-query (<c>AsSingleQuery</c>) eager load, one denormalized
+    /// command is executed and its rows are stitched; otherwise the parent query is executed and any
+    /// split <c>LoadWith</c> children are loaded afterwards.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -179,7 +182,7 @@ public static class EntityBuilderExtensions
     /// <returns>A list containing the matching entities.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static List<TEntity> ToList<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().ToList(@params);
+        => MaterializeList(builder, @params);
     /// <summary>
     /// Executes the query asynchronously and materializes the matching entities into a list.
     /// </summary>
@@ -198,17 +201,25 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is a list containing the matching entities.</returns>
     public static Task<List<TEntity>> ToListAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().ToListAsync(cancellationToken, @params);
+        => MaterializeListAsync(builder, cancellationToken, @params);
     /// <summary>
-    /// Executes the query and materializes the matching entities into an array.
+    /// Executes the query and materializes the matching entities into an array, applying the same
+    /// stitching as <see cref="ToList{TEntity}(EntityBuilder{TEntity}, ReadOnlySpan{object?})"/>.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>An array containing the matching entities.</returns>
-    public static TEntity[] ToArray<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => builder.ToCommand().ToArray(@params);
+    public static TEntity[] ToArray<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
+    {
+        if (!UsesStitching(builder))
+            return builder.ToParentCommand().ToArray(@params);
+
+        return [.. MaterializeList(builder, @params)];
+    }
     /// <summary>
-    /// Executes the query asynchronously and materializes the matching entities into an array.
+    /// Executes the query asynchronously and materializes the matching entities into an array, applying the
+    /// same stitching as <see cref="ToListAsync{TEntity}(EntityBuilder{TEntity}, CancellationToken, object[])"/>.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
@@ -217,15 +228,82 @@ public static class EntityBuilderExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<TEntity[]> ToArrayAsync<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => ToArrayAsync(builder, CancellationToken.None, @params);
     /// <summary>
-    /// Executes the query asynchronously and materializes the matching entities into an array.
+    /// Executes the query asynchronously and materializes the matching entities into an array, applying the
+    /// same stitching as <see cref="ToListAsync{TEntity}(EntityBuilder{TEntity}, CancellationToken, object[])"/>.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is an array containing the matching entities.</returns>
-    public static Task<TEntity[]> ToArrayAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().ToArrayAsync(cancellationToken, @params);
+    public static async Task<TEntity[]> ToArrayAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
+    {
+        if (!UsesStitching(builder))
+            return await builder.ToParentCommand().ToArrayAsync(cancellationToken, @params).ConfigureAwait(false);
+
+        return [.. await MaterializeListAsync(builder, cancellationToken, @params).ConfigureAwait(false)];
+    }
+
+    /// <summary>
+    /// Whether the builder materializes through a stitched result: a <c>JoinInto</c> declaration, a
+    /// single-query (<c>AsSingleQuery</c>) eager-load set, or a split <c>LoadWith</c> set. The
+    /// non-stitching terminals bypass this and evaluate the parent only.
+    /// </summary>
+    private static bool UsesStitching<TEntity>(EntityBuilder<TEntity> builder)
+        => builder.JoinIntos is { Count: > 0 } || builder.LoadSpecs is { Count: > 0 };
+
+    /// <summary>Whether the builder must run its <c>LoadWith</c> collections through the single-query path.</summary>
+    private static bool UsesSingleQueryLoading<TEntity>(EntityBuilder<TEntity> builder)
+        => builder.SingleQuery && builder.LoadSpecs is { Count: > 0 };
+
+    /// <summary>
+    /// Materializes the builder for the list terminals: one stitched command for <c>JoinInto</c> /
+    /// single-query <c>LoadWith</c>, otherwise the parent query followed by the split child loads.
+    /// </summary>
+    private static List<TEntity> MaterializeList<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
+    {
+        if (UsesSingleQueryLoading(builder))
+        {
+            var (specs, joins) = builder.BuildSingleQueryJoins();
+            var rows = builder.CreatePairCommand(specs, joins).ToObjectList(@params);
+            return JoinIntoStitcher.Stitch(builder, specs, rows, requireMappedParentKey: true);
+        }
+
+        if (builder.JoinIntos is { Count: > 0 })
+        {
+            var joined = JoinIntoStitcher.Execute(builder, @params);
+            EntityBuilderEagerLoading.Execute(builder, joined);
+            return joined;
+        }
+
+        var list = builder.ToParentCommand().ToList(@params);
+        EntityBuilderEagerLoading.Execute(builder, list);
+        return list;
+    }
+
+    /// <summary>Asynchronous counterpart of <see cref="MaterializeList{TEntity}"/>.</summary>
+    private static async Task<List<TEntity>> MaterializeListAsync<TEntity>(EntityBuilder<TEntity> builder, CancellationToken cancellationToken, object[] @params)
+    {
+        if (UsesSingleQueryLoading(builder))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var (specs, joins) = builder.BuildSingleQueryJoins();
+            var rows = await builder.CreatePairCommand(specs, joins).ToObjectListAsync(@params, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return JoinIntoStitcher.Stitch(builder, specs, rows, requireMappedParentKey: true);
+        }
+
+        if (builder.JoinIntos is { Count: > 0 })
+        {
+            var joined = await JoinIntoStitcher.ExecuteAsync(builder, @params, cancellationToken).ConfigureAwait(false);
+            await EntityBuilderEagerLoading.ExecuteAsync(builder, joined, cancellationToken).ConfigureAwait(false);
+            return joined;
+        }
+
+        var list = await builder.ToParentCommand().ToListAsync(cancellationToken, @params).ConfigureAwait(false);
+        await EntityBuilderEagerLoading.ExecuteAsync(builder, list, cancellationToken).ConfigureAwait(false);
+        return list;
+    }
     /// <summary>
     /// Executes the query and materializes the distinct matching entities into a hash set.
     /// </summary>
@@ -233,7 +311,7 @@ public static class EntityBuilderExtensions
     /// <param name="builder">The query builder being extended.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A hash set containing the distinct matching entities.</returns>
-    public static HashSet<TEntity> ToHashSet<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => builder.ToCommand().ToHashSet(@params);
+    public static HashSet<TEntity> ToHashSet<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => builder.ToParentCommand().ToHashSet(@params);
     /// <summary>
     /// Executes the query and materializes the distinct matching entities into a hash set.
     /// </summary>
@@ -242,7 +320,7 @@ public static class EntityBuilderExtensions
     /// <param name="comparer">The equality comparer to use, or <see langword="null"/> to use the default comparer.</param>
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A hash set containing the distinct matching entities.</returns>
-    public static HashSet<TEntity> ToHashSet<TEntity>(this EntityBuilder<TEntity> builder, IEqualityComparer<TEntity>? comparer, params ReadOnlySpan<object?> @params) => builder.ToCommand().ToHashSet(comparer, @params);
+    public static HashSet<TEntity> ToHashSet<TEntity>(this EntityBuilder<TEntity> builder, IEqualityComparer<TEntity>? comparer, params ReadOnlySpan<object?> @params) => builder.ToParentCommand().ToHashSet(comparer, @params);
     /// <summary>
     /// Executes the query asynchronously and materializes the distinct matching entities into a hash set.
     /// </summary>
@@ -261,7 +339,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is a hash set containing the distinct matching entities.</returns>
     public static Task<HashSet<TEntity>> ToHashSetAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().ToHashSetAsync(cancellationToken, @params);
+        => builder.ToParentCommand().ToHashSetAsync(cancellationToken, @params);
     /// <summary>
     /// Executes the query asynchronously and materializes the distinct matching entities into a hash set.
     /// </summary>
@@ -272,7 +350,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is a hash set containing the distinct matching entities.</returns>
     public static Task<HashSet<TEntity>> ToHashSetAsync<TEntity>(this EntityBuilder<TEntity> builder, IEqualityComparer<TEntity>? comparer, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().ToHashSetAsync(comparer, cancellationToken, @params);
+        => builder.ToParentCommand().ToHashSetAsync(comparer, cancellationToken, @params);
     /// <summary>
     /// Executes the query and materializes the matching entities into a dictionary keyed by the projected values.
     /// </summary>
@@ -283,7 +361,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A dictionary of matching entities keyed by the selected keys.</returns>
     public static Dictionary<TKey, TEntity> ToDictionary<TEntity, TKey>(this EntityBuilder<TEntity> builder, Func<TEntity, TKey> keySelector, params ReadOnlySpan<object?> @params) where TKey : notnull
-        => builder.ToCommand().ToDictionary(keySelector, @params);
+        => builder.ToParentCommand().ToDictionary(keySelector, @params);
     /// <summary>
     /// Executes the query and materializes the matching entities into a dictionary keyed by the projected values.
     /// </summary>
@@ -295,7 +373,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A dictionary of matching entities keyed by the selected keys.</returns>
     public static Dictionary<TKey, TEntity> ToDictionary<TEntity, TKey>(this EntityBuilder<TEntity> builder, Func<TEntity, TKey> keySelector, IEqualityComparer<TKey>? comparer, params ReadOnlySpan<object?> @params) where TKey : notnull
-        => builder.ToCommand().ToDictionary(keySelector, comparer, @params);
+        => builder.ToParentCommand().ToDictionary(keySelector, comparer, @params);
     /// <summary>
     /// Executes the query asynchronously and materializes the matching entities into a dictionary keyed by the projected values.
     /// </summary>
@@ -319,7 +397,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is a dictionary of matching entities keyed by the selected keys.</returns>
     public static Task<Dictionary<TKey, TEntity>> ToDictionaryAsync<TEntity, TKey>(this EntityBuilder<TEntity> builder, Func<TEntity, TKey> keySelector, CancellationToken cancellationToken, params object[] @params) where TKey : notnull
-        => builder.ToCommand().ToDictionaryAsync(keySelector, cancellationToken, @params);
+        => builder.ToParentCommand().ToDictionaryAsync(keySelector, cancellationToken, @params);
     /// <summary>
     /// Executes the query asynchronously and materializes the matching entities into a dictionary keyed by the projected values.
     /// </summary>
@@ -332,7 +410,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is a dictionary of matching entities keyed by the selected keys.</returns>
     public static Task<Dictionary<TKey, TEntity>> ToDictionaryAsync<TEntity, TKey>(this EntityBuilder<TEntity> builder, Func<TEntity, TKey> keySelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken, params object[] @params) where TKey : notnull
-        => builder.ToCommand().ToDictionaryAsync(keySelector, comparer, cancellationToken, @params);
+        => builder.ToParentCommand().ToDictionaryAsync(keySelector, comparer, cancellationToken, @params);
 
     /// <summary>
     /// Returns the first matching entity and throws when the query is empty.
@@ -350,7 +428,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>The first matching entity.</returns>
     public static TEntity First<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().First(@params);
+        => builder.ToParentCommand().First(@params);
     /// <summary>
     /// Returns the first matching entity asynchronously and throws when the query is empty.
     /// </summary>
@@ -369,7 +447,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is the first matching entity.</returns>
     public static Task<TEntity> FirstAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().FirstAsync(cancellationToken, @params);
+        => builder.ToParentCommand().FirstAsync(cancellationToken, @params);
     /// <summary>
     /// Returns the first matching entity, or the default value when the query is empty.
     /// </summary>
@@ -386,7 +464,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>The first matching entity, or the default value when the query is empty.</returns>
     public static TEntity? FirstOrDefault<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().FirstOrDefault(@params);
+        => builder.ToParentCommand().FirstOrDefault(@params);
     /// <summary>
     /// Returns the first matching entity asynchronously, or the default value when the query is empty.
     /// </summary>
@@ -405,7 +483,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is the first matching entity, or the default value when the query is empty.</returns>
     public static Task<TEntity?> FirstOrDefaultAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().FirstOrDefaultAsync(cancellationToken, @params);
+        => builder.ToParentCommand().FirstOrDefaultAsync(cancellationToken, @params);
 
     /// <summary>
     /// Returns the only matching entity and throws when the query returns zero or more than one row.
@@ -423,7 +501,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>The single matching entity.</returns>
     public static TEntity Single<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().Single(@params);
+        => builder.ToParentCommand().Single(@params);
     /// <summary>
     /// Returns the only matching entity asynchronously and throws when the query returns zero or more than one row.
     /// </summary>
@@ -442,7 +520,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is the single matching entity.</returns>
     public static Task<TEntity> SingleAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().SingleAsync(cancellationToken, @params);
+        => builder.ToParentCommand().SingleAsync(cancellationToken, @params);
     /// <summary>
     /// Returns the only matching entity, or the default value when the query is empty; throws when it returns more than one row.
     /// </summary>
@@ -459,7 +537,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>The single matching entity, or the default value when the query is empty.</returns>
     public static TEntity? SingleOrDefault<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().SingleOrDefault(@params);
+        => builder.ToParentCommand().SingleOrDefault(@params);
     /// <summary>
     /// Returns the only matching entity asynchronously, or the default value when the query is empty; throws when it returns more than one row.
     /// </summary>
@@ -478,7 +556,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is the single matching entity, or the default value when the query is empty.</returns>
     public static Task<TEntity?> SingleOrDefaultAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().SingleOrDefaultAsync(cancellationToken, @params);
+        => builder.ToParentCommand().SingleOrDefaultAsync(cancellationToken, @params);
 
     /// <summary>
     /// Returns the last matching entity and throws when the query is empty.
@@ -496,7 +574,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>The last matching entity.</returns>
     public static TEntity Last<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().Last(@params);
+        => builder.ToParentCommand().Last(@params);
     /// <summary>
     /// Returns the last matching entity asynchronously and throws when the query is empty.
     /// </summary>
@@ -515,7 +593,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is the last matching entity.</returns>
     public static Task<TEntity> LastAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().LastAsync(cancellationToken, @params);
+        => builder.ToParentCommand().LastAsync(cancellationToken, @params);
     /// <summary>
     /// Returns the last matching entity, or the default value when the query is empty.
     /// </summary>
@@ -532,7 +610,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>The last matching entity, or the default value when the query is empty.</returns>
     public static TEntity? LastOrDefault<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params)
-        => builder.ToCommand().LastOrDefault(@params);
+        => builder.ToParentCommand().LastOrDefault(@params);
     /// <summary>
     /// Returns the last matching entity asynchronously, or the default value when the query is empty.
     /// </summary>
@@ -551,7 +629,7 @@ public static class EntityBuilderExtensions
     /// <param name="params">The query parameters, in the order their placeholders appear.</param>
     /// <returns>A task whose result is the last matching entity, or the default value when the query is empty.</returns>
     public static Task<TEntity?> LastOrDefaultAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
-        => builder.ToCommand().LastOrDefaultAsync(cancellationToken, @params);
+        => builder.ToParentCommand().LastOrDefaultAsync(cancellationToken, @params);
 
     /// <summary>
     /// Creates a command with its SQL already compiled so it can be executed repeatedly, typically with different parameters.
@@ -562,7 +640,7 @@ public static class EntityBuilderExtensions
     /// <param name="cancellationToken">A token used to cancel the operation.</param>
     /// <returns>The prepared query command.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static IPreparedQueryCommand<TEntity> Prepare<TEntity>(this EntityBuilder<TEntity> builder, bool nonStreamUsing = true, CancellationToken cancellationToken = default) => builder.ToCommand().Prepare(nonStreamUsing, cancellationToken);
+    public static IPreparedQueryCommand<TEntity> Prepare<TEntity>(this EntityBuilder<TEntity> builder, bool nonStreamUsing = true, CancellationToken cancellationToken = default) => builder.ToParentCommand().Prepare(nonStreamUsing, cancellationToken);
 
     /// <summary>
     /// Counts the matching rows by emitting a SQL <c>COUNT(*)</c>.
@@ -600,7 +678,7 @@ public static class EntityBuilderExtensions
     /// <returns>A task whose result is the number of matching rows.</returns>
     public static Task<int> CountAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
     {
-        var cmd = builder.Select(e => SqlFunctions.Sql.count());
+        var cmd = builder.SelectParent(e => SqlFunctions.Sql.count());
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
@@ -984,21 +1062,21 @@ public static class EntityBuilderExtensions
 
     private static int CountCore<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
     {
-        var cmd = builder.Select(e => SqlFunctions.Sql.count());
+        var cmd = builder.SelectParent(e => SqlFunctions.Sql.count());
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
 
     private static TResult? AggregateCore<TEntity, TResult>(EntityBuilder<TEntity> builder, MethodInfo sqlMethod, Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
-        var cmd = builder.Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(CommonFunctions.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        var cmd = builder.SelectParent(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(CommonFunctions.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
 
     private static Task<TResult?> AggregateAsyncCore<TEntity, TResult>(EntityBuilder<TEntity> builder, MethodInfo sqlMethod, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, object[] @params)
     {
-        var cmd = builder.Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(CommonFunctions.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        var cmd = builder.SelectParent(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(CommonFunctions.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }

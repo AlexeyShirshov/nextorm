@@ -90,7 +90,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity final prewhere (nullableint > 0) settings max_threads = 2
 ```
 
-See [Query hints](../15-query-hints.md#clickhouse-query-modifiers)
+See [Query hints](../13-query-hints.md#clickhouse-query-modifiers)
 ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings)).
 `FINAL`/`PREWHERE` need a table engine that supports them — the `Memory` engine rejects both.
 
@@ -230,7 +230,7 @@ See [Scalar functions](../../scalar-functions/index.md).
   `System.Tuple<...>.ItemN` renders `tupleElement(t, n)` (a whole `Tuple(...)` projects as
   `System.Tuple<...>`); `untuple` is not supported.
 
-See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../16-json.md)
+See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../14-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Table functions

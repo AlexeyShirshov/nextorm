@@ -67,7 +67,7 @@ boundaries:
 - **Warm-path performance**: the prepared path is fastest on every measured scenario, but the implicit plan
   cache still trails Dapper by roughly 1.15–1.6× on CTE, recursive CTE, 4-table join and captured IN-list
   (inline IN-list is level); closing that gap is ongoing (see [Benchmarks](benchmarks.md)).
-- **EF Core integration**: planned, not shipped — there is no `linq2db.EntityFrameworkCore`-style package yet.
+- **EF Core integration**: an MVP is shipped as `nextorm.entityframeworkcore` — nextorm reads and writes run over an existing `DbContext` connection and transaction, reusing the EF model mapping, and participate in EF's transaction, while change tracking and `SaveChanges` stay in EF Core (see [EF Core integration](../advanced/integration-efcore.md)); a `SaveChanges`/change-tracking bridge and navigation translation remain ahead.
 - **Stored procedures, dynamic SQL and multiple result sets**: raw SQL covers a whole query; raw
   `EXEC`/`CALL` commands via `ExecuteRaw` and the dedicated `CommandType.StoredProcedure` API
   `ExecuteProcedure` support parameters, output parameters and sequential result sets, and a batch can

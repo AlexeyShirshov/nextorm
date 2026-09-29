@@ -247,7 +247,7 @@ using var reader = ctx.From<Document>()
     .ToTextReader();
 ```
 
-The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/30-large-objects.md).
+The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/26-large-objects.md).
 
 SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite rejects it because its streaming projection always carries the `rowid` locator; MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support.
 
@@ -280,7 +280,7 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | Regular expressions | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; `regexp_like` additionally needs database compatibility level 170) |
 | Locking table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
-| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/22-bulk-insert.md#sql-server-bulk-copy-options)) |
+| Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/20-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |

@@ -22,7 +22,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     // delegate. Neither is the concrete DataContext, so the enumerator no longer depends on the
     // context type (F6). The delegate is handed over once per enumeration, not built per call.
     private IConnectionManager? _connectionManager;
-    private Func<string, object?, DbParameter>? _createParam;
+    private Func<DbCommand, string, object?, DbParameter>? _createParam;
     private Func<DbTransaction?>? _currentTransaction;
     private InterceptorHooks? _interceptors;
     private IDataContext? _context;
@@ -39,6 +39,10 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     // disposed by the context (DataContext.DisposeStaff). Disposing it here would close a connection
     // that is still in use, so it is only cleared (Reset/DisposeAsync).
     private DbConnection? _conn;
+    // Owned only on the transient streaming-row path: the planner creates a per-call DbCommand that
+    // is never stored in the plan cache, so nothing else can release it. Cached plans leave this null
+    // (their command is owned by the plan and reused). Cleared before disposal so it is disposed once.
+    private DbCommand? _ownedCommand;
     private bool _disposed;
     private TResult _current = default!;
     /// <summary>
@@ -89,6 +93,13 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     }
 
     /// <summary>
+    /// Makes this enumerator responsible for disposing the compiled query's per-call command. Called
+    /// only for a streaming-row command that was not stored in the plan cache and therefore has no
+    /// other owner; a cached plan's command must never be taken over.
+    /// </summary>
+    internal void OwnCommand() => _ownedCommand = _compiledQuery.DbCommand;
+
+    /// <summary>
     /// Asynchronously disposes the active data reader, if any, and releases the reference to it. The
     /// underlying connection is owned by the context and is not closed here.
     /// </summary>
@@ -97,21 +108,28 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     {
         GC.SuppressFinalize(this);
 
-        if (_reader is not null)
+        var reader = _reader;
+        _reader = null;
+        _conn = null;
+
+        var command = _ownedCommand;
+        _ownedCommand = null;
+
+        if (reader is not null)
         {
-            var r = _reader;
-            _reader = null;
-            _conn = null;
             if (_logDebug) _logger!.LogDebug("Disposing data reader");
-            return r.DisposeAsync();
+            // The cached path (no owned command) keeps the allocation-free reader-only fast path.
+            return command is null ? reader.DisposeAsync() : DisposeReaderAndCommandAsync(reader, command);
         }
+
+        command?.Dispose();
         return ValueTask.CompletedTask;
-        //_compiledQuery.DbCommand.Connection = null;
-        // if (_conn is not null)
-        // {
-        //     if (_logDebug) _logger.LogDebug("Disposing connection");
-        //     await _conn.DisposeAsync();
-        // }
+    }
+
+    private static async ValueTask DisposeReaderAndCommandAsync(DbDataReader reader, DbCommand command)
+    {
+        await reader.DisposeAsync().ConfigureAwait(false);
+        command.Dispose();
     }
 
     // public void Init(object data)
@@ -188,7 +206,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
-    internal void InitEnumerator(IConnectionManager connectionManager, Func<string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
+    internal void InitEnumerator(IConnectionManager connectionManager, Func<DbCommand, string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction, InterceptorHooks interceptors, IDataContext context)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
@@ -360,6 +378,11 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         {
             if (disposing)
             {
+                // Reset() releases the reader but deliberately keeps the command, because Reset is
+                // also "start over". Only real disposal releases the owned command.
+                var command = _ownedCommand;
+                _ownedCommand = null;
+                command?.Dispose();
             }
 
             _disposed = true;

@@ -55,7 +55,7 @@ public partial class QueryCommand
             PrepareFrom(from, dontCalculateHash, cancellationToken);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
-            var wherePlanHash = PrepareWhere(cmd, dontCalculateHash, cancellationToken);
+            var wherePlanHash = PrepareWhere(cmd, InjectMainSourceFilters(cmd, srcType), dontCalculateHash, cancellationToken);
             PreparePreWhere(cmd, dontCalculateHash, cancellationToken);
             PrepareArrayJoin(cmd, cancellationToken);
 
@@ -312,52 +312,68 @@ public partial class QueryCommand
                     // condition do not each scan the entity metadata.
                     var bodyConverter = cmd._exp.Body is MemberExpression ? ResolveConverter(srcMetadata, cmd._exp.Body) : null;
 
+                    // A streaming named-column accessor projects one LOB column even though its CLR type
+                    // (Stream/TextReader) is not one of the scalar types in IsSingleColumnProjection.
+                    var bodyIsStreaming = TableAliasAccessors.IsStreaming(cmd._exp.Body);
+
                     if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
                         var args = ctor.Arguments;
                         var argsCount = args.Count;
 
-                        selectList = new SelectExpression[argsCount];
+                        var expanded = new List<SelectExpression>(argsCount);
 
                         var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
                         using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < argsCount; idx++)
                         {
                             if (cancellationToken.IsCancellationRequested)
-                                return (selectList, columnsPlanHash);
+                                return (expanded.ToArray(), columnsPlanHash);
 
-                            SelectExpression selExp;
                             var arg = args[idx];
                             var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                            // An entity-typed projection item (for example Right = p.Item2) is expanded
+                            // into its mapped scalar columns so the SQL row mapper can read them; the
+                            // materializer rebuilds the entity from the group (and produces null when
+                            // every column is SQL NULL, i.e. the missing side of an outer join).
+                            if (cmd._dataContext!.NeedMapping
+                                && TryExpandEntityItem(ctorParam.ParameterType, arg, idx, null, innerQueryVisitor, expanded, cancellationToken))
+                                continue;
+
                             var (durationUnit, durationPrecision) = ResolveDuration(srcMetadata, arg);
                             var converter = ResolveConverter(srcMetadata, arg);
 
-                            selExp = new SelectExpression(ctorParam.ParameterType)
+                            var selExp = new SelectExpression(ctorParam.ParameterType)
                             {
-                                Index = idx,
+                                Index = expanded.Count,
                                 PropertyName = ctorParam.Name!,
                                 Expression = innerQueryVisitor.Visit(arg),
                                 DurationUnit = durationUnit,
                                 DurationPrecision = durationPrecision,
                                 ProviderType = converter?.ProviderType,
                                 Converter = converter,
+                                IsLobStreaming = TableAliasAccessors.IsStreaming(arg),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
-                            if (!cmd._dontCache && !noHash)
-                                selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                            selectList[idx] = selExp;
-
-                            if (!cmd._dontCache && !noHash) unchecked
-                                {
-
-                                    columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                                }
+                            expanded.Add(selExp);
                         }
 
+                        selectList = expanded.ToArray();
+                        for (var i = 0; i < selectList.Length; i++)
+                            selectList[i].Index = i;
 
-
+                        if (!cmd._dontCache && !noHash) unchecked
+                        {
+                            for (var i = 0; i < selectList.Length; i++)
+                            {
+                                selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
+                                columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                            }
+                        }
                     }
                     else if (TypeFacts.IsSingleColumnProjection(cmd._exp.Body.Type)
+                        || bodyIsStreaming
                         || (cmd._exp.Body is not NewExpression && TypeFacts.IsTupleType(cmd._exp.Body.Type))
                         || bodyConverter is not null)
                     {
@@ -374,6 +390,7 @@ public partial class QueryCommand
                             DurationPrecision = scalarDurationPrecision,
                             ProviderType = bodyConverter?.ProviderType,
                             Converter = bodyConverter,
+                            IsLobStreaming = bodyIsStreaming,
                         };
                         // A dialect that does not enforce scalar-subquery cardinality (SQLite) would
                         // silently return the first row for Single/SingleOrDefault, so wrap the
@@ -419,6 +436,7 @@ public partial class QueryCommand
                                 DurationPrecision = bindingDurationPrecision,
                                 ProviderType = bindingConverter?.ProviderType,
                                 Converter = bindingConverter,
+                                IsLobStreaming = TableAliasAccessors.IsStreaming(binding.Expression),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(binding.Expression);
                             if (!cmd._dontCache && !noHash)
@@ -440,11 +458,28 @@ public partial class QueryCommand
                     if (srcType is null)
                         throw new QueryPreparationException("Lambda expression or source type must exists");
 
-                    if (cmd._dataContext!.NeedMapping)
+                    if (cmd._dataContext!.NeedMapping
+                        && (cmd.ProjectionType ?? srcType).IsAssignableTo(typeof(IProjection))
+                        && TryBuildProjectionSelectList(cmd, noHash, cmd.ProjectionType ?? srcType, cancellationToken, out var projectionColumns))
                     {
+                        selectList = projectionColumns;
+                        if (!cmd._dontCache && !noHash)
+                            for (var i = 0; i < projectionColumns.Length; i++) unchecked
+                            {
+                                columnsPlanHash = columnsPlanHash * 13 + projectionColumns[i].PlanHashCode;
+                            }
+                    }
+                    else if (cmd._dataContext!.NeedMapping)
+                    {
+                        DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta);
+                        if (entityMeta is not null
+                            && entityMeta.DynamicColumnsStore is not null
+                            && cmd.Joins is { Length: > 0 })
+                            throw new NotSupportedException("A dynamic-columns store is only supported for a query over a single physical source; the query has joins.");
+
                         if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
                         {
-                            if (DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta))
+                            if (entityMeta is not null)
                             {
                                 // The projection is built by the shared helper (also used by raw-command
                                 // mapping); the per-column plan hash is folded in here so the cached column
@@ -454,6 +489,20 @@ public partial class QueryCommand
                                     return (columns, columnsPlanHash);
 
                                 selectList = columns;
+
+                                if (entityMeta.DynamicColumnsStore is { } dynamicStore)
+                                {
+                                    var withStore = new SelectExpression[selectList.Length + 1];
+                                    selectList.CopyTo(withStore, 0);
+                                    withStore[selectList.Length] = new SelectExpression(typeof(Dictionary<string, object?>))
+                                    {
+                                        Index = selectList.Length,
+                                        PropertyName = dynamicStore.PropertyInfo.Name,
+                                        PropertyInfo = dynamicStore.PropertyInfo,
+                                        IsDynamicColumnsStore = true,
+                                    };
+                                    selectList = withStore;
+                                }
 
                                 if (!cmd._dontCache && !noHash)
                                     for (var i = 0; i < selectList.Length; i++) unchecked
@@ -482,6 +531,97 @@ public partial class QueryCommand
             }
 
             return (selectList, columnsPlanHash);
+        }
+
+        /// <summary>
+        /// Builds the projection of a bare join command whose result type is an <see cref="IProjection"/>
+        /// (a <c>JoinedEntityBuilder</c> used without <c>Select</c>): every entity-typed item is expanded
+        /// into its mapped scalar columns, tagged with the item it belongs to so the row materializer can
+        /// rebuild the entities. Returns <see langword="false"/> when the source is not such a projection,
+        /// leaving the caller's existing behaviour untouched.
+        /// </summary>
+        private static bool TryBuildProjectionSelectList(QueryCommand cmd, bool noHash, Type srcType, CancellationToken cancellationToken, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SelectExpression[]? selectList)
+        {
+            selectList = null;
+            if (cmd._joins is not { Length: > 0 } || !srcType.IsAssignableTo(typeof(IProjection)))
+                return false;
+
+            var itemTypes = srcType.GetGenericArguments();
+            var projectionParam = Expression.Parameter(srcType);
+            var output = new List<SelectExpression>(itemTypes.Length);
+
+            for (var i = 0; i < itemTypes.Length; i++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return false;
+
+                var memberName = $"Item{i + 1}";
+                var itemExpression = (Expression)Expression.Property(projectionParam, memberName);
+
+                // The first item of a JoinInto pair command is the query's own source: it renders
+                // against the main table alias, so it must not be re-rooted onto the projection
+                // parameter (that would drop the alias). Later items re-root onto their ItemN.
+                var reRoot = !(i == 0 && cmd.ProjectionType is not null && itemTypes[i] == cmd._srcType);
+
+                // Every item must be a mapped entity; a scalar item cannot be expanded from an entity
+                // source and is left to the caller's existing (rejecting) path rather than materialized
+                // as a wrong shape.
+                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot))
+                    return false;
+            }
+
+            var columns = output.ToArray();
+            for (var i = 0; i < columns.Length; i++)
+            {
+                columns[i].Index = i;
+                if (!cmd._dontCache && !noHash)
+                    columns[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(columns[i]);
+            }
+
+            selectList = columns;
+            return true;
+        }
+
+        /// <summary>
+        /// Expands one entity-typed projection item into its mapped scalar <see cref="SelectExpression"/>s.
+        /// Each column is re-rooted onto <paramref name="itemExpression"/> (so it renders against the
+        /// item's table alias) and tagged with a shared <see cref="ProjectionEntityItem"/>. Returns
+        /// <see langword="false"/> when <paramref name="itemType"/> is not a mapped entity.
+        /// </summary>
+        private static bool TryExpandEntityItem(
+            Type itemType,
+            Expression itemExpression,
+            int slot,
+            PropertyInfo? member,
+            CorrelatedQueryExpressionVisitor? visitor,
+            List<SelectExpression> output,
+            CancellationToken cancellationToken,
+            bool reRoot = true)
+        {
+            if (!DataContextCache.Metadata.TryGetValue(itemType, out var metadata) || metadata.Properties.Count == 0)
+                return false;
+
+            var (columns, completed) = EntitySelectListBuilder.Build(itemType, metadata, cancellationToken);
+            if (!completed)
+                return false;
+
+            var group = new ProjectionEntityItem(slot, itemType, member);
+
+            for (var i = 0; i < columns.Length; i++)
+            {
+                var column = columns[i];
+
+                if (reRoot && column.Expression is LambdaExpression { Parameters.Count: 1 } lambda)
+                    column.Expression = new ReplaceParameterInstanceVisitor(lambda.Parameters[0], itemExpression).Visit(lambda.Body);
+
+                if (visitor is not null)
+                    column.Expression = visitor.Visit(column.Expression!);
+
+                column.ProjectionItem = group;
+                output.Add(column);
+            }
+
+            return true;
         }
 
         // Resolves the declared duration storage unit of a directly projected entity property, so a
@@ -518,7 +658,13 @@ public partial class QueryCommand
 
                 for (var (idx, cnt) = (0, cmd._joins.Length); idx < cnt; idx++)
                 {
-                    var join = cmd._joins[idx];
+                    // Copy-on-write: builders share JoinExpression elements by reference across
+                    // clones, so preparation must mutate only this command's own copy. The copy is
+                    // based on the pristine original condition before any filter injection, so a
+                    // sibling's already-injected filters can never leak in (a plain join whose scope
+                    // disables every filter injects nothing and must stay unfiltered). The _joins array
+                    // itself is per-command, so replacing the element is local to this command.
+                    var join = cmd._joins[idx] = cmd._joins[idx].CloneForPreparation();
 
                     if (join.ApplySource is { } applySource)
                     {
@@ -551,14 +697,133 @@ public partial class QueryCommand
                         PrepareFrom(join.From, noHash, cancellationToken);
                     }
 
+                    InjectJoinFilters(cmd, join);
+
                     if (!cmd._dontCache && !noHash) unchecked
-                        {
-                            joinPlanHash = joinPlanHash * 13 + cmd.GetJoinExpressionPlanEqualityComparer().GetHashCode(join);
-                        }
+                    {
+                        joinPlanHash = joinPlanHash * 13 + cmd.GetJoinExpressionPlanEqualityComparer().GetHashCode(join);
+                    }
                 }
             }
 
             return joinPlanHash;
+        }
+
+        private static LambdaExpression? InjectMainSourceFilters(QueryCommand cmd, Type srcType)
+        {
+            // A joined query (a regular Join chain or a JoinInto pair) exposes the Projection<T1, …>
+            // type as its lambda parameter while its physical main source is the first table. A filter
+            // lookup keyed off the projection type would miss T1's filters, so resolve the main entity
+            // type from the projection's first item and re-root the filter onto Item1.
+            var isProjectionSource = srcType.IsAssignableTo(typeof(IProjection))
+                && srcType.GetGenericArguments().Length > 0;
+            var filterEntityType = isProjectionSource ? srcType.GetGenericArguments()[0] : srcType;
+
+            var filters = QueryFilterResolver.GetFilters(filterEntityType, cmd._filterScope);
+            if (filters.Count == 0)
+                return cmd._condition;
+
+            var condition = cmd._condition;
+            var parameter = condition is { Parameters.Count: >= 1 } typedCondition
+                ? typedCondition.Parameters[0]
+                : Expression.Parameter(srcType);
+            Expression? body = condition?.Body;
+            Expression filterTarget = isProjectionSource
+                ? Expression.Property(parameter, "Item1")
+                : parameter;
+
+            for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+            {
+                if (!TryBuildFilterBody(cmd, filters[i], filterTarget, out var filterBody))
+                    continue;
+
+                body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
+            }
+
+            return body is null ? null : Expression.Lambda(body, parameter);
+        }
+
+        private static void InjectJoinFilters(QueryCommand cmd, JoinExpression join)
+        {
+            if (join.From.SubQuery is not null)
+                return;
+
+            if (join.OriginalJoinCondition is not { Parameters: { Count: >= 2 } } joinCondition)
+                return;
+
+            var rightType = join.EntityType ?? join.From.SourceType ?? joinCondition.Parameters[1].Type;
+            // A join may carry the right-hand (child) side's own selective filter scope (single-query
+            // LoadWith/JoinInto or a JoinInto child that disabled filters). The effective child scope is
+            // always the union of the child's scope and the command's scope: `null` (a plain join) and an
+            // empty child scope both inherit the command's whole scope, while a non-empty child scope adds
+            // to it and All absorbs the union. So a parent IgnoreFilters() disables every child filter, and
+            // a child IgnoreFilters(keys) is not narrowed by a selective parent scope.
+            var scope = join.FilterScope is { } childScope
+                ? childScope.Union(cmd._filterScope)
+                : cmd._filterScope;
+            var filters = QueryFilterResolver.GetFilters(rightType, scope);
+            if (filters.Count == 0)
+                return;
+
+            var rightParameter = joinCondition.Parameters[1];
+            var body = joinCondition.Body;
+
+            for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+            {
+                if (!TryBuildFilterBody(cmd, filters[i], rightParameter, out var filterBody))
+                    continue;
+
+                body = Expression.AndAlso(body, filterBody);
+            }
+
+            join.SetJoinCondition(Expression.Lambda(body, joinCondition.Parameters));
+        }
+
+        // Reduces one resolved filter to the body to AND into the source condition. A predicate filter is
+        // used as declared; a builder-function filter is invoked once here (at plan build) and only the
+        // predicate it added is kept. A filter that declares neither form contributes nothing.
+        private static bool TryBuildFilterBody(QueryCommand cmd, IQueryFilterMetadata filter, Expression entityParameter, out Expression body)
+        {
+            LambdaExpression filterLambda;
+            if (filter.Lambda is { } lambda)
+                filterLambda = lambda;
+            else if (filter.Func is not null)
+                filterLambda = QueryFilterFunc.Apply(filter, cmd._dataContext!);
+            else
+            {
+                body = null!;
+                return false;
+            }
+
+            body = BuildFilterBody(filterLambda, cmd._dataContext!, entityParameter);
+            return true;
+        }
+
+        private static Expression BuildFilterBody(LambdaExpression filter, IDataContext dataContext, Expression entityParameter)
+        {
+            if (filter.Parameters.Count == 0)
+                throw new NotSupportedException($"The query filter registered for the {entityParameter.Type.Name} source declares no entity parameter.");
+
+            var filterEntityParameter = filter.Parameters[0];
+            if (!filterEntityParameter.Type.IsAssignableFrom(entityParameter.Type))
+                throw new NotSupportedException($"The query filter registered for {filterEntityParameter.Type.Name} cannot be applied to the {entityParameter.Type.Name} source: the filter's entity parameter type does not match the source type.");
+
+            var body = filter.Body;
+
+            if (filter.Parameters.Count > 1)
+            {
+                var host = new QueryFilterContext(dataContext);
+                var context = Expression.Property(Expression.Constant(host), nameof(QueryFilterContext.Context));
+                body = new ReplaceParameterInstanceVisitor(filter.Parameters[1], context).Visit(body);
+            }
+
+            return new ReplaceParameterInstanceVisitor(filterEntityParameter, entityParameter).Visit(body);
+        }
+
+        private sealed class ReplaceParameterInstanceVisitor(ParameterExpression target, Expression replacement) : ExpressionVisitor
+        {
+            protected override Expression VisitParameter(ParameterExpression node)
+                => ReferenceEquals(node, target) ? replacement : base.VisitParameter(node);
         }
 
         private static int PrepareSorting(QueryCommand cmd, SelectExpression[]? selectList, bool noHash, CancellationToken cancellationToken)
@@ -651,13 +916,13 @@ public partial class QueryCommand
             }
         }
 
-        private static int PrepareWhere(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
+        private static int PrepareWhere(QueryCommand cmd, LambdaExpression? condition, bool noHash, CancellationToken cancellationToken)
         {
             int wherePlanHash = 7;
-            if (cmd._condition is not null)
+            if (condition is not null)
             {
                 var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
-                cmd.PreparedCondition = innerQueryVisitor.Visit(cmd._condition);
+                cmd.PreparedCondition = innerQueryVisitor.Visit(condition);
 
                 if (!cmd._dontCache && !noHash) unchecked
                     {

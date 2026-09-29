@@ -54,6 +54,105 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DynamicColumnsStore_ShouldAppendStar()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    [Fact]
+    public void OtherDialects_DynamicSql_Unchanged()
+    {
+        // Regression guard for the MySQL-only qualification: PostgreSQL keeps the bare star.
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<DynamicColumnsEntity>();
+
+        SqlOf(ctx, e.ToCommand()).Should().Be("select id, * from dynamic_entity");
+    }
+
+    private static DynamicColumnsEntity DynamicWriteEntity()
+        => new()
+        {
+            Id = 1,
+            Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null },
+        };
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldRenderQuotedOrdinalKeysAndParameters()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
+        // every dynamic key is double-quoted even though the global identifier-quoting flag is off.
+        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+            .Values(DynamicWriteEntity())
+            .ToSql())
+            .Should().Contain("(id, \"alpha\", \"mid\", \"zeta\") values (@p0, @p1, @p2, @p3)");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Update_ShouldRenderQuotedKeysInSet()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        Normalize(ctx.Update<DynamicColumnsEntity>()
+            .Set(DynamicWriteEntity())
+            .Where(x => x.Id == 1)
+            .ToSql())
+            .Should().Contain("set \"alpha\" = @p0, \"mid\" = @p1, \"zeta\" = @p2 where id = 1");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_KeyUpsert_ShouldKeepDynamicKeysOutOfMatchCondition()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+            .Using(DynamicWriteEntity())
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql());
+
+        sql.Should().Contain("(id, \"alpha\", \"mid\", \"zeta\") values (@p0, @p1, @p2, @p3)");
+        sql.Should().Contain("on conflict (id) do update set \"alpha\" = excluded.\"alpha\", \"mid\" = excluded.\"mid\", \"zeta\" = excluded.\"zeta\"");
+        sql.Should().NotContain("on conflict (\"alpha\")");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_FullMerge_ShouldKeepDynamicKeysOutOfMatchCondition()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = Normalize(ctx.MergeInto<DynamicWritableEntity>()
+            .Using(new DynamicWritableEntity { Id = 1, Label = "L", Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null } })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql());
+
+        sql.Should().Contain("as source (id, label, \"alpha\", \"mid\", \"zeta\")");
+        sql.Should().Contain("on target.id = source.id");
+        sql.Should().Contain("then update set label = source.label, \"alpha\" = source.\"alpha\", \"mid\" = source.\"mid\", \"zeta\" = source.\"zeta\"");
+        sql.Should().Contain("insert (id, label, \"alpha\", \"mid\", \"zeta\") values (source.id, source.label, source.\"alpha\", source.\"mid\", source.\"zeta\")");
+        sql.Should().NotContain("on target.\"alpha\"");
+    }
+
+    [Fact]
+    public void Write_StorelessInsertSqlUnchanged()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
+    }
+
+    [Fact]
     public void IndexHint_ShouldThrowBecauseNotSupported()
     {
         using var ctx = PostgresTestContext.Create();
@@ -542,6 +641,23 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         sql.Should().Be("select t1.id, t3.\"String\" from simple_entity as \"t1\" cross join lateral (select t2.id, t2.somestring as \"String\" from complex_entity as \"t2\"\n"
+            + " where t2.id = cast(t1.id as bigint)) as \"t3\"");
+    }
+
+    [Fact]
+    public void CrossApply_WithJoinHint_ShouldKeepTheCorrelatedApply()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
+            .WithJoinHint("NestLoop(t1 t3)")
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        // The hint folds into the statement-level comment; the join modifier must not replace the join
+        // with a copy that loses its correlated apply source, or the lateral derived table would
+        // silently disappear.
+        sql.Should().Be("select /*+ NestLoop(t1 t3) */ t1.id, t3.\"String\" from simple_entity as \"t1\" cross join lateral (select t2.id, t2.somestring as \"String\" from complex_entity as \"t2\"\n"
             + " where t2.id = cast(t1.id as bigint)) as \"t3\"");
     }
 
@@ -2745,6 +2861,32 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_CrossApply_ShouldRenderAppliedSource()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, simple
+            .CrossApply(ctx.FromTableFunction(() => Tvf.AllRows()))
+            .Select(p => new { p.Item1.Id, p.Item2.Value }));
+
+        sql.Should().Be("select t1.id, t2.value from simple_entity as \"t1\" cross join lateral all_rows() as \"t2\"");
+    }
+
+    [Fact]
+    public void TableFunction_CrossApply_Correlated_ShouldRenderLateralSubquery()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, simple
+            .CrossApply(s => ctx.FromTableFunction(() => Tvf.ById(s.Id)))
+            .Select(p => new { p.Item1.Id, p.Item2.Value }));
+
+        sql.Should().Be("select t1.id, t3.value from simple_entity as \"t1\" cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as \"t2\") as \"t3\"");
+    }
+
+    [Fact]
     public void BooleanAggregates_ShouldEmit()
     {
         using var ctx = PostgresTestContext.Create();
@@ -3898,6 +4040,51 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
 
         sql.Should().Be("select t1.id, t2.id as \"SId\" from (select id, somestring as \"String\" from complex_entity) as \"t1\" join simple_entity as \"t2\" on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
+    }
+
+    [Fact]
+    public void AsThenJoin_ShouldRenderDerivedTable()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.\"OrderId\", t3.\"CustomerName\", t4.id as \"Third\" from (select t1.id as \"OrderId\", t2.somestring as \"CustomerName\" from simple_entity as \"t1\" join complex_entity as \"t2\" on cast(t1.id as bigint) = t2.id) as \"t3\" join complex_entity as \"t4\" on cast(t3.\"OrderId\" as bigint) = t4.id");
+    }
+
+    [Fact]
+    public void AsThenWhere_ShouldFilterDerivedTable()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+            .Where(d => d.OrderId > 0)
+            .Select(d => new { d.OrderId, d.CustomerName }));
+
+        sql.Should().Contain("from (select t1.id as");
+        sql.Should().Contain("where (t3");
+        sql.Should().Contain("OrderId");
+        sql.Should().Contain("CustomerName");
+    }
+
+    [Fact]
+    public void AsThenJoin_SameTypedSources_ShouldUseDistinctAliases()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
+            .As(p => new { A = p.Item1.Id, B = p.Item2.Id })
+            .Join(ctx.From<ISimpleEntity>(), (d, s3) => d.B == s3.Id)
+            .Select(p => new { p.Item1.A, p.Item1.B, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.\"A\", t3.\"B\", t4.id as \"Third\" from (select t1.id as \"A\", t2.id as \"B\" from simple_entity as \"t1\" join simple_entity as \"t2\" on t1.id = t2.id) as \"t3\" join simple_entity as \"t4\" on t3.\"B\" = t4.id");
     }
 
     [Fact]

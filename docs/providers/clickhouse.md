@@ -262,7 +262,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
   matched verbatim, so quoting follows the dialect.
 - The LOB streaming terminals (`ToStream`/`ToTextReader`) are rejected with `NotSupportedException`:
   `ClickHouse.Driver` exposes no streaming getters (see
-  [Streaming large objects](../guide/30-large-objects.md)).
+  [Streaming large objects](../guide/26-large-objects.md)).
 
 ## See also
 

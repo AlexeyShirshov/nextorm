@@ -52,6 +52,22 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   --filter "FullyQualifiedName~PostgresIntegrationTests"
 ```
 
+## Cost discipline — build once, serialise, don't repeat filters
+
+- **Build once, then run with `--no-build`.** `dotnet run --project tests/X` (and plain `dotnet test`) rebuild the project on every invocation — a re-run costs a full MSBuild pass and re-reads the whole project graph. Build the solution once, then add `--no-build`:
+
+  ```bash
+  dotnet build nextorm.slnx -c Debug
+  DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
+    dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- \
+    -class nextorm.integration.tests.PostgresIntegrationTests -noColor
+  ```
+
+- **Run provider suites one at a time, never in parallel.** Four concurrent test projects (plus build + editors) saturate 8 vCPU and push disk reads to ~1.9 GiB/s for minutes. Serialise them.
+- **Never re-run the same filter.** Each distinct `--dotnet-test-pipe /tmp/<id>` is a real execution; re-issuing `--filter FullyQualifiedName~Csv` (or the same `-class`) is wasted work — run it once. For a provider subset use a single `--filter "FullyQualifiedName~Csv&FullyQualifiedName~<Provider>IntegrationTests"` instead of repeating.
+- **Scope the run to the change.** For a core/CSV-streaming change the relevant targets are `nextorm.integration.tests --filter FullyQualifiedName~Csv` and `nextorm.core.tests`; the per-provider SQL-generation suites (`tests/nextorm.*.tests`) need no database and need not all run for such a change. Reserve a full sweep for final validation, once.
+- Repeated `[.NET TP Worker]` / `[RequestBuilder]` children under a `dotnet run`/`dotnet test` mean you are rebuilding — switch to `--no-build`.
+
 ## Behaviour and gotchas
 
 - **Without `DOCKER_HOST` only SQLite runs.** `ProviderTestSuite` calls `Assert.SkipUnless(Provider.IsAvailable, ...)` in its constructor, so PostgreSQL/SQL Server/MySQL/ClickHouse tests are reported as skipped — a green run proves nothing about those providers.

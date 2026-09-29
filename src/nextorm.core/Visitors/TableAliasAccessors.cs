@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace NextORM.Core;
@@ -14,8 +15,42 @@ internal static class TableAliasAccessors
 {
     private static readonly FrozenSet<string> s_accessors = BuildAccessors();
     private static readonly string s_getColumn = nameof(TableAlias.GetColumn);
+    private static readonly FrozenSet<string> s_streamingAccessors = BuildStreamingAccessors();
+    private static readonly FrozenSet<string> s_streamingMembers = BuildStreamingMembers();
 
     internal static bool IsAccessor(string methodName) => s_accessors.Contains(methodName);
+
+    /// <summary>
+    /// True when the <see cref="TableAlias"/> accessor selects a streaming LOB column
+    /// (<see cref="TableAlias.GetStream"/> or <see cref="TableAlias.GetTextReader"/>).
+    /// </summary>
+    internal static bool IsStreamingAccessor(string methodName) => s_streamingAccessors.Contains(methodName);
+
+    /// <summary>
+    /// True when <paramref name="expression"/> selects a streaming LOB column — either a
+    /// <see cref="TableAlias"/> method call (<c>GetStream</c>/<c>GetTextReader</c>) or a
+    /// <see cref="TableColumn"/> streaming member (<c>AsStream</c>/<c>AsTextReader</c>). Used by the
+    /// projection builder to mark the resulting <see cref="SelectExpression"/>, and by the row mapper
+    /// to reject buffered materialization of a streaming column.
+    /// </summary>
+    internal static bool IsStreaming(Expression expression)
+    {
+        switch (TypeFacts.UnwrapConvert(expression))
+        {
+            case MethodCallExpression call:
+                return call.Method.DeclaringType == typeof(TableAlias) && IsStreamingAccessor(call.Method.Name);
+            case MemberExpression member:
+                return member.Member.DeclaringType == typeof(TableColumn) && s_streamingMembers.Contains(member.Member.Name);
+            default:
+                return false;
+        }
+    }
+
+    private static FrozenSet<string> BuildStreamingAccessors()
+        => new[] { nameof(TableAlias.GetStream), nameof(TableAlias.GetTextReader) }.ToFrozenSet(StringComparer.Ordinal);
+
+    private static FrozenSet<string> BuildStreamingMembers()
+        => new[] { nameof(TableColumn.AsStream), nameof(TableColumn.AsTextReader) }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// True when the accessor accepts a computed (non-constant) column expression — only

@@ -21,6 +21,17 @@ public static class DataContextExtensions
         => new(dataContext, definition);
 
     /// <summary>
+    /// Creates an untyped query command whose result type is supplied at runtime, used by
+    /// <c>JoinInto</c> to materialize a dynamically-built join projection.
+    /// </summary>
+    /// <param name="dataContext">The context that executes the command.</param>
+    /// <param name="resultType">The runtime result/projection type.</param>
+    /// <param name="definition">The query shape.</param>
+    /// <returns>The untyped command.</returns>
+    internal static QueryCommand CreateCommand(this IDataContext dataContext, Type resultType, QueryDefinition definition)
+        => (QueryCommand)Activator.CreateInstance(typeof(QueryCommand<>).MakeGenericType(resultType), dataContext, definition)!;
+
+    /// <summary>
     /// Executes a raw command text without parameters. Convenience overload of
     /// <see cref="IRawCommandExecutor.ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/>.
     /// </summary>

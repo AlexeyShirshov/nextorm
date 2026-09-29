@@ -253,7 +253,7 @@ select id from simple_entity where id = $norm_p0
 ```
 
 Параметры времени выполнения именуются `norm_p{index}`; значение `42` привязывается к `norm_p0`
-терминальным методом. См. [Повторное использование запросов: cache и Prepare](13-query-reuse.md)
+терминальным методом. См. [Повторное использование запросов: cache и Prepare](../infrastructure/01-query-reuse-and-caching.md)
 для правил времени жизни.
 
 Захваченная локальная переменная регистрируется **один раз на утверждение**, сколько бы раз она ни
@@ -273,6 +273,13 @@ var rows = await dataContext.From<SimpleEntity>()
     .Select(p => new { p.Item1.Id })
     .ToListAsync();
 ```
+
+```sql
+-- SQLite
+select t1.id from simple_entity as 't1' join (select id from complex_entity where nullableint = $v) as 't2' on cast(t1.id as bigint) = t2.id where (t1.id != $v or t2.id != cast($v as bigint))
+```
+
+Три обращения к `v` — в подзапросе и дважды в `WHERE` — дают один параметр `$v`, связанный один раз.
 
 Не нужно заводить отдельную локальную переменную на каждое обращение, чтобы каждая ссылка получила
 собственный параметр.

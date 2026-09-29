@@ -16,7 +16,7 @@ public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> 
 Лямбда не выполняется - она транслируется в список `SELECT` генерируемого оператора.
 [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1); терминальный метод ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
 [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) выполняет его. См. [Сортировку и постраничную выборку](../guide/04-sorting-and-paging.md)
-для терминальных методов и их асинхронных форм. Если проекция — одна колонка `byte[]`/`string`, её вместо этого можно стримить через `ToStream`/`ToTextReader` — см. [Потоковое чтение больших объектов](../guide/30-large-objects.md).
+для терминальных методов и их асинхронных форм. Если проекция — одна колонка `byte[]`/`string`, её вместо этого можно стримить через `ToStream`/`ToTextReader` — см. [Потоковое чтение больших объектов](../guide/26-large-objects.md).
 
 Правила, применимые к любой проекции:
 

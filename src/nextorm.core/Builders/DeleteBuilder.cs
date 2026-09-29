@@ -16,6 +16,7 @@ public sealed class DeleteBuilder<TEntity>
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
     private EntityBuilder<TEntity>? _filter;
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
     private bool _all;
 
     internal DeleteBuilder(IDataContext dataContext, IEntityMetadata metadata)
@@ -43,6 +44,70 @@ public sealed class DeleteBuilder<TEntity>
             throw new InvalidOperationException("Where(...) cannot be combined with All(); a delete is either filtered or full-table.");
 
         _filter = (_filter ?? _dataContext.From<TEntity>()).Where(predicate);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables <b>all</b> global query filters declared for the target entity type, so the delete (in
+    /// the predicate form and the key form) removes the unfiltered rows. <see cref="All"/> stays an
+    /// explicit full-table delete and is never filtered. Repeatable: a later call accumulates with the
+    /// earlier scope.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public DeleteBuilder<TEntity> IgnoreFilters()
+    {
+        _filterScope = _filterScope.Union(QueryFilterScope.AllFilters);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types. An empty or
+    /// <see langword="null"/> <paramref name="entityTypes"/> disables nothing. Repeatable: a later call
+    /// accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public DeleteBuilder<TEntity> IgnoreFilters(params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromTypes(entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on the target
+    /// entity type. An empty or <see langword="null"/> <paramref name="filterKeys"/> disables nothing.
+    /// Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public DeleteBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        var scope = QueryFilterScope.FromKeys(filterKeys);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
+    /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public DeleteBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromKeysAndTypes(filterKeys, entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
         return this;
     }
 
@@ -144,14 +209,15 @@ public sealed class DeleteBuilder<TEntity>
         if (_filter is null && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
-        // The predicate reuses the SELECT pipeline: the command's prepared condition is rendered as a
-        // standalone WHERE by the planner. All() deletes the whole table (no condition, no keys).
-        var condition = _filter?.ToCommand();
+        // The predicate reuses the SELECT pipeline: the command's prepared condition (user predicate
+        // plus the injected target filter) is rendered as a standalone WHERE by the planner. All()
+        // deletes the whole table (no condition, no keys).
+        var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
 
         return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null);
     }
 
-    private DeleteCommand BuildKeyCommand(TEntity entity)
+    internal DeleteCommand BuildKeyCommand(TEntity entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
 
@@ -166,7 +232,11 @@ public sealed class DeleteBuilder<TEntity>
             throw new InvalidOperationException(
                 $"Entity {typeof(TEntity)} has no key property. Mark one with [Key]/.Key() before deleting by entity, or use DeleteFrom<T>().Where(...).");
 
-        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, null, keys);
+        // The key form carries the target entity's global filter through a no-predicate source command:
+        // preparing it injects the filter (minus the IgnoreFilters scope) into the condition, which the
+        // planner ANDs to the key equalities.
+        var condition = ApplyFilterScope(_filter ?? _dataContext.From<TEntity>()).ToCommand();
+        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, keys);
     }
 
     /// <summary>Builds the delete command for use as a side-effecting step of a batch.</summary>
@@ -182,7 +252,7 @@ public sealed class DeleteBuilder<TEntity>
         if (_filter is null && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
-        var condition = _filter?.ToCommand();
+        var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
         return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, returningColumns, outputInto);
     }
 
@@ -195,9 +265,16 @@ public sealed class DeleteBuilder<TEntity>
         if (_filter is null && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
-        var condition = _filter?.ToCommand();
+        var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
         return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, null, new OutputIntoClause(targetTable, outputColumns));
     }
+
+    // Applies the builder's selective filter scope to the source command that carries the DELETE's
+    // condition, so both the predicate form and the key form honor IgnoreFilters. The scope is folded
+    // into a copy, never onto the retained source builder, so repeated terminal builds re-derive from
+    // the current state instead of accumulating a stale scope.
+    private EntityBuilder<TEntity> ApplyFilterScope(EntityBuilder<TEntity> source)
+        => source.WithFilterScope(_filterScope);
 
     private IPropertyMetadata? FindProperty(PropertyInfo property)
     {

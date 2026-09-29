@@ -137,7 +137,11 @@ select id from app.rows_between($lo, $hi)
 
 ## Объединение, фильтрация и сортировка TVF
 
-TVF — обычный источник, поэтому его можно объединить с таблицей и читать через проекцию `t1`/`t2`:
+TVF — обычный источник, поэтому он может стоять по любую сторону соединения. Два источника доступны
+как `p.Item1`/`p.Item2` в порядке объявления: TVF слева читается через `p.Item1`, справа — через
+`p.Item2`.
+
+TVF как левый источник — соединён с таблицей:
 
 ```csharp
 var rows = dataContext
@@ -151,6 +155,67 @@ var rows = dataContext
 -- SQLite
 select t1.value, t2.somestring as 'String' from all_rows() as 't1' join complex_entity as 't2' on t1.id = t2.id
 ```
+
+Обратный случай — таблица слева, TVF справа — ведёт себя так же и используется, когда функция
+принимает столбец внешней строки (см. [Применение TVF](#применение-tvf)):
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .Join(dataContext.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQLite
+select t1.id, t2.value from simple_entity as 't1' join all_rows() as 't2' on t2.id = cast(t1.id as bigint)
+-- SQL Server / PostgreSQL отличаются только кавычками идентификаторов ([t2] / "t2")
+```
+
+`cast` — обычное приведение типов при соединении: `Tvf.AllRows().Id` имеет тип `long`, а
+`ISimpleEntity.Id` — `int`.
+
+### Применение TVF
+
+[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) принимают TVF и как применяемый источник (см. [APPLY и LATERAL](02-joins.md#apply-и-lateral)). Без лямбды функция применяется один раз:
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .CrossApply(dataContext.FromTableFunction(() => Tvf.AllRows()))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t2.value from simple_entity as "t1" cross join lateral all_rows() as "t2"
+```
+
+Если построить функцию внутри лямбды, она коррелируется с внешней строкой: захваченный столбец
+становится внешней ссылкой, и функция вызывается по разу на каждую левую строку.
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .CrossApply(s => dataContext.FromTableFunction(() => Tvf.ById(s.Id)))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+-- PostgreSQL
+select t1.id, t3.value from simple_entity as "t1" cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as "t2") as "t3"
+```
+
+`OuterApply` — близнец, сохраняющий левые строки: он оставляет строки, для которых функция не вернула
+ни одной строки, проецируя `null`. Применение любого источника требует провайдера с lateral-источником —
+SQLite, ClickHouse и in-memory провайдер отклоняют его ([`SupportsApply`](xref:NextORM.Core.ISqlDialect.SupportsApply)).
 
 Фильтрация, сортировка и группировка работают как обычно:
 
@@ -566,17 +631,17 @@ SQL без списка колонок, — а все остальные про�
 
 ## См. также
 
-* [Соединения](02-joins.md) — соединение TVF с таблицей или другим TVF.
+* [Соединения](02-joins.md) — соединение TVF с таблицей или другим TVF и его применение через `CrossApply`/`OuterApply` ([APPLY и LATERAL](02-joins.md#apply-и-lateral)).
 * [Пользовательские функции](10-user-defined-functions.md) — скалярный эквивалент.
-* [Инструкция INSERT](17-insert-statement.md) — TVF (`unnest`, `generate_series`) как источник `INSERT ... SELECT`.
+* [Инструкция INSERT](15-insert-statement.md) — TVF (`unnest`, `generate_series`) как источник `INSERT ... SELECT`.
 * [Обзор провайдеров](../providers/overview.md) — требование псевдонима TVF для каждого провайдера.
 
 ---
 
-Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/DataContext/DataContextExtensions.cs:117`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:121`;
+Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:39`, `src/nextorm.core/DataContext/DataContextExtensions.cs:1127`, `src/nextorm.core/DataContext/InMemoryQueryBuilder.cs:132`;
 `tests/nextorm.integration.tests/CommonTestSuite.Tvf.cs:34`, `:47`, `:61`, `:76`;
-`tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
-generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
-`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`, `:1477`;
-`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1015`, `:1031`, `:1047`, `:1063`, `:1079`, `:1095`, `:1111`.
+`tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:5`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:2399`, `:2421`, `:2434`, `:2448`, `:2462`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1740`, `:1749`, `:1762`, `:1776`, `:1790`, `:1803`, `:1816`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:1638`, `:1748`, `:2801`, `:2810`, `:2823`, `:2837`, `:2851`, `:2864`, `:2877`;
+`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1474`, `:1501`, `:1527`, `:1556`, `:1668`, `:1694`.

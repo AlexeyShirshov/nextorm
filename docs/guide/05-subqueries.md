@@ -51,6 +51,26 @@ var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
+## Naming a derived table with `As`
+
+`As<TResult>(...)` wraps a projection as a derived table in `FROM`: it projects each row into the
+named type and returns a builder over the result, so the projected members can be joined, filtered
+and projected further. Because the derived table resets the join arity counter, this is how you keep
+composing after a join, including past the eight-table cap:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String })
+    .Where(d => d.OrderId > 100)
+    .Select(d => new { d.OrderId, d.CustomerName })
+    .ToList();
+```
+
+Only the projected members remain visible after `As`, and the in-memory provider rejects a `Join`
+on the derived table with `NotSupportedException`. See [Joins](02-joins.md#naming-an-intermediate-projection-as)
+for the full operator.
+
 ## Scalar subquery in SELECT
 
 Calling a single-row terminal ([`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})), [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0}))) inside the

@@ -258,4 +258,20 @@ public abstract partial class CommonTestSuite
         rows.Should().HaveCount(3);
         rows.Should().OnlyContain(r => r.Third == r.CustomerName);
     }
+
+    [Fact]
+    public void AsThenJoin_ShouldReturnData()
+    {
+        // As names the intermediate join projection and starts a fresh join from the derived table.
+        var rows = _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .As(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.RequiredString })
+            .Join(_sut.ComplexEntity, (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.RequiredString })
+            .ToList();
+
+        // simple_entity has ids 1..10 and complex_entity 1..3, so the chain matches ids 1..3.
+        rows.Should().HaveCount(3);
+        rows.Should().OnlyContain(r => r.Third == r.CustomerName);
+    }
 }

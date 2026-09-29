@@ -26,7 +26,9 @@ public sealed class BulkInsertBuilder<TEntity>
     private readonly IEntityMetadata _metadata;
     private readonly BulkInsertOptions _options;
     private readonly bool _keepIdentity;
+    private readonly PropertyInfo? _dynamicStoreProperty;
 
+    private QueryFilterScope _filterScope = QueryFilterScope.None;
     private IEnumerable<TEntity>? _syncSource;
     private IAsyncEnumerable<TEntity>? _asyncSource;
 
@@ -37,10 +39,85 @@ public sealed class BulkInsertBuilder<TEntity>
         _metadata = metadata;
         _options = options;
         _keepIdentity = options.KeepIdentity && HasIdentityColumn(metadata);
+        _dynamicStoreProperty = metadata.DynamicColumnsStore?.PropertyInfo;
     }
 
     /// <summary>The context the bulk insert executes on; used by <see cref="BulkInsertReturningBuilder{TEntity, TResult}"/>.</summary>
     internal IDataContext DataContext => _dataContext;
+
+    /// <summary>
+    /// Disables <b>all</b> global query filters declared for the target entity type, so the bulk write
+    /// is not validated against them. Repeatable: a later call accumulates with the earlier scope.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertBuilder<TEntity> IgnoreFilters()
+    {
+        _filterScope = _filterScope.Union(QueryFilterScope.AllFilters);
+        return this;
+    }
+
+    /// <summary>
+    /// Disables every global query filter declared for the given entity types, so the bulk write is not
+    /// validated against them. An empty or <see langword="null"/> <paramref name="entityTypes"/>
+    /// disables nothing. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="entityTypes">The entity types whose filters are disabled.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertBuilder<TEntity> IgnoreFilters(params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromTypes(entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> on the target
+    /// entity type, so the bulk write is not validated against them. An empty or <see langword="null"/>
+    /// <paramref name="filterKeys"/> disables nothing. Repeatable: a later call accumulates (union) with
+    /// the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys)
+    {
+        var scope = QueryFilterScope.FromKeys(filterKeys);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
+    /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
+    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
+    /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
+    /// </summary>
+    /// <param name="filterKeys">The filter keys to disable.</param>
+    /// <param name="entityTypes">The entity types the disable is scoped to; empty means any entity type.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public BulkInsertBuilder<TEntity> IgnoreFilters(IEnumerable<string> filterKeys, params Type[] entityTypes)
+    {
+        var scope = QueryFilterScope.FromKeysAndTypes(filterKeys, entityTypes);
+        if (!scope.IsEmpty)
+            _filterScope = _filterScope.Union(scope);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Validates the rows about to be written against the target entity type's active global query
+    /// filters (minus the <c>IgnoreFilters</c> scope). A violation raises
+    /// <see cref="QueryFilterException"/> before that row is handed to the provider; because a bulk
+    /// write streams in batches, rows already written are not rolled back (the write is not atomic).
+    /// </summary>
+    /// <param name="rows">The rows about to be written.</param>
+    /// <exception cref="QueryFilterException">A written row violates an active filter.</exception>
+    internal void ValidateRows(IReadOnlyList<TEntity> rows)
+        => QueryFilterValidator.ValidateEntities(rows, _filterScope, _dataContext, "BULK INSERT");
 
     /// <summary>The mapped entity metadata; used by the returning builder.</summary>
     internal IEntityMetadata Metadata => _metadata;
@@ -90,8 +167,8 @@ public sealed class BulkInsertBuilder<TEntity>
     /// <exception cref="NotSupportedException">The context is read-only, or the provider cannot express a requested form.</exception>
     public int BulkInsert()
     {
-        EnsureSyncSource();
-        var command = BuildCommand(ProjectSync(_syncSource!), null);
+        var rows = ValidateAndMaterializeSync();
+        var command = BuildCommand(ProjectSync(rows), null);
         return Execute(command);
     }
 
@@ -104,11 +181,37 @@ public sealed class BulkInsertBuilder<TEntity>
     {
         EnsureSourceSet();
 
-        var command = _asyncSource is not null
-            ? BuildCommand(null, ProjectAsync(_asyncSource))
-            : BuildCommand(ProjectSync(_syncSource!), null);
+        if (_asyncSource is not null)
+        {
+            // The source is streamed once: each row is validated before it is handed to the provider, so
+            // an earlier batch may already be written when a later row violates a filter.
+            var streamed = BuildCommand(null, ProjectAsync(_asyncSource, cancellationToken));
+            return ExecuteAsync(streamed, cancellationToken);
+        }
 
+        var rows = ValidateAndMaterializeSync();
+        var command = BuildCommand(ProjectSync(rows), null);
         return ExecuteAsync(command, cancellationToken);
+    }
+
+    // The synchronous source is buffered so the whole set can be validated before any SQL is sent. An
+    // already-materialised collection is used as is.
+    private IReadOnlyList<TEntity> MaterializeSync()
+        => _syncSource as IReadOnlyList<TEntity> ?? _syncSource!.ToList();
+
+    /// <summary>
+    /// Validates the whole synchronous source and returns it materialised, so every row is checked
+    /// before the first batch is written.
+    /// </summary>
+    /// <returns>The validated rows.</returns>
+    /// <exception cref="InvalidOperationException">No synchronous source was supplied.</exception>
+    /// <exception cref="QueryFilterException">A row violates an active filter.</exception>
+    internal IReadOnlyList<TEntity> ValidateAndMaterializeSync()
+    {
+        EnsureSyncSource();
+        var rows = MaterializeSync();
+        ValidateRows(rows);
+        return rows;
     }
 
     /// <summary>
@@ -201,8 +304,20 @@ public sealed class BulkInsertBuilder<TEntity>
     /// <param name="columns">The written columns, in order.</param>
     /// <param name="dialect">The active dialect; used to convert a duration to its stored integer form.</param>
     /// <returns>The values, one per written column.</returns>
-    internal static object?[] ToRow(TEntity entity, IReadOnlyList<IPropertyMetadata> columns, ISqlDialect dialect)
+    /// <exception cref="NotSupportedException">The entity carries a non-empty dynamic-columns store.</exception>
+    internal object?[] ToRow(TEntity entity, IReadOnlyList<IPropertyMetadata> columns, ISqlDialect dialect)
     {
+        // The bulk path writes only mapped columns and has no dynamic-column support yet, so a populated
+        // store would be silently dropped. Fail closed instead of writing a truncated row. The store's
+        // declared type is IReadOnlyDictionary<string, object?>, so non-emptiness must be decided through
+        // that interface (or enumeration), not only through the non-generic ICollection shape.
+        if (_dynamicStoreProperty is not null
+            && HasAnyDynamicColumn(_dynamicStoreProperty.GetValue(entity)))
+        {
+            throw new NotSupportedException(
+                $"Bulk insert of dynamic columns is not supported: entity {typeof(TEntity)} has a non-empty dynamic-columns store. Clear the store or use InsertInto<{typeof(TEntity).Name}>().Values(...) instead.");
+        }
+
         var row = new object?[columns.Count];
         for (var i = 0; i < columns.Count; i++)
             row[i] = DurationStorage.ToParameterValue(columns[i].PropertyInfo.GetValue(entity), columns[i], dialect);
@@ -210,9 +325,47 @@ public sealed class BulkInsertBuilder<TEntity>
         return row;
     }
 
+    /// <summary>
+    /// Whether a dynamic-columns store holds at least one key. Decided through the store's declared
+    /// string-keyed dictionary interface (or, failing a count, by enumerating it) so an implementation
+    /// that is not a non-generic <see cref="System.Collections.ICollection"/> is not mistaken for empty.
+    /// </summary>
+    /// <param name="store">The store value read from the entity, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the store exposes at least one key.</returns>
+    private static bool HasAnyDynamicColumn(object? store)
+    {
+        switch (store)
+        {
+            case null:
+                return false;
+            case System.Collections.ICollection collection:
+                return collection.Count > 0;
+            case IReadOnlyDictionary<string, object?> readOnly:
+                return readOnly.Count > 0;
+            case IDictionary<string, object?> dictionary:
+                return dictionary.Count > 0;
+            case IReadOnlyCollection<KeyValuePair<string, object?>> collection:
+                return collection.Count > 0;
+            case IEnumerable<KeyValuePair<string, object?>> enumerable:
+                // The declared store type guarantees a string-keyed dictionary; the enumeration is the
+                // last-resort probe for a shape that exposes no count, stopping at the first element.
+                foreach (var _ in enumerable)
+                    return true;
+
+                return false;
+            default:
+                return false;
+        }
+    }
+
     /// <summary>Projects the synchronous source to ordinal value arrays; only valid when a sync source was supplied.</summary>
     /// <returns>The projected rows.</returns>
     internal IEnumerable<object?[]> ProjectSyncRows() => ProjectSync(_syncSource!);
+
+    /// <summary>Projects a materialised, already-validated synchronous row set to ordinal value arrays.</summary>
+    /// <param name="rows">The validated entity rows.</param>
+    /// <returns>The projected rows.</returns>
+    internal IEnumerable<object?[]> ProjectRows(IReadOnlyList<TEntity> rows) => ProjectSync(rows);
 
     /// <summary>Projects the asynchronous source to ordinal value arrays; only valid when an async source was supplied.</summary>
     /// <param name="cancellationToken">Cancels enumeration.</param>
@@ -323,8 +476,12 @@ public sealed class BulkInsertBuilder<TEntity>
     {
         var columns = WritableColumns();
         var dialect = ((DataContext)_dataContext).Dialect;
+        var check = QueryFilterValidator.CreateEntityCheck<TEntity>(_filterScope, _dataContext, "BULK INSERT");
         await foreach (var entity in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            check?.Invoke(entity);
             yield return ToRow(entity, columns, dialect);
+        }
     }
 
     private Action<int>? CreateProgressCallback()

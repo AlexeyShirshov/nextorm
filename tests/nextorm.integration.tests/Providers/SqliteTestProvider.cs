@@ -111,5 +111,18 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table merge_entity (id integer primary key, name text, age int);
 
         create table delete_entity (id integer primary key, name text, age int);
+
+        -- Dynamic-columns write fixtures (#104): the defaulted "seeded" column makes a key omitted from
+        -- the store distinguishable from a key bound to a value.
+        create table dynamic_entity (id integer primary key, name text, alpha text, beta text, seeded text default 'defaulted');
+
+        create table eager_parent (id integer primary key, name text);
+        create table eager_child (id integer primary key, parent_id int not null, name text);
+        create table eager_note (id integer primary key, parent_id int not null, text text);
+
+        -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
+        -- target table. Both carry the tenant/soft-delete columns the shared suite filters on.
+        create table query_filter_entity (id integer primary key, tenant_id int not null, is_deleted integer not null, name text);
+        create table query_filter_target (id integer primary key autoincrement, tenant_id int null, is_deleted integer not null, name text);
         """;
 }

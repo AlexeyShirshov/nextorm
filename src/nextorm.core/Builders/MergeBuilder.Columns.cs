@@ -7,7 +7,7 @@ public sealed partial class MergeBuilder<TEntity>
 {
     private MergeBuilder<TEntity> AddBranch(MergeMatchKind match, MergeActionKind action, LambdaExpression? columns, LambdaExpression? condition)
     {
-        if (_columns.Count == 0 && _source is null)
+        if (_columns.Count == 0 && _source is null && _dynamicColumns is null)
             throw new InvalidOperationException("Call Using(...) before adding a merge branch.");
 
         IReadOnlyList<IPropertyMetadata> selected;
@@ -33,7 +33,11 @@ public sealed partial class MergeBuilder<TEntity>
             ValidateExplicitColumns(selected, action);
         }
 
-        if (action is MergeActionKind.Update or MergeActionKind.Insert && selected.Count == 0)
+        // A store-only entity (its only mapped column is the match key) has nothing to select
+        // automatically, but the dynamic-columns store still supplies column values; the renderer
+        // appends the store's dynamic keys to the branch, so an empty selection is allowed when a
+        // store is present. Only an entity with neither a mapped nor a dynamic column is rejected.
+        if (action is MergeActionKind.Update or MergeActionKind.Insert && selected.Count == 0 && _dynamicColumns is null)
             throw new NotSupportedException($"Entity {typeof(TEntity)} has no column to {action.ToString().ToLowerInvariant()}.");
 
         _branches.Add(new MergeBranch(match, action, selected, condition));
