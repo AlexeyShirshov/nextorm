@@ -104,6 +104,29 @@ public class InMemoryJoinTests
     }
 
     [Fact]
+    public void TestJoinTableHint_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity
+            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { FirstId = p.Item1.Id })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*hints are not supported*");
+    }
+
+    [Fact]
+    public void TestTableHint_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity
+            .WithTableHint("nolock")
+            .Select(p => new { p.Id })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*hints are not supported*");
+    }
+
+    [Fact]
     public void TestTablesInScopeHint_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity

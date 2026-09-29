@@ -118,9 +118,10 @@ internal static class InMemoryQueryBuilder
             throw new NotSupportedException("The FINAL/SAMPLE/SETTINGS query modifiers are not supported by the in-memory provider.");
 
         if (queryCommand.TablesInScopeHints is { Count: > 0 }
+            || queryCommand.TableHints is { Count: > 0 }
             || queryCommand.From?.SubQueryHint is not null
             || HasJoinHint(queryCommand))
-            throw new NotSupportedException("Join/subquery/tables-in-scope hints are not supported by the in-memory provider.");
+            throw new NotSupportedException("Table/join/subquery/tables-in-scope hints are not supported by the in-memory provider.");
 
         if (queryCommand.PreWhere is not null)
             throw new NotSupportedException("The PREWHERE clause is not supported by the in-memory provider.");
@@ -466,7 +467,7 @@ internal static class InMemoryQueryBuilder
 
         for (var i = 0; i < joins.Length; i++)
         {
-            if (joins[i].JoinHint is not null)
+            if (joins[i].JoinHint is not null || joins[i].TableHints is { Count: > 0 })
                 return true;
         }
 

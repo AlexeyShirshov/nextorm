@@ -2020,6 +2020,149 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JoinTableHint_ShouldEmitWithClauseOnJoinedTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("from simple_entity as [t1]");
+        sql.Should().Contain("join complex_entity with (nolock) as [t2]");
+        sql.Should().NotContain("simple_entity with (");
+    }
+
+    [Fact]
+    public void JoinTableHint_OnTwoJoins_ShouldTargetOnlyTheLastJoin()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .Join(ctx.From<ISalesEntity>(), (p, s2) => p.Item2.Id == s2.Id)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("join complex_entity as [t2]");
+        sql.Should().Contain("join sales with (nolock) as [t3]");
+        sql.Should().NotContain("complex_entity with (");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldMergeWithTablesInScopeHintIntoSingleClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .WithTableHint("rowlock")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .WithTablesInScopeHint("updlock")
+            .Select(p => new { p.Item1.Id }));
+
+        // The primary table merges its own hint with the scope hint; the joined table merges the
+        // per-join hint first, then the scope hint, into one WITH clause.
+        sql.Should().Contain("from simple_entity with (rowlock, updlock) as [t1]");
+        sql.Should().Contain("join complex_entity with (nolock, updlock) as [t2]");
+
+        // Each physical table carries exactly one WITH clause: the per-join hint must not be emitted
+        // a second time next to the scope hint.
+        (sql.Split("with (").Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldBeIndependentOfJoinHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .WithJoinHint("hash")
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("inner hash join complex_entity with (nolock) as [t2]");
+    }
+
+    [Fact]
+    public void JoinTableHint_BlankCall_ShouldKeepPreviousHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // A blank-only call with no prior hint emits no WITH clause at all.
+        var noPrior = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint(" ")
+            .Select(p => new { p.Item1.Id }));
+
+        noPrior.Should().Contain("join complex_entity as [t2]");
+        noPrior.Should().NotContain("complex_entity with (");
+
+        // A blank-only call and a no-arg call after a real hint keep the real hint.
+        var kept = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .WithJoinTableHint(" ")
+            .WithJoinTableHint()
+            .Select(p => new { p.Item1.Id }));
+
+        kept.Should().Contain("join complex_entity with (nolock) as [t2]");
+    }
+
+    [Fact]
+    public void JoinTableHint_OnApplyJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(complex)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
+    }
+
+    [Fact]
+    public void JoinTableHint_OnDerivedTableJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From(ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id, c.String }));
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(derived, (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldIgnoreBlankEntries()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("  ", "nolock", null!)
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("complex_entity with (nolock) as [t2]");
+    }
+
+    [Fact]
+    public void JoinTableHint_WithoutJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.From<ISimpleEntity>().WithJoinTableHint("nolock");
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*preceding join*");
+    }
+
+    [Fact]
     public void SubQueryHint_ShouldThrowOnSqlServer()
     {
         using var ctx = SqlServerTestContext.Create();

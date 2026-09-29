@@ -115,6 +115,14 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// </summary>
     public string? JoinHint { get; internal init; }
     /// <summary>
+    /// Optional table-level hints attached to this join's right-hand physical table, or <c>null</c>
+    /// when the join has none. Set through the fluent <c>WithJoinTableHint</c> modifier, which copies
+    /// the join rather than mutating it. On a dialect with structural table hints (SQL Server) they
+    /// render as a <c>WITH (...)</c> clause after the joined table name; a dialect that does not
+    /// support table hints rejects the command.
+    /// </summary>
+    internal IReadOnlyList<string>? TableHints { get; init; }
+    /// <summary>
     /// Joined source type. Only needed when <see cref="JoinCondition"/> is absent (a cross join has no
     /// condition parameter to read the right-hand type from), so the alias of the joined table can be
     /// resolved during SQL generation and in the in-memory provider.
@@ -171,6 +179,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             Strictness = Strictness,
             IsGlobal = IsGlobal,
             JoinHint = JoinHint,
+            TableHints = TableHints,
             ApplySource = ApplySource,
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
@@ -188,6 +197,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             Strictness = Strictness,
             IsGlobal = IsGlobal,
             JoinHint = JoinHint,
+            TableHints = TableHints,
             ApplySource = ApplySource,
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,

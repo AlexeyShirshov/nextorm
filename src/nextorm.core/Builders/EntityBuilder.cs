@@ -951,6 +951,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Strictness = source.Strictness,
             IsGlobal = source.IsGlobal,
             JoinHint = source.JoinHint,
+            TableHints = source.TableHints,
             ApplySource = source.ApplySource,
             OriginalJoinCondition = source.OriginalJoinCondition,
             IsJoinInto = source.IsJoinInto,
@@ -1119,6 +1120,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                     Strictness = join.Strictness,
                     IsGlobal = join.IsGlobal,
                     JoinHint = join.JoinHint,
+                    TableHints = join.TableHints,
                     OriginalJoinCondition = original,
                     IsJoinInto = true,
                     JoinIntoIdentity = join.JoinIntoIdentity,
@@ -1348,7 +1350,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// join objects by reference, so the last one is replaced with a fresh copy; mutating it in place
     /// would leak the modifier into the source builder and its other clones.
     /// </summary>
-    private EntityBuilder<TEntity> ReplaceLastJoin(JoinStrictness? strictness = null, bool isGlobal = false, string? joinHint = null)
+    private EntityBuilder<TEntity> ReplaceLastJoin(JoinStrictness? strictness = null, bool isGlobal = false, string? joinHint = null, IReadOnlyList<string>? tableHints = null)
     {
         if (_joins is not { Count: > 0 })
             throw new InvalidOperationException("A join modifier requires a preceding join.");
@@ -1370,6 +1372,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Strictness = strictness ?? last.Strictness,
             IsGlobal = isGlobal || last.IsGlobal,
             JoinHint = joinHint ?? last.JoinHint,
+            TableHints = tableHints ?? last.TableHints,
             ApplySource = last.ApplySource,
             OriginalJoinCondition = last.OriginalJoinCondition,
             // A join modifier on a JoinInto must not degrade it to a regular join: without these the
@@ -2364,6 +2367,39 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             throw new ArgumentException("A join hint must be a non-empty string.", nameof(hint));
 
         return ReplaceLastJoin(joinHint: hint);
+    }
+    /// <summary>
+    /// Attaches table-level hints to the most recently added join, for example SQL Server
+    /// <c>.WithJoinTableHint("nolock")</c> which renders a <c>WITH (nolock)</c> clause on that joined
+    /// table only. This is the per-join counterpart of <see cref="WithTableHint"/> and is distinct
+    /// from the optimizer join hint <see cref="WithJoinHint"/>; unlike <see cref="WithTablesInScopeHint"/>
+    /// it never leaks to the other physical tables. The builder is copied — the source join is replaced
+    /// by a copy carrying the hints, so neither the source builder nor a sibling built from it is
+    /// affected. Call it after the join it should affect and before the next join. Hints are rendered
+    /// verbatim, so only pass trusted values; null/blank entries are ignored, and a call that supplies
+    /// only ignored entries leaves any previously attached hints unchanged. Requires a dialect that
+    /// supports table hints (see <see cref="ISqlDialect.SupportsTableHints"/>) and a physical-table join
+    /// source (an APPLY, derived-table, table-valued-function or XML/pivot join source is rejected).
+    /// </summary>
+    /// <param name="hints">The table hints to apply to the joined table (for example <c>nolock</c>).</param>
+    /// <returns>A builder whose last join carries the hints.</returns>
+    /// <exception cref="InvalidOperationException">The builder has no join to modify.</exception>
+    public EntityBuilder<TEntity> WithJoinTableHint(params string[] hints)
+    {
+        if (_joins is not { Count: > 0 })
+            throw new InvalidOperationException("A join modifier requires a preceding join.");
+
+        // Normalize blank-only input to null: a call that supplies no usable hint must not clear hints
+        // attached by an earlier call, mirroring WithTableHint. ReplaceLastJoin keeps the previous value
+        // when the argument is null.
+        string[]? filtered = hints is { Length: > 0 }
+            ? hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToArray()
+            : null;
+
+        if (filtered is { Length: 0 })
+            filtered = null;
+
+        return ReplaceLastJoin(tableHints: filtered);
     }
     /// <summary>
     /// Attaches a provider-specific hint to the derived-table source this builder selects from (for

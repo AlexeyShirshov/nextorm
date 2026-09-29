@@ -73,10 +73,52 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity with (nolock)
 ```
 
+`EntityBuilder<T>.WithJoinTableHint(params string[] hints)` прикрепляет такой же табличный хинт к
+**последнему добавленному** join — вызывайте его после join и до следующего, как `WithJoinHint`. Это не
+то же самое, что [`WithJoinHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinHint(System.String))
+(оптимизаторный *join*-хинт вроде `loop`/`hash`/`merge`, рендерится внутри предложения join), и не то
+же самое, что `WithTablesInScopeHint` (охватывает каждую физическую таблицу). SQL Server рендерит его
+как предложение `WITH (...)` только на этой присоединённой таблице:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Join(dataContext.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
+    .WithJoinTableHint("nolock")
+    .Select(p => new { p.Item1.Id })
+    .ToList();
+```
+
+```sql
+select t1.id from complex_entity as [t1] inner join simple_entity with (nolock) as [t2] on t1.id = t2.id
+```
+
+В сочетании с `WithTablesInScopeHint` всё равно получается одно предложение `WITH (...)` на этой
+таблице: сначала идёт локальный хинт join, затем хинты области видимости (которые по-прежнему
+охватывают все остальные физические таблицы):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .WithTablesInScopeHint("holdlock")
+    .Join(dataContext.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
+    .WithJoinTableHint("nolock")
+    .Select(p => new { p.Item1.Id })
+    .ToList();
+```
+
+```sql
+select t1.id from complex_entity with (holdlock) as [t1] inner join simple_entity with (nolock, holdlock) as [t2] on t1.id = t2.id
+```
+
 Хинты рендерятся дословно, поэтому передавайте только доверенные значения. Провайдер включается через
 [`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) и [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String},NextORM.Core.KeywordCase)) (SQL Server); остальные диалекты
-отклоняют команду с табличными хинтами через `NotSupportedException`. Покрыта только основная
-таблица; хинты на присоединённых таблицах пока не входят в API.
+отклоняют команду с табличными хинтами через `NotSupportedException`. Вызывайте `WithJoinTableHint`,
+чтобы задать табличный хинт конкретному join; `WithTableHint` по-прежнему покрывает только основную
+таблицу. Табличный хинт конкретного join можно отрендерить только на join **физической таблицы**:
+APPLY-join (а также источник join — производная таблица, табличная функция, XML/pivot или raw-SQL) не имеет
+имени таблицы, к которому можно приписать предложение `WITH (...)`, и отклоняется через
+`InvalidOperationException`. Если передать только пустые/`null` хинты, ранее прикреплённые хинты остаются
+без изменений. И `WithTableHint`, и `WithJoinTableHint` требуют диалект с табличными хинтами, поэтому
+SQLite, ClickHouse и провайдер in-memory отклоняют их через `NotSupportedException`.
 
 ## Index-хинты
 
@@ -169,7 +211,7 @@ var my = dataContext.From<ISimpleEntity>()
 
 ## Хинты join, подзапроса и таблиц в области видимости
 
-`Hint(...)` действует на уровне всей инструкции. Три метода построителя прикрепляют хинт к более узкой
+`Hint(...)` действует на уровне всей инструкции. Четыре метода построителя прикрепляют хинт к более узкой
 части запроса; каждый диалект рендерит доступную ему форму либо отклоняет команду:
 
 ```csharp
@@ -185,6 +227,13 @@ var rows = dataContext.From<ISimpleEntity>()
   до следующего, как `WithStrictness`/`Global`). SQL Server вставляет его внутрь предложения join
   (`inner loop join`, `left hash join`); хинт на `CROSS`/`APPLY`-join отклоняется. PostgreSQL, MySQL и
   MariaDB сворачивают его в комментарий `/*+ ... */` уровня инструкции.
+* `WithJoinTableHint(params string[] hints)` прикрепляет блокирующий табличный хинт к последнему
+  добавленному join — парный к `WithTableHint` для отдельного join и отличный от оптимизаторного
+  `WithJoinHint` выше. SQL Server рендерит предложение `WITH (hint, ...)` на этой присоединённой
+  таблице; остальные диалекты отклоняют его через `NotSupportedException`. Его можно применить только к
+  join физической таблицы: APPLY-join, производная таблица, табличная функция или XML/pivot-источник join
+  отклоняются через `InvalidOperationException`. См. раздел
+  «Блокирующие табличные хинты».
 * `WithSubQueryHint(string hint)` прикрепляет хинт к источнику-производной таблице построителя
   `From(subQuery)`. PostgreSQL/MySQL/MariaDB сворачивают его в `/*+ ... */`; SQL Server отклоняет —
   T-SQL не позволяет добавить query hint к подзапросу.
@@ -205,7 +254,7 @@ select /*+ JOIN_ORDER(t1, t2) */ id from simple_entity as `t1` join complex_enti
 Пустой хинт отклоняется через `ArgumentException`, а join-хинт без предшествующего join бросает
 `InvalidOperationException`. Для диалектов с inline-комментарием текст хинта рендерится как есть, поэтому
 пишите псевдонимы источников сами (`HashJoin(t1 t2)`): псевдонимы nextorm назначаются на этапе рендера и
-наружу не отдаются. Все три хинта входят в ключ плана. В SQLite, ClickHouse и провайдере in-memory они
+наружу не отдаются. Все четыре хинта входят в ключ плана. В SQLite, ClickHouse и провайдере in-memory они
 отклоняются через `NotSupportedException`.
 
 ## Модификаторы запроса ClickHouse
@@ -240,8 +289,7 @@ settings max_threads = 2
 
 ## Ограничения
 
-* Блокирующие табличные хинты рендерятся только для основной таблицы; для присоединённых таблиц
-  используйте `WithTablesInScopeHint` ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) применяется к таблице из `FROM` запроса).
+* Блокирующие табличные хинты для таблицы из `FROM` запроса рендерит [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])); для выбранного join используйте [`WithJoinTableHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinTableHint(System.String[])), а чтобы покрыть все физические таблицы — `WithTablesInScopeHint`.
 * Объединение команды с хинтами через операцию над множествами ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) не
   защищено; хинт «уезжает» в ту ветку, к которой был привязан, и этого следует избегать.
 
@@ -254,7 +302,7 @@ settings max_threads = 2
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/Builders/EntityBuilder.cs` (`WithTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
+`src/nextorm.core/Builders/EntityBuilder.cs` (`WithTableHint`/`WithJoinTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

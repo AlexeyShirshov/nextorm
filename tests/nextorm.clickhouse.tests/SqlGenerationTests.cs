@@ -193,6 +193,19 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JoinTableHint_ShouldThrowBecauseClickHouseHasNoTableHints()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
+    }
+
+    [Fact]
     public void ForUpdate_ShouldThrowBecauseClickHouseHasNoRowLocking()
     {
         using var ctx = ClickHouseTestContext.Create();

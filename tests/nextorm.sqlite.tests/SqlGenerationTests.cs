@@ -2628,6 +2628,33 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JoinTableHint_OnDerivedTableJoin_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var derived = ctx.From(ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id }));
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(derived, (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldThrowBecauseSqliteHasNoTableHints()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .WithJoinTableHint("nolock")
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
+    }
+
+    [Fact]
     public void ForUpdate_ShouldThrowBecauseSqliteHasNoRowLocking()
     {
         using var ctx = SqliteTestContext.Create();

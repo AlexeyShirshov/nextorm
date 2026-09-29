@@ -186,6 +186,7 @@ internal static class SqlSourceRenderer
         }
 
         ValidateJoinModifiers(in ctx, join);
+        ValidateJoinTableHintSource(join);
 
         if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply)
             return MakeApplyJoin(in ctx, join);
@@ -204,7 +205,7 @@ internal static class SqlSourceRenderer
 
             if (joinCondition is null)
             {
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TablesInScopeHints: tablesInScopeHints));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -223,7 +224,7 @@ internal static class SqlSourceRenderer
             {
                 var dim = JoinDimension(joinCondition);
 
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TablesInScopeHints: tablesInScopeHints));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -256,6 +257,7 @@ internal static class SqlSourceRenderer
     internal static (string From, string Condition) MakeJoinParts(in SqlBuildContext ctx, JoinExpression join, Type entityType)
     {
         ValidateJoinModifiers(in ctx, join);
+        ValidateJoinTableHintSource(join);
 
         var condition = join.JoinCondition
             ?? throw new BuildSqlCommandException("A multi-table DELETE only supports INNER joins, which carry a condition.");
@@ -266,7 +268,7 @@ internal static class SqlSourceRenderer
 
         try
         {
-            var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, condition.Parameters[1].Type, false));
+            var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, condition.Parameters[1].Type, false, TableHints: join.TableHints));
 
             var conditionBuilder = StringBuilderPool.Shared.Get();
             try
@@ -302,6 +304,31 @@ internal static class SqlSourceRenderer
         if (join.JoinType is not (JoinType.Inner or JoinType.Left or JoinType.Right or JoinType.Full))
             throw new NotSupportedException($"The join modifier cannot be applied to a {join.JoinType} join");
     }
+
+    // A per-join table hint renders as a WITH (...) clause after the joined table name, so it requires a
+    // plain physical-table source. An APPLY join, a derived subquery, a table-valued function, an
+    // XML/pivot, raw-SQL or table-expression join source cannot carry it; reject deterministically rather
+    // than silently dropping the hint. Dialect support for a physical-table join is checked by MakeFrom
+    // (see the SupportsTableHints guard), which lets SQLite/ClickHouse reject with NotSupportedException.
+    private static void ValidateJoinTableHintSource(JoinExpression join)
+    {
+        if (join.TableHints is not { Count: > 0 })
+            return;
+
+        if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply || !IsPhysicalTableSource(join.From))
+            throw new InvalidOperationException("Join table hints are only supported on a physical table source.");
+    }
+
+    // Mirrors the physical-table branch of MakeFrom: the only source shape that can render a table hint
+    // is a named table that is not one of the special source kinds dispatched before it.
+    private static bool IsPhysicalTableSource(FromExpression from)
+        => !string.IsNullOrEmpty(from.Table)
+            && from.SubQuery is null
+            && from.TableFunction is null
+            && from.Pivot is null
+            && from.XmlNodes is null
+            && from.RawSqlSource is null
+            && from.TableExpressionOverride is null;
 
     // A join condition needs a pushed column scope when two of its parameter types are the same (for
     // example a self-join), so each alias resolves within its own scope.
