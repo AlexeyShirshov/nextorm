@@ -11,7 +11,7 @@
 Один билдер обслуживает две формы:
 
 * **key upsert** — `OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`. Каждый SQL-провайдер выражает её нативно, и только она применяется in-memory-провайдером (к зарегистрированной последовательности).
-* **полный `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, каждая завершается `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Нативно на SQL Server и PostgreSQL 15+; остальные провайдеры его отклоняют.
+* **полный `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, каждая завершается `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Нативно на SQL Server и PostgreSQL (предпосылка времени выполнения: сервер 15+); остальные провайдеры его отклоняют.
 
 ## Upsert (key merge)
 
@@ -54,7 +54,7 @@ merge into simple_entity as target using (values (@p0, @p1)) as source (id, name
 
 ## Полный `MERGE`
 
-[`WhenMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenMatched) / [`WhenNotMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatched) / [`WhenNotMatchedBySource()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatchedBySource) расширяют тот же билдер до общего много-веточного `MERGE` на провайдерах, которые рендерят его нативно (SQL Server, PostgreSQL 15+). Каждая ветка завершается действием, и ветки выполняются в порядке объявления:
+[`WhenMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenMatched) / [`WhenNotMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatched) / [`WhenNotMatchedBySource()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatchedBySource) расширяют тот же билдер до общего много-веточного `MERGE` на провайдерах, которые рендерят его нативно (SQL Server, PostgreSQL; сервер 15+). Каждая ветка завершается действием, и ветки выполняются в порядке объявления:
 
 ```csharp
 ctx.MergeInto<IDest>()
@@ -100,12 +100,14 @@ ctx.MergeInto<IDest>()
 | Провайдер | Полный `MERGE` | `THEN DELETE` | `THEN DO NOTHING` | `ON` / `WHEN ... AND` | `WHEN NOT MATCHED BY SOURCE` |
 |---|---|---|---|---|---|
 | SQL Server | да | да | — | да | да |
-| PostgreSQL | да (15+) | да | да | да | — |
+| PostgreSQL | да (сервер 15+) | да | да | да | — |
 | SQLite, MySQL, MariaDB | — (только key upsert) | — | — | — | — |
 | In-memory | — (только key upsert) | — | — | — | — |
 | ClickHouse | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` |
 
 `Using(ctx.From<T>().Where(...))` или `Using(QueryCommand<T>)` задаёт строки серверным запросом (`USING (<select>) AS source`) вместо батча `VALUES`; источник-запрос принимает только форма полного `MERGE`.
+
+При активном [глобальном фильтре запросов](../advanced/query-filters.md) полный `MERGE` подмешивает предикат цели в условие `MERGE ... ON` и в каждую ветку `WHEN NOT MATCHED BY SOURCE` (SQL Server), поэтому строка цели, скрытая фильтром, никогда не сопоставляется, не обновляется и не удаляется. Форма должна быть настоящим много-веточным `MERGE` (реальные ветки `WhenMatched()`/`WhenNotMatched()`); `.On(...)` не превращает key-upsert-сокращение в эту форму. Key upsert на провайдере, который не может выразить предикат (`ON CONFLICT` / `ON DUPLICATE KEY` / in-memory), **отказывает** с `NotSupportedException` до любой мутации, и предикат никогда не отбрасывается молча; `IgnoreFilters()` восстанавливает нативный upsert. Отказ по возможности/форме происходит до любого чтения, а merge с источником-запросом может сначала выполнить pre-check-чтение источника, прежде чем отказ по трансляции/рендерингу. На поддерживаемой форме полного `MERGE` каждая ветка — включая update-only и delete-only — проверяет входящие строки источника по фильтрам цели и бросает `QueryFilterException` до мутации (см. [Изоляция цели записи](../advanced/query-filters.md#изоляция-цели-записи) и [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка)).
 
 ### Возврат слитых строк
 
@@ -134,7 +136,7 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 `ON CONFLICT ... DO UPDATE`; полный `MERGE` возвращает строки через SQL Server `OUTPUT inserted.<col>`
 и PostgreSQL 17+ `RETURNING target.<col>`. MySQL/MariaDB не имеют возвращающей формы для key upsert,
 поэтому `.Returning()` там бросает `NotSupportedException`; SQLite и ClickHouse по-прежнему отклоняют
-полный `MERGE`.
+полный `MERGE` (а для самой инструкции общего `MERGE` сервер должен быть PostgreSQL 15+).
 
 ## Просмотр SQL
 
@@ -159,7 +161,7 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 | Провайдер | Key upsert | Полный `MERGE` | `RETURNING`/`OUTPUT` | Примечание |
 |---|---|---|---|---|
 | SQL Server | `MERGE ... USING (VALUES ...)` | да | `OUTPUT inserted.<col>` (key upsert и полный) | все ветки, включая `WHEN NOT MATCHED BY SOURCE` |
-| PostgreSQL | `ON CONFLICT ... DO UPDATE` | да (15+) | `RETURNING` (key upsert 9.5+, полный 17+) | `DO NOTHING`; без `BY SOURCE` |
+| PostgreSQL | `ON CONFLICT ... DO UPDATE` | да (сервер 15+) | `RETURNING` (key upsert 9.5+, полный 17+) | `DO NOTHING`; без `BY SOURCE` |
 | SQLite | `ON CONFLICT ... DO UPDATE` | — | `RETURNING` (key upsert, 3.35+) | только key upsert |
 | MySQL | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert; нет `RETURNING` |
 | MariaDB | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert; `RETURNING` не используется для `ON DUPLICATE KEY` |
@@ -172,12 +174,18 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 * **Ветки выполняются в порядке объявления.** SQL Server и PostgreSQL вычисляют клаузы `WHEN` сверху вниз; к строке применяется первая подходящая клауза.
 * **Условие `WHEN NOT MATCHED BY SOURCE` на SQL Server — только по target.** `MERGE` в SQL Server не предоставляет в этой клаузе алиас источника, поэтому условие может ссылаться только на строку target.
 * **Источник — серверный запрос.** `Using(ctx.From<T>().Where(...))` / `Using(QueryCommand<T>)` принимает только форма полного `MERGE`; key-upsert-провайдеры откатываются к батчу `VALUES`.
+* **PostgreSQL 15+ — серверная предпосылка.** nextorm не обнаруживает и не настраивает версию сервера и не читает её; он рендерит общий `MERGE` только по флагам возможностей диалекта, а более старый сервер отклоняет саму инструкцию. Клиентской защиты «PostgreSQL < 15 отказывает» нет.
 * **Мутации не готовятся и не кладутся в кэш планов.** Оптимизация в nextorm нацелена только на read-only запросы (`Prepare`, неявный кэш планов, бенчмарки); merge всегда рендерит и выполняет одну команду за вызов.
 * **Число затронутых строк.** `Merge()`/`MergeAsync()` возвращают число строк, которое сообщает провайдер.
-* **Глобальные фильтры запросов не добавляются в цель.** Фильтр, объявленный для типа сущности, никогда не
-  добавляется в `MERGE`; вместо этого строки insert-ветки проверяются на соответствие активным фильтрам
-  цели до выполнения, и нарушение бросает `QueryFilterException`. `IgnoreFilters` на билдере отключает их
-  и от проверки. См. [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
+* **Глобальные фильтры запросов и цель merge.** Фильтр, объявленный для типа сущности, не подмешивается
+  через `FROM` источника; входящие строки источника каждой ветки поддерживаемого полного `MERGE`
+  (insert, update-only и delete-only) проверяются на соответствие активным фильтрам цели до
+  выполнения, и нарушение бросает `QueryFilterException`. При активном фильтре полный `MERGE` дополнительно
+  изолирует цель внутри инструкции (см.
+  [Изоляция цели записи](../advanced/query-filters.md#изоляция-цели-записи)), а нефильтруемый key upsert
+  (`ON CONFLICT` / `ON DUPLICATE KEY` / in-memory) **отказывает** с `NotSupportedException`; `IgnoreFilters`
+  отключает фильтр от проверки и восстанавливает нативный upsert. См.
+  [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
 * In-memory-провайдер только для чтения: полный `MERGE` бросает `NotSupportedException`; только key-upsert merge применяется к зарегистрированной последовательности в контексте.
 
 ## См. также

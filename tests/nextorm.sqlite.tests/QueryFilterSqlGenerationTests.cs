@@ -384,6 +384,18 @@ public class QueryFilterSqlGenerationTests
         public int Id { get; set; }
     }
 
+    /// <summary>A target with no filter and no test configuring one, so the process-wide metadata cache
+    /// cannot leak an active filter into the branchless-On control.</summary>
+    [SqlTable("filter_dml_target_plain")]
+    public sealed class BranchlessPlainEntity
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+    }
+
     [SqlTable("filter_insert_source")]
     public sealed class FilterInsertSourceEntity
     {
@@ -638,19 +650,118 @@ public class QueryFilterSqlGenerationTests
     }
 
     [Fact]
-    public void Merge_Target_IsNotFiltered()
+    public void Merge_Target_Filtered_ShouldRefuseNotSupported()
     {
         using var ctx = SqliteTestContext.Create();
         ConfigureDmlTarget(ctx);
 
+        // #123: the ON CONFLICT key upsert cannot isolate a filtered-out target row atomically, so an
+        // active target filter refuses instead of silently bypassing it (the old assertion expected the
+        // native unfiltered SQL).
+        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+            .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void Merge_Target_IgnoreFilters_ShouldRenderNativeSql()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ConfigureDmlTarget(ctx);
+
+        // Control for the refusal above: IgnoreFilters opts out and restores the pre-change SQL.
         var sql = Normalize(ctx.MergeInto<FilterDmlTargetEntity>()
             .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
+            .IgnoreFilters()
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .ToSql());
 
-        CountOccurrences(sql, "tenant_id = ").Should().Be(1, "only the SET value remains; the target filter is not injected");
+        sql.Should().StartWith("insert into filter_dml_target");
+        sql.Should().Contain("on conflict (id) do update");
+        CountOccurrences(sql, "tenant_id = ").Should().Be(1, "only the SET value remains; no filter predicate is injected");
+    }
+
+    // --- #123 zero-round-trip: the refusal is a metadata decision taken before any connection is
+    // --- opened or command executed. A recording interceptor set proves nothing reached the database.
+
+    private sealed class CountingConnectionInterceptor : IConnectionInterceptor
+    {
+        public int Opening { get; private set; }
+        public int Opened { get; private set; }
+
+        public void ConnectionOpening(ConnectionEventData eventData) => Opening++;
+
+        public void ConnectionOpened(ConnectionEventData eventData) => Opened++;
+    }
+
+    private sealed class CountingQueryInterceptor : IQueryInterceptor
+    {
+        public int Initialized { get; private set; }
+        public int Executing { get; private set; }
+
+        public void CommandInitialized(CommandEventData eventData, DbCommand command) => Initialized++;
+
+        public void CommandExecuting(CommandEventData eventData, DbCommand command) => Executing++;
+    }
+
+    private static (SqliteDataContext Ctx, CountingConnectionInterceptor Connection, CountingQueryInterceptor Query) CreateCountedContext()
+    {
+        var connection = new CountingConnectionInterceptor();
+        var query = new CountingQueryInterceptor();
+        var ctx = new SqliteDataContext(
+            "Data Source=:memory:",
+            new DataContextBuilder().AddInterceptor(connection).AddInterceptor(query));
+        ctx.Properties[DmlTenantKey] = 1;
+        ctx.From<FilterDmlTargetEntity>(b => b
+            .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[DmlTenantKey]));
+        return (ctx, connection, query);
+    }
+
+    [Fact]
+    public void Merge_Target_Filtered_Sync_ShouldRefuseWithZeroRoundTrips()
+    {
+        var (ctx, connection, query) = CreateCountedContext();
+        using var _ = ctx;
+
+        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+            .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Merge();
+
+        act.Should().Throw<NotSupportedException>();
+        connection.Opening.Should().Be(0, "the refusal is decided from metadata, before opening a connection");
+        connection.Opened.Should().Be(0);
+        query.Initialized.Should().Be(0, "no command is created or executed");
+        query.Executing.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Merge_Target_Filtered_Async_ShouldRefuseWithZeroRoundTrips()
+    {
+        var (ctx, connection, query) = CreateCountedContext();
+        using var _ = ctx;
+        var command = ctx.MergeInto<FilterDmlTargetEntity>()
+            .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert();
+
+        var act = async () => await command.MergeAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        connection.Opening.Should().Be(0);
+        connection.Opened.Should().Be(0);
+        query.Initialized.Should().Be(0);
+        query.Executing.Should().Be(0);
     }
 
     [Fact]
@@ -901,5 +1012,72 @@ public class QueryFilterSqlGenerationTests
 
         lowerIgnored.GetOrCreatePlanKey(null).Equals(upperIgnored.GetOrCreatePlanKey(null))
             .Should().BeFalse("two different function declarations inject different conditions");
+    }
+
+    // --- #123 amendment: the full-MERGE form is detected by actual branches, so a branchless `.On(...)`
+    // --- under an active filter is the key-upsert form and refuses before any source read. SQLite has no
+    // --- general MERGE and no filtered key upsert, so the target filter is never dropped silently.
+
+    [Fact]
+    public void BranchlessOn_ActiveFilter_Sync_ShouldRefuseWithZeroRoundTrips()
+    {
+        var (ctx, connection, query) = CreateCountedContext();
+        using var _ = ctx;
+
+        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+            .Using(ctx.From<FilterDmlTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
+            .On((t, s) => t.Id == s.Id)
+            .Merge();
+
+        act.Should().Throw<NotSupportedException>("a branchless On(...) is not a full MERGE on SQLite");
+        connection.Opening.Should().Be(0, "the refusal precedes the source pre-check");
+        query.Executing.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task BranchlessOn_ActiveFilter_Async_ShouldRefuseWithZeroRoundTrips()
+    {
+        var (ctx, connection, query) = CreateCountedContext();
+        using var _ = ctx;
+        var command = ctx.MergeInto<FilterDmlTargetEntity>()
+            .Using(ctx.From<FilterDmlTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
+            .On((t, s) => t.Id == s.Id);
+
+        var act = async () => await command.MergeAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        connection.Opening.Should().Be(0);
+        query.Executing.Should().Be(0);
+    }
+
+    [Fact]
+    public void BranchlessOn_IgnoredFilter_ShouldKeepTheMalformedFormError()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ConfigureDmlTarget(ctx);
+
+        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+            .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
+            .IgnoreFilters()
+            .On((t, s) => t.Id == s.Id)
+            .ToSql();
+
+        act.Should().Throw<InvalidOperationException>(
+                "IgnoreFilters keeps the bypass, so the branchless On(...) keeps its malformed-form error")
+            .Which.Should().NotBeOfType<NotSupportedException>();
+    }
+
+    [Fact]
+    public void BranchlessOn_NoFilterConfigured_ShouldKeepTheMalformedFormError()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.MergeInto<BranchlessPlainEntity>()
+            .Using(new BranchlessPlainEntity { Id = 1, TenantId = 1 })
+            .On((t, s) => t.Id == s.Id)
+            .ToSql();
+
+        act.Should().Throw<InvalidOperationException>("without an active filter the branchless On(...) behaves as before")
+            .Which.Should().NotBeOfType<NotSupportedException>();
     }
 }

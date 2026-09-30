@@ -5,8 +5,9 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Validates the rows written by an <c>INSERT</c> or <c>MERGE</c> against the target entity type's
-/// active global query filters. The filters are never injected into the target of a write; instead the
-/// values being written are checked before the statement executes, and a violation raises a
+/// active global query filters. On a supported <c>MERGE</c> (and <c>UPDATE</c>/<c>DELETE</c>) the filter
+/// is also injected into the statement's target predicate; the remaining writes — and the inserted rows
+/// of a merge — are checked before the statement executes, and a violation raises a
 /// <see cref="QueryFilterException"/>.
 /// </summary>
 /// <remarks>

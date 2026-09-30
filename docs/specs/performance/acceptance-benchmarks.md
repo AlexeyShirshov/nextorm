@@ -429,3 +429,31 @@ unchanged (7.52 vs 7.42), and the current-tree parameter-path allocations match 
 D2 run within BDN's one-unit rounding (no "byte-identical" claim); the MySQL
 `command.CreateParameter()` swap is allocation-neutral. The noisy acceptance time ratio
 (1.38 / 3.89) is reported as such and is not used to claim an improvement or a regression.
+
+## Results 2026-10-01 — issue #123 (MERGE/UPSERT target-filter isolation)
+
+Post-fix acceptance re-run on the same host/config/case set as the D2 pre-fix baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7** cases, **0** failures).
+External shell wall clock **51.95 s**; BDN `Global total time` under the 4 min budget.
+
+| Metric | D2 pre-fix baseline | Post-fix (#123) |
+|--------|---------------------|-----------------|
+| Wall clock | 43.14 s | 51.95 s |
+| Cached/prepared ratio (`Cached_ToList / Prepared_ToList`) | 1.89 | **1.93** |
+| Allocated ratio | 7.87 | **7.88** |
+
+Both runs are **same-host** and the deltas are within `ShortRun` noise: the tracked cached-vs-prepared
+ratio moves +2.1 % (time) and +0.1 % (allocation), far below the 20 % investigation threshold.
+Verdict: within noise, **no regression**; the target filter is added only when a filter is active and
+not `IgnoreFilters`, and the unsupported-form refusal is metadata-only (no DB round-trip).
+
+### Targeted `MergeTargetFilterBenchmark` (category `merge-filter`)
+
+Command `--filter '*MergeTargetFilterBenchmark*'` (SQL Server renders SQL only, placeholder connection,
+no connection opened; the in-memory arms use `InMemoryDataContext`). Post-fix the
+`FullMerge_Filtered_SqlBuild` arm is **~492 µs** (vs the pre-fix ~146 µs): the added cost is the new
+**one-time command-build work** that resolves the filter and renders the `target`-qualified predicate
+into `MERGE ... ON` — paid once per command, not per row. `FullMerge_IgnoreFilters_SqlBuild` and
+`InMemory_NoFilter` are **unchanged** (the filter render is skipped when inactive or `IgnoreFilters`);
+`InMemory_ActiveFilter` becomes the metadata capability refusal (no source read, no interceptor events).

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
@@ -289,5 +290,124 @@ public class QueryFilterSqlGenerationTests
         ReferenceEquals(first, second).Should().BeTrue("the second execution must hit the cached plan, so the changed value is observed on it");
         second.DbCommand.Parameters.Count.Should().Be(1);
         second.DbCommand.Parameters[0].Value.Should().Be(2, "the cached plan re-reads the context value and binds the second one");
+    }
+
+    // --- #123: MariaDB has no general MERGE and its ON DUPLICATE KEY UPDATE cannot isolate a
+    // --- filtered-out target row, so a filtered key upsert refuses; IgnoreFilters restores the
+    // --- native form. No database connection is opened.
+
+    private const string MergeTenantKey = "qf_merge_tenant_mariadb";
+
+    [SqlTable("qf_merge_target")]
+    public sealed class QfMergeTargetEntity
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+
+        [Column("name")]
+        public string? Name { get; set; }
+    }
+
+    [SqlTable("qf_merge_other")]
+    public sealed class QfMergeOtherEntity
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+    }
+
+    private static void ConfigureMergeTarget(IDataContext ctx)
+    {
+        ctx.Properties[MergeTenantKey] = 1;
+        ctx.From<QfMergeTargetEntity>(b => b
+            .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[MergeTenantKey]));
+    }
+
+    [Fact]
+    public void KeyUpsert_Filtered_ShouldThrowNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var act = () => ctx.MergeInto<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>("ON DUPLICATE KEY UPDATE cannot isolate a filtered target row");
+    }
+
+    [Fact]
+    public void KeyUpsert_IgnoreFilters_ShouldRenderNativeSql()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters()
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        sql.Should().Contain("on duplicate key update");
+        sql.Should().NotContain("tenant_id = @");
+    }
+
+    [Fact]
+    public void KeyUpsert_SelectiveIgnore_ShouldRefuseUntilTheTargetFilterIsDropped()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var otherKey = () => ctx.MergeInto<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(["other"])
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+        var targetKey = () => ctx.MergeInto<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(["tenant"])
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        otherKey.Should().Throw<NotSupportedException>();
+        targetKey.Should().NotThrow();
+    }
+
+    [Fact]
+    public void KeyUpsert_SelectiveIgnoreByType_ShouldRefuseWhenAnUnrelatedTypeIsIgnored()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var unrelated = () => ctx.MergeInto<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(typeof(QfMergeOtherEntity))
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+        var target = () => ctx.MergeInto<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(typeof(QfMergeTargetEntity))
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        unrelated.Should().Throw<NotSupportedException>();
+        target.Should().NotThrow();
     }
 }

@@ -1075,11 +1075,24 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     {
         if (command.Branches is null)
         {
+            // A filtered SQL Server key upsert (SupportsMerge) is routed through the same filtered MERGE
+            // renderer as the full-MERGE form: the target predicate is rendered into its ON. Every other
+            // dialect has already refused in the builder's capability guard, so there is no filter here.
+            IParameterProvider? keyProvider = null;
+            List<Parameter>? keyAccumulator = null;
+            string? keyFilterSql = null;
+            if (Dialect.SupportsMerge && command.Registry is { } keyRegistry)
+            {
+                keyProvider = new DefaultParameterProvider();
+                keyAccumulator = [];
+                keyFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, keyRegistry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+            }
+
             if (command.Source is null)
-                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase);
+                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql);
 
             var (withInsert, sourceInsert, sourceInsertParameters) = _planner.RenderSource(command.Source);
-            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, null, sourceInsert, sourceInsertParameters);
+            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql);
             return (withInsert is null ? insertSql : withInsert + insertSql, insertParameters);
         }
 
@@ -1096,6 +1109,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (command.MatchCondition is not null)
             matchConditionSql = _planner.RenderMergeCondition(command.MatchCondition, command.EntityType, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
 
+        // The active target filter joins the ON predicate and every WHEN NOT MATCHED BY SOURCE arm. The
+        // capability guard already refused forms that cannot carry it, and RenderMergeTargetFilter returns
+        // null when the effective scope leaves no filter active (IgnoreFilters / no filter configured).
+        var targetFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
+
         string?[]? branchConditions = null;
         for (var i = 0; i < command.Branches.Count; i++)
         {
@@ -1108,14 +1126,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         if (command.Source is null)
         {
-            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions);
+            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql);
             return (sql, parameters);
         }
 
         var (withSql, sourceSql, _) = _planner.RenderSource(command.Source, provider, accumulator);
         // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
         // passing them again would duplicate every @pN.
-        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions);
+        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql);
         return (withSql is null ? fullSql : withSql + fullSql, fullParameters);
     }
 

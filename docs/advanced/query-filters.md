@@ -159,6 +159,7 @@ A filter is attached to the entity type and is injected wherever that type appea
 | Join source | into the join's `ON` condition for the joined entity |
 | Subquery | into the subquery when it is prepared |
 | Mutation target (`UPDATE` / `DELETE`) | into the statement's `WHERE`, combined with the predicate or the key equality |
+| `MERGE` target (SQL Server, PostgreSQL) | into the `MERGE ... ON` condition and every `WHEN NOT MATCHED BY SOURCE` arm (see [Write-target isolation](#write-target-isolation)) |
 
 The main source of a join is the first table, so a filter declared for `T1` applies to `Item1` exactly as in a plain query.
 
@@ -196,19 +197,21 @@ ctx.Update<Document>()
     .Update();
 ```
 
-`INSERT` / `MERGE` do not filter their target (there is no `FROM` for it); `INSERT … SELECT` filters the source as any read — and the written rows are validated instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)).
+`INSERT` / `MERGE` do not inject a target filter through a source `FROM` (the target has no `FROM`); under an active filter a full `MERGE` constrains the target inside the statement, and the key-upsert forms that cannot do so **refuse** (see [Write-target isolation](#write-target-isolation)). `INSERT … SELECT` filters its source as any read — and the written rows are validated instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)).
 
 ## INSERT and MERGE (validation)
 
-An `INSERT` or `MERGE` never injects a filter into its **target** — the target has no `FROM` — so a write is never silently restricted. Instead the values about to be written are validated against the target entity's active filters (minus the `IgnoreFilters` scope) **before** the statement runs; a violation raises [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) (a [`DataContextException`](xref:NextORM.Core.DataContextException)).
+Neither an `INSERT` nor a `MERGE` injects a target filter through a source `FROM` — the target has no `FROM` — so a write is never silently restricted. A **full `MERGE`** (and the SQL Server key upsert, which renders as the same form) instead constrains the target atomically inside the statement, while an `ON CONFLICT` / `ON DUPLICATE KEY` / in-memory key upsert — which cannot carry the predicate — **refuses** (see [Write-target isolation](#write-target-isolation)). Independently, the values about to be written are validated against the target entity's active filters (minus the `IgnoreFilters` scope) **before** the statement runs; a violation raises [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) (a [`DataContextException`](xref:NextORM.Core.DataContextException)).
 
 | Statement | What is validated |
 |---|---|
 | `InsertInto<T>().Value(...)` / `Values(entity)` / batch `Values(...)` | every written row against the target filters |
 | `BulkInsertInto<T>()` | every row in the source |
-| `MergeInto<T>().Using(...)` | the rows of the merge's insert branch |
+| `MergeInto<T>().Using(...)` | the source rows of **every** `MERGE` branch — insert, update-only and delete-only |
 | `InsertInto<T>().Values(source, mapping)` (`INSERT … SELECT`) | a server-side pre-check of the source rows |
 | `MergeInto<T>().Using(query)` (query-sourced `MERGE`) | a server-side pre-check of the source rows |
+
+On the supported full-`MERGE` form the source-value validation covers **every branch combination** — an update-only or delete-only `MERGE` validates its incoming source rows just like one that inserts, and a non-passing source row throws [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) before any mutation, even when the statement would not insert a row.
 
 For a materialised entity the filter is evaluated directly against it. For the column/value forms only the written columns carry a value, so validation is **fail-closed**: if an active filter reads a column the statement does **not** write, the write is **rejected** with a [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) rather than let through — a database default could satisfy or violate the filter, and nextorm does not guess. Write the column explicitly, or disable the filter for the statement with `IgnoreFilters`.
 
@@ -226,6 +229,40 @@ ctx.InsertInto<Document>()
 ```
 
 A filter declared in the builder-function form (`FilterFunc`) cannot be validated against a written row — it is evaluated only while a query plan is built — so a write whose active **target** filter is declared as a function is rejected (fail-closed) unless the filter is disabled with `IgnoreFilters`; declare the filter as a predicate (`FilterLambda`) when the write must be validated. `INSERT … SELECT` still filters its **source** as a read, and `UPDATE` / `DELETE` are unaffected (see [Builder-function filters](#builder-function-filters-filterfunc)).
+
+## Write-target isolation
+
+A write is filtered on two sides, and they are independent:
+
+- the **source** of an `INSERT … SELECT` or a query-sourced `MERGE` is an ordinary read, so a filter declared for the source entity is injected into the source query as usual;
+- the **target** has no `FROM`, so its filter is not part of any source query. Under an active, non-ignored target filter the operation is constrained atomically in the statement where the dialect can express it; where it cannot, the command **refuses** with `NotSupportedException` before any mutation. A capability/form refusal happens before any read, but a query-sourced merge may first run its source pre-check read before a translation/render refusal. The predicate is never silently dropped: an active filter that cannot be translated to a target predicate is a fail-closed error, not a bypass.
+
+For the full `MERGE` form (SQL Server, PostgreSQL) the target predicate is injected into the `MERGE ... ON` condition and — on SQL Server, which has the arm — appended to every `WHEN NOT MATCHED BY SOURCE` branch. A target row hidden by the filter is therefore never matched, never updated and never deleted by the merge, including its delete arm. The SQL Server key upsert renders as the same `MERGE` form and takes the same predicate, so it is filtered too.
+
+**Form rule.** The atomic form is a real multi-branch `MERGE`, which requires actual `WhenMatched()`/`WhenNotMatched()` branches. Calling `.On(...)` does not turn the key-upsert shortcut (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`) into a full `MERGE`; the two are distinct forms. On a provider that has no full-`MERGE` support (SQLite, MySQL, MariaDB, in-memory), a branchless `.On(...)` under an active filter therefore fails closed with `NotSupportedException` before any source read.
+
+**PostgreSQL is a server prerequisite, not a client-side guard.** PostgreSQL 15+ is required for the server to execute the general `MERGE`; nextorm does not discover or configure the server version and performs **no version read**. Capability-based rendering is version-independent — the library emits the statement from the dialect's capability flags alone, and an older server rejects it server-side. There is no library-side "PostgreSQL < 15 refuses" path.
+
+| Provider / form | Target filter under an active, non-ignored filter |
+|---|---|
+| SQL Server — full `MERGE` and key upsert (`MERGE`) | injected into `ON` and into every `WHEN NOT MATCHED BY SOURCE` arm |
+| PostgreSQL (server 15+) — full `MERGE` | injected into `ON` (PostgreSQL has no `WHEN NOT MATCHED BY SOURCE`) |
+| PostgreSQL, SQLite — key upsert (`ON CONFLICT`) | `NotSupportedException` — fail closed |
+| MySQL, MariaDB — key upsert (`ON DUPLICATE KEY`) | `NotSupportedException` — fail closed |
+| In-memory — key upsert | `NotSupportedException` — fail closed |
+| Any provider — no active filter, or the filter is disabled | native behavior, no extra predicate |
+
+The capability refusal is a **metadata decision, before any connection, command or read** (zero database round-trips); the exception message points to `IgnoreFilters()` or to a full-`MERGE`-capable provider/form. It is deliberate fail-closed behavior, not a bug.
+
+`IgnoreFilters` bypasses the target filter for the statement, with the same four overloads as elsewhere (all-or-nothing, by entity type, by key, and the key/type intersection). A scope that disables the target entity's filter — or all filters — restores the provider's native upsert without the predicate; a selective scope that does not cover the target filter leaves it active, so an `ON CONFLICT` / `ON DUPLICATE KEY` upsert still refuses.
+
+### Limits of target isolation
+
+- **Existence oracle on a unique-index collision (insert arm only).** When a `MERGE`'s insert arm attempts a row whose key collides with a target row the filter hides, the provider reports its native unique-constraint error for whichever unique index it hits — not only the PK/merge key — revealing that a hidden target row exists; it cannot be removed without dropping the unique constraint. The composite-key mitigation (include the tenant/filter column) applies to the primary/merge key only, since it prevents a hidden row's key from colliding with a visible source key but does not cover other unique indexes. An update-only or delete-only `MERGE` never inserts, so a hidden row is a silent no-op (the filtered-out row is simply not matched) and exposes no oracle.
+- **Source-value validation is a separate read.** For `INSERT … SELECT` and a query-sourced `MERGE`, the written source values are checked by a separate existence query (`QueryFilterValidator`) with a **TOCTOU** window. It validates source values, not target rows, so it does not reveal hidden target existence and it does not make the write atomic (see [INSERT and MERGE (validation)](#insert-and-merge-validation)).
+- The refusal above is the intended safe outcome when the dialect cannot isolate the target atomically.
+
+With **no filter** configured the write path is unchanged: no predicate is added and no operation refuses.
 
 ## Builder-function filters (`FilterFunc`)
 
@@ -285,7 +322,7 @@ ctx.From<Document>(m => m.HasQueryFilter((b, c) =>
 
 ## In-memory provider
 
-The in-memory provider applies the same predicate to the registered sequence before projection and joins, so soft-delete and multi-tenancy queries behave identically to SQL providers. The `IgnoreFilters` overloads are honoured there too.
+The in-memory provider applies the same predicate to the registered sequence before projection and joins, so soft-delete and multi-tenancy queries behave identically to SQL providers. The `IgnoreFilters` overloads are honoured there too. For a write — the key-upsert merge is the only write it applies — an active, non-ignored filter makes the operation **refuse** with `NotSupportedException` (fail closed; see [Write-target isolation](#write-target-isolation)); `IgnoreFilters` restores the native behavior.
 
 ## Metadata
 
@@ -313,10 +350,11 @@ public interface IQueryFilterMetadata
 
 ## Not yet
 
+Write-target isolation **is** implemented for the full `MERGE` (SQL Server, PostgreSQL 15+) and the SQL Server key upsert, and the `ON CONFLICT` / `ON DUPLICATE KEY` / in-memory key upserts **refuse** under an active filter rather than bypass it (see [Write-target isolation](#write-target-isolation), [#123](https://github.com/AlexeyShirshov/nextorm/issues/123)).
+
 The following are **not** available:
 
-- filtering the **target** of `INSERT` / `MERGE` / `UPSERT` (there is no `FROM` for it) — target filters are enforced by validating the written rows instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)); `INSERT … SELECT` already filters its **source** ([#123](https://github.com/AlexeyShirshov/nextorm/issues/123));
 - filters on `FromSql` / raw sources ([#124](https://github.com/AlexeyShirshov/nextorm/issues/124));
 - the EF Core bridge that forwards EF Core 10 keyed filters ([#125](https://github.com/AlexeyShirshov/nextorm/issues/125)).
 
-`UPDATE` and `DELETE` are covered (see [UPDATE and DELETE (DML)](#update-and-delete-dml)).
+`UPDATE`, `DELETE` and the full-`MERGE` write target are covered (see [UPDATE and DELETE (DML)](#update-and-delete-dml) and [Write-target isolation](#write-target-isolation)).

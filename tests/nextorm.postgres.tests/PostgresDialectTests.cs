@@ -40,6 +40,22 @@ public class PostgresDialectTests
     }
 
     [Fact]
+    public void MergeCapability_IsVersionIndependent_WithoutClientRefusal()
+    {
+        // #123 amendment: `SupportsMergeStatement` is a static capability (PG15+ is a server prerequisite,
+        // not a client guard). There is no version discovery, connection or configuration read: reading the
+        // dialect property must not throw and must not require a server. The dialect exposes no minimum
+        // version knob, so a library-side PG<15 refusal is deliberately not part of the contract.
+        Dialect.SupportsMergeStatement.Should().BeTrue(
+            "the capability is unconditional and decided without a connection or a server round-trip");
+        Dialect.GetType().GetProperties()
+            .Select(p => p.Name)
+            .Where(n => System.Text.RegularExpressions.Regex.IsMatch(n, "(^|[A-Z])Version")
+                || n.Contains("MinMerge", StringComparison.OrdinalIgnoreCase))
+            .Should().BeEmpty("the dialect exposes no version-gated MERGE switch to read");
+    }
+
+    [Fact]
     public void MakeTypeName_String_ShouldBeText()
     {
         Dialect.MakeTypeName(typeof(string)).Should().Be("text");

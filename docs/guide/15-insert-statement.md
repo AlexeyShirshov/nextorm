@@ -488,6 +488,8 @@ The same builder family also writes rows through a `MERGE`: a portable **key ups
 
 - [Data merging (MERGE / upsert)](19-merge-statement.md)
 
+Under an active [global query filter](../advanced/query-filters.md), the portable **key upsert** on `ON CONFLICT` (PostgreSQL, SQLite) and `ON DUPLICATE KEY` (MySQL, MariaDB) **refuses** with `NotSupportedException`, because those forms cannot carry a target predicate; `IgnoreFilters()` restores the native upsert. The full `MERGE` form filters its target instead (see [Write-target isolation](../advanced/query-filters.md#write-target-isolation)).
+
 ## Inspecting the SQL
 
 [`ToSql()`](xref:NextORM.Core.InsertBuilder`1.ToSql) renders the parameterised SQL a plain
@@ -540,8 +542,12 @@ SQL Server additionally writes the modified rows into an existing table with `OU
 * **Global query filters are not injected into the target.** A filter declared for the entity type is
   never added to the `INSERT`; instead the written values are validated against the target's active
   filters before execution and a violation raises `QueryFilterException`. `IgnoreFilters` on the builder
-  disables them from validation too. See
-  [INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation).
+  disables them from validation too. On the key-upsert providers that cannot express a target predicate
+  (`ON CONFLICT` / `ON DUPLICATE KEY`) an active filter makes the upsert **refuse** with
+  `NotSupportedException`; `IgnoreFilters()` restores it, and the full `MERGE` form filters the target
+  instead. See
+  [INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation) and
+  [Write-target isolation](../advanced/query-filters.md#write-target-isolation).
 * The in-memory provider is query-only: `INSERT`/`UPDATE`/`DELETE` and the full `MERGE` throw `NotSupportedException`; only the key-upsert merge is applied to the registered sequence in the context.
 
 ## See also

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
@@ -289,5 +290,47 @@ public class QueryFilterSqlGenerationTests
         ReferenceEquals(first, second).Should().BeTrue("the second execution must hit the cached plan, so the changed value is observed on it");
         second.DbCommand.Parameters.Count.Should().Be(1);
         second.DbCommand.Parameters[0].Value.Should().Be(2, "the cached plan re-reads the context value and binds the second one");
+    }
+
+    // --- #123: ClickHouse has no engine-level DML upsert at all, so a filtered key upsert is refused
+    // --- (the same NotSupportedException the unfiltered form already raises). No connection is opened.
+
+    private const string MergeTenantKey = "qf_merge_tenant_ch";
+
+    [SqlTable("qf_merge_target")]
+    public sealed class QfMergeTargetEntity
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+
+        [Column("name")]
+        public string? Name { get; set; }
+    }
+
+    private static void ConfigureMergeTarget(IDataContext ctx)
+    {
+        ctx.Properties[MergeTenantKey] = 1;
+        ctx.From<QfMergeTargetEntity>(b => b
+            .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[MergeTenantKey]));
+    }
+
+    [Fact]
+    public void KeyUpsert_Filtered_ShouldThrowNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var act = () => ctx.MergeInto<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>("ClickHouse has no DML upsert form, filtered or not");
     }
 }

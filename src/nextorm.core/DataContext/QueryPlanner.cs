@@ -276,6 +276,49 @@ internal sealed class QueryPlanner : IQueryPlanner
         }
     }
 
+    // Renders the target entity's active global filter (after the effective IgnoreFilters scope) as a
+    // "target"-alias-qualified MERGE search condition, appending its bound parameters to `parameters`.
+    // The filters are reduced through the same entity/context substitution the SELECT pipeline uses
+    // (QueryPreparer.TryBuildFilterBody) and rendered by RenderMergeCondition, so target/source
+    // qualification, quoting and parameter binding are identical to the user's On(...)/branch condition.
+    // Returns null only when the scope leaves no filter active (IgnoreFilters / no filter configured).
+    // Fail-closed: an active, non-ignored filter that cannot be reduced to a predicate throws
+    // NotSupportedException here (before any mutation) instead of being dropped. This render seam is the
+    // single injection point for the target predicate: a caller under a scope that leaves a filter active
+    // gets the AND-combined predicate or the refusal, never a silently omitted filter.
+    internal string? RenderMergeTargetFilter(
+        Type entityType,
+        QueryFilterScope scope,
+        QueryCommand registry,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        KeywordCase keywordCase)
+    {
+        var filters = QueryFilterResolver.GetFilters(entityType, scope);
+        if (filters.Count == 0)
+            return null;
+
+        var target = Expression.Parameter(entityType, "target");
+        var source = Expression.Parameter(entityType, "source");
+        Expression? body = null;
+        for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+        {
+            if (!QueryCommand.QueryPreparer.TryBuildFilterBody(filters[i], _context, target, out var filterBody))
+                throw new NotSupportedException(
+                    $"An active global query filter on entity type '{entityType.Name}' cannot be translated into an atomic predicate on the merge write target, so the filter would be silently bypassed. Call IgnoreFilters() to disable the filter, or use a filter declared as a predicate or builder function.");
+
+            body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
+        }
+
+        if (body is null)
+            return null;
+
+        var condition = Expression.Lambda(body, target, source);
+        return RenderMergeCondition(condition, entityType, registry, parameterProvider, parameters, quoteIdentifiers, namingConvention, keywordCase);
+    }
+
     // Renders the SET list of an UPDATE command (without the SET keyword) together with its parameters.
     // A constant RHS is bound as a parameter, a column RHS renders an unqualified column reference, and
     // an arbitrary RHS expression is rendered by the same column visitor the SELECT/WHERE pipeline uses,

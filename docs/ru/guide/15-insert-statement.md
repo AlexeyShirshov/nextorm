@@ -492,6 +492,8 @@ var rows = ctx.InsertInto<Order>()
 
 - [Слияние данных (MERGE / upsert)](19-merge-statement.md)
 
+При активном [глобальном фильтре запросов](../advanced/query-filters.md) переносимый **key upsert** через `ON CONFLICT` (PostgreSQL, SQLite) и `ON DUPLICATE KEY` (MySQL, MariaDB) **отказывает** с `NotSupportedException`, так как эти формы не могут нести предикат цели; `IgnoreFilters()` восстанавливает нативный upsert. Форма полного `MERGE` вместо этого фильтрует свою цель (см. [Изоляция цели записи](../advanced/query-filters.md#изоляция-цели-записи)).
+
 ## Просмотр SQL
 
 [`ToSql()`](xref:NextORM.Core.InsertBuilder`1.ToSql) рендерит параметризованный SQL, который выполнил
@@ -543,8 +545,12 @@ SQL Server дополнительно записывает изменённые 
 * **Глобальные фильтры запросов не добавляются в цель.** Фильтр, объявленный для типа сущности, никогда
   не добавляется в `INSERT`; вместо этого записываемые значения проверяются на соответствие активным
   фильтрам цели до выполнения, и нарушение бросает `QueryFilterException`. `IgnoreFilters` на билдере
-  отключает их и от проверки. См.
-  [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка).
+  отключает их и от проверки. На key-upsert-провайдерах, которые не могут выразить предикат цели
+  (`ON CONFLICT` / `ON DUPLICATE KEY`), активный фильтр заставляет upsert **отказать** с
+  `NotSupportedException`; `IgnoreFilters()` восстанавливает его, а форма полного `MERGE` вместо этого
+  фильтрует цель. См.
+  [INSERT и MERGE (проверка)](../advanced/query-filters.md#insert-и-merge-проверка) и
+  [Изоляция цели записи](../advanced/query-filters.md#изоляция-цели-записи).
 * In-memory-провайдер только для чтения: `INSERT`/`UPDATE`/`DELETE` и полный `MERGE` бросают `NotSupportedException`; только key-upsert merge применяется к зарегистрированной последовательности в контексте.
 
 ## См. также

@@ -1546,10 +1546,12 @@ public class QueryFilterTests
     }
 
     [Fact]
-    public void Merge_ViolatesFilter_ShouldThrowBeforeExecution()
+    public void Merge_ActiveFilter_ShouldRefuseBeforeReadingOrWriting()
     {
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
+        var rows = new List<InsertValidatedEntity>();
+        ctx.Data[typeof(InsertValidatedEntity)] = rows;
 
         var act = () => ctx.MergeInto<InsertValidatedEntity>(ConfigureInsertValidated)
             .Using(new InsertValidatedEntity { Id = 1, TenantId = 2 })
@@ -1558,7 +1560,10 @@ public class QueryFilterTests
             .WhenNotMatchedInsert()
             .Merge();
 
-        act.Should().Throw<QueryFilterException>("the merge's insert branch is validated");
+        // #123: the in-memory key upsert cannot isolate a filtered-out target row atomically, so an
+        // active filter now refuses before any read/write instead of pre-validating the source rows.
+        act.Should().Throw<NotSupportedException>();
+        rows.Should().BeEmpty();
     }
 
     [Fact]
@@ -1832,7 +1837,7 @@ public class QueryFilterTests
     }
 
     [Fact]
-    public void Merge_TargetFuncFilter_ShouldThrowQueryFilterFailClosed()
+    public void Merge_TargetFuncFilter_ShouldRefuseNotSupported()
     {
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
@@ -1844,7 +1849,10 @@ public class QueryFilterTests
             .WhenNotMatchedInsert()
             .Merge();
 
-        act.Should().Throw<QueryFilterException>().WithMessage("*FilterFunc*");
+        // #123 precedence: an active target filter on the in-memory key upsert is refused as a
+        // capability before any source-value validation, so the FilterFunc fail-closed path is not
+        // reached.
+        act.Should().Throw<NotSupportedException>();
     }
 
     [Fact]
