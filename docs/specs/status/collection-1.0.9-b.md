@@ -10,7 +10,7 @@
 
 | id | tasks (order) | worktree | branch | status |
 |---|---|---|---|---|
-| group-1 | 116,136,115,113,135,39,112,123,124,125,118 | (current worktree) | `1.0.9-b` (current) | in-progress |
+| group-1 | 116,136,115,113,135,39,112,123,124,125,118 | (current worktree) | `1.0.9-b` (current) | blocked |
 
 ## Tasks
 
@@ -23,10 +23,10 @@
 | 5 | #135 | group-1 | 1.0.9-b | done | - |
 | 6 | #39  | group-1 | 1.0.9-b | done | - |
 | 7 | #112 | group-1 | 1.0.9-b | done | - |
-| 8 | #123 | group-1 | 1.0.9-b | pending | - |
-| 9 | #124 | group-1 | 1.0.9-b | pending | - |
-| 10 | #125 | group-1 | 1.0.9-b | pending | - |
-| 11 | #118 | group-1 | 1.0.9-b | pending | - |
+| 8 | #123 | group-1 | 1.0.9-b | blocked | - |
+| 9 | #124 | group-1 | 1.0.9-b | blocked | - |
+| 10 | #125 | group-1 | 1.0.9-b | blocked | - |
+| 11 | #118 | group-1 | 1.0.9-b | blocked | - |
 
 ## Decisions
 
@@ -50,3 +50,7 @@
 - Verified:
 - Blocked:
 - #113 skipped by user decision (scope: runtime WithAlias vs source-generator p.Alias unresolved). Runtime WithAlias slice saved as /tmp/opencode/task-4-113-withalias.patch; not merged.
+
+## Stopped
+
+Autonomous run stopped after #112. #123/#124/#125/#118 not started — each is an independent feature requiring its own PLAN→DO→CHECK→ACT. Resume from PLAN per task. #113 remains blocked (user-skipped).
