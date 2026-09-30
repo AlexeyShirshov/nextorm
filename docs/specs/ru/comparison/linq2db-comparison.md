@@ -98,7 +98,7 @@ linq2db или превосходит её — и расходятся в *мо�
 | **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **yes** | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `MergeMatchedBuilder<TEntity>`, `MergeNotMatchedBuilder<TEntity>`, `MergeNotMatchedBySourceBuilder<TEntity>`, `MergeReturningBuilder<TEntity,TResult>`, `DeleteBuilder<TEntity>`, `UpdateBuilder<TEntity>`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge`/`SupportsDelete`; in-memory применяет только key upsert |
 | Bulk copy / merge / временные таблицы | yes | **частично** — key upsert (`MergeInto`/`MergeBuilder<T>`), полный `MERGE` с ветками (`WhenMatched`/`WhenNotMatched`/`WhenNotMatchedBySource`, произвольные условия, `RETURNING`/`OUTPUT`; SQL Server, PostgreSQL 15+), массовая вставка (`BulkInsertInto<T>`: нативные `COPY`/`SqlBulkCopy` + чанковый `INSERT ... VALUES`, настройка через record `BulkInsertOptions` или fluent-`BulkInsertOptionsBuilder` — `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, прогресс `NotifyAfter` с `ProgressCancellationTokenSource`; `ReturningKey`/`Returning`) и материализация запроса во (временную) таблицу ([`ToTable`/`ToTempTable`](../../../ru/guide/18-create-table-as.md) — `ToTable` на PostgreSQL/SQLite/MySQL/MariaDB/SQL Server/ClickHouse, временная форма `ToTempTable` на PostgreSQL/SQLite/MySQL/MariaDB) реализованы | `MergeBuilder<TEntity>`, `BulkInsertBuilder<TEntity>`, `BulkInsertOptions`, `TempTableExtensions` |
 | Транзакции (собственные и привязанные) | yes | **yes** (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse и in-memory отклоняют) | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `ISqlDialect.SupportsTransactions` |
-| Навигационные свойства / связи / eager loading | yes (`[Association]`, `LoadWith`) | **частично** — метаданные связей + `JoinInto` (O2M) и уровень-1 `LoadWith` (split / single-query); неявные соединения и загрузка M2M/O2O открыты | `Builders/EntityBuilder.cs`, `JoinIntoSpec.cs`/`JoinIntoStitcher.cs`, `Builders/EntityBuilderEagerLoading.cs` |
+| Навигационные свойства / связи / eager loading | yes (`[Association]`, `LoadWith`) | **частично** — метаданные связей (O2M/M2O/O2O/M2M) + `JoinInto` (коллекции one-to-many, ссылки one-to-one, many-to-many через явный junction) и уровень-1 `LoadWith` (split / single-query); неявные соединения открыты, а составной junction-селектор или many-to-many `JoinInto` под `AsSingleQuery` отклоняется | `Builders/EntityBuilder.cs`, `JoinIntoSpec.cs`/`JoinIntoStitcher.cs`, `Builders/EntityBuilderEagerLoading.cs` |
 | Отслеживание изменений / identity map | partial | **no** (по замыслу) | — |
 | Расширяемость (интерсепторы, собственный SQL, фильтры) | обширная | **yes** — диалект + `[SqlFunction]`/`[SqlTableFunction]`, перехватчики команд/соединения, глобальные фильтры запросов и сырой SQL | `SqlDialectBase`, `IQueryInterceptor`/`IConnectionInterceptor`, `QueryFilterAttribute`/`HasQueryFilter` |
 | Провайдеры | SQL Server, PostgreSQL, MySQL/MariaDB, Oracle, SQLite, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | `src/nextorm.*` |
@@ -190,10 +190,10 @@ linq2db или превосходит её — и расходятся в *мо�
   `DELETE`/полный `MERGE`), массовую вставку, `CREATE TABLE AS SELECT` и транзакции, но каждая запись
   остаётся явной командой — без `SaveChanges` и автоматического отслеживания изменений. linq2db сбрасывает
   отслеживаемый unit of work.
-* **Связи**: nextorm декларативно моделирует связи O2M/M2O (`[Relationship]`/`HasMany`/`HasOne` +
-  `JoinInto`) с eager loading уровня 1 (`LoadWith`) ([связи](../../../advanced/relationships.md),
-  [eager loading](../../../advanced/eager-loading.md)); linq2db дополнительно даёт неявный вывод соединений
-  и загрузку M2M/O2O.
+* **Связи**: nextorm декларативно моделирует связи O2M/M2O/O2O/M2M (`[Relationship]`/`HasMany`/`HasOne`/
+  `HasOneToOne`/`HasManyThrough` + `JoinInto`) с eager loading уровня 1 (`LoadWith`)
+  ([связи](../../../advanced/relationships.md), [eager loading](../../../advanced/eager-loading.md));
+  linq2db дополнительно даёт только неявный вывод соединений.
 * **Кодогенерация под существующую БД**: linq2db поставляет CLI/T4-цепочку кодогенерации, которая
   скаффолдит маппинги сущностей и табличных функций из живой базы; nextorm объявляет маппинги в коде.
   Источники с динамической схемой, которые nextorm поддерживает через объявляемую вызывающим схему
@@ -230,9 +230,9 @@ linq2db или превосходит её — и расходятся в *мо�
 на поставляемых сценариях и более настраиваемом выводе SQL (квотирование идентификаторов, соглашения об
 именовании и регистр ключевых слов включаются явно и переопределяются для отдельной команды, тогда как
 linq2db квотирует по умолчанию и фиксирует имена через схему отображения). linq2db остаётся лучшим выбором только когда тот же слой должен дополнительно давать неявный вывод
-соединений и загрузку M2M/O2O, отслеживать изменения или генерировать слой доступа к данным из живой
-схемы — то, что nextorm осознанно оставляет за рамками (связи O2M/M2O и eager loading уровня 1 уже
-покрыты).
+соединений, отслеживать изменения или генерировать слой доступа к данным из живой схемы — то, что nextorm
+осознанно оставляет за рамками (связи O2M/M2O/O2O, many-to-many через junction и eager loading уровня 1
+уже покрыты).
 
 ## См. также
 

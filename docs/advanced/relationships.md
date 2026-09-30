@@ -1,12 +1,12 @@
 # Relationships and single-query loading (`JoinInto`)
 
-> A relationship is declared explicitly on the mapping metadata ([`HasMany`](xref:NextORM.Core.EntityMetadataBuilder`1)/[`HasOne`](xref:NextORM.Core.EntityMetadataBuilder`1) or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)); [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) then loads one child collection in a single round trip — one `LEFT JOIN` (or `INNER JOIN`) — and stitches the denormalized rows back onto deduplicated parents.
+> A relationship is declared explicitly on the mapping metadata ([`HasMany`](xref:NextORM.Core.EntityMetadataBuilder`1)/[`HasOne`](xref:NextORM.Core.EntityMetadataBuilder`1) or [`[Relationship]`](xref:NextORM.Core.RelationshipAttribute)); [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) then loads a declared navigation in a single round trip and stitches the denormalized rows back onto deduplicated parents: a one-to-many collection through one `LEFT JOIN` (or `INNER JOIN`), a one-to-one nullable reference through one join, and a many-to-many collection through a junction with two flat joins (a derived link join plus the child join).
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Joins](../guide/02-joins.md) · [Eager loading child collections](eager-loading.md)
 
 ## Overview
 
-nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query child-collection loader. Implicit joins inferred from a navigation (`e.Parent.Name`) are **not** implemented.
+nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit joins inferred from a navigation (`e.Parent.Name`) are **not** implemented.
 
 `JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, `LoadWith` is a split query with one extra child statement per key chunk.
 
@@ -62,7 +62,7 @@ public sealed class Order
 
 ## Loading with `JoinInto`
 
-[`JoinInto`](xref:NextORM.Core.EntityBuilder`1) declares a join that fills a parent collection when the query is enumerated by a list terminal. It returns a **copy** of the builder, so the source builder is unchanged and declarations chain:
+[`JoinInto`](xref:NextORM.Core.EntityBuilder`1) declares a join that fills a declared navigation — a child collection (one-to-many), a nullable reference (one-to-one) or a junction-backed many-to-many collection — when the query is enumerated by a list terminal. It returns a **copy** of the builder, so the source builder is unchanged and declarations chain:
 
 > **Note.** The former child-collection scenario (issue #40) — loading children from a parent+child join — is expressed today by `JoinInto` into a **declared collection property**, as shown below. Projecting children into an arbitrary (anonymous) shape, the historical `NORM.ChildCollection(...)` form, is **not provided**: declare the collection and load it with `JoinInto`, or select the child rows with an explicit join and materialize them yourself.
 
@@ -107,6 +107,70 @@ var orders = ctx.From<Order>()
 ```
 
 `JoinInto` is **`LEFT` by default**: a parent with no children is kept with an empty collection. The explicit overload accepts only [`JoinType.Inner`](xref:NextORM.Core.JoinType) and [`JoinType.Left`](xref:NextORM.Core.JoinType); `Inner` drops childless parents.
+
+### One-to-one reference
+
+A one-to-one relationship is declared with the principal key on the parent and the unique foreign key on the child; the foreign-key uniqueness is trusted, not validated by the core:
+
+```csharp
+ctx.From<Order>(b => b.HasOneToOne(o => o.Invoice, o => o.Id, i => i.OrderId));
+```
+
+Loading uses the reference-navigation `JoinInto` overloads, which assign the single joined child to the parent's reference member:
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(ctx.From<Invoice>(), (o, i) => o.Id == i.OrderId, o => o.Invoice)
+    .ToList();
+```
+
+`JoinOptions.OneToOne<TParent, TChild, TKey>(parentKey, childForeignKey)` configures the relationship locally through a `JoinInto` options lambda (the same two selectors) when it is not declared, fully replacing the declared metadata for that call:
+
+```csharp
+var orders = ctx.From<Order>()
+    .JoinInto(
+        ctx.From<Invoice>(),
+        (o, i) => o.Id == i.OrderId,
+        o => o.Invoice,
+        j => j.OneToOne<Order, Invoice, int>(o => o.Id, i => i.OrderId))
+    .ToList();
+```
+
+The LEFT/INNER semantics mirror the collection loaders: with `Left` (the default) a parent without a matching child keeps the reference `null`, and with `Inner` a parent without a matching child is excluded. A parent that matches **more than one distinct child** throws [`InvalidOperationException`](xref:System.InvalidOperationException) at materialization, while cartesian repeats of the **same** child caused by a neighbouring join are tolerated and collapse to the single occurrence. The navigation member must be settable — a read-only reference throws [`NotSupportedException`](xref:System.NotSupportedException).
+
+### Many-to-many through a junction
+
+A many-to-many relationship is declared with the explicit junction (link) entity — the core never infers it. `HasManyThrough` takes the collection navigation, the keys on both principal sides and the two junction foreign keys that reference them:
+
+```csharp
+ctx.From<Post>(b => b.HasManyThrough<Tag, TagLink, int, int>(
+    p => p.Tags,      // collection navigation on the principal
+    p => p.Id,        // parent key
+    l => l.PostId,    // junction FK referencing the parent key
+    t => t.Id,        // child key
+    l => l.TagId));   // junction FK referencing the child key
+```
+
+Each junction foreign key must match the type of the key it references. Loading uses the collection `JoinInto` overload with a local `JoinOptions.ManyToMany` configuration (the same four selectors), which fully replaces the declared metadata for that call:
+
+```csharp
+var posts = ctx.From<Post>()
+    .JoinInto(
+        ctx.From<Tag>(),
+        (p, t) => t.Active,
+        p => p.Tags,
+        j => j.ManyToMany<Post, Tag, TagLink, int, int>(
+            p => p.Id, l => l.PostId, t => t.Id, l => l.TagId))
+    .ToList();
+```
+
+The `(parent, child) => ...` predicate is an extra filter over the joined rows; the join keys come from the junction configuration, not from the predicate. Use `(p, t) => true` when no filter is needed.
+
+The LEFT/INNER semantics are the same as for a one-to-many collection: with `Left` a parent without a junction row is kept with an empty collection, and a junction row that references a missing child contributes no element; with `Inner` a parent without a matching child is excluded. Multiplicity differs in one place: **duplicate `(parent, child)` junction rows are preserved as distinct elements** — the same child appears once per junction row — whereas a one-to-many join collapses duplicate child rows by child identity.
+
+When a query carries two or more collection navigations (one-to-one is excluded) the preparation emits the `JoinInto.MultipleCollections` warning once per plan, because the intermediate row count multiplies into a cartesian product. Pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda (`j => j.SuppressCartesianWarning()`) to silence it; the warning is informational and does not change the result.
+
+A **composite** junction selector and a many-to-many `JoinInto` under [`AsSingleQuery`](eager-loading.md) are rejected with [`NotSupportedException`](xref:System.NotSupportedException). A many-to-many `JoinInto` takes **two** projection slots, so it counts double against the arity cap.
 
 ## One round trip
 
@@ -163,7 +227,7 @@ A `Where` written **before** `JoinInto` filters the parent source. The predicate
 
 ## Multiple collections
 
-Each `JoinInto` adds its own join. Two child collections on the same parent produce a **cartesian product** of rows in the denormalized stream; parent deduplication and independent per-collection grouping keep the result correct, but the intermediate row count multiplies. Declare several collections only when the parent sets are small, or load the second collection with a separate query ([`LoadWith`](eager-loading.md) is the split-query alternative).
+Each `JoinInto` adds its own join. Two child collections on the same parent produce a **cartesian product** of rows in the denormalized stream; parent deduplication and independent per-collection grouping keep the result correct, but the intermediate row count multiplies. When two or more collection navigations are present, preparation emits the `JoinInto.MultipleCollections` warning once per plan; pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda to silence it. Declare several collections only when the parent sets are small, or load the second collection with a separate query ([`LoadWith`](eager-loading.md) is the split-query alternative).
 
 `JoinInto` **cannot be combined with any other join on the same builder**: once the builder carries a `JoinInto`, adding `Join`, `LeftJoin`, `CrossJoin`, `SemiJoin`, `AntiJoin` (or any other explicit join) throws `NotSupportedException`, and vice versa. Declare the `JoinInto` collections on a plain entity source, so the non-list terminals know exactly which joins to drop. Mixing the two would leave the parent-only command unable to tell an explicit join from a `JoinInto`.
 
@@ -188,9 +252,9 @@ The join is part of the command and is stitched **only** by the stitching termin
 
 The following are rejected with [`NotSupportedException`](xref:System.NotSupportedException):
 
-- `JoinInto` over a relationship declared as **many-to-many** or **one-to-one** (the metadata model can represent the kinds; loading them is not implemented);
-- a **composite** principal or foreign key on the relationship (single-column keys only);
-- an **undeclared** relationship, when the collection overload is used without relationship metadata — declare it with `HasMany`/`HasOne`/`[Relationship]` or use the explicit-key overload;
+- a **many-to-many** relationship under `AsSingleQuery` — `AsSingleQuery` is the [`LoadWith`](eager-loading.md) style single-query mode; the explicit `JoinInto` path does support M:N through a junction (see above);
+- a **composite** principal, foreign or junction key on the relationship (single-column keys only);
+- an **undeclared** relationship, when the collection overload is used without relationship metadata — declare it with `HasMany`/`HasOne`/`HasManyThrough`/`[Relationship]` or use the explicit-key overload; the reference overload likewise requires a declared one-to-one (`HasOneToOne`) or a local `JoinOptions.OneToOne` configuration;
 - `JoinInto` applied to a derived (`As`) or joined projection source;
 - a `Select` projection or an `As` derived source applied to a builder carrying a `JoinInto` — both drop the stitching contract (repeated parents or lost metadata), so materialize with `ToList`/`ToListAsync` instead;
 - `JoinInto` combined with another join on the same builder (adding any explicit join once a `JoinInto` is declared throws, and adding a `JoinInto` once an explicit join exists throws) — declare `JoinInto` on a plain entity source only;

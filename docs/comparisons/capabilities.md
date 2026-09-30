@@ -77,7 +77,7 @@ construct.
 | Area | Nextorm | linq2db | EF Core |
 |---|---|---|---|
 | Entity class optional (query without a mapped type) | yes | partial | no |
-| Navigation properties / associations / eager loading | no | yes | yes |
+| Navigation properties / associations / eager loading | partial (declarative O2M/M2O/O2O/M2M relationship metadata and the single-query `JoinInto` loader, plus level-1 `LoadWith` eager loading; implicit join inference open) | yes | yes |
 | Change tracking / identity map | no (by design) | partial | yes |
 | Migrations | no | partial (schema API; migrations via third-party) | yes |
 | Database-first scaffolding | no (mappings declared in code) | yes | yes |

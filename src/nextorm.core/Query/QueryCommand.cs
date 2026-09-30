@@ -422,6 +422,16 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </remarks>
     internal bool HasDataModifyingCte => HasDataModifyingCteIn(this, null);
 
+    /// <summary>
+    /// Whether this command should emit the <c>JoinInto.MultipleCollections</c> diagnostic on its next
+    /// plan preparation — i.e. on the plan-cache miss — because the pair command is built from two or more
+    /// collection navigations and no join suppressed it. The diagnostic is best-effort: a plan served from
+    /// cache does not re-emit it. Diagnostic-only state: it is deliberately <b>not</b> part of the plan key
+    /// and is cleared once the warning has been emitted, so a command warns at most once per preparation,
+    /// with suppression applying to the first plan-cache population.
+    /// </summary>
+    internal bool PendingJoinIntoCartesianWarning { get; set; }
+
     private static bool HasDataModifyingCteIn(QueryCommand command, HashSet<QueryCommand>? visited)
     {
         if (command._ctes is not { Count: > 0 } ctes)

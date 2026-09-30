@@ -19,6 +19,7 @@ public sealed class JoinOptions
     internal bool IsGlobal { get; private set; }
     internal string? JoinHint { get; private set; }
     internal IReadOnlyList<string>? TableHints { get; private set; }
+    internal bool CartesianWarningSuppressed { get; private set; }
 
     /// <summary>
     /// The relationship configured locally for this join, or <see langword="null"/> to fall back to the
@@ -68,6 +69,20 @@ public sealed class JoinOptions
             throw new ArgumentException("A join hint must be a non-empty string.", nameof(hint));
 
         JoinHint = hint;
+        return this;
+    }
+
+    /// <summary>
+    /// Suppresses the <c>JoinInto.MultipleCollections</c> warning that is emitted when a query declares
+    /// two or more collection navigations (including many-to-many declarations), whose joins multiply
+    /// the parent rows. Suppression applies only to this join, but the warning is silenced for the whole
+    /// query as soon as any declared join sets it. The flag is never part of the plan key and never
+    /// throws; it only affects the diagnostic.
+    /// </summary>
+    /// <returns>This instance, to allow chaining.</returns>
+    public JoinOptions SuppressCartesianWarning()
+    {
+        CartesianWarningSuppressed = true;
         return this;
     }
 

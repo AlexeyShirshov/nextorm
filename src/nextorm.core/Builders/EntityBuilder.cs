@@ -631,6 +631,13 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         options?.Invoke(opts);
 
         var relationship = ResolveJoinIntoRelationship(collection, opts);
+        if (relationship.Kind is RelationshipKind.ManyToMany)
+        {
+            var (manyToMany, linkJoin, childJoin) = JoinIntoManyToManySpec<TEntity, TChild>.Create(
+                child, predicate, collection, relationship, joinType, opts, _dataProvider);
+            return AddJoinInto(manyToMany, linkJoin, childJoin);
+        }
+
         var spec = new JoinIntoSpec<TEntity, TChild>(child, predicate, collection, relationship, joinType);
         return AddJoinInto(spec, new JoinExpression(predicate, joinType)
         {
@@ -638,7 +645,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
+            TableHints = opts.TableHints,
+            SuppressCartesianWarning = opts.CartesianWarningSuppressed
         });
     }
     /// <summary>
@@ -708,7 +716,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
+            TableHints = opts.TableHints,
+            SuppressCartesianWarning = opts.CartesianWarningSuppressed
         });
     }
     /// <summary>
@@ -754,7 +763,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,
             JoinHint = opts.JoinHint,
-            TableHints = opts.TableHints
+            TableHints = opts.TableHints,
+            SuppressCartesianWarning = opts.CartesianWarningSuppressed
         });
     }
     /// <summary>Validates the <c>JoinInto</c> join kind: only inner and left edges are supported.</summary>
@@ -811,6 +821,14 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                     throw new NotSupportedException(
                         $"JoinInto does not support a composite key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
 
+                // The junction carries its own four key lists; validate them independently of the
+                // principal/child key pair so a composite junction is rejected explicitly.
+                if (relationship.Junction is { } junction &&
+                    (junction.ParentKey.Count != 1 || junction.ChildKey.Count != 1 ||
+                     junction.JunctionParentForeignKey.Count != 1 || junction.JunctionChildForeignKey.Count != 1))
+                    throw new NotSupportedException(
+                        $"JoinInto does not support a composite junction key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
+
                 return relationship;
             }
 
@@ -860,6 +878,14 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
             throw new NotSupportedException(
                 $"JoinInto does not support a composite key on the local relationship configured for '{typeof(TEntity).Name}.{property.Name}'.");
+
+        // As in the declared-metadata path, validate the junction's own key lists: a local ManyToMany
+        // configuration with a composite junction selector is rejected explicitly.
+        if (relationship.Junction is { } junction &&
+            (junction.ParentKey.Count != 1 || junction.ChildKey.Count != 1 ||
+             junction.JunctionParentForeignKey.Count != 1 || junction.JunctionChildForeignKey.Count != 1))
+            throw new NotSupportedException(
+                $"JoinInto does not support a composite junction key on the local relationship configured for '{typeof(TEntity).Name}.{property.Name}'.");
 
         return relationship;
     }
@@ -952,21 +978,32 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// join list and the spec is appended to the stitching metadata list. Copying keeps the source
     /// builder unchanged and lets a following <c>Where</c> keep the join.
     /// </summary>
-    private EntityBuilder<TEntity> AddJoinInto(IJoinIntoSpec<TEntity> spec, JoinExpression join)
+    private EntityBuilder<TEntity> AddJoinInto(IJoinIntoSpec<TEntity> spec, params JoinExpression[] joins)
     {
         if (_joins is { } existing && existing.Exists(j => !j.IsJoinInto))
             throw new NotSupportedException(
                 "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
 
-        join.IsJoinInto = true;
-        join.JoinIntoIdentity = spec.Identity;
+        if (joins.Length == 0)
+            throw new ArgumentException("A JoinInto declaration must contribute at least one join.", nameof(joins));
+
+        foreach (var join in joins)
+        {
+            join.IsJoinInto = true;
+            join.JoinIntoIdentity = spec.Identity;
+        }
+
         // A plain JoinInto child that made no selective filter decision leaves the scope null so it keeps
         // inheriting the parent's whole scope (including a parent IgnoreFilters()); one that disabled
-        // specific filters carries its own scope so the selective disable reaches the child join.
-        join.FilterScope = spec.ChildFilterScope.IsEmpty ? null : spec.ChildFilterScope;
+        // specific filters carries its own scope so the selective disable reaches the child join. Only the
+        // child edge takes the scope: the many-to-many link edge is a derived junction source with no
+        // child filters of its own.
+        var childJoin = joins[^1];
+        childJoin.FilterScope = spec.ChildFilterScope.IsEmpty ? null : spec.ChildFilterScope;
+
         var b = Clone();
         b._joinIntos = _joinIntos is null ? [spec] : [.. _joinIntos, spec];
-        b._joins = _joins is null ? [join] : [.. _joins, join];
+        b._joins = _joins is null ? [.. joins] : [.. _joins, .. joins];
         return b;
     }
     /// <summary>
@@ -1122,6 +1159,18 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             throw new NotSupportedException(
                 "AsSingleQuery single-query loading cannot be combined with other joins on the same builder; declare LoadWith on a plain entity source only.");
 
+        // A many-to-many declaration contributes two joins while the single-query mapping assumes one join
+        // per declaration; reject it before any join/spec index pairing can overflow.
+        if (_joinIntos is { Count: > 0 } manyToManyIntos)
+        {
+            for (var i = 0; i < manyToManyIntos.Count; i++)
+            {
+                if (manyToManyIntos[i].IsManyToMany)
+                    throw new NotSupportedException(
+                        "AsSingleQuery single-query loading does not support a many-to-many JoinInto declaration; materialize the many-to-many JoinInto separately, or use split-query loading.");
+            }
+        }
+
         var specs = new List<IJoinIntoSpec<TEntity>>();
         var joins = new List<JoinExpression>();
 
@@ -1130,15 +1179,33 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             specs.AddRange(_joinIntos);
             if (_joins is { } existingJoins)
             {
-                for (var i = 0; i < existingJoins.Count; i++)
+                // Pair each declaration with its own joins: a many-to-many declaration contributes a link
+                // edge followed by a child edge, and only the child edge carries the child's selective
+                // filter scope. Indexing by join position would hand a link edge the child scope and shift
+                // every later declaration.
+                var joinCursor = 0;
+                for (var i = 0; i < _joinIntos.Count; i++)
                 {
-                    // The child's own selective filter scope, independent of the parent's scope. An empty
-                    // child scope is normalized to null: null and empty both mean "inherit", so the join
-                    // then carries the command's whole scope (including a parent IgnoreFilters()) instead
-                    // of an explicit empty scope that would read as a selective decision.
-                    var childScope = i < _joinIntos.Count ? _joinIntos[i].ChildFilterScope : QueryFilterScope.None;
-                    joins.Add(WithChildFilterScope(existingJoins[i], childScope.IsEmpty ? null : childScope));
+                    var spec = _joinIntos[i];
+                    var linkEdges = spec.ItemTypes.Count - 1;
+
+                    for (var j = 0; j < linkEdges && joinCursor < existingJoins.Count; j++)
+                        joins.Add(existingJoins[joinCursor++]);
+
+                    if (joinCursor < existingJoins.Count)
+                    {
+                        // The child's own selective filter scope, independent of the parent's scope. An
+                        // empty child scope is normalized to null: null and empty both mean "inherit", so
+                        // the join then carries the command's whole scope (including a parent
+                        // IgnoreFilters()) instead of an explicit empty scope that would read as a
+                        // selective decision.
+                        var childScope = spec.ChildFilterScope;
+                        joins.Add(WithChildFilterScope(existingJoins[joinCursor++], childScope.IsEmpty ? null : childScope));
+                    }
                 }
+
+                for (; joinCursor < existingJoins.Count; joinCursor++)
+                    joins.Add(existingJoins[joinCursor]);
             }
         }
 
@@ -1184,6 +1251,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             OriginalJoinCondition = source.OriginalJoinCondition,
             IsJoinInto = source.IsJoinInto,
             JoinIntoIdentity = source.JoinIntoIdentity,
+            SuppressCartesianWarning = source.SuppressCartesianWarning,
             FilterScope = childFilterScope,
         };
 
@@ -1205,13 +1273,31 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <returns>The command producing one row per <c>(parent, child…)</c> pair.</returns>
     internal QueryCommand CreatePairCommand(IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<JoinExpression>? joins)
     {
+        var isSql = _dataProvider.NeedMapping;
+
         var itemTypesByDeclaration = new IReadOnlyList<Type>[specs.Count];
         for (var i = 0; i < specs.Count; i++)
-            itemTypesByDeclaration[i] = specs[i].ItemTypes;
+        {
+            // A many-to-many declaration projects a different link item per path: the synthetic link the
+            // derived row_number() source produces on SQL, or the junction entity the in-memory engine
+            // joins directly.
+            itemTypesByDeclaration[i] = specs[i] is IJoinIntoManyToManySpec manyToMany
+                ? manyToMany.GetItemTypes(isSql)
+                : specs[i].ItemTypes;
+
+            // Re-publish the synthetic link mapping (and the junction it is derived from) before
+            // preparation so a DataContextCache.Clear() between declaration and execution cannot leave
+            // the derived junction link unregistered. SQL-only: the in-memory path reads the junction
+            // entity and never touches the link type.
+            if (isSql && specs[i] is IJoinIntoManyToManySpec manyToManySpec)
+            {
+                JunctionLinkSourceFactory.EnsureRegistered(specs[i].ItemTypes[0]);
+                JunctionLinkSourceFactory.EnsureJunctionRegistered(manyToManySpec.JunctionEntityType);
+            }
+        }
 
         var projectionType = JoinIntoProjectionFactory.Create(typeof(TEntity), itemTypesByDeclaration);
 
-        var isSql = _dataProvider.NeedMapping;
         var sourceType = isSql ? _sourceEntityType ?? typeof(TEntity) : projectionType;
         LambdaExpression? condition = _condition;
         var sorting = _sorting?.ToArray();
@@ -1277,7 +1363,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             ProjectionType = projectionType,
             Condition = condition,
             FilterScope = _filterScope,
-            Joins = isSql ? joins?.ToArray() : BuildInMemoryJoinIntos(joins),
+            Joins = isSql ? joins?.ToArray() : BuildInMemoryJoinIntos(specs, joins),
             Paging = default,
             Sorting = sorting,
             Group = group,
@@ -1302,15 +1388,46 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         ApplyCommandOptions(cmd);
 
+        // A query with two or more collection navigations renders the cartesian product of the parent
+        // rows; warn once per preparation unless a declaration suppressed it. The count excludes
+        // one-to-one references (IsCollection false), and this flag is command state, not plan-key state.
+        var collectionCount = 0;
+        for (var i = 0; i < specs.Count; i++)
+        {
+            if (specs[i].IsCollection)
+                collectionCount++;
+        }
+
+        var suppressed = false;
+        if (joins is not null)
+        {
+            for (var i = 0; i < joins.Count; i++)
+            {
+                if (joins[i].SuppressCartesianWarning)
+                {
+                    suppressed = true;
+                    break;
+                }
+            }
+        }
+
+        cmd.PendingJoinIntoCartesianWarning = collectionCount >= 2 && !suppressed;
+
         return cmd;
     }
 
     /// <summary>
     /// Rewrites the <c>JoinInto</c> join conditions for the in-memory provider. Its join engine threads
     /// an accumulated projection through the joins, so the second and later conditions must read the
-    /// parent through <c>Item1</c> of that projection rather than through the bare parent parameter.
+    /// parent through <c>Item1</c> of that projection rather than through the bare parent parameter. A
+    /// many-to-many declaration is rebuilt entirely: its stored link edge joins the derived
+    /// <c>row_number()</c> source (SQL-only), so in memory the junction entity is joined directly and the
+    /// junction instance is the link item, whose projection slot the child edge reads.
     /// </summary>
-    private JoinExpression[]? BuildInMemoryJoinIntos(List<JoinExpression>? source)
+    /// <param name="specs">The stitching specifications, in declaration order.</param>
+    /// <param name="source">The stored SQL joins, in declaration order, or <c>null</c> when there are none.</param>
+    /// <returns>The joins the in-memory engine executes, or <c>null</c> when there are none.</returns>
+    private JoinExpression[]? BuildInMemoryJoinIntos(IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<JoinExpression>? source)
     {
         if (source is null)
             return null;
@@ -1318,18 +1435,34 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         // By contract every preceding join is a JoinInto: mixing regular joins with JoinIntos is
         // rejected at declaration time (see AddJoinInto/AddSemiAntiJoin/CreateJoined). The in-memory
         // join engine threads an accumulated Projection<TEntity, …> through every join, and each
-        // JoinInto appends exactly one item, so the arity of the projection a JoinInto reads is simply
-        // its index in the join list.
-        var joins = new JoinExpression[source.Count];
+        // declaration's joins append their items in turn.
+        var joins = new List<JoinExpression>(source.Count);
         var precedingTypes = new List<Type>(source.Count);
+        var cursor = 0;
 
-        for (var i = 0; i < source.Count; i++)
+        for (var i = 0; i < specs.Count && cursor < source.Count; i++)
         {
-            var join = source[i];
+            var spec = specs[i];
+
+            if (spec is IJoinIntoManyToManySpec manyToMany)
+            {
+                if (cursor + 1 >= source.Count)
+                    throw new InvalidOperationException(
+                        "A many-to-many JoinInto declaration requires a link join followed by a child join.");
+
+                joins.Add(BuildInMemoryManyToManyLinkJoin(manyToMany, source[cursor++], precedingTypes));
+                precedingTypes.Add(manyToMany.JunctionEntityType);
+
+                joins.Add(BuildInMemoryManyToManyChildJoin(spec, manyToMany, source[cursor++], precedingTypes));
+                precedingTypes.Add(spec.ChildEntityType);
+                continue;
+            }
+
+            var join = source[cursor++];
 
             // The first join already starts from the bare parent (arity 1); every later JoinInto reads
             // the parent through Item1 of the projection accumulated so far.
-            if (join.IsJoinInto && i > 0 && join.JoinCondition is { Parameters.Count: 2 } condition)
+            if (join.IsJoinInto && joins.Count > 0 && join.JoinCondition is { Parameters.Count: 2 } condition)
             {
                 var leftType = JoinIntoProjectionFactory.Create(
                     typeof(TEntity),
@@ -1343,7 +1476,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                     ? ReRootJoinCondition(originalCondition, leftParameter)
                     : join.OriginalJoinCondition;
 
-                joins[i] = new JoinExpression(rewritten, join.JoinType)
+                joins.Add(new JoinExpression(rewritten, join.JoinType)
                 {
                     From = join.From,
                     EntityType = join.EntityType,
@@ -1354,20 +1487,123 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                     OriginalJoinCondition = original,
                     IsJoinInto = true,
                     JoinIntoIdentity = join.JoinIntoIdentity,
+                    SuppressCartesianWarning = join.SuppressCartesianWarning,
                     // Preserve the child's own filter scope; dropping it would make the 2nd+ spec
                     // inherit the parent's IgnoreFilters() and silently apply the wrong child filters.
                     FilterScope = join.FilterScope,
-                };
+                });
             }
             else
             {
-                joins[i] = join;
+                joins.Add(join);
             }
 
             precedingTypes.Add(JoinSecondType(join));
         }
 
-        return joins;
+        // Defensive: the declaration and join lists are paired by construction, but any unpaired trailing
+        // join is kept rather than silently dropped.
+        while (cursor < source.Count)
+            joins.Add(source[cursor++]);
+
+        return joins.ToArray();
+    }
+
+    /// <summary>
+    /// Builds the in-memory parent-to-junction edge of a many-to-many declaration: the junction entity is
+    /// joined directly (there is no derived <c>row_number()</c> source in memory), so the link item is
+    /// the junction instance. The condition is <c>(p, j) =&gt; p.principalKey == j.parentForeignKey</c> and
+    /// is re-rooted onto the accumulated projection for any declaration after the first.
+    /// </summary>
+    private JoinExpression BuildInMemoryManyToManyLinkJoin(
+        IJoinIntoManyToManySpec spec, JoinExpression stored, List<Type> precedingTypes)
+    {
+        var parentParameter = Expression.Parameter(typeof(TEntity), "p");
+        var junctionParameter = Expression.Parameter(spec.JunctionEntityType, "j");
+        var equality = JoinIntoSpecHelpers.BuildKeyEquality(
+            Expression.Property(parentParameter, spec.ParentPrincipalKey),
+            Expression.Property(junctionParameter, spec.JunctionParentForeignKey),
+            spec.ParentPrincipalKey.PropertyType,
+            "JoinInto");
+        LambdaExpression condition = Expression.Lambda(equality, parentParameter, junctionParameter);
+
+        if (precedingTypes.Count > 0)
+        {
+            var leftType = JoinIntoProjectionFactory.Create(
+                typeof(TEntity),
+                precedingTypes.Select(static type => (IReadOnlyList<Type>)new[] { type }).ToArray());
+            condition = ReRootJoinCondition(condition, Expression.Parameter(leftType, "l"));
+        }
+
+        return new JoinExpression(condition, stored.JoinType)
+        {
+            From = new FromExpression(spec.JunctionEntityType),
+            EntityType = spec.JunctionEntityType,
+            Strictness = stored.Strictness,
+            IsGlobal = stored.IsGlobal,
+            JoinHint = stored.JoinHint,
+            TableHints = stored.TableHints,
+            OriginalJoinCondition = condition,
+            IsJoinInto = true,
+            JoinIntoIdentity = stored.JoinIntoIdentity,
+            SuppressCartesianWarning = stored.SuppressCartesianWarning,
+        };
+    }
+
+    /// <summary>
+    /// Builds the in-memory junction-to-child edge of a many-to-many declaration: the condition is
+    /// <c>(l, c) =&gt; c.childKey == l.ItemN.childForeignKey &amp;&amp; &lt;user predicate over Item1 and c&gt;</c>,
+    /// where <c>ItemN</c> is the junction slot the link edge just appended. Unlike a direct declaration
+    /// the left parameter is the accumulated projection, so the condition is <b>not</b> re-rooted again.
+    /// </summary>
+    private JoinExpression BuildInMemoryManyToManyChildJoin(
+        IJoinIntoSpec<TEntity> spec, IJoinIntoManyToManySpec manyToMany, JoinExpression stored, List<Type> precedingTypes)
+    {
+        // The link edge appended the junction as the last item; its 1-based Item slot is parent + the
+        // accumulated items, the junction being the last of them.
+        var leftType = JoinIntoProjectionFactory.Create(
+            typeof(TEntity),
+            precedingTypes.Select(static type => (IReadOnlyList<Type>)new[] { type }).ToArray());
+
+        var predicate = spec.Predicate;
+        var leftParameter = Expression.Parameter(leftType, "l");
+        var childParameter = predicate.Parameters[1];
+        // The link edge is an outer join, so a parent without a junction row reaches this edge as a
+        // projection whose junction item is null. The junction accessor must be guarded before it is
+        // dereferenced, exactly as SQL's NULL-propagating ON predicate would be (a null junction matches
+        // no child, it does not throw).
+        var junctionItem = Expression.Property(leftParameter, $"Item{precedingTypes.Count + 1}");
+        var equality = JoinIntoSpecHelpers.BuildKeyEquality(
+            Expression.Property(childParameter, manyToMany.ChildKey),
+            Expression.Property(junctionItem, manyToMany.JunctionChildForeignKey),
+            manyToMany.ChildKey.PropertyType,
+            "JoinInto");
+        var predicateBody = JoinIntoSpecHelpers.ReplaceParameter(
+            predicate.Body, predicate.Parameters[0], Expression.Property(leftParameter, "Item1"));
+        var body = Expression.AndAlso(equality, predicateBody);
+        if (!manyToMany.JunctionEntityType.IsValueType)
+        {
+            var junctionGuard = Expression.NotEqual(
+                junctionItem, Expression.Constant(null, manyToMany.JunctionEntityType));
+            body = Expression.AndAlso(junctionGuard, body);
+        }
+
+        var condition = Expression.Lambda(body, leftParameter, childParameter);
+
+        return new JoinExpression(condition, stored.JoinType)
+        {
+            From = stored.From,
+            EntityType = stored.EntityType,
+            Strictness = stored.Strictness,
+            IsGlobal = stored.IsGlobal,
+            JoinHint = stored.JoinHint,
+            TableHints = stored.TableHints,
+            OriginalJoinCondition = condition,
+            IsJoinInto = true,
+            JoinIntoIdentity = stored.JoinIntoIdentity,
+            SuppressCartesianWarning = stored.SuppressCartesianWarning,
+            FilterScope = stored.FilterScope,
+        };
     }
 
     /// <summary>

@@ -27,6 +27,11 @@
     <!-- The ClickHouse SQL-generation tests render the internal JoinInto pair command so the
          parent-paging subquery (not just the denormalized query) is asserted. -->
     <InternalsVisibleTo Include="nextorm.clickhouse.tests" />
+    <!-- The PostgreSQL/MySQL/SQL Server JoinInto SQL-generation tests render the internal pair command
+         to assert the many-to-many derived junction shape without opening a connection. -->
+    <InternalsVisibleTo Include="nextorm.postgres.tests" />
+    <InternalsVisibleTo Include="nextorm.mysql.tests" />
+    <InternalsVisibleTo Include="nextorm.sqlserver.tests" />
     <!-- The integration suite exercises the key form (BuildEntityCommand/UpdateEntity/DeleteEntity) of
          the DML builders, which is internal; the filter scope of the key form is asserted end to end. -->
     <InternalsVisibleTo Include="nextorm.integration.tests" />

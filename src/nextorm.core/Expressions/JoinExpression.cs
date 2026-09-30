@@ -146,6 +146,12 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// </summary>
     internal bool IsJoinInto { get; set; }
     /// <summary>
+    /// Whether the <c>JoinInto</c> declaration that added this join asked to suppress the
+    /// <c>JoinInto.MultipleCollections</c> diagnostic (see <see cref="JoinOptions.SuppressCartesianWarning"/>).
+    /// Diagnostic-only: it never participates in the rendered SQL or the plan key.
+    /// </summary>
+    internal bool SuppressCartesianWarning { get; init; }
+    /// <summary>
     /// The identity of the <c>JoinInto</c> declaration that added this join, or <see langword="null"/>
     /// for a regular join. It is folded into the join's plan hash and equality so two distinct
     /// <c>JoinInto</c> declarations (different child/keys/collection) never share a cached plan.
@@ -184,6 +190,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
+            SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
         };
     internal JoinExpression CloneForCache()
@@ -202,6 +209,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
+            SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
         };
     }

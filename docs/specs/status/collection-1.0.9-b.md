@@ -20,7 +20,7 @@
 | 2 | #136 | group-1 | 1.0.9-b | done | - |
 | 3 | #115 | group-1 | 1.0.9-b | done | - |
 | 4 | #113 | group-1 | 1.0.9-b | blocked | - |
-| 5 | #135 | group-1 | 1.0.9-b | in-progress | - |
+| 5 | #135 | group-1 | 1.0.9-b | done | - |
 | 6 | #39  | group-1 | 1.0.9-b | pending | - |
 | 7 | #112 | group-1 | 1.0.9-b | pending | - |
 | 8 | #123 | group-1 | 1.0.9-b | pending | - |
@@ -44,8 +44,7 @@
 - #116 done on collection/1.0.9-b/task-1-1 (828c4c4); build 0/0; CHECK PASS (live ClickHouse nested-CTE 1/1; cache identity; all-provider sql-gen; coverage 85.1/76.6).
 - #136 done on collection/1.0.9-b/task-1-2 (09d8f555a63c00bc82a0878b3d8b36aa271da447); build 0/0; CHECK PASS (single+join UPDATE/DELETE CTE bodies w/ explicit-projection RETURNING, PostgreSQL-only; live PG 11/11 + arities 3/3; coverage 87.1/77.9). Scope: identity whole-Projection Returning deferred to issue #143 (milestone 1.0.9-b). Accepted P2 debts: join-returning terminal duplication; JoinedMutationSource per-call placeholder re-prepare.
 - #115 done on collection/1.0.9-b/task-1-3 (9dd018a4e241424d51e3fd88c9ea63f903db0dc0); build 0/0; CHECK PASS (SelectWhereMax/Min whole-row+projection, global/per-group, One/All, portable window lowering on all 6 SQL providers + in-memory; live integration 64/64 incl. ClickHouse; coverage 85.1/76.7). Native PG DISTINCT ON / CH argMax fast paths deferred to issue #144. Test-isolation fix: Query plan cache collection (serializes purge vs cache-hit assertions).
-- In progress:
-- #135 (JoinInto 1:1 + M:N) — slice A (1:1 `HasOneToOne` + public `JoinInto` nullable-ref overloads; LEFT→null / INNER→excluded / >1 child→throw; core+sqlite+postgres SQL-gen + live integration 44/44) and M:N metadata/API (`RelationshipJunctionMetadata`, `HasManyThrough`, local `JoinOptions.OneToOne/ManyToMany`) are done and green in the working tree (uncommitted). M:N **execution** (link projection item + `row_number` occurrence token, junction-row multiplicity, mixed joins, `JoinInto.MultipleCollections` warning) is NOT done; design from escalate captured but not implemented.
+- #135 done on 1.0.9-b (#135-commit); build 0/0; CHECK PASS — M:N execution (derived `row_number()` link + two flat joins with spec JoinType, occurrence dedup `(ParentKey, ChildKey, Occurrence)`, junction-instance token in-memory); R3 metadata-lifecycle fix (configured junction mapping wins; `MemberInfoExtensions` column-name cache invalidated on `DataContextCache.Clear()`); warning `JoinInto.MultipleCollections` + `SuppressCartesianWarning()`; docs EN+RU. Evidence: core 991/991; JoinInto core 79, sqlite 33, postgres 8, mysql 4, sqlserver 4, clickhouse 12; container JoinInto 68/68 all 4 providers; full integration 2622/0 failed/187 capability skips; coverage 85.4/76.9; perf 7-case acceptance pass + new `SqliteBenchmarkManyToManyJoinInto` (14.08 ms / 2.28 MB, per-row). Residual deferrals (rejected by design, not backlog): composite junction selectors and M:N under `AsSingleQuery`.
 - Verified:
 - Blocked:
 - #113 skipped by user decision (scope: runtime WithAlias vs source-generator p.Alias unresolved). Runtime WithAlias slice saved as /tmp/opencode/task-4-113-withalias.patch; not merged.

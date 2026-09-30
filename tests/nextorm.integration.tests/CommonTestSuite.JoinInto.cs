@@ -20,6 +20,8 @@ public abstract partial class CommonTestSuite
         => _sut.DataProvider.From<JoinIntoParent>(b => b
             .HasMany(p => p.Children, c => c.ParentId)
             .HasMany(p => p.Notes, n => n.ParentId)
+            .HasManyThrough<JoinIntoTag, JoinIntoTagLink, int, int>(
+                p => p.Tags, p => p.Id, l => l.ParentId, t => t.Id, l => l.ChildId)
             .HasOneToOne(p => p.PrimaryChild, p => p.Id, c => c.ParentId));
 
     private EntityBuilder<JoinIntoChild> JoinIntoChildren()
@@ -27,6 +29,9 @@ public abstract partial class CommonTestSuite
 
     private EntityBuilder<JoinIntoNote> JoinIntoNotes()
         => _sut.DataProvider.From<JoinIntoNote>();
+
+    private EntityBuilder<JoinIntoTag> JoinIntoTags()
+        => _sut.DataProvider.From<JoinIntoTag>();
 
     /// <summary>
     /// Seeds a fresh parent/child/note triple with unique ids: <c>many</c> has two children and two
@@ -63,6 +68,22 @@ public abstract partial class CommonTestSuite
         ctx.InsertInto<JoinIntoNote>().Values([
             new JoinIntoNote { Id = many + 200, ParentId = many, Text = "many-n1" },
             new JoinIntoNote { Id = many + 201, ParentId = many, Text = "many-n2" },
+        ]).Insert();
+
+        // Many-to-many fixtures (#135): two tags for "many" plus one for "one", linked through a
+        // junction that repeats a (parent, child) pair and carries one dangling child foreign key.
+        ctx.InsertInto<JoinIntoTag>().Values([
+            new JoinIntoTag { Id = many + 300, Name = "many-t1" },
+            new JoinIntoTag { Id = many + 301, Name = "many-t2" },
+            new JoinIntoTag { Id = many + 302, Name = "one-t1" },
+        ]).Insert();
+
+        ctx.InsertInto<JoinIntoTagLink>().Values([
+            new JoinIntoTagLink { Id = many + 400, ParentId = many, ChildId = many + 300 },
+            new JoinIntoTagLink { Id = many + 401, ParentId = many, ChildId = many + 301 },
+            new JoinIntoTagLink { Id = many + 402, ParentId = many, ChildId = many + 300 },
+            new JoinIntoTagLink { Id = many + 403, ParentId = one, ChildId = many + 302 },
+            new JoinIntoTagLink { Id = many + 404, ParentId = many, ChildId = many + 399 },
         ]).Insert();
 
         return (many, one, none);
@@ -249,6 +270,105 @@ public abstract partial class CommonTestSuite
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("*more than one distinct*");
     }
+
+    [Fact]
+    public void JoinInto_ManyToMany_Left_ShouldKeepParentWithoutTagAndGroupTags()
+    {
+        var (many, one, none) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == many || p.Id == one || p.Id == none)
+            .JoinInto(JoinIntoTags(), (p, t) => t.Id >= many + 300, p => p.Tags)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(many, one, none);
+
+        // Two distinct tags for "many", one of them linked twice: the duplicate junction row is preserved.
+        parents[0].Tags.Select(t => t.Id).Should().BeEquivalentTo([many + 300, many + 301, many + 300]);
+        parents[1].Tags.Select(t => t.Id).Should().Equal(many + 302);
+        parents[2].Tags.Should().BeEmpty("a LEFT many-to-many join keeps a parent without any junction row");
+    }
+
+    [Fact]
+    public void JoinInto_ManyToMany_Inner_ShouldExcludeParentWithoutTag()
+    {
+        var (many, one, none) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == many || p.Id == one || p.Id == none)
+            .JoinInto(JoinIntoTags(), (p, t) => t.Id >= many + 300, p => p.Tags, JoinType.Inner)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal([many, one], "an INNER many-to-many join excludes a parent with no junction row");
+    }
+
+    [Fact]
+    public void JoinInto_ManyToMany_ShouldPreserveDuplicateJunctionRows()
+    {
+        var (many, _, _) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == many)
+            .JoinInto(JoinIntoTags(), (p, t) => t.Id >= many + 300, p => p.Tags)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Tags.Count(t => t.Id == many + 300).Should()
+            .Be(2, "two junction rows linking the same (parent, child) pair are distinct elements");
+    }
+
+    [Fact]
+    public void JoinInto_ManyToMany_DanglingChild_ShouldYieldNoElement()
+    {
+        var (many, _, _) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == many)
+            .JoinInto(JoinIntoTags(), (p, t) => t.Id >= many + 300, p => p.Tags)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        // Two tags are linked (one twice); the fourth junction row points at child id many + 399,
+        // which no seeded tag has, so it must contribute no element at all.
+        parents[0].Tags.Should().HaveCount(3, "the dangling junction row contributes no element");
+        parents[0].Tags.Should().NotContainNulls("a junction row whose child does not exist contributes no element");
+        parents[0].Tags.Select(t => t.Id).Should().NotContain(many + 399);
+    }
+
+    [Fact]
+    public void JoinInto_ManyToMany_MixedWithOneToManyAndOneToOne_ShouldStitchEachCollection()
+    {
+        var (many, one, _) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == one)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.Children)
+            .JoinInto(JoinIntoTags(), (p, t) => t.Id >= many + 300, p => p.Tags)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .ToList();
+
+        parents.Should().ContainSingle("the 1:N, 1:1 and M:N joins must not multiply the parent");
+        parents[0].Children.Should().ContainSingle();
+        parents[0].Tags.Should().ContainSingle();
+        parents[0].PrimaryChild.Should().NotBeNull("the single matching child fills the one-to-one reference");
+    }
+
+    [Fact]
+    public void JoinInto_ManyToMany_Predicate_ShouldFilterTheJoinedTags()
+    {
+        var (many, _, _) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == many)
+            .JoinInto(JoinIntoTags(), (p, t) => t.Name != "many-t2", p => p.Tags)
+            .ToList();
+
+        parents.Should().ContainSingle();
+        parents[0].Tags.Select(t => t.Id).Should().NotContain(many + 301, "the child predicate is ANDed into the child join");
+        parents[0].Tags.Should().OnlyContain(t => t.Name != "many-t2");
+    }
 }
 
 [SqlTable("eager_parent")]
@@ -264,6 +384,8 @@ public sealed class JoinIntoParent
     public ICollection<JoinIntoChild> Children { get; set; } = new List<JoinIntoChild>();
 
     public ICollection<JoinIntoNote> Notes { get; set; } = new List<JoinIntoNote>();
+
+    public ICollection<JoinIntoTag> Tags { get; set; } = new List<JoinIntoTag>();
 
     public JoinIntoChild? PrimaryChild { get; set; }
 }
@@ -296,4 +418,29 @@ public sealed class JoinIntoNote
 
     [Column("text")]
     public string? Text { get; set; }
+}
+
+[SqlTable("eager_tag")]
+public sealed class JoinIntoTag
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("name")]
+    public string? Name { get; set; }
+}
+
+[SqlTable("eager_link")]
+public sealed class JoinIntoTagLink
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("parent_id")]
+    public int ParentId { get; set; }
+
+    [Column("child_id")]
+    public int ChildId { get; set; }
 }

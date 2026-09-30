@@ -219,12 +219,33 @@ public static class DataContextExtensions
 
     internal static IEntityMetadata ResolveMetadata<TEntity>(Action<EntityMetadataBuilder<TEntity>>? configEntity)
     {
+        // A configured mapping must win over an auto-published junction mapping: the many-to-many
+        // resolver publishes the auto-built junction into Metadata so the derived link source can read
+        // its columns, but that entry must not shadow an explicit From<TJunction>(cfg).
+        if (configEntity is not null && DataContextCache.AutoPublishedJunctionMetadata.ContainsKey(typeof(TEntity)))
+        {
+            var configuredBuilder = new EntityMetadataBuilder<TEntity>();
+            configEntity(configuredBuilder);
+            var configured = configuredBuilder.Build();
+            DataContextCache.Metadata[typeof(TEntity)] = configured;
+            DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
+
+            // The auto-published mapping may already have seeded the per-property column-name cache;
+            // drop those names so the configured columns are resolved from now on.
+            MemberInfoExtensions.ClearColumnNames(typeof(TEntity));
+            return configured;
+        }
+
         if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
         {
             var eb = new EntityMetadataBuilder<TEntity>();
             configEntity?.Invoke(eb);
             metadata = eb.Build();
             DataContextCache.Metadata[typeof(TEntity)] = metadata;
+
+            // A configured rebuild is no longer an auto-published junction entry.
+            if (configEntity is not null)
+                DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
         }
 
         return metadata;

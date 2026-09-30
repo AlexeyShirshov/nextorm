@@ -51,7 +51,7 @@ range-типа) и динамическая схема табличных ист
 |---|---|---|---|---|
 | `epic: DDL` | 18 | `CREATE`/`ALTER`/`DROP TABLE`, constraints, индексы, sequences, enums, `Create/Drop Database` | CTAS есть (`ToTempTable`/`ToTable`), управления схемой нет | **Gap (решение нужно)**: либо осознанно <span style="color:orange">out-of-scope</span>, либо новый workstream «DDL» |
 | `epic: code-generator` | 21 | CLI/T4-скаффолдинг маппингов из живой БД | none (маппинги только в коде) | **<span style="color:orange">Out-of-scope</span>** (заявленная граница) |
-| `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | O2M/M2O-метаданные (`[Relationship]`/`HasMany`/`HasOne`) + `JoinInto` + уровень-1 `LoadWith` ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)) | **Частичный паритет**: неявный вывод соединений, M2M/O2O, ordering/strategy — <span style="color:orange">out-of-scope</span> |
+| `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | O2M/M2O-метаданные (`[Relationship]`/`HasMany`/`HasOne`) + `JoinInto` (O2M, O2O, M:N через junction) + уровень-1 `LoadWith` ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)) | **Частичный паритет**: O2O и M:N-исполнение отгружены (остатки: составные junction-селекторы, M:N под `AsSingleQuery`, неявный вывод соединений — issue #105); ordering/strategy — <span style="color:orange">out-of-scope</span> |
 | `epic: insert` | 16 | полнота INSERT/UPSERT, bulk, output | `INSERT VALUES/SELECT`, key-upsert, full MERGE, bulk — <span style="color:green">Done</span> | смешанно: см. §4 |
 | `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON (фаза 1: `[JsonColumn]`) — <span style="color:green">Done</span>; SQLite TVF (`json_each`/`json_tree`) — <span style="color:green">Done</span> | **<span style="color:green">Done</span>** (~~G14~~) |
 | `epic: merge` | 5 | MERGE: immutable-модели, частичные setters, TPH/EF | full MERGE (SQL Server, PG15+) — <span style="color:green">Done</span>; inheritance/EF — <span style="color:orange">out-of-scope</span> | частично **Gap** (G-merge) |
@@ -336,8 +336,9 @@ integration-тест. Подробности — [Duration columns](../../guide/
   enums, `Create/Drop Database`. nextorm мутирует схему только через CTAS. Это **единственный крупный
   непокрытый эпик**, где нужно явное решение: осознанно оставить или завести workstream «DDL» (в
   `sql-capabilities-gap-analysis.md` DDL сейчас в «Future workstreams (not scheduled)»).
-- **Inheritance/TPH** (и остатки `epic: eager-load`: неявный вывод соединений, загрузка M2M/O2O) —
-  O2M/M2O-связи и eager loading уровня 1 в nextorm уже отгружены (см. подсекцию «Инфраструктура» ниже).
+- **Inheritance/TPH** (и остатки `epic: eager-load`: неявный вывод соединений, составные junction-селекторы,
+  M:N под `AsSingleQuery`) — O2M/M2O/O2O/M:N-связи и eager loading уровня 1 в nextorm уже отгружены
+  (см. подсекцию «Инфраструктура» ниже).
 - **Скаффолдинг/кодогенерация** (`epic: code-generator`).
 - **Новые провайдеры** (`epic: new-provider`): Oracle, Firebird, DB2, SAP HANA, Informix, Sybase,
   Redshift, DuckDB, YDB, Access, SQL CE.
@@ -394,7 +395,7 @@ statement/table/index).
 | Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
 | DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **<span style="color:orange">Out-of-scope</span>** (см. §4) |
 | Хранимые процедуры / сырой `Execute*` / несколько result-set | `ExecuteRaw`/`ExecuteProcedure` + `ProcedureResult`; несколько result-set'ов — `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()` | **<span style="color:green">Done</span>** (2026-09-26, #70 включая #25) |
-| Association/eager-load, inheritance/TPH | метаданные O2M/M2O (`[Relationship]`/`HasMany`/`HasOne`) + `JoinInto` и уровень-1 `LoadWith` ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)); неявный вывод соединений, M2M/O2O и inheritance/TPH — <span style="color:orange">out-of-scope</span> | **Частичный паритет + <span style="color:orange">Out-of-scope</span>** |
+| Association/eager-load, inheritance/TPH | метаданные O2M/M2O/O2O/M2M (`[Relationship]`/`HasMany`/`HasOne`/`HasOneToOne`/`HasManyThrough`) + `JoinInto` (O2O и M:N отгружены) и уровень-1 `LoadWith` ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)); остатки: неявный вывод соединений, составные junction-селекторы, M:N под `AsSingleQuery`; inheritance/TPH — <span style="color:orange">out-of-scope</span> | **Частичный паритет + <span style="color:orange">Out-of-scope</span>** |
 | Testing framework, NuGet-упаковка, multi-targeting | собственные тесты/сборка | **N/A** |
 
 ## 5. Общие пробелы (нет и у nextorm, и у linq2db)

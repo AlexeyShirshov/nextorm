@@ -129,6 +129,47 @@ public class JoinIntoRejectionTests
     }
 
     [Fact]
+    public void CompositeJunctionRelationshipKey_ShouldThrow()
+    {
+        var parentProperties = new EntityMetadataBuilder<JunctionParent>().Build().Properties;
+        var childProperties = new EntityMetadataBuilder<JunctionChild>().Build().Properties;
+        var linkProperties = new EntityMetadataBuilder<JunctionLink>().Build().Properties;
+        var parentKey = parentProperties.First(p => p.PropertyInfo.Name == nameof(JunctionParent.Id)).PropertyInfo;
+        var childKey = childProperties.First(p => p.PropertyInfo.Name == nameof(JunctionChild.Id)).PropertyInfo;
+        var junctionParentForeignKey = linkProperties.First(p => p.PropertyInfo.Name == nameof(JunctionLink.ParentId)).PropertyInfo;
+        var junctionChildForeignKey = linkProperties.First(p => p.PropertyInfo.Name == nameof(JunctionLink.ChildId)).PropertyInfo;
+
+        DataContextCache.Metadata[typeof(JunctionParent)] = MetadataWithRelationship<JunctionParent>(
+            new RelationshipMetadata(
+                RelationshipKind.ManyToMany,
+                typeof(JunctionParent),
+                typeof(JunctionChild),
+                typeof(JunctionParent).GetProperty(nameof(JunctionParent.Children)),
+                isCollection: true,
+                childKey,
+                parentKey,
+                typeof(JunctionChild),
+                typeof(JunctionParent),
+                new RelationshipJunctionDeclaration
+                {
+                    JunctionType = typeof(JunctionLink),
+                    ParentKey = [parentKey],
+                    ChildKey = [childKey],
+                    // The principal/child key pair stays single-column, so the junction-specific guard fires
+                    // rather than the generic composite-relationship guard.
+                    JunctionParentForeignKey = [junctionParentForeignKey, junctionParentForeignKey],
+                    JunctionChildForeignKey = [junctionChildForeignKey],
+                }));
+
+        using var ctx = new InMemoryDataContext();
+
+        Action act = () => ctx.From<JunctionParent>()
+            .JoinInto(ctx.From<JunctionChild>(), (p, c) => p.Id == c.Id, p => p.Children);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*composite junction key*");
+    }
+
+    [Fact]
     public void OneToOneRelationship_OnTheCollectionOverload_ShouldThrow()
     {
         DataContextCache.Metadata[typeof(RejectParent)] = MetadataWithRelationship<RejectParent>(
@@ -269,6 +310,52 @@ public class JoinIntoRejectionTests
             .JoinInto(ctx.From<ArityChild>(), (p, c) => p.Id == c.ParentId, p => p.C6)
             .JoinInto(ctx.From<ArityChild>(), (p, c) => p.Id == c.ParentId, p => p.C7)
             .JoinInto(ctx.From<ArityChild>(), (p, c) => p.Id == c.ParentId, p => p.C8)
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*at most 7 child collections*");
+    }
+
+    public sealed class ArityManyToManyParent
+    {
+        public int Id { get; set; }
+        public ICollection<ArityManyToManyChild> T1 { get; set; } = new List<ArityManyToManyChild>();
+        public ICollection<ArityManyToManyChild> T2 { get; set; } = new List<ArityManyToManyChild>();
+        public ICollection<ArityManyToManyChild> T3 { get; set; } = new List<ArityManyToManyChild>();
+        public ICollection<ArityManyToManyChild> T4 { get; set; } = new List<ArityManyToManyChild>();
+    }
+
+    public sealed class ArityManyToManyChild
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class ArityManyToManyLink
+    {
+        public int ParentId { get; set; }
+        public int ChildId { get; set; }
+    }
+
+    [Fact]
+    public void ManyToManyArityOverflow_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+        var parents = ctx.From<ArityManyToManyParent>(b => b
+            .HasManyThrough<ArityManyToManyChild, ArityManyToManyLink, int, int>(
+                p => p.T1, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId)
+            .HasManyThrough<ArityManyToManyChild, ArityManyToManyLink, int, int>(
+                p => p.T2, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId)
+            .HasManyThrough<ArityManyToManyChild, ArityManyToManyLink, int, int>(
+                p => p.T3, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId)
+            .HasManyThrough<ArityManyToManyChild, ArityManyToManyLink, int, int>(
+                p => p.T4, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId));
+
+        // Four many-to-many declarations is below the seven-collection cap, but each contributes a link
+        // and a child item, so the projection needs eight child slots and overflows.
+        Action act = () => parents
+            .JoinInto(ctx.From<ArityManyToManyChild>(), (p, c) => true, p => p.T1)
+            .JoinInto(ctx.From<ArityManyToManyChild>(), (p, c) => true, p => p.T2)
+            .JoinInto(ctx.From<ArityManyToManyChild>(), (p, c) => true, p => p.T3)
+            .JoinInto(ctx.From<ArityManyToManyChild>(), (p, c) => true, p => p.T4)
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*at most 7 child collections*");

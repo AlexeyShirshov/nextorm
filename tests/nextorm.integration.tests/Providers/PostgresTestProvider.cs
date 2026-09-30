@@ -88,6 +88,8 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists merge_entity;
         drop table if exists delete_entity;
         drop table if exists dynamic_entity;
+        drop table if exists eager_link;
+        drop table if exists eager_tag;
         drop table if exists eager_note;
         drop table if exists eager_child;
         drop table if exists eager_parent;
@@ -198,6 +200,19 @@ internal sealed class PostgresTestProvider : ITestProvider
             id integer primary key,
             parent_id integer not null,
             text varchar(100)
+        );
+
+        create table eager_tag
+        (
+            id integer primary key,
+            name varchar(100)
+        );
+
+        create table eager_link
+        (
+            id integer primary key,
+            parent_id integer not null,
+            child_id integer not null
         );
 
         -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT

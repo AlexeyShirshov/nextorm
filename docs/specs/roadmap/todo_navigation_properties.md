@@ -28,7 +28,8 @@ single-query загрузку дочерней коллекции `JoinInto` (`L
 **Не-цели этого цикла.**
 
 - Неявные соединения из навигаций (слайс C) — отдельный цикл.
-- Составные ключи и M2M/O2O в `JoinInto` — модель их представляет, реализация отклоняет явно.
+- Составные ключи (и составные junction-селекторы) в `JoinInto` — модель их представляет, реализация
+  отклоняет явно; O2O и M:N через junction добавлены отдельным слайсом после B.
 - Изменение `LoadWith` (#95, split-query) — сосуществует; связь по-прежнему задаётся селекторами.
 - Вывод связей по конвенции (без явного объявления).
 - Изменение существующих join-методов и `Projection<T1..T8>`.
@@ -75,9 +76,9 @@ public interface IRelationshipMetadata
 IReadOnlyList<IRelationshipMetadata> Relationships => Array.Empty<IRelationshipMetadata>();
 ```
 
-M2M представляется расширением модели (junction-дескриптор: тип/таблица junction и два FK). Полная
-форма M2M — часть модели, но реализуется в слайсе B как `NotSupportedException` (см. §6). Точная форма
-junction-дескриптора фиксируется при реализации M2M и не является публичным API до этого.
+M2M представляется расширением модели (junction-дескриптор: тип/таблица junction и два FK). O2O и
+полная форма M2M реализованы после слайса B; отложены только составные junction-селекторы и M:N под
+`AsSingleQuery` (см. §6). Точная форма junction-дескриптора зафиксирована при реализации M:N.
 
 ### 3.2. Fluent-объявление
 
@@ -257,7 +258,7 @@ left join Child as t2 on <predicate>
 
 ## 6. `NotSupportedException` (точный список слайса B)
 
-- `JoinInto` по связи `ManyToMany` или `OneToOne`.
+- M:N-`JoinInto` под `AsSingleQuery` и составной junction-селектор (исполнение O2O и M:N через junction теперь есть).
 - Связь не объявлена в метаданных (навигация не распознана) — без тихой клиентской оценки.
 - Составной principal-ключ или составной FK (в модели допустимы).
 - Несовпадение типов FK/principal-key и `TKey` fallback-перегрузки.
@@ -288,8 +289,9 @@ left join Child as t2 on <predicate>
 ## 8. Документация
 
 - `docs/advanced/limitations.md` + `docs/ru/advanced/limitations.md` — обновить статус навигаций и
-  ограничения `JoinInto` (одна коллекция на запрос без cartesian, только `Left`/`Inner`, составные
-  ключи и M2M/O2O отклоняются, `ToCommand` даёт денормализованные строки).
+  ограничения `JoinInto` (только `Left`/`Inner`, несколько коллекций дают cartesian-warning с
+  `SuppressCartesianWarning()`, составные ключи и junction-селекторы отклоняются, M:N под
+  `AsSingleQuery` отклоняется, `ToCommand` даёт денормализованные строки).
 - Новый гид `docs/advanced/relationships.md` (+ RU) — объявление связей и `JoinInto`.
 - `docs/advanced/eager-loading.md` (+ RU) — перекрёстная ссылка `LoadWith` ↔ `JoinInto`.
 - `docs/guide/02-joins.md` (+ RU) — ссылка на `JoinInto`.
@@ -309,7 +311,7 @@ left join Child as t2 on <predicate>
 
 ## 10. Открытые пункты (решаются при реализации, модель их допускает)
 
-- Точная форма junction-дескриптора M2M (внутренняя, не публичная до реализации M2M).
+- **Решено** (был открытый пункт): точная форма junction-дескриптора M2M зафиксирована при реализации M:N (см. §3.1); отложены только составные junction-селекторы и M:N под `AsSingleQuery`.
 - Валидация уникальности FK для `OneToOne` (по умолчанию — доверие объявлению).
 - Поведение `JoinInto` над `As`/derived-источником — отклонить сейчас, пересмотреть при спросе.
 

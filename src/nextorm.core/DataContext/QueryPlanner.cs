@@ -543,6 +543,19 @@ internal sealed class QueryPlanner : IQueryPlanner
             if ((_logger?.IsEnabled(LogLevel.Debug) ?? false) && storeInCache && queryCommand.Cache)
                 _logger.LogDebug("Query plan cache miss with hash: {hash}", queryPlan!.GetHashCode());
 
+            // One diagnostic per prepared pair command: a query with two or more collection JoinInto
+            // declarations renders a cartesian product of parent rows. The flag is command state, never
+            // part of the plan key, and is cleared here so a command warns at most once even when its
+            // plan is not cached.
+            if (queryCommand.PendingJoinIntoCartesianWarning)
+            {
+                queryCommand.PendingJoinIntoCartesianWarning = false;
+                _logger?.LogWarning(
+                    "JoinInto.MultipleCollections: {Message}",
+                    "The query declares two or more collection JoinInto navigations; their joins multiply the parent rows. " +
+                    "Pass JoinOptions.SuppressCartesianWarning() to silence this warning.");
+            }
+
             var (sql, @params) = ext is null
                 ? MakeSelectInternal()
                 : (ext.ManualSql, ext.MakeParams?.Invoke());

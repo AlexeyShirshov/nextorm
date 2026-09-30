@@ -15,6 +15,28 @@ public static class MemberInfoExtensions
     private static readonly ConcurrentDictionary<(PropertyInfo, INamingConvention?), string> _columnNames = new();
 
     /// <summary>
+    /// Drops the cached column names, all of them or only those of <paramref name="entityType"/>. Called
+    /// when the process-wide metadata cache is cleared and when an already-published mapping is replaced
+    /// by a configured one (the many-to-many junction auto-publish), so a column name resolved against
+    /// the superseded metadata cannot be served afterwards.
+    /// </summary>
+    /// <param name="entityType">The owning entity type to invalidate, or <see langword="null"/> for all.</param>
+    internal static void ClearColumnNames(Type? entityType = null)
+    {
+        if (entityType is null)
+        {
+            _columnNames.Clear();
+            return;
+        }
+
+        foreach (var key in _columnNames.Keys)
+        {
+            if (key.Item1.DeclaringType == entityType)
+                _columnNames.TryRemove(key, out _);
+        }
+    }
+
+    /// <summary>
     /// Column name registered for the member in the shared entity metadata cache, or an empty string
     /// when the metadata does not declare it. Auto-derived names are translated through
     /// <paramref name="convention"/>; declared names are returned verbatim.

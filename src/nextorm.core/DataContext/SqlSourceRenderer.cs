@@ -231,9 +231,13 @@ internal static class SqlSourceRenderer
                 return ctx.ParamMode ? null : sqlBuilder!.ToString();
             }
 
-            // A scope is pushed only when the condition's parameters contain a repeated type. Doing
-            // this with a double loop avoids the Select/Distinct LINQ allocations on every build.
-            var scopedAdded = JoinNeedsScope(joinCondition.Parameters);
+            // A scope is pushed when the condition's parameters contain a repeated type (a double loop
+            // avoids the Select/Distinct LINQ allocations on every build), or when the joined type
+            // already has a sibling source in the current scope. Without the latter, an empty scope makes
+            // FindAlias resolve the condition's right-hand parameter to the first same-typed source (the
+            // earlier sibling) instead of the just-added join source, binding the ON to the wrong alias.
+            var scopedAdded = JoinNeedsScope(joinCondition.Parameters)
+                || ctx.ColumnsProvider.FindAlias(joinCondition.Parameters[1].Type, null, fromProjection: false) is not null;
             if (scopedAdded)
                 ctx.ColumnsProvider.PushScope(joinCondition.Parameters);
 

@@ -104,9 +104,15 @@ internal static class JoinIntoStitcher
     {
         var parents = new List<TEntity>();
         var parentsByKey = new Dictionary<object, TEntity>();
-        var perSpec = new List<(TEntity Parent, object? Child)>[specs.Count];
+        var perSpec = new List<(TEntity Parent, object? Child)>?[specs.Count];
+        var perManyToMany = new List<JoinIntoManyToManyRow<TEntity>>?[specs.Count];
         for (var i = 0; i < specs.Count; i++)
-            perSpec[i] = new List<(TEntity, object?)>();
+        {
+            if (specs[i] is IJoinIntoManyToManySpec)
+                perManyToMany[i] = [];
+            else
+                perSpec[i] = [];
+        }
 
         // Parent identity comes from the entity's own key, not from the first JoinInto spec: the specs may
         // declare different parent keys, and a spec key is not the parent's identity. Resolved before the
@@ -125,21 +131,30 @@ internal static class JoinIntoStitcher
 
         // Each declaration contributes one or more projection items (a many-to-many declaration
         // contributes a link item followed by the child). The child assigned per declaration is the
-        // last item of its slice; the offsets locate that slice in the flattened projection.
+        // last item of its slice, and the link is the first; the offsets locate that slice in the
+        // flattened projection. The many-to-many slice is path-dependent: SQL projects the derived
+        // JoinIntoLink, in memory the junction entity.
+        var isSql = builder.DataProvider.NeedMapping;
         var itemTypesByDeclaration = new IReadOnlyList<Type>[specs.Count];
         for (var i = 0; i < specs.Count; i++)
-            itemTypesByDeclaration[i] = specs[i].ItemTypes;
+            itemTypesByDeclaration[i] = specs[i] is IJoinIntoManyToManySpec manyToMany
+                ? manyToMany.GetItemTypes(isSql)
+                : specs[i].ItemTypes;
 
         var projectionType = JoinIntoProjectionFactory.Create(typeof(TEntity), itemTypesByDeclaration);
 
         var childProperties = new PropertyInfo[specs.Count];
+        var linkProperties = new PropertyInfo?[specs.Count];
         var offset = 1;
         for (var i = 0; i < specs.Count; i++)
         {
-            var itemCount = specs[i].ItemTypes.Count;
+            var itemCount = itemTypesByDeclaration[i].Count;
             if (itemCount == 0)
                 throw new InvalidOperationException(
                     $"The JoinInto declaration for '{specs[i].ChildEntityType.Name}' contributes no projection items.");
+
+            if (specs[i] is IJoinIntoManyToManySpec)
+                linkProperties[i] = ResolveItemPropertyNumber(projectionType, offset + 1);
 
             childProperties[i] = ResolveItemProperty(i, projectionType, offset, itemCount);
             offset += itemCount;
@@ -167,17 +182,34 @@ internal static class JoinIntoStitcher
                 }
 
                 for (var i = 0; i < specs.Count; i++)
-                    perSpec[i].Add((canonical, childProperties[i].GetValue(row)));
+                {
+                    if (specs[i] is IJoinIntoManyToManySpec)
+                    {
+                        perManyToMany[i]!.Add(new JoinIntoManyToManyRow<TEntity>(
+                            canonical,
+                            linkProperties[i]!.GetValue(row),
+                            childProperties[i].GetValue(row)));
+                    }
+                    else
+                    {
+                        perSpec[i]!.Add((canonical, childProperties[i].GetValue(row)));
+                    }
+                }
             }
         }
 
         // The in-memory provider pages after deduplication; the SQL provider already paged the parent
         // subquery, so the limit is not applied again here.
-        if (!builder.DataProvider.NeedMapping && !builder.Paging.IsEmpty)
+        if (!isSql && !builder.Paging.IsEmpty)
             parents = ApplyPaging(parents, builder.Paging);
 
         for (var i = 0; i < specs.Count; i++)
-            specs[i].AssignChildren(parents, perSpec[i]);
+        {
+            if (specs[i] is IJoinIntoManyToManySpec manyToMany)
+                manyToMany.AssignChildrenFromLinks(parents, perManyToMany[i]!);
+            else
+                specs[i].AssignChildren(parents, perSpec[i]!);
+        }
 
         return parents;
     }
@@ -192,12 +224,13 @@ internal static class JoinIntoStitcher
     /// <param name="itemCount">The number of projection items the declaration contributes.</param>
     /// <returns>The <c>ItemN</c> property that holds the joined child.</returns>
     private static PropertyInfo ResolveItemProperty(int specIndex, Type projectionType, int offset, int itemCount)
-    {
-        var itemNumber = offset + itemCount;
-        return projectionType.GetProperty($"Item{itemNumber}")
+        => ResolveItemPropertyNumber(projectionType, offset + itemCount)
             ?? throw new InvalidOperationException(
-                $"The denormalized projection for the JoinInto declaration {specIndex} has no 'Item{itemNumber}' property.");
-    }
+                $"The denormalized projection for the JoinInto declaration {specIndex} has no 'Item{offset + itemCount}' property.");
+
+    /// <summary>Resolves the 1-based <c>ItemN</c> accessor of the denormalized projection, or <c>null</c> when absent.</summary>
+    private static PropertyInfo? ResolveItemPropertyNumber(Type projectionType, int itemNumber)
+        => projectionType.GetProperty($"Item{itemNumber}");
 
     /// <summary>
     /// Resolves the <c>ItemN</c> accessors of the denormalized projection from the first non-null row, or

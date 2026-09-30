@@ -135,6 +135,23 @@ public class UpdateJoinSqlGenerationTests
     }
 
     [Fact]
+    public void UpdateJoin_TwoJoinsToSameType_ShouldBindSecondConditionToSecondAlias()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // Two joins to the same entity type: the second join's right-hand parameter must bind to the
+        // second source (t3), not the earlier sibling (t2). The join targets bind positionally via
+        // MemberTranslator.AliasProvider.FindAlias, so the ON condition reads "t2.id = t3.id".
+        ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Join(ctx.From<ISimpleEntity>(), (p, s) => p.Item2.Id == s.Id)
+            .UpdateJoin()
+            .Set(p => p.Item1.String, "x")
+            .ToSql()
+            .Should().Be("update complex_entity as \"t1\" set somestring = @p0 from simple_entity as \"t2\", simple_entity as \"t3\" where t1.id = cast(t2.id as bigint) and t2.id = t3.id");
+    }
+
+    [Fact]
     public void UpdateJoin_RepeatedSet_ShouldReplaceEarlierAssignment()
     {
         using var ctx = PostgresTestContext.Create();

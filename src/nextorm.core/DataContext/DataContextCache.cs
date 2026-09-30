@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading;
 
 namespace NextORM.Core;
@@ -21,6 +22,7 @@ public static class DataContextCache
 {
     private readonly static TimedDictionary<Type, IEntityMetadata> _metadata = new();
     private readonly static TimedDictionary<Type, IEntityMetadata> _tvpMetadata = new();
+    private readonly static ConcurrentDictionary<Type, byte> _autoPublishedJunctionMetadata = new();
     private readonly static TimedDictionary<Type, SelectExpression[]> _selectListCache = new();
     private readonly static TimedDictionary<ExpressionKey, Delegate> _expCache = new();
     private readonly static TimedDictionary<ExpressionKey, Func<object?, object?>> _inValuesCache = new();
@@ -40,6 +42,15 @@ public static class DataContextCache
     /// back to this cache. Internal: not part of the public cache surface.
     /// </summary>
     internal static IDictionary<Type, IEntityMetadata> TvpMetadata => _tvpMetadata;
+    /// <summary>
+    /// Junction entity types whose mapping was auto-published into <see cref="Metadata"/> by the
+    /// many-to-many resolver, without a user configuration, so the derived link source can read its
+    /// columns. Tracked separately so a later <c>From&lt;TJunction&gt;(cfg)</c> can tell an auto-built
+    /// entry from a configured one and rebuild it from the configuration instead of silently reusing
+    /// the auto mapping. The auto path clears the marker when the configuration wins. Internal: not
+    /// part of the public cache surface.
+    /// </summary>
+    internal static IDictionary<Type, byte> AutoPublishedJunctionMetadata => _autoPublishedJunctionMetadata;
     /// <summary>
     /// Cached select lists (the projected columns) of each CLR type, keyed by that type, so the
     /// projection is not rebuilt per query.
@@ -90,6 +101,7 @@ public static class DataContextCache
     {
         _metadata.Clear();
         _tvpMetadata.Clear();
+        _autoPublishedJunctionMetadata.Clear();
         _selectListCache.Clear();
         _expCache.Clear();
         _inValuesCache.Clear();
@@ -98,5 +110,6 @@ public static class DataContextCache
         ProjectionAliasCache.Clear();
         QueryPlanner.ClearFromCache();
         QueryPlanStore.Clear();
+        MemberInfoExtensions.ClearColumnNames();
     }
 }

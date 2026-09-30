@@ -120,6 +120,10 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table eager_child (id integer primary key, parent_id int not null, name text);
         create table eager_note (id integer primary key, parent_id int not null, text text);
 
+        -- Many-to-many JoinInto fixtures (#135): the tag child plus the junction linking it to a parent.
+        create table eager_tag (id integer primary key, name text);
+        create table eager_link (id integer primary key, parent_id int not null, child_id int not null);
+
         -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
         -- target table. Both carry the tenant/soft-delete columns the shared suite filters on.
         create table query_filter_entity (id integer primary key, tenant_id int not null, is_deleted integer not null, name text);
