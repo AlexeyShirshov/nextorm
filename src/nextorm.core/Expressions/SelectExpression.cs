@@ -225,12 +225,17 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         {
             return GetFieldValueMI.MakeGenericMethod(typeof(JsonElement));
         }
+        else if (readType == typeof(byte[]))
+        {
+            // A binary column is read through the generic typed accessor so the value is not boxed
+            // through GetValue; the caller receives the array directly.
+            return GetFieldValueMI.MakeGenericMethod(typeof(byte[]));
+        }
         else if (readType.IsArray)
         {
-            // Array columns and array-returning expressions (binary bytea/varbinary/blob,
-            // PostgreSQL text[]/int[], ClickHouse Array(T) including nested arrays) have no typed
-            // reader getter; read the value through GetValue and let the caller cast it to the
-            // declared array type.
+            // Other array columns and array-returning expressions (PostgreSQL text[]/int[],
+            // ClickHouse Array(T) including nested arrays) have no typed reader getter; read the
+            // value through GetValue and let the caller cast it to the declared array type.
             return GetValueMI;
         }
         else if (TypeFacts.IsTupleType(readType))

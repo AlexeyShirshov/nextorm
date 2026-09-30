@@ -1463,6 +1463,55 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         }
     }
 
+    [SqlTable("csv_widening_probe")]
+    private interface ICsvWideningProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+
+        // The physical column is bigint while the projection is int, so the reader's storage type
+        // (long) differs from the projected CLR type.
+        [Column("big_value")]
+        int BigValue { get; set; }
+
+        // Likewise decimal(12,4) storage projected as int, so the typed CSV hook converts decimal -> int.
+        [Column("dec_value")]
+        int DecValue { get; set; }
+    }
+
+    // End-to-end cover for the CSV typed-column hook on a real server: the projected CLR type is int
+    // while the storage types are bigint and decimal(12,4), so the exact bytes prove the storage-typed
+    // getter + static Convert overload path runs without an exception or an object-based fallback.
+    [Fact]
+    public void Csv_NumericColumnWithWiderStorage_ShouldWriteConvertedBytes()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists csv_widening_probe");
+        Execute(ctx, "create table csv_widening_probe (id bigint not null primary key, big_value bigint not null, dec_value decimal(12,4) not null)");
+
+        try
+        {
+            Execute(ctx, "insert into csv_widening_probe (id, big_value, dec_value) values (1, 42, 123.0000)");
+            Execute(ctx, "insert into csv_widening_probe (id, big_value, dec_value) values (2, -7, -8.0000)");
+
+            using var destination = new MemoryStream();
+            ctx.From<ICsvWideningProbe>()
+                .OrderBy(x => x.Id)
+                .Select(x => new { x.BigValue, x.DecValue })
+                .WriteCsv(destination, null, TestContext.Current.CancellationToken);
+
+            Encoding.UTF8.GetString(destination.ToArray()).Should().Be(
+                "BigValue,DecValue\r\n" +
+                "42,123\r\n" +
+                "-7,-8\r\n");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists csv_widening_probe");
+        }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

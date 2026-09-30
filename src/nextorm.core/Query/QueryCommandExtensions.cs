@@ -387,6 +387,84 @@ public static class QueryCommandExtensions
         }
     }
 
+    /// <summary>Writes the command's <c>Select</c> result as CSV to <paramref name="destination"/>.</summary>
+    /// <typeparam name="TResult">The projected result type; it is not materialized on this path.</typeparam>
+    /// <param name="command">The command to execute.</param>
+    /// <param name="destination">The stream that receives the UTF-8 CSV; it stays open.</param>
+    /// <param name="options">The CSV dialect options, or <c>null</c> for the defaults.</param>
+    /// <param name="cancellationToken">A token that cancels the write.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    public static void WriteCsv<TResult>(this QueryCommand<TResult> command, Stream destination, CsvStreamOptions? options = null, CancellationToken cancellationToken = default, params ReadOnlySpan<object?> parameters)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(destination);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var context = RequireRelationalContextForCsv(command);
+        var dialectOptions = options ?? new CsvStreamOptions();
+        CsvStreamWriter.ValidateOptions(dialectOptions);
+
+        command.PrepareCommand(cancellationToken);
+
+        // Reject unsupported projections from static information before any SQL is executed.
+        CsvStreamWriter.ValidateProjection(command.SelectList, context.MapColumnExpression, context.SupportsTypedColumn);
+
+        var owner = context.OpenResultReader(command, parameters, cancellationToken);
+        try
+        {
+            // Binding happens after the reader is open so the provider can pick a typed getter from the
+            // storage type; the plan (and every guard) is still built before the header is written.
+            var plan = CsvStreamWriter.Build(command.SelectList, owner.Reader, context.MapTypedColumn);
+            CsvStreamWriter.Write(owner.Reader, destination, plan, dialectOptions, cancellationToken);
+        }
+        finally
+        {
+            owner.Dispose();
+        }
+    }
+
+    /// <summary>Asynchronously writes the command's <c>Select</c> result as CSV to <paramref name="destination"/>.</summary>
+    /// <typeparam name="TResult">The projected result type; it is not materialized on this path.</typeparam>
+    /// <param name="command">The command to execute.</param>
+    /// <param name="destination">The stream that receives the UTF-8 CSV; it stays open.</param>
+    /// <param name="options">The CSV dialect options, or <c>null</c> for the defaults.</param>
+    /// <param name="cancellationToken">A token that cancels the write.</param>
+    /// <param name="parameters">The positional parameter values bound to the query.</param>
+    /// <returns>A task that completes when the CSV has been written.</returns>
+    public static Task WriteCsvAsync<TResult>(this QueryCommand<TResult> command, Stream destination, CsvStreamOptions? options = null, CancellationToken cancellationToken = default, params object?[] parameters)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(destination);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return WriteCsvAsyncCore(command, destination, options, cancellationToken, parameters);
+    }
+
+    private static async Task WriteCsvAsyncCore<TResult>(QueryCommand<TResult> command, Stream destination, CsvStreamOptions? options, CancellationToken cancellationToken, object?[] parameters)
+    {
+        var context = RequireRelationalContextForCsv(command);
+        var dialectOptions = options ?? new CsvStreamOptions();
+        CsvStreamWriter.ValidateOptions(dialectOptions);
+
+        command.PrepareCommand(cancellationToken);
+
+        // Reject unsupported projections from static information before any SQL is executed.
+        CsvStreamWriter.ValidateProjection(command.SelectList, context.MapColumnExpression, context.SupportsTypedColumn);
+
+        var owner = await context.OpenResultReaderAsync(command, (object[]?)parameters, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Binding happens after the reader is open so the provider can pick a typed getter from the
+            // storage type; the plan (and every guard) is still built before the header is written.
+            var plan = CsvStreamWriter.Build(command.SelectList, owner.Reader, context.MapTypedColumn);
+            await CsvStreamWriter.WriteAsync(owner.Reader, destination, plan, dialectOptions, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await owner.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
     internal const string LobDataReaderLocatorMessage =
         "ToDataReader is not supported on providers that append a LOB locator column (SQLite); use ToStream/ToTextReader for a single LOB column.";
 
@@ -446,6 +524,15 @@ public static class QueryCommandExtensions
         return command.DataContext as DataContext
             ?? throw new NotSupportedException(
                 "LOB reads require a database provider; the in-memory provider has no DbDataReader and supports only the single-column ToStream/ToTextReader terminals.");
+    }
+
+    private static DataContext RequireRelationalContextForCsv(QueryCommand command)
+    {
+        ThrowIfDisposed(command.DataContext);
+
+        return command.DataContext as DataContext
+            ?? throw new NotSupportedException(
+                "CSV streaming requires a database provider; the in-memory provider has no DbDataReader and does not support the WriteCsv/WriteCsvAsync terminals.");
     }
 
     private static void ThrowIfDisposed(IDataContext? context)

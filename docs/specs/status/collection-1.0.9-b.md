@@ -22,7 +22,7 @@
 | 4 | #113 | group-1 | 1.0.9-b | blocked | - |
 | 5 | #135 | group-1 | 1.0.9-b | done | - |
 | 6 | #39  | group-1 | 1.0.9-b | done | - |
-| 7 | #112 | group-1 | 1.0.9-b | pending | - |
+| 7 | #112 | group-1 | 1.0.9-b | done | - |
 | 8 | #123 | group-1 | 1.0.9-b | pending | - |
 | 9 | #124 | group-1 | 1.0.9-b | pending | - |
 | 10 | #125 | group-1 | 1.0.9-b | pending | - |
@@ -46,6 +46,7 @@
 - #115 done on collection/1.0.9-b/task-1-3 (9dd018a4e241424d51e3fd88c9ea63f903db0dc0); build 0/0; CHECK PASS (SelectWhereMax/Min whole-row+projection, global/per-group, One/All, portable window lowering on all 6 SQL providers + in-memory; live integration 64/64 incl. ClickHouse; coverage 85.1/76.7). Native PG DISTINCT ON / CH argMax fast paths deferred to issue #144. Test-isolation fix: Query plan cache collection (serializes purge vs cache-hit assertions).
 - #135 done on 1.0.9-b (466e870bfa35d4323b50840cbf5e37140f0c38a0); build 0/0; CHECK PASS — M:N execution (derived `row_number()` link + two flat joins with spec JoinType, occurrence dedup `(ParentKey, ChildKey, Occurrence)`, junction-instance token in-memory); R3 metadata-lifecycle fix (configured junction mapping wins; `MemberInfoExtensions` column-name cache invalidated on `DataContextCache.Clear()`); warning `JoinInto.MultipleCollections` + `SuppressCartesianWarning()`; docs EN+RU. Evidence: core 991/991; JoinInto core 79, sqlite 33, postgres 8, mysql 4, sqlserver 4, clickhouse 12; container JoinInto 68/68 all 4 providers; full integration 2622/0 failed/187 capability skips; coverage 85.4/76.9; perf 7-case acceptance pass + new `SqliteBenchmarkManyToManyJoinInto` (14.08 ms / 2.28 MB, per-row). Residual deferrals (rejected by design, not backlog): composite junction selectors and M:N under `AsSingleQuery`.
 - #39 Streaming JSON to a Stream (WriteJson/WriteJsonAsync) done on 1.0.9-b; build 0/0; core 993/993; SQLite JsonStreaming 24/24; WriteJson integration 40/40 across SQLite/PG/SQL Server/MySQL/ClickHouse/MariaDB, 0 skipped; full suite 2662/0 failed/187 capability skips; coverage 87.4/78.1; perf `SqliteBenchmarkWriteJson` (scalar allocation flat sync+async, variable-width transient, no Gen2; bounded 64 KiB buffer, no per-row retention). Accepted P2 debts: 2 zero-hit `DeferFlush` branches; no dedicated JSON `DefaultOnNull` test. Temp-table P1 fix included; commit f29c642.
+- #112 Streaming CSV to a Stream (WriteCsv/WriteCsvAsync) done on 1.0.9-b; build 0/0; core 1107/1107; CSV integration 69/69 across SQLite/PG/SQL Server/MySQL/ClickHouse/MariaDB, 0 skipped; full suite 2731/0 failed/187 capability skips; coverage 85.7/77.1; perf `WriteCsv` 0.77× ToList allocation + acceptance 7/7. Options: `IncludeHeader`/`Delimiter`/`NullMarker` (`\N`)/`ExcelMode`/`ValueTransform`; base implemented by adapting `refs/heads/exp112/upstream` (`c29de9d`). Accepted P2 debts: remaining zero-hit branch partials; whole-field `byte[]` memory bound (documented, deferred with trigger).
 - Verified:
 - Blocked:
 - #113 skipped by user decision (scope: runtime WithAlias vs source-generator p.Alias unresolved). Runtime WithAlias slice saved as /tmp/opencode/task-4-113-withalias.patch; not merged.

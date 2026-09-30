@@ -11,6 +11,33 @@ namespace NextORM.Core;
 /// </summary>
 public static class EntityBuilderExtensions
 {
+    /// <summary>Writes the builder's <c>Select</c> result as CSV to <paramref name="destination"/>.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The stream that receives the UTF-8 CSV; it stays open.</param>
+    /// <param name="options">The CSV dialect options, or <c>null</c> for the defaults.</param>
+    /// <param name="cancellationToken">A token that cancels the write.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    public static void WriteCsv<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, CsvStreamOptions? options = null, CancellationToken cancellationToken = default, params ReadOnlySpan<object?> @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.ToParentCommand().WriteCsv(destination, options, cancellationToken, @params);
+    }
+
+    /// <summary>Asynchronously writes the builder's <c>Select</c> result as CSV to <paramref name="destination"/>.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The stream that receives the UTF-8 CSV; it stays open.</param>
+    /// <param name="options">The CSV dialect options, or <c>null</c> for the defaults.</param>
+    /// <param name="cancellationToken">A token that cancels the write.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task that completes when the CSV has been written.</returns>
+    public static Task WriteCsvAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, CsvStreamOptions? options = null, CancellationToken cancellationToken = default, params object?[] @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.ToParentCommand().WriteCsvAsync(destination, options, cancellationToken, @params);
+    }
+
     /// <summary>
     /// Streams the matching entities as an asynchronous sequence without buffering the whole result set.
     /// </summary>

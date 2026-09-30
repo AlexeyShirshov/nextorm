@@ -39,6 +39,7 @@
 - [Range-колонки (диапазон, хранимый парой скалярных колонок)](guide/25-range-columns.md)
 - [Потоковое чтение больших объектов (BLOB/CLOB)](guide/26-large-objects.md)
 - [Динамические колонки](guide/27-dynamic-columns.md)
+- [Потоковая выдача результатов запроса в CSV](guide/28-csv-export.md)
 
 ### Инфраструктура
 

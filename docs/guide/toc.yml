@@ -52,6 +52,8 @@
   href: 26-large-objects.md
 - name: Dynamic columns
   href: 27-dynamic-columns.md
+- name: Streaming query results to CSV
+  href: 28-csv-export.md
 - name: Provider-specific SQL
   items:
     - name: Overview

@@ -443,6 +443,58 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
+    /// <summary>
+    /// Opens a plain multi-column reader for a prepared command using the command's own
+    /// <see cref="CommandBehavior"/> (the buffered default for a non-LOB command): no sequential
+    /// access and no locator column are required. Returns an owner of the reader and the per-call
+    /// command; the caller must dispose it.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="compiledQuery">The per-call command to execute.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    /// <returns>An owner of the open reader and its command.</returns>
+    internal CommandReaderOwner OpenResultReader<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+
+        DbCommand? command = GetDbCommand(compiledQuery, @params);
+        try
+        {
+            var reader = RunReader(command!, compiledQuery.Behavior);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
+    }
+
+    /// <summary>Asynchronously opens a plain multi-column reader for a prepared command with the command's own <see cref="CommandBehavior"/>.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="compiledQuery">The per-call command to execute.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    /// <param name="cancellationToken">Cancels opening the reader.</param>
+    /// <returns>A task producing an owner of the open reader and its command.</returns>
+    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+
+        DbCommand? command = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var reader = await RunReaderAsync(command!, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
+    }
+
     /// <summary>Executes a mutation and returns the number of affected rows.</summary>
     /// <param name="sql">The parameterised statement text.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>

@@ -11,11 +11,16 @@ namespace NextORM.Core.Tests;
 public class SelectExpressionTests
 {
     [Fact]
-    public void GetDataRecordMethod_ForByteArray_ShouldReadThroughGetValue()
+    public void GetDataRecordMethod_ForByteArray_ShouldReadThroughGetFieldValue()
     {
         var column = new SelectExpression(typeof(byte[])) { PropertyName = "Data", Index = 0 };
 
-        column.GetDataRecordMethod().Name.Should().Be(nameof(IDataRecord.GetValue));
+        var method = column.GetDataRecordMethod();
+
+        method.Name.Should().Be(nameof(DbDataReader.GetFieldValue));
+        method.ReturnType.Should().Be(typeof(byte[]));
+        method.IsGenericMethod.Should().BeTrue();
+        method.GetGenericArguments().Should().ContainSingle().Which.Should().Be(typeof(byte[]));
     }
 
     [Fact]

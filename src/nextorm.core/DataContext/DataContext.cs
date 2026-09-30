@@ -416,6 +416,48 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
     }
 
+    // The plain (non-LOB) multi-column reader seam: unlike PrepareLobCommand it demands neither
+    // sequential access nor a locator column, so it runs on every relational provider (including
+    // SQLite, whose rowid locator would otherwise be appended). The plan is prepared per call with
+    // storeInCache: false and without touching QueryCommand.Cache, so a shared command (for example
+    // the context-cached AnyCommand) is never mutated and no plan is promoted into the plan cache.
+    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        return _executor.OpenResultReader(prepared, @params);
+    }
+
+    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        return await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
+    }
+
+    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
+
+        // The plain multi-column reader cannot run a lazy temporary-table source: the source is not a
+        // single statement but a batch (DROP + CREATE TEMPORARY TABLE AS + read) that must share one
+        // session, and it is consumed through the batch-aware enumerable/scalar terminals. Preparing the
+        // read here would strip the batch and execute a lone SELECT against a table that was never
+        // created, surfacing the provider's raw "table does not exist" error. Fail closed instead, before
+        // the CSV terminal writes the header.
+        if (queryCommand.HasTemporaryTableSource())
+            throw new NotSupportedException(
+                "The CSV terminal (WriteCsv/WriteCsvAsync) does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be streamed as CSV. Materialise the query first (for example ToList) and write the rows yourself.");
+
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
+            queryCommand,
+            createEnumerator: false,
+            storeInCache: false,
+            sequentialAccess: false,
+            streamingRowsRequested: false,
+            cancellationToken);
+    }
+
     internal bool IsDisposed => _disposed;
 
     BatchPlan IBatchExecutor.RenderTemporaryTableBatch(QueryCommand command)
@@ -556,6 +598,44 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
     public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect);
+
+    /// <summary>
+    /// Maps a projected column when the reader's actual field (storage) type is known. The CSV terminal
+    /// calls this after the reader is open, passing <c>reader.GetFieldType(column.Index)</c>, so a
+    /// provider can pick a typed getter for the storage type and convert to the projected type without
+    /// going through <see cref="IDataRecord.GetValue"/>. It is a provider extension point: <c>protected</c>
+    /// so it does not widen the context's public surface, and overridden by providers (for example
+    /// <c>SqlServerDataContext</c>) whose reader does not widen numerics. The default ignores
+    /// <paramref name="storageType"/> and delegates to <see cref="MapColumnExpression"/> so buffered
+    /// materialization is unchanged.
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="record">The data-reader expression the accessor is built from.</param>
+    /// <param name="storageType">The reader's CLR field type for the column's ordinal.</param>
+    /// <returns>An expression that reads (and, when needed, converts) the column value.</returns>
+    protected virtual Expression MapTypedColumnExpression(SelectExpression column, Expression record, Type storageType)
+        => MapColumnExpression(column, record);
+
+    /// <summary>
+    /// True when <see cref="MapTypedColumnExpression"/> will read <paramref name="column"/> through a
+    /// typed getter even though <see cref="MapColumnExpression"/> (which has no storage type to work
+    /// with) would box through <see cref="IDataRecord.GetValue"/>/<c>Convert.ChangeType(object)</c>. The
+    /// CSV terminal calls this before the query is executed, when only the static projection is known,
+    /// so it can reject a column that will box on every row without falsely rejecting a provider whose
+    /// typed hook is storage-driven (SQL Server numeric widening). The default is <see langword="false"/>.
+    /// </summary>
+    /// <param name="column">The projected column about to be validated.</param>
+    /// <returns><see langword="true"/> when the typed hook can bind the column box-free.</returns>
+    protected virtual bool SupportsTypedColumnMapping(SelectExpression column) => false;
+
+    // The CSV terminal lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal bool SupportsTypedColumn(SelectExpression column) => SupportsTypedColumnMapping(column);
+
+    // The CSV terminal lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal Expression MapTypedColumn(SelectExpression column, Expression record, Type storageType)
+        => MapTypedColumnExpression(column, record, storageType);
 
     /// <summary>Resets the cached execution plan of <paramref name="queryCommand"/> so it is rebuilt on next use.</summary>
     /// <param name="queryCommand">The command whose plan should be discarded.</param>

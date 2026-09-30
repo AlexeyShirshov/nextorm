@@ -39,6 +39,7 @@
 - [Range columns (pair of scalar columns)](guide/25-range-columns.md)
 - [Streaming large objects (BLOB/CLOB)](guide/26-large-objects.md)
 - [Dynamic columns](guide/27-dynamic-columns.md)
+- [Streaming query results to CSV](guide/28-csv-export.md)
 
 ### Infrastructure
 
