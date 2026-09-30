@@ -6,7 +6,7 @@
 
 ## Overview
 
-nextorm deliberately has no cross-provider JSON method. "Working with JSON" means different things on
+nextorm deliberately has no cross-provider JSON function surface. "Working with JSON" means different things on
 different providers, and the engine keeps those mechanisms separate instead of pretending they are one
 feature:
 
@@ -32,6 +32,11 @@ feature:
   *column* is still not mapped (the driver returns it as `System.Text.Json.Nodes.JsonObject`).
 * **SQLite** does not expose any JSON construct. The database has JSON1, but nextorm does not map it
   yet, so building the SQL throws `NotSupportedException`.
+* **Every SQL provider** shares one JSON *terminal*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
+  [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) stream the query's projection to a caller-owned `Stream` as a JSON array or
+  NDJSON, serialized client-side with `System.Text.Json` (see [Streaming JSON to a Stream](#streaming-json-to-a-stream)).
+  This is a serialization terminal, not a SQL JSON function: it does not change the per-provider JSON
+  surfaces below.
 
 Because the mechanisms are different, the same conceptual result is written in different ways. Read the
 section for your provider; the [provider matrix](#provider-matrix) and
@@ -50,6 +55,113 @@ section for your provider; the [provider matrix](#provider-matrix) and
 
 "No" means the command is rejected with `NotSupportedException` when its SQL is built, not that the
 database lacks JSON support.
+
+## Streaming JSON to a Stream
+
+[`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) / [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) are the one JSON surface shared by every SQL provider. The terminal
+executes the query, reads each row through typed `DbDataReader` accessors and writes it to a
+caller-owned `Stream` with `System.Text.Json` — it never materializes a `TResult` per row, so live
+memory stays O(buffer) regardless of the result-set size. That makes it the right tool for piping a
+large or unbounded result set to an HTTP response, a file or a network stream. It is **not** available
+on the in-memory provider: there is no `DbDataReader` and no managed fallback, so both methods throw
+`NotSupportedException` before the destination is touched.
+
+The four terminals are members of [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and are
+mirrored as extension methods on [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). The
+public overloads take no explicit parameter list: pass values through captured variables in the query.
+Streaming needs an explicit `Select` projection — an entity query with no projection has no JSON shape
+and throws `InvalidOperationException`.
+
+```csharp
+public void WriteJson(Stream destination);
+public void WriteJson(Stream destination, JsonStreamOptions options);
+public Task WriteJsonAsync(Stream destination, CancellationToken cancellationToken = default);
+public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default);
+```
+
+```csharp
+await using var file = File.Create("orders.ndjson");
+
+await ctx.From<Order>()
+    .Where(o => o.CreatedAt >= from)
+    .Select(o => new { o.Id, o.CreatedAt, o.Total })
+    .WriteJsonAsync(file, new JsonStreamOptions
+    {
+        Mode = JsonStreamMode.NdJson,
+        IgnoreNull = true,
+    }, cancellationToken);
+```
+
+### Options
+
+[`JsonStreamMode`](xref:NextORM.Core.JsonStreamMode) selects the container shape:
+
+| Value | Output |
+|---|---|
+| [`Array`](xref:NextORM.Core.JsonStreamMode.Array) (default) | one `[ ... ]` document; a multi-column row is an object, a single-column projection is written as a bare value |
+| [`NdJson`](xref:NextORM.Core.JsonStreamMode.NdJson) | one standalone JSON value per row, separated by `\n` |
+
+[`JsonStreamOptions`](xref:NextORM.Core.JsonStreamOptions) shapes the document:
+
+| Option | Meaning |
+|---|---|
+| `Mode` | [`Array`](xref:NextORM.Core.JsonStreamMode.Array) (default) or [`NdJson`](xref:NextORM.Core.JsonStreamMode.NdJson). |
+| `Root` | Array only: wraps the document as `{"<Root>":[...]}`. `null` (default) writes a bare array. |
+| `IgnoreNull` | When `true`, object members whose value is SQL NULL are omitted instead of written as `null`. Only affects object (multi-column) rows; a scalar `null` is still written. |
+| `WriteIndented` | Array only: pretty-prints the document. |
+| `PropertyNamingPolicy` | A `System.Text.Json` naming policy applied to the projected member names. A single-column (scalar) projection has no member name, so the policy has no effect there. |
+
+`NdJson` combined with `Root` or with `WriteIndented` is contradictory and throws
+`NotSupportedException` while the shape is planned — before any output is produced. Invalid option
+values throw the same way from the terminal's options overloads.
+
+### Supported shapes (fail-fast)
+
+The projection must be a **flat** row of whitelisted scalar columns. Supported CLR types are `byte`,
+`short`, `int`, `long`, `float`, `double`, `decimal`, `bool`, `string`, `Guid`, `DateTime`, `byte[]`
+and their `Nullable<>` forms. Values are written the way `System.Text.Json` defaults render them:
+numbers as JSON numbers, `bool` as a JSON boolean, `Guid` as canonical text, `DateTime` as ISO-8601,
+`byte[]` as base64.
+
+Anything outside that list throws `NotSupportedException` when the shape is planned, before any output
+is produced — `TimeSpan`, `DateTimeOffset`, `DateOnly`/`TimeOnly`, enums, `Range<T>`, value-converted
+columns (including JSON-column members) and streaming LOB columns are all rejected on purpose rather
+than silently degraded. Entity-typed projection items are not rejected as such: they are flattened
+into their mapped scalar columns (the standard SQL-mapping expansion) and those columns are then
+validated against this same whitelist. These shape/option validation failures are raised before any
+output; conversely, a provider-runtime or I/O failure, or cancellation, can occur mid-document and
+leave partial output (see [Ownership, flushing and errors](#ownership-flushing-and-errors)).
+
+A multi-column projection must have named members (an
+anonymous type or a named record); a column without a name throws. There is no nesting: unlike SQL
+Server `FOR JSON`, each row is one flat object, so project the fields you need and reshape on the
+consumer side.
+
+### Ownership, flushing and errors
+
+* The destination is **caller-owned**: the terminal never closes it and never calls `Stream.Flush`,
+  so flush or dispose it yourself after the call (for example with `await using` on a file).
+* Rows are flushed to the destination as they are written (per row, at the buffer threshold and at
+  the end), so output appears progressively while the query is still running.
+* If an error occurs mid-document the exception propagates and the already-written bytes are left in
+  place (the JSON document is truncated, with no closing bracket), the destination is **not** closed,
+  and the reader and command are released. An empty result writes `[]` in `Array` mode and zero bytes
+  in `NdJson` mode.
+* A query backed by a lazy temporary-table source throws `NotSupportedException`; materialize it
+  first with `ToTable`/`ToTempTable`. Passing `null` for the destination or options throws
+  `ArgumentNullException`.
+
+### `WriteJson` vs SQL Server `FOR JSON`
+
+| | `WriteJson` / `WriteJsonAsync` | [`ForJson`](#return-the-whole-result-set-as-one-json-document) |
+|---|---|---|
+| Providers | every SQL provider | SQL Server only |
+| Where the JSON is built | client side, `System.Text.Json`, O(buffer) memory | server side, `FOR JSON` |
+| Shape | one flat object per row (or a bare scalar) | `FOR JSON PATH`/`AUTO`, driven by the projection or the table/join structure |
+| Result | written incrementally to your `Stream` | one `string` materialized in memory (`null` when the query is empty) |
+| Use when | large or unbounded result sets, HTTP/file/network output, portable code | a small result set, SQL Server-side nesting, or you want the database to render the JSON |
+
+Both are terminals on the same query, so pick one — do not chain them.
 
 ## SQL Server
 

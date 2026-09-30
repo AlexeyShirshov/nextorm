@@ -134,6 +134,78 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         await foreach (var row in dataContext.GetAsyncEnumerable<TResult>(preparedCommand, cancellationToken, @params).ConfigureAwait(false))
             yield return row;
     }
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as a JSON array,
+    /// without materializing a <typeparamref name="TResult"/> per row. The destination is owned by the
+    /// caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
+    public void WriteJson(Stream destination) => WriteJson(destination, new JsonStreamOptions());
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as JSON using
+    /// <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    public void WriteJson(Stream destination, JsonStreamOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(options);
+
+        RequireJsonContext().WriteJson(this, destination, options, null, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as a
+    /// JSON array, without materializing a <typeparamref name="TResult"/> per row. The destination is
+    /// owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
+    public Task WriteJsonAsync(Stream destination, CancellationToken cancellationToken = default)
+        => WriteJsonAsync(destination, new JsonStreamOptions(), cancellationToken);
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as
+    /// JSON using <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per
+    /// row. The destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(options);
+
+        return RequireJsonContext().WriteJsonAsync(this, destination, options, null, cancellationToken);
+    }
+
+    // JSON streaming has no in-memory fallback: the in-memory provider has no DbDataReader and no
+    // managed JsonSerializer path. Fail before the destination is touched, mirroring the LOB guard.
+    private DataContext RequireJsonContext()
+    {
+        var disposed = _dataContext switch
+        {
+            DataContext db => db.IsDisposed,
+            InMemoryDataContext memory => memory.IsDisposed,
+            _ => false,
+        };
+        ObjectDisposedException.ThrowIf(disposed, nameof(DataContext));
+
+        return _dataContext as DataContext
+            ?? throw new NotSupportedException(
+                "WriteJson requires a database provider; the in-memory provider has no DbDataReader and does not support JSON streaming.");
+    }
     /// <summary>Executes the command and returns the result set as a synchronous sequence.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>A sequence over the result rows.</returns>

@@ -1042,6 +1042,33 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         r.Text.Should().NotBeNull().And.Contain("\"name\"").And.Contain("alice");
     }
 
+    // #39 managed JSON streaming: ClickHouse does not derive CommonTestSuite, so the shared
+    // CommonTestSuite.JsonStream facts are mirrored here through their reusable bodies. complex_entity
+    // carries the same ids/rows as the shared fixture.
+    [Fact]
+    public void WriteJson_Array_ShouldMatchJsonSerializer_ForScalar()
+        => CommonTestSuite.WriteJsonArrayScalar(_sut);
+
+    [Fact]
+    public void WriteJson_Array_ShouldMatchJsonSerializer_ForFlatDto()
+        => CommonTestSuite.WriteJsonArrayFlatDto(_sut);
+
+    [Fact]
+    public void WriteJson_NdJson_ShouldMatchLineByLine()
+        => CommonTestSuite.WriteJsonNdJson(_sut);
+
+    [Fact]
+    public void WriteJson_IgnoreNull_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonIgnoreNull(_sut);
+
+    [Fact]
+    public void WriteJson_EmptyResult_ShouldProduceEmptyArray()
+        => CommonTestSuite.WriteJsonEmptyResult(_sut);
+
+    [Fact]
+    public void WriteJson_TypedColumns_ShouldMatchJsonSerializer()
+        => CommonTestSuite.WriteJsonTypedColumns(_sut);
+
     [Fact]
     public void ArrayColumns_ShouldProjectDirectly()
     {

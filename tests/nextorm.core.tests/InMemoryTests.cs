@@ -125,6 +125,34 @@ public class InMemoryTests
         await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*relational*");
     }
     [Fact]
+    public void WriteJson_InMemory_ShouldThrowNotSupported()
+    {
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+        var length = stream.Length;
+
+        var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(length);
+    }
+    [Fact]
+    public async Task WriteJsonAsync_InMemory_ShouldThrowNotSupported()
+    {
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+        var length = stream.Length;
+
+        var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(length);
+    }
+    [Fact]
     public void TestPivot_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity

@@ -1079,4 +1079,77 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return r;
         }
     }
+
+    /// <summary>
+    /// Streams a prepared command's rows directly to <paramref name="output"/> as JSON, reading each
+    /// row through a typed <see cref="JsonRowWriter"/> instead of materializing the projected result.
+    /// The caller-owned <paramref name="output"/> is never closed; the reader is released in
+    /// <c>finally</c> and the rented buffer is returned by the writer's disposal.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+    /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
+    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
+    /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+    /// <param name="options">The validated container options.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    internal void WriteJson<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, Stream output, JsonStreamOptions options, ReadOnlySpan<object?> @params)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+        ThrowIfJsonBatch(compiledQuery);
+
+        using var stream = new JsonStreamWriter(output, rowWriter, options);
+        var sqlCommand = GetDbCommand(compiledQuery, @params);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior);
+        try
+        {
+            while (reader.Read())
+                stream.WriteRow(reader);
+        }
+        finally
+        {
+            reader.Dispose();
+        }
+
+        stream.Complete();
+    }
+
+    /// <summary>
+    /// Asynchronously streams a prepared command's rows directly to <paramref name="output"/> as JSON.
+    /// The caller-owned <paramref name="output"/> is never closed; the reader is released in
+    /// <c>finally</c> and the rented buffer is returned by the writer's disposal.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+    /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
+    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
+    /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+    /// <param name="options">The validated container options.</param>
+    /// <param name="params">The positional parameter values bound to the query, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    internal async Task WriteJsonAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+        ThrowIfJsonBatch(compiledQuery);
+
+        using var stream = new JsonStreamWriter(output, rowWriter, options);
+        var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                await stream.WriteRowAsync(reader, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await reader.DisposeAsync().ConfigureAwait(false);
+        }
+
+        await stream.CompleteAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ThrowIfJsonBatch<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+    {
+        if (compiledQuery.PendingBatch is not null)
+            throw new NotSupportedException(
+                "WriteJson does not support a query backed by a lazy temporary table; materialize the temporary table source first.");
+    }
 }

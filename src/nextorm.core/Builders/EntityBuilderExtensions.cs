@@ -41,6 +41,64 @@ public static class EntityBuilderExtensions
     public static IEnumerable<TEntity> ToEnumerable<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => builder.ToParentCommand().ToEnumerable(@params);
 
     /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as a JSON array,
+    /// without materializing a <typeparamref name="TEntity"/> per row. The destination is owned by the
+    /// caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream destination)
+        => builder.ToParentCommand().WriteJson(destination);
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as JSON using
+    /// <paramref name="options"/>, without materializing a <typeparamref name="TEntity"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, JsonStreamOptions options)
+        => builder.ToParentCommand().WriteJson(destination, options);
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as a
+    /// JSON array, without materializing a <typeparamref name="TEntity"/> per row. The destination is
+    /// owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task WriteJsonAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, CancellationToken cancellationToken = default)
+        => builder.ToParentCommand().WriteJsonAsync(destination, cancellationToken);
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as
+    /// JSON using <paramref name="options"/>, without materializing a <typeparamref name="TEntity"/> per
+    /// row. The destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task WriteJsonAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default)
+        => builder.ToParentCommand().WriteJsonAsync(destination, options, cancellationToken);
+
+    /// <summary>
     /// Determines whether the query matches at least one row.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
