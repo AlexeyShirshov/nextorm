@@ -71,8 +71,7 @@ public class InMemoryJoinTests
     public void TestJoinStrictness_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity
-            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
-            .WithStrictness(JoinStrictness.Any)
+            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id, j => j.WithStrictness(JoinStrictness.Any))
             .Select(p => new { FirstId = p.Item1.Id })
             .ToList();
 
@@ -83,8 +82,7 @@ public class InMemoryJoinTests
     public void TestGlobalJoin_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity
-            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
-            .Global()
+            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id, j => j.Global())
             .Select(p => new { FirstId = p.Item1.Id })
             .ToList();
 
@@ -95,8 +93,7 @@ public class InMemoryJoinTests
     public void TestJoinHint_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity
-            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
-            .WithJoinHint("loop")
+            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id, j => j.WithJoinHint("loop"))
             .Select(p => new { FirstId = p.Item1.Id })
             .ToList();
 
@@ -107,8 +104,7 @@ public class InMemoryJoinTests
     public void TestJoinTableHint_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity
-            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
-            .WithJoinTableHint("nolock")
+            .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { FirstId = p.Item1.Id })
             .ToList();
 

@@ -50,7 +50,7 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | Predicates (`WHERE`: comparison, `and`/`or`/`!`, arithmetic, bitwise/shift) | yes | yes | `Visitors/WhereExpressionVisitor.cs`, `BaseExpressionVisitor.cs` |
 | `INNER` / `LEFT` / `RIGHT` / `FULL` / `CROSS JOIN` | yes | **yes** (`FULL JOIN` not on MySQL/MariaDB) | `SqlBuilder.MakeJoin`, `EntityBuilder.Join/LeftJoin/RightJoin/FullJoin/CrossJoin`, `ISqlDialect.SupportsFullJoin` |
 | `APPLY` / `LATERAL` | yes | **yes** (gated off on SQLite/ClickHouse) | `JoinType.CrossApply/OuterApply`, `SqlBuilder.MakeApplyJoin`, `ISqlDialect.SupportsApply`/`MakeApply` |
-| Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | no | **yes** on ClickHouse | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
+| Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | no | **yes** on ClickHouse | `JoinStrictness`, `JoinOptions.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
 | Join arity | yes | **yes** — up to 8 | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
 | JOIN to a derived table (subquery) | yes | **yes** | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
 | Subqueries (`FROM`, scalar, correlated `EXISTS/IN/ANY/ALL`) | yes | **yes** (in-memory evaluates depth one only) | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference`, `DataContext/InMemoryCorrelatedPlan.cs` |

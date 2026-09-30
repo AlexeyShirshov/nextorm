@@ -14,6 +14,7 @@ public sealed class FromOptions
     internal IReadOnlyList<string>? TableHints { get; private set; }
     internal IReadOnlyList<string>? IndexHints { get; private set; }
     internal IndexHintKind IndexHintKind { get; private set; }
+    internal string? SubQueryHint { get; private set; }
 
     /// <summary>
     /// Reads only <paramref name="percent"/> percent of the primary table with a <c>TABLESAMPLE</c>
@@ -141,4 +142,23 @@ public sealed class FromOptions
     /// <returns>This instance, to allow chaining.</returns>
     public FromOptions WithoutIndex()
         => WithIndex(IndexHintKind.Ignore);
+
+    /// <summary>
+    /// Attaches a provider-specific hint to a derived-table source (for example a PostgreSQL
+    /// <c>pg_hint_plan</c> or MySQL optimizer hint), for example
+    /// <c>ctx.From(subquery, o =&gt; o.WithSubQueryHint("NestLoop(t1)"))</c>. Only a
+    /// <c>From(...)</c> overload whose source is an explicit subquery can carry it; the SQL Server
+    /// dialect rejects it because a query hint cannot be appended to a subselect.
+    /// </summary>
+    /// <param name="hint">The subquery hint text; must be non-empty.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="hint"/> is null, empty or whitespace.</exception>
+    public FromOptions WithSubQueryHint(string hint)
+    {
+        if (string.IsNullOrWhiteSpace(hint))
+            throw new ArgumentException("A subquery hint must be a non-empty string.", nameof(hint));
+
+        SubQueryHint = hint;
+        return this;
+    }
 }

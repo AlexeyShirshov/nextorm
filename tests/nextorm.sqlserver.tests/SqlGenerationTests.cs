@@ -1978,8 +1978,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("loop")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("loop"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("inner loop join complex_entity as [t2] on cast(t1.id as bigint) = t2.id");
@@ -1991,8 +1990,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .LeftJoin(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+            .LeftJoin(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("left hash join complex_entity as [t2]");
@@ -2004,8 +2002,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .CrossJoin(ctx.From<IComplexEntity>())
-            .WithJoinHint("hash")
+            .CrossJoin(ctx.From<IComplexEntity>(), j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*join hint*");
@@ -2042,8 +2039,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("from simple_entity as [t1]");
@@ -2058,8 +2054,7 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
             .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .Join(ctx.From<ISalesEntity>(), (p, s2) => p.Item2.Id == s2.Id)
-            .WithJoinTableHint("nolock")
+            .Join(ctx.From<ISalesEntity>(), (p, s2) => p.Item2.Id == s2.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("join complex_entity as [t2]");
@@ -2073,8 +2068,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock"))
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
             .WithTablesInScopeHint("updlock")
             .Select(p => new { p.Item1.Id }));
 
@@ -2094,9 +2088,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
-            .WithJoinHint("hash")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock").WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("inner hash join complex_entity with (nolock) as [t2]");
@@ -2109,8 +2101,7 @@ public class SqlGenerationTests
 
         // A blank-only call with no prior hint emits no WITH clause at all.
         var noPrior = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint(" ")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint(" "))
             .Select(p => new { p.Item1.Id }));
 
         noPrior.Should().Contain("join complex_entity as [t2]");
@@ -2118,10 +2109,7 @@ public class SqlGenerationTests
 
         // A blank-only call and a no-arg call after a real hint keep the real hint.
         var kept = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
-            .WithJoinTableHint(" ")
-            .WithJoinTableHint()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock").WithJoinTableHint(" ").WithJoinTableHint())
             .Select(p => new { p.Item1.Id }));
 
         kept.Should().Contain("join complex_entity with (nolock) as [t2]");
@@ -2134,8 +2122,7 @@ public class SqlGenerationTests
         var complex = ctx.From<IComplexEntity>();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .CrossApply(complex)
-            .WithJoinTableHint("nolock")
+            .CrossApply(complex, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
@@ -2148,8 +2135,7 @@ public class SqlGenerationTests
         var derived = ctx.From(ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id, c.String }));
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(derived, (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
+            .Join(derived, (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
@@ -2161,21 +2147,10 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("  ", "nolock", null!)
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("  ", "nolock", null!))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("complex_entity with (nolock) as [t2]");
-    }
-
-    [Fact]
-    public void JoinTableHint_WithoutJoin_ShouldThrow()
-    {
-        using var ctx = SqlServerTestContext.Create();
-
-        var act = () => ctx.From<ISimpleEntity>().WithJoinTableHint("nolock");
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*preceding join*");
     }
 
     [Fact]
@@ -2184,7 +2159,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var act = () => SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
     }
@@ -2195,8 +2170,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id })
             .Hint("recompile"));
 
@@ -2207,9 +2181,7 @@ public class SqlGenerationTests
     public void EmptyJoinHint_ShouldThrow()
     {
         using var ctx = SqlServerTestContext.Create();
-        var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id);
-
-        var act = () => joined.WithJoinHint("   ");
+        var act = () => ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("   "));
 
         act.Should().Throw<ArgumentException>();
     }

@@ -36,7 +36,7 @@ anything else throws `ArgumentException`. The call is translated to `[schema.]na
 with the arguments rendered through the regular expression visitor, so **captured values become
 parameters**. nextorm only emits the call - the function must already exist in the target database.
 
-The returned `EntityBuilder<T>` is an ordinary query source, so [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})),
+The returned `EntityBuilder<T>` is an ordinary query source, so [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})),
 [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), paging and terminals all work over it.
 
 ## Declaring the mapping
@@ -178,7 +178,7 @@ The `cast` is the regular join-time type unification: `Tvf.AllRows().Id` is `lon
 
 ### Applying a TVF
 
-[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) accept a TVF as the applied source too (see [APPLY and LATERAL](02-joins.md#apply-and-lateral)). Without a lambda the function is applied once:
+[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) accept a TVF as the applied source too (see [APPLY and LATERAL](02-joins.md#apply-and-lateral)). Without a lambda the function is applied once:
 
 ```csharp
 var rows = dataContext

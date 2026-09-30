@@ -1052,6 +1052,28 @@ public static class DataContextExtensions
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
 
     /// <summary>
+    /// Starts a query from an existing <see cref="QueryCommand{TResult}"/> with per-source options. The
+    /// values set on <paramref name="options"/> (currently the derived-table <c>SubQueryHint</c>) are
+    /// copied into the returned builder; the options object is not retained.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="query">The command whose definition drives the query.</param>
+    /// <param name="options">Configures the derived-table source, for example <c>o =&gt; o.WithSubQueryHint("NestLoop(t1)")</c>.</param>
+    /// <returns>A builder for composing the query further.</returns>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query, Action<FromOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var fromOptions = new FromOptions();
+        options(fromOptions);
+
+        return new(dataContext, query) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint };
+    }
+
+    /// <summary>
     /// Starts a query over a lazy temporary table created by
     /// <see cref="TempTableExtensions.AsTempTable{TResult}(QueryCommand{TResult}, CreateTableOptions?)"/>.
     /// Executing the returned query runs one batch on a single session — it drops and re-creates the
@@ -1092,6 +1114,28 @@ public static class DataContextExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, EntityBuilder<TResult> builder)
         => new(dataContext, builder) { Logger = dataContext.CommandLogger };
+
+    /// <summary>
+    /// Starts a new query builder that shares the source and definition of an existing builder, with
+    /// per-source options. The values set on <paramref name="options"/> (currently the derived-table
+    /// <c>SubQueryHint</c>) are copied into the returned builder; the options object is not retained.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="builder">The builder to copy the query shape from.</param>
+    /// <param name="options">Configures the derived-table source, for example <c>o =&gt; o.WithSubQueryHint("NestLoop(t1)")</c>.</param>
+    /// <returns>A new builder bound to <paramref name="dataContext"/>.</returns>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, EntityBuilder<TResult> builder, Action<FromOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var fromOptions = new FromOptions();
+        options(fromOptions);
+
+        return new(dataContext, builder) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint };
+    }
 
     /// <summary>
     /// Starts a query from a table-valued function. <paramref name="call"/> must be a call to a static

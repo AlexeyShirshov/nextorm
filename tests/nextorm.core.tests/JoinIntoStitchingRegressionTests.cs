@@ -140,8 +140,7 @@ public class JoinIntoStitchingRegressionTests
 
         Action act = () => ctx.From<StitchParent>()
             .JoinInto(ctx.From<StitchChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .JoinInto(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId, p => p.Notes)
-            .Global()
+            .JoinInto(ctx.From<StitchNote>(), (p, n) => p.Id == n.ParentId, p => p.Notes, j => j.Global())
             .ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*GLOBAL*");

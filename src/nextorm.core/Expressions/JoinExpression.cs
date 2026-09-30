@@ -94,30 +94,30 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// <param name="condition">The condition to install.</param>
     internal void SetJoinCondition(LambdaExpression condition) => JoinCondition = condition;
     /// <summary>
-    /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set through the fluent
-    /// <c>WithStrictness</c> modifier, which copies the join rather than mutating it; defaults to
+    /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set at construction from the join's
+    /// <see cref="JoinOptions"/> (<c>WithStrictness</c>); defaults to
     /// <see cref="JoinStrictness.Default"/>.
     /// </summary>
     public JoinStrictness Strictness { get; internal init; }
     /// <summary>
     /// Whether the join is the ClickHouse <c>GLOBAL</c> variant (the right-hand side is resolved once
-    /// and broadcast, for distributed queries). Set through the fluent <c>Global</c> modifier, which
-    /// copies the join rather than mutating it. Rendered by
+    /// and broadcast, for distributed queries). Set at construction from the join's
+    /// <see cref="JoinOptions"/> (<c>Global</c>). Rendered by
     /// <see cref="ISqlDialect.MakeJoinKeyword(JoinType, JoinStrictness, bool, KeywordCase)"/> and gated by <see cref="ISqlDialect.SupportsGlobalJoin"/>.
     /// </summary>
     public bool IsGlobal { get; internal init; }
     /// <summary>
     /// Optional provider-specific hint attached to this join, or <c>null</c> when the join has none.
-    /// Set through the fluent <c>WithJoinHint</c> modifier, which copies the join rather than mutating
-    /// it. A dialect that renders join hints places it inside the join clause (SQL Server
+    /// Set at construction from the join's <see cref="JoinOptions"/> (<c>WithJoinHint</c>).
+    /// A dialect that renders join hints places it inside the join clause (SQL Server
     /// <c>inner loop join</c>); a dialect with inline hint comments folds it into the statement-level
     /// <c>/*+ ... */</c>. A dialect that supports neither rejects the command.
     /// </summary>
     public string? JoinHint { get; internal init; }
     /// <summary>
     /// Optional table-level hints attached to this join's right-hand physical table, or <c>null</c>
-    /// when the join has none. Set through the fluent <c>WithJoinTableHint</c> modifier, which copies
-    /// the join rather than mutating it. On a dialect with structural table hints (SQL Server) they
+    /// when the join has none. Set at construction from the join's <see cref="JoinOptions"/>
+    /// (<c>WithJoinTableHint</c>). On a dialect with structural table hints (SQL Server) they
     /// render as a <c>WITH (...)</c> clause after the joined table name; a dialect that does not
     /// support table hints rejects the command.
     /// </summary>

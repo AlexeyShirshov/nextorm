@@ -105,17 +105,17 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   списку значений, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
   отрицание — через C# `!` (`GLOBAL NOT IN`);
 - модификаторы строгости/типа join `ANY`/`ALL`/`ASOF` через
-  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) сразу после join
+  [`JoinOptions.WithStrictness`](xref:NextORM.Core.JoinOptions.WithStrictness(NextORM.Core.JoinStrictness)) в завершающей лямбде соединения
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
   [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean,NextORM.Core.KeywordCase)), enum `JoinStrictness`).
   `LEFT ANY JOIN` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, а `ASOF`
   требует хотя бы одной equi-колонки и неравенства последним. Для видов `SEMI`/`ANTI`/`PASTE` есть
-  отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/`AntiJoin` отдают
+  отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/`AntiJoin` отдают
   только левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
   сопоставляет два источника по позиции строки без `ON` (строк — сколько у более короткой стороны).
   Гейты — [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   Вариант `GLOBAL` (правая сторона разрешается один раз и broadcast'ится для распределённых
-  запросов) задаётся через [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1.Global) и
+  запросов) задаётся через [`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global) и
   комбинируется со strictness (`global left any join`,
   [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 

@@ -62,8 +62,7 @@ public class SqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Join hints*");
@@ -75,7 +74,7 @@ public class SqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var act = () => SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
     }
@@ -2634,8 +2633,7 @@ public class SqlGenerationTests
         var derived = ctx.From(ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id }));
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(derived, (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
+            .Join(derived, (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
@@ -2647,8 +2645,7 @@ public class SqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");

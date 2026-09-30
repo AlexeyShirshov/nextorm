@@ -169,7 +169,7 @@ Each `JoinInto` adds its own join. Two child collections on the same parent prod
 
 ## Join modifiers
 
-The join modifiers of the underlying join are available. On ClickHouse, [`WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) may be chained after `JoinInto(...)`: `WithStrictness(Any)` keeps only the **first** matching child per parent, so the loaded collection is truncated to at most one element; the other strictness modifiers (`All`, `Asof`) and [`Global`](xref:NextORM.Core.EntityBuilder`1.Global) pass through unchanged. A modifier applied to a `JoinInto` preserves the parent-only terminal behaviour — the non-list terminals still exclude the join.
+The join modifiers of the underlying join are available. On ClickHouse, [`JoinOptions.WithStrictness`](xref:NextORM.Core.JoinOptions.WithStrictness(NextORM.Core.JoinStrictness)) may be passed to `JoinInto(...)` through its trailing lambda: `j => j.WithStrictness(Any)` keeps only the **first** matching child per parent, so the loaded collection is truncated to at most one element; the other strictness modifiers (`All`, `Asof`) and [`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global) pass through unchanged. An option passed to a `JoinInto` preserves the parent-only terminal behaviour — the non-list terminals still exclude the join.
 
 ## Terminal boundary
 

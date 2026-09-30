@@ -50,7 +50,7 @@ linq2db или превосходит её — и расходятся в *мо�
 | Предикаты (`WHERE`: сравнения, `and`/`or`/`!`, арифметика, битовые/сдвиги) | yes | yes | `Visitors/WhereExpressionVisitor.cs`, `BaseExpressionVisitor.cs` |
 | `INNER` / `LEFT` / `RIGHT` / `FULL` / `CROSS JOIN` | yes | **yes** (`FULL JOIN` нет в MySQL/MariaDB) | `SqlBuilder.MakeJoin`, `EntityBuilder.Join/LeftJoin/RightJoin/FullJoin/CrossJoin`, `ISqlDialect.SupportsFullJoin` |
 | `APPLY` / `LATERAL` | yes | **yes** (отключено в SQLite/ClickHouse) | `JoinType.CrossApply/OuterApply`, `SqlBuilder.MakeApplyJoin`, `ISqlDialect.SupportsApply`/`MakeApply` |
-| Строгость соединений (`ANY`/`ALL`/`ASOF`) и `GLOBAL` | no | **yes** в ClickHouse | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
+| Строгость соединений (`ANY`/`ALL`/`ASOF`) и `GLOBAL` | no | **yes** в ClickHouse | `JoinStrictness`, `JoinOptions.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
 | Арность соединений | yes | **yes** — до 8 | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
 | Соединение с производной таблицей (подзапросом) | yes | **yes** | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
 | Подзапросы (`FROM`, скалярные, коррелированные `EXISTS/IN/ANY/ALL`) | yes | **yes** (in-memory — только глубина один) | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference`, `DataContext/InMemoryCorrelatedPlan.cs` |

@@ -164,8 +164,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Join hints*");
@@ -177,7 +176,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var act = () => SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
     }
@@ -198,8 +197,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinTableHint("nolock")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
@@ -1941,20 +1939,17 @@ public class SqlGenerationTests
         var complex = ctx.From<IComplexEntity>();
 
         SqlOf(ctx,
-            simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-                .WithStrictness(JoinStrictness.Any)
+            simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
                 .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left any join ").And.Contain(" on ");
 
         SqlOf(ctx,
-            simple.Join(complex, (s, c) => s.Id == c.Id)
-                .WithStrictness(JoinStrictness.All)
+            simple.Join(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.All))
                 .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" all join ");
 
         SqlOf(ctx,
-            simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-                .WithStrictness(JoinStrictness.Asof)
+            simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Asof))
                 .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left asof join ");
     }
@@ -1966,22 +1961,10 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.CrossJoin(complex)
-            .WithStrictness(JoinStrictness.Any)
+        var act = () => SqlOf(ctx, simple.CrossJoin(complex, j => j.WithStrictness(JoinStrictness.Any))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be applied to a Cross join*");
-    }
-
-    [Fact]
-    public void WithStrictness_WithoutJoin_ShouldThrow()
-    {
-        using var ctx = ClickHouseTestContext.Create();
-        var simple = ctx.From<ISimpleEntity>();
-
-        var act = () => simple.WithStrictness(JoinStrictness.Any);
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*preceding join*");
     }
 
     [Fact]
@@ -1991,10 +1974,10 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var joined = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
-        var any = joined.WithStrictness(JoinStrictness.Any);
+        var plain = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
+        var any = simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any));
 
-        SqlOf(ctx, joined.Select(p => new { p.Item1.Id, p.Item2.String }))
+        SqlOf(ctx, plain.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left join ").And.NotContain(" left any join ");
         SqlOf(ctx, any.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left any join ");
@@ -2007,8 +1990,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
             .Join(simple, (p, s) => p.Item2.Id == s.Id)
             .Select(p => new { p.Item1.Id }));
 
@@ -2022,14 +2004,11 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .Global()
+        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global())
             .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global left join ");
 
-        SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id)
-            .Global()
-            .WithStrictness(JoinStrictness.Any)
+        SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id, j => j.Global().WithStrictness(JoinStrictness.Any))
             .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global any join ");
     }
@@ -2041,10 +2020,10 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var joined = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
-        var global = joined.Global();
+        var plain = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
+        var global = simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global());
 
-        SqlOf(ctx, joined.Select(p => new { p.Item1.Id, p.Item2.String }))
+        SqlOf(ctx, plain.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left join ").And.NotContain(" global ");
         SqlOf(ctx, global.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global left join ");
@@ -2057,22 +2036,9 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
-            .Global()
+        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any).Global())
             .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global left any join ");
-    }
-
-    [Fact]
-    public void Global_WithoutJoin_ShouldThrow()
-    {
-        using var ctx = ClickHouseTestContext.Create();
-        var simple = ctx.From<ISimpleEntity>();
-
-        var act = () => simple.Global();
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*preceding join*");
     }
 
     [Fact]
@@ -2163,8 +2129,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
+        var act = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
             .Select(s => new { s.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be applied to a Semi join*");
@@ -2262,8 +2227,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .Global()
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global())
             .Join(simple, (p, s) => p.Item2.Id == s.Id)
             .Select(p => new { p.Item1.Id }));
 

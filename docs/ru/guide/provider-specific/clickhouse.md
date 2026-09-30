@@ -97,14 +97,13 @@ select id from complex_entity final prewhere (nullableint > 0) settings max_thre
 
 ## Строгость соединения и `GLOBAL JOIN`
 
-Модификаторы соединения ClickHouse применяются к только что добавленному соединению:
-`WithStrictness(JoinStrictness.Any | All | Asof)` и `Global()`:
+Модификаторы соединения ClickHouse передаются соединению через его завершающую лямбду:
+`j => j.WithStrictness(JoinStrictness.Any | All | Asof)` и `j => j.Global()`:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-    .Global()
-    .WithStrictness(JoinStrictness.Any)
+    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id,
+        j => j.Global().WithStrictness(JoinStrictness.Any))
     .Select(p => new { p.Item1.Id, p.Item2.String })
     .ToList();
 ```

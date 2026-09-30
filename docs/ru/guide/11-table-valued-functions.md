@@ -36,7 +36,7 @@ public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContex
 аргументы рендерятся через обычный посетитель выражений, поэтому **захваченные значения становятся
 параметрами**. nextorm только генерирует вызов — функция уже должна существовать в целевой базе данных.
 
-Возвращаемый `EntityBuilder<T>` — обычный источник запроса, поэтому [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})),
+Возвращаемый `EntityBuilder<T>` — обычный источник запроса, поэтому [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})),
 [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), разбиение на страницы и терминалы работают с ним.
 
 ## Объявление сопоставления
@@ -178,7 +178,7 @@ select t1.id, t2.value from simple_entity as 't1' join all_rows() as 't2' on t2.
 
 ### Применение TVF
 
-[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) принимают TVF и как применяемый источник (см. [APPLY и LATERAL](02-joins.md#apply-и-lateral)). Без лямбды функция применяется один раз:
+[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) принимают TVF и как применяемый источник (см. [APPLY и LATERAL](02-joins.md#apply-и-lateral)). Без лямбды функция применяется один раз:
 
 ```csharp
 var rows = dataContext

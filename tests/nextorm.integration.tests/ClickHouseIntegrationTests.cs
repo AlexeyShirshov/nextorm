@@ -708,8 +708,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
             .Should().HaveCount(9);
 
         _sut.ComplexEntity
-            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt)
-            .WithStrictness(JoinStrictness.Any)
+            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt, j => j.WithStrictness(JoinStrictness.Any))
             .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
             .ToList()
             .Should().HaveCount(3);
@@ -719,8 +718,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void AllStrictness_ShouldKeepEveryMatch()
     {
         _sut.ComplexEntity
-            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt)
-            .WithStrictness(JoinStrictness.All)
+            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt, j => j.WithStrictness(JoinStrictness.All))
             .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
             .ToList()
             .Should().HaveCount(9);
@@ -733,8 +731,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         // it keeps the right row with the greatest id not exceeding the left id (ids are unique
         // 1..3), so the result matches the left rows one to one.
         var rows = _sut.ComplexEntity
-            .Join(_sut.ComplexEntity, (a, b) => a.Boolean == b.Boolean && a.Id >= b.Id)
-            .WithStrictness(JoinStrictness.Asof)
+            .Join(_sut.ComplexEntity, (a, b) => a.Boolean == b.Boolean && a.Id >= b.Id, j => j.WithStrictness(JoinStrictness.Asof))
             .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
             .ToList();
 
@@ -748,8 +745,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         // On a single node GLOBAL JOIN behaves like a regular join, so this only checks that the
         // rendered SQL is accepted and preserves the left-hand rows.
         var rows = _sut.SimpleEntity
-            .LeftJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
-            .Global()
+            .LeftJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id, j => j.Global())
             .Select(p => new { p.Item1.Id })
             .ToList();
 

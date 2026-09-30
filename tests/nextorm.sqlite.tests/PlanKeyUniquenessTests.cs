@@ -187,18 +187,18 @@ public class PlanKeyUniquenessTests
         yield return ("table-hint", ctx => Row(ctx.From<IComplexEntity>(o => o.WithTableHint("INDEX(ix)"))));
         yield return ("index-hint", ctx => Row(ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Force, "ix"))));
         yield return ("index-hint-kind", ctx => Row(ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Ignore, "ix"))));
-        yield return ("join-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("hash")
+        yield return ("join-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinHint("hash"))
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
-        yield return ("join-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("loop")
+        yield return ("join-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinHint("loop"))
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
-        yield return ("join-table-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinTableHint("nolock")
+        yield return ("join-table-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
-        yield return ("join-table-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinTableHint("updlock")
+        yield return ("join-table-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("updlock"))
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
-        yield return ("subquery-hint", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }))
-            .WithSubQueryHint("NestLoop(t1)").Select(t => new PKRow { Id = t.Id, Int = t.Int }));
-        yield return ("subquery-hint-other", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }))
-            .WithSubQueryHint("SeqScan(t1)").Select(t => new PKRow { Id = t.Id, Int = t.Int }));
+        yield return ("subquery-hint", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }), o => o.WithSubQueryHint("NestLoop(t1)"))
+            .Select(t => new PKRow { Id = t.Id, Int = t.Int }));
+        yield return ("subquery-hint-other", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }), o => o.WithSubQueryHint("SeqScan(t1)"))
+            .Select(t => new PKRow { Id = t.Id, Int = t.Int }));
         yield return ("scope-hint", ctx => Row(E(ctx).WithTablesInScopeHint("nolock")));
         yield return ("scope-hint-other", ctx => Row(E(ctx).WithTablesInScopeHint("index(ix)")));
 
@@ -293,9 +293,12 @@ public class PlanKeyUniquenessTests
 
         QueryCommand Build(string hint, bool blankAfter)
         {
-            var joined = E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinTableHint(hint);
-            if (blankAfter)
-                joined = joined.WithJoinTableHint(" ");
+            var joined = E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j =>
+            {
+                j.WithJoinTableHint(hint);
+                if (blankAfter)
+                    j.WithJoinTableHint(" ");
+            });
 
             return joined.Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int });
         }
@@ -320,8 +323,7 @@ public class PlanKeyUniquenessTests
         using var ctx = SqliteTestContext.Create();
 
         QueryCommand Build(params string[] hints)
-            => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
-                .WithJoinTableHint(hints)
+            => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint(hints))
                 .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int });
 
         var ab = Build("a", "b");

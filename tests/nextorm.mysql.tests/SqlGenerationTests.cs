@@ -643,8 +643,7 @@ public class SqlGenerationTests
         using var ctx = MySqlTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("JOIN_ORDER(t1, t2)")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("JOIN_ORDER(t1, t2)"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().StartWith("select /*+ JOIN_ORDER(t1, t2) */");
@@ -657,7 +656,7 @@ public class SqlGenerationTests
         using var ctx = MySqlTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var sql = SqlOf(ctx, ctx.From(inner).WithSubQueryHint("NO_BNL()").Select(t => new { t.Id }));
+        var sql = SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("NO_BNL()")).Select(t => new { t.Id }));
 
         sql.Should().StartWith("select /*+ NO_BNL() */");
     }

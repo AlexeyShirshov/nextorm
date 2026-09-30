@@ -379,8 +379,8 @@ to the ledger on 2026-09-29.
     `NotSupportedException`. Gated by [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) /
     [`IIndexHintRenderer`](xref:NextORM.Core.IIndexHintRenderer) and carried on the plan key.
     Shipped: [Query hints](../../guide/13-query-hints.md#index-hints).
-17a. **Join / subquery / tables-in-scope hints — <span style="color:green">shipped</span> (issue #96).** `EntityBuilder<T>.WithJoinHint(...)`,
-    `.WithSubQueryHint(...)` and `.WithTablesInScopeHint(...)` attach a hint to a specific join, a
+17a. **Join / subquery / tables-in-scope hints — <span style="color:green">shipped</span> (issue #96).** `JoinOptions.WithJoinHint(...)`,
+    `FromOptions.WithSubQueryHint(...)` and `EntityBuilder<T>.WithTablesInScopeHint(...)` attach a hint to a specific join, a
     derived-table source or every physical table in scope. SQL Server renders the join hint inside the
     join clause (`inner loop join`) and the scope hint as `WITH (...)` on each table; PostgreSQL/MySQL/
     MariaDB fold all three into the inline `/*+ ... */`; SQLite/ClickHouse/the in-memory provider reject

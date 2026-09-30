@@ -105,17 +105,17 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   value list, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
   negate with C# `!` for `GLOBAL NOT IN`;
 - the join strictness/kind modifiers `ANY`/`ALL`/`ASOF` via
-  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) right after a join
+  [`JoinOptions.WithStrictness`](xref:NextORM.Core.JoinOptions.WithStrictness(NextORM.Core.JoinStrictness)) in a join's trailing lambda
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
   [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean,NextORM.Core.KeywordCase)), enum `JoinStrictness`).
   `LEFT ANY JOIN` keeps a single right-hand row per left-hand row, `ALL` keeps every match and
   `ASOF` needs one equi-join column plus a final inequality. The `SEMI`/`ANTI`/`PASTE` kinds have
-  dedicated builder methods: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/`AntiJoin` return only the
+  dedicated builder methods: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/`AntiJoin` return only the
   left-hand columns for left rows that do (respectively do not) have a match, and `PasteJoin` pairs the
   two sources by row position with no `ON` (yielding as many rows as the shorter side). They are gated
   by [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   The `GLOBAL` variant (resolved once and broadcast for distributed queries) is set with
-  [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1.Global) and combines with strictness
+  [`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global) and combines with strictness
   (`global left any join`, [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
 ClickHouse has no recursive CTE support, so the dialect declares every CTE with plain `with`.

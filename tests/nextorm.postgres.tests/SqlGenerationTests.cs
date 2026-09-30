@@ -540,8 +540,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
+        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*join modifier is not supported*");
@@ -554,8 +553,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .Global()
+        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global())
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*GLOBAL join modifier is not supported*");
@@ -650,8 +648,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
-            .WithJoinHint("NestLoop(t1 t3)")
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), j => j.WithJoinHint("NestLoop(t1 t3)"))
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         // The hint folds into the statement-level comment; the join modifier must not replace the join
@@ -753,8 +750,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("HashJoin(t1 t2)")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("HashJoin(t1 t2)"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().StartWith("select /*+ HashJoin(t1 t2) */");
@@ -767,7 +763,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var sql = SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var sql = SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         sql.Should().StartWith("select /*+ SeqScan(t1) */");
     }

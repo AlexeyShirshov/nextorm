@@ -130,7 +130,7 @@ public sealed class FromExpression
      internal readonly XmlNodesExpression? XmlNodes;
      /// <summary>
      /// Optional provider-specific hint attached to this derived-table source, or <c>null</c> when it has
-     /// none. Set through the fluent <c>WithSubQueryHint</c> modifier. Only dialects with an inline hint
+     /// none. Set through <c>FromOptions.WithSubQueryHint</c>. Only dialects with an inline hint
      /// comment (PostgreSQL <c>pg_hint_plan</c>, MySQL/MariaDB optimizer hints) can express it; SQL Server
      /// rejects a query hint on a subselect, so the command is rejected there.
      /// </summary>
