@@ -170,6 +170,59 @@ public class RelationshipMetadataTests
         public int ParentId { get; set; }
     }
 
+    public sealed class ProfileOwnerA
+    {
+        public int Id { get; set; }
+        public ProfileA? Profile { get; set; }
+    }
+
+    public sealed class ProfileA
+    {
+        public int Id { get; set; }
+        public int OwnerId { get; set; }
+    }
+
+    public sealed class M2MParent
+    {
+        public int Id { get; set; }
+        public List<M2MChild> Children { get; set; } = new List<M2MChild>();
+    }
+
+    public sealed class M2MChild
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    public sealed class M2MLink
+    {
+        public int ParentId { get; set; }
+        public int ChildId { get; set; }
+    }
+
+    public sealed class JuncMismatchParent
+    {
+        public int Id { get; set; }
+        public List<JuncMismatchChild> Children { get; set; } = new List<JuncMismatchChild>();
+    }
+
+    public sealed class JuncMismatchChild
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class JuncParentMismatchLink
+    {
+        public Guid ParentId { get; set; }
+        public int ChildId { get; set; }
+    }
+
+    public sealed class JuncChildMismatchLink
+    {
+        public int ParentId { get; set; }
+        public long ChildId { get; set; }
+    }
+
     [Fact]
     public void HasMany_ShouldRegisterOneToManyRelationshipOnPrincipalSide()
     {
@@ -194,6 +247,35 @@ public class RelationshipMetadataTests
         relationship.PrincipalKey.Should().ContainSingle();
         relationship.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(ParentA.Id));
         relationship.PrincipalKey[0].IsKey.Should().BeTrue();
+    }
+
+    [Fact]
+    public void HasOneToOne_ShouldRegisterOneToOneRelationshipOnPrincipalSide()
+    {
+        var metadata = new EntityMetadataBuilder<ProfileOwnerA>()
+            .HasOneToOne(o => o.Profile, o => o.Id, p => p.OwnerId)
+            .Build();
+
+        metadata.Relationships.Should().ContainSingle();
+        var relationship = metadata.Relationships[0];
+
+        relationship.Kind.Should().Be(RelationshipKind.OneToOne);
+        relationship.DeclaringType.Should().Be(typeof(ProfileOwnerA));
+        relationship.RelatedType.Should().Be(typeof(ProfileA));
+        relationship.Navigation!.Name.Should().Be(nameof(ProfileOwnerA.Profile));
+        relationship.Navigation!.DeclaringType.Should().Be(typeof(ProfileOwnerA));
+        relationship.IsCollection.Should().BeFalse();
+
+        // The foreign key lives on the related (dependent) type; the principal key on this entity.
+        relationship.ForeignKey.Should().ContainSingle();
+        relationship.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(ProfileA.OwnerId));
+        relationship.ForeignKey[0].PropertyInfo.DeclaringType.Should().Be(typeof(ProfileA));
+
+        relationship.PrincipalKey.Should().ContainSingle();
+        relationship.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(ProfileOwnerA.Id));
+        relationship.PrincipalKey[0].IsKey.Should().BeTrue();
+
+        metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(ProfileOwnerA.Profile));
     }
 
     [Fact]
@@ -390,6 +472,80 @@ public class RelationshipMetadataTests
     }
 
     [Fact]
+    public void Junction_ShouldBeNull_ForNonManyToManyRelationship()
+    {
+        var relationship = new EntityMetadataBuilder<ParentA>()
+            .HasMany(p => p.Children, c => c.ParentId)
+            .Build()
+            .Relationships[0];
+
+        relationship.Junction.Should().BeNull();
+    }
+
+    [Fact]
+    public void HasManyThrough_ShouldRegisterManyToManyWithJunction()
+    {
+        var metadata = new EntityMetadataBuilder<M2MParent>()
+            .HasManyThrough<M2MChild, M2MLink, int, int>(
+                p => p.Children, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId)
+            .Build();
+
+        metadata.Relationships.Should().ContainSingle();
+        var relationship = metadata.Relationships[0];
+
+        relationship.Kind.Should().Be(RelationshipKind.ManyToMany);
+        relationship.DeclaringType.Should().Be(typeof(M2MParent));
+        relationship.RelatedType.Should().Be(typeof(M2MChild));
+        relationship.IsCollection.Should().BeTrue();
+        relationship.Navigation!.Name.Should().Be(nameof(M2MParent.Children));
+
+        relationship.PrincipalKey.Should().ContainSingle();
+        relationship.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(M2MParent.Id));
+        relationship.ForeignKey.Should().ContainSingle();
+        relationship.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(M2MChild.Id));
+
+        relationship.Junction.Should().NotBeNull();
+        relationship.Junction!.JunctionType.Should().Be(typeof(M2MLink));
+        relationship.Junction.ParentKey[0].PropertyInfo.Name.Should().Be(nameof(M2MParent.Id));
+        relationship.Junction.ChildKey[0].PropertyInfo.Name.Should().Be(nameof(M2MChild.Id));
+        relationship.Junction.JunctionParentForeignKey[0].PropertyInfo.Name.Should().Be(nameof(M2MLink.ParentId));
+        relationship.Junction.JunctionChildForeignKey[0].PropertyInfo.Name.Should().Be(nameof(M2MLink.ChildId));
+    }
+
+    [Fact]
+    public void HasManyThrough_ShouldExcludeNavigationFromProperties()
+    {
+        var metadata = new EntityMetadataBuilder<M2MParent>()
+            .HasManyThrough<M2MChild, M2MLink, int, int>(
+                p => p.Children, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId)
+            .Build();
+
+        metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(M2MParent.Children));
+    }
+
+    [Fact]
+    public void HasManyThrough_ParentKeyTypeMismatch_ShouldThrow()
+    {
+        var builder = new EntityMetadataBuilder<JuncMismatchParent>();
+
+        Action act = () => builder.HasManyThrough<JuncMismatchChild, JuncParentMismatchLink, object, int>(
+            p => p.Children, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*does not match the junction*");
+    }
+
+    [Fact]
+    public void HasManyThrough_ChildKeyTypeMismatch_ShouldThrow()
+    {
+        var builder = new EntityMetadataBuilder<JuncMismatchParent>();
+
+        Action act = () => builder.HasManyThrough<JuncMismatchChild, JuncChildMismatchLink, int, object>(
+            p => p.Children, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*does not match the junction*");
+    }
+
+    [Fact]
     public void AllRelationshipKinds_ShouldBeRepresentable()
     {
         var kinds = Enum.GetValues<RelationshipKind>();
@@ -399,7 +555,7 @@ public class RelationshipMetadataTests
         kinds.Should().Contain(RelationshipKind.OneToOne);
         kinds.Should().Contain(RelationshipKind.ManyToMany);
 
-        // Slice A only exposes declaration overloads for O2M/M2O, but the model can carry all four kinds.
+        // Fluent overloads exist for O2M/M2O/O2O; the model can carry M2M as well.
         var oneToOne = new RelationshipMetadata(
             RelationshipKind.OneToOne,
             typeof(InvChild),

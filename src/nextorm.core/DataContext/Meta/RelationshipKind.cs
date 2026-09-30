@@ -24,7 +24,7 @@ public enum RelationshipKind
 
     /// <summary>
     /// A reference navigation whose foreign key is unique. Uniqueness is not validated by the core; the
-    /// declaration is trusted. Declarable through the model but not through the slice-A fluent API.
+    /// declaration is trusted. Declarable through the fluent <c>HasOneToOne</c> or the model.
     /// </summary>
     OneToOne,
 

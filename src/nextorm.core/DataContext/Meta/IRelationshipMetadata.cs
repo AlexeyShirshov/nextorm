@@ -64,4 +64,12 @@ public interface IRelationshipMetadata
     /// other side has not been declared or does not converge on the same foreign key.
     /// </summary>
     IRelationshipMetadata? Inverse { get; }
+
+    /// <summary>
+    /// The junction descriptor of a <see cref="RelationshipKind.ManyToMany"/> relationship, or
+    /// <see langword="null"/> for every other kind and for a many-to-many relationship that was declared
+    /// without a junction. The default implementation returns <see langword="null"/> so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    RelationshipJunctionMetadata? Junction => null;
 }

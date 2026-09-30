@@ -85,6 +85,25 @@ internal static class RelationshipResolver
     private static IEntityMetadata ResolveEntityMetadata(Type entityType)
         => DataContextExtensions.ResolveMetadata(entityType);
 
+    /// <summary>
+    /// Validates that a many-to-many key member and the junction foreign key that references it have the
+    /// same (nullable-unwrapped) type, so the junction can be joined without a runtime cast.
+    /// </summary>
+    /// <param name="entityName">The declaring entity name, used in the rejection.</param>
+    /// <param name="keyName">The descriptive name of the key member.</param>
+    /// <param name="key">The selected key member.</param>
+    /// <param name="foreignKeyName">The descriptive name of the junction foreign key.</param>
+    /// <param name="foreignKey">The selected junction foreign-key member.</param>
+    /// <exception cref="NotSupportedException">The two member types differ.</exception>
+    internal static void ValidateJunctionKeyType(string entityName, string keyName, PropertyInfo key, string foreignKeyName, PropertyInfo foreignKey)
+    {
+        var keyType = Nullable.GetUnderlyingType(key.PropertyType) ?? key.PropertyType;
+        var foreignKeyType = Nullable.GetUnderlyingType(foreignKey.PropertyType) ?? foreignKey.PropertyType;
+        if (keyType != foreignKeyType)
+            throw new NotSupportedException(
+                $"The many-to-many relationship declared on '{entityName}' has the {keyName} '{key.Name}' of type {keyType} that does not match the junction {foreignKeyName} '{foreignKey.Name}' of type {foreignKeyType}.");
+    }
+
     private static string Describe(Type declaringType, PropertyInfo? navigation)
         => navigation is null ? declaringType.Name : $"{declaringType.Name}.{navigation.Name}";
 }

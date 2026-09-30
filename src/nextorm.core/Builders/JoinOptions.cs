@@ -1,3 +1,6 @@
+using System.Linq.Expressions;
+using System.Reflection;
+
 namespace NextORM.Core;
 
 /// <summary>
@@ -16,6 +19,13 @@ public sealed class JoinOptions
     internal bool IsGlobal { get; private set; }
     internal string? JoinHint { get; private set; }
     internal IReadOnlyList<string>? TableHints { get; private set; }
+
+    /// <summary>
+    /// The relationship configured locally for this join, or <see langword="null"/> to fall back to the
+    /// declared relationship metadata. A local configuration fully replaces the metadata for the calling
+    /// <c>JoinInto</c> and works without registration.
+    /// </summary>
+    internal RelationshipMetadata? Relationship { get; private set; }
 
     /// <summary>
     /// Applies a ClickHouse join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>) to this join, for
@@ -86,5 +96,125 @@ public sealed class JoinOptions
             TableHints = filtered;
 
         return this;
+    }
+
+    /// <summary>
+    /// Configures the relationship for a one-to-one <c>JoinInto</c> call locally, without declaring it in
+    /// metadata: the parent-side key on <typeparamref name="TParent"/> and the unique foreign key on
+    /// <typeparamref name="TChild"/>. The configuration fully replaces the declared relationship for this
+    /// call.
+    /// </summary>
+    /// <typeparam name="TParent">The parent entity type of the calling <c>JoinInto</c>.</typeparam>
+    /// <typeparam name="TChild">The child entity type of the calling <c>JoinInto</c>.</typeparam>
+    /// <typeparam name="TKey">The property type shared by the parent key and the child foreign key.</typeparam>
+    /// <param name="parentKey">Selects the parent-side key property, for example <c>p =&gt; p.Id</c>.</param>
+    /// <param name="childForeignKey">Selects the foreign-key property on the child, for example <c>c =&gt; c.ParentId</c>.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A relationship was already configured on this instance.</exception>
+    public JoinOptions OneToOne<TParent, TChild, TKey>(
+        Expression<Func<TParent, TKey>> parentKey,
+        Expression<Func<TChild, TKey>> childForeignKey)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(parentKey);
+        ArgumentNullException.ThrowIfNull(childForeignKey);
+        EnsureNoRelationshipConfigured();
+
+        var parentKeyProperty = ResolveSelectedProperty(parentKey, nameof(parentKey));
+        var childForeignKeyProperty = ResolveSelectedProperty(childForeignKey, nameof(childForeignKey));
+
+        Relationship = new RelationshipMetadata(
+            RelationshipKind.OneToOne,
+            typeof(TParent),
+            typeof(TChild),
+            navigation: null,
+            isCollection: false,
+            childForeignKeyProperty,
+            parentKeyProperty,
+            typeof(TChild),
+            typeof(TParent));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a many-to-many relationship for a collection <c>JoinInto</c> call locally, without
+    /// declaring it in metadata: the keys on both principal sides and the two junction foreign keys that
+    /// reference them. The configuration fully replaces the declared relationship for this call.
+    /// </summary>
+    /// <typeparam name="TParent">The parent entity type of the calling <c>JoinInto</c>.</typeparam>
+    /// <typeparam name="TChild">The child entity type of the calling <c>JoinInto</c>.</typeparam>
+    /// <typeparam name="TJunction">The junction (link) entity type.</typeparam>
+    /// <typeparam name="TParentKey">The property type shared by the parent key and the junction parent foreign key.</typeparam>
+    /// <typeparam name="TChildKey">The property type shared by the child key and the junction child foreign key.</typeparam>
+    /// <param name="parentKey">Selects the parent-side key property, for example <c>p =&gt; p.Id</c>.</param>
+    /// <param name="junctionParentForeignKey">Selects the junction foreign key referencing the parent key, for example <c>l =&gt; l.ParentId</c>.</param>
+    /// <param name="childKey">Selects the child-side key property, for example <c>c =&gt; c.Id</c>.</param>
+    /// <param name="junctionChildForeignKey">Selects the junction foreign key referencing the child key, for example <c>l =&gt; l.ChildId</c>.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    /// <exception cref="ArgumentNullException">A selector is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A relationship was already configured on this instance.</exception>
+    /// <exception cref="NotSupportedException">A key does not match its junction foreign key's type.</exception>
+    public JoinOptions ManyToMany<TParent, TChild, TJunction, TParentKey, TChildKey>(
+        Expression<Func<TParent, TParentKey>> parentKey,
+        Expression<Func<TJunction, TParentKey>> junctionParentForeignKey,
+        Expression<Func<TChild, TChildKey>> childKey,
+        Expression<Func<TJunction, TChildKey>> junctionChildForeignKey)
+        where TChild : class
+        where TJunction : class
+    {
+        ArgumentNullException.ThrowIfNull(parentKey);
+        ArgumentNullException.ThrowIfNull(junctionParentForeignKey);
+        ArgumentNullException.ThrowIfNull(childKey);
+        ArgumentNullException.ThrowIfNull(junctionChildForeignKey);
+        EnsureNoRelationshipConfigured();
+
+        var parentKeyProperty = ResolveSelectedProperty(parentKey, nameof(parentKey));
+        var junctionParentForeignKeyProperty = ResolveSelectedProperty(junctionParentForeignKey, nameof(junctionParentForeignKey));
+        var childKeyProperty = ResolveSelectedProperty(childKey, nameof(childKey));
+        var junctionChildForeignKeyProperty = ResolveSelectedProperty(junctionChildForeignKey, nameof(junctionChildForeignKey));
+
+        RelationshipResolver.ValidateJunctionKeyType(typeof(TParent).Name, nameof(parentKey), parentKeyProperty, nameof(junctionParentForeignKey), junctionParentForeignKeyProperty);
+        RelationshipResolver.ValidateJunctionKeyType(typeof(TParent).Name, nameof(childKey), childKeyProperty, nameof(junctionChildForeignKey), junctionChildForeignKeyProperty);
+
+        Relationship = new RelationshipMetadata(
+            RelationshipKind.ManyToMany,
+            typeof(TParent),
+            typeof(TChild),
+            navigation: null,
+            isCollection: true,
+            childKeyProperty,
+            parentKeyProperty,
+            typeof(TChild),
+            typeof(TParent),
+            new RelationshipJunctionDeclaration
+            {
+                JunctionType = typeof(TJunction),
+                ParentKey = [parentKeyProperty],
+                ChildKey = [childKeyProperty],
+                JunctionParentForeignKey = [junctionParentForeignKeyProperty],
+                JunctionChildForeignKey = [junctionChildForeignKeyProperty],
+            });
+
+        return this;
+    }
+
+    private void EnsureNoRelationshipConfigured()
+    {
+        if (Relationship is not null)
+            throw new InvalidOperationException(
+                "A JoinInto call accepts at most one relationship configuration; a repeated or mixed local configuration is not supported.");
+    }
+
+    private static PropertyInfo ResolveSelectedProperty(LambdaExpression selector, string parameterName)
+    {
+        var body = selector.Body;
+        while (body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } conversion)
+            body = conversion.Operand;
+
+        return body is MemberExpression { Member: PropertyInfo property }
+            ? property
+            : throw new NotSupportedException($"The '{parameterName}' selector must select a property.");
     }
 }

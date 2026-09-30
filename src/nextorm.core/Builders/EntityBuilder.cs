@@ -577,9 +577,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// The join is part of the query: <see cref="ToCommand"/> emits
     /// <c>... from Parent as t1 left join Child as t2 on &lt;predicate&gt;</c> while still materializing
     /// <typeparamref name="TEntity"/> rows, so a bare <see cref="ToCommand"/> may repeat a parent once
-    /// per matching child. The parent/child keys are resolved from the declared relationship metadata; a relationship
-    /// that is not declared (or is many-to-many/one-to-one, or uses a composite key) is rejected with
-    /// <see cref="NotSupportedException"/> — use the explicit-key overload instead. The list terminals
+    /// per matching child. The parent/child keys are resolved from the declared relationship metadata (or
+    /// from a local <see cref="JoinOptions"/> configuration, which fully replaces the metadata for this
+    /// call); a relationship that is not declared, is many-to-many without a junction, or uses a composite
+    /// key is rejected with <see cref="NotSupportedException"/> — use the explicit-key overload instead.
+    /// The list terminals
     /// execute one denormalized command and stitch the children onto the deduplicated parents; the
     /// non-list terminals exclude this join and evaluate the parent only.
     /// </para>
@@ -628,8 +630,78 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         var opts = new JoinOptions();
         options?.Invoke(opts);
 
-        var relationship = ResolveJoinIntoRelationship(collection);
+        var relationship = ResolveJoinIntoRelationship(collection, opts);
         var spec = new JoinIntoSpec<TEntity, TChild>(child, predicate, collection, relationship, joinType);
+        return AddJoinInto(spec, new JoinExpression(predicate, joinType)
+        {
+            From = GetJoinSource(child),
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        });
+    }
+    /// <summary>
+    /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that assigns the single joined child to the
+    /// one-to-one <paramref name="navigation"/> reference of every parent when the query is enumerated by a
+    /// list terminal. The returned builder is a copy; the current builder is unchanged.
+    /// <para>
+    /// The relationship must be declared as one-to-one (<c>HasOneToOne</c>) so the principal/foreign keys
+    /// are known. At most one child is assigned per parent; a <c>LEFT</c> join leaves the reference
+    /// <see langword="null"/> when no child matches, while an <c>INNER</c> join excludes the parent. A
+    /// parent that matches more than one distinct child throws <see cref="InvalidOperationException"/> at
+    /// materialization. Cartesian repeats of the same child caused by a neighbouring join are tolerated.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The child source.</param>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind, relationship kind or keys are not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, TChild?>> navigation,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+        => JoinInto(child, predicate, navigation, JoinType.Left, options);
+    /// <summary>
+    /// Declares a typed join to <paramref name="child"/> (see
+    /// <see cref="JoinInto{TChild}(EntityBuilder{TChild}, Expression{Func{TEntity, TChild, bool}}, Expression{Func{TEntity, TChild}}, Action{JoinOptions}?)"/>)
+    /// that assigns the single joined child to the one-to-one <paramref name="navigation"/> reference.
+    /// Only <see cref="JoinType.Inner"/> and <see cref="JoinType.Left"/> are accepted; any other kind
+    /// throws <see cref="NotSupportedException"/>. The returned builder is a copy; the current builder is
+    /// unchanged.
+    /// </summary>
+    /// <typeparam name="TChild">The child entity type.</typeparam>
+    /// <param name="child">The child source.</param>
+    /// <param name="predicate">The join predicate over the parent and child.</param>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="joinType">The join kind; <see cref="JoinType.Inner"/> or <see cref="JoinType.Left"/>.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
+    /// <returns>A copy of this builder carrying the join declaration.</returns>
+    /// <exception cref="NotSupportedException">The join kind, relationship kind or keys are not supported.</exception>
+    public EntityBuilder<TEntity> JoinInto<TChild>(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, TChild?>> navigation,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TChild : class
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        ArgumentNullException.ThrowIfNull(predicate);
+        ArgumentNullException.ThrowIfNull(navigation);
+        EnsureJoinIntoSupported(joinType);
+        EnsureJoinIntoSource(nameof(JoinInto));
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var relationship = ResolveJoinIntoReferenceRelationship(navigation, opts);
+        var spec = new JoinIntoReferenceSpec<TEntity, TChild>(child, predicate, navigation, relationship, joinType);
         return AddJoinInto(spec, new JoinExpression(predicate, joinType)
         {
             From = GetJoinSource(child),
@@ -701,14 +773,19 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
     /// <summary>
     /// Finds the declared relationship whose navigation is <paramref name="collection"/> on the parent,
-    /// rejecting the unsupported cardinalities/keys and an undeclared relationship.
+    /// rejecting the unsupported cardinalities/keys and an undeclared relationship. A relationship
+    /// configured locally through <paramref name="options"/> fully replaces the metadata lookup.
     /// </summary>
     private IRelationshipMetadata ResolveJoinIntoRelationship<TChild>(
-        Expression<Func<TEntity, ICollection<TChild>>> collection)
+        Expression<Func<TEntity, ICollection<TChild>>> collection,
+        JoinOptions options)
     {
         var property = JoinIntoSpecHelpers.TryResolveCollectionProperty(collection)
             ?? throw new NotSupportedException(
                 "JoinInto requires the collection selector to be a property access so the declared relationship can be resolved.");
+
+        if (options.Relationship is { } local)
+            return ValidateLocalCollectionRelationship<TChild>(local, property);
 
         var metadata = DataContextExtensions.ResolveMetadata<TEntity>(null);
         foreach (var relationship in metadata.Relationships)
@@ -716,9 +793,33 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             if (relationship.Navigation is null || !relationship.Navigation.Equals(property))
                 continue;
 
-            if (relationship.Kind is RelationshipKind.ManyToMany or RelationshipKind.OneToOne)
+            // Many-to-many needs a junction descriptor; a model-only declaration without one (or a
+            // locally configured relationship without a junction) is reported instead of silently
+            // producing a direct join between the two principal sides.
+            if (relationship.Kind is RelationshipKind.ManyToMany)
+            {
+                if (relationship.Junction is null)
+                    throw new NotSupportedException(
+                        $"The many-to-many relationship declared on '{typeof(TEntity).Name}.{property.Name}' has no junction metadata; " +
+                        "declare it with HasManyThrough, or pass a local ManyToMany configuration through the JoinInto options.");
+
+                if (relationship.RelatedType != typeof(TChild))
+                    throw new NotSupportedException(
+                        $"The relationship declared on '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
+
+                if (relationship.PrincipalKey.Count != 1 || relationship.ForeignKey.Count != 1)
+                    throw new NotSupportedException(
+                        $"JoinInto does not support a composite key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
+
+                return relationship;
+            }
+
+            // OneToOne is lowered by the reference-navigation overload; the collection overload only
+            // accepts a collection navigation (OneToMany).
+            if (relationship.Kind is not RelationshipKind.OneToMany)
                 throw new NotSupportedException(
-                    $"JoinInto does not support the {relationship.Kind} relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
+                    $"JoinInto on the collection '{typeof(TEntity).Name}.{property.Name}' expects a OneToMany relationship, " +
+                    $"but the declared kind is {relationship.Kind}; use the reference-navigation JoinInto overload for a one-to-one navigation.");
 
             if (relationship.RelatedType != typeof(TChild))
                 throw new NotSupportedException(
@@ -733,7 +834,96 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         throw new NotSupportedException(
             $"JoinInto on '{typeof(TEntity).Name}.{property.Name}' requires an explicitly declared relationship; " +
-            "declare it with HasMany/HasOne (or [Relationship]) or use the explicit-key JoinInto overload.");
+            "declare it with HasMany/HasOne/HasManyThrough (or [Relationship]) or use the explicit-key JoinInto overload.");
+    }
+
+    /// <summary>Validates a locally configured relationship used by a collection <c>JoinInto</c>.</summary>
+    private static IRelationshipMetadata ValidateLocalCollectionRelationship<TChild>(IRelationshipMetadata relationship, PropertyInfo property)
+    {
+        if (relationship.DeclaringType != typeof(TEntity))
+            throw new NotSupportedException(
+                $"The local relationship configured for '{typeof(TEntity).Name}.{property.Name}' declares '{relationship.DeclaringType.Name}' as the parent, not '{typeof(TEntity).Name}'.");
+
+        if (relationship.Kind is not (RelationshipKind.OneToMany or RelationshipKind.ManyToMany))
+            throw new NotSupportedException(
+                $"The local relationship configured for the collection '{typeof(TEntity).Name}.{property.Name}' must be OneToMany or ManyToMany, " +
+                $"but its kind is {relationship.Kind}; use the reference-navigation JoinInto overload for a one-to-one navigation.");
+
+        if (relationship.Kind is RelationshipKind.ManyToMany && relationship.Junction is null)
+            throw new NotSupportedException(
+                $"The local many-to-many relationship configured for '{typeof(TEntity).Name}.{property.Name}' has no junction metadata.");
+
+        if (relationship.RelatedType != typeof(TChild))
+            throw new NotSupportedException(
+                $"The local relationship configured for '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
+
+        if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
+            throw new NotSupportedException(
+                $"JoinInto does not support a composite key on the local relationship configured for '{typeof(TEntity).Name}.{property.Name}'.");
+
+        return relationship;
+    }
+
+    /// <summary>
+    /// Finds the declared one-to-one relationship whose reference navigation is <paramref name="navigation"/>,
+    /// rejecting another relationship kind, an undeclared relationship, a mismatched child type, a
+    /// composite key and a read-only navigation. A relationship configured locally through
+    /// <paramref name="options"/> fully replaces the metadata lookup.
+    /// </summary>
+    private IRelationshipMetadata ResolveJoinIntoReferenceRelationship<TChild>(Expression<Func<TEntity, TChild?>> navigation, JoinOptions options)
+        where TChild : class
+    {
+        var property = JoinIntoSpecHelpers.TryResolveNavigationProperty(navigation)
+            ?? throw new NotSupportedException(
+                "JoinInto requires the navigation selector to be a property access so the declared relationship can be resolved.");
+
+        if (options.Relationship is { } local)
+        {
+            if (local.DeclaringType != typeof(TEntity) || local.RelatedType != typeof(TChild))
+                throw new NotSupportedException(
+                    $"The local relationship configured for '{typeof(TEntity).Name}.{property.Name}' must relate '{typeof(TEntity).Name}' to '{typeof(TChild).Name}'.");
+
+            if (local.Kind is not RelationshipKind.OneToOne)
+                throw new NotSupportedException(
+                    $"The local relationship configured for the reference navigation '{typeof(TEntity).Name}.{property.Name}' must be OneToOne, " +
+                    $"but its kind is {local.Kind}; use the collection JoinInto overload for a collection navigation.");
+
+            if (property.SetMethod is null)
+                throw new NotSupportedException(
+                    $"JoinInto cannot assign the one-to-one navigation '{typeof(TEntity).Name}.{property.Name}' because it has no setter.");
+
+            return local;
+        }
+
+        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(null);
+        foreach (var relationship in metadata.Relationships)
+        {
+            if (relationship.Navigation is null || !relationship.Navigation.Equals(property))
+                continue;
+
+            if (relationship.Kind is not RelationshipKind.OneToOne)
+                throw new NotSupportedException(
+                    $"JoinInto with a reference navigation supports only a OneToOne relationship, but " +
+                    $"'{typeof(TEntity).Name}.{property.Name}' declares {relationship.Kind}; use the collection JoinInto overload.");
+
+            if (relationship.RelatedType != typeof(TChild))
+                throw new NotSupportedException(
+                    $"The relationship declared on '{typeof(TEntity).Name}.{property.Name}' points to '{relationship.RelatedType.Name}', not '{typeof(TChild).Name}'.");
+
+            if (relationship.ForeignKey.Count != 1 || relationship.PrincipalKey.Count != 1)
+                throw new NotSupportedException(
+                    $"JoinInto does not support a composite key on the relationship declared on '{typeof(TEntity).Name}.{property.Name}'.");
+
+            if (property.SetMethod is null)
+                throw new NotSupportedException(
+                    $"JoinInto cannot assign the one-to-one navigation '{typeof(TEntity).Name}.{property.Name}' because it has no setter.");
+
+            return relationship;
+        }
+
+        throw new NotSupportedException(
+            $"JoinInto on '{typeof(TEntity).Name}.{property.Name}' requires an explicitly declared one-to-one relationship; " +
+            "declare it with HasOneToOne (or [Relationship]) or use the collection JoinInto overload.");
     }
     /// <summary>Rejects explicit key selectors whose selected property types do not agree, or that are not member accesses.</summary>
     private static void ValidateJoinIntoKeys<TChild, TKey>(
@@ -1015,11 +1205,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <returns>The command producing one row per <c>(parent, child…)</c> pair.</returns>
     internal QueryCommand CreatePairCommand(IReadOnlyList<IJoinIntoSpec<TEntity>> specs, List<JoinExpression>? joins)
     {
-        var childTypes = new Type[specs.Count];
+        var itemTypesByDeclaration = new IReadOnlyList<Type>[specs.Count];
         for (var i = 0; i < specs.Count; i++)
-            childTypes[i] = specs[i].ChildEntityType;
+            itemTypesByDeclaration[i] = specs[i].ItemTypes;
 
-        var projectionType = JoinIntoProjectionFactory.Create(typeof(TEntity), childTypes);
+        var projectionType = JoinIntoProjectionFactory.Create(typeof(TEntity), itemTypesByDeclaration);
 
         var isSql = _dataProvider.NeedMapping;
         var sourceType = isSql ? _sourceEntityType ?? typeof(TEntity) : projectionType;
@@ -1141,7 +1331,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             // the parent through Item1 of the projection accumulated so far.
             if (join.IsJoinInto && i > 0 && join.JoinCondition is { Parameters.Count: 2 } condition)
             {
-                var leftType = JoinIntoProjectionFactory.Create(typeof(TEntity), precedingTypes);
+                var leftType = JoinIntoProjectionFactory.Create(
+                    typeof(TEntity),
+                    precedingTypes.Select(static type => (IReadOnlyList<Type>)new[] { type }).ToArray());
                 var leftParameter = Expression.Parameter(leftType, "l");
                 var rewritten = ReRootJoinCondition(condition, leftParameter);
                 // Re-root the original condition too: the preparer injects the joined entity's global

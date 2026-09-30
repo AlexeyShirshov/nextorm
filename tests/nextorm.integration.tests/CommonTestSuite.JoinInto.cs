@@ -19,7 +19,8 @@ public abstract partial class CommonTestSuite
     private EntityBuilder<JoinIntoParent> JoinIntoParents()
         => _sut.DataProvider.From<JoinIntoParent>(b => b
             .HasMany(p => p.Children, c => c.ParentId)
-            .HasMany(p => p.Notes, n => n.ParentId));
+            .HasMany(p => p.Notes, n => n.ParentId)
+            .HasOneToOne(p => p.PrimaryChild, p => p.Id, c => c.ParentId));
 
     private EntityBuilder<JoinIntoChild> JoinIntoChildren()
         => _sut.DataProvider.From<JoinIntoChild>(b => b.HasOne(c => c.Parent, c => c.ParentId));
@@ -202,6 +203,52 @@ public abstract partial class CommonTestSuite
         parents[0].Children.Should().HaveCount(2);
         parents[2].Children.Should().BeEmpty();
     }
+
+    [Fact]
+    public void JoinInto_OneToOne_Left_ShouldAssignSingleChildAndLeaveChildlessNull()
+    {
+        var (many, one, none) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == one || p.Id == none)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .OrderBy(p => p.Id)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal(one, none);
+        parents[0].PrimaryChild.Should().NotBeNull("the single matching child is assigned to the one-to-one reference");
+        parents[0].PrimaryChild!.Id.Should().Be(many + 102);
+        parents[0].PrimaryChild!.ParentId.Should().Be(one);
+        parents[1].PrimaryChild.Should().BeNull("a LEFT one-to-one join without a matching child leaves the reference null");
+    }
+
+    [Fact]
+    public void JoinInto_OneToOne_Inner_ShouldExcludeChildlessParent()
+    {
+        var (many, one, none) = SeedJoinInto();
+
+        var parents = JoinIntoParents()
+            .Where(p => p.Id == one || p.Id == none)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild, JoinType.Inner)
+            .ToList();
+
+        parents.Select(p => p.Id).Should().Equal([one], "an INNER one-to-one join excludes a parent with no matching child");
+        parents[0].PrimaryChild!.Id.Should().Be(many + 102);
+    }
+
+    [Fact]
+    public void JoinInto_OneToOne_ShouldThrowWhenAParentMatchesMoreThanOneChild()
+    {
+        var (many, _, _) = SeedJoinInto();
+
+        Action act = () => JoinIntoParents()
+            .Where(p => p.Id == many)
+            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
+            .ToList();
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*more than one distinct*");
+    }
 }
 
 [SqlTable("eager_parent")]
@@ -217,6 +264,8 @@ public sealed class JoinIntoParent
     public ICollection<JoinIntoChild> Children { get; set; } = new List<JoinIntoChild>();
 
     public ICollection<JoinIntoNote> Notes { get; set; } = new List<JoinIntoNote>();
+
+    public JoinIntoChild? PrimaryChild { get; set; }
 }
 
 [SqlTable("eager_child")]

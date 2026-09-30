@@ -61,6 +61,34 @@ public class JoinIntoPlanKeyTests
         comparer.Equals(first, second).Should().BeTrue("a repeated declaration must reuse the cached plan");
         comparer.GetHashCode(first).Should().Be(comparer.GetHashCode(second));
     }
+
+    [Fact]
+    public void DistinctOneToOneNavigations_ShouldHaveDistinctPlanKeys()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<PlanOneToOneParent>(b => b
+            .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId)
+            .HasOneToOne(p => p.Secondary, p => p.Id, c => c.ParentId));
+        ctx.From<PlanOneToOneChild>();
+
+        static QueryCommand<PlanOneToOneParent> Command(InMemoryDataContext ctx, bool primary)
+        {
+            var cmd = ctx.From<PlanOneToOneParent>()
+                .JoinInto(ctx.From<PlanOneToOneChild>(), (p, c) => p.Id == c.ParentId, primary ? p => p.Primary : p => p.Secondary)
+                .ToCommand();
+            cmd.PrepareCommand(CancellationToken.None);
+            return cmd;
+        }
+
+        var first = Command(ctx, primary: true);
+        var second = Command(ctx, primary: false);
+        var repeat = Command(ctx, primary: true);
+        var comparer = first.GetQueryPlanEqualityComparer();
+
+        comparer.Equals(first, second).Should().BeFalse("different one-to-one navigations must not share a cached plan");
+        comparer.Equals(first, repeat).Should().BeTrue("the same one-to-one declaration must reuse the cached plan");
+        comparer.GetHashCode(first).Should().Be(comparer.GetHashCode(repeat));
+    }
 }
 
 public sealed class PlanParent
@@ -71,6 +99,19 @@ public sealed class PlanParent
 }
 
 public sealed class PlanChild
+{
+    public int Id { get; set; }
+    public int ParentId { get; set; }
+}
+
+public sealed class PlanOneToOneParent
+{
+    public int Id { get; set; }
+    public PlanOneToOneChild? Primary { get; set; }
+    public PlanOneToOneChild? Secondary { get; set; }
+}
+
+public sealed class PlanOneToOneChild
 {
     public int Id { get; set; }
     public int ParentId { get; set; }

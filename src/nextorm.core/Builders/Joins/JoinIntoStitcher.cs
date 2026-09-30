@@ -12,27 +12,40 @@ internal static class JoinIntoProjectionFactory
     private const int MaxArity = 8;
 
     /// <summary>
-    /// Creates the closed projection type <c>Projection&lt;TParent, TChild1, …&gt;</c> for the given
-    /// parent and children.
+    /// Creates the closed projection type <c>Projection&lt;TParent, …&gt;</c> for the given parent and the
+    /// per-declaration item types, flattened in declaration order.
     /// </summary>
     /// <param name="parentType">The parent entity type (the first item).</param>
-    /// <param name="childTypes">The joined child entity types, in declaration order.</param>
+    /// <param name="itemTypesByDeclaration">
+    /// The projection item types each declaration contributes, in declaration order. A one-to-many or
+    /// one-to-one declaration contributes one item (the child); a many-to-many declaration contributes
+    /// two (the link and the child).
+    /// </param>
     /// <returns>The closed projection type.</returns>
-    /// <exception cref="NotSupportedException">More children than the projection arity supports.</exception>
-    public static Type Create(Type parentType, IReadOnlyList<Type> childTypes)
+    /// <exception cref="NotSupportedException">More items than the projection arity supports.</exception>
+    public static Type Create(Type parentType, IReadOnlyList<IReadOnlyList<Type>> itemTypesByDeclaration)
     {
-        var arity = childTypes.Count + 1;
+        var childCount = 0;
+        for (var i = 0; i < itemTypesByDeclaration.Count; i++)
+            childCount += itemTypesByDeclaration[i].Count;
+
+        var arity = childCount + 1;
         if (arity < 2 || arity > MaxArity)
             throw new NotSupportedException(
-                $"JoinInto supports at most {MaxArity - 1} child collections in one query, but {childTypes.Count} were declared.");
+                $"JoinInto supports at most {MaxArity - 1} child collections in one query, but {childCount} were declared.");
 
         var open = typeof(Projection<,>).Assembly.GetType($"NextORM.Core.Projection`{arity}")
             ?? throw new InvalidOperationException($"Cannot create projection type of arity {arity}.");
 
         var arguments = new Type[arity];
         arguments[0] = parentType;
-        for (var i = 0; i < childTypes.Count; i++)
-            arguments[i + 1] = childTypes[i];
+        var index = 1;
+        for (var i = 0; i < itemTypesByDeclaration.Count; i++)
+        {
+            var itemTypes = itemTypesByDeclaration[i];
+            for (var j = 0; j < itemTypes.Count; j++)
+                arguments[index++] = itemTypes[j];
+        }
 
         return open.MakeGenericType(arguments);
     }
@@ -110,6 +123,28 @@ internal static class JoinIntoStitcher
                 "mapped key so the denormalized rows can be deduplicated. Configure a key (for example with " +
                 "HasKey), or use split-query loading (LoadWith without AsSingleQuery), which does not require one.");
 
+        // Each declaration contributes one or more projection items (a many-to-many declaration
+        // contributes a link item followed by the child). The child assigned per declaration is the
+        // last item of its slice; the offsets locate that slice in the flattened projection.
+        var itemTypesByDeclaration = new IReadOnlyList<Type>[specs.Count];
+        for (var i = 0; i < specs.Count; i++)
+            itemTypesByDeclaration[i] = specs[i].ItemTypes;
+
+        var projectionType = JoinIntoProjectionFactory.Create(typeof(TEntity), itemTypesByDeclaration);
+
+        var childProperties = new PropertyInfo[specs.Count];
+        var offset = 1;
+        for (var i = 0; i < specs.Count; i++)
+        {
+            var itemCount = specs[i].ItemTypes.Count;
+            if (itemCount == 0)
+                throw new InvalidOperationException(
+                    $"The JoinInto declaration for '{specs[i].ChildEntityType.Name}' contributes no projection items.");
+
+            childProperties[i] = ResolveItemProperty(i, projectionType, offset, itemCount);
+            offset += itemCount;
+        }
+
         var properties = ResolveItemProperties(rows);
         if (properties is not null)
         {
@@ -132,7 +167,7 @@ internal static class JoinIntoStitcher
                 }
 
                 for (var i = 0; i < specs.Count; i++)
-                    perSpec[i].Add((canonical, properties[i + 1].GetValue(row)));
+                    perSpec[i].Add((canonical, childProperties[i].GetValue(row)));
             }
         }
 
@@ -145,6 +180,23 @@ internal static class JoinIntoStitcher
             specs[i].AssignChildren(parents, perSpec[i]);
 
         return parents;
+    }
+
+    /// <summary>
+    /// Resolves the parameterless <c>ItemN</c> accessor of the denormalized projection that carries the
+    /// child item of a declaration: the last item of the declaration's flattened slice.
+    /// </summary>
+    /// <param name="specIndex">The declaration index, used for diagnostics.</param>
+    /// <param name="projectionType">The closed denormalized projection type.</param>
+    /// <param name="offset">The 1-based item number immediately before the declaration's slice.</param>
+    /// <param name="itemCount">The number of projection items the declaration contributes.</param>
+    /// <returns>The <c>ItemN</c> property that holds the joined child.</returns>
+    private static PropertyInfo ResolveItemProperty(int specIndex, Type projectionType, int offset, int itemCount)
+    {
+        var itemNumber = offset + itemCount;
+        return projectionType.GetProperty($"Item{itemNumber}")
+            ?? throw new InvalidOperationException(
+                $"The denormalized projection for the JoinInto declaration {specIndex} has no 'Item{itemNumber}' property.");
     }
 
     /// <summary>

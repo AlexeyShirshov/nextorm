@@ -6,7 +6,7 @@ namespace NextORM.Core.Tests;
 
 /// <summary>
 /// Boundary tests for the <c>JoinInto</c> declaration guards (#105): the explicit-key type mismatch,
-/// the undeclared relationship, the unsupported relationship kinds (M2M/O2O), the composite-key
+/// the undeclared relationship, the unsupported relationship kind (M2M), the composite-key
 /// reject, the derived (<c>As</c>) source reject and the projection-arity cap.
 /// </summary>
 public class JoinIntoRejectionTests
@@ -74,14 +74,12 @@ public class JoinIntoRejectionTests
         public int ParentId { get; set; }
     }
 
-    [Theory]
-    [InlineData(RelationshipKind.ManyToMany)]
-    [InlineData(RelationshipKind.OneToOne)]
-    public void UnsupportedRelationshipKind_ShouldThrow(RelationshipKind kind)
+    [Fact]
+    public void ManyToManyWithoutJunction_ShouldThrow()
     {
         DataContextCache.Metadata[typeof(RejectParent)] = MetadataWithRelationship<RejectParent>(
             new RelationshipMetadata(
-                kind,
+                RelationshipKind.ManyToMany,
                 typeof(RejectParent),
                 typeof(RejectChild),
                 typeof(RejectParent).GetProperty(nameof(RejectParent.Children)),
@@ -96,7 +94,63 @@ public class JoinIntoRejectionTests
         Action act = () => ctx.From<RejectParent>()
             .JoinInto(ctx.From<RejectChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
 
-        act.Should().Throw<NotSupportedException>().WithMessage($"*does not support the {kind}*");
+        act.Should().Throw<NotSupportedException>().WithMessage("*no junction metadata*");
+    }
+
+    public sealed class JunctionParent
+    {
+        public int Id { get; set; }
+        public List<JunctionChild> Children { get; set; } = new List<JunctionChild>();
+    }
+
+    public sealed class JunctionChild
+    {
+        public int Id { get; set; }
+    }
+
+    public sealed class JunctionLink
+    {
+        public int ParentId { get; set; }
+        public int ChildId { get; set; }
+    }
+
+    [Fact]
+    public void ManyToManyWithJunction_ShouldResolve()
+    {
+        using var ctx = new InMemoryDataContext();
+        ctx.From<JunctionParent>(b => b.HasManyThrough<JunctionChild, JunctionLink, int, int>(
+            p => p.Children, p => p.Id, l => l.ParentId, c => c.Id, l => l.ChildId));
+        ctx.From<JunctionChild>();
+
+        Action act = () => ctx.From<JunctionParent>()
+            .JoinInto(ctx.From<JunctionChild>(), (p, c) => p.Id == c.Id, p => p.Children);
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void OneToOneRelationship_OnTheCollectionOverload_ShouldThrow()
+    {
+        DataContextCache.Metadata[typeof(RejectParent)] = MetadataWithRelationship<RejectParent>(
+            new RelationshipMetadata(
+                RelationshipKind.OneToOne,
+                typeof(RejectParent),
+                typeof(RejectChild),
+                typeof(RejectParent).GetProperty(nameof(RejectParent.Children)),
+                isCollection: true,
+                typeof(RejectChild).GetProperty(nameof(RejectChild.ParentId))!,
+                typeof(RejectParent).GetProperty(nameof(RejectParent.Id)),
+                typeof(RejectChild),
+                typeof(RejectParent)));
+
+        using var ctx = new InMemoryDataContext();
+
+        // A one-to-one relationship is lowered by the reference-navigation overload; the collection
+        // overload asks the caller to use it instead of silently producing a collection shape.
+        Action act = () => ctx.From<RejectParent>()
+            .JoinInto(ctx.From<RejectChild>(), (p, c) => p.Id == c.ParentId, p => p.Children);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*expects a OneToMany relationship*");
     }
 
     [Fact]
