@@ -15,6 +15,7 @@
     <Project Path="src/nextorm.mysql/nextorm.mysql.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj" />
     <Project Path="tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj" />
     <Project Path="tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj" />
     <Project Path="tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj" />
