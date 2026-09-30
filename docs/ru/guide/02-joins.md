@@ -417,8 +417,8 @@ for (var i = 1; i <= 3; i++)
 
 ClickHouse добавляет два модификатора соединения, которых нет у остальных диалектов: модификатор
 **строгости** (`ANY`/`ALL`/`ASOF`) и распределённый префикс `GLOBAL`. Оба передаются соединению через
-его лямбду `Action<JoinOptions>`: [`JoinOptions.WithStrictness`](xref:NextORM.Core.JoinOptions.WithStrictness(NextORM.Core.JoinStrictness)) и
-[`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global):
+его лямбду `Action<JoinOptions>`: [`JoinOptions.WithStrictness`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithStrictness(NextORM.Core.JoinOptions,NextORM.Core.JoinStrictness)) и
+[`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)):
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -436,7 +436,7 @@ select t1.id, t2.somestring from simple_entity as `t1` left any join complex_ent
 правую строку на каждую левую; [`JoinStrictness.All`](xref:NextORM.Core.JoinStrictness.All) оставляет все
 совпадения; [`JoinStrictness.Asof`](xref:NextORM.Core.JoinStrictness.Asof) рендерит `asof join`, для
 которого нужна одна колонка равенства и завершающее неравенство.
-[`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global) рендерит префикс `GLOBAL`, используемый в
+[`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)) рендерит префикс `GLOBAL`, используемый в
 распределённых запросах, и сочетается с модификатором строгости в любом порядке
 (`global left any join`):
 
@@ -474,11 +474,11 @@ var ids = dataContext.From<ISimpleEntity>()
 select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-- [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) оставляет только левые колонки — по одной на каждую
+- [`SemiJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) оставляет только левые колонки — по одной на каждую
   левую строку, у которой есть хотя бы одно совпадение справа;
-- [`AntiJoin`](xref:NextORM.Core.EntityBuilder`1.AntiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) оставляет только левые колонки для левых строк без
+- [`AntiJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.AntiJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) оставляет только левые колонки для левых строк без
   совпадения (дополнение к `SemiJoin`);
-- [`PasteJoin`](xref:NextORM.Core.EntityBuilder`1.PasteJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) сопоставляет два источника по позиции строки без `ON`;
+- [`PasteJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.PasteJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Action{NextORM.Core.JoinOptions})) сопоставляет два источника по позиции строки без `ON`;
   проекция содержит обе стороны, а строк — сколько у более короткой стороны.
 
 `SemiJoin`/`AntiJoin` возвращают ту же форму проекции (правые колонки недоступны), а `PasteJoin`

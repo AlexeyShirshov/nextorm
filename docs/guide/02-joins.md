@@ -413,7 +413,7 @@ for (var i = 1; i <= 3; i++)
 
 ClickHouse adds two join modifiers that the other dialects do not have: a **strictness** modifier
 (`ANY`/`ALL`/`ASOF`) and the distributed `GLOBAL` prefix. Both are passed to the join through its
-trailing `Action<JoinOptions>` lambda, with [`JoinOptions.WithStrictness`](xref:NextORM.Core.JoinOptions.WithStrictness(NextORM.Core.JoinStrictness)) and [`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global):
+trailing `Action<JoinOptions>` lambda, with [`JoinOptions.WithStrictness`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithStrictness(NextORM.Core.JoinOptions,NextORM.Core.JoinStrictness)) and [`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)):
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -430,7 +430,7 @@ select t1.id, t2.somestring from simple_entity as `t1` left any join complex_ent
 [`JoinStrictness.Any`](xref:NextORM.Core.JoinStrictness.Any) renders `<type> any join` and keeps a single
 right-hand row per left-hand row; [`JoinStrictness.All`](xref:NextORM.Core.JoinStrictness.All) keeps every
 match; [`JoinStrictness.Asof`](xref:NextORM.Core.JoinStrictness.Asof) renders `asof join`, which requires one
-equi-join column plus a final inequality. [`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global) renders the
+equi-join column plus a final inequality. [`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)) renders the
 `GLOBAL` prefix used by distributed queries and composes with the strictness modifier in either order
 (`global left any join`):
 
@@ -467,11 +467,11 @@ var ids = dataContext.From<ISimpleEntity>()
 select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-- [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) keeps only the left-hand columns, once per left row that
+- [`SemiJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) keeps only the left-hand columns, once per left row that
   has at least one matching right row;
-- [`AntiJoin`](xref:NextORM.Core.EntityBuilder`1.AntiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) keeps only the left-hand columns for left rows with no
+- [`AntiJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.AntiJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) keeps only the left-hand columns for left rows with no
   match (the complement of `SemiJoin`);
-- [`PasteJoin`](xref:NextORM.Core.EntityBuilder`1.PasteJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) pairs the two sources by row position with no `ON`; the
+- [`PasteJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.PasteJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Action{NextORM.Core.JoinOptions})) pairs the two sources by row position with no `ON`; the
   projection exposes both sides and the result has as many rows as the shorter side.
 
 `SemiJoin`/`AntiJoin` return the same projection shape (the right columns are not accessible), whereas

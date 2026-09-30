@@ -7,6 +7,12 @@
 
 **Prerequisites:** [Querying and projections](../../querying/index.md) · [ClickHouse provider](../../providers/clickhouse.md)
 
+> **Extension methods.** Every ClickHouse-only member on this page (`ArrayJoin`/`LeftArrayJoin`/
+> `ArrayJoinElement`/`LeftArrayJoinElement`, `LimitBy`, `WithTotals`, `Final`, `PreWhere`, `Settings`,
+> `Sample`, `SemiJoin`/`AntiJoin`/`PasteJoin` and `j => j.Global()`) is an extension method from the
+> `nextorm.clickhouse` package, not part of the common `nextorm` API. Add `using NextORM.ClickHouse;`
+> and the examples compile unchanged.
+
 ## Arrays and `ARRAY JOIN`
 
 ClickHouse has a native `Array(T)` type. Array functions operate on array columns or nested array
@@ -31,7 +37,7 @@ The scalar `array_join` (one row per element, projectable) and the clause method
 
 ## `LIMIT n BY expr`
 
-[`LimitBy`](xref:NextORM.Core.EntityBuilder`1.LimitBy``1(System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{`0,``0}})) returns the first `n` rows **per distinct key**, emitted
+[`LimitBy`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LimitBy``2(NextORM.Core.EntityBuilder{``0},System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{``0,``1}})) returns the first `n` rows **per distinct key**, emitted
 after `ORDER BY` and before the final `LIMIT`:
 
 ```csharp
@@ -51,7 +57,7 @@ See [Sorting and paging](../04-sorting-and-paging.md#limit-by-clickhouse)
 
 ## `GROUP BY ... WITH TOTALS`
 
-[`WithTotals`](xref:NextORM.Core.EntityBuilder`1.WithTotals) appends the ClickHouse `with totals` modifier to a
+[`WithTotals`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithTotals``1(NextORM.Core.EntityBuilder{``0})) appends the ClickHouse `with totals` modifier to a
 grouping, adding a totals row for the whole result set. It is orthogonal to `ROLLUP`/`CUBE` and cannot
 be combined with `GROUPING SETS`:
 

@@ -1199,7 +1199,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// ReplacingMergeTree/CollapsingMergeTree before the read). Requires a dialect that supports it (see
     /// <see cref="ISqlDialect.SupportsFinal"/>).
     /// </summary>
-    public EntityBuilder<TEntity> Final()
+    internal EntityBuilder<TEntity> Final()
     {
         var b = Clone();
         b.IsFinal = true;
@@ -1210,7 +1210,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// verbatim, so only pass trusted literals (for example <c>max_threads = "2"</c>). Requires a dialect
     /// that supports it (see <see cref="ISqlDialect.SupportsSettings"/>).
     /// </summary>
-    public EntityBuilder<TEntity> Settings(params (string Key, string Value)[] settings)
+    internal EntityBuilder<TEntity> Settings(params (string Key, string Value)[] settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
@@ -1232,7 +1232,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// can skip the other columns. A repeated call combines the predicates with <c>and</c>. Requires a
     /// dialect that supports it (see <see cref="ISqlDialect.SupportsPreWhere"/>).
     /// </summary>
-    public EntityBuilder<TEntity> PreWhere(Expression<Func<TEntity, bool>> condition)
+    internal EntityBuilder<TEntity> PreWhere(Expression<Func<TEntity, bool>> condition)
     {
         ArgumentNullException.ThrowIfNull(condition);
 
@@ -1256,7 +1256,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/> in the projection when the value is needed.
     /// Requires a dialect that supports it (see <see cref="ISqlDialect.ArrayJoinClause"/>).
     /// </summary>
-    public EntityBuilder<TEntity> ArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
+    internal EntityBuilder<TEntity> ArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
         => AddArrayJoin(array, ArrayJoinKind.Inner);
 
     /// <summary>
@@ -1264,7 +1264,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// whose array is empty is kept (with the array column at its default). Requires a dialect that
     /// supports it (see <see cref="ISqlDialect.ArrayJoinClause"/>).
     /// </summary>
-    public EntityBuilder<TEntity> LeftArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
+    internal EntityBuilder<TEntity> LeftArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
         => AddArrayJoin(array, ArrayJoinKind.Left);
 
     private EntityBuilder<TEntity> AddArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array, ArrayJoinKind kind)
@@ -1298,7 +1298,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// The builder already carries a bound array join, a join, or a Where/Having (which must be applied
     /// after this call), or the array join kind conflicts with an earlier <c>ArrayJoin</c>.
     /// </exception>
-    public EntityBuilder<ArrayJoinProjection<TEntity, TElement>> ArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array)
+    internal EntityBuilder<ArrayJoinProjection<TEntity, TElement>> ArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array)
         => ToArrayJoinElement(array, ArrayJoinKind.Inner);
 
     /// <summary>
@@ -1313,7 +1313,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// The builder already carries a bound array join, a join, or a Where/Having (which must be applied
     /// after this call), or the array join kind conflicts with an earlier <c>ArrayJoin</c>.
     /// </exception>
-    public EntityBuilder<ArrayJoinProjection<TEntity, TElement>> LeftArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array)
+    internal EntityBuilder<ArrayJoinProjection<TEntity, TElement>> LeftArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array)
         => ToArrayJoinElement(array, ArrayJoinKind.Left);
 
     private EntityBuilder<ArrayJoinProjection<TEntity, TElement>> ToArrayJoinElement<TElement>(Expression<Func<TEntity, IEnumerable<TElement>>> array, ArrayJoinKind kind)
@@ -1642,7 +1642,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// anonymous type to key on several columns. Requires a dialect that supports it (see
     /// <see cref="ISqlDialect.LimitBy"/>).
     /// </summary>
-    public EntityBuilder<TEntity> LimitBy<TResult>(int limit, Expression<Func<TEntity, TResult>> exp)
+    internal EntityBuilder<TEntity> LimitBy<TResult>(int limit, Expression<Func<TEntity, TResult>> exp)
         => LimitBy(limit, 0, exp);
     /// <summary>
     /// Adds a <c>LIMIT offset, n BY expr</c> clause (ClickHouse): skips <paramref name="offset"/> rows
@@ -1650,7 +1650,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// must be positive and <paramref name="offset"/> non-negative. Requires a dialect that supports it
     /// (see <see cref="ISqlDialect.LimitBy"/>).
     /// </summary>
-    public EntityBuilder<TEntity> LimitBy<TResult>(int limit, int offset, Expression<Func<TEntity, TResult>> exp)
+    internal EntityBuilder<TEntity> LimitBy<TResult>(int limit, int offset, Expression<Func<TEntity, TResult>> exp)
     {
         ArgumentNullException.ThrowIfNull(exp);
 
@@ -1947,7 +1947,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <param name="joinCondition">The join predicate over the two entities.</param>
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the left-hand columns, carrying the semi join.</returns>
-    public EntityBuilder<TEntity> SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder<TEntity> SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(GetJoinSource(_), joinCondition, JoinType.Semi, options);
     /// <summary>
     /// Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>: only the left-hand columns
@@ -1959,7 +1959,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <param name="joinCondition">The join predicate over the two entities.</param>
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the left-hand columns, carrying the anti join.</returns>
-    public EntityBuilder<TEntity> AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder<TEntity> AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(GetJoinSource(_), joinCondition, JoinType.Anti, options);
     /// <summary>
     /// Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>: the two sources are paired by row
@@ -1969,16 +1969,16 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <param name="_">The builder for the joined entity; only its source is used.</param>
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the joined projection.</returns>
-    public JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
+    internal JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     /// <inheritdoc cref="SemiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions})"/>
-    public EntityBuilder<TEntity> SemiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder<TEntity> SemiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(new FromExpression(query), joinCondition, JoinType.Semi, options);
     /// <inheritdoc cref="AntiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions})"/>
-    public EntityBuilder<TEntity> AntiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder<TEntity> AntiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
         => AddSemiAntiJoin(new FromExpression(query), joinCondition, JoinType.Anti, options);
     /// <inheritdoc cref="PasteJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Action{JoinOptions})"/>
-    public JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Action<JoinOptions>? options = null)
+    internal JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Action<JoinOptions>? options = null)
         => JoinCore(query, JoinType.Paste, null, options);
     private EntityBuilder<TEntity> AddSemiAntiJoin(FromExpression rightSource, LambdaExpression joinCondition, JoinType joinType, Action<JoinOptions>? options = null)
     {
@@ -2332,7 +2332,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <see cref="ISqlDialect.SupportsGroupByWithTotals"/>); it cannot be combined with
     /// <see cref="GroupByGroupingSets"/>. It is a no-op when the query has no grouping.
     /// </summary>
-    public EntityBuilder<TEntity> WithTotals()
+    internal EntityBuilder<TEntity> WithTotals()
     {
         var b = Clone();
 
@@ -2990,7 +2990,7 @@ public class EntityBuilder : ICloneable
     /// <param name="joinCondition">The join predicate over the two table aliases.</param>
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the left-hand columns, carrying the semi join.</returns>
-    public EntityBuilder SemiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder SemiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
         options?.Invoke(opts);
@@ -3004,7 +3004,7 @@ public class EntityBuilder : ICloneable
         });
     }
     /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}}, Action{JoinOptions})"/>
-    public EntityBuilder AntiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder AntiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
         options?.Invoke(opts);
@@ -3024,7 +3024,7 @@ public class EntityBuilder : ICloneable
     /// <param name="from">The named-table builder whose source is joined.</param>
     /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the joined projection.</returns>
-    public JoinedEntityBuilder<TableAlias, TableAlias> PasteJoin(EntityBuilder from, Action<JoinOptions>? options = null)
+    internal JoinedEntityBuilder<TableAlias, TableAlias> PasteJoin(EntityBuilder from, Action<JoinOptions>? options = null)
         => JoinCore(from, JoinType.Paste, null, options);
     private EntityBuilder AddSemiAntiJoin(JoinExpression join)
     {
@@ -3118,7 +3118,7 @@ public class EntityBuilder : ICloneable
     public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.OuterApply, null);
     /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}}, Action{JoinOptions})"/>
-    public EntityBuilder SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
         options?.Invoke(opts);
@@ -3132,7 +3132,7 @@ public class EntityBuilder : ICloneable
         });
     }
     /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}}, Action{JoinOptions})"/>
-    public EntityBuilder AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal EntityBuilder AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
         options?.Invoke(opts);
@@ -3146,7 +3146,7 @@ public class EntityBuilder : ICloneable
         });
     }
     /// <inheritdoc cref="PasteJoin(EntityBuilder, Action{JoinOptions})"/>
-    public JoinedEntityBuilder<TableAlias, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
+    internal JoinedEntityBuilder<TableAlias, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     private JoinedEntityBuilder<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {

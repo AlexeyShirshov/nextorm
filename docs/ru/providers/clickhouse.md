@@ -4,6 +4,12 @@
 
 **Предварительные требования:** [Обзор провайдеров](overview.md) · [Quickstart](../getting-started/02-quickstart.md)
 
+> **Методы-расширения.** Эксклюзивные для ClickHouse fluent-члены — `Final`, `PreWhere`, `Settings`,
+> `Sample`, `LimitBy`, `WithTotals`, `ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement`,
+> `SemiJoin`/`AntiJoin`/`PasteJoin` и `j => j.Global()` — не входят в общий API `nextorm`.
+> Они поставляются пакетом `nextorm.clickhouse` как методы-расширения; добавьте
+> `using NextORM.ClickHouse;`, и цепочки ниже компилируются без изменений.
+
 ## Обзор
 
 [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext) (`src/nextorm.clickhouse/ClickHouseDataContext.cs`) оборачивает официальный
@@ -105,17 +111,17 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   списку значений, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
   отрицание — через C# `!` (`GLOBAL NOT IN`);
 - модификаторы строгости/типа join `ANY`/`ALL`/`ASOF` через
-  [`JoinOptions.WithStrictness`](xref:NextORM.Core.JoinOptions.WithStrictness(NextORM.Core.JoinStrictness)) в завершающей лямбде соединения
+  [`JoinOptions.WithStrictness`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithStrictness(NextORM.Core.JoinOptions,NextORM.Core.JoinStrictness)) в завершающей лямбде соединения
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
   [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean,NextORM.Core.KeywordCase)), enum `JoinStrictness`).
   `LEFT ANY JOIN` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, а `ASOF`
   требует хотя бы одной equi-колонки и неравенства последним. Для видов `SEMI`/`ANTI`/`PASTE` есть
-  отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/`AntiJoin` отдают
+  отдельные методы-построители: [`SemiJoin`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.SemiJoin``2(NextORM.Core.EntityBuilder{``0},NextORM.Core.EntityBuilder{``1},System.Linq.Expressions.Expression{System.Func{``0,``1,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/`AntiJoin` отдают
   только левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
   сопоставляет два источника по позиции строки без `ON` (строк — сколько у более короткой стороны).
   Гейты — [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   Вариант `GLOBAL` (правая сторона разрешается один раз и broadcast'ится для распределённых
-  запросов) задаётся через [`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global) и
+  запросов) задаётся через [`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)) и
   комбинируется со strictness (`global left any join`,
   [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 

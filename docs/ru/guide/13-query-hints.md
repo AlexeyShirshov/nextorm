@@ -253,8 +253,10 @@ select /*+ JOIN_ORDER(t1, t2) */ id from simple_entity as `t1` join complex_enti
 
 ClickHouse имеет четыре модификатора уровня запроса — не хинты: `Final()`, `PreWhere(predicate)` и
 `Settings(("key", "value"), ...)` — отдельные методы построителя, а модификатор `Sample(ratio[, offset])`
-— это опция источника на время запроса, задаваемая в `From`. Они допустимы только в ClickHouse;
-остальные провайдеры и контекст in-memory бросают `NotSupportedException`.
+— это опция источника на время запроса, задаваемая в `From`. Они специфичны для ClickHouse и
+поставляются как методы-расширения в пакете `nextorm.clickhouse`, поэтому файлу, который их
+использует, нужен `using NextORM.ClickHouse;`. Остальные провайдеры и контекст in-memory бросают
+`NotSupportedException`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))

@@ -76,13 +76,13 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
     public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2> SemiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2> SemiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2> AntiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2> AntiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3> PasteJoin<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3> PasteJoin<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     private JoinedEntityBuilder<T1, T2, T3> JoinCore<T3>(EntityBuilder<T3> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
@@ -121,10 +121,10 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -206,13 +206,13 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3> SemiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3> SemiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3> AntiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3> AntiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> PasteJoin<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> PasteJoin<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     private JoinedEntityBuilder<T1, T2, T3, T4> JoinCore<T4>(EntityBuilder<T4> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
@@ -241,10 +241,10 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -320,13 +320,13 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> SemiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> SemiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> AntiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> AntiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> PasteJoin<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> PasteJoin<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5> JoinCore<T5>(EntityBuilder<T5> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
@@ -355,10 +355,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -434,13 +434,13 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> SemiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> SemiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> AntiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> AntiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> PasteJoin<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> PasteJoin<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> JoinCore<T6>(EntityBuilder<T6> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
@@ -469,10 +469,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -548,13 +548,13 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> SemiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> SemiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> AntiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> AntiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> PasteJoin<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> PasteJoin<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> JoinCore<T7>(EntityBuilder<T7> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
@@ -583,10 +583,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -662,13 +662,13 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> SemiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> SemiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> AntiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> AntiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> PasteJoin<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> PasteJoin<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> JoinCore<T8>(EntityBuilder<T8> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
@@ -697,10 +697,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -740,10 +740,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> : EntityBuilder
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>

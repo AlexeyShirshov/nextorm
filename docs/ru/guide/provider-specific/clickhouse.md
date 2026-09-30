@@ -8,6 +8,12 @@
 
 **Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Провайдер ClickHouse](../../providers/clickhouse.md)
 
+> **Методы-расширения.** Каждый эксклюзивный для ClickHouse член на этой странице (`ArrayJoin`/
+> `LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement`, `LimitBy`, `WithTotals`, `Final`,
+> `PreWhere`, `Settings`, `Sample`, `SemiJoin`/`AntiJoin`/`PasteJoin` и `j => j.Global()`) — это
+> метод-расширение из пакета `nextorm.clickhouse`, а не часть общего API `nextorm`. Добавьте
+> `using NextORM.ClickHouse;`, и примеры компилируются без изменений.
+
 ## Массивы и `ARRAY JOIN`
 
 У ClickHouse есть нативный тип `Array(T)`. Функции массивов работают с колонками-массивами или
@@ -32,7 +38,7 @@ select id from array_entity left array join tags where id > 0
 
 ## `LIMIT n BY expr`
 
-[`LimitBy`](xref:NextORM.Core.EntityBuilder`1.LimitBy``1(System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращает первые `n` строк **на каждое значение
+[`LimitBy`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LimitBy``2(NextORM.Core.EntityBuilder{``0},System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{``0,``1}})) возвращает первые `n` строк **на каждое значение
 ключа**, клауза рендерится после `ORDER BY` и до финального `LIMIT`:
 
 ```csharp
@@ -52,7 +58,7 @@ select id, nullableint from complex_entity order by id limit 2 by nullableint
 
 ## `GROUP BY ... WITH TOTALS`
 
-[`WithTotals`](xref:NextORM.Core.EntityBuilder`1.WithTotals) добавляет к группировке модификатор ClickHouse
+[`WithTotals`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithTotals``1(NextORM.Core.EntityBuilder{``0})) добавляет к группировке модификатор ClickHouse
 `with totals` — строку итогов по всему набору. Он ортогонален `ROLLUP`/`CUBE` и не сочетается с
 `GROUPING SETS`:
 

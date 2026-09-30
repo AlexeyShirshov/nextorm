@@ -169,7 +169,7 @@ public sealed class Order
 
 ## Модификаторы соединения
 
-Доступны модификаторы нижележащего соединения. В ClickHouse [`JoinOptions.WithStrictness`](xref:NextORM.Core.JoinOptions.WithStrictness(NextORM.Core.JoinStrictness)) можно передать в `JoinInto(...)` через его завершающую лямбду: `j => j.WithStrictness(Any)` оставляет только **первого** совпавшего ребёнка на родителя, поэтому загруженная коллекция усекается максимум до одного элемента; остальные модификаторы строгости (`All`, `Asof`) и [`JoinOptions.Global`](xref:NextORM.Core.JoinOptions.Global) проходят без изменений. Опция, переданная в `JoinInto`, сохраняет поведение родительских терминалов — не-списочные терминалы по-прежнему исключают соединение.
+Доступны модификаторы нижележащего соединения. В ClickHouse [`JoinOptions.WithStrictness`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithStrictness(NextORM.Core.JoinOptions,NextORM.Core.JoinStrictness)) можно передать в `JoinInto(...)` через его завершающую лямбду: `j => j.WithStrictness(Any)` оставляет только **первого** совпавшего ребёнка на родителя, поэтому загруженная коллекция усекается максимум до одного элемента; остальные модификаторы строгости (`All`, `Asof`) и [`JoinOptions.Global`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.Global(NextORM.Core.JoinOptions)) проходят без изменений. Опция, переданная в `JoinInto`, сохраняет поведение родительских терминалов — не-списочные терминалы по-прежнему исключают соединение.
 
 ## Граница терминалов
 

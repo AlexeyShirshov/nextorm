@@ -18,6 +18,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.mysql\nextorm.mysql.csproj" />
+    <!-- Reference the ClickHouse provider to call its SemiJoin extension method when asserting that
+         MySQL rejects it at render time (issue #122). -->
+    <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
   </ItemGroup>
 
 </Project>

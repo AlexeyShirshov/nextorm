@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 using NpgsqlTypes;
 

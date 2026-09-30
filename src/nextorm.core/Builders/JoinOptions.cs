@@ -24,7 +24,7 @@ public sealed class JoinOptions
     /// </summary>
     /// <param name="strictness">The strictness modifier to apply to this join.</param>
     /// <returns>This instance, to allow chaining.</returns>
-    public JoinOptions WithStrictness(JoinStrictness strictness)
+    internal JoinOptions WithStrictness(JoinStrictness strictness)
     {
         Strictness = strictness;
         return this;
@@ -36,7 +36,7 @@ public sealed class JoinOptions
     /// dialect that supports it (see <see cref="ISqlDialect.SupportsGlobalJoin"/>).
     /// </summary>
     /// <returns>This instance, to allow chaining.</returns>
-    public JoinOptions Global()
+    internal JoinOptions Global()
     {
         IsGlobal = true;
         return this;

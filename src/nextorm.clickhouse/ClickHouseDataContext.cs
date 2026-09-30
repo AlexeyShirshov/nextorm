@@ -74,7 +74,7 @@ public class ClickHouseDataContext : DataContext
     /// <returns>A new ClickHouse parameter configured from <paramref name="parameter"/>.</returns>
     /// <exception cref="ArgumentException"><see cref="ProcedureParameter.TypeName"/> is set (SQL Server only), or a table parameter is not <see cref="ParameterDirection.Input"/>.</exception>
     /// <exception cref="NotSupportedException">A table parameter column has a CLR type with no ClickHouse mapping.</exception>
-    protected override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
+    protected internal override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
     {
         if (parameter.Value is TableParameterValue tableValue)
             return CreateTableValuedParameter(parameter, tableValue);

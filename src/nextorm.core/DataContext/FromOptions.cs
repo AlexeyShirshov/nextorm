@@ -44,7 +44,7 @@ public sealed class FromOptions
     /// <param name="ratio">The fraction of rows to read; must be in <c>[0, 1]</c>.</param>
     /// <returns>This instance, to allow chaining.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="ratio"/> is not finite or is outside <c>[0, 1]</c>.</exception>
-    public FromOptions Sample(double ratio) => Sample(ratio, 0);
+    internal FromOptions Sample(double ratio) => Sample(ratio, 0);
 
     /// <summary>
     /// Reads roughly <paramref name="ratio"/> of the primary table starting at <paramref name="offset"/>
@@ -55,7 +55,7 @@ public sealed class FromOptions
     /// <param name="offset">The fraction of rows to skip before sampling; must be in <c>[0, 1]</c>.</param>
     /// <returns>This instance, to allow chaining.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="ratio"/> or <paramref name="offset"/> is not finite or is outside <c>[0, 1]</c>.</exception>
-    public FromOptions Sample(double ratio, double offset)
+    internal FromOptions Sample(double ratio, double offset)
     {
         if (!double.IsFinite(ratio) || ratio is < 0 or > 1)
             throw new ArgumentOutOfRangeException(nameof(ratio), ratio, "Sample ratio must be a finite value in [0, 1].");
