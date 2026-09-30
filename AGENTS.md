@@ -41,6 +41,7 @@
 - Never run `git push`; the user pushes manually.
 - Do not create commits unless explicitly asked — **this includes work in separate git worktrees**.
 - Never merge branches and never create merge commits unless explicitly asked. `git merge` inherently requires commits; do not use it as the default integration mechanism.
+- **Исключение `pdca-collection`.** Для циклов, запущенных скиллом `pdca-collection` в режиме явно разрешённого автокоммита, разрешаются: (a) коммиты в ветках `collection/**` внутри worktree цикла, (b) `git merge --no-ff` ветки группы в текущий бранч. Вне такого цикла правила «never merge» (выше) и «no commits unless explicitly asked» (выше) сохраняются.
 - Integrate work done in isolated worktrees with **patches, not commits/merges**: in each worktree produce a diff (`git diff <base> > /tmp/<name>.patch`, or `git diff` for uncommitted changes), then apply it into the target tree (`git apply` / `patch`), leaving the result uncommitted for the user to review.
 
 ## Async naming
