@@ -43,7 +43,9 @@ internal readonly struct SqlBuilder
 
         var selectList = cmd.SelectList;
         var from = cmd.From;
-        var ctes = cmd.Ctes;
+        // A command whose declarations were hoisted into the enclosing statement's top-level WITH must
+        // not emit a WITH of its own (see CteHoister); only the root of the render emits it.
+        var ctes = _ctx.SuppressCtes ? null : cmd.Ctes;
 
         var sqlBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
         var selectBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();

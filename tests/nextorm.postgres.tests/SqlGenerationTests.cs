@@ -2013,6 +2013,63 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSingleTopLevelWith()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        // PostgreSQL renders the hoisted declaration tree as one flat `with`, with the nested `i`
+        // declared before the `o` that consumes it; still the ANSI form (no `recursive` needed here).
+        sql.Should().Be("with i as (select id from complex_entity\n where (id > 1)), o as (select id from i) select id from o");
+    }
+
+    [Fact]
+    public void Cte_ForwardSiblingReference_ShouldOrderDependencyBeforeConsumer()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // `b` reads the name `a` while `a` is declared only afterwards, so the hoist has to move the
+        // declaration of `a` ahead of `b` (declaration order alone is not the dependency order).
+        var a = ctx.From<IComplexEntity>().Where(x => x.Id > 1).Select(x => new { x.Id });
+        var b = ctx.From("a").Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("b", b).With("a", a).From("b").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with a as (select id from complex_entity");
+        sql.Should().Contain("), b as (select id from a)");
+        sql.Should().EndWith("select id from b");
+    }
+
+    [Fact]
+    public void Cte_NestedBodyJoinedToAnotherCte_ShouldHoistMergedDeclarations()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The joined side is a CTE scope whose body itself carries a nested declaration. Joining it
+        // merges its declarations into the outer statement (CteMerge.Merge), which the hoist then
+        // flattens into one top-level `with`.
+        var nested = ctx.With("i", ctx.From<ISimpleEntity>().Where(s => s.Id > 1).Select(s => new { s.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+        var right = ctx.With("o", nested).From("o");
+
+        var sql = SqlOf(ctx, e
+            .Join(right, (l, r) => l.Id == r.GetInt64("id"))
+            .Select(p => new { Id = p.Item1.Id, Other = p.Item2.GetInt64("id") }));
+
+        sql.Should().StartWith("with i as (select id from simple_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().Contain("from complex_entity as \"t1\" join o as \"t2\"");
+    }
+
+    [Fact]
     public void Cte_JoinedToAnotherCte_ShouldQualifyAliasColumns()
     {
         using var ctx = PostgresTestContext.Create();

@@ -46,4 +46,28 @@ public abstract partial class CommonTestSuite
 
         rows.Select(r => r.n).OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
     }
+
+    /// <summary>
+    /// A CTE whose body is itself a query carrying a CTE (a query built as <c>With(...).From(...)</c>) must
+    /// be hoisted into one top-level <c>WITH</c> and execute against every provider, including SQL Server,
+    /// whose T-SQL forbids a <c>WITH</c> nested inside a derived table.
+    /// </summary>
+    [Fact]
+    public void Cte_Nested_ShouldHoistAndReturnData()
+    {
+        var ctx = _sut.DataProvider;
+
+        var inner = ctx.With("i", _sut.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var rows = ctx
+            .With("o", inner)
+            .From("o")
+            .Select(t => new { id = t["id"].AsInt })
+            .ToList();
+
+        // complex_entity has ids 1..3; the inner CTE keeps 2 and 3 and the outer one passes them through.
+        rows.Select(r => r.id).OrderBy(id => id).Should().Equal(2, 3);
+    }
 }

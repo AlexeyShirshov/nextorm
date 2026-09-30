@@ -41,6 +41,12 @@ internal readonly record struct SqlBuildContext
     internal bool QuoteIdentifiers { get; init; }
     internal INamingConvention? NamingConvention { get; init; }
     internal bool IncludeNestedSources { get; init; }
+    /// <summary>
+    /// When <see langword="true"/> the command being rendered must not emit its own <c>WITH</c>: its
+    /// declarations have already been hoisted into the enclosing statement's top-level <c>WITH</c>
+    /// (see <see cref="CteHoister"/>). Set only while rendering the body of a hoisted declaration.
+    /// </summary>
+    internal bool SuppressCtes { get; init; }
     internal KeywordCase KeywordCase { get; init; }
     internal string ParameterNamePrefix { get; init; }
 

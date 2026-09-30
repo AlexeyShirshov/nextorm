@@ -253,6 +253,144 @@ public class PlanCacheTests
         }
     }
 
+    /// <summary>
+    /// A nested CTE (an inner declaration inside the outer CTE's body) is hoisted before the plan hash is
+    /// taken. A captured parameter still refreshes across executions, a freshly rebuilt equivalent chain
+    /// reuses the cached plan, and a structurally different nested definition does not.
+    /// </summary>
+    [Fact]
+    public void NestedCte_CapturedParam_FreshRebuildAndChangedDefinition()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // The same shape runs twice with a different captured value: the first keeps the seeded row
+            // (42 > 0), the second drops it (42 > 100). The inner CTE lives inside the outer body, so the
+            // parameter has to survive the hoist into the single top-level WITH.
+            foreach (var threshold in new[] { 0, 100 })
+            {
+                var captured = threshold;
+
+                var rows = ctx
+                    .With("o", ctx
+                        .With("i", ctx.From<ISimpleEntity>().Where(x => x.Id > captured).Select(x => new { x.Id }))
+                        .From("i")
+                        .Select(t => t["id"].AsInt))
+                    .From("o")
+                    .Select(t => t["id"].AsInt)
+                    .ToList();
+
+                if (threshold == 0)
+                    rows.Should().Equal(42);
+                else
+                    rows.Should().BeEmpty();
+            }
+
+            static IPreparedQueryCommand<int> PrepareMatching(IDataContext ctx)
+            {
+                var inner = ctx
+                    .With("i", ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }))
+                    .From("i")
+                    .Select(t => t["id"].AsInt);
+                var cmd = ctx.With("o", inner).From("o").Select(t => t["id"].AsInt);
+                return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
+            }
+
+            static IPreparedQueryCommand<int> PrepareDifferent(IDataContext ctx)
+            {
+                var inner = ctx
+                    .With("i", ctx.From<ISimpleEntity>().Where(x => x.Id > 1000).Select(x => new { x.Id }))
+                    .From("i")
+                    .Select(t => t["id"].AsInt);
+                var cmd = ctx.With("o", inner).From("o").Select(t => t["id"].AsInt);
+                return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
+            }
+
+            var first = PrepareMatching(ctx);
+            var second = PrepareMatching(ctx);
+
+            ReferenceEquals(first, second).Should()
+                .BeTrue("a freshly rebuilt equivalent nested CTE must reuse the cached plan");
+            first.ToList(ctx).Should().Equal(42);
+            second.ToList(ctx).Should().Equal(42);
+
+            var different = PrepareDifferent(ctx);
+
+            ReferenceEquals(first, different).Should()
+                .BeFalse("a changed nested CTE definition must not reuse the cached plan");
+            different.ToList(ctx).Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A nested CTE query (the inner declaration lives on the outer body's command) and the equivalent
+    /// flat <c>With(...).With(...)</c> chain hoist to the same declaration list and must share one cached
+    /// plan. The hoisted body used to keep its own nested <c>Ctes</c>, which the plan key folded a second
+    /// time, so the two equivalent forms keyed different plans.
+    /// </summary>
+    [Fact]
+    public void NestedCte_AndEquivalentChained_ShouldReuseCachedPlan()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            // Both forms close over the same test-method local, so they share one compiler-generated
+            // closure display class. Two separately declared captured parameters would compile to two
+            // different display-class types, and ExpressionPlanEqualityComparer.CompareMember (line 270)
+            // keys on that type rather than on the captured value; that pre-existing comparer property is
+            // unrelated to the CTE hoist under test, so the predicate is one shared closure here. The
+            // captured value is still exercised: it becomes a runtime parameter of the cached plan.
+            var threshold = 0;
+
+            var nestedInner = ctx
+                .With("i", ctx.From<ISimpleEntity>().Where(x => x.Id > threshold).Select(x => new { x.Id }))
+                .From("i")
+                .Select(t => t["id"].AsInt);
+            var cmdNested = ctx.With("o", nestedInner).From("o").Select(t => t["id"].AsInt);
+
+            var cmdChained = ctx
+                .With("i", ctx.From<ISimpleEntity>().Where(x => x.Id > threshold).Select(x => new { x.Id }))
+                .With("o", ctx.From("i").Select(t => t["id"].AsInt))
+                .From("o")
+                .Select(t => t["id"].AsInt);
+
+            var nested = ctx.GetPreparedQueryCommand(cmdNested, false, true, TestContext.Current.CancellationToken);
+            var chained = ctx.GetPreparedQueryCommand(cmdChained, false, true, TestContext.Current.CancellationToken);
+
+            ReferenceEquals(nested, chained).Should()
+                .BeTrue("the nested form and the equivalent chained form must share one cached plan");
+            nested.ToList(ctx).Should().Equal(42);
+            chained.ToList(ctx).Should().Equal(42);
+
+            // A structurally different definition (an unrelated constant, not the shared captured value)
+            // must not reuse the cached plan.
+            var cmdDifferent = ctx
+                .With("i", ctx.From<ISimpleEntity>().Where(x => x.Id > 1000).Select(x => new { x.Id }))
+                .With("o", ctx.From("i").Select(t => t["id"].AsInt))
+                .From("o")
+                .Select(t => t["id"].AsInt);
+            var different = ctx.GetPreparedQueryCommand(cmdDifferent, false, true, TestContext.Current.CancellationToken);
+
+            ReferenceEquals(nested, different).Should()
+                .BeFalse("a changed CTE definition must not reuse the cached plan");
+            different.ToList(ctx).Should().BeEmpty();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Prepared_ShouldNotPopulateThePlanCache()
     {

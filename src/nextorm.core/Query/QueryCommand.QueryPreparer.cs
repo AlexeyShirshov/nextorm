@@ -213,41 +213,60 @@ public partial class QueryCommand
 
         private static void PrepareCtes(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
         {
-            if (cmd._ctes is not { Count: > 0 }) return;
-
-            for (var (i, cnt) = (0, cmd._ctes.Count); i < cnt; i++)
+            if (cmd._ctes is { Count: > 0 })
             {
-                var cte = cmd._ctes[i];
-                if (!cte.Query.IsPrepared)
-                    cte.Query.PrepareCommand(noHash, cancellationToken);
+                // A CTE body may itself carry a WITH (a query built as With(...).From(...) passed as the
+                // body of another With). Flatten the declaration tree into one ordered list before the
+                // plan hash is taken and before the SQL pass, so every provider sees a single top-level
+                // WITH (SQL Server rejects WITH inside a derived table). Definitions are shared, not
+                // mutated.
+                cmd._ctes = CteHoister.Hoist(cmd._ctes);
 
-                // An INSERT ... SELECT used as a data-modifying CTE body renders its source select in
-                // the enclosing statement, so the source must be prepared like any other command.
-                if (cte.Mutation is { Source: { IsPrepared: false } mutationSource })
-                    mutationSource.PrepareCommand(noHash, cancellationToken);
+                for (var (i, cnt) = (0, cmd._ctes!.Count); i < cnt; i++)
+                {
+                    var cte = cmd._ctes[i];
+                    if (!cte.Query.IsPrepared)
+                        cte.Query.PrepareCommand(noHash, cancellationToken);
 
-                // A data-modifying CTE is a side-effecting statement: never share its plan, because the
-                // mutation's shape (row count, target columns) is not fully captured by the CTE query.
-                if (cte.IsDataModifying)
-                    cmd.Cache = false;
+                    // An INSERT ... SELECT used as a data-modifying CTE body renders its source select
+                    // in the enclosing statement, so the source must be prepared like any other command.
+                    if (cte.Mutation is { Source: { IsPrepared: false } mutationSource })
+                        mutationSource.PrepareCommand(noHash, cancellationToken);
+
+                    // A data-modifying CTE is a side-effecting statement: never share its plan, because
+                    // the mutation's shape (row count, target columns) is not fully captured by the CTE
+                    // query.
+                    if (cte.IsDataModifying)
+                        cmd.Cache = false;
+                }
             }
 
-            if (!cmd._dontCache && !noHash)
+            // A declaration nested anywhere else (a derived-table subquery, a correlated reference or a
+            // set-operation branch) cannot be hoisted into the top-level WITH; fail before emitting the
+            // non-portable nested form instead of rendering invalid SQL. Commands without declarations
+            // are checked too, so `From(<query that carries a WITH>)` fails fast rather than nesting.
+            CteHoister.EnsureNoUnhoistedCtes(cmd, cmd._ctes ?? Array.Empty<CteDefinition>());
+
+            if (cmd._ctes is not { Count: > 0 } || cmd._dontCache || noHash)
+                return;
+
+            XxHash32 hash = new();
+            unchecked
             {
-                XxHash32 hash = new();
-                unchecked
+                for (var (i, cnt) = (0, cmd._ctes.Count); i < cnt; i++)
                 {
-                    for (var (i, cnt) = (0, cmd._ctes.Count); i < cnt; i++)
-                    {
-                        var cte = cmd._ctes[i];
-                        hash.Add(cte.Name);
-                        hash.Add(cte.Recursive);
-                        if (cte.MaxRecursion is int maxRecursion)
-                            hash.Add(maxRecursion);
-                        hash.Add(cte.Query, cmd.GetQueryPlanEqualityComparer());
-                    }
-                    cmd.CtesPlanHash = hash.ToHashCode();
+                    var cte = cmd._ctes[i];
+                    hash.Add(cte.Name);
+                    hash.Add(cte.Recursive);
+                    if (cte.MaxRecursion is int maxRecursion)
+                        hash.Add(maxRecursion);
+                    // Hash the body without its own nested declarations: after the hoist above they are
+                    // already represented as separate top-level entries, and the equivalent flat
+                    // With(...).With(...) chain carries no nested list on the body. Including them here
+                    // would double-count and give the nested and flat forms different plan keys.
+                    hash.Add(cmd.GetQueryPlanEqualityComparer().GetCteBodyHashCode(cte.Query));
                 }
+                cmd.CtesPlanHash = hash.ToHashCode();
             }
         }
 

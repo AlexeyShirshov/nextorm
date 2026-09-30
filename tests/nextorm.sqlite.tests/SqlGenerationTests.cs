@@ -2018,6 +2018,112 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoOneTopLevelWith()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedBodyWithMultipleSiblings_ShouldPreserveDeclarationOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var first = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var second = ctx.From("first").Select(t => new { id = t["id"].AsInt });
+
+        var inner = ctx.With("first", first).With("second", second)
+            .From("second")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with first as (select id from complex_entity");
+        sql.Should().Contain("), second as (select id from first)");
+        sql.Should().Contain("), o as (select id from second)");
+        sql.Should().NotContain("with first as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedDepthThree_ShouldHoistEveryLevel()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var level3 = ctx.With("c", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("c").Select(t => new { id = t["id"].AsInt });
+        var level2 = ctx.With("b", level3).From("b").Select(t => new { id = t["id"].AsInt });
+        var level1 = ctx.With("a", level2).From("a").Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", level1).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with c as (");
+        sql.Should().Contain("), b as (select id from c)");
+        sql.Should().Contain("), a as (select id from b)");
+        sql.Should().Contain("), o as (select id from a)");
+    }
+
+    [Fact]
+    public void Cte_NestedBodyReusedByTwoCtes_ShouldDeclareSharedInnerOnce()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i").Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("a", inner).With("b", inner).From("a").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (");
+        sql.Should().Contain("), a as (select id from i)");
+        sql.Should().Contain("), b as (select id from i)");
+        sql.Should().EndWith("select id from a");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedSameNameDifferentDefinition_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("c", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("c").Select(t => new { id = t["id"].AsInt });
+
+        var scope = ctx.With("c", e.Where(x => x.Id > 100).Select(x => new { x.Id })).With("o", inner);
+
+        var act = () => SqlOf(ctx, scope.From("o").Select(t => new { id = t["id"].AsInt }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*'c'*");
+    }
+
+    [Fact]
+    public void Cte_NestedInsideDerivedTableSubquery_ShouldThrowBeforeRendering()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("c", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("c").Select(t => new { id = t["id"].AsInt });
+
+        var act = () => SqlOf(ctx, ctx.From(inner).Select(t => new { t.id }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*cannot be hoisted*");
+    }
+
+    [Fact]
     public void Cte_Source_ShouldSupportGroupByHavingOrderByLimit()
     {
         using var ctx = SqliteTestContext.Create();

@@ -48,7 +48,7 @@ internal static class SqlSourceRenderer
                 if (cte.Mutation is not null)
                     continue;
 
-                var walker = new SqlBuilder(ctx with { ParamMode = true, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = null });
+                var walker = new SqlBuilder(ctx with { ParamMode = true, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = null, SuppressCtes = true });
                 walker.MakeSelect(cte.Query);
             }
 
@@ -81,8 +81,10 @@ internal static class SqlSourceRenderer
                 {
                     // Each CTE is rendered in isolation: a fresh columns provider keeps the outer source
                     // list untouched, and a fresh alias provider makes alias numbering self-contained
-                    // (mirroring how UNION branches are rendered).
-                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider() });
+                    // (mirroring how UNION branches are rendered). Any declarations the body itself
+                    // carries have already been hoisted into this top-level WITH, so the body must not
+                    // emit a nested WITH of its own (invalid on SQL Server).
+                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider(), SuppressCtes = true });
                     withBuilder.Append(builder.MakeSelect(cte.Query));
                 }
 

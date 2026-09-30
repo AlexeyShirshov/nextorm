@@ -1564,6 +1564,66 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSinglePlainWith()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedRecursive_ShouldHoistAndOmitRecursiveKeyword()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var nums = ctx.WithRecursive("nums", anchor.UnionAll(step));
+
+        var inner = nums.From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new CteNumberRow { n = t["n"].AsInt }));
+
+        // T-SQL declares a recursive CTE with `with` alone, even after the nested declaration is hoisted.
+        sql.Should().StartWith("with nums as (");
+        sql.Should().NotContain("with recursive");
+        sql.Should().Contain("), o as (select n from nums)");
+    }
+
+    [Fact]
+    public void Cte_NestedRecursive_WithMaxRecursion_ShouldKeepOptionAfterHoist()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var nums = ctx.WithRecursive("nums", anchor.UnionAll(step), 75);
+
+        var inner = nums.From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new CteNumberRow { n = t["n"].AsInt }));
+
+        // The recursion-depth option belongs to the hoisted recursive declaration and stays on the
+        // flattened statement.
+        sql.Should().StartWith("with nums as (");
+        sql.Should().Contain("), o as (select n from nums)");
+        sql.Should().EndWith("option (maxrecursion 75)");
+        sql.Should().NotContain("with recursive");
+    }
+
+    [Fact]
     public void RowNumber_ShouldEmitOverWithPartitionAndOrder()
     {
         using var ctx = SqlServerTestContext.Create();

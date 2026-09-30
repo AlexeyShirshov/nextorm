@@ -86,12 +86,21 @@ var rows = dataContext
 with first as (select id from complex_entity where (id > 1)), second as (select id from first) select id from second
 ```
 
-> **Nested CTEs are not hoisted.** A CTE whose body itself carries a `WITH` — a query built as
-> `dataContext.With(...).From(...)` and passed as the body of another `With` — is rendered literally
-> nested (`with o as (with i as (...) select ... from i) select ... from o`) instead of being flattened
-> into the outer `with`. That form is portable to PostgreSQL, SQLite and MySQL/MariaDB but **not** to
-> SQL Server, whose T-SQL forbids `WITH` inside a derived table. Declare the dependency as a **chained**
-> (top-level) CTE instead, as above: nextorm then emits one flat `with i as (...), o as (select ... from i)`.
+> **Nested CTEs are hoisted automatically.** A CTE whose body itself carries a `WITH` — a query built as
+> `dataContext.With(...).From(...)` and passed as the body of another `With` — is flattened into a single
+> top-level `with` instead of being rendered literally nested. The hoister emits each dependency before
+> the CTE that consumes it, even when the dependency is a sibling declared later, and keeps the original
+> relative order of declarations that do not depend on each other. A declaration is listed only once when
+> the same `CteDefinition` instance is referenced more than once; two different instances that share a
+> name are rejected with an `InvalidOperationException` (a single `WITH` cannot bind one name to two
+> definitions).
+>
+> Every provider then sees the flat, portable form. In particular, SQL Server always emits a plain
+> `with name as (...)` list — never `with recursive`; T-SQL declares a recursive CTE with `with` alone.
+>
+> A declaration that cannot be moved to the top-level `WITH` — one nested inside a derived-table subquery,
+> a correlated reference or a set-operation branch — fails fast with an `InvalidOperationException` before
+> any SQL is rendered, rather than emitting the non-portable nested form.
 
 `From(CteDefinition)` is equivalent to `From(definition.Name)` and is convenient when you kept the scope
 instead of the name:

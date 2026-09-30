@@ -2975,6 +2975,28 @@ public class SqlGenerationTests
         act.Should().Throw<BuildSqlCommandException>();
     }
 
+    [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSingleTopLevelWith()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // ClickHouse declares every CTE with `with` (ClickHouseDialect.MakeWith drops the RECURSIVE
+        // modifier it does not support); a nested non-recursive declaration hoists into one flat top-level
+        // `with` instead of the nested `with i as (with ...)` shape.
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+        sql.Should().NotContain("with recursive");
+    }
+
 }
 
 [SqlTable("unsigned_cast")]

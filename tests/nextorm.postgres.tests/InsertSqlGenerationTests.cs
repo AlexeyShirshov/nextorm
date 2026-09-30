@@ -466,6 +466,20 @@ public class InsertSqlGenerationTests
     }
 
     [Fact]
+    public void DataModifyingCte_NestedReadCteInBodyWithoutPreceding_ShouldHoistBoth()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var source = ctx.With("src", ctx.From<InsertSource>().Select(s => new { s.Name, s.Age })).From("src");
+
+        var insert = ctx.InsertInto<IInsertEntity>()
+            .Values(source, a => new { Name = a.GetString("Name"), Age = a.GetInt32("Age") })
+            .Returning(x => new { x.Id });
+
+        SqlOf(ctx, ctx.With("ins", insert).From("ins").Select(r => new { r.Id }))
+            .Should().Be("with src as (select Name, Age from insert_source), ins as (insert into insert_entity (name, age) select Name, Age from src returning id) select id from ins as \"t1\"");
+    }
+
+    [Fact]
     public void InsertFromMutationCte_ShouldHoistWithBeforeInsert()
     {
         using var ctx = PostgresTestContext.Create();
@@ -492,6 +506,25 @@ public class InsertSqlGenerationTests
             .ToSql());
 
         sql.Should().Be("with c as (select Name, Age from insert_source) insert into insert_entity (name, age) select name, age from c");
+    }
+
+    [Fact]
+    public void ValuesQuery_WithNestedReadCte_ShouldHoistOneFlatWithBeforeInsert()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The INSERT ... SELECT source is a CTE whose body itself carries a nested declaration; the
+        // source render hoists the whole tree into one flat WITH before the INSERT.
+        var nested = ctx.With("i", ctx.From<InsertSource>().Select(s => new { s.Name, s.Age }))
+            .From("i")
+            .Select(t => new { Name = t.GetString("Name"), Age = t.GetInt32("Age") });
+        var source = ctx.With("o", nested).From("o");
+
+        var sql = Normalize(ctx.InsertInto<IInsertEntity>()
+            .Values(source, a => new { Name = a.GetString("name"), Age = a.GetInt32("age") })
+            .ToSql());
+
+        sql.Should().Be("with i as (select Name, Age from insert_source), o as (select Name, Age from i) insert into insert_entity (name, age) select name, age from o");
     }
 
     [Fact]

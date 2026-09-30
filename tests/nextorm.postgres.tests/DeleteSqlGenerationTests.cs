@@ -168,6 +168,28 @@ public class DeleteSqlGenerationTests
     }
 
     [Fact]
+    public void DeleteJoin_FromNestedCte_ShouldHoistOneFlatWith()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The joined side is a CTE whose body itself carries a nested declaration; the multi-table
+        // DELETE has to hoist the whole tree (QueryPlanner.RenderDeleteJoin at line 324).
+        var nested = ctx.With("i", ctx.From<IComplexEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+        var scope = ctx.With("o", nested);
+
+        var sql = ctx.From<IComplexEntity>()
+            .Join(scope.From("o"), (t, c) => t.Id == c["id"].AsInt)
+            .ToSql();
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().Contain("delete from complex_entity as \"t1\" using o as \"t2\" where t1.id = cast(t2.id as bigint)");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    [Fact]
     public void DeleteJoin_ThreeTables_ShouldChainJoins()
     {
         using var ctx = PostgresTestContext.Create();

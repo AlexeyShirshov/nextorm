@@ -1084,4 +1084,25 @@ public class SqlGenerationTests
         sql.Should().Contain("limit 20 offset 1");
     }
 
+    [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSingleTopLevelWith()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // MySQL 8 / MariaDB 10.2+ accept the ANSI `with` form (SqlDialectBase.MakeWith), so the nested
+        // declaration hoists into one flat top-level `with` instead of the (invalid on MySQL 5.7) nested
+        // `with i as (with ...)` shape.
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+    }
+
 }

@@ -1301,6 +1301,54 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
+
+    /// <summary>
+    /// #116 reproducer on ClickHouse: an inner CTE declared inside the body of an outer CTE must be
+    /// hoisted into a single top-level <c>with</c> (a <c>with</c> nested inside a derived table is
+    /// invalid), execute, and return the same rows as the equivalent flat <c>With(...).With(...)</c>
+    /// chain.
+    /// </summary>
+    [Fact]
+    public void Cte_NestedOnClickHouse_ShouldHoistAndReturnData()
+    {
+        var ctx = _sut.DataProvider;
+
+        // Outer CTE "o" whose body is itself a query carrying CTE "i".
+        var inner = ctx.With("i", _sut.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id }))
+            .From("i")
+            .Select(t => new { id = t.GetInt64("id") });
+
+        var nested = ctx.With("o", inner)
+            .From("o")
+            .Select(t => new { id = t.GetInt64("id") });
+
+        // The equivalent flat chain: both declarations at the top level, "o" reads "i" directly.
+        var flat = ctx
+            .With("i", _sut.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id }))
+            .With("o", ctx.From("i").Select(t => new { id = t.GetInt64("id") }))
+            .From("o")
+            .Select(t => new { id = t.GetInt64("id") });
+
+        var nestedSql = SqlOf(ctx, nested);
+        var flatSql = SqlOf(ctx, flat);
+
+        // Exactly one top-level `with`; the inner declaration must not stay nested.
+        System.Text.RegularExpressions.Regex.Matches(nestedSql, @"\bwith\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count.Should().Be(1);
+        nestedSql.Should().NotContain("(with");
+        flatSql.Should().NotContain("(with");
+
+        var nestedRows = nested.ToList().Select(r => r.id).OrderBy(id => id).ToList();
+        var flatRows = flat.ToList().Select(r => r.id).OrderBy(id => id).ToList();
+
+        // complex_entity ids are 1..3; the inner CTE keeps 2 and 3, the outer one passes them through.
+        nestedRows.Should().Equal(flatRows).And.Equal(2, 3);
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
+                cmd, createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken))
+            .DbCommand.CommandText.Replace("\r\n", "\n");
 }
 
 [SqlTable("uint64_entity")]
