@@ -435,7 +435,7 @@ internal static class SqlSourceRenderer
             return MakeXmlNodes(in ctx, from, entityType);
 
         if (from.RawSqlSource is not null)
-            return MakeRawSqlSource(in ctx, from, needAlias, entityType);
+            return MakeRawSqlSource(in ctx, from, needAlias, entityType, hasJoins);
 
         if (from.TableExpressionOverride is not null)
             return MakeTableExpression(in ctx, from, options, entityType);
@@ -592,7 +592,7 @@ internal static class SqlSourceRenderer
     /// bound into the enclosing command in both the parameter and the SQL pass, so the order matches.
     /// Columns are read through <see cref="TableAlias"/> accessors.
     /// </summary>
-    private static string MakeRawSqlSource(in SqlBuildContext ctx, FromExpression from, bool needAlias, Type? entityType)
+    private static string MakeRawSqlSource(in SqlBuildContext ctx, FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
     {
         if (!ctx.Dialect.SupportsRawSqlSource)
             throw new NotSupportedException("Raw SQL as a FROM source is not supported by this SQL dialect");
@@ -619,8 +619,15 @@ internal static class SqlSourceRenderer
 
             if (needAlias || ctx.Dialect.RequireSubqueryAlias)
             {
+                // A joined command exposes the Projection<T1, …> type as the command's entity type while
+                // the physical main source is its first item. Register that first item (mirroring the
+                // physical-table branch) so a main-source predicate re-rooted onto Item1 resolves here.
                 if (entityType is not null)
-                    ctx.ColumnsProvider.Add(entityType, false);
+                    ctx.ColumnsProvider.Add(
+                        hasJoins && typeof(IProjection).IsAssignableFrom(entityType)
+                            ? entityType.GetGenericArguments()[0]
+                            : entityType,
+                        false);
 
                 sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
             }

@@ -457,3 +457,36 @@ no connection opened; the in-memory arms use `InMemoryDataContext`). Post-fix th
 into `MERGE ... ON` — paid once per command, not per row. `FullMerge_IgnoreFilters_SqlBuild` and
 `InMemory_NoFilter` are **unchanged** (the filter render is skipped when inactive or `IgnoreFilters`);
 `InMemory_ActiveFilter` becomes the metadata capability refusal (no source read, no interceptor events).
+
+## Results 2026-10-01 — issue #124 (global filters on bound raw SQL sources)
+
+Final acceptance re-run on the same host/config/case set as the D0 pre-#124 baseline
+(AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8,
+`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`, **7** cases, **0** failures).
+External shell wall clock **~51 s** (baseline 42.6 s); BDN `Global total time` under the 4 min budget.
+
+| Metric | D0 pre-#124 baseline | Final (#124) |
+|--------|----------------------|--------------|
+| Wall clock | 42.6 s | ~51 s |
+| Cached/prepared ratio (`Cached_ToList / Prepared_ToList`) | 1.94 | **2.03** |
+| Allocated ratio | 7.88 | **7.90** |
+| `Cached_PlanOnly_Param` ratio | 0.57 | **0.57** |
+
+Both runs are **same-host** and the deltas are within `ShortRun` noise: the tracked cached-vs-prepared
+ratio moves +4.6 % (time, 1.94 → 2.03), the allocated ratio +0.3 %, and the plan-only ratio is
+unchanged at 0.57 — all far below the 20 % investigation threshold. Verdict: within noise,
+**no regression**.
+
+### Raw-plan reuse — `RawSourcePlanReuseBenchmark` (category `raw-plan-reuse`)
+
+New focused, non-acceptance benchmark for the `FromExpressionPlanEqualityComparer` seam that #124
+tightened: a raw `FromSql(sql)` source is identified by **reference** in the plan key
+(`ReferenceEquals(x.RawSqlSource, y.RawSqlSource)`), so two independently-constructed
+`FromSql(sql)` sources no longer share a cached plan, while reusing the same builder instance still
+hits the cache. SQLite renders the statement only (`:memory:`, never opened). Reused warm
+(`Unbound_Reused_Warm` baseline) **111.4 µs / 158.0 KB**; bound reused warm **1.45×** time / 1.23×
+alloc; fresh unbound cold **2.46×** / 2.40×; fresh bound cold **3.00×** / 2.87× — a
+**1.45×–3.00×** conservative warm/cold spread. The conservative reference-identity key is the
+deliberate price of isolation: independent same-SQL sources are a guaranteed cache miss by
+construction. A `GlobalSetup` guard fails the run if independent raw sources share a cached command
+or a reused source misses. Command `--filter '*RawSourcePlanReuseBenchmark*'`.

@@ -222,6 +222,55 @@ select t1.id, t2.id from simple_entity as "t1" join (select id from complex_enti
 [`SupportsRawSqlSource`](xref:NextORM.Core.ISqlDialect.SupportsRawSqlSource); его включают все SQL-провайдеры,
 а SQLite опускает псевдоним производной таблицы, когда источник не присоединяется.
 
+### Привязка сырого источника к метаданным сущности
+
+По умолчанию сырой источник `FROM` передаётся как есть, и [глобальный фильтр запросов](../advanced/query-filters.md)
+к нему не применяется — nextorm не знает, какие столбцы раскрывает фрагмент. Вызовите
+[`BindEntity<TEntity>`](xref:NextORM.Core.EntityBuilderExtensions.BindEntity``1(NextORM.Core.EntityBuilder{NextORM.Core.TableAlias},System.Collections.Generic.IReadOnlyCollection{System.String}))
+**первой** операцией над источником, чтобы объявить тип сущности и выходные столбцы, которые возвращает
+фрагмент; тогда каждый активный фильтр, все столбцы которого объявлены, применяется по мере возможности,
+а фильтр с отсутствующими столбцами пропускается с предупреждением `RawSourceFilterSkipped` на категории
+логгера `NextORM.QueryFilters` (уровень `Warning`, причина `MissingColumns`; в сообщение попадают **физические
+имена mapped-столбцов**, которые читает фильтр). При пустом объявленном списке столбцов фильтр с доказанной
+пустой зависимостью применяется, а фильтр, зависящий от столбца, или неопределённый фильтр пропускается с
+причиной `UndeterminedColumns`. Ничего из этого не бросает исключение:
+
+```csharp
+public static EntityBuilder<TEntity> BindEntity<TEntity>(
+    this EntityBuilder<TableAlias> source,
+    IReadOnlyCollection<string> availableColumns)
+```
+
+```csharp
+var rows = dataContext
+    .FromSql("select id, tenant_id from complex_entity where id > @min", new { min = 5 })
+    .BindEntity<ComplexEntity>(["id", "tenant_id"])
+    .Where(t => t["id"].AsInt > 10)
+    .ToList();
+```
+
+- Имена столбцов — это **выходные/SQL-имена** сырого списка `select` (сконфигурированное отображение
+  столбца имеет приоритет над авто-именем), сравниваются регистронезависимо.
+- `BindEntity` должен быть первым вызовом после `FromSql`/`From(string)`: более поздний вызов (после
+  `Where`/`Select`/`Join`/проекции) бросает `InvalidOperationException`, а другая форма источника или
+  привязка к `TableAlias` — `NotSupportedException`.
+- Список — это объявление вызывающего, а не зондирование схемы: nextorm не разбирает SQL, не добавляет и
+  не переименовывает столбцы и не проверяет, что столбцы действительно существуют.
+- Привязка применяет фильтры лишь по мере возможности и **не** является гарантией безопасности: фильтр,
+  столбцы которого вы не указали, молча пропускается, поэтому принудительное ограничение строк держите в
+  самом SQL.
+- Привязка не относится к `WithSql`/`PrepareFromSql`/`ExecuteRaw`, а провайдер in-memory по-прежнему
+  отклоняет `FromSql` с `NotSupportedException`.
+
+Привязка действует на источник: присоединённый сырой источник использует собственную привязку
+`BindEntity<TEntity>` и собственные объявленные столбцы (никогда — привязку главного источника или другого
+вхождения), а его совместимые фильтры добавляются в `ON` именно этого соединения. Фильтры главного источника
+всегда вычисляются по его собственной привязке; в присоединённой команде они перепривязываются к главному
+псевдониму проекции `Item1` и помещаются в `WHERE`. `SourceOrdinal` обозначает пропущенный источник — `0`
+для главного источника и `j + 1` для соединения с индексом `j`, при этом считаются все соединения, привязанные
+и непривязанные. Соединение `CROSS`/`CROSS APPLY` не имеет `ON`, поэтому у привязанного источника на таком
+соединении совместимые фильтры помещаются в `WHERE`, и nextorm никогда не выдумывает `ON`.
+
 ## Выполнение сырых команд (`ExecuteRaw`)
 
 [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) и [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) сохраняют типизированный запрос и подменяют его часть. Когда инструкция вообще не является отображаемым запросом — DDL/DML-команда, хранимая процедура или команда, возвращающая несколько наборов результатов, — используйте `ExecuteRaw` (произвольный текст команды) или `ExecuteProcedure` (процедура по имени), которые выполняют команду и возвращают [`ProcedureResult`](xref:NextORM.Core.ProcedureResult):

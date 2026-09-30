@@ -106,7 +106,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             GetDialect,
             GetType(),
             new ProviderHooks(MapColumn, _createParam, CreateCommand),
-            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData),
+            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
             _interceptors);
     }
 

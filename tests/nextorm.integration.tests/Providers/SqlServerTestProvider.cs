@@ -55,8 +55,15 @@ internal sealed class SqlServerTestProvider : ITestProvider
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";
 
-    public IDataContext CreateContext() =>
-        new SqlServerDataContext(SqlServerContainer.ConnectionString, new DataContextBuilder());
+    public IDataContext CreateContext() => CreateContext(null);
+
+    public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
+    {
+        var builder = new DataContextBuilder();
+        if (loggerFactory is not null)
+            builder = builder.UseLoggerFactory(loggerFactory);
+        return new SqlServerDataContext(SqlServerContainer.ConnectionString, builder);
+    }
 
     public void EnsureSeeded()
     {

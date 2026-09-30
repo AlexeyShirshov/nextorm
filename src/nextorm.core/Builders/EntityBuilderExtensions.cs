@@ -11,6 +11,84 @@ namespace NextORM.Core;
 /// </summary>
 public static class EntityBuilderExtensions
 {
+    /// <summary>
+    /// Binds a direct raw source (<see cref="DataContextExtensions.FromSql"/> or
+    /// <see cref="DataContextExtensions.From(IDataContext, string)"/>) to an entity type so its global
+    /// query filters may be applied to the source. <typeparamref name="TEntity"/> selects the effective
+    /// metadata (a configured mapping wins over the auto mapping).
+    /// <para>
+    /// The caller also declares the output columns the raw SQL exposes; each filter is applied
+    /// best-effort against that list, and a filter whose columns are missing is skipped rather than
+    /// failing the query. Binding neither adds nor renames output columns and is <b>not</b> a security
+    /// guarantee: a skipped filter means its predicate does not run.
+    /// </para>
+    /// <para>
+    /// Only direct named/raw sources qualify, and the call must be the first operation after the source
+    /// is created (before predicates, projection or joins). The receiver is not mutated; a new typed
+    /// builder is returned.
+    /// </para>
+    /// <para>
+    /// A filter whose declared columns are all present is injected; a filter with missing columns is
+    /// skipped rather than failing the query. With an empty declared-column list, a filter with a proven
+    /// zero-column dependency is applied, while a column-dependent or undetermined filter is skipped.
+    /// One <c>RawSourceFilterSkipped</c> warning is logged per skipped filter on the
+    /// <c>NextORM.QueryFilters</c> category (level <c>Warning</c>, reasons <c>MissingColumns</c> /
+    /// <c>UndeterminedColumns</c>; the missing names are the physical mapped column names) while a plan is
+    /// prepared on a cache miss; a cache hit does not re-emit it. The message carries no SQL text, table
+    /// names, parameter or captured values.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose metadata and filters are used.</typeparam>
+    /// <param name="source">
+    /// The direct raw/named source builder created by <c>FromSql</c> or <c>From(string)</c>. The receiver
+    /// must not be composed: a predicate, projection, join or other query operator rejects the call. A CTE
+    /// declaration (<c>Ctes</c>) or a derived-table sub-query hint (<c>SubQueryHint</c>) is source metadata,
+    /// not composition, and does not disqualify the binding.
+    /// </param>
+    /// <param name="availableColumns">The output columns the raw source exposes; names are compared case-insensitively.</param>
+    /// <returns>A new typed builder over the same raw source, carrying the binding.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="availableColumns"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="availableColumns"/> contains a <see langword="null"/> or blank entry.</exception>
+    /// <exception cref="NotSupportedException">The receiver is not a direct raw/named source, or <typeparamref name="TEntity"/> is exactly <see cref="TableAlias"/> (a mapped subclass of <see cref="TableAlias"/> is accepted).</exception>
+    /// <exception cref="InvalidOperationException">The source has already been composed (predicate, projection, join or another query operator).</exception>
+    public static EntityBuilder<TEntity> BindEntity<TEntity>(this EntityBuilder<TableAlias> source, IReadOnlyCollection<string> availableColumns)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(availableColumns);
+
+        var binding = new FromExpression.EntityBinding(typeof(TEntity), NormalizeColumns(availableColumns));
+
+        // Resolve the mapping eagerly so binding is never a silent no-op: a configured mapping wins over
+        // the auto mapping, an unmapped type is auto-resolved, and a broken mapping fails here instead of
+        // producing a query whose filters were silently dropped. The metadata is not frozen into the
+        // binding; the filter resolver re-resolves it per preparation, so DataContextCache.Clear() is
+        // honored. TableAlias is rejected later with NotSupportedException and has no mapping to resolve.
+        if (typeof(TEntity) != typeof(TableAlias))
+            _ = DataContextExtensions.ResolveMetadata(typeof(TEntity));
+
+        return source.BindEntitySource<TEntity>(binding);
+    }
+
+    /// <summary>Copies, deduplicates and case-insensitively sorts the declared output columns.</summary>
+    /// <param name="availableColumns">The caller-declared columns.</param>
+    /// <returns>An owned, normalized column list.</returns>
+    /// <exception cref="ArgumentException">An entry is <see langword="null"/> or blank.</exception>
+    private static string[] NormalizeColumns(IReadOnlyCollection<string> availableColumns)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in availableColumns)
+        {
+            if (string.IsNullOrWhiteSpace(column))
+                throw new ArgumentException("Available columns must be non-null and non-blank.", nameof(availableColumns));
+            set.Add(column);
+        }
+
+        var result = new string[set.Count];
+        set.CopyTo(result);
+        Array.Sort(result, StringComparer.OrdinalIgnoreCase);
+        return result;
+    }
+
     /// <summary>Writes the builder's <c>Select</c> result as CSV to <paramref name="destination"/>.</summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>

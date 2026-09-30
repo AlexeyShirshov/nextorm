@@ -27,6 +27,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
     private readonly Func<string, DbCommand> _createCommand;
     private readonly ILogger? _resultSetEnumeratorLogger;
+    private readonly ILogger? _queryFilterLogger;
     private readonly bool _logSensitiveData;
     private readonly InterceptorHooks _interceptors;
     private readonly Func<CteMutation, SqlBuildContext, string> _renderMutationBody;
@@ -47,6 +48,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         _createParam = hooks.CreateParam;
         _createCommand = hooks.CreateCommand;
         _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
+        _queryFilterLogger = logging.QueryFilterLogger;
         _logSensitiveData = logging.LogSensitiveData;
         _interceptors = interceptors;
         _renderMutationBody = RenderMutationBody;
@@ -599,6 +601,28 @@ internal sealed class QueryPlanner : IQueryPlanner
                     "Pass JoinOptions.SuppressCartesianWarning() to silence this warning.");
             }
 
+            // Raw-source global-filter skips are collected during preparation and emitted here, on the
+            // cache miss only: the list is cleared before logging so a cache hit never re-emits, and a
+            // re-preparation replaces (never appends to) the previous list. The warning carries only the
+            // entity name, filter key, reason and declared column names — never SQL text, table names,
+            // parameters or captured values.
+            if (queryCommand.PendingRawSourceFilterSkips is { Count: > 0 } rawSourceFilterSkips)
+            {
+                queryCommand.PendingRawSourceFilterSkips = null;
+
+                for (var i = 0; i < rawSourceFilterSkips.Count; i++)
+                {
+                    var skip = rawSourceFilterSkips[i];
+                    _queryFilterLogger?.LogWarning(
+                        "RawSourceFilterSkipped: EntityType={EntityType}; SourceOrdinal={SourceOrdinal}; FilterKey={FilterKey}; Reason={Reason}; MissingColumns={MissingColumns}",
+                        skip.EntityType,
+                        skip.SourceOrdinal,
+                        skip.FilterKey,
+                        skip.Reason,
+                        skip.MissingColumns);
+                }
+            }
+
             var (sql, @params) = ext is null
                 ? MakeSelectInternal()
                 : (ext.ManualSql, ext.MakeParams?.Invoke());
@@ -675,6 +699,12 @@ internal sealed class QueryPlanner : IQueryPlanner
 #if DEBUG
             if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Query plan cache hit");
 #endif
+
+            // A diagnostic collected while preparing a command that then hit the plan cache belongs to a
+            // preparation whose SQL was already built (and warned about) by the earlier miss. Discarding
+            // it here keeps the list from surviving on the command, where a later uncached call on the
+            // same command would replay it outside its owning preparation.
+            queryCommand.PendingRawSourceFilterSkips = null;
 
             var compiledQuery = (DbPreparedQueryCommand<TResult>)planCache;
 

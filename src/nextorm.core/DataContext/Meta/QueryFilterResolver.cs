@@ -20,7 +20,15 @@ internal static class QueryFilterResolver
         if (entityType is null || scope.All)
             return Array.Empty<IQueryFilterMetadata>();
 
-        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+        // Resolve through the normal path (a configured mapping wins over the auto mapping) instead of
+        // requiring DataContextCache.Metadata to have been primed by an earlier From<T>: a source bound
+        // with BindEntity must get its filters on first use and after DataContextCache.Clear() has
+        // dropped the metadata. Synthetic source shapes (a raw TableAlias, a joined projection) have no
+        // entity filters and must not be auto-resolved into the metadata caches.
+        var metadata = entityType == typeof(TableAlias) || typeof(IProjection).IsAssignableFrom(entityType)
+            ? null
+            : DataContextExtensions.ResolveMetadata(entityType);
+        if (metadata is null)
             return Array.Empty<IQueryFilterMetadata>();
 
         var declared = metadata.Filters;

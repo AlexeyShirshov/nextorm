@@ -59,6 +59,18 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (!string.Equals(x.ServerOverride, y.ServerOverride, StringComparison.Ordinal)) return false;
         if (!string.Equals(x.TableExpressionOverride, y.TableExpressionOverride, StringComparison.Ordinal)) return false;
 
+        // The entity binding (its entity type, effective metadata and declared column shape) changes which
+        // filters are injected, so it must be part of the key before the table-name short-circuit below
+        // would treat two bindings of the same source as equal and share a plan.
+        if (!BindingEquals(x.SourceBinding, y.SourceBinding)) return false;
+
+        // A raw fragment has no structural identity here (its SQL and parameters are opaque to the
+        // comparer): two raw sources are the same source only when they are the same instance. Without
+        // this branch the fallback below compared the two null subqueries and treated every raw source as
+        // equal, letting unrelated FromSql queries share a cached plan.
+        if (x.RawSqlSource is not null || y.RawSqlSource is not null)
+            return ReferenceEquals(x.RawSqlSource, y.RawSqlSource);
+
         // if (x.TableAlias != y.TableAlias) return false;
         if (!string.Equals(x.SubQueryHint, y.SubQueryHint, StringComparison.Ordinal)) return false;
 
@@ -177,8 +189,74 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         return hash.ToHashCode();
     }
 
+    private static bool BindingEquals(FromExpression.EntityBinding? x, FromExpression.EntityBinding? y)
+    {
+        if (x is null || y is null)
+            return x is null && y is null;
+
+        if (x.EntityType != y.EntityType)
+            return false;
+
+        // Two different effective mappings of the same entity type produce different filter predicates,
+        // so compare the metadata instance (not just the entity type) to keep their plans isolated.
+        if (!ReferenceEquals(EffectiveMetadata(x.EntityType), EffectiveMetadata(y.EntityType)))
+            return false;
+
+        var xColumns = x.AvailableColumns;
+        var yColumns = y.AvailableColumns;
+        if (xColumns.Count != yColumns.Count)
+            return false;
+
+        for (var i = 0; i < xColumns.Count; i++)
+        {
+            if (!StringComparer.OrdinalIgnoreCase.Equals(xColumns[i], yColumns[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static IEntityMetadata? EffectiveMetadata(Type entityType)
+        => DataContextCache.Metadata.TryGetValue(entityType, out var metadata) ? metadata : null;
+
+    private static void AddBindingHash(ref System.HashCode hash, FromExpression.EntityBinding? binding)
+    {
+        if (binding is null)
+        {
+            hash.Add(0);
+            return;
+        }
+
+        hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(binding.EntityType));
+        var metadata = EffectiveMetadata(binding.EntityType);
+        hash.Add(metadata is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(metadata));
+        hash.Add(binding.AvailableColumns.Count);
+
+        for (var i = 0; i < binding.AvailableColumns.Count; i++)
+            hash.Add(binding.AvailableColumns[i], StringComparer.OrdinalIgnoreCase);
+    }
+
     private int GetBaseHash(FromExpression obj)
     {
+        // A raw fragment is identified by reference (see Equals) and carries its own binding identity.
+        if (obj.RawSqlSource is not null)
+        {
+            var rawHash = new System.HashCode();
+            rawHash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.RawSqlSource));
+            AddBindingHash(ref rawHash, obj.SourceBinding);
+            return rawHash.ToHashCode();
+        }
+
+        // A named table with an entity binding is identified by its name plus the binding identity: two
+        // bindings of the same table must not hash to the same plan key.
+        if (obj.SourceBinding is not null)
+        {
+            var boundHash = new System.HashCode();
+            boundHash.Add(obj.Table, StringComparer.Ordinal);
+            AddBindingHash(ref boundHash, obj.SourceBinding);
+            return boundHash.ToHashCode();
+        }
+
         if (obj.LinqSource is not null)
             return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.LinqSource);
 

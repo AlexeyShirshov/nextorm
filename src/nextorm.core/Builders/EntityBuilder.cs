@@ -2275,6 +2275,85 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.Ctes = Ctes;
     }
     /// <summary>
+    /// Creates a typed copy of this raw-source builder with <paramref name="binding"/> attached to the
+    /// source, enforcing the <c>BindEntity</c> guards. Used by
+    /// <see cref="EntityBuilderExtensions.BindEntity{TEntity}(EntityBuilder{TableAlias}, IReadOnlyCollection{string})"/>.
+    /// </summary>
+    /// <typeparam name="TResult">The bound entity type.</typeparam>
+    /// <param name="binding">The binding to attach.</param>
+    /// <returns>A new typed builder; the original is not mutated.</returns>
+    /// <exception cref="NotSupportedException">The receiver is not a direct <c>FromSql</c>/<c>From(string)</c> source, or <typeparamref name="TResult"/> is exactly <see cref="TableAlias"/> (a mapped subclass is accepted).</exception>
+    /// <exception cref="InvalidOperationException">The source has already been composed (predicate, projection, join or another query operator); a CTE declaration or a sub-query hint is not composition and does not reject the call.</exception>
+    internal EntityBuilder<TResult> BindEntitySource<TResult>(FromExpression.EntityBinding binding)
+    {
+        ArgumentNullException.ThrowIfNull(binding);
+
+        if (typeof(TResult) == typeof(TableAlias))
+            throw new NotSupportedException("An entity binding cannot target TableAlias; bind a mapped entity type instead.");
+
+        var raw = _from;
+        var isRawSql = raw?.RawSqlSource is not null;
+        var isNamedTable = raw is null && !string.IsNullOrEmpty(_table);
+        if (!isRawSql && !isNamedTable)
+            throw new NotSupportedException("BindEntity can only be applied to a direct FromSql or From(string) source.");
+
+        if (HasCompositionState)
+            throw new InvalidOperationException("BindEntity must be called immediately after FromSql/From(string), before any predicate, projection, join or other query operator.");
+
+        var bound = isRawSql
+            ? raw!.WithEntityBinding(binding)
+            : new FromExpression(_table!).WithEntityBinding(binding);
+
+        var dst = new EntityBuilder<TResult>(_dataProvider) { Logger = Logger };
+        CopyProjectionIndependentStateTo(dst);
+        dst._from = bound;
+        dst._table = null;
+        return dst;
+    }
+    /// <summary>
+    /// Whether the builder has been composed past its source (filter, projection, join, grouping,
+    /// paging or another query operator), which makes a later <c>BindEntity</c> invalid.
+    /// </summary>
+    private bool HasCompositionState =>
+        _condition is not null
+        || _query is not null
+        || _joins is { Count: > 0 }
+        || _group is not null
+        || _having is not null
+        || _sorting is { Count: > 0 }
+        || _joinIntos is { Count: > 0 }
+        || _loadSpecs is { Count: > 0 }
+        || _limitBy is not null
+        || _distinctOn is not null
+        || _extremeRow is not null
+        || _preWhere is not null
+        || _arrayJoins is { Count: > 0 }
+        || _windows is { Count: > 0 }
+        || _tableNameOverride is not null
+        || _schemaOverride is not null
+        || _databaseOverride is not null
+        || _serverOverride is not null
+        || _tableExpression is not null
+        || IsDistinct
+        || _singleQuery
+        || !_filterScope.IsEmpty
+        || _tablesample is not null
+        || _temporal is not null
+        || _rowLock is not null
+        || TableHints is { Count: > 0 }
+        || IndexHints is { Count: > 0 }
+        || SettingsList is { Count: > 0 }
+        || GroupingType != NextORM.Core.GroupingType.None
+        || GroupingSets is { Count: > 0 }
+        || GroupByWithTotals
+        || IsFinal
+        || SampleRatio is not null
+        || SampleOffset != 0
+        || TablesInScopeHints is { Count: > 0 }
+        || _sourceEntityType is not null
+        || _bindArrayJoinElement
+        || !Paging.IsEmpty;
+    /// <summary>
     /// Creates the copy returned by <see cref="Clone"/> and the explicit <c>ICloneable.Clone</c> call.
     /// Overridden by derived builders to clone their extra state.
     /// </summary>

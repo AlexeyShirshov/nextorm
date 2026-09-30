@@ -432,6 +432,47 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal bool PendingJoinIntoCartesianWarning { get; set; }
 
+    /// <summary>
+    /// The raw-source global-filter skips collected during the current preparation, or <see langword="null"/>
+    /// when no bound filter was skipped. Emitted by the planner on the next plan-cache miss (and cleared
+    /// there) so a skipped filter warns once per completed preparation and never on a cache hit. Not part
+    /// of the plan key: it carries only diagnostic data (entity name, filter key, reason, missing column
+    /// names), never SQL text, table names, parameters or captured values.
+    /// </summary>
+    internal List<RawSourceFilterSkip>? PendingRawSourceFilterSkips { get; set; }
+
+    /// <summary>
+    /// The bound raw/named join filters collected during the current preparation whose join has no
+    /// <c>ON</c> clause (CROSS/APPLY). They are deferred until the main-source filter pass so they can be
+    /// re-rooted onto the projection's join alias and placed in <c>WHERE</c>; a CROSS/APPLY join must never
+    /// fabricate an <c>ON</c> clause. Preparation-local scratch: reset at the start of every preparation
+    /// and never part of the plan key.
+    /// </summary>
+    internal List<PendingCrossJoinFilter>? PendingCrossJoinFilters { get; set; }
+
+    /// <summary>
+    /// One bound join filter deferred to the main-source filter pass because its CROSS/APPLY join has no
+    /// <c>ON</c> clause. Carries the resolved predicate so a builder-function filter is invoked exactly
+    /// once, plus the join's source ordinal for alias re-rooting.
+    /// </summary>
+    /// <param name="Binding">The binding declared on the joined source.</param>
+    /// <param name="SourceOrdinal">The join's source ordinal (zero-based join index plus one).</param>
+    /// <param name="Filter">The resolved filter metadata.</param>
+    /// <param name="Lambda">The filter predicate, resolved once.</param>
+    internal readonly record struct PendingCrossJoinFilter(FromExpression.EntityBinding Binding, int SourceOrdinal, IQueryFilterMetadata Filter, LambdaExpression Lambda);
+
+    /// <summary>
+    /// One skipped global query filter on an explicitly bound raw/named source. Carries diagnostic data
+    /// only; <see cref="MissingColumns"/> is a comma-joined list of declared column names or <c>null</c>
+    /// for the undetermined case.
+    /// </summary>
+    /// <param name="EntityType">The bound entity type name (no namespace).</param>
+    /// <param name="SourceOrdinal">The source ordinal within the command (0 for the main source).</param>
+    /// <param name="FilterKey">The filter key, or <c>""</c> for an anonymous filter.</param>
+    /// <param name="Reason"><c>MissingColumns</c> or <c>UndeterminedColumns</c>.</param>
+    /// <param name="MissingColumns">The required column names absent from the declared shape, if any.</param>
+    internal readonly record struct RawSourceFilterSkip(string EntityType, int SourceOrdinal, string FilterKey, string Reason, string? MissingColumns);
+
     private static bool HasDataModifyingCteIn(QueryCommand command, HashSet<QueryCommand>? visited)
     {
         if (command._ctes is not { Count: > 0 } ctes)

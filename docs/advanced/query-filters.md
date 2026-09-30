@@ -318,11 +318,63 @@ ctx.From<Document>(m => m.HasQueryFilter((b, c) =>
 - **Captured collections.** A predicate that closes over a collection — for example `ids.Contains(e.Id)` — captures it as a runtime value and is rejected with `NotSupportedException`. The function runs only at plan build, so the collection cannot stay a bound `IN` list; declare the filter as a predicate (`FilterLambda`) or use a `SqlFunctions.Parameter<T>(idx)` placeholder instead.
 - **Foreign captured context.** A predicate that closes over an `IDataContext` other than the one passed to the function is rejected with `NotSupportedException`: reading it on a shared plan would silently return the wrong context's values. Read the function's `IDataContext` parameter instead.
 - **`INSERT` / `MERGE` target validation.** A function filter is evaluated only while a query plan is built, so it cannot be validated against a written row; a write whose active **target** filter is declared as a function is rejected (fail-closed) unless the filter is disabled with `IgnoreFilters`. Declare the filter as a predicate (`FilterLambda`) when the write must be validated.
-- **Filter functions on `FromSql` / raw sources** are not applied (the raw SQL is passed through as written; the same holds for predicate filters).
+- **Filter functions on unbound `FromSql` / raw sources** are not applied (the raw SQL is passed through as written; the same holds for predicate filters). Bind the source with [`BindEntity<TEntity>`](#filters-on-bound-raw-sources) to opt in.
 
 ## In-memory provider
 
 The in-memory provider applies the same predicate to the registered sequence before projection and joins, so soft-delete and multi-tenancy queries behave identically to SQL providers. The `IgnoreFilters` overloads are honoured there too. For a write — the key-upsert merge is the only write it applies — an active, non-ignored filter makes the operation **refuse** with `NotSupportedException` (fail closed; see [Write-target isolation](#write-target-isolation)); `IgnoreFilters` restores the native behavior.
+
+## Filters on bound raw sources
+
+A [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object))/`From(string)` source has no mapped entity type, so nextorm cannot know which columns a filter reads. Call [`BindEntity<TEntity>`](xref:NextORM.Core.EntityBuilderExtensions.BindEntity``1(NextORM.Core.EntityBuilder{NextORM.Core.TableAlias},System.Collections.Generic.IReadOnlyCollection{System.String})) as the first operation on the source to attach entity metadata and declare the columns the raw SQL exposes; nextorm then applies each active global filter to that source best-effort:
+
+```csharp
+var rows = dataContext
+    .FromSql("select id, tenant_id from documents where archived = 0")
+    .BindEntity<Document>(["id", "tenant_id"])
+    .Where(t => t["id"].AsInt > 10)
+    .ToList();
+```
+
+`availableColumns` are the **output/SQL names** of the raw select list — a configured column mapping wins, otherwise the name the projection expects — and they are compared case-insensitively. The list is a caller declaration, not a schema read: nextorm does not parse the SQL or query the schema, and binding neither adds nor renames output columns, so the columns you project remain your responsibility.
+
+The exact signature is:
+
+```csharp
+public static EntityBuilder<TEntity> BindEntity<TEntity>(
+    this EntityBuilder<TableAlias> source,
+    IReadOnlyCollection<string> availableColumns)
+```
+
+For each active filter on `TEntity`:
+
+- if every column the filter reads is declared, the filter is `and`-ed into the source;
+- if a required column is missing, the filter is **skipped** (no exception) and a `RawSourceFilterSkipped` warning is logged on the `NextORM.QueryFilters` logger category with reason `MissingColumns` and the missing names — the **physical mapped column names** the filter reads, not the caller's declared output names;
+- **with an empty declared-column list**, a filter with a proven zero-column dependency (a predicate that reads no mapped column, such as a constant) is applied; a column-dependent or undetermined filter is skipped with a warning (reason `UndeterminedColumns`).
+
+Filters are evaluated independently — one skipped filter does not stop the others — and [`IgnoreFilters`](#disabling-filters-for-one-query) disables the selected filters before this analysis, so an ignored filter is never reported. The warning is emitted once per skipped filter while the query plan is prepared (a cache miss); a plan-cache hit does not re-emit it. The message carries only the entity type name, the source ordinal, the filter key, the reason and the missing column names (physical mapped column names only) — never SQL text, table names, parameter values or captured values. Wire an `ILoggerFactory` and enable the `NextORM.QueryFilters` category at `Warning` to see it (categories are topic-based, so filtering that category is enough):
+
+```csharp
+using var loggerFactory = LoggerFactory.Create(builder => builder
+    .AddFilter("NextORM.QueryFilters", LogLevel.Warning)
+    .AddConsole());
+
+var ctx = new SqliteDataContext(builder => builder.UseLoggerFactory(loggerFactory));
+```
+
+`BindEntity` must be the first operation after the source is created; a later call (after `Where`/`Select`/`Join`/projection) throws `InvalidOperationException`. Another source shape, or binding to `TableAlias`, throws `NotSupportedException`; a `null` source or column collection throws `ArgumentNullException`, and a `null`/blank entry throws `ArgumentException` (an empty collection is allowed, and the receiver is not mutated — a new typed builder is returned). `WithSql`, `PrepareFromSql` and `ExecuteRaw` are unchanged and do not take part, and the in-memory provider still rejects a raw source.
+
+> **Not a security guarantee.** nextorm trusts the column list you supply: a filter whose columns you forget to declare is silently skipped, and the raw source then returns rows the filter would have excluded. Treat `BindEntity` as a convenience for composing filters over a trusted raw source, not as an enforcement or isolation boundary; keep row-level authorization in the SQL itself when it must be enforced.
+
+### Joined bound sources and the main source
+
+Binding is **per source**, not per entity type: each joined raw source uses its own `BindEntity<TEntity>` binding and its own declared column list, and never borrows the main source's binding or another occurrence's. The same entity type joined twice with different declared columns keeps both bindings independent. A joined source's compatible filters are merged into **that join's** `ON` condition; a skipped filter on one occurrence warns separately and leaves the other occurrences and the other filters unaffected, and an outer join's predicates stay in `ON` and are never moved into `WHERE`.
+
+The main source's filters are always evaluated against the **main source's own binding**, even when the command is a joined projection. In that case the retained predicates are re-rooted onto the projection's **main** alias, `Item1` (`Projection<T1, …>`), and placed in the `WHERE` clause; they are never resolved from a join-side binding or alias.
+
+`SourceOrdinal` identifies where a skip happened: the main source is `0`, and join index `j` (zero-based) is `j + 1`, counting **all** joins — including unbound ones — so the ordinal is the join's position, not the number of bound sources.
+
+A `CROSS`/`CROSS APPLY` join has no `ON` clause, so a bound raw source on such a join has no predicate to attach to: its compatible filters are placed in `WHERE` instead, and nextorm never fabricates an `ON` for a join that has none. `OUTER APPLY`/`PASTE` are left unchanged, because moving their predicates into `WHERE` would change the result.
 
 ## Metadata
 
@@ -354,7 +406,6 @@ Write-target isolation **is** implemented for the full `MERGE` (SQL Server, Post
 
 The following are **not** available:
 
-- filters on `FromSql` / raw sources ([#124](https://github.com/AlexeyShirshov/nextorm/issues/124));
 - the EF Core bridge that forwards EF Core 10 keyed filters ([#125](https://github.com/AlexeyShirshov/nextorm/issues/125)).
 
 `UPDATE`, `DELETE` and the full-`MERGE` write target are covered (see [UPDATE and DELETE (DML)](#update-and-delete-dml) and [Write-target isolation](#write-target-isolation)).

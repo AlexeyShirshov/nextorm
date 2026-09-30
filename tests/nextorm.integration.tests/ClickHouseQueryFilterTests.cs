@@ -99,4 +99,20 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
         Range().IgnoreFilters(["tenant"]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 2]);
         Range().IgnoreFilters([QueryFilters.AnonymousKey]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 1]);
     }
+
+    [Fact]
+    public void RawSourceBinding_BoundCompatible_ShouldReturnFilteredRows()
+    {
+        var ctx = QueryFilterContext(1);
+        var b = NextQueryFilterBase();
+        SeedQueryFilterRows(Active(b, "raw-active"), SoftDeleted(b - 1, "raw-deleted"), ForeignTenant(b - 2, "raw-foreign"));
+
+        var rows = ctx.FromSql("select id, tenant_id, is_deleted, name from query_filter_entity")
+            .BindEntity<QueryFilterEntity>(["id", "tenant_id", "is_deleted", "name"])
+            .Where(x => x.Id >= b - 2 && x.Id <= b)
+            .Select(x => x.Id)
+            .ToList();
+
+        rows.Should().BeEquivalentTo([b], "the bound raw source carries the ClickHouse-eligible filters");
+    }
 }

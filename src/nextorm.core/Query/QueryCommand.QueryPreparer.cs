@@ -37,6 +37,14 @@ public partial class QueryCommand
             // without a shape entry, so it must be evaluated on the fly instead of reusing a stale form.
             cmd.ShapeScanned = !dontCalculateHash && !cmd._dontCache;
             cmd.LookupPartitions = null;
+
+            // Raw-source filter skips are collected for this preparation only (main source + every join),
+            // then emitted once by the planner on the cache miss. A re-preparation starts from a clean list
+            // so a sibling join's or a previous run's skips can never leak into the emitted set.
+            cmd.PendingRawSourceFilterSkips = null;
+            // CROSS/APPLY bound-join filters are deferred to the main-source pass; a re-preparation must
+            // not replay a previous run's deferred filters.
+            cmd.PendingCrossJoinFilters = null;
 #if DEBUG
             if (cmd.Logger?.IsEnabled(LogLevel.Debug) ?? false) cmd.Logger.LogDebug("Preparing command");
 #endif
@@ -52,7 +60,7 @@ public partial class QueryCommand
             }
 
             FromExpression? from = cmd._from ?? cmd._dataContext.GetFrom(srcType, cmd);
-            PrepareFrom(from, dontCalculateHash, cancellationToken);
+            PrepareFrom(from, dontCalculateHash, cancellationToken, cmd);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
             var wherePlanHash = PrepareWhere(cmd, InjectMainSourceFilters(cmd, srcType), dontCalculateHash, cancellationToken);
@@ -67,6 +75,8 @@ public partial class QueryCommand
             var sortingPlanHash = PrepareSorting(cmd, selectList, dontCalculateHash, cancellationToken);
 
             cmd._union?.PrepareCommand(dontCalculateHash, cancellationToken);
+            if (cmd._union is { } union)
+                TransferNestedFilterSkips(union, cmd);
             PrepareCtes(cmd, dontCalculateHash, cancellationToken);
             PrepareHints(cmd, dontCalculateHash);
 
@@ -205,13 +215,31 @@ public partial class QueryCommand
             cmd.InValuesPartitions = merged;
         }
 
-        private static void PrepareFrom(FromExpression? from, bool dontCalculateHash, CancellationToken cancellationToken)
+        private static void PrepareFrom(FromExpression? from, bool dontCalculateHash, CancellationToken cancellationToken, QueryCommand owner)
         {
-            if (from?.SubQuery is not null && !from.SubQuery._isPrepared)
-                from.SubQuery.PrepareCommand(dontCalculateHash, cancellationToken);
+            if (from?.SubQuery is not null)
+            {
+                if (!from.SubQuery._isPrepared)
+                    from.SubQuery.PrepareCommand(dontCalculateHash, cancellationToken);
+
+                TransferNestedFilterSkips(from.SubQuery, owner);
+            }
 
             if (from?.Pivot is not null)
-                PrepareFrom(from.Pivot.Inner, dontCalculateHash, cancellationToken);
+                PrepareFrom(from.Pivot.Inner, dontCalculateHash, cancellationToken, owner);
+        }
+
+        // Moves the raw-source filter skips collected while preparing a nested command (a derived table,
+        // CTE body, set-operation branch or correlated applied source) into the owning preparation, so the
+        // planner emits them on the owner's cache miss. The child list is drained so a later or shared
+        // preparation can never replay the warning (no duplication on a cache hit).
+        private static void TransferNestedFilterSkips(QueryCommand child, QueryCommand owner)
+        {
+            if (ReferenceEquals(child, owner) || child.PendingRawSourceFilterSkips is not { Count: > 0 } childSkips)
+                return;
+
+            (owner.PendingRawSourceFilterSkips ??= []).AddRange(childSkips);
+            child.PendingRawSourceFilterSkips = null;
         }
 
         private static void PrepareCtes(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
@@ -230,11 +258,16 @@ public partial class QueryCommand
                     var cte = cmd._ctes[i];
                     if (!cte.Query.IsPrepared)
                         cte.Query.PrepareCommand(noHash, cancellationToken);
+                    TransferNestedFilterSkips(cte.Query, cmd);
 
                     // An INSERT ... SELECT used as a data-modifying CTE body renders its source select
                     // in the enclosing statement, so the source must be prepared like any other command.
-                    if (cte.Mutation is { Source: { IsPrepared: false } mutationSource })
-                        mutationSource.PrepareCommand(noHash, cancellationToken);
+                    if (cte.Mutation is { Source: { } mutationSource })
+                    {
+                        if (!mutationSource.IsPrepared)
+                            mutationSource.PrepareCommand(noHash, cancellationToken);
+                        TransferNestedFilterSkips(mutationSource, cmd);
+                    }
 
                     // A data-modifying CTE is a side-effecting statement: never share its plan, because
                     // the mutation's shape (row count, target columns) is not fully captured by the CTE
@@ -712,15 +745,16 @@ public partial class QueryCommand
                             var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
                             if (!applyCommand.IsPrepared)
                                 applyCommand.PrepareCommand(noHash, cancellationToken);
+                            TransferNestedFilterSkips(applyCommand, cmd);
                             join.SetFrom(new FromExpression(applyCommand));
                         }
                     }
                     else
                     {
-                        PrepareFrom(join.From, noHash, cancellationToken);
+                        PrepareFrom(join.From, noHash, cancellationToken, cmd);
                     }
 
-                    InjectJoinFilters(cmd, join);
+                    InjectJoinFilters(cmd, join, idx + 1);
 
                     if (!cmd._dontCache && !noHash) unchecked
                     {
@@ -742,8 +776,18 @@ public partial class QueryCommand
                 && srcType.GetGenericArguments().Length > 0;
             var filterEntityType = isProjectionSource ? srcType.GetGenericArguments()[0] : srcType;
 
+            // A direct raw/named source explicitly bound to an entity carries a caller-declared output
+            // column shape; its filters are applied best-effort against that shape. An unbound raw source
+            // has no binding (and resolves no filters), so its behavior is unchanged. A joined command
+            // exposes the Projection<T1, …> type as its lambda parameter while the physical main source is
+            // T1: the binding still belongs to that main source, so the bound path runs for a projection
+            // source too and re-roots the retained predicates onto the projection's main alias (Item1).
+            if (cmd._from?.SourceBinding is { } binding)
+                return InjectBoundSourceFilters(cmd, srcType, binding, isProjectionSource);
+
             var filters = QueryFilterResolver.GetFilters(filterEntityType, cmd._filterScope);
-            if (filters.Count == 0)
+            var hasCrossJoinFilters = cmd.PendingCrossJoinFilters is { Count: > 0 };
+            if (filters.Count == 0 && !hasCrossJoinFilters)
                 return cmd._condition;
 
             var condition = cmd._condition;
@@ -763,18 +807,194 @@ public partial class QueryCommand
                 body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
             }
 
+            body = AppendPendingCrossJoinFilters(cmd, parameter, body);
+
             return body is null ? null : Expression.Lambda(body, parameter);
         }
 
-        private static void InjectJoinFilters(QueryCommand cmd, JoinExpression join)
+        // Applies the active filters to a raw/named source explicitly bound with BindEntity<TEntity>. The
+        // caller declares the output columns, so each filter is first reduced to the column names it
+        // depends on by walking its body (a filter-specific visitor, not a general SQL column extractor).
+        // A filter whose dependencies cannot be determined, or whose columns are not all declared, is
+        // skipped with a warning; the compatible filters stay applied in declaration order. Ignored/
+        // disabled filters are already absent from the resolved list and do not warn.
+        private static LambdaExpression? InjectBoundSourceFilters(QueryCommand cmd, Type srcType, FromExpression.EntityBinding binding, bool isProjectionSource)
+        {
+            var filters = QueryFilterResolver.GetFilters(binding.EntityType, cmd._filterScope);
+            if (filters.Count == 0)
+                return cmd._condition;
+
+            var condition = cmd._condition;
+            var parameter = condition is { Parameters.Count: >= 1 } typedCondition
+                ? typedCondition.Parameters[0]
+                : Expression.Parameter(srcType);
+            Expression? body = condition?.Body;
+
+            // The filter is built against the main source's own binding/alias. In a joined command the
+            // lambda parameter is the Projection<T1, …> type, so the main source alias is its Item1 —
+            // never a join-side alias.
+            Expression filterTarget = isProjectionSource
+                ? Expression.Property(parameter, "Item1")
+                : parameter;
+
+            for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+            {
+                var filter = filters[i];
+
+                // Resolve the filter to one lambda (invoking a builder-function filter exactly once) and
+                // inspect that predicate; the same lambda is then merged, so the delegate never runs twice.
+                if (!TryResolveFilterLambda(filter, cmd._dataContext!, out var filterLambda))
+                    continue;
+
+                if (!TryGetBoundFilterBody(cmd, binding, sourceOrdinal: 0, filter, filterLambda, filterTarget, out var filterBody))
+                    continue;
+
+                body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
+            }
+
+            body = AppendPendingCrossJoinFilters(cmd, parameter, body);
+
+            return body is null ? null : Expression.Lambda(body, parameter);
+        }
+
+        // Decides whether one resolved filter may be applied to a raw source bound with BindEntity<TEntity>
+        // and, when accepted, builds its body against <paramref name="entityParameter"/> (the source's own
+        // alias). Compatibility is evaluated from the predicate's proven column dependencies, never from the
+        // mere emptiness of the declared shape: a constant (zero-column) predicate is applied even when the
+        // caller declares no columns; a predicate with known dependencies is skipped as MissingColumns when
+        // the declared shape is non-empty, and as UndeterminedColumns when the shape is empty (an empty
+        // declaration cannot prove the dependency); an opaque/undetermined predicate is always skipped as
+        // UndeterminedColumns. Each skip records its own warning entry.
+        private static bool TryGetBoundFilterBody(
+            QueryCommand cmd,
+            FromExpression.EntityBinding binding,
+            int sourceOrdinal,
+            IQueryFilterMetadata filter,
+            LambdaExpression filterLambda,
+            Expression entityParameter,
+            out Expression body)
+        {
+            body = null!;
+
+            if (filterLambda.Parameters.Count == 0)
+            {
+                // A filter with no entity parameter is malformed; let the existing validation throw.
+                _ = BuildFilterBody(filterLambda, cmd._dataContext!, entityParameter);
+                return false;
+            }
+
+            var requirements = new FilterColumnDependencyVisitor(binding.EntityType, cmd.ResolvedNamingConvention, filterLambda.Parameters[0])
+                .Analyze(filterLambda);
+            if (requirements.Undetermined)
+            {
+                RecordRawSourceFilterSkip(cmd, binding, sourceOrdinal, filter.Key, "UndeterminedColumns", missingColumns: null);
+                return false;
+            }
+
+            if (requirements.Columns.Count > 0)
+            {
+                if (binding.AvailableColumns.Count == 0)
+                {
+                    // A proven non-empty dependency set against an empty declared shape is undetermined,
+                    // not a missing-column case: the caller declared nothing, so nothing can be matched.
+                    RecordRawSourceFilterSkip(cmd, binding, sourceOrdinal, filter.Key, "UndeterminedColumns", missingColumns: null);
+                    return false;
+                }
+
+                var missing = FilterColumnDependencyVisitor.FindMissing(requirements.Columns, binding.AvailableColumns);
+                if (missing is { Count: > 0 })
+                {
+                    RecordRawSourceFilterSkip(cmd, binding, sourceOrdinal, filter.Key, "MissingColumns", string.Join(", ", missing));
+                    return false;
+                }
+            }
+
+            body = BuildFilterBody(filterLambda, cmd._dataContext!, entityParameter);
+            return true;
+        }
+
+        // Collects the safe diagnostic data for one skipped filter. Only the entity type name, source
+        // ordinal, filter key, reason and declared column names are stored — never SQL text, table names,
+        // parameters or captured values.
+        private static void RecordRawSourceFilterSkip(QueryCommand cmd, FromExpression.EntityBinding binding, int sourceOrdinal, string filterKey, string reason, string? missingColumns)
+        {
+            (cmd.PendingRawSourceFilterSkips ??= []).Add(
+                new QueryCommand.RawSourceFilterSkip(binding.EntityType.Name, sourceOrdinal, filterKey, reason, missingColumns));
+        }
+
+        // Collects the active filters of a bound raw/named source joined with a CROSS/APPLY join. Such a
+        // join has no ON clause, so the filters cannot be merged into it; they are resolved to one lambda
+        // (so a builder-function filter runs once) and deferred to the main-source pass, which re-roots
+        // them onto the join's projection alias in WHERE. Only inner CROSS semantics reach here: OUTER
+        // APPLY and PASTE would change meaning if their predicates moved into WHERE, so they are left
+        // unchanged. The child filter scope is unioned with the command's exactly like the ON path.
+        private static void CollectBoundCrossJoinFilters(QueryCommand cmd, JoinExpression join, FromExpression.EntityBinding binding, int sourceOrdinal)
+        {
+            var scope = join.FilterScope is { } childScope
+                ? childScope.Union(cmd._filterScope)
+                : cmd._filterScope;
+
+            var filters = QueryFilterResolver.GetFilters(binding.EntityType, scope);
+            if (filters.Count == 0)
+                return;
+
+            for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+            {
+                var filter = filters[i];
+                if (!TryResolveFilterLambda(filter, cmd._dataContext!, out var filterLambda))
+                    continue;
+
+                (cmd.PendingCrossJoinFilters ??= []).Add(
+                    new QueryCommand.PendingCrossJoinFilter(binding, sourceOrdinal, filter, filterLambda));
+            }
+        }
+
+        // Appends the deferred bound CROSS/APPLY join filters (collected in PrepareJoin, because those
+        // joins carry no ON clause) to the statement condition. Each predicate is re-rooted onto the
+        // join's alias in the projection — join ordinal n surfaces as Item(n + 1), the main source being
+        // Item1 — and placed in WHERE; a CROSS/APPLY join must never fabricate an ON clause. The same
+        // per-filter compatibility decision and skip diagnostics as an ON filter apply, keyed by the
+        // join's own source ordinal.
+        private static Expression? AppendPendingCrossJoinFilters(QueryCommand cmd, Expression parameter, Expression? body)
+        {
+            if (cmd.PendingCrossJoinFilters is not { Count: > 0 } pending)
+                return body;
+
+            for (var (i, cnt) = (0, pending.Count); i < cnt; i++)
+            {
+                var item = pending[i];
+                var joinAlias = Expression.Property(parameter, "Item" + (item.SourceOrdinal + 1));
+
+                if (!TryGetBoundFilterBody(cmd, item.Binding, item.SourceOrdinal, item.Filter, item.Lambda, joinAlias, out var filterBody))
+                    continue;
+
+                body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
+            }
+
+            return body;
+        }
+
+        private static void InjectJoinFilters(QueryCommand cmd, JoinExpression join, int sourceOrdinal)
         {
             if (join.From.SubQuery is not null)
                 return;
 
             if (join.OriginalJoinCondition is not { Parameters: { Count: >= 2 } } joinCondition)
-                return;
+            {
+                // A CROSS join / CROSS APPLY carries no ON clause. A bound raw/named source on such a
+                // join still resolves its filters, but there is no predicate to attach them to, so they
+                // are deferred to the statement's WHERE (the applicable placement for an inner
+                // cross/apply) instead of fabricating an ON. OUTER APPLY / PASTE are excluded because a
+                // WHERE predicate would change their result; their bound source keeps the prior behavior.
+                if (join.From.SourceBinding is { } crossBinding
+                    && join.JoinType is JoinType.Cross or JoinType.FullCross or JoinType.CrossApply)
+                {
+                    CollectBoundCrossJoinFilters(cmd, join, crossBinding, sourceOrdinal);
+                }
 
-            var rightType = join.EntityType ?? join.From.SourceType ?? joinCondition.Parameters[1].Type;
+                return;
+            }
+
             // A join may carry the right-hand (child) side's own selective filter scope (single-query
             // LoadWith/JoinInto or a JoinInto child that disabled filters). The effective child scope is
             // always the union of the child's scope and the command's scope: `null` (a plain join) and an
@@ -784,12 +1004,41 @@ public partial class QueryCommand
             var scope = join.FilterScope is { } childScope
                 ? childScope.Union(cmd._filterScope)
                 : cmd._filterScope;
-            var filters = QueryFilterResolver.GetFilters(rightType, scope);
-            if (filters.Count == 0)
-                return;
 
             var rightParameter = joinCondition.Parameters[1];
             var body = joinCondition.Body;
+
+            if (join.From.SourceBinding is { } binding)
+            {
+                // The joined raw source carries its own caller binding: use that binding (never the main
+                // source's or another earlier occurrence's) and apply the per-filter compatibility decision
+                // against that joined source's alias. Incompatible filters are skipped individually with
+                // their own warning; the compatible ones keep their place in the ON condition, so an outer
+                // join's predicates stay in ON and never move into WHERE.
+                var boundFilters = QueryFilterResolver.GetFilters(binding.EntityType, scope);
+                if (boundFilters.Count == 0)
+                    return;
+
+                for (var (i, cnt) = (0, boundFilters.Count); i < cnt; i++)
+                {
+                    var filter = boundFilters[i];
+                    if (!TryResolveFilterLambda(filter, cmd._dataContext!, out var filterLambda))
+                        continue;
+
+                    if (!TryGetBoundFilterBody(cmd, binding, sourceOrdinal, filter, filterLambda, rightParameter, out var filterBody))
+                        continue;
+
+                    body = Expression.AndAlso(body, filterBody);
+                }
+
+                join.SetJoinCondition(Expression.Lambda(body, joinCondition.Parameters));
+                return;
+            }
+
+            var rightType = join.EntityType ?? join.From.SourceType ?? joinCondition.Parameters[1].Type;
+            var filters = QueryFilterResolver.GetFilters(rightType, scope);
+            if (filters.Count == 0)
+                return;
 
             for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
             {
@@ -807,12 +1056,7 @@ public partial class QueryCommand
         // predicate it added is kept. A filter that declares neither form contributes nothing.
         internal static bool TryBuildFilterBody(IQueryFilterMetadata filter, IDataContext dataContext, Expression entityParameter, out Expression body)
         {
-            LambdaExpression filterLambda;
-            if (filter.Lambda is { } lambda)
-                filterLambda = lambda;
-            else if (filter.Func is not null)
-                filterLambda = QueryFilterFunc.Apply(filter, dataContext);
-            else
+            if (!TryResolveFilterLambda(filter, dataContext, out var filterLambda))
             {
                 body = null!;
                 return false;
@@ -820,6 +1064,26 @@ public partial class QueryCommand
 
             body = BuildFilterBody(filterLambda, dataContext, entityParameter);
             return true;
+        }
+
+        // Resolves a filter to its predicate lambda, invoking a builder-function filter exactly once. A
+        // filter that declares neither form contributes nothing (returns false).
+        internal static bool TryResolveFilterLambda(IQueryFilterMetadata filter, IDataContext dataContext, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out LambdaExpression? filterLambda)
+        {
+            if (filter.Lambda is { } lambda)
+            {
+                filterLambda = lambda;
+                return true;
+            }
+
+            if (filter.Func is not null)
+            {
+                filterLambda = QueryFilterFunc.Apply(filter, dataContext);
+                return true;
+            }
+
+            filterLambda = null;
+            return false;
         }
 
         private static Expression BuildFilterBody(LambdaExpression filter, IDataContext dataContext, Expression entityParameter)
@@ -842,6 +1106,253 @@ public partial class QueryCommand
 
             return new ReplaceParameterInstanceVisitor(filterEntityParameter, entityParameter).Visit(body);
         }
+
+        // Walks one filter predicate and reports the SQL column names it reads off its entity parameter.
+        // It is intentionally filter-specific: it maps the *root* property of each member chain (unwrapping
+        // nullable/`Value` chains) through the effective entity metadata by (DeclaringType, MetadataToken),
+        // so it never becomes a general SQL-expression column extractor. A captured/context read is not a
+        // column; opaque whole-entity use, dynamic access or an unmapped member makes the whole filter
+        // undetermined (conservative best-effort skip).
+        private sealed class FilterColumnDependencyVisitor : ExpressionVisitor
+        {
+            private readonly INamingConvention? _convention;
+            private readonly ParameterExpression _entityParameter;
+            private readonly IEntityMetadata? _metadata;
+            private readonly Dictionary<FilterMemberKey, IPropertyMetadata>? _byMember;
+            private HashSet<ParameterExpression>? _knownParameters;
+
+            public FilterColumnDependencyVisitor(Type entityType, INamingConvention? convention, ParameterExpression entityParameter)
+            {
+                _convention = convention;
+                _entityParameter = entityParameter;
+
+                // Resolve through the normal path (configured mapping wins over the auto mapping), not
+                // just DataContextCache.Metadata: a bound raw source's entity may only have been resolved
+                // into the auto cache by BindEntity/GetFilters.
+                var metadata = DataContextExtensions.ResolveMetadata(entityType);
+                _metadata = metadata;
+                _byMember = new Dictionary<FilterMemberKey, IPropertyMetadata>(metadata.Properties.Count);
+                for (var i = 0; i < metadata.Properties.Count; i++)
+                {
+                    var property = metadata.Properties[i].PropertyInfo;
+                    if (property.DeclaringType is { } declaringType)
+                        _byMember[new FilterMemberKey(declaringType, property.MetadataToken)] = metadata.Properties[i];
+                }
+            }
+
+            public bool Undetermined { get; private set; }
+
+            public List<string> RequiredColumns { get; } = [];
+
+            public FilterColumnRequirements Analyze(LambdaExpression filter)
+            {
+                // The filter's own non-entity parameters (its IDataContext parameter, if declared) are
+                // not column dependencies; every *other* parameter reached from the body (a nested
+                // lambda's element) leaves the root unresolved and makes the filter undetermined.
+                if (filter.Parameters.Count > 1)
+                {
+                    _knownParameters = new HashSet<ParameterExpression>();
+                    for (var i = 1; i < filter.Parameters.Count; i++)
+                        _knownParameters.Add(filter.Parameters[i]);
+                }
+
+                Visit(filter.Body);
+                return new FilterColumnRequirements(Undetermined, RequiredColumns);
+            }
+
+            // Returns the required column names not present (case-insensitively) in the declared shape,
+            // or null when every dependency is declared.
+            public static List<string>? FindMissing(IReadOnlyList<string> requiredColumns, IReadOnlyList<string> availableColumns)
+            {
+                List<string>? missing = null;
+                for (var (i, cnt) = (0, requiredColumns.Count); i < cnt; i++)
+                {
+                    var required = requiredColumns[i];
+                    var found = false;
+                    for (var (j, availableCount) = (0, availableColumns.Count); j < availableCount; j++)
+                    {
+                        if (string.Equals(required, availableColumns[j], StringComparison.OrdinalIgnoreCase))
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (!found)
+                        (missing ??= []).Add(required);
+                }
+
+                return missing;
+            }
+
+            protected override Expression VisitMember(MemberExpression node)
+            {
+                if (!TryGetEntityRoot(node, out var rootProperty, out var chain))
+                    return base.VisitMember(node);
+
+                // The member read directly off the entity parameter must itself be a mapped column: a
+                // bound raw source declares a flat column list, so a navigation/field root can never be
+                // matched against it.
+                if (rootProperty is null || !TryMapColumn(rootProperty, out _))
+                {
+                    Undetermined = true;
+                    return node;
+                }
+
+                // A chain is compatible only when its *physical* column can be proven. The SQL renderer
+                // reads the column of the outermost member that names one (skipping CLR-only wrappers
+                // such as Nullable.Value / string.Length / DateTime parts), so a nested chain like
+                // e.Navigation.Col depends on Col's column, not on the navigation's. Tracking only the
+                // root would judge the filter compatible while the physical column is deeper; a member
+                // that is neither a wrapper nor a mapped column leaves the dependency unproven.
+                if (!TryResolvePhysicalColumn(chain, out var column))
+                {
+                    Undetermined = true;
+                    return node;
+                }
+
+                if (column.Length > 0)
+                    RequiredColumns.Add(column);
+
+                return node;
+            }
+
+            protected override Expression VisitParameter(ParameterExpression node)
+            {
+                // The entity parameter reached other than as the instance of a member chain is opaque
+                // whole-entity use (a comparison, an argument, an indexer). A parameter declared by the
+                // filter itself (its IDataContext parameter) is not a column dependency; any other
+                // parameter — for example a nested lambda's element — leaves the root unresolved.
+                if (ReferenceEquals(node, _entityParameter))
+                    Undetermined = true;
+                else if (_knownParameters is null || !_knownParameters.Contains(node))
+                    Undetermined = true;
+
+                return node;
+            }
+
+            // Returns the member chain from the entity parameter outward: chain[0] is read directly off
+            // the parameter, chain[^1] is the node's own member. A transparent Convert/ConvertChecked
+            // over the parameter (an upcast or boxing) is normalized. Returns false when the chain is
+            // not rooted at the entity parameter.
+            private bool TryGetEntityRoot(MemberExpression node, out PropertyInfo? rootProperty, out List<MemberInfo> chain)
+            {
+                rootProperty = null;
+                chain = null!;
+                var members = new List<MemberInfo>();
+                Expression? current = node;
+                while (true)
+                {
+                    if (current is MemberExpression member)
+                    {
+                        members.Add(member.Member);
+                        current = member.Expression;
+                        continue;
+                    }
+
+                    if (current is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+                    {
+                        current = unary.Operand;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                if (!ReferenceEquals(current, _entityParameter))
+                    return false;
+
+                members.Reverse();
+                chain = members;
+                rootProperty = members[0] as PropertyInfo;
+                return true;
+            }
+
+            // Resolves the physical column a rooted chain reads by walking from the node's member inward,
+            // skipping CLR-only wrappers, and returning the first member that maps to a column.
+            private bool TryResolvePhysicalColumn(List<MemberInfo> chain, out string column)
+            {
+                for (var i = chain.Count - 1; i >= 0; i--)
+                {
+                    if (chain[i] is not PropertyInfo property)
+                        break;
+
+                    if (IsTransparentMember(property))
+                        continue;
+
+                    return TryMapAnyColumn(property, out column);
+                }
+
+                column = string.Empty;
+                return false;
+            }
+
+            // A member whose SQL rendering keeps the underlying column (Nullable.Value, string.Length,
+            // DateTime parts) contributes no dependency of its own.
+            private static bool IsTransparentMember(PropertyInfo property)
+            {
+                var declaringType = property.DeclaringType;
+                if (declaringType is null)
+                    return false;
+
+                if (property.Name == nameof(Nullable<int>.Value) && Nullable.GetUnderlyingType(declaringType) is not null)
+                    return true;
+
+                if (declaringType == typeof(string) && property.Name == nameof(string.Length))
+                    return true;
+
+                return declaringType == typeof(DateTime) && property.Name is
+                    nameof(DateTime.Year) or nameof(DateTime.Month) or nameof(DateTime.Day)
+                    or nameof(DateTime.Hour) or nameof(DateTime.Minute) or nameof(DateTime.Second)
+                    or nameof(DateTime.DayOfYear);
+            }
+
+            private bool TryMapColumn(PropertyInfo property, out string column)
+            {
+                IPropertyMetadata? mapped = null;
+                if (_byMember is not null && property.DeclaringType is { } declaringType
+                    && _byMember.TryGetValue(new FilterMemberKey(declaringType, property.MetadataToken), out var indexed))
+                    mapped = indexed;
+
+                mapped ??= _metadata is null ? null : MemberTranslator.FindProperty(_metadata, property);
+
+                return TryFormatColumn(mapped, out column);
+            }
+
+            // Resolves the column of a member that is not part of the entity's own metadata (a member of
+            // a nested mapped type) through that member's declaring-type metadata, mirroring the
+            // renderer's column lookup.
+            private bool TryMapAnyColumn(PropertyInfo property, out string column)
+            {
+                IPropertyMetadata? mapped = null;
+                if (_byMember is not null && property.DeclaringType is { } declaringType
+                    && _byMember.TryGetValue(new FilterMemberKey(declaringType, property.MetadataToken), out var indexed))
+                    mapped = indexed;
+
+                mapped ??= MemberTranslator.ResolveProperty(property, _metadata);
+
+                return TryFormatColumn(mapped, out column);
+            }
+
+            private bool TryFormatColumn(IPropertyMetadata? mapped, out string column)
+            {
+                column = string.Empty;
+
+                if (mapped is null || mapped.IsDynamicColumnsStore || mapped.RangeColumns is not null)
+                    return false;
+
+                var name = mapped.ColumnName;
+                if (string.IsNullOrEmpty(name))
+                    return false;
+
+                column = mapped.IsColumnNameAuto && _convention is not null ? _convention.ColumnName(name) : name;
+                return true;
+            }
+        }
+
+        private readonly record struct FilterMemberKey(Type DeclaringType, int MetadataToken);
+
+        private readonly record struct FilterColumnRequirements(bool Undetermined, IReadOnlyList<string> Columns);
 
         private sealed class ReplaceParameterInstanceVisitor(ParameterExpression target, Expression replacement) : ExpressionVisitor
         {

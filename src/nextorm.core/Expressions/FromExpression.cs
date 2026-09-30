@@ -6,6 +6,30 @@ namespace NextORM.Core;
 /// </summary>
 public sealed class FromExpression
 {
+     /// <summary>
+     /// Immutable binding attached to a raw source by
+     /// <c>EntityBuilder&lt;TableAlias&gt;.BindEntity&lt;TEntity&gt;</c>: the entity whose global query
+     /// filters may be injected into the source, together with the caller-declared output columns.
+     /// The column list is owned, deduplicated and sorted case-insensitively.
+     /// </summary>
+     internal sealed class EntityBinding
+     {
+          /// <summary>Creates a binding for <paramref name="entityType"/> over <paramref name="availableColumns"/>.</summary>
+          /// <param name="entityType">The entity whose configured or auto metadata governs the filters.</param>
+          /// <param name="availableColumns">The normalized, caller-declared output columns of the raw source.</param>
+          public EntityBinding(Type entityType, IReadOnlyList<string> availableColumns)
+          {
+               EntityType = entityType;
+               AvailableColumns = availableColumns;
+          }
+
+          /// <summary>The bound entity type.</summary>
+          public Type EntityType { get; }
+
+          /// <summary>The declared output columns (sorted, deduplicated, case-insensitive).</summary>
+          public IReadOnlyList<string> AvailableColumns { get; }
+     }
+
      /// <summary>Creates a source for a mapped CLR entity type.</summary>
      /// <param name="srcType">The entity type.</param>
      public FromExpression(Type srcType) => SourceType = srcType;
@@ -160,9 +184,15 @@ public sealed class FromExpression
      /// <c>EntityBuilder&lt;TEntity&gt;.WithTableExpression</c>.
      /// </summary>
      internal readonly string? TableExpressionOverride;
+     /// <summary>
+     /// Optional entity binding declared through <c>EntityBuilder&lt;TableAlias&gt;.BindEntity&lt;TEntity&gt;</c>
+     /// for a direct raw source (<c>FromSql</c>/<c>From(string)</c>); <c>null</c> for an unbound source.
+     /// Immutable and shared with any copied source.
+     /// </summary>
+     internal EntityBinding? SourceBinding { get; init; }
 
      /// <summary>Copies every source slot and applies the given overrides, falling back to the source's own.</summary>
-     private FromExpression(FromExpression source, string? tableName, string? schema, string? database, string? server, string? tableExpression)
+     private FromExpression(FromExpression source, string? tableName, string? schema, string? database, string? server, string? tableExpression, EntityBinding? sourceBinding = null)
      {
           Table = source.Table;
           IsAutoMapped = source.IsAutoMapped;
@@ -182,6 +212,7 @@ public sealed class FromExpression
           ServerOverride = server ?? source.ServerOverride;
           TableExpressionOverride = tableExpression ?? source.TableExpressionOverride;
           SubQueryHint = source.SubQueryHint;
+          SourceBinding = sourceBinding ?? source.SourceBinding;
      }
 
      /// <summary>Whether any table-name/schema/database/server qualifier override is present.</summary>
@@ -193,6 +224,13 @@ public sealed class FromExpression
      /// </summary>
      internal FromExpression WithOverrides(string? tableName, string? schema, string? database, string? server, string? tableExpression)
           => new(this, tableName, schema, database, server, tableExpression);
+
+     /// <summary>
+     /// Returns a copy of this source carrying <paramref name="binding"/>; the original is not mutated so
+     /// a metadata-cached source stays shared.
+     /// </summary>
+     internal FromExpression WithEntityBinding(EntityBinding binding)
+          => new(this, null, null, null, null, null, binding);
 
      // public override int GetHashCode()
      // {
@@ -224,11 +262,11 @@ public sealed class FromExpression
           if (Pivot is not null)
           {
                var pivot = Pivot.CloneForCache();
-               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot);
+               return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding };
           }
 
           if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
 
-          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint };// { TableAlias = TableAlias };
+          return new FromExpression(SubQuery!.CloneForCache()) { SubQueryHint = SubQueryHint, SourceBinding = SourceBinding };// { TableAlias = TableAlias };
      }
 }

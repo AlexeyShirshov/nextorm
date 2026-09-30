@@ -53,8 +53,15 @@ internal sealed class ClickHouseTestProvider : ITestProvider
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";
 
-    public IDataContext CreateContext() =>
-        new ClickHouseDataContext(ClickHouseContainer.ConnectionString, new DataContextBuilder());
+    public IDataContext CreateContext() => CreateContext(null);
+
+    public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
+    {
+        var builder = new DataContextBuilder();
+        if (loggerFactory is not null)
+            builder = builder.UseLoggerFactory(loggerFactory);
+        return new ClickHouseDataContext(ClickHouseContainer.ConnectionString, builder);
+    }
 
     public void EnsureSeeded()
     {

@@ -12,7 +12,8 @@ internal readonly record struct LoggingOptions(
     ILogger? Logger,
     ILogger? ResultSetEnumeratorLogger = null,
     bool LogSensitiveData = false,
-    bool LogParams = false);
+    bool LogParams = false,
+    ILogger? QueryFilterLogger = null);
 
 /// <summary>
 /// The provider hooks the planning axis invokes lazily. They are passed as delegates (not the

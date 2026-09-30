@@ -220,6 +220,52 @@ The fragment is emitted verbatim (only pass trusted SQL). A provider opts in thr
 [`SupportsRawSqlSource`](xref:NextORM.Core.ISqlDialect.SupportsRawSqlSource); every SQL provider does,
 and SQLite omits the derived-table alias when the source is not joined.
 
+### Binding a raw source to entity metadata
+
+By default a raw `FROM` source is passed through as written and no [global query filter](../advanced/query-filters.md)
+is applied — nextorm does not know which columns the fragment exposes. Call
+[`BindEntity<TEntity>`](xref:NextORM.Core.EntityBuilderExtensions.BindEntity``1(NextORM.Core.EntityBuilder{NextORM.Core.TableAlias},System.Collections.Generic.IReadOnlyCollection{System.String}))
+as the **first** operation on the source to declare the entity type and the output columns the fragment
+returns; each active filter whose columns are all declared is then applied best-effort, and a filter whose
+columns are missing is skipped with a `RawSourceFilterSkipped` warning on the `NextORM.QueryFilters` logger
+category (level `Warning`, reason `MissingColumns`, carrying the **physical mapped column names** the filter
+reads). With an empty declared-column list, a filter with a proven zero-column dependency is applied, while
+a column-dependent or undetermined filter is skipped with reason `UndeterminedColumns`. None of this throws:
+
+```csharp
+public static EntityBuilder<TEntity> BindEntity<TEntity>(
+    this EntityBuilder<TableAlias> source,
+    IReadOnlyCollection<string> availableColumns)
+```
+
+```csharp
+var rows = dataContext
+    .FromSql("select id, tenant_id from complex_entity where id > @min", new { min = 5 })
+    .BindEntity<ComplexEntity>(["id", "tenant_id"])
+    .Where(t => t["id"].AsInt > 10)
+    .ToList();
+```
+
+- Column names are the **output/SQL names** of the raw select list (a configured column mapping wins over
+  the auto name), compared case-insensitively.
+- `BindEntity` must be the first call after `FromSql`/`From(string)`: a later call (after
+  `Where`/`Select`/`Join`/projection) throws `InvalidOperationException`, and another source shape, or
+  binding to `TableAlias`, throws `NotSupportedException`.
+- The list is a caller declaration, not a schema probe: nextorm does not parse the SQL, does not add or
+  rename columns and does not verify that the columns actually exist.
+- Binding applies best-effort filters only and is **not** a security guarantee: a filter whose columns you
+  omit is silently skipped, so keep enforced row scoping in the SQL itself.
+- The binding does not apply to `WithSql`/`PrepareFromSql`/`ExecuteRaw`, and the in-memory provider still
+  rejects `FromSql` with `NotSupportedException`.
+
+Binding is per source: a joined raw source uses its own `BindEntity<TEntity>` binding and declared columns
+(never the main source's or another occurrence's), and its compatible filters are merged into that join's
+`ON` condition. The main source's filters are always evaluated against its own binding; in a joined command
+they are re-rooted onto the projection's main alias `Item1` and placed in `WHERE`. `SourceOrdinal` names the
+skipped source — `0` for the main source and `j + 1` for join index `j`, counting all joins, bound or not. A
+`CROSS`/`CROSS APPLY` join has no `ON` clause, so a bound source on such a join has its compatible filters
+placed in `WHERE` and nextorm never fabricates an `ON`.
+
 ## Executing raw commands (`ExecuteRaw`)
 
 [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) and [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) keep a typed query and swap part of it. When the statement is not a mapped query at all - a DDL/DML command, a stored procedure, or a command that returns several result sets - use `ExecuteRaw` (arbitrary command text) or `ExecuteProcedure` (a stored procedure by name), which run the command and hand back a [`ProcedureResult`](xref:NextORM.Core.ProcedureResult):
