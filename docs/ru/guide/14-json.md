@@ -89,7 +89,7 @@ NULL для пустого результата `FOR JSON`). Предложен�
 терминал): запрос `for json path option (recompile)` корректен. Используйте
 [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), чтобы только присоединить предложение и сохранить
 команду композируемой. (Табличные хинты,
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), прикрепляются к таблице `FROM` и не
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), прикрепляются к таблице `FROM` и не
 зависят от JSON-предложения.) Диалект без
 поддержки предложения отклоняет команду, а совмещение `ForJson` с `ForXml` бросает
 `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.

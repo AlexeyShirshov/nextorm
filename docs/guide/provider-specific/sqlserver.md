@@ -29,7 +29,7 @@ See [Scalar functions](../../scalar-functions/04-conditionals-and-conversion.md#
 
 ## Hints
 
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) attaches a table hint to the query's `FROM` table
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])) attaches a table hint to the query's `FROM` table
 ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), and a query hint renders the
 trailing `OPTION (...)` clause, for example `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); the CTE `maxRecursion`
@@ -53,7 +53,7 @@ select id from simple_entity with (updlock)
 
 `ForUpdate` renders `updlock` (update lock held to the end of the transaction) and `ForShare` renders
 `holdlock` (shared lock). The lock hint combines with
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), so `.WithTableHint("rowlock").ForUpdate()`
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), so `dataContext.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate()`
 renders `with (rowlock, updlock)`. See
 [Row locking](../../querying/03-provider-specifics.md#row-locking-for-update--for-share).
 

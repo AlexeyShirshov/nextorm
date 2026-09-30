@@ -8136,4 +8136,24 @@ P0/P1 нет**; обе находки ниже — 🟡 P2, **deferred с три
 - 🟡 **Находка 238 (P2, идентичность члена / латентная корректность; НОВАЯ, deferred) — `FindProperty` сравнивает `PropertyInfo` по ссылке в остальных билдерах и трансляторах.**
   **Где:** `UpdateBuilder.FindProperty` (`Builders/UpdateBuilder.cs:383`), `DeleteBuilder.FindProperty` (`Builders/DeleteBuilder.cs:279`), `BulkInsertBuilder.FindProperty` (`Builders/BulkInsertBuilder.cs:498`), `UpdateJoinBuilder.FindProperty` (`Builders/UpdateJoinBuilder.cs:215`), `EntityMetadata.FindProperty` (`DataContext/Meta/Implementation/EntityMetadata.cs:42`), `MemberTranslator.FindProperty` (`Visitors/MemberTranslator.cs:109,126`) — только `InsertBuilder` починен в цикле 4b (`InsertBuilder.FindProperty`/`SameMember`, `Builders/InsertBuilder.cs:574,590`).
   **Почему:** для членов, объявленных в базовом типе и скрытых через `new`, lookup по ссылке не находит метаданные (base-declared / `new`-hidden).
-  **Триггер:** запрос/мутация, адресующая base-declared или `new`-hidden свойство, даёт `null`/неверную метаданную.
+  **Триггер:** запрос/мутация, адресущая base-declared или `new`-hidden свойство, даёт `null`/неверную метаданную.
+
+---
+
+## Аудит 30.09.2026 — issue #121: per-source table/index hints перенесены с `EntityBuilder<T>` в `FromOptions` (uncommitted working tree, ветка `1.0.9-b`); новых 🔴/🟡 нет, ℹ️ — 2
+
+**Область.** `FromOptions` (`src/nextorm.core/DataContext/FromOptions.cs`) получил `WithTableHint` (`:81`), `WithIndex` (`:102`), `WithIndex(IndexHintKind, …)` (`:113`), `WithoutIndex` (`:131`); те же 4 публичных метода удалены с `EntityBuilder<TEntity>`; оба `From`-overload'а копируют `TableHints`/`IndexHints`/`IndexHintKind` (`DataContextExtensions.cs:849-851,1015-1017`). Internal-свойства builder'а и все copy-пути (`CopyTo:1771-1773`, `JoinedEntityBuilder:2167`, план-ключ `:1573`) не тронуты. Публичная сторона — `API-NAMING-REVIEW.md` §FSH1/FSH2.
+
+| # | Проверка | Итог |
+|---|----------|------|
+| 1. `IDisposable` | ✅ Новых ресурсов/`IDisposable` нет: `FromOptions` — короткоживущий value-объект, значения копируются в builder, объект не удерживается; `CA2000`/`CA2213`/`CA1816` не затронуты. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; соотношение проекта **11/11** (0 неоправданных). |
+| 3. LINQ на горячем пути | ✅ `WithTableHint`/`WithIndex` — `.Where(...).ToArray()` на этапе построения запроса (холодно); маппинг/материализация не затронуты. |
+| 4. God-классы | ✅ `EntityBuilder.cs` уменьшился (~63 строки удалено), `FromOptions.cs` вырос до 133; пороги не перейдены, новых god-классов нет. |
+| 5. Хэш-ключи / план-кэш | ✅ `QueryPlanEqualityComparer` по-прежнему включает `TableHints` (`:106`) и `IndexHints` (`:108`); значения по-прежнему попадают в `EntityBuilder.TableHints` — ключ плана не изменился. |
+| 6. События / исключения | ✅ Подписок/`catch` нет; новых `throw` нет. |
+| 7. NRT / optional `= null` | ✅ Новых `T? x = null` нет; `params string[]` не nullable; сборка `0/0`. |
+
+ℹ️ **Наблюдения.** (1) **Находка 86 (🟡, закрыта 23.09) — локация переехала, поведение сохранено:** нормализация whitespace-фильтра теперь в `FromOptions.cs:113-123` (`Use`/`Force` + пустой после фильтра список → `IndexHints = null`, no-op; `Ignore` + пустой → `[]`). Гарды рендереров MySQL/SQL Server (`MySqlDialect.cs`, `SqlServerDialect.cs`) и `SqliteDialect` `NOT INDEXED` не менялись — Находка остаётся закрытой. (2) **Исторические ссылки в этом регистре — superseded, не переоткрываются:** записи 22.09.2026 (`:4729`, `:4737`, `:4789`) и пост-фиксы (`:4818`, `:4819`, `:4851`) называют `EntityBuilder.WithIndex`/`WithIndex`; после #121 объявления живут в `FromOptions.cs`, а не `EntityBuilder.cs:1428/1448/1458/1474-1488/1483-1488` — читать как снимок на дату.
+
+**База (30.09.2026).** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors**. Подавления `src/`: **6** `SuppressMessage` (все с `Justification`) + **5** `#pragma warning disable` (все с парным `restore`: `EntityBuilderExtensions.cs:123/125,140/142,156/158`, `ExpressionPlanEqualityComparer.cs:421/423`, `InMemoryLinqSource.cs:82/84`) = **11/11** оправданных. Слоп: `Skip=` — **0**; `Task.Delay` — 2 baseline (`Task.Delay(0)`-yield, `tests/nextorm.core.tests/InMemoryTests.cs`, вне диффа); `Thread.Sleep`/пустых `catch`/`NoWarn`/inline `Version` — **0**. `slopwatch` локально не установлен (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен вручную. `.editorconfig` — те же 7 `dotnet_diagnostic.*.severity = silent` (6 `S*` инертны без `SonarAnalyzer` + `CA2254`; пре-существующее). `find -name 'PublicAPI*.txt'` — **0** (Шаг 5 открыт).

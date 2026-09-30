@@ -114,7 +114,7 @@ full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFa
 ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), spelled through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))) and
 `SqlFunctions.SqlServer.choose(index, ...)` renders `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)); the
 specialized `SqlFunctions.SqlServer.iif` spelling still works by inheritance. Locking table hints ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) render as `WITH (hint, ...)` after the
-primary table name: `ctx.From<IComplexEntity>().WithTableHint("nolock")` emits
+primary table name: `ctx.From<IComplexEntity>(o => o.WithTableHint("nolock"))` emits
 `from complex_entity with (nolock)`. Row locking reuses the same mechanism:
 `ForUpdate`/`ForShare` ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) attach `with (updlock)`/
@@ -278,7 +278,7 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | Full-text predicates | `contains(...)` / `freetext(...)` (column must be full-text indexed) |
 | Full-text ranking | `containstable(table, column, search)` / `freetexttable(...)` table functions return `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
 | Regular expressions | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; `regexp_like` additionally needs database compatibility level 170) |
-| Locking table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
+| Locking table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
 | Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/20-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |

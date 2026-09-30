@@ -147,9 +147,9 @@ public class SqlGenerationTests
     public void IndexHint_WithIndex_ShouldEmitWithIndex()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity with (index(idx_id))");
     }
 
@@ -157,9 +157,9 @@ public class SqlGenerationTests
     public void IndexHint_ShouldMergeWithTableHintIntoSingleWithClause()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock").WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity with (nolock, index(idx_id))");
     }
 
@@ -167,9 +167,9 @@ public class SqlGenerationTests
     public void KeywordCase_Upper_ShouldUppercaseTableHintsAndIndexHint()
     {
         using var ctx = SqlServerTestContext.CreateUppercase();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock").WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Contain("WITH (nolock, INDEX(idx_id))");
     }
 
@@ -1934,18 +1934,37 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        SqlOf(ctx, ctx.From<IComplexEntity>().WithTableHint("nolock").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock")).Select(x => new { x.Id }))
             .Should().Be("select id from complex_entity with (nolock)");
 
-        SqlOf(ctx, ctx.From<IComplexEntity>().WithTableHint("nolock", "index(ix_id)").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock", "index(ix_id)")).Select(x => new { x.Id }))
             .Should().Be("select id from complex_entity with (nolock, index(ix_id))");
+    }
+
+    [Fact]
+    public void TableHint_BlankAfterHint_ShouldKeepEarlierHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // A blank name must be a no-op; a later blank call must not clear the hint set earlier.
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock").WithTableHint(" ")).Select(x => new { x.Id }))
+            .Should().Be("select id from complex_entity with (nolock)");
+    }
+
+    [Fact]
+    public void TableHint_BlankOnly_ShouldNotEmitWithClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint(" ")).Select(x => new { x.Id }))
+            .Should().Be("select id from complex_entity");
     }
 
     [Fact]
     public void TableHint_WithJoin_ShouldPlaceHintBeforeAlias()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.From<ISimpleEntity>().WithTableHint("nolock");
+        var simple = ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock"));
         var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id }));
@@ -2010,9 +2029,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .WithTableHint("rowlock")
-            .WithIndex("idx_id")
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock").WithIndex("idx_id"))
             .WithTablesInScopeHint("nolock")
             .Select(x => new { x.Id }));
 
@@ -2055,8 +2072,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .WithTableHint("rowlock")
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock"))
             .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
             .WithJoinTableHint("nolock")
             .WithTablesInScopeHint("updlock")
@@ -2178,8 +2194,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .WithTableHint("nolock")
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
             .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
             .WithJoinHint("hash")
             .Select(p => new { p.Item1.Id })
@@ -2687,9 +2702,8 @@ public class SqlGenerationTests
     public void ForUpdate_SkipLocked_WithTableHint_ShouldCombineHints()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.WithTableHint("rowlock").ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
             .Should().Be("select id from simple_entity with (rowlock, updlock, readpast)");
     }
 
@@ -2730,9 +2744,8 @@ public class SqlGenerationTests
     public void ForUpdate_WithTableHint_ShouldCombineHints()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.WithTableHint("rowlock").ForUpdate().Select(x => x.Id))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate().Select(x => x.Id))
             .Should().Be("select id from simple_entity with (rowlock, updlock)");
     }
 
@@ -3100,7 +3113,7 @@ public class SqlGenerationTests
         var ordered = () => e.OrderBy(x => x.Id).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
         ordered.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
 
-        var hinted = () => e.WithTableHint("nolock").Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        var hinted = () => ctx.From<ISalesEntity>(o => o.WithTableHint("nolock")).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
         hinted.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
     }
 

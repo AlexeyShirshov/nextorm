@@ -2,10 +2,9 @@
 
 Deferred items found while implementing #130 per-join table hints. Both stay in milestone 1.0.9-b.
 
-## A. Command-level WithTableHint does not normalize blank input
+## A. Command-level WithTableHint does not normalize blank input — <span style="color:green">RESOLVED</span> (2026-09-30)
 
-`EntityBuilder.WithTableHint` (src/nextorm.core/Builders/EntityBuilder.cs) stores an empty list for blank-only input instead of normalizing to null (as the new `WithJoinTableHint` does), so `.WithTableHint(" ")` yields a distinct plan key and clears previously set hints. The XML comment claiming `WithJoinTableHint` mirrors `WithTableHint` is inverted.
-Trigger: next work touching command-level table/index hints, or the #122 API cleanup.
+Resolved by the #121 API cleanup: `WithTableHint`/`WithIndex` now live on `FromOptions` (src/nextorm.core/DataContext/FromOptions.cs) and blank-only input is ignored, so `.WithTableHint(" ")` leaves the options unchanged — it neither pollutes the plan key nor clears a previously set hint; `WithoutIndex()` still sets the empty-ignore form.
 
 ## D. TablesInScopeHints not passed on multi-table DELETE/UPDATE join paths
 

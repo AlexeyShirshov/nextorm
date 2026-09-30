@@ -820,13 +820,14 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a query over the mapping of <typeparamref name="T"/> with per-query source options. The
-    /// values set on <paramref name="options"/> (a <c>TABLESAMPLE</c> percentage or a ClickHouse
-    /// <c>SAMPLE</c> ratio) are copied into the returned builder; the options object is not retained.
+    /// values set on <paramref name="options"/> (a <c>TABLESAMPLE</c> percentage, a ClickHouse
+    /// <c>SAMPLE</c> ratio, or per-source table/index hints) are copied into the returned builder; the
+    /// options object is not retained.
     /// The type's metadata is resolved exactly like <see cref="From{T}(IDataContext, Action{EntityMetadataBuilder{T}}?)"/>.
     /// </summary>
     /// <typeparam name="T">The mapped entity type.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c>.</param>
+    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c> or <c>o =&gt; o.WithTableHint("nolock")</c>.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for composing the query.</returns>
     public static EntityBuilder<T> From<T>(this IDataContext dataContext, Action<FromOptions> options, Action<EntityMetadataBuilder<T>>? configEntity = null)
@@ -845,6 +846,9 @@ public static class DataContextExtensions
             TableSampleClause = fromOptions.TableSampleClause,
             SampleRatio = fromOptions.SampleRatio,
             SampleOffset = fromOptions.SampleOffset,
+            TableHints = fromOptions.TableHints,
+            IndexHints = fromOptions.IndexHints,
+            IndexHintKind = fromOptions.IndexHintKind,
         };
     }
 
@@ -986,12 +990,12 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a query against a raw table (or CTE) name with per-query source options (a
-    /// <c>TABLESAMPLE</c> percentage or a ClickHouse <c>SAMPLE</c> ratio). Columns are read through
-    /// <see cref="TableAlias"/> accessors.
+    /// <c>TABLESAMPLE</c> percentage, a ClickHouse <c>SAMPLE</c> ratio, or per-source table/index
+    /// hints). Columns are read through <see cref="TableAlias"/> accessors.
     /// </summary>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="table">The table or CTE name.</param>
-    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c>.</param>
+    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c> or <c>o =&gt; o.WithTableHint("nolock")</c>.</param>
     /// <returns>A builder for composing the query.</returns>
     public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table, Action<FromOptions> options)
     {
@@ -1008,6 +1012,9 @@ public static class DataContextExtensions
             TableSampleClause = fromOptions.TableSampleClause,
             SampleRatio = fromOptions.SampleRatio,
             SampleOffset = fromOptions.SampleOffset,
+            TableHints = fromOptions.TableHints,
+            IndexHints = fromOptions.IndexHints,
+            IndexHintKind = fromOptions.IndexHintKind,
         };
     }
 

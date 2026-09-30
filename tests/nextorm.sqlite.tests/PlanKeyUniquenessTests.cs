@@ -184,9 +184,9 @@ public class PlanKeyUniquenessTests
         yield return ("forxml-mode", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).WithForXml(ForXmlMode.Raw));
         yield return ("hints", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).Hint("recompile"));
         yield return ("hints-two", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).Hint("recompile", "maxdop 1"));
-        yield return ("table-hint", ctx => Row(E(ctx).WithTableHint("INDEX(ix)")));
-        yield return ("index-hint", ctx => Row(E(ctx).WithIndex(IndexHintKind.Force, "ix")));
-        yield return ("index-hint-kind", ctx => Row(E(ctx).WithIndex(IndexHintKind.Ignore, "ix")));
+        yield return ("table-hint", ctx => Row(ctx.From<IComplexEntity>(o => o.WithTableHint("INDEX(ix)"))));
+        yield return ("index-hint", ctx => Row(ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Force, "ix"))));
+        yield return ("index-hint-kind", ctx => Row(ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Ignore, "ix"))));
         yield return ("join-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("hash")
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
         yield return ("join-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("loop")

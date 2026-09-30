@@ -241,9 +241,9 @@ public class SqlGenerationTests
     public void IndexHint_WithIndex_ShouldEmitIndexedBy()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity indexed by idx_id");
     }
 
@@ -251,9 +251,9 @@ public class SqlGenerationTests
     public void IndexHint_WithoutIndex_ShouldEmitNotIndexed()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithoutIndex());
 
-        SqlOf(ctx, e.WithoutIndex().Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity not indexed");
     }
 
@@ -261,9 +261,9 @@ public class SqlGenerationTests
     public void IndexHint_ShouldRespectKeywordCase()
     {
         using var ctx = SqliteTestContext.CreateUppercase();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Contain("INDEXED BY idx_id");
     }
 
@@ -2622,7 +2622,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>().WithTableHint("nolock").Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock")).Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
     }

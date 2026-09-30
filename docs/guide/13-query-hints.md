@@ -86,12 +86,11 @@ var sql = dataContext.WithRecursive("nums", body, 100)
 
 ## Locking table hints
 
-`EntityBuilder<T>.WithTableHint(params string[] hints)` attaches SQL Server locking hints (`nolock`/`updlock`/`holdlock`) to the primary
+`FromOptions.WithTableHint(params string[] hints)` attaches SQL Server locking hints (`nolock`/`updlock`/`holdlock`) to the primary
 physical table. SQL Server renders them as a `WITH (...)` clause between the table name and its alias:
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .WithTableHint("nolock")
+var rows = dataContext.From<IComplexEntity>(o => o.WithTableHint("nolock"))
     .Select(c => new { c.Id })
     .ToList();
 ```
@@ -147,14 +146,13 @@ the in-memory provider reject them with `NotSupportedException`.
 
 ## Index hints
 
-`EntityBuilder<T>.WithIndex(params string[] indexes)` asks the planner to consider a named index on the
+`FromOptions.WithIndex(params string[] indexes)` asks the planner to consider a named index on the
 primary physical table. The overload `WithIndex(IndexHintKind kind, params string[] indexes)` selects the
 intent ([`IndexHintKind`](xref:NextORM.Core.IndexHintKind).`Use`/`Force`/`Ignore`), and `WithoutIndex()`
 suppresses index use. Each dialect renders its native form after the table name and before its alias:
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .WithIndex("ix_complex_id")
+var rows = dataContext.From<IComplexEntity>(o => o.WithIndex("ix_complex_id"))
     .Select(c => new { c.Id })
     .ToList();
 ```
@@ -210,8 +208,7 @@ builder rejects a command that carries hints on a dialect that reports `false`.
 each dialect renders the form it has, or rejects the command:
 
 ```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .WithTableHint("nolock")
+var rows = dataContext.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
     .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .WithJoinHint("loop")
     .Select(p => new { p.Item1.Id })
@@ -283,7 +280,7 @@ both.
 
 ## Limitations
 
-* Locking table hints on the query's `FROM` table are rendered by [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])); use [`WithJoinTableHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinTableHint(System.String[])) for a chosen join, or `WithTablesInScopeHint` to cover every physical table.
+* Locking table hints on the query's `FROM` table are rendered by [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])); use [`WithJoinTableHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinTableHint(System.String[])) for a chosen join, or `WithTablesInScopeHint` to cover every physical table.
 * Concatenating a hinted command with a set operation ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) is not guarded against;
   the hint travels to the branch it was attached to and should be avoided there.
 
@@ -296,7 +293,8 @@ both.
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/Builders/EntityBuilder.cs` (`WithTableHint`/`WithJoinTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
+`src/nextorm.core/DataContext/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
+`src/nextorm.core/Builders/EntityBuilder.cs` (`WithJoinTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB inherits).

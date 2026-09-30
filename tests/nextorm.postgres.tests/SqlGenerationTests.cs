@@ -156,9 +156,9 @@ public class SqlGenerationTests
     public void IndexHint_ShouldThrowBecauseNotSupported()
     {
         using var ctx = PostgresTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        var act = () => SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Index hints*");
     }

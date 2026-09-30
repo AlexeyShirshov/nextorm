@@ -2332,23 +2332,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return b;
     }
     /// <summary>
-    /// Attaches table-level hints to the primary physical table, for example
-    /// <c>From&lt;IComplexEntity&gt;().WithTableHint("nolock")</c> which renders
-    /// <c>from complex_entity with (nolock)</c>. Requires a dialect that supports table hints (see
-    /// <see cref="ISqlDialect.SupportsTableHints"/>); the hints are rendered verbatim, so only use
-    /// trusted values.
-    /// </summary>
-    public EntityBuilder<TEntity> WithTableHint(params string[] hints)
-    {
-        var b = Clone();
-
-        b.TableHints = hints is { Length: > 0 }
-            ? hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToArray()
-            : null;
-
-        return b;
-    }
-    /// <summary>
     /// Attaches a provider-specific hint to the most recently added join, for example SQL Server
     /// <c>.WithJoinHint("loop")</c> which renders <c>inner loop join</c>. The builder is copied — the
     /// source join is replaced by a copy carrying the hint, so neither the source builder nor a sibling
@@ -2371,7 +2354,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <summary>
     /// Attaches table-level hints to the most recently added join, for example SQL Server
     /// <c>.WithJoinTableHint("nolock")</c> which renders a <c>WITH (nolock)</c> clause on that joined
-    /// table only. This is the per-join counterpart of <see cref="WithTableHint"/> and is distinct
+    /// table only. This is the per-join counterpart of <see cref="FromOptions.WithTableHint"/> and is distinct
     /// from the optimizer join hint <see cref="WithJoinHint"/>; unlike <see cref="WithTablesInScopeHint"/>
     /// it never leaks to the other physical tables. The builder is copied — the source join is replaced
     /// by a copy carrying the hints, so neither the source builder nor a sibling built from it is
@@ -2390,8 +2373,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             throw new InvalidOperationException("A join modifier requires a preceding join.");
 
         // Normalize blank-only input to null: a call that supplies no usable hint must not clear hints
-        // attached by an earlier call, mirroring WithTableHint. ReplaceLastJoin keeps the previous value
-        // when the argument is null.
+        // attached by an earlier call, mirroring FromOptions.WithTableHint. ReplaceLastJoin keeps the
+        // previous value when the argument is null.
         string[]? filtered = hints is { Length: > 0 }
             ? hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToArray()
             : null;
@@ -2447,46 +2430,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         b.TablesInScopeHints = names;
         return b;
     }
-    /// <summary>
-    /// Attaches an index hint to the primary physical table, asking the planner to consider
-    /// <paramref name="indexes"/> (<c>USE INDEX</c> on MySQL/MariaDB, <c>INDEXED BY</c> on SQLite,
-    /// <c>WITH (INDEX(...))</c> on SQL Server). Requires a dialect that supports index hints (see
-    /// <see cref="ISqlDialect.IndexHints"/>); a dialect without a native form rejects the command with
-    /// <see cref="NotSupportedException"/>. The names are emitted verbatim, so only use trusted values.
-    /// Use the overload taking an <see cref="IndexHintKind"/> to force or ignore the indexes.
-    /// </summary>
-    /// <param name="indexes">The index names to hint; never empty.</param>
-    /// <returns>A builder with the index hint applied.</returns>
-    public EntityBuilder<TEntity> WithIndex(params string[] indexes)
-        => WithIndex(IndexHintKind.Use, indexes);
-    /// <summary>
-    /// Attaches an index hint with an explicit <paramref name="kind"/> to the primary physical table.
-    /// With <see cref="IndexHintKind.Ignore"/> and no names, SQLite renders <c>NOT INDEXED</c>. Requires
-    /// a dialect that supports index hints (see <see cref="ISqlDialect.IndexHints"/>).
-    /// </summary>
-    /// <param name="kind">Whether to use, force or ignore the indexes.</param>
-    /// <param name="indexes">The index names to hint; may be empty for <see cref="IndexHintKind.Ignore"/>.</param>
-    /// <returns>A builder with the index hint applied.</returns>
-    public EntityBuilder<TEntity> WithIndex(IndexHintKind kind, params string[] indexes)
-    {
-        var b = Clone();
-
-        var names = indexes is { Length: > 0 }
-            ? indexes.Where(i => !string.IsNullOrWhiteSpace(i)).ToArray()
-            : [];
-        b.IndexHints = names.Length > 0 ? names : (kind == IndexHintKind.Ignore ? [] : null);
-        b.IndexHintKind = kind;
-
-        return b;
-    }
-    /// <summary>
-    /// Tells the SQLite planner not to use any index (<c>NOT INDEXED</c>), or asks other dialects to
-    /// ignore every named index. Requires a dialect that supports index hints (see
-    /// <see cref="ISqlDialect.IndexHints"/>).
-    /// </summary>
-    /// <returns>A builder with the index suppression applied.</returns>
-    public EntityBuilder<TEntity> WithoutIndex()
-        => WithIndex(IndexHintKind.Ignore);
     /// <summary>
     /// Overrides identifier quoting for the commands this builder creates: when
     /// <paramref name="value"/> is <c>true</c>, physical table and column names are quoted with the

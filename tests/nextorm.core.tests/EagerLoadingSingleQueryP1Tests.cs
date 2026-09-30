@@ -1045,7 +1045,7 @@ public class EagerLoadingSingleQueryP1Tests
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().WithTableHint("nolock"), p => p.Id, c => c.ParentId)
+            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.WithTableHint("nolock")), p => p.Id, c => c.ParentId)
             .AsSingleQuery()
             .ToList();
 
@@ -1234,7 +1234,7 @@ public class EagerLoadingSingleQueryP1Tests
         using var context = CreateContext();
 
         var act = () => context.From<P1Parent>()
-            .LoadWith(p => p.Children, c => c.From<P1Child>().WithIndex("ix_child"), p => p.Id, c => c.ParentId)
+            .LoadWith(p => p.Children, c => c.From<P1Child>(o => o.WithIndex("ix_child")), p => p.Id, c => c.ParentId)
             .AsSingleQuery()
             .ToList();
 

@@ -178,15 +178,14 @@ public class SqlGenerationTests
     public void IndexHint_UseForceIgnore_ShouldRenderMySqlForms()
     {
         using var ctx = MySqlTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id")).Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity use index (idx_id)");
 
-        SqlOf(ctx, e.WithIndex(IndexHintKind.Force, "idx_id", "idx_other").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithIndex(IndexHintKind.Force, "idx_id", "idx_other")).Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity force index (idx_id, idx_other)");
 
-        SqlOf(ctx, e.WithIndex(IndexHintKind.Ignore, "idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithIndex(IndexHintKind.Ignore, "idx_id")).Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity ignore index (idx_id)");
     }
 
@@ -194,9 +193,9 @@ public class SqlGenerationTests
     public void IndexHint_WhitespaceNames_ShouldBeIgnored()
     {
         using var ctx = MySqlTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("  "));
 
-        SqlOf(ctx, e.WithIndex("  ").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity");
     }
 
@@ -204,9 +203,9 @@ public class SqlGenerationTests
     public void IndexHint_WithoutIndex_ShouldThrowOnMySql()
     {
         using var ctx = MySqlTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithoutIndex());
 
-        var act = () => SqlOf(ctx, e.WithoutIndex().Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*at least one index*");
     }
@@ -703,7 +702,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Int)).Should().EndWith("FOR UPDATE SKIP LOCKED");
         SqlOf(ctx, e.ForShare(LockWaitMode.NoWait).Select(x => x.Int)).Should().EndWith("FOR SHARE NOWAIT");
 
-        SqlOf(ctx, e.WithIndex(IndexHintKind.Force, "idx_int").Select(x => x.Int))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Force, "idx_int")).Select(x => x.Int))
             .Should().Contain("FORCE INDEX (idx_int)");
     }
 

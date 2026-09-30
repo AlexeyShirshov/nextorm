@@ -88,7 +88,7 @@ NULL for an empty `FOR JSON` result). The clause is placed after `ORDER BY` and 
 `OPTION (...)`, so it composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (apply the hint first, then the
 terminal): a `for json path option (recompile)` query is valid. Use
 [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) to only attach the clause and keep the command composable. (Table hints,
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), attach to the `FROM` table and are independent of the
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), attach to the `FROM` table and are independent of the
 JSON clause.) A dialect that does not support the clause rejects the command, and combining `ForJson`
 with `ForXml` throws `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
 

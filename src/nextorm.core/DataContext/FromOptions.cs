@@ -11,6 +11,9 @@ public sealed class FromOptions
     internal TableSampleClause? TableSampleClause { get; private set; }
     internal double? SampleRatio { get; private set; }
     internal double SampleOffset { get; private set; }
+    internal IReadOnlyList<string>? TableHints { get; private set; }
+    internal IReadOnlyList<string>? IndexHints { get; private set; }
+    internal IndexHintKind IndexHintKind { get; private set; }
 
     /// <summary>
     /// Reads only <paramref name="percent"/> percent of the primary table with a <c>TABLESAMPLE</c>
@@ -64,4 +67,78 @@ public sealed class FromOptions
 
         return this;
     }
+
+    /// <summary>
+    /// Attaches table-level hints to the primary physical table, for example
+    /// <c>ctx.From&lt;IComplexEntity&gt;(o =&gt; o.WithTableHint("nolock"))</c> which renders
+    /// <c>from complex_entity with (nolock)</c>. Requires a dialect that supports table hints (see
+    /// <see cref="ISqlDialect.SupportsTableHints"/>); the hints are rendered verbatim, so only use
+    /// trusted values. Null/blank entries are ignored: a call that supplies no usable hint leaves the
+    /// options unchanged.
+    /// </summary>
+    /// <param name="hints">The table hints to apply to the primary source (for example <c>nolock</c>).</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions WithTableHint(params string[] hints)
+    {
+        var names = hints is { Length: > 0 }
+            ? hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToArray()
+            : [];
+
+        if (names.Length > 0)
+            TableHints = names;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Attaches an index hint to the primary physical table, asking the planner to consider
+    /// <paramref name="indexes"/> (<c>USE INDEX</c> on MySQL/MariaDB, <c>INDEXED BY</c> on SQLite,
+    /// <c>WITH (INDEX(...))</c> on SQL Server). Requires a dialect that supports index hints (see
+    /// <see cref="ISqlDialect.IndexHints"/>); a dialect without a native form rejects the command with
+    /// <see cref="NotSupportedException"/>. The names are emitted verbatim, so only use trusted values.
+    /// Use the overload taking an <see cref="IndexHintKind"/> to force or ignore the indexes.
+    /// </summary>
+    /// <param name="indexes">The index names to hint; never empty.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions WithIndex(params string[] indexes)
+        => WithIndex(IndexHintKind.Use, indexes);
+
+    /// <summary>
+    /// Attaches an index hint with an explicit <paramref name="kind"/> to the primary physical table.
+    /// With <see cref="IndexHintKind.Ignore"/> and no names, SQLite renders <c>NOT INDEXED</c>. Requires
+    /// a dialect that supports index hints (see <see cref="ISqlDialect.IndexHints"/>). Null/blank names
+    /// are ignored: a call with no usable name is a no-op unless <paramref name="kind"/> is
+    /// <see cref="IndexHintKind.Ignore"/>.
+    /// </summary>
+    /// <param name="kind">Whether to use, force or ignore the indexes.</param>
+    /// <param name="indexes">The index names to hint; may be empty for <see cref="IndexHintKind.Ignore"/>.</param>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions WithIndex(IndexHintKind kind, params string[] indexes)
+    {
+        var names = indexes is { Length: > 0 }
+            ? indexes.Where(i => !string.IsNullOrWhiteSpace(i)).ToArray()
+            : [];
+
+        if (names.Length > 0)
+        {
+            IndexHints = names;
+            IndexHintKind = kind;
+        }
+        else if (kind == IndexHintKind.Ignore)
+        {
+            IndexHints = [];
+            IndexHintKind = kind;
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Tells the SQLite planner not to use any index (<c>NOT INDEXED</c>), or asks other dialects to
+    /// ignore every named index. Requires a dialect that supports index hints (see
+    /// <see cref="ISqlDialect.IndexHints"/>).
+    /// </summary>
+    /// <returns>This instance, to allow chaining.</returns>
+    public FromOptions WithoutIndex()
+        => WithIndex(IndexHintKind.Ignore);
 }

@@ -58,13 +58,12 @@ var sql = dataContext.WithRecursive("nums", body, 100)
 
 ## Блокирующие табличные хинты
 
-`EntityBuilder<T>.WithTableHint(params string[] hints)` прикрепляет блокирующие хинты SQL Server (`nolock`/`updlock`/`holdlock`) к основной
+`FromOptions.WithTableHint(params string[] hints)` прикрепляет блокирующие хинты SQL Server (`nolock`/`updlock`/`holdlock`) к основной
 физической таблице. SQL Server рендерит их как предложение `WITH (...)`, между именем таблицы и её
 псевдонимом:
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .WithTableHint("nolock")
+var rows = dataContext.From<IComplexEntity>(o => o.WithTableHint("nolock"))
     .Select(c => new { c.Id })
     .ToList();
 ```
@@ -122,15 +121,14 @@ SQLite, ClickHouse и провайдер in-memory отклоняют их че�
 
 ## Index-хинты
 
-`EntityBuilder<T>.WithIndex(params string[] indexes)` просит планировщик рассмотреть именованный индекс
+`FromOptions.WithIndex(params string[] indexes)` просит планировщик рассмотреть именованный индекс
 основной физической таблицы. Перегрузка `WithIndex(IndexHintKind kind, params string[] indexes)` задаёт
 намерение ([`IndexHintKind`](xref:NextORM.Core.IndexHintKind).`Use`/`Force`/`Ignore`), а `WithoutIndex()`
 подавляет использование индексов. Каждый диалект рендерит свою нативную форму после имени таблицы и до
 её псевдонима:
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .WithIndex("ix_complex_id")
+var rows = dataContext.From<IComplexEntity>(o => o.WithIndex("ix_complex_id"))
     .Select(c => new { c.Id })
     .ToList();
 ```
@@ -215,8 +213,7 @@ var my = dataContext.From<ISimpleEntity>()
 части запроса; каждый диалект рендерит доступную ему форму либо отклоняет команду:
 
 ```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .WithTableHint("nolock")
+var rows = dataContext.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
     .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .WithJoinHint("loop")
     .Select(p => new { p.Item1.Id })
@@ -289,7 +286,7 @@ settings max_threads = 2
 
 ## Ограничения
 
-* Блокирующие табличные хинты для таблицы из `FROM` запроса рендерит [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])); для выбранного join используйте [`WithJoinTableHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinTableHint(System.String[])), а чтобы покрыть все физические таблицы — `WithTablesInScopeHint`.
+* Блокирующие табличные хинты для таблицы из `FROM` запроса рендерит [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])); для выбранного join используйте [`WithJoinTableHint`](xref:NextORM.Core.EntityBuilder`1.WithJoinTableHint(System.String[])), а чтобы покрыть все физические таблицы — `WithTablesInScopeHint`.
 * Объединение команды с хинтами через операцию над множествами ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) не
   защищено; хинт «уезжает» в ту ветку, к которой был привязан, и этого следует избегать.
 
@@ -302,7 +299,8 @@ settings max_threads = 2
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/Builders/EntityBuilder.cs` (`WithTableHint`/`WithJoinTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
+`src/nextorm.core/DataContext/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
+`src/nextorm.core/Builders/EntityBuilder.cs` (`WithJoinTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

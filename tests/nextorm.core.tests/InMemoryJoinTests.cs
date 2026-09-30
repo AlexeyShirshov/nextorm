@@ -118,8 +118,7 @@ public class InMemoryJoinTests
     [Fact]
     public void TestTableHint_ShouldThrow()
     {
-        var act = () => _sut.SimpleEntity
-            .WithTableHint("nolock")
+        var act = () => _sut.DataProvider.From<SimpleEntity>(o => o.WithTableHint("nolock"))
             .Select(p => new { p.Id })
             .ToList();
 

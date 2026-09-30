@@ -29,7 +29,7 @@ select choose(2, 'a', 'b', 'c') as [Label] from complex_entity
 
 ## Хинты
 
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) привязывает табличный хинт к таблице `FROM`
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])) привязывает табличный хинт к таблице `FROM`
 запроса ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), а хинт запроса
 рендерит завершающую клаузу `OPTION (...)`, например `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); параметр CTE
@@ -54,7 +54,7 @@ select id from simple_entity with (updlock)
 
 `ForUpdate` рендерит `updlock` (блокировка обновления до конца транзакции), а `ForShare` — `holdlock`
 (разделяемая блокировка). Хинт блокировки комбинируется с
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])): `.WithTableHint("rowlock").ForUpdate()` даёт
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])): `dataContext.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate()` даёт
 `with (rowlock, updlock)`. См.
 [Блокировку строк](../../querying/03-provider-specifics.md#блокировка-строк-for-update--for-share).
 

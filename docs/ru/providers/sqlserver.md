@@ -136,7 +136,7 @@ XQuery и SQL-тип обязаны быть строковыми литерал
 `IXmlNodesRow.Value` проецируется скалярными методами выше (операнд обязан быть колонкой внешней строки,
 XQuery — строковым литералом).
 Блокирующие табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) отрисовываются как `WITH (hint, ...)` после имени основной
-таблицы: `ctx.From<IComplexEntity>().WithTableHint("nolock")` даёт `from complex_entity with (nolock)`.
+таблицы: `ctx.From<IComplexEntity>(o => o.WithTableHint("nolock"))` даёт `from complex_entity with (nolock)`.
 Блокировка строк использует тот же механизм: `ForUpdate`/`ForShare`
 ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) привязывают
@@ -287,7 +287,7 @@ SQL Server также поддерживает многоколоночный т
 | Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |
 | Полнотекстовое ранжирование | табличные функции `containstable(table, column, search)` / `freetexttable(...)` возвращают `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
 | Регулярные выражения | `regexp_like(value, pattern, 'c'/'i')` / `regexp_replace(value, pattern, replacement, 1, 0, 'c'/'i')` (SQL Server 2025+; для `regexp_like` дополнительно нужен уровень совместимости БД 170) |
-| Блокирующие табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
+| Блокирующие табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[]))) |
 | Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на основной таблице ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
 | Нативный bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions` (см. [Массовая вставка](../guide/20-bulk-insert.md#опции-bulk-copy-в-sql-server)) |
 | JSON-вывод | весь набор одним JSON-документом, терминальные `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |

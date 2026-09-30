@@ -372,7 +372,7 @@ to the ledger on 2026-09-29.
     `pg_hint_plan` extension on PostgreSQL and as native optimizer hints on MySQL/MariaDB); SQLite and
     ClickHouse have no statement-hint syntax and reject it.
     Shipped: [Query hints](../../guide/13-query-hints.md).
-17. **Index hints — <span style="color:green">shipped</span> cross-provider.** `EntityBuilder<T>.WithIndex(...)`/`WithoutIndex()` renders the
+17. **Index hints — <span style="color:green">shipped</span> cross-provider.** `FromOptions.WithIndex(...)`/`WithoutIndex()` renders the
     native form on MySQL/MariaDB (`USE`/`FORCE`/`IGNORE INDEX`), SQLite (`INDEXED BY`/`NOT INDEXED`) and
     SQL Server (`WITH (INDEX(...))`, merged with a locking `WithTableHint` into one `WITH (...)`); PostgreSQL
     (without `pg_hint_plan`), ClickHouse and the in-memory provider have no native form and reject it with
