@@ -3197,4 +3197,53 @@ public class SqlGenerationTests
         sql.Should().Be("select t3.A, t3.B, t4.id as 'Third' from (select t1.id as 'A', t2.id as 'B' from simple_entity as 't1' join simple_entity as 't2' on t1.id = t2.id) as 't3' join simple_entity as 't4' on t3.B = t4.id");
     }
 
+    // --- SelectWhereMax: window-rank lowering ---
+
+    private static string Dequoted(string sql) => sql
+        .Replace("\r\n", " ")
+        .Replace('\n', ' ')
+        .Replace("\"", string.Empty)
+        .Replace("[", string.Empty)
+        .Replace("]", string.Empty)
+        .Replace("`", string.Empty);
+
+    private static string OuterSelectList(string sql)
+    {
+        const string marker = "select ";
+        var start = sql.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return sql;
+        start += marker.Length;
+        var end = sql.IndexOf(" from ", start, StringComparison.Ordinal);
+        return end < 0 ? sql[start..] : sql[start..end];
+    }
+
+    [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldRenderRowNumberFilteredToTheSingleExtreme()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
 }

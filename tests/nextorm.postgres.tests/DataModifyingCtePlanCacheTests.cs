@@ -4,6 +4,13 @@ using NextORM.Core;
 namespace NextORM.Postgres.Tests;
 
 /// <summary>
+/// Serializes the tests that purge the process-wide plan cache with the tests that assert plan-cache
+/// HITS, so a purge on another xunit thread cannot evict a plan just stored by a cache-asserting test.
+/// </summary>
+[CollectionDefinition("Query plan cache", DisableParallelization = true)]
+public sealed class QueryPlanCacheCollection;
+
+/// <summary>
 /// The plan-cache contract for a command whose <c>WITH</c> carries a data-modifying CTE. Such a
 /// statement is side-effecting, so its plan must be neither looked up nor stored. The cache decision
 /// (<c>QueryPlanner.GetPreparedQueryCommand</c>) is taken before <c>QueryPreparer.PrepareCtes</c> hoists
@@ -11,6 +18,7 @@ namespace NextORM.Postgres.Tests;
 /// a DML CTE nested in a derived table / join / set-operation branch, which the hoist rejects, fails
 /// before it can reach the cache. All tests run against a placeholder connection string (no database).
 /// </summary>
+[Collection("Query plan cache")]
 public class DataModifyingCtePlanCacheTests
 {
     public sealed class DmlRow

@@ -30,6 +30,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private LambdaExpression? _group;
     private LimitByClause? _limitBy;
     private DistinctOnClause? _distinctOn;
+    private ExtremeRowClause? _extremeRow;
     private TableSampleClause? _tablesample;
     private TemporalClause? _temporal;
     private LockClause? _rowLock;
@@ -157,6 +158,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal LimitByClause? LimitByClause { get => _limitBy; set => _limitBy = value; }
     /// <summary>The <c>DISTINCT ON (expr, ...)</c> clause (PostgreSQL), or <c>null</c> when there is none.</summary>
     internal DistinctOnClause? DistinctOnClause { get => _distinctOn; set => _distinctOn = value; }
+    /// <summary>The <c>SelectWhereMax</c>/<c>SelectWhereMin</c> clause, or <c>null</c> when there is none.</summary>
+    internal ExtremeRowClause? ExtremeRowClause { get => _extremeRow; set => _extremeRow = value; }
     /// <summary>The <c>TABLESAMPLE</c> table modifier, or <c>null</c> when there is none.</summary>
     internal TableSampleClause? TableSampleClause { get => _tablesample; set => _tablesample = value; }
     /// <summary>The <c>FOR SYSTEM_TIME</c> temporal-table clause, or <c>null</c> when there is none.</summary>
@@ -309,6 +312,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
         cmd.DistinctOn = _distinctOn;
+        cmd.ExtremeRow = _extremeRow;
         cmd.TableSample = _tablesample;
         cmd.Temporal = _temporal;
         cmd.RowLock = _rowLock;
@@ -834,6 +838,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         if (_distinctOn is not null)
             shapes.Add("DistinctOn");
+
+        if (_extremeRow is not null)
+            shapes.Add("SelectWhereExtreme");
 
         if (_limitBy is not null)
             shapes.Add("LimitBy");
@@ -1390,6 +1397,105 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return b;
     }
     /// <summary>
+    /// Selects the row(s) with the maximum <paramref name="valueSelector"/> value, optionally per
+    /// <paramref name="groupBy"/> group. Requires a dialect that supports it (see
+    /// <see cref="ISqlDialect.SupportsSelectWhereMinMax"/>).
+    /// </summary>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <param name="valueSelector">The value whose maximum is compared.</param>
+    /// <param name="ties">Whether to keep a single row or every tied row.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
+    public EntityBuilder<TEntity> SelectWhereMax<TValue>(
+        Expression<Func<TEntity, TValue>> valueSelector,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+        => SelectWhereExtreme(ExtremeKind.Max, valueSelector, ties, groupBy);
+
+    /// <summary>
+    /// Selects the row(s) with the minimum <paramref name="valueSelector"/> value, optionally per
+    /// <paramref name="groupBy"/> group. Requires a dialect that supports it (see
+    /// <see cref="ISqlDialect.SupportsSelectWhereMinMax"/>).
+    /// </summary>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <param name="valueSelector">The value whose minimum is compared.</param>
+    /// <param name="ties">Whether to keep a single row or every tied row.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
+    public EntityBuilder<TEntity> SelectWhereMin<TValue>(
+        Expression<Func<TEntity, TValue>> valueSelector,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+        => SelectWhereExtreme(ExtremeKind.Min, valueSelector, ties, groupBy);
+
+    /// <summary>
+    /// Selects the row(s) with the maximum <paramref name="valueSelector"/> value and projects each with
+    /// <paramref name="projection"/>, optionally per <paramref name="groupBy"/> group. Requires a dialect
+    /// that supports it (see <see cref="ISqlDialect.SupportsSelectWhereMinMax"/>).
+    /// </summary>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <typeparam name="TResult">The projection type.</typeparam>
+    /// <param name="valueSelector">The value whose maximum is compared.</param>
+    /// <param name="projection">The projection applied to the surviving row(s).</param>
+    /// <param name="ties">Whether to keep a single row or every tied row.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
+    public QueryCommand<TResult> SelectWhereMax<TValue, TResult>(
+        Expression<Func<TEntity, TValue>> valueSelector,
+        Expression<Func<TEntity, TResult>> projection,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+        => SelectWhereExtreme(ExtremeKind.Max, valueSelector, projection, ties, groupBy);
+
+    /// <summary>
+    /// Selects the row(s) with the minimum <paramref name="valueSelector"/> value and projects each with
+    /// <paramref name="projection"/>, optionally per <paramref name="groupBy"/> group. Requires a dialect
+    /// that supports it (see <see cref="ISqlDialect.SupportsSelectWhereMinMax"/>).
+    /// </summary>
+    /// <typeparam name="TValue">The value type compared for the extremum.</typeparam>
+    /// <typeparam name="TResult">The projection type.</typeparam>
+    /// <param name="valueSelector">The value whose minimum is compared.</param>
+    /// <param name="projection">The projection applied to the surviving row(s).</param>
+    /// <param name="ties">Whether to keep a single row or every tied row.</param>
+    /// <param name="groupBy">Optional grouping key; <c>null</c> selects across the whole result.</param>
+    public QueryCommand<TResult> SelectWhereMin<TValue, TResult>(
+        Expression<Func<TEntity, TValue>> valueSelector,
+        Expression<Func<TEntity, TResult>> projection,
+        ExtremeRowTies ties = ExtremeRowTies.One,
+        Expression<Func<TEntity, object?>>? groupBy = null)
+        => SelectWhereExtreme(ExtremeKind.Min, valueSelector, projection, ties, groupBy);
+
+    private EntityBuilder<TEntity> SelectWhereExtreme<TValue>(
+        ExtremeKind kind,
+        Expression<Func<TEntity, TValue>> valueSelector,
+        ExtremeRowTies ties,
+        Expression<Func<TEntity, object?>>? groupBy)
+    {
+        ArgumentNullException.ThrowIfNull(valueSelector);
+
+        var b = Clone();
+        b._extremeRow = new ExtremeRowClause(kind, valueSelector, ties, groupBy, null);
+
+        return b;
+    }
+
+    private QueryCommand<TResult> SelectWhereExtreme<TValue, TResult>(
+        ExtremeKind kind,
+        Expression<Func<TEntity, TValue>> valueSelector,
+        Expression<Func<TEntity, TResult>> projection,
+        ExtremeRowTies ties,
+        Expression<Func<TEntity, object?>>? groupBy)
+    {
+        ArgumentNullException.ThrowIfNull(valueSelector);
+        ArgumentNullException.ThrowIfNull(projection);
+
+        var b = Clone();
+        b._extremeRow = new ExtremeRowClause(kind, valueSelector, ties, groupBy, projection);
+
+        // Build the projection command over the same source so the command's select list is the
+        // user projection and the extreme-row clause rides on that same command. Wrapping it in a
+        // derived query would leave the outer command with a null select list, which the preparer
+        // rejects ("Select must return new anonymous type").
+        return b.Select(projection);
+    }
+    /// <summary>
     /// Declares a named window <c>w AS (PARTITION BY ... ORDER BY ... frame)</c> on this query. Window
     /// functions reference it with <c>Over("w")</c>; every declared window renders in a single
     /// <c>WINDOW</c> clause after <c>GROUP BY</c>/<c>HAVING</c>. Requires a dialect that supports named
@@ -1528,7 +1634,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             || _group is not null || _sorting is { Count: > 0 } || !Paging.IsEmpty || IsDistinct
             || _tablesample is not null || _temporal is not null || _rowLock is not null || _preWhere is not null
             || _arrayJoins is { Count: > 0 } || _settings is { Count: > 0 } || _limitBy is not null
-            || _distinctOn is not null || _windows is { Count: > 0 } || IsFinal || SampleRatio is not null
+            || _distinctOn is not null || _extremeRow is not null || _windows is { Count: > 0 } || IsFinal || SampleRatio is not null
             || TableHints is { Count: > 0 } || IndexHints is not null || Ctes is { Count: > 0 })
             throw new NotSupportedException(_query is not null
                 ? "PIVOT/UNPIVOT over a derived query accepts no modifiers on the pivot builder; apply filters, joins, grouping, ordering, paging and table modifiers inside the derived query or to the reshaped result."
@@ -1719,6 +1825,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.GroupByWithTotals = GroupByWithTotals;
         dst.LimitByClause = LimitByClause;
         dst.DistinctOnClause = DistinctOnClause;
+        dst.ExtremeRowClause = ExtremeRowClause;
         dst.TableSampleClause = TableSampleClause;
         dst.TemporalClause = TemporalClause;
         dst.RowLockClause = RowLockClause;

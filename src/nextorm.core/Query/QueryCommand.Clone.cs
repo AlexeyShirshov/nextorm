@@ -77,6 +77,9 @@ public partial class QueryCommand
         dst._limitByColumns = _limitByColumns;
         dst.DistinctOn = DistinctOn;
         dst._distinctOnColumns = _distinctOnColumns;
+        dst.ExtremeRow = ExtremeRow;
+        dst._extremeRowColumns = _extremeRowColumns;
+        dst._extremeRowGroupByColumns = _extremeRowGroupByColumns;
         dst.TableSample = TableSample;
         dst.Temporal = Temporal;
         dst.RowLock = RowLock;

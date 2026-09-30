@@ -42,6 +42,11 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType;
         ArgumentNullException.ThrowIfNull(entityType);
 
+        // A SelectWhereMax/SelectWhereMin command is lowered to a portable window-function derived
+        // table (see MakeExtremeRowSelect) instead of the plain single-statement rendering below.
+        if (cmd.ExtremeRow is not null)
+            return MakeExtremeRowSelect(cmd, selectInto);
+
         var selectList = cmd.SelectList;
         var from = cmd.From;
         // A command whose declarations were hoisted into the enclosing statement's top-level WITH must
@@ -590,6 +595,329 @@ internal readonly struct SqlBuilder
             if (sqlBuilder is not null)
                 StringBuilderPool.Shared.Return(sqlBuilder);
         }
+    }
+
+    /// <summary>
+    /// Lowers a <c>SelectWhereMax</c>/<c>SelectWhereMin</c> command to a portable window-function query:
+    /// <code>
+    /// select &lt;projection&gt; from (
+    ///     select *, row_number() | rank() over (partition by ... order by ... desc|asc) as rn
+    ///     from &lt;source&gt; where &lt;condition&gt;
+    /// ) t1 where t1.rn = 1
+    /// </code>
+    /// The source rows plus the synthetic rank column form the derived table; the outer statement
+    /// projects the command's select list over it. The rank column is dropped by the projection and is
+    /// named to avoid colliding with a mapped source column. Works on every provider whose dialect
+    /// reports <see cref="ISqlDialect.SupportsSelectWhereMinMax"/>.
+    /// </summary>
+    private string? MakeExtremeRowSelect(QueryCommand cmd, string? selectInto)
+    {
+        if (!_ctx.Dialect.SupportsSelectWhereMinMax)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} does not support SelectWhereMax/SelectWhereMin.");
+
+        EnsureExtremeRowCompatible(cmd, selectInto);
+
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+        var rankColumn = MakeExtremeRowRankName(entityType);
+
+        // --- inner derived table: the source rows plus the window rank ---
+        string? innerSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var inner = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+                var rankSql = MakeExtremeRowRankExpression(cmd, entityType, rankColumn);
+
+                if (!_ctx.ParamMode)
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(Kw(" from ")).Append(fromSql);
+
+                // Comparison nulls must not participate in the extremum: a NULL `order by` value wins
+                // MIN under SQLite's (and PostgreSQL's) default null ordering and would surface an
+                // all-null group. Filtering the value expressions out of the source makes such rows
+                // invisible to rank()/row_number() and drops all-null partitions entirely. The filter
+                // is ANDed with the source's own condition (if any) and, like the rank expression,
+                // walks the value expressions in parameter mode so numbering stays in step with SQL.
+                var valueColumns = cmd.ExtremeRowColumns ?? [];
+                var hasNotNullFilter = valueColumns.Length > 0;
+                var hasCondition = cmd.PreparedCondition is not null;
+
+                if (hasNotNullFilter || hasCondition)
+                {
+                    if (!_ctx.ParamMode)
+                        inner!.AppendLine().Append(Kw(" where "));
+
+                    if (hasNotNullFilter)
+                    {
+                        for (var i = 0; i < valueColumns.Length; i++)
+                        {
+                            if (!_ctx.ParamMode && i > 0)
+                                inner!.Append(Kw(" and "));
+
+                            var (_, valueColumn) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
+                            if (!_ctx.ParamMode)
+                                inner!.Append(valueColumn).Append(' ').Append(Kw("is not null"));
+                        }
+
+                        if (hasCondition && !_ctx.ParamMode)
+                            inner!.Append(Kw(" and "));
+                    }
+
+                    if (cmd.PreparedCondition is { } condition)
+                        SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
+                }
+
+                innerSql = inner?.ToString();
+            }
+            finally
+            {
+                if (inner is not null) StringBuilderPool.Shared.Return(inner);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        // --- outer statement over the derived table ---
+        string? result = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            string? alias = null;
+            if (!_ctx.ParamMode)
+            {
+                // Register the derived table as a physical-shaped source so member access of the
+                // command's select list resolves to its aliased columns; the inner `select *` exposes
+                // the source's physical column names.
+                _ctx.ColumnsProvider.Add(entityType, false);
+                alias = _ctx.AliasProvider!.GetNextAlias(new FromExpression(entityType));
+            }
+
+            var outer = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var selectList = cmd.SelectList;
+
+                if (!_ctx.ParamMode)
+                {
+                    outer!.Append(Kw("select "));
+
+                    if (cmd.Tag is { Length: > 0 } tag)
+                        outer.Append(MakeTagComment(tag)).Append(' ');
+
+                    if (cmd.IsDistinct)
+                        outer.Append(Kw("distinct "));
+
+                    if (cmd.IgnoreColumns || selectList is null || selectList.Length == 0)
+                    {
+                        // The inner derived table selects the source columns plus the synthetic rank
+                        // column, so a bare `*` here would leak that rank column into the result. With no
+                        // explicit projection, expand the entity's mapped columns explicitly (the same
+                        // shape the normal whole-row select path prepares) so the rank is dropped.
+                        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
+                            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
+
+                        var (entityColumns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
+                        for (var i = 0; i < entityColumns.Length; i++)
+                        {
+                            if (i > 0) outer.Append(", ");
+
+                            var item = entityColumns[i];
+                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
+                            outer.Append(column);
+
+                            if (needAliasForColumn)
+                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                        }
+                    }
+                    else
+                    {
+                        for (var i = 0; i < selectList.Length; i++)
+                        {
+                            if (i > 0) outer.Append(", ");
+
+                            var item = selectList[i];
+                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
+                            outer.Append(column);
+
+                            if (needAliasForColumn)
+                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                        }
+                    }
+
+                    outer.AppendLine().Append(Kw("from ")).Append('(').Append(innerSql).Append(')')
+                        .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
+
+                    outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
+                        .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
+
+                    AppendOrderBy(cmd, entityType, outer);
+                }
+                else
+                {
+                    // Parameter pass: walk the same expressions in the same order as the SQL pass.
+                    if (!cmd.IgnoreColumns && selectList is not null)
+                    {
+                        for (var i = 0; i < selectList.Length; i++)
+                            SqlSourceRenderer.MakeColumn(in _ctx, selectList[i], entityType, dontNeedAlias: false, renameAware: true);
+                    }
+
+                    if (cmd.Sorting is { Length: > 0 } sorting)
+                    {
+                        for (var i = 0; i < sorting.Length; i++)
+                        {
+                            if (sorting[i].PreparedExpression is { } prepared)
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+                        }
+                    }
+                }
+
+                result = outer?.ToString();
+            }
+            finally
+            {
+                if (outer is not null) StringBuilderPool.Shared.Return(outer);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Renders the <c>order by</c> of the surviving rows on the outer statement. Mirrors the plain
+    /// select-list ordering: a prepared expression is rendered through the column visitor, an ordinal
+    /// is emitted verbatim. A parameter-mode caller walks the expressions separately.
+    /// </summary>
+    private void AppendOrderBy(QueryCommand cmd, Type entityType, StringBuilder target)
+    {
+        if (cmd.Sorting is not { Length: > 0 } sorting)
+            return;
+
+        target.AppendLine().Append(Kw("order by "));
+        for (var i = 0; i < sorting.Length; i++)
+        {
+            if (i > 0) target.Append(", ");
+
+            if (sorting[i].PreparedExpression is { } prepared)
+                target.Append(SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0));
+            else
+                target.Append(sorting[i].ColumnIndex);
+
+            if (sorting[i].Direction == OrderDirection.Desc)
+                target.Append(Kw(" desc"));
+        }
+    }
+
+    /// <summary>
+    /// Renders <c>row_number()</c> (single survivor) or <c>rank()</c> (every tied survivor) over the
+    /// optional group partition and the value ordering. <c>Max</c> orders the value descending,
+    /// <c>Min</c> ascending (the default direction). Multiple keys of a composite selector are emitted
+    /// in order. Parameter mode visits the keys but emits nothing.
+    /// </summary>
+    private string MakeExtremeRowRankExpression(QueryCommand cmd, Type entityType, string rankColumn)
+    {
+        var extreme = cmd.ExtremeRow!;
+        var valueColumns = cmd.ExtremeRowColumns ?? [];
+        var groupColumns = cmd.ExtremeRowGroupByColumns ?? [];
+
+        var builder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        try
+        {
+            if (builder is not null)
+                builder.Append(extreme.Ties == ExtremeRowTies.All ? "rank()" : "row_number()").Append(Kw(" over ("));
+
+            for (var i = 0; i < groupColumns.Length; i++)
+            {
+                if (builder is not null)
+                    builder.Append(i == 0 ? Kw("partition by ") : ", ");
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, groupColumns[i], entityType, dontNeedAlias: true);
+                if (builder is not null) builder.Append(column);
+            }
+
+            for (var i = 0; i < valueColumns.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    if (i == 0)
+                        builder.Append(groupColumns.Length > 0 ? Kw(" order by ") : Kw("order by "));
+                    else
+                        builder.Append(", ");
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
+                if (builder is not null)
+                {
+                    builder.Append(column);
+                    if (extreme.Kind == ExtremeKind.Max)
+                        builder.Append(Kw(" desc"));
+                }
+            }
+
+            if (builder is not null)
+                builder.Append(')').Append(_ctx.Dialect.MakeColumnAlias(rankColumn, _ctx.KeywordCase));
+
+            return builder?.ToString() ?? string.Empty;
+        }
+        finally
+        {
+            if (builder is not null) StringBuilderPool.Shared.Return(builder);
+        }
+    }
+
+    /// <summary>
+    /// Returns a rank-column name that no mapped column of <paramref name="entityType"/> uses, so the
+    /// synthetic column cannot shadow or be shadowed by a source column when the derived table selects
+    /// <c>*</c> plus the rank.
+    /// </summary>
+    private static string MakeExtremeRowRankName(Type entityType)
+    {
+        const string seed = "__nextorm_rn";
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+            return seed;
+
+        var properties = metadata.Properties;
+        var name = seed;
+        while (true)
+        {
+            var collides = false;
+            for (var i = 0; i < properties.Count; i++)
+            {
+                if (string.Equals(properties[i].ColumnName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    collides = true;
+                    break;
+                }
+            }
+
+            if (!collides) return name;
+            name += "_";
+        }
+    }
+
+    /// <summary>
+    /// Rejects the combinations the derived-table lowering cannot express, before any SQL is assembled.
+    /// The modifier checks are shared with the in-memory evaluator (see
+    /// <see cref="ExtremeRowCompatibility.EnsureModifiersCompatible"/>); only the SQL-only source shape
+    /// and the SELECT ... INTO wrapper are checked here.
+    /// </summary>
+    private static void EnsureExtremeRowCompatible(QueryCommand cmd, string? selectInto)
+    {
+        if (selectInto is not null)
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin cannot be rendered as a SELECT ... INTO source.");
+
+        ExtremeRowCompatibility.EnsureModifiersCompatible(cmd);
+
+        if (cmd.From is null || cmd.From.SubQuery is not null)
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a single physical-table source.");
     }
 
     /// <summary>

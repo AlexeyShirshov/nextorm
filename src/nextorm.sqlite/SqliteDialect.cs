@@ -136,6 +136,9 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite 3.25+ declares named windows (<c>WINDOW w AS (...)</c>) and references them with <c>OVER w</c>.</summary>
     public override bool SupportsNamedWindows => true;
 
+    /// <summary>SQLite 3.25+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+    public override bool SupportsSelectWhereMinMax => true;
+
     /// <summary>SQLite 3.28+ supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
 

@@ -1248,6 +1248,14 @@ public interface ISqlDialect
     IDistinctOnRenderer? DistinctOn => null;
 
     /// <summary>
+    /// Whether the dialect can express the <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection
+    /// request from <see cref="NextORM.Core.ExtremeRowClause"/>. When <c>false</c>, a command that
+    /// carries one is rejected when its SQL is built. Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling; every built-in dialect opts in.
+    /// </summary>
+    bool SupportsSelectWhereMinMax => false;
+
+    /// <summary>
     /// Wraps the rendered table-function call, or returns it unchanged. ClickHouse uses it to cast the
     /// unsigned <c>numbers</c> column to a type the row reader supports.
     /// </summary>

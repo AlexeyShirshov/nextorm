@@ -180,6 +180,69 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 The key may be an anonymous type to key on several columns. Only PostgreSQL implements `DISTINCT ON`;
 every other provider rejects it at SQL build time.
 
+## Keeping the extreme row (`SelectWhereMax` / `SelectWhereMin`)
+
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) and
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) keep the row (or rows)
+whose value under a selector is the greatest or smallest in the source. They are a row filter, not an
+aggregate: a surviving row keeps every column.
+
+**Global vs per-group.** Without a group key the extremum is taken over the whole source; with a group
+key the extreme row(s) are selected within each distinct group. A `null` key is a group of its own.
+
+```csharp
+// Global: the single row with the greatest score.
+var top = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score)
+    .ToList();
+
+// Per group: one extreme row per category.
+var perGroup = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category)
+    .ToList();
+```
+
+[`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) controls ties. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (the default) keeps a single
+row — when values tie the provider picks one — while [`All`](xref:NextORM.Core.ExtremeRowTies.All) keeps every row tied on the extreme
+value. Ties are decided only by the selector, so an `All` result contains all of them and a `One`
+result exactly one arbitrary member.
+
+**Projection form.** The
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) overloads take a
+projection and apply it to each surviving row, returning a typed query command:
+
+```csharp
+var projected = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+    .ToList();
+```
+
+**NULL semantics.** `null` comparison values are ignored, so they never win the extremum and never
+appear in a result. A group whose comparison value is always `null` yields no rows at all, and the
+global form returns nothing when every value is `null`.
+
+**Portable implementation.** The dialect lowers the request to a window-function derived table —
+`row_number()` for [`One`](xref:NextORM.Core.ExtremeRowTies.One), `rank()` for [`All`](xref:NextORM.Core.ExtremeRowTies.All), `over (partition by <group> order by <value> [desc])` —
+filtered to rank `1`, with the source condition ANDed with an `is not null` filter on the value:
+
+```sql
+-- the portable shape: rank the source rows, then keep rank 1
+select <projection> from (
+    select *, row_number() over (partition by <group> order by <value> desc) as rn
+    from <source>
+    where <value> is not null and <condition>
+) t where t.rn = 1
+```
+
+This is the implementation on every SQL provider (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB and
+ClickHouse) and on the in-memory provider. Native shortcuts such as PostgreSQL `DISTINCT ON` or
+ClickHouse `argMax` are a possible future optimization; the current implementation is the portable one.
+
+The request is rejected at SQL build time when combined with another row-shaping modifier the
+derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a join, `Having`, named windows,
+`LimitBy`, `ArrayJoin`, `PreWhere`, paging, a set operation or a non-physical source.
+
 ## Provider differences
 
 | Provider | `DISTINCT` + limit | `DISTINCT` over a join |
@@ -203,4 +266,6 @@ every other provider rejects it at SQL build time.
 Source: `tests/nextorm.integration.tests/CommonTestSuite.Distinct.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:26`,
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:26,35`,
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:25`.
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:25`,
+`tests/nextorm.integration.tests/CommonTestSuite.SelectWhereExtrema.cs:41`,
+`tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1353`.

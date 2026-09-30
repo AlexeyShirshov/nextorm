@@ -10,6 +10,7 @@ namespace NextORM.Postgres.Tests;
 /// UPDATE/DELETE <c>WHERE</c>, an INSERT target is never filtered and an INSERT ... SELECT filters only
 /// its source. No database connection is opened.
 /// </summary>
+[Collection("Query plan cache")]
 public class QueryFilterSqlGenerationTests
 {
     private const string TenantKey = "qf_tenant_pg_sqlgen";

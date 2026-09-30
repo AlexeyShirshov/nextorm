@@ -95,6 +95,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists eager_parent;
         drop table if exists query_filter_target;
         drop table if exists query_filter_entity;
+        drop table if exists extrema_entity;
 
         create table simple_entity (id int not null primary key);
 
@@ -232,5 +233,28 @@ internal sealed class SqlServerTestProvider : ITestProvider
             is_deleted bit not null,
             name nvarchar(100) null
         );
+
+        -- SelectWhereMax/SelectWhereMin fixtures (#115): a nullable comparison value (score) and a
+        -- nullable group key (category), with ties, a null group, an all-null group and a category
+        -- absent from the data (for the empty-result case).
+        create table extrema_entity
+        (
+            id int not null primary key,
+            score int null,
+            category nvarchar(50) null,
+            label nvarchar(50) not null
+        );
+        insert into extrema_entity (id, score, category, label) values
+            (1, null, 'a', 'one'),
+            (2, 5, 'a', 'two'),
+            (3, 9, 'a', 'three'),
+            (4, 9, 'a', 'four'),
+            (5, 3, 'b', 'five'),
+            (6, 1, 'b', 'six'),
+            (7, null, null, 'seven'),
+            (8, 7, null, 'eight'),
+            (9, 4, 'c', 'nine'),
+            (10, 1, 'b', 'ten'),
+            (11, null, 'd', 'eleven');
         """;
 }

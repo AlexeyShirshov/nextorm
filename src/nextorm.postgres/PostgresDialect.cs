@@ -364,6 +364,9 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL supports the <c>SELECT DISTINCT ON (expr, ...)</c> modifier.</summary>
     public override IDistinctOnRenderer DistinctOn => PostgresDistinctOnRenderer.Instance;
 
+    /// <summary>PostgreSQL renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+    public override bool SupportsSelectWhereMinMax => true;
+
     /// <summary>PostgreSQL supports the <c>TABLESAMPLE</c> table modifier (both <c>SYSTEM</c> and <c>BERNOULLI</c>).</summary>
     public override ITableSampleMethods TableSample => PostgresTableSampleMethods.Instance;
 

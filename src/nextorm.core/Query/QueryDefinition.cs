@@ -61,6 +61,8 @@ public sealed record QueryDefinition
     internal LimitByClause? LimitBy { get; init; }
     /// <summary>Optional <c>DISTINCT ON (expr, ...)</c> clause (PostgreSQL).</summary>
     internal DistinctOnClause? DistinctOn { get; init; }
+    /// <summary>Optional <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection clause.</summary>
+    internal ExtremeRowClause? ExtremeRow { get; init; }
     /// <summary>Optional <c>TABLESAMPLE</c> table modifier.</summary>
     internal TableSampleClause? TableSample { get; init; }
     /// <summary>Optional <c>FOR SYSTEM_TIME</c> temporal-table clause.</summary>

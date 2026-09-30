@@ -234,6 +234,8 @@ internal static class InMemoryQueryBuilder
             throw new NotSupportedException($"Aggregate '{asyncAggregateName}' over an async source is not supported by the in-memory provider.");
         if (queryCommand.GroupBy is not null)
             throw new NotSupportedException("GroupBy over an async source is not supported by the in-memory provider.");
+        if (queryCommand.ExtremeRow is not null)
+            throw new NotSupportedException("SelectWhereMax/SelectWhereMin over an async source is not supported by the in-memory provider.");
         if (queryCommand.Sorting is not null)
         {
             // An async source cannot be sorted lazily without buffering; wrap it in an iterator that
@@ -309,6 +311,18 @@ internal static class InMemoryQueryBuilder
             if (queryCommand.GroupBy is not null)
                 return InMemoryGrouping.CreateGroupedEnumerator<TResult, TEntity>(context, queryCommand, cacheEntry, data!, @params);
 
+            if (queryCommand.ExtremeRow is not null)
+            {
+                // Mirror the normal path's cache state (resolved source + per-call resolver) while
+                // keeping the source fresh: the resolver re-resolves TEntity from the current
+                // context.Data on every execution, so a cached plan reused after WithData replaced the
+                // registered source sees the new rows instead of replaying the first call's capture.
+                cacheEntry.Data = data;
+                cacheEntry.Resolver = p => InMemoryExtremeRow.CreateEnumerator<TResult, TEntity>(
+                    context, queryCommand, cacheEntry, ResolveExtremeSource<TEntity>(context), p);
+                return InMemoryExtremeRow.CreateEnumerator<TResult, TEntity>(context, queryCommand, cacheEntry, data!, @params);
+            }
+
             if (queryCommand.Sorting is not null)
             {
                 data = InMemoryOrdering.ApplyOrdering(context, data, queryCommand, context.SortingSelectorCache);
@@ -365,8 +379,31 @@ internal static class InMemoryQueryBuilder
         }
     }
 
+    /// <summary>
+    /// Re-resolves a query's source entity sequence from the context's current
+    /// <see cref="InMemoryDataContext.Data"/>. The extreme-row per-call resolver uses this so a cached
+    /// plan reads re-seeded rows instead of a captured reference from its first execution; the
+    /// <c>IAsyncEnumerable</c> guard preserves the fail-closed contract of the extreme path.
+    /// </summary>
+    private static IEnumerable<TEntity> ResolveExtremeSource<TEntity>(InMemoryDataContext context)
+    {
+        if (!context.Data.TryGetValue(typeof(TEntity), out var source))
+            return Array.Empty<TEntity>();
+
+        if (source is IEnumerable<TEntity> rows)
+            return rows;
+
+        if (source is IAsyncEnumerable<TEntity>)
+            throw new NotSupportedException("SelectWhereMax/SelectWhereMin over an async source is not supported by the in-memory provider.");
+
+        return Array.Empty<TEntity>();
+    }
+
     public static IAsyncEnumerator<TResult> CreateEnumeratorAdapter<TResult, TEntity>(InMemoryDataContext context, QueryCommand<TResult> queryCommand, InMemoryPreparedQueryCommand<TResult> cacheEntry, IAsyncEnumerator<TEntity> enumerator)
     {
+        if (queryCommand.ExtremeRow is not null)
+            throw new NotSupportedException("SelectWhereMax/SelectWhereMin over a derived subquery source is not supported by the in-memory provider.");
+
         if (queryCommand.Joins is { Length: > 0 } && !typeof(TEntity).IsAssignableTo(typeof(IProjection)))
             throw new NotSupportedException($"The {queryCommand.Joins[0].JoinType} join is not supported by the in-memory provider.");
 

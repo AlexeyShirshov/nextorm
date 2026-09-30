@@ -181,6 +181,9 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL 8.0+ declares named windows (the <c>WINDOW</c> clause) and references them with <c>OVER w</c>.</summary>
     public override bool SupportsNamedWindows => true;
 
+    /// <summary>MySQL 8.0+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+    public override bool SupportsSelectWhereMinMax => true;
+
     // MySQL/MariaDB full-text search matches against a FULLTEXT index; contains uses boolean mode,
     // freetext natural-language mode. The relevance score is turned into a boolean.
     /// <inheritdoc/>

@@ -134,6 +134,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private SelectExpression[]? _groupingList;
     private SelectExpression[]? _limitByColumns;
     private SelectExpression[]? _distinctOnColumns;
+    private SelectExpression[]? _extremeRowColumns;
+    private SelectExpression[]? _extremeRowGroupByColumns;
     /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
     protected readonly Sorting[]? _sorting;
 
@@ -168,6 +170,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         GroupByWithTotals = definition.GroupByWithTotals;
         LimitBy = definition.LimitBy;
         DistinctOn = definition.DistinctOn;
+        ExtremeRow = definition.ExtremeRow;
         TableSample = definition.TableSample;
         Temporal = definition.Temporal;
         RowLock = definition.RowLock;
@@ -203,6 +206,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         GroupByWithTotals = GroupByWithTotals,
         LimitBy = LimitBy,
         DistinctOn = DistinctOn,
+        ExtremeRow = ExtremeRow,
         TableSample = TableSample,
         Temporal = Temporal,
         RowLock = RowLock,
@@ -328,6 +332,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     internal DistinctOnClause? DistinctOn { get; set; }
     /// <summary>The prepared key columns of <see cref="DistinctOn"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? DistinctOnColumns => _distinctOnColumns;
+    /// <summary>
+    /// The <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection clause, or <c>null</c> when the query
+    /// has none. A dialect that does not support it rejects the command when its SQL is built.
+    /// </summary>
+    internal ExtremeRowClause? ExtremeRow { get; set; }
+    /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
+    internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;
+    /// <summary>The prepared group-by columns of <see cref="ExtremeRow"/>, or <c>null</c> when the clause has no group.</summary>
+    internal SelectExpression[]? ExtremeRowGroupByColumns => _extremeRowGroupByColumns;
     /// <summary>
     /// The <c>TABLESAMPLE</c> table modifier, or <c>null</c> when the query has none. A dialect that does
     /// not support it rejects the command when its SQL is built.
@@ -615,6 +628,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _groupingList = null;
         _limitByColumns = null;
         _distinctOnColumns = null;
+        _extremeRowColumns = null;
+        _extremeRowGroupByColumns = null;
         PreparedPreWhere = null;
         _preparedArrayJoin = null;
         PreWhereShapeHash = 0;

@@ -232,6 +232,9 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; PostgreSQL opts into <c>DISTINCT ON</c>.</summary>
     public virtual IDistinctOnRenderer? DistinctOn => null;
 
+    /// <summary>Defaults to <c>false</c>; no provider opts into <c>SelectWhereMax</c>/<c>SelectWhereMin</c> yet.</summary>
+    public virtual bool SupportsSelectWhereMinMax => false;
+
     /// <summary>
     /// Wraps the rendered table-function call, or returns it unchanged. ClickHouse uses it to cast the
     /// unsigned <c>numbers</c> column to a type the row reader supports.

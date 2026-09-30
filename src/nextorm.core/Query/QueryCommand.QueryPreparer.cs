@@ -62,6 +62,7 @@ public partial class QueryCommand
             var (groupingList, groupingPlanHash) = PrepareGrouping(cmd, dontCalculateHash, cancellationToken);
             var limitByColumns = PrepareLimitBy(cmd, cancellationToken);
             var distinctOnColumns = PrepareDistinctOn(cmd, cancellationToken);
+            var (extremeRowColumns, extremeRowGroupByColumns) = PrepareExtremeRow(cmd, cancellationToken);
             PrepareWindows(cmd, dontCalculateHash);
             var sortingPlanHash = PrepareSorting(cmd, selectList, dontCalculateHash, cancellationToken);
 
@@ -74,6 +75,8 @@ public partial class QueryCommand
             cmd._groupingList = groupingList ?? [];
             cmd._limitByColumns = limitByColumns ?? [];
             cmd._distinctOnColumns = distinctOnColumns ?? [];
+            cmd._extremeRowColumns = extremeRowColumns ?? [];
+            cmd._extremeRowGroupByColumns = extremeRowGroupByColumns ?? [];
             cmd._srcType = srcType;
             cmd._from = from;
 
@@ -1028,6 +1031,28 @@ public partial class QueryCommand
                 columns = BuildKeyColumns(distinctOn.Expression, "DISTINCT ON", cancellationToken);
 
             return columns;
+        }
+
+        /// <summary>
+        /// Prepares the value-selector (and optional group-by) key columns of a
+        /// <c>SelectWhereMax</c>/<c>SelectWhereMin</c> clause. Rendering is provider-specific and happens
+        /// later; this only resolves the clause lambdas into select expressions.
+        /// </summary>
+        private static (SelectExpression[]? ValueColumns, SelectExpression[]? GroupByColumns) PrepareExtremeRow(QueryCommand cmd, CancellationToken cancellationToken)
+        {
+            var valueColumns = cmd._extremeRowColumns;
+            var groupByColumns = cmd._extremeRowGroupByColumns;
+
+            if (cmd.ExtremeRow is { } extremeRow)
+            {
+                if (valueColumns is null)
+                    valueColumns = BuildKeyColumns(extremeRow.ValueSelector, "SelectWhereMax/Min", cancellationToken);
+
+                if (extremeRow.GroupBy is { } groupBy && groupByColumns is null)
+                    groupByColumns = BuildKeyColumns(groupBy, "SelectWhereMax/Min GROUP BY", cancellationToken);
+            }
+
+            return (valueColumns, groupByColumns);
         }
 
         /// <summary>

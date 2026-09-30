@@ -268,6 +268,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse declares named windows (<c>WINDOW w AS (...)</c>) and references them with <c>OVER w</c>.</summary>
     public override bool SupportsNamedWindows => true;
 
+    /// <summary>ClickHouse 21+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+    public override bool SupportsSelectWhereMinMax => true;
+
     /// <summary>ClickHouse supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;
 

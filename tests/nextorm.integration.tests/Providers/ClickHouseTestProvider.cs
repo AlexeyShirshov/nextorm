@@ -232,6 +232,33 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             is_deleted Bool,
             name Nullable(String)
         ) engine = Memory
+        """,
+
+        // SelectWhereMax/SelectWhereMin fixtures: ClickHouse does not derive CommonTestSuite, so the
+        // same deterministic data is re-pinned by ClickHouseIntegrationTests.
+        "drop table if exists extrema_entity",
+        """
+        create table extrema_entity
+        (
+            id Int32,
+            score Nullable(Int32),
+            category Nullable(String),
+            label String
+        ) engine = Memory
+        """,
+        """
+        insert into extrema_entity (id, score, category, label) values
+            (1, null, 'a', 'one'),
+            (2, 5, 'a', 'two'),
+            (3, 9, 'a', 'three'),
+            (4, 9, 'a', 'four'),
+            (5, 3, 'b', 'five'),
+            (6, 1, 'b', 'six'),
+            (7, null, null, 'seven'),
+            (8, 7, null, 'eight'),
+            (9, 4, 'c', 'nine'),
+            (10, 1, 'b', 'ten'),
+            (11, null, 'd', 'eleven')
         """
     ];
 }

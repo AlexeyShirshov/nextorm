@@ -356,6 +356,9 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server 2012+ implements the <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
     public override bool SupportsPercentRankCumeDist => true;
 
+    /// <summary>SQL Server 2012+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+    public override bool SupportsSelectWhereMinMax => true;
+
     /// <summary>SQL Server renders percentiles as the <c>PERCENTILE_CONT</c>/<c>PERCENTILE_DISC</c> analytic functions (no exact ordered-set aggregate form).</summary>
     public override bool SupportsPercentileWindow => true;
 

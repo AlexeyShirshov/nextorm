@@ -1345,6 +1345,67 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         nestedRows.Should().Equal(flatRows).And.Equal(2, 3);
     }
 
+    /// <summary>
+    /// SelectWhereMax: keeps the single whole row with the greatest <c>score</c>. The portable
+    /// window-function lowering must be accepted by ClickHouse unchanged.
+    /// </summary>
+    [Fact]
+    public void SelectWhereExtrema_Max_GlobalOne_ShouldReturnTheWholeExtremeRow()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>().SelectWhereMax(e => e.Score).ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Score.Should().Be(9);
+        (rows[0].Id, rows[0].Label).Should().BeOneOf((3, "three"), (4, "four"));
+    }
+
+    /// <summary>
+    /// SelectWhereMax grouped with <see cref="ExtremeRowTies.All"/>: every row tied on the group
+    /// maximum survives, and the all-null group contributes no rows.
+    /// </summary>
+    [Fact]
+    public void SelectWhereExtrema_Max_GroupedAll_ShouldReturnEveryTiedRowPerGroup()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>()
+            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category)
+            .ToList();
+
+        rows.Should().HaveCount(5);
+        rows.Should().NotContain(r => r.Category == "d");
+        rows.Where(r => r.Category == "a").Select(r => r.Id).Should().BeEquivalentTo([3, 4]);
+        rows.Where(r => r.Category == "b").Select(r => r.Id).Should().BeEquivalentTo([5]);
+        rows.Where(r => r.Category == "c").Select(r => r.Id).Should().BeEquivalentTo([9]);
+        rows.Where(r => r.Category == null).Select(r => r.Id).Should().BeEquivalentTo([8]);
+    }
+
+    /// <summary>SelectWhereMax projection form over a ClickHouse table.</summary>
+    [Fact]
+    public void SelectWhereExtrema_Max_Projection_ShouldProjectTheExtremeRow()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>()
+            .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+            .ToList();
+
+        rows.Should().ContainSingle();
+        (rows[0].Id, rows[0].Label).Should().BeOneOf((3, "three"), (4, "four"));
+    }
+
+    /// <summary>
+    /// SelectWhereMin global with <see cref="ExtremeRowTies.All"/>: both minimum rows survive and
+    /// null comparison values are ignored.
+    /// </summary>
+    [Fact]
+    public void SelectWhereExtrema_Min_GlobalAll_ShouldReturnEveryTiedRow()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>()
+            .SelectWhereMin(e => e.Score, ExtremeRowTies.All)
+            .ToList();
+
+        rows.Should().HaveCount(2);
+        rows.Select(r => r.Id).Should().BeEquivalentTo([6, 10]);
+        rows.Should().OnlyContain(r => r.Score == 1);
+    }
+
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
                 cmd, createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken))

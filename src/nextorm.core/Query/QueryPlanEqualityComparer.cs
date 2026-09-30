@@ -95,6 +95,23 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (!_expComparer.Equals(xDistinctOn.Expression, yDistinctOn.Expression)) return false;
         }
 
+        var xExtremeRow = x.ExtremeRow;
+        var yExtremeRow = y.ExtremeRow;
+        if (xExtremeRow is not null || yExtremeRow is not null)
+        {
+            if (xExtremeRow is null || yExtremeRow is null) return false;
+
+            if (xExtremeRow.Kind != yExtremeRow.Kind) return false;
+
+            if (xExtremeRow.Ties != yExtremeRow.Ties) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.ValueSelector, yExtremeRow.ValueSelector)) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.GroupBy, yExtremeRow.GroupBy)) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.Projection, yExtremeRow.Projection)) return false;
+        }
+
         if (!WindowsEqual(x.Windows, y.Windows)) return false;
 
         if (x.TableSample != y.TableSample) return false;
@@ -448,6 +465,19 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (obj.DistinctOn is { } distinctOn)
             {
                 hash.Add(distinctOn.Expression, _expComparer);
+            }
+
+            if (obj.ExtremeRow is { } extremeRow)
+            {
+                hash.Add((int)extremeRow.Kind);
+                hash.Add((int)extremeRow.Ties);
+                hash.Add(extremeRow.ValueSelector, _expComparer);
+
+                if (extremeRow.GroupBy is { } extremeGroupBy)
+                    hash.Add(extremeGroupBy, _expComparer);
+
+                if (extremeRow.Projection is { } extremeProjection)
+                    hash.Add(extremeProjection, _expComparer);
             }
 
             if (obj.TableSample is { } tablesample)
