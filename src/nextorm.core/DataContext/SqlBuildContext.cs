@@ -47,6 +47,16 @@ internal readonly record struct SqlBuildContext
     /// (see <see cref="CteHoister"/>). Set only while rendering the body of a hoisted declaration.
     /// </summary>
     internal bool SuppressCtes { get; init; }
+
+    /// <summary>
+    /// Renders the body of a data-modifying CTE whose command is a single-table <c>UPDATE</c> or
+    /// <c>DELETE</c> (an <c>INSERT</c> body is rendered directly by <see cref="SqlSourceRenderer"/>).
+    /// Set on the context that renders a statement which may declare such a CTE, so the body is emitted
+    /// with the enclosing statement's parameter provider and accumulator. When it is <see langword="null"/>
+    /// the renderer rejects an UPDATE/DELETE body rather than emitting invalid SQL.
+    /// </summary>
+    internal Func<CteMutation, SqlBuildContext, string>? RenderMutationBody { get; init; }
+
     internal KeywordCase KeywordCase { get; init; }
     internal string ParameterNamePrefix { get; init; }
 

@@ -235,9 +235,10 @@ public partial class QueryCommand
 
                     // A data-modifying CTE is a side-effecting statement: never share its plan, because
                     // the mutation's shape (row count, target columns) is not fully captured by the CTE
-                    // query.
-                    if (cte.IsDataModifying)
-                        cmd.Cache = false;
+                    // query. The planner detects the mutation through QueryCommand.HasDataModifyingCte
+                    // and bypasses the plan cache call-locally (storeInCache := false) rather than
+                    // mutating the command's sticky Cache flag here, which would leak to every later
+                    // query on a shared context command.
                 }
             }
 

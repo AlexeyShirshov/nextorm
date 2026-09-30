@@ -1387,6 +1387,20 @@ public interface ISqlDialect
     bool SupportsDataModifyingCtes => false;
 
     /// <summary>
+    /// Whether the dialect can return the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>
+    /// through a <c>RETURNING</c> clause (PostgreSQL). Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsUpdateJoinReturning => false;
+
+    /// <summary>
+    /// Whether the dialect can return the affected rows of a multi-table <c>DELETE ... USING ... JOIN</c>
+    /// through a <c>RETURNING</c> clause (PostgreSQL). Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsDeleteJoinReturning => false;
+
+    /// <summary>
     /// Whether the dialect can insert a row that writes only column defaults
     /// (<c>INSERT ... DEFAULT VALUES</c>, or <c>INSERT ... () VALUES ()</c> where the dialect overrides
     /// <see cref="MakeDefaultValues"/>). Declared as a default interface method returning <c>false</c> so

@@ -151,7 +151,7 @@ public sealed class DeleteBuilder<TEntity>
         var parameter = Expression.Parameter(typeof(TEntity), "x");
         var identity = Expression.Lambda<Func<TEntity, TEntity>>(parameter, parameter);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(identity, _metadata.Properties, FindProperty);
-        return new DeleteReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn);
+        return new DeleteReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn, projection: identity);
     }
 
     /// <summary>
@@ -168,7 +168,7 @@ public sealed class DeleteBuilder<TEntity>
     {
         ArgumentNullException.ThrowIfNull(projection);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(projection, _metadata.Properties, FindProperty);
-        return new DeleteReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn);
+        return new DeleteReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn, projection: projection);
     }
 
     /// <summary>Executes the delete and returns the number of affected rows.</summary>

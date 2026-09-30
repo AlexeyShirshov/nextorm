@@ -16,6 +16,7 @@ public sealed class UpdateReturningBuilder<TEntity, TResult> : IOutputIntoMutati
     private readonly IReadOnlyList<IPropertyMetadata> _returningColumns;
     private readonly SelectExpression[] _selectList;
     private readonly bool _oneColumn;
+    private readonly System.Linq.Expressions.LambdaExpression? _projection;
     private readonly string? _outputIntoTable;
 
     internal UpdateReturningBuilder(
@@ -23,14 +24,32 @@ public sealed class UpdateReturningBuilder<TEntity, TResult> : IOutputIntoMutati
         IReadOnlyList<IPropertyMetadata> returningColumns,
         SelectExpression[] selectList,
         bool oneColumn,
-        string? outputIntoTable = null)
+        string? outputIntoTable = null,
+        System.Linq.Expressions.LambdaExpression? projection = null)
     {
         _update = update;
         _returningColumns = returningColumns;
         _selectList = selectList;
         _oneColumn = oneColumn;
         _outputIntoTable = outputIntoTable;
+        _projection = projection;
     }
+
+    /// <summary>The context the update executes on.</summary>
+    internal IDataContext DataContext => _update.DataContext;
+
+    /// <summary>
+    /// The selector that defines the returned columns, or <c>null</c> when none was captured. Used to
+    /// shape a data-modifying CTE read so its returned columns are typed like the <c>RETURNING</c>
+    /// projection.
+    /// </summary>
+    internal System.Linq.Expressions.LambdaExpression? Projection => _projection;
+
+    /// <summary>The mapped columns the CTE body returns through <c>RETURNING</c>.</summary>
+    internal IReadOnlyList<IPropertyMetadata> ReturningColumns => _returningColumns;
+
+    /// <summary>Builds the <c>UPDATE ... RETURNING</c> command that becomes the body of a data-modifying CTE.</summary>
+    internal MutationCommand BuildMutationCommand() => BuildCommand();
 
     /// <summary>Executes the update and returns the single updated row.</summary>
     /// <returns>The materialized row.</returns>
@@ -85,7 +104,7 @@ public sealed class UpdateReturningBuilder<TEntity, TResult> : IOutputIntoMutati
     public UpdateReturningBuilder<TEntity, TResult> OutputIntoThenOutput(string targetTable)
     {
         ArgumentException.ThrowIfNullOrEmpty(targetTable);
-        return new UpdateReturningBuilder<TEntity, TResult>(_update, _returningColumns, _selectList, _oneColumn, targetTable);
+        return new UpdateReturningBuilder<TEntity, TResult>(_update, _returningColumns, _selectList, _oneColumn, targetTable, _projection);
     }
 
     /// <summary>

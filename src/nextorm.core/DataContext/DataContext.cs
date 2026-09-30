@@ -870,6 +870,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             InsertCommand insert => BuildInsertSql(insert),
             UpdateCommand update => BuildUpdateSql(update),
             DeleteCommand delete => BuildDeleteSql(delete),
+            UpdateJoinCommand updateJoin => BuildUpdateJoinSql(updateJoin),
+            DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
             MergeCommand merge => BuildMergeSql(merge),
             _ => throw new NotSupportedException($"Unsupported returning mutation command {command.GetType().Name}."),
         };

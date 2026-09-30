@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Data.Common;
 
 namespace NextORM.Postgres.Tests;
 
@@ -176,4 +177,23 @@ public class UpdateSqlGenerationTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void DataModifyingCte_UpdateReturningBody_ShouldRenderUpdateReturningInsideCte()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        SqlOf(ctx, ctx.With("upd", ctx.Update<IMergeEntity>()
+                .Set(x => x.Name, "a")
+                .Where(x => x.Id == 1)
+                .Returning(x => new { x.Id, x.Name }))
+            .From("upd")
+            .Select(r => new { r.Id, r.Name }))
+            .Should().Be("with upd as (update merge_entity set name = @p0 where id = 1 returning id, name) select id, name from upd as \"t1\"");
+    }
+
+    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
 }

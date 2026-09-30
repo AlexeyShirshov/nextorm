@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -759,6 +759,131 @@ public static class DataContextExtensions
         return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>>(query, typeof(T1));
     }
 
+    /// <summary>Switches a multi-table <c>DELETE</c> to a row-returning terminal over a projection of the removed rows; a selected member may reference any joined table. See <c>Returning</c> projection overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2>, TResult> Returning<T1, T2, TResult>(this JoinedEntityBuilder<T1, T2> query, Expression<Func<Projection<T1, T2>, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2>, TResult>(query, typeof(T1), columns, selectList, oneColumn, projection);
+    }
+
+    /// <summary>Switches a three-table multi-table <c>DELETE</c> to a projected row-returning terminal. See <c>Returning</c> projection overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3>, TResult> Returning<T1, T2, T3, TResult>(this JoinedEntityBuilder<T1, T2, T3> query, Expression<Func<Projection<T1, T2, T3>, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3>, TResult>(query, typeof(T1), columns, selectList, oneColumn, projection);
+    }
+
+    /// <summary>Switches a four-table multi-table <c>DELETE</c> to a projected row-returning terminal. See <c>Returning</c> projection overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4>, TResult> Returning<T1, T2, T3, T4, TResult>(this JoinedEntityBuilder<T1, T2, T3, T4> query, Expression<Func<Projection<T1, T2, T3, T4>, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4>, TResult>(query, typeof(T1), columns, selectList, oneColumn, projection);
+    }
+
+    /// <summary>Switches a five-table multi-table <c>DELETE</c> to a projected row-returning terminal. See <c>Returning</c> projection overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5>, TResult> Returning<T1, T2, T3, T4, T5, TResult>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query, Expression<Func<Projection<T1, T2, T3, T4, T5>, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5>, TResult>(query, typeof(T1), columns, selectList, oneColumn, projection);
+    }
+
+    /// <summary>Switches a six-table multi-table <c>DELETE</c> to a projected row-returning terminal. See <c>Returning</c> projection overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6>, TResult> Returning<T1, T2, T3, T4, T5, T6, TResult>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6>, TResult>(query, typeof(T1), columns, selectList, oneColumn, projection);
+    }
+
+    /// <summary>Switches a seven-table multi-table <c>DELETE</c> to a projected row-returning terminal. See <c>Returning</c> projection overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>, TResult> Returning<T1, T2, T3, T4, T5, T6, T7, TResult>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>, TResult>(query, typeof(T1), columns, selectList, oneColumn, projection);
+    }
+    /// <summary>Switches an eight-table multi-table <c>DELETE</c> to a projected row-returning terminal. See <c>Returning</c> projection overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="T8">The eighth joined entity type.</typeparam>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TResult> Returning<T1, T2, T3, T4, T5, T6, T7, T8, TResult>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TResult>(query, typeof(T1), columns, selectList, oneColumn, projection);
+    }
+
     private static QueryCommand PrepareDeleteJoinSource<TProjection>(EntityBuilder<TProjection> query)
         => JoinedMutationSource.Prepare(query, "DELETE");
 
@@ -1195,6 +1320,94 @@ public static class DataContextExtensions
         ArgumentException.ThrowIfNullOrEmpty(name);
 
         return MutationCteQuery<TResult>.Create(dataContext, name, insert);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a single-table <c>UPDATE ... RETURNING</c>: the update runs as the CTE body and its returned
+    /// rows are read through <see cref="MutationCteQuery{TResult}.From(string)"/>. Only PostgreSQL accepts
+    /// a data-modifying CTE body.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose rows are updated by the CTE body.</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="update">The returning update that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TEntity, TResult>(this IDataContext dataContext, string name, UpdateReturningBuilder<TEntity, TResult> update)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, update);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a single-table <c>DELETE ... RETURNING</c>. See
+    /// <see cref="With{TEntity, TResult}(IDataContext, string, UpdateReturningBuilder{TEntity, TResult})"/>
+    /// for the full contract.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose rows are removed by the CTE body.</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="delete">The returning delete that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TEntity, TResult>(this IDataContext dataContext, string name, DeleteReturningBuilder<TEntity, TResult> delete)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(delete);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, delete);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a multi-table <c>UPDATE ... FROM ... RETURNING</c>. See
+    /// <see cref="With{TEntity, TResult}(IDataContext, string, UpdateReturningBuilder{TEntity, TResult})"/>
+    /// for the full contract.
+    /// </summary>
+    /// <typeparam name="TProjection">The positional join projection (<c>Projection&lt;T1, ...&gt;</c>).</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="update">The returning multi-table update that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TProjection, TResult>(this IDataContext dataContext, string name, UpdateJoinReturningBuilder<TProjection, TResult> update)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, update);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a multi-table <c>DELETE ... USING ... RETURNING</c>. See
+    /// <see cref="With{TEntity, TResult}(IDataContext, string, DeleteReturningBuilder{TEntity, TResult})"/>
+    /// for the full contract.
+    /// </summary>
+    /// <typeparam name="TProjection">The positional join projection (<c>Projection&lt;T1, ...&gt;</c>).</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="delete">The returning multi-table delete that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TProjection, TResult>(this IDataContext dataContext, string name, DeleteJoinReturningBuilder<TProjection, TResult> delete)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(delete);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, delete);
     }
 
     /// <summary>

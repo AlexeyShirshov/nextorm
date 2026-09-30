@@ -70,4 +70,25 @@ public sealed class PostgresJoinAritiesTests : ProviderTestSuite
         var b8 = b7.Join(_sut.ComplexEntity, (p, c) => p.Item7.Id == c.Id);
         (await b8.Where(p => p.Item1.Id < 0).DeleteAsync(ct)).Should().Be(0);
     }
+
+    [Fact]
+    public void JoinArities_DeleteReturning_ShouldReturnNothing()
+    {
+        // Compiles and executes the projected row-returning terminal at every join arity (3..8); the
+        // negative filter makes the result empty without mutating any row.
+        var b2 = _sut.SimpleEntity.Join(_sut.ComplexEntity, (a, b) => a.Id == b.Id);
+        var b3 = b2.Join(_sut.SimpleEntity, (p, c) => p.Item2.Id == c.Id);
+        var b4 = b3.Join(_sut.ComplexEntity, (p, c) => p.Item3.Id == c.Id);
+        var b5 = b4.Join(_sut.SimpleEntity, (p, c) => p.Item4.Id == c.Id);
+        var b6 = b5.Join(_sut.ComplexEntity, (p, c) => p.Item5.Id == c.Id);
+        var b7 = b6.Join(_sut.SimpleEntity, (p, c) => p.Item6.Id == c.Id);
+        var b8 = b7.Join(_sut.ComplexEntity, (p, c) => p.Item7.Id == c.Id);
+
+        b3.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b4.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b5.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b6.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b7.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b8.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+    }
 }

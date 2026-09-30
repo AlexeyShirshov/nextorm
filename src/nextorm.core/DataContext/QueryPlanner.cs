@@ -29,6 +29,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly ILogger? _resultSetEnumeratorLogger;
     private readonly bool _logSensitiveData;
     private readonly InterceptorHooks _interceptors;
+    private readonly Func<CteMutation, SqlBuildContext, string> _renderMutationBody;
 
     internal QueryPlanner(
         IDataContext context,
@@ -48,6 +49,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
         _logSensitiveData = logging.LogSensitiveData;
         _interceptors = interceptors;
+        _renderMutationBody = RenderMutationBody;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -100,6 +102,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = source.ResolvedNamingConvention,
             KeywordCase = source.ResolvedKeywordCase,
             ParameterNamePrefix = parameterNamePrefix,
+            RenderMutationBody = _renderMutationBody,
         };
 
         string? withSql = null;
@@ -163,6 +166,70 @@ internal sealed class QueryPlanner : IQueryPlanner
         var builder = new StringBuilder();
         SqlSourceRenderer.MakeWhere(in ctx, builder, command.EntityType!, command.PreparedCondition, 0, dontNeedAlias: true);
         return (builder.ToString(), @params);
+    }
+
+    // Renders the body of a data-modifying CTE whose command is a single-table UPDATE/DELETE carrying a
+    // RETURNING projection. The SET list and the WHERE reuse the same helpers as a standalone mutation,
+    // and their parameters are written into the enclosing statement's accumulator/provider (carried on
+    // ctx) so the body's placeholders continue the outer statement's numbering. A body without a
+    // RETURNING projection, or a multi-table mutation, is rejected until its rendering is implemented.
+    private string RenderMutationBody(CteMutation mutation, SqlBuildContext ctx)
+    {
+        switch (mutation.Command)
+        {
+            case UpdateCommand update:
+            {
+                if (update.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE UPDATE body requires a RETURNING projection; call Returning(...) on the update builder.");
+
+                var (setSql, _) = RenderAssignments(update, ctx.ParameterProvider, ctx.Params, ctx.ParameterNamePrefix);
+                var (whereSql, _) = RenderPredicate(update.Source, ctx.ParameterProvider, ctx.Params, ctx.ParameterNamePrefix);
+                var (sql, _) = SqlMutationBuilder.MakeUpdate(ctx.Dialect, ctx.QuoteIdentifiers, ctx.NamingConvention, update, setSql, ctx.Params, whereSql, ctx.ParameterProvider, ctx.KeywordCase);
+                return sql;
+            }
+
+            case DeleteCommand delete:
+            {
+                if (delete.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE DELETE body requires a RETURNING projection; call Returning(...) on the delete builder.");
+
+                string? whereSql = null;
+                if (delete.Condition is not null)
+                {
+                    var (rendered, _) = RenderPredicate(delete.Condition, ctx.ParameterProvider, ctx.Params, ctx.ParameterNamePrefix);
+                    if (rendered.Length > 0)
+                        whereSql = rendered;
+                }
+
+                var (sql, _) = SqlMutationBuilder.MakeDelete(ctx.Dialect, ctx.QuoteIdentifiers, ctx.NamingConvention, delete, whereSql, ctx.Params, ctx.KeywordCase, ctx.ParameterProvider);
+                return sql;
+            }
+
+            case UpdateJoinCommand updateJoin:
+            {
+                if (updateJoin.ReturningProjection is null || updateJoin.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE multi-table UPDATE body requires a RETURNING projection; call Returning(...) on the update builder.");
+
+                if (!ctx.Dialect.SupportsUpdateJoinReturning)
+                    throw new NotSupportedException("A multi-table UPDATE data-modifying common table expression body is only supported by PostgreSQL.");
+
+                return RenderUpdateJoinCore(updateJoin, ctx.ParameterProvider, ctx.Params, suppressCtes: true).Sql;
+            }
+
+            case DeleteJoinCommand deleteJoin:
+            {
+                if (deleteJoin.ReturningProjection is null || deleteJoin.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE multi-table DELETE body requires a RETURNING projection; call Returning(...) on the delete builder.");
+
+                if (!ctx.Dialect.SupportsDeleteJoinReturning)
+                    throw new NotSupportedException("A multi-table DELETE data-modifying common table expression body is only supported by PostgreSQL.");
+
+                return RenderDeleteJoinCore(deleteJoin, ctx.ParameterProvider, ctx.Params, suppressCtes: true).Sql;
+            }
+
+            default:
+                throw new NotSupportedException($"A data-modifying common table expression body of type '{mutation.Command.GetType().Name}' is not supported yet; only a single-table UPDATE/DELETE ... RETURNING body is supported.");
+        }
     }
 
     // Renders an ON/AND search condition of a full MERGE over the (target, source) row. The two lambda
@@ -297,76 +364,98 @@ internal sealed class QueryPlanner : IQueryPlanner
     // joins and condition are rendered through the same source/condition pipeline as a SELECT, so aliases
     // and parameters match the equivalent read query.
     internal (string Sql, List<Parameter> Parameters) RenderDeleteJoin(DeleteJoinCommand command)
+        => RenderDeleteJoinCore(command, new DefaultParameterProvider(), new List<Parameter>(), suppressCtes: false);
+
+    // Core multi-table DELETE renderer shared by the standalone statement and the body of a data-modifying
+    // CTE. The provider and parameter accumulator come from the caller so a CTE body continues the enclosing
+    // statement's numbering. When the command is hoisted as a CTE body (suppressCtes) its own WITH clause
+    // must not be re-emitted: the hoisted CTEs already sit at the top level of the statement.
+    private (string Sql, List<Parameter> Parameters) RenderDeleteJoinCore(
+        DeleteJoinCommand command,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters,
+        bool suppressCtes)
     {
         var source = command.Source;
         if (!source.IsPrepared)
             source.PrepareCommand(false, CancellationToken.None);
 
-        var @params = new List<Parameter>();
         var ctx = new SqlBuildContext
         {
             Dialect = _dialect(),
             ParamMode = false,
-            Params = @params,
+            Params = parameters,
             ColumnsProvider = new DefaultColumnsProvider(),
             QueryProvider = source,
-            ParameterProvider = new DefaultParameterProvider(),
+            ParameterProvider = parameterProvider,
             AliasProvider = new DefaultAliasProvider(),
             Logger = _logger!,
             QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
             NamingConvention = source.ResolvedNamingConvention,
             KeywordCase = source.ResolvedKeywordCase,
+            RenderMutationBody = _renderMutationBody,
         };
 
         string? withSql = null;
         string? maxRecursionStmt = null;
-        if (source.Ctes is { Count: > 0 } ctes)
+        if (!suppressCtes && source.Ctes is { Count: > 0 } ctes)
             withSql = SqlSourceRenderer.MakeWithClause(in ctx, ctes, out maxRecursionStmt);
 
-        var (sql, parameters) = new SqlBuilder(in ctx).MakeDeleteJoin(command);
+        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeDeleteJoin(command);
         if (withSql is not null)
             sql = withSql + sql;
         if (maxRecursionStmt is not null)
             sql += " " + maxRecursionStmt;
-        return (sql, parameters);
+        return (sql, renderedParams);
     }
 
     // Renders a multi-table UPDATE: the target is the first table of the prepared joined command, whose
     // joins and condition are rendered through the same source/condition pipeline as a SELECT, so aliases
     // and parameters match the equivalent read query. The SET list shares the same parameter provider.
     internal (string Sql, List<Parameter> Parameters) RenderUpdateJoin(UpdateJoinCommand command)
+        => RenderUpdateJoinCore(command, new DefaultParameterProvider(), new List<Parameter>(), suppressCtes: false);
+
+    // Core multi-table UPDATE renderer shared by the standalone statement and the body of a data-modifying
+    // CTE. The provider and parameter accumulator come from the caller so a CTE body continues the enclosing
+    // statement's numbering. When the command is hoisted as a CTE body (suppressCtes) its own WITH clause
+    // must not be re-emitted: the hoisted CTEs already sit at the top level of the statement.
+    private (string Sql, List<Parameter> Parameters) RenderUpdateJoinCore(
+        UpdateJoinCommand command,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters,
+        bool suppressCtes)
     {
         var source = command.Source;
         if (!source.IsPrepared)
             source.PrepareCommand(false, CancellationToken.None);
 
-        var @params = new List<Parameter>();
         var ctx = new SqlBuildContext
         {
             Dialect = _dialect(),
             ParamMode = false,
-            Params = @params,
+            Params = parameters,
             ColumnsProvider = new DefaultColumnsProvider(),
             QueryProvider = source,
-            ParameterProvider = new DefaultParameterProvider(),
+            ParameterProvider = parameterProvider,
             AliasProvider = new DefaultAliasProvider(),
             Logger = _logger!,
             QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
             NamingConvention = source.ResolvedNamingConvention,
             KeywordCase = source.ResolvedKeywordCase,
+            RenderMutationBody = _renderMutationBody,
         };
 
         string? withSql = null;
         string? maxRecursionStmt = null;
-        if (source.Ctes is { Count: > 0 } ctes)
+        if (!suppressCtes && source.Ctes is { Count: > 0 } ctes)
             withSql = SqlSourceRenderer.MakeWithClause(in ctx, ctes, out maxRecursionStmt);
 
-        var (sql, parameters) = new SqlBuilder(in ctx).MakeUpdateJoin(command);
+        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeUpdateJoin(command);
         if (withSql is not null)
             sql = withSql + sql;
         if (maxRecursionStmt is not null)
             sql += " " + maxRecursionStmt;
-        return (sql, parameters);
+        return (sql, renderedParams);
     }
 
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess)
@@ -385,6 +474,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = queryCommand.ResolvedNamingConvention,
             KeywordCase = queryCommand.ResolvedKeywordCase,
             SequentialAccess = sequentialAccess,
+            RenderMutationBody = _renderMutationBody,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
@@ -398,6 +488,14 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, CancellationToken cancellationToken)
     {
+        // A data-modifying CTE makes the whole statement side-effecting, so its plan must never be
+        // shared: the mutation's shape (row count, target columns) is not captured by the CTE query.
+        // Clear the call-local storeInCache rather than queryCommand.Cache, which is sticky and would
+        // disable plan caching for a shared command (the context-wide Any/Count command) on every later
+        // query. Both the lookup and store gates below test storeInCache, so they skip.
+        if (queryCommand.HasDataModifyingCte)
+            storeInCache = false;
+
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 

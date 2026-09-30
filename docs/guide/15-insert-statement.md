@@ -224,9 +224,10 @@ throw `NotSupportedException`. `SqlDefault.Value` also works as a mapped member 
 ## Data-modifying CTE (PostgreSQL)
 
 PostgreSQL is the only supported provider that accepts a data-modifying statement as a CTE body
-(`WITH <name> AS (INSERT ... RETURNING ...)`), gated by
+(`WITH <name> AS (<INSERT|UPDATE|DELETE> ... RETURNING ...)`), gated by
 [`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). Start the scope with
-the `With(name, insert)` overload: it takes a returning insert and returns a
+the `With(name, insert)`, `With(name, update)` or `With(name, delete)` overload: each takes a row-returning
+mutation and returns a
 [`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1) typed by the `RETURNING` projection.
 Read the returned rows with `From(name)` (typed):
 
@@ -300,9 +301,42 @@ dataContext.InsertInto<IOrder>()
     .Insert();
 ```
 
+The body may also be a single-table or join/multi-table `UPDATE ... RETURNING` / `DELETE ... RETURNING`;
+`With(name, update)` and `With(name, delete)` accept a row-returning update/delete (a multi-table
+`UpdateJoin().Returning(...)` or the `Returning` extension on a joined builder) and yield the same typed
+scope. A `RETURNING` projection is required — a side-effect-only mutation is out of scope:
+
+```csharp
+// Single-table UPDATE body: update, then read the updated rows typed.
+var updated = dataContext
+    .With("upd", dataContext.Update<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```csharp
+// Join/multi-table DELETE body (PostgreSQL DELETE ... USING ... RETURNING).
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { r.OrderId, r.CustomerName })
+    .ToList();
+```
+
 A statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
-side-effecting). Other providers reject `With(name, insert)` with `NotSupportedException`, because their
-CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](08-cte.md); the `UPDATE` surface is documented in [Data modification (UPDATE)](17-update-statement.md).
+side-effecting). Other providers reject a data-modifying CTE body with `NotSupportedException`, because their
+CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](08-cte.md); the `UPDATE` and
+`DELETE` surfaces are documented in [Data modification (UPDATE)](17-update-statement.md) and
+[Data modification (DELETE)](16-delete-statement.md).
 
 ## Reading the generated key
 

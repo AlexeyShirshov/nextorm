@@ -197,7 +197,7 @@ public sealed class UpdateBuilder<TEntity>
         var parameter = Expression.Parameter(typeof(TEntity), "x");
         var identity = Expression.Lambda<Func<TEntity, TEntity>>(parameter, parameter);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(identity, _metadata.Properties, FindProperty);
-        return new UpdateReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn);
+        return new UpdateReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn, projection: identity);
     }
 
     /// <summary>
@@ -214,7 +214,7 @@ public sealed class UpdateBuilder<TEntity>
     {
         ArgumentNullException.ThrowIfNull(projection);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(projection, _metadata.Properties, FindProperty);
-        return new UpdateReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn);
+        return new UpdateReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn, projection: projection);
     }
 
     /// <summary>

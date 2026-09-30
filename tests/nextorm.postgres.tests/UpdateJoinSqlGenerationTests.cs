@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Data.Common;
 
 namespace NextORM.Postgres.Tests;
 
@@ -160,4 +161,120 @@ public class UpdateJoinSqlGenerationTests
             .ToSql()
             .Should().Be("update merge_entity as \"t1\" set age = (t2.age + @increment) from merge_entity as \"t2\" where t1.id = t2.id");
     }
+
+    [Fact]
+    public void DataModifyingCte_UpdateJoinReturningBody_ShouldRenderUpdateFromReturningInsideCte()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var update = ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .UpdateJoin()
+            .Set(p => p.Item1.String, "x")
+            .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id });
+
+        var sql = SqlOf(ctx, ctx.With("upd", update).From("upd").Select(r => new { r.TargetId, r.JoinedId }));
+
+        sql.Should().StartWith("with upd as (update complex_entity as \"t1\" set somestring = @p0 from simple_entity as \"t2\"");
+        sql.Should().Contain("returning t1.id as \"TargetId\", t2.id as \"JoinedId\"");
+        sql.Split("with ").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void DataModifyingCte_UpdateJoinBodyReferencingReadCte_ShouldHoistReadCteFirst()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The data-modifying UPDATE ... FROM body joins a read CTE declared through the scope; the
+        // hoister must order the read CTE before the mutation that consumes it.
+        var scope = ctx.With("src", ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var update = ctx.From<IComplexEntity>()
+            .Join(scope.From("src"), (c, s) => c.Id == s["id"].AsInt)
+            .UpdateJoin()
+            .Set(p => p.Item1.String, "x")
+            .Returning(p => new { TargetId = p.Item1.Id });
+
+        var sql = SqlOf(ctx, ctx.With("upd", update).From("upd").Select(r => new { r.TargetId }));
+
+        sql.Should().StartWith("with src as (select id from simple_entity");
+        sql.Should().Contain("), upd as (update complex_entity as \"t1\" set somestring = @p0 from src as \"t2\"");
+        sql.Should().NotContain("with src as (with");
+    }
+
+    [Fact]
+    public void DataModifyingCte_UpdateJoinReturningReferencingDerivedShapeSlot_ShouldResolveShapeSlot()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The joined slot is a derived-table projection (a shape) with no registered entity metadata;
+        // the selector reads its shape member, which must resolve against the shape columns rather than
+        // fail as an unmapped entity.
+        var source = ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id });
+
+        var act = () => ctx.From<IComplexEntity>()
+            .Join(source, (c, s) => c.Id == s.Id)
+            .UpdateJoin()
+            .Set(p => p.Item1.String, "x")
+            .Returning(p => new { TargetId = p.Item1.Id, SourceId = p.Item2.Id });
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void DataModifyingCte_UpdateJoinUnnamedReturningMember_ShouldReadBackUnderPhysicalColumnName()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // An anonymous RETURNING member keeps the source member's name (p.Item1.Id -> "Id"), whose
+        // mapped column is "id". The CTE read shape resolves it under the physical column name, so the
+        // body must not alias it to the CLR member name or the outer read references a missing "Id".
+        var scope = ctx.With("upd", ctx.From<IMergeEntity>()
+                .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+                .UpdateJoin()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { p.Item1.Id }))
+            .From("upd")
+            .Select(r => new { r.Id });
+
+        SqlOf(ctx, scope).Should().Be(
+            "with upd as (update merge_entity as \"t1\" set name = t2.name from merge_entity as \"t2\" where t1.id = t2.id returning t1.id) select id from upd as \"t1\"");
+    }
+
+    [Fact]
+    public void UpdateJoinReturning_DirectRoute_ToSql_ShouldRenderReturningWithoutCte()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The standalone terminal (no With(...) scope) renders a plain UPDATE ... FROM ... RETURNING;
+        // BuildReturningSql routes the UpdateJoinCommand arm to the same renderer as the CTE body.
+        var sql = ctx.From<IMergeEntity>()
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+            .UpdateJoin()
+            .Set(p => p.Item1.Name, "x")
+            .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id })
+            .ToSql();
+
+        sql.Should().Be("update merge_entity as \"t1\" set name = @p0 from merge_entity as \"t2\" where t1.id = t2.id returning t1.id as \"TargetId\", t2.id as \"JoinedId\"");
+        sql.Should().NotContain("with ");
+    }
+
+    [Fact]
+    public void UpdateJoinReturning_Scalar_ToSql_ShouldRenderSingleColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        ctx.From<IMergeEntity>()
+            .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+            .UpdateJoin()
+            .Set(p => p.Item1.Name, "x")
+            .Returning(p => p.Item1.Id)
+            .ToSql()
+            .Should().Be("update merge_entity as \"t1\" set name = @p0 from merge_entity as \"t2\" where t1.id = t2.id returning t1.id");
+    }
+
+    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
 }

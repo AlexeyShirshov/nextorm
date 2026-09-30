@@ -165,6 +165,25 @@ selects a column of the first (`Item1`) table; the value may be a constant or an
 references any joined table (`p.Item2...`). `Where` filters on the whole projection, and the terminal is
 `Update()`/`UpdateAsync()` (affected-row count) or `ToSql()`.
 
+Multi-table `Returning(projection)` is available on PostgreSQL only (`UPDATE ... FROM ... RETURNING`) and
+requires an explicit projection — the whole-projection form is not supported. It works
+both as a normal terminal and as a data-modifying CTE body through `With(name, update)`:
+
+```csharp
+var updated = ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "priority")
+    .Where(p => p.Item2.Tier == "gold")
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+update orders as "t1" set status = @p0 from customers as "t2" where t1.customer_id = t2.id and t2.tier = 'gold' returning t1.id as "OrderId", t2.name as "CustomerName"
+```
+
 Only INNER `Join` joins are supported: the join conditions are folded into the filter (or kept as the
 join's `ON`), so an outer join would silently change which rows are updated — `LeftJoin`/`RightJoin`/
 `FullJoin`/`CrossJoin` throw `NotSupportedException`. PostgreSQL and SQLite render `UPDATE ... FROM`,

@@ -227,9 +227,10 @@ SQL Server и SQLite; `() VALUES ()` у MySQL/MariaDB). Запись `DEFAULT` �
 ## Модифицирующий CTE (PostgreSQL)
 
 PostgreSQL — единственный поддерживаемый провайдер, принимающий модифицирующую инструкцию как тело CTE
-(`WITH <имя> AS (INSERT ... RETURNING ...)`); гейтится
+(`WITH <имя> AS (<INSERT|UPDATE|DELETE> ... RETURNING ...)`); гейтится
 [`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). Начните scope с
-перегрузки `With(имя, insert)`: она принимает returning-insert и возвращает
+перегрузки `With(имя, insert)`, `With(имя, update)` или `With(имя, delete)`: каждая принимает
+возвращающую строки мутацию и возвращает
 [`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1), типизированный по проекции
 `RETURNING`. Возвращённые строки читаются через `From(имя)` (типизированно):
 
@@ -303,9 +304,43 @@ dataContext.InsertInto<IOrder>()
     .Insert();
 ```
 
+Телом может быть и однотабличный или join/multi-table `UPDATE ... RETURNING` / `DELETE ... RETURNING`;
+`With(имя, update)` и `With(имя, delete)` принимают возвращающие строки update/delete (multi-table
+`UpdateJoin().Returning(...)` или расширение `Returning` на соединённом билдере) и дают такую же
+типизированную область. Проекция `RETURNING` обязательна — мутация только с побочным эффектом вне области
+охвата:
+
+```csharp
+// Тело UPDATE по одной таблице: обновляем, затем типизированно читаем обновлённые строки.
+var updated = dataContext
+    .With("upd", dataContext.Update<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```csharp
+// Тело join/multi-table DELETE (PostgreSQL DELETE ... USING ... RETURNING).
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { r.OrderId, r.CustomerName })
+    .ToList();
+```
+
 Инструкция, в `WITH` которой есть модифицирующий CTE, никогда не попадает в кэш планов (она имеет
-побочный эффект). Остальные провайдеры отклоняют `With(имя, insert)` с `NotSupportedException`, так как их
-тело CTE обязано быть `SELECT`. Общие (read) CTE — в [Общих табличных выражениях](08-cte.md); поверхность `UPDATE` описана в [Изменении данных (UPDATE)](17-update-statement.md).
+побочный эффект). Остальные провайдеры отклоняют модифицирующее тело CTE с `NotSupportedException`, так
+как их тело CTE обязано быть `SELECT`. Общие (read) CTE — в [Общих табличных выражениях](08-cte.md);
+поверхности `UPDATE` и `DELETE` описаны в [Изменении данных (UPDATE)](17-update-statement.md) и
+[Изменении данных (DELETE)](16-delete-statement.md).
 
 ## Получение сгенерированного ключа
 

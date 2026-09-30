@@ -954,6 +954,12 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public virtual bool SupportsDataModifyingCtes => false;
 
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL returns the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>.</summary>
+    public virtual bool SupportsUpdateJoinReturning => false;
+
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL returns the affected rows of a multi-table <c>DELETE ... USING ... JOIN</c>.</summary>
+    public virtual bool SupportsDeleteJoinReturning => false;
+
     /// <summary>Defaults to <c>true</c>; ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation through <see cref="MakeDeleteHead"/>.</summary>
     public virtual bool SupportsDelete => true;
 

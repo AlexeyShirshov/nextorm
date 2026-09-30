@@ -167,6 +167,25 @@ update orders as "t1" set status = @p0, total = (t1.total + t2.credit) from cust
 присоединённую таблицу (`p.Item2...`). `Where` фильтрует по всей проекции, а терминал —
 `Update()`/`UpdateAsync()` (число затронутых строк) или `ToSql()`.
 
+Multi-table `Returning(projection)` доступен только на PostgreSQL (`UPDATE ... FROM ... RETURNING`) и требует
+явной проекции — форма по всей проекции не поддерживается. Работает и как обычный терминал, и
+как тело модифицирующего CTE через `With(имя, update)`:
+
+```csharp
+var updated = ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "priority")
+    .Where(p => p.Item2.Tier == "gold")
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+update orders as "t1" set status = @p0 from customers as "t2" where t1.customer_id = t2.id and t2.tier = 'gold' returning t1.id as "OrderId", t2.name as "CustomerName"
+```
+
 Поддерживаются только INNER `Join`: условия join складываются в фильтр (или остаются `ON` join), поэтому
 внешний join молча менял бы набор обновляемых строк — `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin`
 бросают `NotSupportedException`. PostgreSQL и SQLite рендерят `UPDATE ... FROM`, SQL Server —

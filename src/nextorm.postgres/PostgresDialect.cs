@@ -21,6 +21,12 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL supports <c>INSERT ... RETURNING &lt;column&gt;</c>.</summary>
     public override bool SupportsReturning => true;
 
+    /// <summary>PostgreSQL returns the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c> through <c>RETURNING</c>.</summary>
+    public override bool SupportsUpdateJoinReturning => true;
+
+    /// <summary>PostgreSQL returns the affected rows of a multi-table <c>DELETE ... USING ... JOIN</c> through <c>RETURNING</c>.</summary>
+    public override bool SupportsDeleteJoinReturning => true;
+
     /// <summary>Npgsql exposes streaming <c>GetStream</c>/<c>GetTextReader</c> accessors for LOB columns.</summary>
     public override bool SupportsSequentialAccess => true;
 

@@ -298,17 +298,52 @@ with recent as (select id from complex_entity where (id > $threshold)) select id
 ## Модифицирующий CTE (PostgreSQL)
 
 PostgreSQL — единственный поддерживаемый провайдер, принимающий модифицирующую инструкцию как тело CTE
-(`WITH <имя> AS (INSERT ... RETURNING ...)`); гейтится
+(`WITH <имя> AS (<INSERT|UPDATE|DELETE> ... RETURNING ...)`); гейтится
 [`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). nextorm открывает
-её перегрузкой `With(имя, insert)` у `IDataContext`/`CteQuery`, возвращающей
-[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1), типизированный проекцией `RETURNING`;
-остальные провайдеры отклоняют её с `NotSupportedException`.
+её перегрузками `With(имя, mutation)` у `IDataContext`/`CteQuery`, принимающими возвращающий строки
+`INSERT`, `UPDATE` или `DELETE`, и возвращающими
+[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1), типизированный по проекции
+`RETURNING`. Проекция `RETURNING` обязательна — тело только с побочным эффектом вне области охвата — и
+принимаются как однотабличные мутации, так и join/multi-table (multi-table `UPDATE ... FROM` через
+[`UpdateJoinBuilder<TProjection>.Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), multi-table
+`DELETE ... USING` через расширение `Returning(projection)` на соединённом билдере; обе формы требуют
+явной проекции — форма по всей проекции не поддерживается). Остальные провайдеры отклоняют
+`With(имя, mutation)` с `NotSupportedException`, так как их тело CTE обязано быть `SELECT`. В отличие от
+read-CTE, инструкция, в `WITH` которой есть модифицирующий CTE, никогда не попадает в кэш планов (она
+имеет побочный эффект) и планируется заново при каждом вызове.
+
+```csharp
+// Тело UPDATE по одной таблице: обновляем, затем типизированно читаем обновлённые строки.
+var updated = dataContext
+    .With("upd", dataContext.Update<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```csharp
+// Тело multi-table DELETE: удаляем строки цели, совпавшие по соединению, возвращая колонки обеих сторон.
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { r.OrderId, r.CustomerName })
+    .ToList();
+```
 
 Write-CTE документируется вместе с поверхностью записи, к которой принадлежит — типизированное чтение через
 `From`/`FromTable`, тело `VALUES` или `INSERT ... SELECT`, чтение более раннего read-CTE и питание
 главного `INSERT ... SELECT` — в разделе
 [Изменение данных (INSERT): Модифицирующий CTE](15-insert-statement.md#модифицирующий-cte-postgresql).
-Тела `UPDATE` и `DELETE` в качестве тела CTE не поддерживаются (только `INSERT`). Общая поверхность `UPDATE` — в [Изменении данных (UPDATE)](17-update-statement.md).
+Общая поверхность `UPDATE` — в [Изменении данных (UPDATE)](17-update-statement.md), `DELETE` — в
+[Изменении данных (DELETE)](16-delete-statement.md).
 
 ## Различия между провайдерами
 

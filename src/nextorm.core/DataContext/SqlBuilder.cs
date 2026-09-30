@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Linq.Expressions;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -730,6 +731,10 @@ internal readonly struct SqlBuilder
                     whereSql.Length == 0 ? null : whereSql.ToString(),
                     _ctx.KeywordCase);
 
+                var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsDeleteJoinReturning, "removed");
+                if (returning is not null)
+                    sql += _ctx.Dialect.MakeReturning(returning, _ctx.KeywordCase);
+
                 return (sql, _ctx.Params);
             }
             finally
@@ -830,6 +835,10 @@ internal readonly struct SqlBuilder
                     whereSql.Length == 0 ? null : whereSql.ToString(),
                     _ctx.KeywordCase);
 
+                var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsUpdateJoinReturning, "updated");
+                if (returning is not null)
+                    sql += _ctx.Dialect.MakeReturning(returning, _ctx.KeywordCase);
+
                 return (sql, _ctx.Params);
             }
             finally
@@ -848,6 +857,119 @@ internal readonly struct SqlBuilder
 
     /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the configured <see cref="KeywordCase"/>.</summary>
     private string Kw(string text) => SqlKeywords.Of(_ctx.KeywordCase, text);
+
+    /// <summary>
+    /// Renders the <c>RETURNING</c> list of a multi-table mutation, qualifying every returned column by
+    /// the alias of the joined table that owns it. The selector runs over the positional join projection,
+    /// so a selected member may reference any joined source
+    /// (<c>p =&gt; new { p.Item1.Id, p.Item2.Name }</c>). Returns <see langword="null"/> when the mutation
+    /// returns nothing.
+    /// </summary>
+    /// <param name="columns">The mapped columns the mutation returns, or <see langword="null"/> for a plain mutation.</param>
+    /// <param name="projection">The selector that defines the returned columns, or <see langword="null"/>.</param>
+    /// <param name="returningSupported">Whether the dialect can return rows from this multi-table mutation.</param>
+    /// <param name="operation">The past-tense operation name used in the rejection message.</param>
+    /// <returns>The rendered returning expressions, or <see langword="null"/>.</returns>
+    /// <exception cref="NotSupportedException">Rows were requested but the dialect cannot return them.</exception>
+    private IReadOnlyList<string>? MakeJoinReturning(
+        IReadOnlyList<IPropertyMetadata>? columns,
+        LambdaExpression? projection,
+        bool returningSupported,
+        string operation)
+    {
+        if (columns is not { Count: > 0 } || projection is null)
+            return null;
+
+        if (!returningSupported)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot return {operation} rows from a multi-table mutation.");
+
+        var parameter = projection.Parameters[0];
+        _ctx.ColumnsProvider.PushScope(projection.Parameters);
+        try
+        {
+            var items = EnumerateReturningMembers(projection);
+            var rendered = new List<string>(items.Count);
+            for (var i = 0; i < items.Count; i++)
+            {
+                using var visitor = _ctx.CreateColumnVisitor(parameter.Type, 0, dontNeedAlias: false);
+                visitor.Visit(items[i].Expression);
+
+                // The outer CTE read addresses a derived-style member under the name the body exposes:
+                // a projection member that keeps its source name (p.Item1.Id -> "Id") is read back under
+                // the mapped column name ("id"), so aliasing it to the CLR name would make the outer
+                // reference miss it. Only a renamed member (TargetId = p.Item1.Id) exposes the alias and
+                // must be aliased with the dialect's quoted-identifier style.
+                var renamed = visitor.ColumnName is { } physical
+                    && !string.Equals(physical, items[i].Name, StringComparison.OrdinalIgnoreCase);
+                rendered.Add(renamed
+                    ? visitor.ToString() + _ctx.Dialect.MakeColumnAlias(items[i].Name, _ctx.KeywordCase)
+                    : visitor.ToString());
+            }
+
+            return rendered;
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopScope();
+        }
+    }
+
+    // Expands a joined returning selector into the member expressions whose column references are
+    // qualified in the RETURNING list, paired with the projection member name the outer CTE read
+    // addresses.
+    private static List<(Expression Expression, string Name)> EnumerateReturningMembers(LambdaExpression projection)
+    {
+        var body = TypeFacts.UnwrapConvert(projection.Body);
+        List<(Expression, string)> members;
+
+        switch (body)
+        {
+            case NewExpression { Arguments.Count: > 0 } newExpression:
+            {
+                var newMembers = newExpression.Members;
+                members = new List<(Expression, string)>(newExpression.Arguments.Count);
+                for (var i = 0; i < newExpression.Arguments.Count; i++)
+                {
+                    var name = newMembers is not null && i < newMembers.Count
+                        ? newMembers[i].Name
+                        : newExpression.Constructor!.GetParameters()[i].Name!;
+                    members.Add((newExpression.Arguments[i], name));
+                }
+
+                break;
+            }
+
+            case MemberInitExpression { Bindings.Count: > 0 } memberInit:
+            {
+                members = new List<(Expression, string)>(memberInit.Bindings.Count);
+                for (var i = 0; i < memberInit.Bindings.Count; i++)
+                {
+                    if (memberInit.Bindings[i] is MemberAssignment assignment)
+                        members.Add((assignment.Expression, assignment.Member.Name));
+                }
+
+                break;
+            }
+
+            case MemberExpression memberExpression:
+                members = [(body, memberExpression.Member.Name)];
+                break;
+
+            default:
+                throw new NotSupportedException(
+                    "A joined RETURNING projection must select at least one mapped member; the whole-projection form is not supported. Provide an explicit projection, for example p => new { p.Item1.Id, p.Item2.Name }.");
+        }
+
+        // Fail closed: an empty RETURNING list is never valid, so a selector that expands to zero members
+        // throws instead of emitting a bare RETURNING.
+        if (members.Count == 0)
+        {
+            throw new NotSupportedException(
+                "A joined RETURNING projection must select at least one mapped member; the whole-projection form is not supported. Provide an explicit projection, for example p => new { p.Item1.Id, p.Item2.Name }.");
+        }
+
+        return members;
+    }
 
     /// <summary>
     /// Returns <paramref name="hints"/> with <paramref name="hint"/> appended, or a single-element list

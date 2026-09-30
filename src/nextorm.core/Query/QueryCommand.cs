@@ -392,6 +392,44 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// participates in the plan cache key.
     /// </summary>
     public IReadOnlyList<CteDefinition>? Ctes { get => _ctes; internal set => _ctes = value; }
+
+    /// <summary>
+    /// True when any common table expression carried by this command, at any declaration depth, has a
+    /// data-modifying body (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE ... RETURNING</c>). Such a statement is
+    /// side-effecting and its plan must not be shared; the planner reads this to bypass the plan cache
+    /// call-locally instead of clearing the sticky <see cref="Cache"/> flag.
+    /// </summary>
+    /// <remarks>
+    /// The walk follows exactly the declaration tree <see cref="CteHoister.Hoist"/> flattens (a CTE body's
+    /// own <c>Ctes</c>), because that is the only tree the renderer can lift into the statement's
+    /// top-level <c>WITH</c>. A declaration reachable only through a derived table, join, set-operation
+    /// branch or correlated reference is not hoisted and is rejected by
+    /// <see cref="CteHoister.EnsureNoUnhoistedCtes"/> during preparation, before the cache lookup/store
+    /// gates, so it cannot be cached either.
+    /// </remarks>
+    internal bool HasDataModifyingCte => HasDataModifyingCteIn(this, null);
+
+    private static bool HasDataModifyingCteIn(QueryCommand command, HashSet<QueryCommand>? visited)
+    {
+        if (command._ctes is not { Count: > 0 } ctes)
+            return false;
+
+        visited ??= new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
+        if (!visited.Add(command))
+            return false;
+
+        for (var i = 0; i < ctes.Count; i++)
+        {
+            var cte = ctes[i];
+            if (cte.Mutation is not null)
+                return true;
+
+            if (HasDataModifyingCteIn(cte.Query, visited))
+                return true;
+        }
+
+        return false;
+    }
     /// <summary>
     /// Statement-level query hints attached to this command (for example SQL Server <c>RECOMPILE</c>),
     /// or <c>null</c> when the command has none. How they are rendered is provider specific; a dialect

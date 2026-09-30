@@ -42,9 +42,10 @@ internal static class SqlSourceRenderer
             {
                 var cte = ctes[i];
 
-                // A command whose WITH carries a data-modifying CTE disables plan caching
-                // (QueryPreparer.PrepareCtes), so this parameter pass never runs for one; only read CTEs
-                // are walked here.
+                // A command whose WITH carries a data-modifying CTE is side-effecting and never shares a
+                // plan: QueryPlanner.GetPreparedQueryCommand detects QueryCommand.HasDataModifyingCte and
+                // clears the call-local storeInCache (not the sticky command.Cache), so this parameter
+                // pass never runs for one; only read CTEs are walked here.
                 if (cte.Mutation is not null)
                     continue;
 
@@ -71,11 +72,9 @@ internal static class SqlSourceRenderer
 
                 if (cte.Mutation is not null)
                 {
-                    // A data-modifying CTE body is the INSERT itself; its parameters share the enclosing
+                    // A data-modifying CTE body is the mutation itself; its parameters share the enclosing
                     // command's provider so the SQL pass and the (rarer) parameter pass number them alike.
-                    var (insertSql, insertParams) = RenderMutation(in ctx, cte);
-                    ctx.Params.AddRange(insertParams);
-                    withBuilder.Append(insertSql);
+                    withBuilder.Append(RenderMutation(in ctx, cte));
                 }
                 else
                 {
@@ -101,22 +100,35 @@ internal static class SqlSourceRenderer
     }
 
     /// <summary>
-    /// Renders the <c>INSERT ... RETURNING</c> body of a data-modifying CTE. Only PostgreSQL accepts a
-    /// data-modifying CTE body. The body may be a <c>VALUES</c> insert or an <c>INSERT ... SELECT</c>
-    /// whose source is rendered here; any CTEs the source carries are dropped because they are already
-    /// declared by the enclosing <c>WITH</c> (a data-modifying CTE sees only the outer CTEs).
+    /// Renders a data-modifying CTE body as the SQL fragment placed inside its declaration, appending
+    /// its parameters to the shared accumulator. Only PostgreSQL accepts a data-modifying CTE body. An
+    /// INSERT body (VALUES or INSERT ... SELECT) is rendered here; a single-table UPDATE/DELETE body is
+    /// delegated to the planner-supplied mutation-body hook so the body reuses the statement's
+    /// assignment/predicate pipeline. A body that is neither is rejected before any SQL is emitted.
     /// </summary>
-    private static (string Sql, List<Parameter> Parameters) RenderMutation(in SqlBuildContext ctx, CteDefinition cte)
+    private static string RenderMutation(in SqlBuildContext ctx, CteDefinition cte)
     {
         if (!ctx.Dialect.SupportsDataModifyingCtes)
             throw new NotSupportedException("Data-modifying common table expressions are only supported by PostgreSQL.");
 
         var mutation = cte.Mutation!;
+
+        // An INSERT body is rendered here. The UPDATE/DELETE bodies are rendered by the planner hook,
+        // which owns the assignment/predicate helpers; a provider that wires none rejects the body (for
+        // example an UPDATE/DELETE body that carries no RETURNING projection, or a multi-table mutation).
+        if (mutation.Command is not InsertCommand insert)
+        {
+            if (ctx.RenderMutationBody is not { } renderMutationBody)
+                throw new NotSupportedException("Only an INSERT data-modifying common table expression can be rendered; UPDATE/DELETE CTE bodies are not supported by this provider.");
+
+            return renderMutationBody(mutation, ctx);
+        }
+
         string? sourceSql = null;
 
-        if (mutation.Source is not null)
+        if (insert.Source is not null)
         {
-            var source = mutation.Source;
+            var source = insert.Source;
             if (source.Ctes is { Count: > 0 })
             {
                 // The outer WITH already declares these CTEs; re-declaring them inside the body would
@@ -142,15 +154,18 @@ internal static class SqlSourceRenderer
             }
         }
 
-        return SqlMutationBuilder.MakeInsert(
+        var (sql, parameters) = SqlMutationBuilder.MakeInsert(
             ctx.Dialect,
             ctx.QuoteIdentifiers,
             ctx.NamingConvention,
-            mutation,
+            insert,
             ctx.KeywordCase,
             sourceSql,
             sourceSql is null ? null : [],
             parameterProvider: ctx.ParameterProvider);
+
+        ctx.Params.AddRange(parameters);
+        return sql;
     }
 
     internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null)

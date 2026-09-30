@@ -296,18 +296,52 @@ plan cache.
 ## Data-modifying CTE (PostgreSQL)
 
 PostgreSQL is the only supported provider that accepts a data-modifying statement as a CTE body
-(`WITH <name> AS (INSERT ... RETURNING ...)`), gated by
+(`WITH <name> AS (<INSERT|UPDATE|DELETE> ... RETURNING ...)`), gated by
 [`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). nextorm exposes it
-as the `With(name, insert)` overload on `IDataContext`/`CteQuery`, which returns a
-[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1) typed by the `RETURNING` projection;
-every other provider rejects it with `NotSupportedException`.
+through the `With(name, mutation)` overloads on `IDataContext`/`CteQuery`, which accept a row-returning
+`INSERT`, `UPDATE` or `DELETE` and return a
+[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1) typed by the `RETURNING` projection.
+A `RETURNING` projection is required — a side-effect-only body is out of scope — and both single-table and
+join/multi-table mutations are accepted (a multi-table `UPDATE ... FROM` through
+[`UpdateJoinBuilder<TProjection>.Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a multi-table
+`DELETE ... USING` through the `Returning(projection)` extension on the joined builder; both require an
+explicit projection — the whole-projection form is not supported). Every other provider rejects
+`With(name, mutation)` with `NotSupportedException`, because its CTE body must be a `SELECT`. Unlike a read
+CTE, a statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
+side-effecting), so it is re-planned on every call.
+
+```csharp
+// Single-table UPDATE body: update, then read the updated rows typed.
+var updated = dataContext
+    .With("upd", dataContext.Update<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```csharp
+// Join/multi-table DELETE body: delete the target rows matched by the join, returning columns from both sides.
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { r.OrderId, r.CustomerName })
+    .ToList();
+```
 
 The write CTE is documented together with the write surface it belongs to — typed read-back via
 `From`/`FromTable`, a `VALUES` or `INSERT ... SELECT` body, reading an earlier read CTE, and feeding a main
 `INSERT ... SELECT` — in
 [Data modification (INSERT): Data-modifying CTE](15-insert-statement.md#data-modifying-cte-postgresql).
-`UPDATE` and `DELETE` bodies are not supported as a CTE body (only `INSERT` is). For the general `UPDATE`
-surface see [Data modification (UPDATE)](17-update-statement.md).
+For the general `UPDATE` surface see [Data modification (UPDATE)](17-update-statement.md), and for `DELETE`
+[Data modification (DELETE)](16-delete-statement.md).
 
 ## Provider differences
 

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Data.Common;
 
 namespace NextORM.Postgres.Tests;
 
@@ -200,4 +201,105 @@ public class DeleteSqlGenerationTests
             .ToSql();
         sql.Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\", array_entity as \"t3\" where t1.id = cast(t2.id as bigint) and t2.id = t3.id");
     }
+
+    [Fact]
+    public void DataModifyingCte_DeleteReturningBody_ShouldRenderDeleteReturningInsideCte()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        SqlOf(ctx, ctx.With("del", ctx.DeleteFrom<IMergeEntity>()
+                .Where(x => x.Id == 1)
+                .Returning(x => new { x.Id, x.Name }))
+            .From("del")
+            .Select(r => new { r.Id, r.Name }))
+            .Should().Be("with del as (delete from merge_entity where id = 1 returning id, name) select id, name from del as \"t1\"");
+    }
+
+    [Fact]
+    public void DataModifyingCte_DeleteJoinReturningBody_ShouldRenderDeleteUsingReturningInsideCte()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var delete = ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id });
+
+        var sql = SqlOf(ctx, ctx.With("del", delete).From("del").Select(r => new { r.TargetId, r.JoinedId }));
+
+        sql.Should().StartWith("with del as (delete from complex_entity as \"t1\" using simple_entity as \"t2\"");
+        sql.Should().Contain("returning t1.id as \"TargetId\", t2.id as \"JoinedId\"");
+        sql.Split("with ").Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void DataModifyingCte_DeleteJoinBodyReferencingReadCte_ShouldHoistReadCteFirst()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The data-modifying DELETE ... USING body joins a read CTE declared through the scope; the
+        // hoister must order the read CTE before the mutation that consumes it.
+        var scope = ctx.With("src", ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var delete = ctx.From<IComplexEntity>()
+            .Join(scope.From("src"), (c, s) => c.Id == s["id"].AsInt)
+            .Returning(p => new { TargetId = p.Item1.Id });
+
+        var sql = SqlOf(ctx, ctx.With("del", delete).From("del").Select(r => new { r.TargetId }));
+
+        sql.Should().StartWith("with src as (select id from simple_entity");
+        sql.Should().Contain("), del as (delete from complex_entity as \"t1\" using src as \"t2\"");
+        sql.Should().NotContain("with src as (with");
+    }
+
+    [Fact]
+    public void DataModifyingCte_DeleteJoinUnnamedReturningMember_ShouldReadBackUnderPhysicalColumnName()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // An anonymous RETURNING member keeps the source member's name (p.Item1.Id -> "Id"), whose
+        // mapped column is "id". The CTE read shape resolves it under the physical column name, so the
+        // body must not alias it to the CLR member name or the outer read references a missing "Id".
+        var scope = ctx.With("del", ctx.From<IComplexEntity>()
+                .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+                .Returning(p => new { p.Item1.Id }))
+            .From("del")
+            .Select(r => new { r.Id });
+
+        SqlOf(ctx, scope).Should().Be(
+            "with del as (delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) returning t1.id) select id from del as \"t1\"");
+    }
+
+    [Fact]
+    public void DeleteJoinReturning_DirectRoute_ToSql_ShouldRenderUsingReturningWithoutCte()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The standalone terminal (no With(...) scope) renders DELETE ... USING ... RETURNING; the
+        // DataContext.BuildReturningSql DeleteJoinCommand arm feeds the same renderer.
+        var sql = ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id })
+            .ToSql();
+
+        sql.Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) returning t1.id as \"TargetId\", t2.id as \"JoinedId\"");
+        sql.Should().NotContain("with ");
+    }
+
+    [Fact]
+    public void DeleteJoinReturning_Scalar_ToSql_ShouldRenderSingleColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Returning(p => p.Item1.Id)
+            .ToSql();
+
+        sql.Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) returning t1.id");
+    }
+
+    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
 }

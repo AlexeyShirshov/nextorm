@@ -31,14 +31,14 @@ public sealed class CteDefinition
     }
 
     /// <summary>
-    /// Creates a data-modifying CTE definition whose body is an <c>INSERT</c> and whose readable
-    /// columns are described by <paramref name="shape"/> (a prepared projection over the inserted
-    /// entity). Only PostgreSQL accepts a data-modifying CTE body.
+    /// Creates a data-modifying CTE definition whose body is a data-modifying statement and whose
+    /// readable columns are described by <paramref name="shape"/> (a prepared projection over the
+    /// mutated entity). Only PostgreSQL accepts a data-modifying CTE body.
     /// </summary>
     /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
     /// <param name="shape">A prepared command describing the columns returned by the mutation.</param>
-    /// <param name="mutation">The <c>INSERT</c> that forms the CTE body.</param>
-    internal CteDefinition(string name, QueryCommand shape, InsertCommand mutation)
+    /// <param name="mutation">The data-modifying statement that forms the CTE body.</param>
+    internal CteDefinition(string name, QueryCommand shape, CteMutation mutation)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(shape);
@@ -54,10 +54,10 @@ public sealed class CteDefinition
     /// <summary>Query that defines the CTE, or the column shape of a data-modifying CTE.</summary>
     public QueryCommand Query { get; }
     /// <summary>
-    /// The data-modifying statement (<c>INSERT ... RETURNING</c>) that forms the CTE body, or
-    /// <c>null</c> when the CTE is an ordinary read CTE.
+    /// The data-modifying statement (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE ... RETURNING</c>) that forms
+    /// the CTE body, or <c>null</c> when the CTE is an ordinary read CTE.
     /// </summary>
-    internal InsertCommand? Mutation { get; }
+    internal CteMutation? Mutation { get; }
     /// <summary>True when the CTE body is a data-modifying statement rather than a <c>SELECT</c>.</summary>
     public bool IsDataModifying => Mutation is not null;
     /// <summary>True when the CTE body may reference <see cref="Name"/> (a recursive CTE).</summary>

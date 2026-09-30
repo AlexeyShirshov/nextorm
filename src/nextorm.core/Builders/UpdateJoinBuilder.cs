@@ -132,6 +132,24 @@ public sealed class UpdateJoinBuilder<TProjection>
     }
 
     /// <summary>
+    /// Switches the builder to a row-returning terminal that materialises a projection of the updated rows
+    /// through PostgreSQL's <c>UPDATE ... FROM ... RETURNING</c> form. A selected member may reference any
+    /// joined table (for example <c>Returning(p =&gt; new { p.Item1.Id, p.Item2.Name })</c>). A projection
+    /// is required: the whole-projection (identity) form is not supported for a multi-table update. Only
+    /// PostgreSQL supports returning rows from a multi-table update; every other provider rejects it.
+    /// </summary>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    /// <exception cref="NotSupportedException">The projection references something other than mapped properties.</exception>
+    public UpdateJoinReturningBuilder<TProjection, TResult> Returning<TResult>(Expression<Func<TProjection, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new UpdateJoinReturningBuilder<TProjection, TResult>(this, columns, selectList, oneColumn, projection);
+    }
+
+    /// <summary>
     /// Renders the parameterised SQL this builder would execute, without executing it. Useful for
     /// diagnostics and for verifying SQL generation without a database.
     /// </summary>
@@ -161,7 +179,10 @@ public sealed class UpdateJoinBuilder<TProjection>
     public Task<int> UpdateAsync(CancellationToken cancellationToken = default)
         => RequireExecutor().Execute(BuildCommand(), cancellationToken);
 
-    private UpdateJoinCommand BuildCommand()
+    /// <summary>The context the update executes on.</summary>
+    internal IDataContext DataContext => _query.DataProvider;
+
+    internal UpdateJoinCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null, LambdaExpression? returningProjection = null)
     {
         if (_assignments.Count == 0)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...).");
@@ -175,7 +196,7 @@ public sealed class UpdateJoinBuilder<TProjection>
         // Only the source, joins and condition of this command are used; the projection is a placeholder
         // and column preparation is skipped (IgnoreColumns), exactly like the multi-table DELETE source.
         var source = JoinedMutationSource.Prepare(_query, "UPDATE");
-        return new UpdateJoinCommand(_targetType, source, [.. _assignments]);
+        return new UpdateJoinCommand(_targetType, source, [.. _assignments], returningColumns, returningProjection);
     }
 
     private void SetAssignment(UpdateJoinAssignment assignment)
