@@ -64,7 +64,7 @@ public static class EntityBuilderExtensions
         // binding; the filter resolver re-resolves it per preparation, so DataContextCache.Clear() is
         // honored. TableAlias is rejected later with NotSupportedException and has no mapping to resolve.
         if (typeof(TEntity) != typeof(TableAlias))
-            _ = DataContextExtensions.ResolveMetadata(typeof(TEntity));
+            _ = DataContextExtensions.ResolveMetadata(source.DataProvider, typeof(TEntity));
 
         return source.BindEntitySource<TEntity>(binding);
     }

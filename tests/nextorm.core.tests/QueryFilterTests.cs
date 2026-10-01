@@ -518,6 +518,65 @@ public class QueryFilterTests
         onlyNamed.Should().BeEquivalentTo([1, 600], "only the anonymous Id filter is disabled");
     }
 
+    // An ignored Count must not poison the plan cache or the context's shared command: the scope is part
+    // of the command's prepared condition, so a later normal terminal sees the full filter set again.
+    [Fact]
+    public void IgnoredCountThenNormalRestoresScope()
+    {
+        using var ctx = new InMemoryDataContext();
+        ConfigureSelectiveKeyed(ctx);
+
+        // Warm the filtered count plan (anonymous Id<100 AND named soft-delete).
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1);
+
+        // Establish the context-shared Any command with the normal scope, so the sticky-flag check below
+        // observes the shared command rather than a fresh one.
+        ctx.From<SelectiveKeyedEntity>().Any().Should().BeTrue();
+        var shared = ctx.AnyCommand!.Value;
+        shared.Cache.Should().BeTrue();
+
+        // Ignore only the named soft filter: the soft-deleted row becomes visible.
+        ctx.From<SelectiveKeyedEntity>().IgnoreFilters(["soft"]).Count().Should().Be(2);
+
+        // A normal call after the ignored one restores the full scope instead of reusing the ignored plan.
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1);
+
+        // The ignored Count must not mutate the context-shared command or flip its sticky Cache flag.
+        ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+        shared.Cache.Should().BeTrue("the ignored Count must not set the sticky Cache=false flag");
+
+        var command = ctx.From<SelectiveKeyedEntity>().ToCommand();
+        command.Cache.Should().BeTrue();
+        command.IgnoreFilters.Should().BeFalse();
+    }
+
+    // The parameterless "all filters" scope (ignored `All`): after `IgnoreFilters()` the next normal call
+    // restores every filter, and neither the plan cache nor the shared command is left in the ignored state.
+    [Fact]
+    public void IgnoredAllThenNormalRestoresScope()
+    {
+        using var ctx = new InMemoryDataContext();
+        ConfigureSelectiveKeyed(ctx);
+
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1);
+
+        ctx.From<SelectiveKeyedEntity>().Any().Should().BeTrue();
+        var shared = ctx.AnyCommand!.Value;
+        shared.Cache.Should().BeTrue();
+
+        // Parameterless IgnoreFilters disables both the anonymous Id filter and the named soft filter.
+        ctx.From<SelectiveKeyedEntity>().IgnoreFilters().Count().Should().Be(3);
+
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1, "a normal call after the ignored one restores every filter");
+
+        ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+        shared.Cache.Should().BeTrue("the ignored Count must not set the sticky Cache=false flag");
+
+        var command = ctx.From<SelectiveKeyedEntity>().ToCommand();
+        command.Cache.Should().BeTrue();
+        command.IgnoreFilters.Should().BeFalse();
+    }
+
     [Fact]
     public void SelectiveIgnore_ByType_ShouldDisableOnlyThatEntityTypesFilters()
     {

@@ -298,7 +298,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         INamingConvention? namingConvention,
         KeywordCase keywordCase)
     {
-        var filters = QueryFilterResolver.GetFilters(entityType, scope);
+        var filters = QueryFilterResolver.GetFilters(entityType, scope, _context);
         if (filters.Count == 0)
             return null;
 
@@ -505,6 +505,12 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess)
     {
+        // The single render funnel for cold, warm-miss and prepared-miss renders (including the cached-hit
+        // parameter refresh through ExtractParams). A previously prepared command skips re-preparation, so
+        // the per-resolution guard cannot see that the bridge metadata was dropped; refuse to render the
+        // unfiltered statement instead. A context with no imported-filter expectations is untouched.
+        QueryFilterExpectations.EnsureExpectedFiltersPresent(_context);
+
         var ctx = new SqlBuildContext
         {
             Dialect = _dialect(),

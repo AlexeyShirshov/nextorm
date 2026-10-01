@@ -403,6 +403,14 @@ internal static class MemberTranslator
         }
         else
         {
+            // A query filter imported from EF Core reads its live owner as
+            // (TContext)<owner-getter>(QueryFilterContext.Context). Parameterize the whole
+            // owner-getter/member subtree with a host-free accessor invoked with the executing context,
+            // so the owner instance and the value it produces never enter a process-wide key. A native
+            // context filter (IDataContext.Properties reads) has no owner-getter and keeps its path.
+            if (QueryFilterContextAccessor.TryTranslate(visitor, node))
+                return node;
+
             // The common member access is <param>.Member (join condition) or <param>.tN.Member
             // (projection), so the lambda parameter can be read structurally. Only the remaining
             // shapes (closure constants, deeper chains) need the allocating twoTypeVisitor.

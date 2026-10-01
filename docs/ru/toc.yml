@@ -152,6 +152,8 @@
       href: advanced/query-filters.md
     - name: Интеграция с Entity Framework Core
       href: advanced/integration-efcore.md
+    - name: Мост фильтров запросов EF Core
+      href: advanced/ef-core-query-filters.md
     - name: Жадная загрузка дочерних коллекций
       href: advanced/eager-loading.md
     - name: Связи и однозапросная загрузка

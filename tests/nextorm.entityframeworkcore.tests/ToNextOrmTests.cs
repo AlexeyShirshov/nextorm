@@ -340,15 +340,21 @@ public sealed class ToNextOrmTests : EfCoreMetadataCleanup
     }
 
     [Fact]
-    public void IgnoreQueryFilters_ShouldThrowNotSupported()
+    public void IgnoreQueryFilters_ShouldBeAccepted()
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         connection.Open();
         using var db = CreateContext(connection);
+        db.Database.EnsureCreated();
 
-        var act = () => db.Tracks.IgnoreQueryFilters().ToNextOrm(db);
+        // The filterless MusicContext has no filter to disable, so this only proves the operator is
+        // accepted and translated; the filtered semantics are covered by EfIgnoreQueryFiltersTests.
+        var builder = db.Tracks.IgnoreQueryFilters().ToNextOrm(db);
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*IgnoreQueryFilters*");
+        using var ctx = db.GetNextOrmContext();
+        var sql = NextOrmSql.Of(ctx, builder.ToCommand());
+
+        sql.Should().Contain("from track_entity");
     }
 
     [Fact]

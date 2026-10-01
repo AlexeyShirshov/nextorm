@@ -81,7 +81,7 @@ internal static class RawMapperFactory
 
         var entityMeta = DataContextCache.Metadata.TryGetValue(resultType, out var existing)
             ? existing
-            : DataContextExtensions.ResolveMetadata<T>(null);
+            : DataContextExtensions.ResolveMetadata<T>(context, null);
 
         if (entityMeta.Properties.Count == 0)
             throw Unsupported(resultType);

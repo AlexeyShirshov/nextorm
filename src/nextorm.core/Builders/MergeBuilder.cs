@@ -175,7 +175,7 @@ public sealed partial class MergeBuilder<TEntity>
     /// <exception cref="NotSupportedException">The active form cannot isolate the write target.</exception>
     internal void EnsureFilteredFormSupported()
     {
-        if (_filterScope.All || QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope).Count == 0)
+        if (_filterScope.All || QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope, _dataContext).Count == 0)
             return;
 
         // The form is decision-relevant only by actual branches: `.On(...)` without a branch is not a
@@ -678,7 +678,7 @@ public sealed partial class MergeBuilder<TEntity>
     }
 
     private bool HasActiveFilter()
-        => !_filterScope.All && QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope).Count > 0;
+        => !_filterScope.All && QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope, _dataContext).Count > 0;
 
     /// <summary>Builds the command whose <c>RETURNING</c>/<c>OUTPUT</c> clause returns <paramref name="returningColumns"/>.</summary>
     internal MergeCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns) => BuildCommand(returningColumns);

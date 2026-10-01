@@ -5424,3 +5424,21 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 | N124-2 | ℹ️ (naming/placement) | `EntityBuilderExtensions.cs:41-53` | Имя глагольное и точное (`BindEntity`), extension живёт в namespace `NextORM.Core` (совпадает с namespace типа), форма параметров (`this EntityBuilder<TableAlias>`, `IReadOnlyCollection<string>`) соответствует конвенции `EntityBuilderExtensions`; `<typeparam>`/`<param>`/`<returns>`/`<exception>` присутствуют. | Без изменений; конвенцию сохранять. |
 
 ℹ️ **Наблюдения.** (1) Публичные доки EN+RU синхронны, ссылок на `docs/specs/**` нет, нумерация страниц не менялась, формулировок «phases» нет. (2) Изменение поверхностно-нейтрально к остальному API: `FromSql`/`From(string)` сигнатуры и семантика не менялись, `WithSql`/`PrepareFromSql`/`ExecuteRaw` вне области. (3) Кодовая сторона и приёмка (build/тесты/перф) — в `code-smells-review.md` §«Аудит 01.10.2026 — issue #124»; этот поток — docs/registers-only, без сборки (build-сериализация у core-потока).
+
+---
+
+## Документирование 01.10.2026 — issue #125: мост фильтров запросов EF Core 10 (docs-only, ветка `1.0.9-b`; новой публичной поверхности нет)
+
+**Область.** #125 не добавляет публичных типов/членов: `EfCoreFilterBinding`/`EfQueryFilterTranslator` — `internal`, а поверхность `ToNextOrm`/`NextOrmModelMapper.Register`/`EntityFrameworkCoreExtensions` используется без изменения сигнатур. Публичная док-сторона EN+RU — новая `advanced/ef-core-query-filters.md` (+ RU) и правки `advanced/{query-filters,integration-efcore,limitations,api-reference}.md` (+ RU), навигация `advanced/toc.yml` + `ru/toc.yml`. Изменение extend-only (поведение импорта/фильтрации), ломающих имён/форм нет.
+
+**Открытые единицы (веха `1.0.9-b`).** F125-1 — срез «ClickHouse без EF-адаптера» (у ClickHouse нет EF Core-провайдера, который распознаёт мост); F125-2 — сертификация общего соединения/транзакции специально для MariaDB (сегодня MariaDB обслуживается только MySQL-провайдером Pomelo). Триггеры и доказательства — `code-smells-review.md` §«Документирование 01.10.2026 — issue #125».
+
+**Проверка (01.10.2026).** Публичной поверхности в диффе нет; `find -name 'PublicAPI*.txt'` — **0** (Шаг 5 открыт). Доки EN+RU синхронны, ссылок на `docs/specs/**` нет, нумерация не менялась, «phases» нет.
+
+---
+
+## Документирование 01.10.2026 — issue #125, round 4: жизненный цикл fail-closed моста EF Core (ветка `1.0.9-b`; новой публичной поверхности нет)
+
+**Область.** Round-4 lifecycle/rebind: `QueryFilterExpectations` (`src/nextorm.core/Query/QueryFilterContext.cs`) — `internal`; правки `DataContextExtensions.cs`, `Meta/QueryFilterResolver.cs`, `QueryPlanner.cs`, `SqlMutationBuilder.cs` и `nextorm.entityframeworkcore/EntityFrameworkCoreExtensions.cs` (диагностическая строка). Публичных типов/членов не добавлено и не изменено, сигнатуры публичной поверхности и решения по именованию — прежние. Новых имён, конфликтов с BCL/EF Core и изменений `PublicAPI.*.txt` (файлов — **0**, Шаг 5 открыт) нет. Итог: **no new public surface**.
+
+**Доки EN+RU.** `advanced/ef-core-query-filters.md` (+ RU) — новая секция «Lifecycle, recovery, and bounded concurrency» / «Жизненный цикл, восстановление и ограниченная конкурентность»; `advanced/integration-efcore.md`, `advanced/limitations.md`, `infrastructure/01-query-reuse-and-caching.md` (+ RU) — fail-closed после `DataContextCache.Clear()`/скользящего вытеснения. Навигация `toc.yml` не менялась (новых страниц/разделов нет, только якоря внутри существующих страниц). Ссылок на `docs/specs/**` нет; EN и RU синхронны.

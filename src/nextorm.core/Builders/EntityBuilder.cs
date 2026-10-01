@@ -797,7 +797,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         if (options.Relationship is { } local)
             return ValidateLocalCollectionRelationship<TChild>(local, property);
 
-        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(null);
+        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(_dataProvider, null);
         foreach (var relationship in metadata.Relationships)
         {
             if (relationship.Navigation is null || !relationship.Navigation.Equals(property))
@@ -921,7 +921,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             return local;
         }
 
-        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(null);
+        var metadata = DataContextExtensions.ResolveMetadata<TEntity>(_dataProvider, null);
         foreach (var relationship in metadata.Relationships)
         {
             if (relationship.Navigation is null || !relationship.Navigation.Equals(property))

@@ -30,6 +30,15 @@ public static class EntityFrameworkCoreExtensions
         "Microsoft.EntityFrameworkCore.SqlServer, Pomelo.EntityFrameworkCore.MySql (MySQL and MariaDB), " +
         "MySql.EntityFrameworkCore (MySQL only), and Microsoft.EntityFrameworkCore.Sqlite.";
 
+    // Supplied to core's owner-free expectation registry. Core only rethrows it and never names the EF
+    // bridge type, so the fail-closed message lives with the bridge that knows what was imported.
+    private const string MissingImportedFilterDiagnostic =
+        "An EF Core query filter that was imported into the process-wide NextORM metadata is no longer " +
+        "present (the metadata cache was cleared or an entry expired), so the bridge cannot prove the " +
+        "filter still runs. Refusing to run the query unfiltered. Re-create the NextORM context through " +
+        "the EF Core bridge (CreateNextOrmContext, GetNextOrmContext, ToNextOrm or AddNextOrmFromDbContext) " +
+        "to re-register the imported filters.";
+
     /// <summary>
     /// Creates a nextorm <see cref="IDataContext"/> over the EF Core connection of
     /// <paramref name="dbContext"/>, using the mapping read from <paramref name="dbContext"/>'s model.
@@ -74,9 +83,19 @@ public static class EntityFrameworkCoreExtensions
         ConfigureProvider(builder, provider, connection);
         configure?.Invoke(builder);
 
-        NextOrmModelMapper.Register(dbContext.Model);
+        var importedFilters = NextOrmModelMapper.RegisterAndCollect(dbContext.Model);
 
         var context = builder.CreateDataContext();
+
+        // Bind the created context to its exact EF owner, so an imported context-capturing query
+        // filter evaluates against the live DbContext instance. This runs only after the mapping and
+        // filters were published successfully.
+        EfCoreFilterBinding.Bind(context, dbContext);
+
+        // Record the imported-filter expectation on the bound context: if that metadata is later
+        // dropped (Clear or sliding eviction), a query on this context fails closed instead of running
+        // unfiltered. Registering after Bind means a failed Register/Bind publishes nothing.
+        QueryFilterExpectations.Register(context, importedFilters, MissingImportedFilterDiagnostic);
 
         var efTransaction = dbContext.Database.CurrentTransaction;
         if (efTransaction is not null)

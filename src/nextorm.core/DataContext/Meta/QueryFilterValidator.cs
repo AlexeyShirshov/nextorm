@@ -173,7 +173,7 @@ internal static class QueryFilterValidator
 
     private static List<(string Key, Func<TEntity, bool> Predicate)> BuildEntityPredicates<TEntity>(QueryFilterScope scope, IDataContext dataContext, string operation)
     {
-        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope);
+        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope, dataContext);
         var predicates = new List<(string, Func<TEntity, bool>)>(filters.Count);
 
         foreach (var filter in filters)
@@ -203,7 +203,7 @@ internal static class QueryFilterValidator
 
     private static List<(string Key, Func<object?[], bool> Predicate)> BuildColumnPredicates(Type entityType, IReadOnlyList<IPropertyMetadata> writtenColumns, QueryFilterScope scope, IDataContext dataContext, string operation)
     {
-        var filters = QueryFilterResolver.GetFilters(entityType, scope);
+        var filters = QueryFilterResolver.GetFilters(entityType, scope, dataContext);
         var predicates = new List<(string, Func<object?[], bool>)>(filters.Count);
         if (filters.Count == 0)
             return predicates;
@@ -321,7 +321,7 @@ internal static class QueryFilterValidator
         string operation,
         IReadOnlyList<IPropertyMetadata>? projectedColumns)
     {
-        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope);
+        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope, dataContext);
         if (filters.Count == 0)
             return null;
 

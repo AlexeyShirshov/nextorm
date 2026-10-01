@@ -75,7 +75,7 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -93,7 +93,7 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity), new BulkInsertOptions());
+        return new(dataContext, ResolveMetadata(dataContext, configEntity), new BulkInsertOptions());
     }
 
     /// <summary>
@@ -115,7 +115,7 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(options);
 
-        return new(dataContext, ResolveMetadata(configEntity), options);
+        return new(dataContext, ResolveMetadata(dataContext, configEntity), options);
     }
 
     /// <summary>
@@ -139,7 +139,7 @@ public static class DataContextExtensions
         var options = new BulkInsertOptionsBuilder();
         configure(options);
 
-        return new(dataContext, ResolveMetadata(configEntity), options.Build());
+        return new(dataContext, ResolveMetadata(dataContext, configEntity), options.Build());
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -176,7 +176,7 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -195,7 +195,7 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).UpdateEntity(entity);
+        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).UpdateEntity(entity);
     }
 
     /// <summary>
@@ -214,21 +214,40 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).UpdateEntityAsync(entity, cancellationToken);
+        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).UpdateEntityAsync(entity, cancellationToken);
     }
 
-    internal static IEntityMetadata ResolveMetadata<TEntity>(Action<EntityMetadataBuilder<TEntity>>? configEntity)
+    internal static IEntityMetadata ResolveMetadata<TEntity>(IDataContext? dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
     {
         // A configured mapping must win over an auto-published junction mapping: the many-to-many
         // resolver publishes the auto-built junction into Metadata so the derived link source can read
         // its columns, but that entry must not shadow an explicit From<TJunction>(cfg).
         if (configEntity is not null && DataContextCache.AutoPublishedJunctionMetadata.ContainsKey(typeof(TEntity)))
         {
+            // Build outside the registration gate: the configuration callback is user code and must
+            // never run while the process-wide metadata gate is held.
             var configuredBuilder = new EntityMetadataBuilder<TEntity>();
             configEntity(configuredBuilder);
             var configured = configuredBuilder.Build();
-            DataContextCache.Metadata[typeof(TEntity)] = configured;
-            DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
+
+            EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), configured);
+
+            lock (DataContextCache.MetadataRegistrationGate)
+            {
+                // Revalidate against the current entry: a concurrent writer may have replaced the
+                // auto-published junction entry while this thread built its mapping. If so, its
+                // mapping wins and the configured build is discarded.
+                if (!DataContextCache.AutoPublishedJunctionMetadata.ContainsKey(typeof(TEntity))
+                    && DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var raced)
+                    && !string.IsNullOrEmpty(raced.TableName))
+                {
+                    EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), raced);
+                    return raced;
+                }
+
+                DataContextCache.Metadata[typeof(TEntity)] = configured;
+                DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
+            }
 
             // The auto-published mapping may already have seeded the per-property column-name cache;
             // drop those names so the configured columns are resolved from now on.
@@ -238,18 +257,40 @@ public static class DataContextExtensions
 
         if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
         {
+            // Build outside the registration gate (no user code is invoked under it).
             var eb = new EntityMetadataBuilder<TEntity>();
             configEntity?.Invoke(eb);
-            metadata = eb.Build();
-            DataContextCache.Metadata[typeof(TEntity)] = metadata;
+            var built = eb.Build();
 
-            // A configured rebuild is no longer an auto-published junction entry.
-            if (configEntity is not null)
-                DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
+            EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), built);
+
+            lock (DataContextCache.MetadataRegistrationGate)
+            {
+                // Revalidate against the current entry: the EF Core bridge (or another thread) may have
+                // published a non-empty mapping while this thread built its own. The published entry
+                // wins, so a bridged import is not clobbered by an auto-built mapping.
+                if (DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var current) && !string.IsNullOrEmpty(current.TableName))
+                {
+                    EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), current);
+                    return current;
+                }
+
+                DataContextCache.Metadata[typeof(TEntity)] = built;
+
+                // A configured rebuild is no longer an auto-published junction entry.
+                if (configEntity is not null)
+                    DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
+            }
+
+            metadata = built;
         }
 
+        EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), metadata);
         return metadata;
     }
+
+    private static void EnsureExpectedFiltersPresent(IDataContext? dataContext, Type entityType, IEntityMetadata metadata)
+        => QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, metadata.Filters);
 
     /// <summary>
     /// Resolves the mapping of an entity type known only at run time (used by the table-valued
@@ -263,21 +304,31 @@ public static class DataContextExtensions
     /// must pick it up.
     /// </para>
     /// </summary>
+    /// <param name="dataContext">
+    /// The executing context, used to enforce the bridge fail-closed expectation. <see langword="null"/>
+    /// (no context known) keeps the existing behavior.
+    /// </param>
     /// <param name="entityType">The entity type to resolve.</param>
     /// <returns>The resolved entity metadata.</returns>
-    /// <exception cref="InvalidOperationException">The metadata builder for the type could not be created or produced no metadata, or a mapping declares a decimal precision/scale whose bound provider type is not decimal or as a partial pair.</exception>
+    /// <exception cref="InvalidOperationException">The metadata builder for the type could not be created or produced no metadata, a mapping declares a decimal precision/scale whose bound provider type is not decimal or as a partial pair, or the context expects imported filters the resolved metadata no longer carries.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A mapping declares a decimal precision/scale outside the allowed range (precision 1..38, scale 0..precision); propagated unwrapped from the reflected auto-build.</exception>
-    internal static IEntityMetadata ResolveMetadata(Type entityType)
+    internal static IEntityMetadata ResolveMetadata(IDataContext? dataContext, Type entityType)
     {
         ArgumentNullException.ThrowIfNull(entityType);
 
         // A configured mapping always wins, whether it was registered before or after an auto bind.
         if (DataContextCache.Metadata.TryGetValue(entityType, out var metadata) && !string.IsNullOrEmpty(metadata.TableName))
+        {
+            QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, metadata.Filters);
             return metadata;
+        }
 
         // The auto path keeps a private cache so it never shadows a later configured registration.
         if (DataContextCache.TvpMetadata.TryGetValue(entityType, out var autoMetadata))
+        {
+            QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, autoMetadata.Filters);
             return autoMetadata;
+        }
 
         var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(entityType);
         var builder = Activator.CreateInstance(builderType)
@@ -290,6 +341,10 @@ public static class DataContextExtensions
         // path reports exactly the same failure as the strongly typed one.
         metadata = build.Invoke(builder, BindingFlags.DoNotWrapExceptions, null, null, null) as IEntityMetadata
             ?? throw new InvalidOperationException($"Building entity metadata for {entityType.Name} returned no metadata.");
+
+        // Fail closed before the auto-built (filterless) metadata is cached or returned.
+        QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, metadata.Filters);
+
         DataContextCache.TvpMetadata[entityType] = metadata;
         return metadata;
     }
@@ -308,7 +363,7 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -325,7 +380,7 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).DeleteEntity(entity);
+        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).DeleteEntity(entity);
     }
 
     /// <summary>
@@ -343,7 +398,7 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).DeleteEntityAsync(entity, cancellationToken);
+        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).DeleteEntityAsync(entity, cancellationToken);
     }
 
     /// <summary>
@@ -949,7 +1004,7 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -959,7 +1014,7 @@ public static class DataContextExtensions
     /// </summary>
     public static EntityBuilder<T> From<T>(this IDataContext dataContext, Action<EntityMetadataBuilder<T>>? configEntity = null)
     {
-        _ = ResolveMetadata(configEntity);
+        _ = ResolveMetadata(dataContext, configEntity);
 
         return new(dataContext) { Logger = dataContext.CommandLogger };
     }
@@ -984,7 +1039,7 @@ public static class DataContextExtensions
         var fromOptions = new FromOptions();
         options(fromOptions);
 
-        _ = ResolveMetadata(configEntity);
+        _ = ResolveMetadata(dataContext, configEntity);
 
         return new(dataContext)
         {

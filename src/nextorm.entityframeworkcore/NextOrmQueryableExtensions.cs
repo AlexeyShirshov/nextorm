@@ -14,8 +14,11 @@ namespace NextORM.EntityFrameworkCore;
 /// <remarks>
 /// Translation is deliberately bounded: only the operators nextorm can express without a client-side
 /// fallback are accepted. Every other operator (projection, eager loading, grouping, joins, subqueries,
-/// raw SQL, query-filter overrides and client evaluation) fails with <see cref="NotSupportedException"/>
-/// rather than being silently evaluated in memory.
+/// raw SQL and client evaluation) fails with <see cref="NotSupportedException"/> rather than being
+/// silently evaluated in memory. <c>IgnoreQueryFilters()</c> and <c>IgnoreQueryFilters(keys)</c> are
+/// translated into the nextorm query-local filter scope: the parameterless form disables every filter
+/// (including anonymous ones), the named form disables only the listed keys (anonymous filters are
+/// preserved).
 /// </remarks>
 public static class NextOrmQueryableExtensions
 {
@@ -114,6 +117,10 @@ public static class NextOrmQueryableExtensions
                     case nameof(EntityFrameworkQueryableExtensions.AsNoTracking):
                     case nameof(EntityFrameworkQueryableExtensions.AsNoTrackingWithIdentityResolution):
                     case nameof(EntityFrameworkQueryableExtensions.TagWith):
+                    // The filter scope is query-local and applied when the builder is composed; an
+                    // unknown or empty key list is a no-op and an empty key entry never selects the
+                    // anonymous filter slot.
+                    case nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters):
                         continue;
 
                     case nameof(EntityFrameworkQueryableExtensions.AsTracking):
@@ -209,6 +216,13 @@ public static class NextOrmQueryableExtensions
                 case nameof(EntityFrameworkQueryableExtensions.TagWith):
                     return builder;
 
+                case nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters):
+                    // Parameterless disables every filter (including anonymous); the keyed overload
+                    // disables only the named keys and leaves anonymous filters active.
+                    return call.Arguments.Count > 1
+                        ? builder.IgnoreFilters(NormalizeFilterKeys(EvaluateFilterKeys(call.Arguments[1])))
+                        : builder.IgnoreFilters();
+
                 default:
                     throw UnknownOperator(call.Method.Name);
             }
@@ -243,6 +257,49 @@ public static class NextOrmQueryableExtensions
         var lambda = StripQuote(call.Arguments[1]);
 
         return Expression.Lambda<Func<T, bool>>(lambda.Body, lambda.Parameters);
+    }
+
+    // Reads the filter-key collection of IgnoreQueryFilters(keys) as an immutable snapshot, so the
+    // translated query owns its scope and does not observe later mutations of the source collection.
+    // A non-evaluable argument is refused instead of silently disabling nothing.
+    private static IReadOnlyCollection<string>? EvaluateFilterKeys(Expression expression)
+    {
+        if (expression is ConstantExpression { Value: null })
+            return null;
+
+        if (expression is ConstantExpression { Value: IReadOnlyCollection<string> constant })
+            return constant;
+
+        try
+        {
+            return Expression.Lambda<Func<IReadOnlyCollection<string>?>>(
+                Expression.Convert(expression, typeof(IReadOnlyCollection<string>))).Compile()();
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            throw new NotSupportedException(
+                "The LINQ operator 'IgnoreQueryFilters' is not supported by ToNextOrm with a non-evaluable filter-key collection.", exception);
+        }
+    }
+
+    // Normalizes a keyed ignore list: null/empty collection is a no-op and null/empty/whitespace key
+    // entries are dropped, so they can never select the anonymous filter slot (whose key is "").
+    // Duplicates collapse through the ordinal set built by QueryFilterScope.FromKeys.
+    private static IEnumerable<string> NormalizeFilterKeys(IReadOnlyCollection<string>? filterKeys)
+    {
+        if (filterKeys is null || filterKeys.Count == 0)
+            return Array.Empty<string>();
+
+        List<string>? normalized = null;
+        foreach (var key in filterKeys)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                continue;
+
+            (normalized ??= new List<string>()).Add(key);
+        }
+
+        return (IEnumerable<string>?)normalized ?? Array.Empty<string>();
     }
 
     private static Expression<Func<T, object?>> BuildKeySelector<T>(MethodCallExpression call)
@@ -294,7 +351,7 @@ public static class NextOrmQueryableExtensions
     private static NotSupportedException UnknownOperator(string name)
         => new(
             $"The LINQ operator '{name}' is not supported by ToNextOrm. Supported operators are Where, " +
-            "OrderBy, OrderByDescending, ThenBy, ThenByDescending, Skip, Take and Distinct.");
+            "OrderBy, OrderByDescending, ThenBy, ThenByDescending, Skip, Take, Distinct and IgnoreQueryFilters.");
 
     private sealed class LambdaBodyGuard : ExpressionVisitor
     {

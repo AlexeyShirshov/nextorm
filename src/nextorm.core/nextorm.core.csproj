@@ -39,5 +39,9 @@
          LimitBy/WithTotals/ArrayJoin*/Semi|Anti|PasteJoin, FromOptions.Sample, JoinOptions.Global)
          as public extension methods over the now-internal instance members. -->
     <InternalsVisibleTo Include="nextorm.clickhouse" />
+    <!-- The EF Core bridge stages its whole import and publishes it under the shared metadata
+         registration gate, so a concurrent auto/configured registration or junction publication
+         cannot clobber a bridged entry (and vice versa). -->
+    <InternalsVisibleTo Include="nextorm.entityframeworkcore" />
   </ItemGroup>
 </Project>

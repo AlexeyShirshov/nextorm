@@ -2,6 +2,8 @@
   href: query-filters.md
 - name: Entity Framework Core integration
   href: integration-efcore.md
+- name: EF Core query-filter bridge
+  href: ef-core-query-filters.md
 - name: Eager loading child collections
   href: eager-loading.md
 - name: Relationships and single-query loading

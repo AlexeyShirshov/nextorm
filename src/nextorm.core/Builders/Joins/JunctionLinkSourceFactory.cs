@@ -62,9 +62,16 @@ internal static class JunctionLinkSourceFactory
             static key => BuildMetadata(GetLinkType(key.ParentKey, key.ChildKey)));
 
         // Republish when the process-wide cache was cleared (or never had the entry): the cached
-        // instance is reused, only the registration is redone.
+        // instance is reused, only the registration is redone. The check and the write run under the
+        // shared registration gate, so a concurrent bridged import for the same key cannot be lost.
         if (!DataContextCache.Metadata.TryGetValue(linkType, out var registered) || !ReferenceEquals(registered, metadata))
-            DataContextCache.Metadata[linkType] = metadata;
+        {
+            lock (DataContextCache.MetadataRegistrationGate)
+            {
+                if (!DataContextCache.Metadata.TryGetValue(linkType, out registered) || !ReferenceEquals(registered, metadata))
+                    DataContextCache.Metadata[linkType] = metadata;
+            }
+        }
 
         return metadata;
     }
@@ -161,12 +168,28 @@ internal static class JunctionLinkSourceFactory
     {
         if (!DataContextCache.Metadata.TryGetValue(junctionType, out var metadata) || string.IsNullOrEmpty(metadata.TableName))
         {
-            metadata = DataContextExtensions.ResolveMetadata(junctionType);
-            DataContextCache.Metadata[junctionType] = metadata;
+            metadata = DataContextExtensions.ResolveMetadata(null, junctionType);
 
-            // The entry came from the auto path (a configured non-empty mapping would have been found
-            // above); mark it so a later From<TJunction>(cfg) can rebuild it from the configuration.
-            DataContextCache.AutoPublishedJunctionMetadata[junctionType] = 0;
+            lock (DataContextCache.MetadataRegistrationGate)
+            {
+                // Revalidate under the shared registration gate: a concurrent writer (including the EF
+                // Core bridge) may have published a non-empty mapping while the auto mapping was built.
+                // A published entry wins and is not marked auto, so a later configured registration
+                // still rebuilds it.
+                if (DataContextCache.Metadata.TryGetValue(junctionType, out var current) && !string.IsNullOrEmpty(current.TableName))
+                {
+                    metadata = current;
+                }
+                else
+                {
+                    DataContextCache.Metadata[junctionType] = metadata;
+
+                    // The entry came from the auto path (a configured non-empty mapping would have
+                    // been found above); mark it so a later From<TJunction>(cfg) can rebuild it from
+                    // the configuration.
+                    DataContextCache.AutoPublishedJunctionMetadata[junctionType] = 0;
+                }
+            }
         }
 
         return !string.IsNullOrEmpty(metadata.TableName)

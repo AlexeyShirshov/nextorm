@@ -83,7 +83,7 @@ internal static class RelationshipResolver
     }
 
     private static IEntityMetadata ResolveEntityMetadata(Type entityType)
-        => DataContextExtensions.ResolveMetadata(entityType);
+        => DataContextExtensions.ResolveMetadata(null, entityType);
 
     /// <summary>
     /// Validates that a many-to-many key member and the junction foreign key that references it have the

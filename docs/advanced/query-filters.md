@@ -399,13 +399,4 @@ public interface IQueryFilterMetadata
 - **Disable scope follows the entry builder.** The selective scope is carried by the builder that starts the query; calling `IgnoreFilters` on a builder that is then used as a join source is not propagated. Use one of the type/key overloads on the query's entry builder instead. Eagerly-loaded `LoadWith` children are the exception: they inherit the entry builder's scope by union (see [Eager loading](eager-loading.md)).
 - **Key-form mutations apply filters but do not expose `IgnoreFilters`.** `Update(entity)` and `Delete(entity)` honour the target filter, but their immediate terminal has no fluent `IgnoreFilters`; use the predicate form (`Update<T>().Where(...)` / `DeleteFrom<T>().Where(...)`) when you need to disable a filter on a mutation.
 - **Plan lifetime.** A context value read by a filter is captured as a runtime parameter (plan-cache safe). The prepared plan retains the first `IDataContext` instance for its lifetime (bounded, one per plan shape).
-
-## Not yet
-
-Write-target isolation **is** implemented for the full `MERGE` (SQL Server, PostgreSQL 15+) and the SQL Server key upsert, and the `ON CONFLICT` / `ON DUPLICATE KEY` / in-memory key upserts **refuse** under an active filter rather than bypass it (see [Write-target isolation](#write-target-isolation), [#123](https://github.com/AlexeyShirshov/nextorm/issues/123)).
-
-The following are **not** available:
-
-- the EF Core bridge that forwards EF Core 10 keyed filters ([#125](https://github.com/AlexeyShirshov/nextorm/issues/125)).
-
-`UPDATE`, `DELETE` and the full-`MERGE` write target are covered (see [UPDATE and DELETE (DML)](#update-and-delete-dml) and [Write-target isolation](#write-target-isolation)).
+- **Open adapter units.** The ClickHouse no-EF-adapter slice and the MariaDB-specific shared-connection certification are tracked open units in milestone `1.0.9-b`; until they land, use the supported EF adapters (see [EF Core query-filter bridge](ef-core-query-filters.md)).

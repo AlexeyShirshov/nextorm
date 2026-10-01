@@ -785,7 +785,7 @@ public partial class QueryCommand
             if (cmd._from?.SourceBinding is { } binding)
                 return InjectBoundSourceFilters(cmd, srcType, binding, isProjectionSource);
 
-            var filters = QueryFilterResolver.GetFilters(filterEntityType, cmd._filterScope);
+            var filters = QueryFilterResolver.GetFilters(filterEntityType, cmd._filterScope, cmd._dataContext);
             var hasCrossJoinFilters = cmd.PendingCrossJoinFilters is { Count: > 0 };
             if (filters.Count == 0 && !hasCrossJoinFilters)
                 return cmd._condition;
@@ -820,7 +820,7 @@ public partial class QueryCommand
         // disabled filters are already absent from the resolved list and do not warn.
         private static LambdaExpression? InjectBoundSourceFilters(QueryCommand cmd, Type srcType, FromExpression.EntityBinding binding, bool isProjectionSource)
         {
-            var filters = QueryFilterResolver.GetFilters(binding.EntityType, cmd._filterScope);
+            var filters = QueryFilterResolver.GetFilters(binding.EntityType, cmd._filterScope, cmd._dataContext);
             if (filters.Count == 0)
                 return cmd._condition;
 
@@ -934,7 +934,7 @@ public partial class QueryCommand
                 ? childScope.Union(cmd._filterScope)
                 : cmd._filterScope;
 
-            var filters = QueryFilterResolver.GetFilters(binding.EntityType, scope);
+            var filters = QueryFilterResolver.GetFilters(binding.EntityType, scope, cmd._dataContext);
             if (filters.Count == 0)
                 return;
 
@@ -1015,7 +1015,7 @@ public partial class QueryCommand
                 // against that joined source's alias. Incompatible filters are skipped individually with
                 // their own warning; the compatible ones keep their place in the ON condition, so an outer
                 // join's predicates stay in ON and never move into WHERE.
-                var boundFilters = QueryFilterResolver.GetFilters(binding.EntityType, scope);
+                var boundFilters = QueryFilterResolver.GetFilters(binding.EntityType, scope, cmd._dataContext);
                 if (boundFilters.Count == 0)
                     return;
 
@@ -1036,7 +1036,7 @@ public partial class QueryCommand
             }
 
             var rightType = join.EntityType ?? join.From.SourceType ?? joinCondition.Parameters[1].Type;
-            var filters = QueryFilterResolver.GetFilters(rightType, scope);
+            var filters = QueryFilterResolver.GetFilters(rightType, scope, cmd._dataContext);
             if (filters.Count == 0)
                 return;
 
@@ -1104,7 +1104,14 @@ public partial class QueryCommand
                 body = new ReplaceParameterInstanceVisitor(filter.Parameters[1], context).Visit(body);
             }
 
-            return new ReplaceParameterInstanceVisitor(filterEntityParameter, entityParameter).Visit(body);
+            var rewritten = new ReplaceParameterInstanceVisitor(filterEntityParameter, entityParameter).Visit(body);
+
+            // Two distinct owner-getter chains that collapse to one source name would emit duplicate
+            // placeholders and fail at parameter binding; reject the ambiguity during preparation, before
+            // any SQL is built or executed.
+            QueryFilterContextAccessor.ValidateDistinctIdentities(rewritten);
+
+            return rewritten;
         }
 
         // Walks one filter predicate and reports the SQL column names it reads off its entity parameter.
@@ -1129,7 +1136,7 @@ public partial class QueryCommand
                 // Resolve through the normal path (configured mapping wins over the auto mapping), not
                 // just DataContextCache.Metadata: a bound raw source's entity may only have been resolved
                 // into the auto cache by BindEntity/GetFilters.
-                var metadata = DataContextExtensions.ResolveMetadata(entityType);
+                var metadata = DataContextExtensions.ResolveMetadata(null, entityType);
                 _metadata = metadata;
                 _byMember = new Dictionary<FilterMemberKey, IPropertyMetadata>(metadata.Properties.Count);
                 for (var i = 0; i < metadata.Properties.Count; i++)

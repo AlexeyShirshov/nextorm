@@ -26,7 +26,23 @@ public static class DataContextCache
     private readonly static TimedDictionary<Type, SelectExpression[]> _selectListCache = new();
     private readonly static TimedDictionary<ExpressionKey, Delegate> _expCache = new();
     private readonly static TimedDictionary<ExpressionKey, Func<object?, object?>> _inValuesCache = new();
+    private readonly static ConcurrentDictionary<string, Func<IDataContext, object>> _queryFilterContextAccessors = new();
     private static long _cacheSlidingExpirationTicks;
+
+    /// <summary>
+    /// Process-wide gate serializing every mutation of <see cref="Metadata"/>. The EF Core model mapper
+    /// stages its whole import and publishes it under this gate, so it re-reads the current entries and
+    /// revalidates conflicts immediately before writing. The core writers take the same gate and
+    /// revalidate against the current entry before writing, so a concurrent auto/configured registration
+    /// or junction publication can neither clobber a bridged entry nor be clobbered by it.
+    /// </summary>
+    /// <remarks>
+    /// A single process-wide lock is used deliberately: the coordinated writers never acquire another
+    /// lock while holding it, so no lock-ordering deadlock is possible. Metadata building runs outside
+    /// the gate (and user configuration callbacks are never invoked under it), so the gate is held only
+    /// across the read-revalidate-write publication itself.
+    /// </remarks>
+    internal static readonly object MetadataRegistrationGate = new();
 
     /// <summary>
     /// Entity metadata resolved for each CLR type, keyed by that type. Populated lazily on the first
@@ -66,6 +82,15 @@ public static class DataContextCache
     /// keyed by the collection expression's shape. See <see cref="InValuesEvaluator"/>.
     /// </summary>
     public static IDictionary<ExpressionKey, Func<object?, object?>> InValuesCache => _inValuesCache;
+    /// <summary>
+    /// Compiled accessors for the owner-getter/member subtree a query filter imported from EF Core
+    /// reads through <see cref="QueryFilterContext.Context"/>. The accessor takes the executing
+    /// <see cref="IDataContext"/> as its only argument, so it is host-free; the key is the canonical
+    /// string text of that accessor lambda, which therefore holds no live context, query command or
+    /// owner instance. Internal: an engine detail of the EF Core bridge, deliberately kept out of the
+    /// public cache surface.
+    /// </summary>
+    internal static IDictionary<string, Func<IDataContext, object>> QueryFilterContextAccessors => _queryFilterContextAccessors;
 
     /// <summary>
     /// Sliding expiration applied to every process-wide cache this class owns. An entry that has not
@@ -105,6 +130,7 @@ public static class DataContextCache
         _selectListCache.Clear();
         _expCache.Clear();
         _inValuesCache.Clear();
+        _queryFilterContextAccessors.Clear();
         MapperCache.Clear();
         RawMapperFactory.Clear();
         ProjectionAliasCache.Clear();

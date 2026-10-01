@@ -192,8 +192,10 @@ internal static class SqlMutationBuilder
     /// <param name="matchConditionSql">The rendered <c>ON &lt;condition&gt;</c> of an explicit match, or <see langword="null"/> to match on the keys.</param>
     /// <param name="branchConditions">The rendered <c>AND &lt;condition&gt;</c> of each branch in order, or <see langword="null"/>.</param>
     /// <param name="targetFilterSql">The rendered <c>target</c>-qualified global-filter predicate to AND into the <c>ON</c> and every <c>WHEN NOT MATCHED BY SOURCE</c> arm, or <see langword="null"/> when no filter is active.</param>
+    /// <param name="dataContext">The executing context, used to enforce the bridge fail-closed expectation before any upsert SQL is produced. <see langword="null"/> (no context known) keeps the existing behavior.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     /// <exception cref="NotSupportedException">The dialect has no <c>ON CONFLICT</c>, <c>ON DUPLICATE KEY</c> or <c>MERGE</c> form.</exception>
+    /// <exception cref="InvalidOperationException">The context expects imported filters that the resolved metadata no longer carries.</exception>
     internal static (string Sql, List<Parameter> Parameters) MakeMerge(
         ISqlDialect dialect,
         bool quoteIdentifiers,
@@ -206,8 +208,15 @@ internal static class SqlMutationBuilder
         List<Parameter>? parameters = null,
         string? matchConditionSql = null,
         IReadOnlyList<string?>? branchConditions = null,
-        string? targetFilterSql = null)
+        string? targetFilterSql = null,
+        IDataContext? dataContext = null)
     {
+        // Merge/upsert is the one DML path that reads the target's global filters at render time
+        // (RenderMerge's native-upsert fallback). A command built before DataContextCache.Clear and
+        // rendered after it must not silently skip the filter, so run the same context-wide fail-closed
+        // check as the SELECT funnel before any upsert SQL is produced. No expectations means no-op.
+        QueryFilterExpectations.EnsureExpectedFiltersPresent(dataContext);
+
         parameterProvider ??= new DefaultParameterProvider();
         parameters ??= new List<Parameter>();
         var writer = StringBuilderPool.Shared.Get();
