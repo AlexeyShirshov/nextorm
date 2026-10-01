@@ -14,6 +14,7 @@ namespace NextORM.Integration.Tests;
 /// SQL Server and MySQL run when their container (or connection string) is available and explicitly
 /// skip otherwise.
 /// </summary>
+[Collection("EF query filter lifecycle")]
 public sealed class EfCoreQueryFilterBridgeTests
 {
     private const string SqliteProvider = "SQLite";

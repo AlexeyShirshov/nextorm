@@ -17,6 +17,7 @@ namespace NextORM.Integration.Tests;
 /// The schema is created before <c>BeginTransaction</c> because MySQL-style providers auto-commit DDL;
 /// the table is dedicated to this suite so it cannot race the shared fixtures.
 /// </summary>
+[Collection("EF query filter lifecycle")]
 public sealed class EfCoreServerSharedTransactionTests
 {
     public static TheoryData<string> ServerProviders => new() { PostgresProvider, SqlServerProvider, MySqlProvider };
