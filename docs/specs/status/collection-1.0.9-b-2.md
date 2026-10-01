@@ -5,6 +5,7 @@
 - mode: autonomous + auto-commit; single group → no worktree/branch, commits go into the current branch `1.0.9-b`; push never
 - cap: 1 (single group — shared query-path files)
 - execution: flat primary (lane unusable in the active profile: `subagent_depth` unset → nested Task depth = 1), current worktree
+- status: CLOSED
 
 ## Group
 
@@ -32,3 +33,22 @@
 - Done: task 1 (#143 identity joined Returning) passed via escalate acceptance (CHECK#3 evidence-only, closed by the evidence ledger in `identity-returning-143-1.md`); task 2 (#144 native `SelectWhereMax`/`SelectWhereMin` fast paths for PostgreSQL/ClickHouse) closed by escalation via the `## Closing addendum (ACT)` in `native-extreme-row-144-1.md`.
 - Verified: task 2 — full suite 7447 / 0 failed (run1/run2), coverage line 88.2 / branch 78.9, DocFX 0 errors; accepted debts recorded in the addendum.
 - Incomplete: none — collection complete.
+
+## Verified (phase C, 2026-10-01, HEAD ccc77488e17c0c412f98595816c81f3beb296330)
+
+- Build Debug + Release: 0 Warning / 0 Error.
+- Full solution: 7449 total / 7261 passed / 0 failed / 188 skipped (all capability/env-gated; 0 availability); two runs identical; PostgreSQL/SQL Server/MySQL/ClickHouse containers live.
+- Integration-only: 2995 total / 0 failed / 187 skipped.
+- Coverage (configured core+sqlite+postgres+sqlserver): line 88.2% / branch 78.9% (>=85/75).
+- Perf acceptance: 7 cases / 0 failures, wall 44.43 s, Cached_ToList/Prepared_ToList 2.02 (baseline 2.10 — within noise).
+- No in-progress merge/unmerged paths; no collection worktrees/branches created (single group → current worktree/branch).
+
+## Report
+
+- Group group-1 (single lane, no worktree/branch/merge): #143 then #144.
+- Done (2): #143 (commit 0acfb7a), #144 (commit ccc7748).
+- Incomplete (0).
+- Both tasks closed r=1 via `escalate` acceptance (evidence-completeness objections only after three CHECKs each; no established product defect; all thresholds met); two real defects found and fixed with red→green (#143 derived parity + alias fail-closed; #144 temp-table native throw + alias collision).
+- Known pre-existing flake `EfCoreQueryFilterLifecycleTests.Lifecycle_ClearOrEvict_ColdWarmPrepared_Live` recorded under #125 deferred-with-trigger; passed in the final runs.
+- Branch `1.0.9-b` ahead of `origin/1.0.9-b` by 7 commits; push never performed.
+- Status: CLOSED.
