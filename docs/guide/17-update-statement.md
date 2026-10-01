@@ -235,6 +235,31 @@ distinct CTE declarations sharing a name on the two sides of a join are rejected
 `InvalidOperationException`, because a single `WITH` cannot bind one name to two definitions. See
 [Common table expressions](08-cte.md).
 
+## UPDATE as a data-modifying CTE body (PostgreSQL)
+
+On PostgreSQL a row-returning `UPDATE` can be the body of a data-modifying CTE: pass it to
+`With(name, update)` and read the updated rows typed through `From(name)`:
+
+```csharp
+var updated = dataContext
+    .With("upd", dataContext.Update<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+```
+
+The joined form works the same way — `With(name, update)` over a multi-table
+`UpdateJoin().Returning(...)`. A `RETURNING` projection is required (a side-effect-only mutation is out of
+scope), and such a statement is never plan-cached. See [Common table expressions](08-cte.md).
+
 ## Provider support at a glance
 
 | Provider | `UPDATE ... SET ... WHERE` | `RETURNING` / `OUTPUT` | `UPDATE ... FROM` |

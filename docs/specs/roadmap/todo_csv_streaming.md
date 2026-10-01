@@ -9,7 +9,7 @@
 > `AsTempTable` и CSV в in-memory-контексте **отгружены** и покрыты тестами (§1).
 > Общая буферизованная материализация (срез c) в объём #112 не входит.
 
-> Публичное поведение и ограничения опубликованы в `docs/guide/28-csv-export.md`
+> Публичное поведение и ограничения опубликованы в `docs/guide/28-streaming-data.md`
 > (+RU) и `docs/advanced/limitations.md` (+RU). Публичные страницы на `docs/specs/**`
 > не ссылаются.
 
@@ -39,7 +39,7 @@
   области #112 (см. (c)).
 - Неизвестный или неконвертируемый storage-тип числовой колонки SQL Server бросает
   `NotSupportedException` **до записи заголовка** и любой строки данных.
-- Публичное поведение и ограничения: `docs/guide/28-csv-export.md` + `docs/ru/guide/28-csv-export.md`,
+- Публичное поведение и ограничения: `docs/guide/28-streaming-data.md` + `docs/ru/guide/28-streaming-data.md`,
   строка в `docs/advanced/limitations.md` + `docs/ru/advanced/limitations.md`.
 - **Fail-closed ленивого temp-источника `AsTempTable`.** `DataContext.PrepareResultCommand`
   проверяет `QueryCommand.HasTemporaryTableSource()` и бросает `NotSupportedException`
@@ -83,5 +83,5 @@
 - `src/nextorm.core/Query/QueryCommandExtensions.cs`,
   `src/nextorm.core/Builders/EntityBuilderExtensions.cs`,
   `src/nextorm.core/Query/Csv/`, `src/nextorm.core/Query/CsvStreamOptions.cs`.
-- `docs/guide/28-csv-export.md`, `docs/ru/guide/28-csv-export.md`,
+- `docs/guide/28-streaming-data.md`, `docs/ru/guide/28-streaming-data.md`,
   `docs/advanced/limitations.md`, `docs/ru/advanced/limitations.md`.

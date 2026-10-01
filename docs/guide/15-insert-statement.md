@@ -85,6 +85,11 @@ ctx.InsertInto<ISimpleEntity>()
     .Insert();
 ```
 
+```sql
+-- PostgreSQL
+insert into simple_entity (id, name) values (@p0, @p1)
+```
+
 The value may also be another mapped column of the same entity, which renders a column reference
 instead of a parameter:
 
@@ -92,6 +97,11 @@ instead of a parameter:
 ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, x => x.OtherName)
     .Insert();
+```
+
+```sql
+-- PostgreSQL: the value is a column reference, not a parameter
+insert into simple_entity (name) values (other_name)
 ```
 
 Only a mapped property access (or a parameter-free expression) is accepted here; anything else throws
@@ -104,10 +114,20 @@ excluded automatically:
 ctx.InsertInto<ISimpleEntity>().Values(entity).Insert();
 ```
 
+```sql
+-- PostgreSQL: Identity/Computed columns are excluded
+insert into simple_entity (name) values (@p0)
+```
+
 **A batch of entities.** The same as the previous form, repeated over a sequence:
 
 ```csharp
 ctx.InsertInto<ISimpleEntity>().Values(new[] { e1, e2, e3 }).Insert();
+```
+
+```sql
+-- PostgreSQL
+insert into simple_entity (name) values (@p0), (@p1), (@p2)
 ```
 
 **A batch from a source.** `Values(source, mapping)` writes one row per element and lets the mapping
@@ -124,6 +144,13 @@ ctx.InsertInto<ISimpleEntity>()
     .Insert();
 ```
 
+```sql
+-- PostgreSQL: one row per element, every value a parameter
+insert into orders (total) values (@p0), (@p1)
+
+insert into simple_entity (name) values (@p0), (@p1)
+```
+
 **A batch from a query (server-side).** The same `Values(source, mapping)` signature also accepts an
 `EntityBuilder<TSource>`, which renders `INSERT ... SELECT` and reads the rows in the database instead of
 the client - useful for copying or filtering server-side. The mapping selects the written columns exactly
@@ -133,6 +160,12 @@ as above:
 ctx.InsertInto<IOrder>()
     .Values(ctx.From<OrderDto>().Where(d => d.Active), d => new { d.Id, d.Amount })
     .Insert();
+```
+
+```sql
+-- PostgreSQL: rendered as INSERT ... SELECT
+insert into orders (id, amount) select id, amount from order_dto
+ where active
 ```
 
 The source is an ordinary query builder (`Where`/`Join`/`GroupBy`/`OrderBy`/...), and its parameters are
@@ -187,6 +220,13 @@ ctx.InsertInto<ISimpleEntity>().Value("a").Insert();                      // one
 ctx.InsertInto<ISimpleEntity>().Values(new[] { "a", "b", "c" }).Insert(); // three rows
 ```
 
+```sql
+-- PostgreSQL
+insert into simple_entity (name) values (@p0)
+
+insert into simple_entity (name) values (@p0), (@p1), (@p2)
+```
+
 The scalar form needs **exactly one** writable column: with several, use a mapping or name the column
 instead (both throw `InvalidOperationException` when called on a scalar). With none (every column is
 `Identity`/`Computed`) there is nothing to pass - insert the all-defaults row with
@@ -202,6 +242,11 @@ ctx.InsertInto<Product>()
     .Insert();
 ```
 
+```sql
+-- PostgreSQL
+insert into product (name, price) values (@p0, @p1), (@p2, @p3)
+```
+
 Writing to a `Computed` column always throws `NotSupportedException`; an `Identity` column may be set
 explicitly (its value is then taken from the input, not generated).
 
@@ -213,6 +258,13 @@ ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, SqlDefault.Value).Insert();
 
 // every column is Identity/Computed:
 ctx.InsertInto<AuditRow>().Insert();
+```
+
+```sql
+-- PostgreSQL
+insert into simple_entity (name) values (default)
+
+insert into audit_row default values
 ```
 
 The all-defaults row uses the provider's native form (`DEFAULT VALUES` on PostgreSQL, SQL Server and
@@ -264,6 +316,11 @@ var rows = dataContext
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+with ins as (insert into orders (customer_id) values (@p0) returning id), src as (select total from orders) select Total from src
+```
+
 > The rows a data-modifying CTE inserts are **not** visible to the other CTEs of the same statement:
 > PostgreSQL executes the sub-statements concurrently against the same snapshot. Read them back through
 > `From(name)`, or in a later statement.
@@ -286,6 +343,12 @@ var rows = scope
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+with src as (select id from customers
+ where active), ins as (insert into orders (customer_id) select Id from src returning id) select id from ins as "t1"
+```
+
 A data-modifying CTE can also feed a main `INSERT ... SELECT`: the `WITH` is hoisted to precede `INSERT`
 (PostgreSQL requires the data-modifying statement at the top level):
 
@@ -301,42 +364,18 @@ dataContext.InsertInto<IOrder>()
     .Insert();
 ```
 
-The body may also be a single-table or join/multi-table `UPDATE ... RETURNING` / `DELETE ... RETURNING`;
-`With(name, update)` and `With(name, delete)` accept a row-returning update/delete (a multi-table
-`UpdateJoin().Returning(...)` or the `Returning` extension on a joined builder) and yield the same typed
-scope. A `RETURNING` projection is required — a side-effect-only mutation is out of scope:
-
-```csharp
-// Single-table UPDATE body: update, then read the updated rows typed.
-var updated = dataContext
-    .With("upd", dataContext.Update<IOrder>()
-        .Set(x => x.Total, 0)
-        .Where(x => x.CustomerId == 7)
-        .Returning(x => new { x.Id, x.Total }))
-    .From("upd")
-    .Select(r => new { r.Id, r.Total })
-    .ToList();
+```sql
+-- PostgreSQL: WITH hoisted before the main INSERT
+with ins as (insert into orders (customer_id) values (@p0) returning customer_id) insert into orders (customer_id) select "CustomerId" from ins as "t1"
 ```
 
-```csharp
-// Join/multi-table DELETE body (PostgreSQL DELETE ... USING ... RETURNING).
-var doomed = dataContext
-    .From<IOrder>()
-    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
-    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
-
-var removed = dataContext
-    .With("del", doomed)
-    .From("del")
-    .Select(r => new { r.OrderId, r.CustomerName })
-    .ToList();
-```
+The CTE body may also be an `UPDATE` or `DELETE` (`With(name, update)` / `With(name, delete)`); those
+bodies carry their own statements, so they are shown with them — [Data modification (UPDATE)](17-update-statement.md)
+and [Data modification (DELETE)](16-delete-statement.md).
 
 A statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
 side-effecting). Other providers reject a data-modifying CTE body with `NotSupportedException`, because their
-CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](08-cte.md); the `UPDATE` and
-`DELETE` surfaces are documented in [Data modification (UPDATE)](17-update-statement.md) and
-[Data modification (DELETE)](16-delete-statement.md).
+CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](08-cte.md).
 
 ## Reading the generated key
 
@@ -375,6 +414,14 @@ long fromMetadata = ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningKey<long>()
     .Single();
+```
+
+```sql
+-- PostgreSQL
+-- ReturningIdentity(x => x.Id) and ReturningKey<long>() name the column:
+insert into simple_entity (name) values (@p0) returning id
+-- ReturningIdentity<long>() appends the provider's identity function in the same batch:
+insert into simple_entity (name) values (@p0); select lastval()
 ```
 
 * `ReturningIdentity(selector)` requires the selected column to be declared `Identity`; `ReturningKey<TKey>()`
@@ -448,18 +495,25 @@ builder and call `OutputInto(targetTable)`:
 
 ```csharp
 // write the inserted rows into audit_log; nothing is returned to the client
-var written = ctx.InsertInto<Order>()
+var written = ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputInto("audit_log")
     .Execute();                       // int: affected-row count
 
 // write into audit_log and also return the same rows to the client (second OUTPUT)
-var rows = ctx.InsertInto<Order>()
+var rows = ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputIntoThenOutput("audit_log")
     .ToList();                        // IReadOnlyList<{ Id, Name }>
+```
+
+```sql
+-- SQL Server
+insert into simple_entity (name) output inserted.id, inserted.name into audit_log (id, name) values (@p0)
+
+insert into simple_entity (name) output inserted.id, inserted.name into audit_log (id, name) output inserted.id, inserted.name values (@p0)
 ```
 
 * `OutputInto(...)` returns an [`OutputIntoBuilder`](xref:NextORM.Core.OutputIntoBuilder)

@@ -85,6 +85,11 @@ ctx.InsertInto<ISimpleEntity>()
     .Insert();
 ```
 
+```sql
+-- PostgreSQL
+insert into simple_entity (id, name) values (@p0, @p1)
+```
+
 Значением может быть и другая mapped-колонка той же сущности — тогда рендерится ссылка на колонку,
 а не параметр:
 
@@ -92,6 +97,11 @@ ctx.InsertInto<ISimpleEntity>()
 ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, x => x.OtherName)
     .Insert();
+```
+
+```sql
+-- PostgreSQL: значение — ссылка на колонку, а не параметр
+insert into simple_entity (name) values (other_name)
 ```
 
 Здесь принимается только обращение к mapped-свойству (или выражение без параметров); иначе бросается
@@ -104,10 +114,20 @@ ctx.InsertInto<ISimpleEntity>()
 ctx.InsertInto<ISimpleEntity>().Values(entity).Insert();
 ```
 
+```sql
+-- PostgreSQL: колонки Identity/Computed исключаются
+insert into simple_entity (name) values (@p0)
+```
+
 **Батчем сущностей.** То же самое, повторённое для последовательности:
 
 ```csharp
 ctx.InsertInto<ISimpleEntity>().Values(new[] { e1, e2, e3 }).Insert();
+```
+
+```sql
+-- PostgreSQL
+insert into simple_entity (name) values (@p0), (@p1), (@p2)
 ```
 
 **Батч из источника.** `Values(source, mapping)` пишет по строке на элемент, а проекция выбирает колонки.
@@ -124,6 +144,13 @@ ctx.InsertInto<ISimpleEntity>()
     .Insert();
 ```
 
+```sql
+-- PostgreSQL: по строке на элемент, каждое значение — параметр
+insert into orders (total) values (@p0), (@p1)
+
+insert into simple_entity (name) values (@p0), (@p1)
+```
+
 **Батч из запроса (на сервере).** Та же подпись `Values(source, mapping)` принимает и
 `EntityBuilder<TSource>` — тогда рендерится `INSERT ... SELECT`, и строки читает сама БД, а не клиент
 (удобно для копирования или серверной фильтрации). Проекция выбирает записываемые колонки так же, как
@@ -133,6 +160,12 @@ ctx.InsertInto<ISimpleEntity>()
 ctx.InsertInto<IOrder>()
     .Values(ctx.From<OrderDto>().Where(d => d.Active), d => new { d.Id, d.Amount })
     .Insert();
+```
+
+```sql
+-- PostgreSQL: рендерится как INSERT ... SELECT
+insert into orders (id, amount) select id, amount from order_dto
+ where active
 ```
 
 Источник — обычный билдер запроса (`Where`/`Join`/`GroupBy`/`OrderBy`/...), его параметры переносятся в
@@ -189,6 +222,13 @@ ctx.InsertInto<ISimpleEntity>().Value("a").Insert();                      // о�
 ctx.InsertInto<ISimpleEntity>().Values(new[] { "a", "b", "c" }).Insert(); // три строки
 ```
 
+```sql
+-- PostgreSQL
+insert into simple_entity (name) values (@p0)
+
+insert into simple_entity (name) values (@p0), (@p1), (@p2)
+```
+
 Скалярной форме нужна **ровно одна** записываемая колонка: если их несколько — используйте проекцию или
 укажите колонку явно (скалярный вызов в обоих случаях бросает `InvalidOperationException`). Если
 записываемых колонок нет (все `Identity`/`Computed`) — передавать нечего: строка целиком из дефолтов
@@ -204,6 +244,11 @@ ctx.InsertInto<Product>()
     .Insert();
 ```
 
+```sql
+-- PostgreSQL
+insert into product (name, price) values (@p0, @p1), (@p2, @p3)
+```
+
 Запись в колонку `Computed` всегда бросает `NotSupportedException`; колонку `Identity` можно указать
 явно (тогда её значение берётся из ввода, а не генерируется).
 
@@ -216,6 +261,13 @@ ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, SqlDefault.Value).Insert();
 
 // все колонки — Identity/Computed:
 ctx.InsertInto<AuditRow>().Insert();
+```
+
+```sql
+-- PostgreSQL
+insert into simple_entity (name) values (default)
+
+insert into audit_row default values
 ```
 
 Строка «только дефолты» использует нативную форму провайдера (`DEFAULT VALUES` у PostgreSQL,
@@ -267,6 +319,11 @@ var rows = dataContext
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+with ins as (insert into orders (customer_id) values (@p0) returning id), src as (select total from orders) select Total from src
+```
+
 > Строки, вставленные модифицирующим CTE, **не** видны другим CTE той же инструкции: PostgreSQL
 > выполняет под-инструкции параллельно на одном снимке. Читайте их через `From(имя)` или в отдельной
 > инструкции.
@@ -289,6 +346,12 @@ var rows = scope
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+with src as (select id from customers
+ where active), ins as (insert into orders (customer_id) select Id from src returning id) select id from ins as "t1"
+```
+
 Модифицирующий CTE может также питать главный `INSERT ... SELECT`: `WITH` поднимается перед `INSERT`
 (PostgreSQL требует модифицирующую инструкцию на верхнем уровне):
 
@@ -304,43 +367,18 @@ dataContext.InsertInto<IOrder>()
     .Insert();
 ```
 
-Телом может быть и однотабличный или join/multi-table `UPDATE ... RETURNING` / `DELETE ... RETURNING`;
-`With(имя, update)` и `With(имя, delete)` принимают возвращающие строки update/delete (multi-table
-`UpdateJoin().Returning(...)` или расширение `Returning` на соединённом билдере) и дают такую же
-типизированную область. Проекция `RETURNING` обязательна — мутация только с побочным эффектом вне области
-охвата:
-
-```csharp
-// Тело UPDATE по одной таблице: обновляем, затем типизированно читаем обновлённые строки.
-var updated = dataContext
-    .With("upd", dataContext.Update<IOrder>()
-        .Set(x => x.Total, 0)
-        .Where(x => x.CustomerId == 7)
-        .Returning(x => new { x.Id, x.Total }))
-    .From("upd")
-    .Select(r => new { r.Id, r.Total })
-    .ToList();
+```sql
+-- PostgreSQL: WITH поднимается перед главным INSERT
+with ins as (insert into orders (customer_id) values (@p0) returning customer_id) insert into orders (customer_id) select "CustomerId" from ins as "t1"
 ```
 
-```csharp
-// Тело join/multi-table DELETE (PostgreSQL DELETE ... USING ... RETURNING).
-var doomed = dataContext
-    .From<IOrder>()
-    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
-    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
-
-var removed = dataContext
-    .With("del", doomed)
-    .From("del")
-    .Select(r => new { r.OrderId, r.CustomerName })
-    .ToList();
-```
+Телом CTE может быть и `UPDATE` или `DELETE` (`With(имя, update)` / `With(имя, delete)`); у этих тел свои
+инструкции, поэтому они показаны вместе с ними — [Изменение данных (UPDATE)](17-update-statement.md) и
+[Изменение данных (DELETE)](16-delete-statement.md).
 
 Инструкция, в `WITH` которой есть модифицирующий CTE, никогда не попадает в кэш планов (она имеет
 побочный эффект). Остальные провайдеры отклоняют модифицирующее тело CTE с `NotSupportedException`, так
-как их тело CTE обязано быть `SELECT`. Общие (read) CTE — в [Общих табличных выражениях](08-cte.md);
-поверхности `UPDATE` и `DELETE` описаны в [Изменении данных (UPDATE)](17-update-statement.md) и
-[Изменении данных (DELETE)](16-delete-statement.md).
+как их тело CTE обязано быть `SELECT`. Общие (read) CTE — в [Общих табличных выражениях](08-cte.md).
 
 ## Получение сгенерированного ключа
 
@@ -379,6 +417,14 @@ long fromMetadata = ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningKey<long>()
     .Single();
+```
+
+```sql
+-- PostgreSQL
+-- ReturningIdentity(x => x.Id) и ReturningKey<long>() называют колонку:
+insert into simple_entity (name) values (@p0) returning id
+-- ReturningIdentity<long>() дописывает identity-функцию провайдера в том же батче:
+insert into simple_entity (name) values (@p0); select lastval()
 ```
 
 * `ReturningIdentity(selector)` требует, чтобы выбранная колонка была объявлена `Identity`; `ReturningKey<TKey>()`
@@ -452,18 +498,25 @@ SQL Server умеет записывать изменённые строки в 
 
 ```csharp
 // записать вставленные строки в audit_log; клиенту ничего не возвращается
-var written = ctx.InsertInto<Order>()
+var written = ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputInto("audit_log")
     .Execute();                       // int: число затронутых строк
 
 // записать в audit_log и вернуть те же строки клиенту (второй OUTPUT)
-var rows = ctx.InsertInto<Order>()
+var rows = ctx.InsertInto<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputIntoThenOutput("audit_log")
     .ToList();                        // IReadOnlyList<{ Id, Name }>
+```
+
+```sql
+-- SQL Server
+insert into simple_entity (name) output inserted.id, inserted.name into audit_log (id, name) values (@p0)
+
+insert into simple_entity (name) output inserted.id, inserted.name into audit_log (id, name) output inserted.id, inserted.name values (@p0)
 ```
 
 * `OutputInto(...)` возвращает [`OutputIntoBuilder`](xref:NextORM.Core.OutputIntoBuilder),

@@ -16,6 +16,8 @@ This is the nextorm equivalent of EF Core global query filters and linq2db query
 
 Declare the filter where the entity's mapping is configured with `From<T>`. The declaration runs once, when the type's metadata is first built, so the condition is part of the mapping rather than of one query:
 
+> The examples on this page use a `Document` entity mapped to `documents(id, tenant_id, is_deleted)` and an `Attachment` entity mapped to `attachments(id, document_id, is_deleted)`. `Document` declares a soft-delete filter keyed `"soft-delete"` and a tenant filter keyed `"tenant"` that reads the tenant id from `c.Properties["tenant"]`; `Attachment` declares an anonymous soft-delete filter; the write examples use an `ArchivedDocument` entity mapped to `archived_documents(id, tenant_id, is_deleted)` as the `INSERT … SELECT` target.
+
 ```csharp
 ctx.From<Document>(m => m.HasQueryFilter(d => !d.IsDeleted));
 ```
@@ -44,6 +46,25 @@ Give a filter a **key** so it can be targeted individually by `IgnoreFilters`:
 ctx.From<Document>(m => m
     .HasQueryFilter("soft-delete", (d, c) => !d.IsDeleted)
     .HasQueryFilter("tenant", (d, c) => d.TenantId == (int)c.Properties["tenant"]));
+```
+
+Both predicates are then `and`-ed into every read of `Document`; the tenant value is a bound parameter, not an inlined literal:
+
+```csharp
+var ids = ctx.From<Document>()
+    .Where(d => d.Id == 10)
+    .Select(d => d.Id)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from documents
+ where ((id = 10 and not (is_deleted)) and tenant_id = @p0)
+
+-- SQL Server
+select id from documents
+ where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
 A keyed filter occupies a **slot**: a repeated call with the same key **replaces** the earlier filter, and passing a `null` `filter` **removes** the slot. Anonymous filters (declared without a key) are additive — several are combined with `and` — and are reported with the key [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey), the empty string `""`.
@@ -145,6 +166,18 @@ var deleted = ctx.From<Document>()
     .ToList();
 ```
 
+The tenant filter is still applied; only the soft-delete predicate is dropped:
+
+```sql
+-- PostgreSQL
+select id from documents
+ where (id = 10 and tenant_id = @p0)
+
+-- SQL Server
+select id from documents
+ where (id = 10 and tenant_id = @p0)
+```
+
 The original builder is unchanged; only the returned copy ignores the filters. **Repeated calls accumulate (union), they do not replace**: `IgnoreFilters(["a"]).IgnoreFilters(["b"])` disables both `a` and `b`, and the order of calls and duplicate keys do not matter. Type-only and key-only selectors also accumulate independently, while a single `IgnoreFilters(keys, types)` call is an **intersection** — each of its keys applies only to the listed types. A combined call is never folded into another selector's union. A scope that is empty (an empty or `null` key/type list) disables nothing, and an all-or-nothing `IgnoreFilters()` dominates any selective scope combined with it.
 
 Once the query command exists, [`QueryCommand.IgnoreFilters`](xref:NextORM.Core.QueryCommand.IgnoreFilters) reads back the result: it is `true` when **any** filter is disabled — whether by the all-or-nothing form or by a selective scope — and `false` when none is. Its setter is all-or-nothing (`true` disables every filter, `false` clears the scope) because a `bool` cannot express a selective disable; the selective scope itself is the authoritative state.
@@ -160,6 +193,51 @@ A filter is attached to the entity type and is injected wherever that type appea
 | Subquery | into the subquery when it is prepared |
 | Mutation target (`UPDATE` / `DELETE`) | into the statement's `WHERE`, combined with the predicate or the key equality |
 | `MERGE` target (SQL Server, PostgreSQL) | into the `MERGE ... ON` condition and every `WHEN NOT MATCHED BY SOURCE` arm (see [Write-target isolation](#write-target-isolation)) |
+
+For example, the filter of a joined entity is injected into that join's `ON`, while the filter of the main source stays in `WHERE`:
+
+```csharp
+var rows = ctx.From<Attachment>()
+    .Join(ctx.From<Document>(), (a, d) => a.DocumentId == d.Id)
+    .Select(p => p.Item1.Id)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id from attachments as "t1"
+ join documents as "t2" on ((t1.document_id = t2.id and not (t2.is_deleted)) and t2.tenant_id = @p0)
+ where not (t1.is_deleted)
+
+-- SQL Server
+select t1.id from attachments as [t1]
+ join documents as [t2] on ((t1.document_id = t2.id and not ((t2.is_deleted) = 1)) and t2.tenant_id = @p0)
+ where not ((t1.is_deleted) = 1)
+```
+
+A subquery prepared as part of an outer query is filtered the same way:
+
+```csharp
+var rows = ctx.From<Document>()
+    .Select(d => new { d.Id, sid = ctx.From<Attachment>()
+        .Where(a => a.DocumentId == d.Id)
+        .Select(a => a.Id)
+        .First() })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, (select t2.id from attachments as "t2"
+ where (t2.document_id = t1.id and not (t2.is_deleted))
+limit 1) as "sid" from documents as "t1"
+ where (not (t1.is_deleted) and t1.tenant_id = @p0)
+
+-- SQL Server
+select t1.id, (select top(1) t2.id from attachments as [t2]
+ where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid] from documents as [t1]
+ where (not ((t1.is_deleted) = 1) and t1.tenant_id = @p0)
+```
 
 The main source of a join is the first table, so a filter declared for `T1` applies to `Item1` exactly as in a plain query.
 
@@ -197,6 +275,20 @@ ctx.Update<Document>()
     .Update();
 ```
 
+Those rules are visible in the rendered statement — the active filter and the predicate share one `WHERE`, and `IgnoreFilters(["soft-delete"])` removes only the soft-delete term:
+
+```sql
+-- PostgreSQL
+update documents set is_deleted = @p0 where ((id = 10 and not (is_deleted)) and tenant_id = @p1)
+
+delete from documents where (is_deleted and tenant_id = @p0)
+
+-- SQL Server
+update documents set is_deleted = @p0 where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p1)
+
+delete from documents where ((is_deleted) = 1 and tenant_id = @p0)
+```
+
 `INSERT` / `MERGE` do not inject a target filter through a source `FROM` (the target has no `FROM`); under an active filter a full `MERGE` constrains the target inside the statement, and the key-upsert forms that cannot do so **refuse** (see [Write-target isolation](#write-target-isolation)). `INSERT … SELECT` filters its source as any read — and the written rows are validated instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)).
 
 ## INSERT and MERGE (validation)
@@ -210,6 +302,36 @@ Neither an `INSERT` nor a `MERGE` injects a target filter through a source `FROM
 | `MergeInto<T>().Using(...)` | the source rows of **every** `MERGE` branch — insert, update-only and delete-only |
 | `InsertInto<T>().Values(source, mapping)` (`INSERT … SELECT`) | a server-side pre-check of the source rows |
 | `MergeInto<T>().Using(query)` (query-sourced `MERGE`) | a server-side pre-check of the source rows |
+
+An `INSERT` never carries a target filter; an `INSERT … SELECT` filters only its source:
+
+```csharp
+// A target INSERT is never filtered; the written row is validated instead.
+ctx.InsertInto<Document>()
+    .Values(new Document { Id = 1, TenantId = 1, IsDeleted = false })
+    .Insert();
+
+// INSERT … SELECT filters its source as a read and pre-checks the written rows.
+ctx.InsertInto<ArchivedDocument>()
+    .Values(ctx.From<Document>().Where(d => d.Id > 0), d => new { d.Id, d.TenantId, d.IsDeleted })
+    .Insert();
+```
+
+```sql
+-- PostgreSQL
+insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
+
+insert into archived_documents (id, tenant_id, is_deleted)
+select id, tenant_id as "TenantId", is_deleted as "IsDeleted" from documents
+ where (((id > 0) and not (is_deleted)) and tenant_id = @p0)
+
+-- SQL Server
+insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
+
+insert into archived_documents (id, tenant_id, is_deleted)
+select id, tenant_id as [TenantId], is_deleted as [IsDeleted] from documents
+ where (((id > 0) and not ((is_deleted) = 1)) and tenant_id = @p0)
+```
 
 On the supported full-`MERGE` form the source-value validation covers **every branch combination** — an update-only or delete-only `MERGE` validates its incoming source rows just like one that inserts, and a non-passing source row throws [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) before any mutation, even when the statement would not insert a row.
 
@@ -238,6 +360,31 @@ A write is filtered on two sides, and they are independent:
 - the **target** has no `FROM`, so its filter is not part of any source query. Under an active, non-ignored target filter the operation is constrained atomically in the statement where the dialect can express it; where it cannot, the command **refuses** with `NotSupportedException` before any mutation. A capability/form refusal happens before any read, but a query-sourced merge may first run its source pre-check read before a translation/render refusal. The predicate is never silently dropped: an active filter that cannot be translated to a target predicate is a fail-closed error, not a bypass.
 
 For the full `MERGE` form (SQL Server, PostgreSQL) the target predicate is injected into the `MERGE ... ON` condition and — on SQL Server, which has the arm — appended to every `WHEN NOT MATCHED BY SOURCE` branch. A target row hidden by the filter is therefore never matched, never updated and never deleted by the merge, including its delete arm. The SQL Server key upsert renders as the same `MERGE` form and takes the same predicate, so it is filtered too.
+
+```csharp
+ctx.MergeInto<Document>()
+    .Using(new Document { Id = 1, TenantId = 1, IsDeleted = true })
+    .OnKeys()
+    .WhenMatched().ThenUpdate()
+    .WhenNotMatched().ThenInsert()
+    .Merge();
+```
+
+On a full `MERGE`, the active target filter joins the `ON` search condition:
+
+```sql
+-- PostgreSQL
+merge into documents as target using (values (@p1, @p2, @p3)) as source (id, tenant_id, is_deleted)
+ on target.id = source.id and ((not (target.is_deleted) and target.tenant_id = @p0))
+ when matched then update set tenant_id = source.tenant_id, is_deleted = source.is_deleted
+ when not matched then insert (id, tenant_id, is_deleted) values (source.id, source.tenant_id, source.is_deleted)
+
+-- SQL Server
+merge into documents as target using (values (@p1, @p2, @p3)) as source (id, tenant_id, is_deleted)
+ on target.id = source.id and ((not ((target.is_deleted) = 1) and target.tenant_id = @p0))
+ when matched then update set target.tenant_id = source.tenant_id, target.is_deleted = source.is_deleted
+ when not matched then insert (id, tenant_id, is_deleted) values (source.id, source.tenant_id, source.is_deleted);
+```
 
 **Form rule.** The atomic form is a real multi-branch `MERGE`, which requires actual `WhenMatched()`/`WhenNotMatched()` branches. Calling `.On(...)` does not turn the key-upsert shortcut (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`) into a full `MERGE`; the two are distinct forms. On a provider that has no full-`MERGE` support (SQLite, MySQL, MariaDB, in-memory), a branchless `.On(...)` under an active filter therefore fails closed with `NotSupportedException` before any source read.
 
@@ -330,10 +477,21 @@ A [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IData
 
 ```csharp
 var rows = dataContext
-    .FromSql("select id, tenant_id from documents where archived = 0")
-    .BindEntity<Document>(["id", "tenant_id"])
-    .Where(t => t["id"].AsInt > 10)
+    .FromSql("select id, tenant_id, is_deleted from documents")
+    .BindEntity<Document>(["id", "tenant_id", "is_deleted"])
+    .Where(t => t.Id > 10)
+    .Select(t => t.Id)
     .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from (select id, tenant_id, is_deleted from documents) as "t1"
+ where (((t1.id > 10) and not (t1.is_deleted)) and t1.tenant_id = @p0)
+
+-- SQL Server
+select id from (select id, tenant_id, is_deleted from documents) as [t1]
+ where (((t1.id > 10) and not ((t1.is_deleted) = 1)) and t1.tenant_id = @p0)
 ```
 
 `availableColumns` are the **output/SQL names** of the raw select list — a configured column mapping wins, otherwise the name the projection expects — and they are compared case-insensitively. The list is a caller declaration, not a schema read: nextorm does not parse the SQL or query the schema, and binding neither adds nor renames output columns, so the columns you project remain your responsibility.

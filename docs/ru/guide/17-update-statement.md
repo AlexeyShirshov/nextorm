@@ -236,6 +236,31 @@ with recent as (select id from orders where (id > 1000)) update orders as "t1" s
 объявления CTE с одинаковым именем по сторонам join отклоняются с `InvalidOperationException`: один
 `WITH` не может связать одно имя с двумя определениями. См. [Common table expressions](08-cte.md).
 
+## UPDATE как тело модифицирующего CTE (PostgreSQL)
+
+На PostgreSQL возвращающий строки `UPDATE` может быть телом модифицирующего CTE: передайте его в
+`With(имя, update)` и читайте обновлённые строки типизированно через `From(имя)`:
+
+```csharp
+var updated = dataContext
+    .With("upd", dataContext.Update<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+```
+
+Соединённая форма работает так же — `With(имя, update)` над multi-table
+`UpdateJoin().Returning(...)`. Проекция `RETURNING` обязательна (мутация только с побочным эффектом вне
+области охвата), и такая инструкция никогда не кэшируется. См. [Common table expressions](08-cte.md).
+
 ## Поддержка провайдерами
 
 | Провайдер | `UPDATE ... SET ... WHERE` | `RETURNING` / `OUTPUT` | `UPDATE ... FROM` |

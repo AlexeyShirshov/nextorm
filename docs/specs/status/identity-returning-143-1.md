@@ -108,7 +108,7 @@ Update EN+RU: `docs/guide/08-cte.md`, `docs/guide/17-update-statement.md`, `docs
 CHECK#3 = evidence-only; closed by this ledger (escalate ruling 2026-10-01). No residual #143 P1/P2.
 
 ### Debts recorded
-- **D1 (P2):** pre-existing flake `EfCoreQueryFilterLifecycleTests.Lifecycle_ClearOrEvict_ColdWarmPrepared_Live` (`:96,99`) — baseline `781846a` 2/6 failures (MySQL, SqlServer), provider-agnostic, unrelated to #143; needs deterministic (non-sleep) eviction. Deferred-with-trigger from #125 (`docs/specs/status/procedure-result-sets-1.md:111-112`); second confirmed recurrence → move to nearest backlog; if it blocks CI, mark known-flake, do not reopen #143.
-- **D2 (process):** CHECK briefs must require the evidence ledger (exit codes, matrix refs, file:line) in the DO handoff.
+- **D1 (P2):** pre-existing flake `EfCoreQueryFilterLifecycleTests.Lifecycle_ClearOrEvict_ColdWarmPrepared_Live` (`:96,99`) — baseline `781846a` 2/6 failures (MySQL, SqlServer), provider-agnostic, unrelated to #143; needs deterministic (non-sleep) eviction. Deferred-with-trigger from #125 (`docs/specs/status/procedure-result-sets-1.md:111-112`); second confirmed recurrence → move to nearest backlog; if it blocks CI, mark known-flake, do not reopen #143. Tracked as **#149** (https://github.com/AlexeyShirshov/nextorm/issues/149).
+- **D2 (process):** CHECK briefs must require the evidence ledger (exit codes, matrix refs, file:line) in the DO handoff. Tracked as **#152** (https://github.com/AlexeyShirshov/nextorm/issues/152).
 - **D3 (scope):** #143 is PostgreSQL + INNER + built-in `Projection<T1..T8>`; OUTER/CROSS rejected; non-PG standalone/CTE rejected; custom projections and multi-column Range out of scope with diagnostics.
 - **D4 (info):** 188 skips all capability/env-gated (0 availability); the 1 sqlite skip is pre-existing.

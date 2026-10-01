@@ -75,3 +75,10 @@
 
 ## Benchmarks
 - `benchmarks/nextorm.benchmark` is a BenchmarkDotNet console app using `BenchmarkSwitcher`: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkWhere*`.
+
+## Brainstorming & GitHub tracking
+
+- In this repo, load `.opencode/skills/nextorm-brainstorming/SKILL.md` together with the global `brainstorming` skill before starting the brainstorm.
+- For any agreed feature/refactor/fix, create or update its GitHub issue and milestone, and record `#N` + verified URL in the spec/handoff, before asking for written-spec review or handing off to planning/implementation.
+- The overlay only adds tracking; brainstorming's approval gates stay unchanged, and no git commit/push/merge is granted.
+- PDCA work keeps its existing spine — use `nextorm-pdca`; the overlay does not turn PDCA into brainstorming.

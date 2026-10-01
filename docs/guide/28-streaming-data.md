@@ -1,16 +1,124 @@
-# Streaming query results to CSV
+# Streaming data to a Stream
 
-> Write a `Select` result to a caller-owned `Stream` as RFC 4180 CSV, row by row, without materialising the result set.
+> Write a `Select` result to a caller-owned `Stream` as JSON or RFC 4180 CSV, row by row, without materialising the result set: JSON is serialized client-side with `System.Text.Json`, CSV is formatted incrementally from the provider reader.
 
-**Prerequisites:** [Querying and projections](../querying/index.md) · [Projections](../querying/01-projections.md) · [Streaming large objects (BLOB/CLOB)](26-large-objects.md) · [Limitations](../advanced/limitations.md)
+**Prerequisites:** [Querying and projections](../querying/index.md) · [Projections](../querying/01-projections.md) · [Streaming large objects (BLOB/CLOB)](26-large-objects.md) · [JSON support across providers](14-json.md) · [Limitations](../advanced/limitations.md)
 
 ## Overview
+
+nextorm has two streaming *save* terminals, one per output format. Both write a query's projection straight to a caller-owned `Stream`, pull rows from the database reader and format them one at a time, and never materialise the result set into a list:
+
+* [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) / [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) write each row as a JSON array or NDJSON value, serialized client-side with `System.Text.Json`; live memory stays O(buffer).
+* `WriteCsv` / `WriteCsvAsync` write each row as RFC 4180 CSV, reading every supported column without boxing; live memory stays O(row), except a `byte[]` column, which is read whole-field.
+
+Neither terminal closes or disposes the destination — the caller owns the stream's lifetime, which is what lets you hand it an HTTP response body or a `FileStream`. Neither is available on the in-memory provider (there is no `DbDataReader` and no managed fallback), so both throw `NotSupportedException` before the destination is touched.
+
+Pick a format below. To stream a single large value rather than a whole result set, use the [LOB terminals](26-large-objects.md) instead.
+
+## JSON
+
+[`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) / [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) are the one JSON surface shared by every SQL provider. The terminal executes the query, reads each row through typed `DbDataReader` accessors and writes it to a caller-owned `Stream` with `System.Text.Json` — it never materializes a `TResult` per row, so live memory stays O(buffer) regardless of the result-set size. That makes it the right tool for piping a large or unbounded result set to an HTTP response, a file or a network stream. It is **not** available on the in-memory provider: there is no `DbDataReader` and no managed fallback, so both methods throw `NotSupportedException` before the destination is touched.
+
+The four terminals are members of [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and are mirrored as extension methods on [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). The public overloads take no explicit parameter list: pass values through captured variables in the query. Streaming needs an explicit `Select` projection — an entity query with no projection has no JSON shape and throws `InvalidOperationException`.
+
+```csharp
+public void WriteJson(Stream destination);
+public void WriteJson(Stream destination, JsonStreamOptions options);
+public Task WriteJsonAsync(Stream destination, CancellationToken cancellationToken = default);
+public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default);
+```
+
+```csharp
+await using var file = File.Create("orders.ndjson");
+
+await ctx.From<Order>()
+    .Where(o => o.CreatedAt >= from)
+    .Select(o => new { o.Id, o.CreatedAt, o.Total })
+    .WriteJsonAsync(file, new JsonStreamOptions
+    {
+        Mode = JsonStreamMode.NdJson,
+        IgnoreNull = true,
+    }, cancellationToken);
+```
+
+### JSON options
+
+[`JsonStreamMode`](xref:NextORM.Core.JsonStreamMode) selects the container shape:
+
+| Value | Output |
+|---|---|
+| [`Array`](xref:NextORM.Core.JsonStreamMode.Array) (default) | one `[ ... ]` document; a multi-column row is an object, a single-column projection is written as a bare value |
+| [`NdJson`](xref:NextORM.Core.JsonStreamMode.NdJson) | one standalone JSON value per row, separated by `\n` |
+
+[`JsonStreamOptions`](xref:NextORM.Core.JsonStreamOptions) shapes the document:
+
+| Option | Meaning |
+|---|---|
+| `Mode` | [`Array`](xref:NextORM.Core.JsonStreamMode.Array) (default) or [`NdJson`](xref:NextORM.Core.JsonStreamMode.NdJson). |
+| `Root` | Array only: wraps the document as `{"<Root>":[...]}`. `null` (default) writes a bare array. |
+| `IgnoreNull` | When `true`, object members whose value is SQL NULL are omitted instead of written as `null`. Only affects object (multi-column) rows; a scalar `null` is still written. |
+| `WriteIndented` | Array only: pretty-prints the document. |
+| `PropertyNamingPolicy` | A `System.Text.Json` naming policy applied to the projected member names. A single-column (scalar) projection has no member name, so the policy has no effect there. |
+
+`NdJson` combined with `Root` or with `WriteIndented` is contradictory and throws
+`NotSupportedException` while the shape is planned — before any output is produced. Invalid option
+values throw the same way from the terminal's options overloads.
+
+### Supported shapes (fail-fast)
+
+The projection must be a **flat** row of whitelisted scalar columns. Supported CLR types are `byte`,
+`short`, `int`, `long`, `float`, `double`, `decimal`, `bool`, `string`, `Guid`, `DateTime`, `byte[]`
+and their `Nullable<>` forms. Values are written the way `System.Text.Json` defaults render them:
+numbers as JSON numbers, `bool` as a JSON boolean, `Guid` as canonical text, `DateTime` as ISO-8601,
+`byte[]` as base64.
+
+Anything outside that list throws `NotSupportedException` when the shape is planned, before any output
+is produced — `TimeSpan`, `DateTimeOffset`, `DateOnly`/`TimeOnly`, enums, `Range<T>`, value-converted
+columns (including JSON-column members) and streaming LOB columns are all rejected on purpose rather
+than silently degraded. Entity-typed projection items are not rejected as such: they are flattened
+into their mapped scalar columns (the standard SQL-mapping expansion) and those columns are then
+validated against this same whitelist. These shape/option validation failures are raised before any
+output; conversely, a provider-runtime or I/O failure, or cancellation, can occur mid-document and
+leave partial output (see [Ownership, flushing and errors](#ownership-flushing-and-errors)).
+
+A multi-column projection must have named members (an
+anonymous type or a named record); a column without a name throws. There is no nesting: unlike SQL
+Server `FOR JSON`, each row is one flat object, so project the fields you need and reshape on the
+consumer side.
+
+### Ownership, flushing and errors
+
+* The destination is **caller-owned**: the terminal never closes it and never calls `Stream.Flush`,
+  so flush or dispose it yourself after the call (for example with `await using` on a file).
+* Rows are flushed to the destination as they are written (per row, at the buffer threshold and at
+  the end), so output appears progressively while the query is still running.
+* If an error occurs mid-document the exception propagates and the already-written bytes are left in
+  place (the JSON document is truncated, with no closing bracket), the destination is **not** closed,
+  and the reader and command are released. An empty result writes `[]` in `Array` mode and zero bytes
+  in `NdJson` mode.
+* A query backed by a lazy temporary-table source throws `NotSupportedException`; materialize it
+  first with `ToTable`/`ToTempTable`. Passing `null` for the destination or options throws
+  `ArgumentNullException`.
+
+### `WriteJson` vs SQL Server `FOR JSON`
+
+| | `WriteJson` / `WriteJsonAsync` | [`ForJson`](14-json.md#return-the-whole-result-set-as-one-json-document) |
+|---|---|---|
+| Providers | every SQL provider | SQL Server only |
+| Where the JSON is built | client side, `System.Text.Json`, O(buffer) memory | server side, `FOR JSON` |
+| Shape | one flat object per row (or a bare scalar) | `FOR JSON PATH`/`AUTO`, driven by the projection or the table/join structure |
+| Result | written incrementally to your `Stream` | one `string` materialized in memory (`null` when the query is empty) |
+| Use when | large or unbounded result sets, HTTP/file/network output, portable code | a small result set, SQL Server-side nesting, or you want the database to render the JSON |
+
+Both are terminals on the same query, so pick one — do not chain them.
+
+## CSV
 
 `WriteCsv`/`WriteCsvAsync` turn a query into CSV and write it straight to a `Stream` you supply. Rows are pulled from the database reader and formatted one at a time: the result set is **not** materialised into a list, no `TResult` instance is constructed for a row, and the per-row path reads every supported column without boxing. That includes SQL Server numeric columns: the CSV terminal reads them through the provider's storage-typed getter (the `MapTypedColumnExpression` hook, which receives the reader's actual field type) and converts them with a typed `Convert.To<T>` — no `GetValue` and no `Convert.ChangeType(object)`. A column whose storage type is unknown or cannot be converted is rejected with `NotSupportedException` before any output. Memory use is O(row), so a query over millions of rows can be served to a file or an HTTP response without buffering it; binary (`byte[]`) columns are the exception — each is read and Base64-encoded whole-field per row, so memory is bounded by the largest field/row rather than a fixed buffer (see [Limitations](#limitations)).
 
 This is the streaming terminal for **tabular** output. The single-`byte[]`/`string` [LOB terminals](26-large-objects.md) stream one large value; the CSV terminals stream every column and row of the projection.
 
-## Terminals
+### Terminals
 
 Sync overloads take the parameters as a `params ReadOnlySpan<object?>`; async overloads take a `params object?[]`:
 
@@ -28,7 +136,7 @@ public static Task WriteCsvAsync<TEntity>(this EntityBuilder<TEntity> builder, S
 
 The `QueryCommand<TResult>` form is the type `Select` returns; the `EntityBuilder<TEntity>` form forwards to it. Both prepare a **fresh per-call command with `storeInCache: false`**, so a CSV export neither reads nor writes the plan cache and never reuses the shared buffered command of the same query shape.
 
-## Usage
+### Usage
 
 ```csharp
 using var ctx = new DataContextBuilder().UsePostgres(connectionString).CreateDataContext();
@@ -47,7 +155,7 @@ await ctx.From<Order>()
     .WriteCsvAsync(report, null, cancellationToken, from);
 ```
 
-## Options
+### CSV options
 
 ```csharp
 public sealed class CsvStreamOptions
@@ -85,22 +193,22 @@ ctx.From<Order>()
 
 The rest of the dialect stays fixed (see the [dialect table](#dialect)): UTF-8 without a BOM, RFC 4180 escaping, CRLF terminators and invariant-culture value formats.
 
-### NULL, empty values and the marker
+#### NULL, empty values and the marker
 
 * **SQL NULL → `NullMarker` verbatim.** A SQL `NULL`/`DBNull` is written as `NullMarker` exactly, unquoted, and never passed through `ValueTransform`.
 * **Empty string → empty field.** A non-`NULL` empty string (or an empty `byte[]`) is written as an empty field, so a reader can tell a missing value from an empty one.
 * **Marker-equal text is force-quoted.** A non-`NULL` value whose formatted text equals `NullMarker` exactly is wrapped in `"` (`"\N"`) so it can never be read back as NULL.
 * **The marker is validated before any output.** `NullMarker` must be non-empty and must not contain the `Delimiter`, a `"`, CR or LF; a violating value is rejected before the header (and any data row) is written.
 
-### Excel guard
+#### Excel guard
 
 With `ExcelMode = true`, a field whose formatted text begins with `=`, `+`, `-` or `@` is prefixed with an apostrophe (`'`) so spreadsheet applications treat it as text rather than a formula. The guard runs **after** `ValueTransform` and **before** RFC 4180 escaping, so the apostrophe becomes part of the escaped field (it ends up inside the quotes) and a transform cannot smuggle a formula past it. It applies to the formatted text of every column, including negative numeric values.
 
-### Value transform
+#### Value transform
 
 `ValueTransform` receives every non-`NULL` value (boxed) and returns the text that replaces the default formatting, or `null` to write the NULL marker. It runs before the Excel guard and before CSV escaping; a SQL NULL never invokes it. The default path (no transform) stays box-free — boxing happens only when `ValueTransform` is set.
 
-## Dialect
+### Dialect
 
 | Aspect | Behaviour |
 |---|---|
@@ -121,7 +229,7 @@ With `ExcelMode = true`, a field whose formatted text begins with `=`, `+`, `-` 
 | `byte[]` | Base64 string |
 | Numbers | invariant-culture default formatting |
 
-## Providers
+### Providers
 
 | Provider | `WriteCsv` / `WriteCsvAsync` |
 |---|---|
@@ -134,7 +242,7 @@ With `ExcelMode = true`, a field whose formatted text begins with `=`, `+`, `-` 
 
 Unlike the LOB terminals, CSV export needs no sequential-access support and no `rowid` locator, so it works against every relational provider. The in-memory provider has no `DbDataReader` to stream from and rejects the terminal with `NotSupportedException`, exactly like `ToDataReader`; there is no buffered fallback in memory — materialise the query and write the CSV yourself if you need that.
 
-## Writing to an HTTP response or a file
+### Writing to an HTTP response or a file
 
 The terminal writes to `destination` and **never closes or disposes it**: the caller owns the stream's lifetime. That is what lets you hand it an HTTP response body or a `FileStream` and keep control.
 
@@ -162,14 +270,14 @@ await using var file = File.Create("orders.csv");   // caller owns the file
 await ctx.From<Order>().WriteCsvAsync(file);
 ```
 
-## Ownership, cancellation and errors
+### Ownership, cancellation and errors
 
 * **Stream ownership.** The destination `Stream` is never closed by the terminal — on success, cancellation or error. Dispose it yourself when you opened it.
 * **Reader/command ownership.** The terminal opens a per-call command and reader and releases both when it returns (or throws); the [`DataContext`](xref:NextORM.Core.DataContext) stays alive and usable.
 * **Cancellation.** The token is honoured while reading rows and, on the async path, while writing to the destination; a cancelled export throws `OperationCanceledException` without closing the destination stream.
 * **Write errors.** An exception from the destination stream (a broken socket, a full disk) propagates after the reader and command are released; the destination is still left open.
 
-## Limitations
+### Limitations
 
 * **In-memory context — `NotSupportedException`.** There is no `DbDataReader`, so the terminal fails closed instead of buffering; see [Providers](#providers).
 * **Lazy temp-table sources — `NotSupportedException` before any output.** A query that reads a source created with [`AsTempTable`](18-create-table-as.md#lazy-temporary-tables-astemptable) is not a single statement: it needs a `DROP` + `CREATE TEMPORARY TABLE ... AS SELECT` + read batch on one session, which the CSV terminal cannot stream. The terminal fails closed with `NotSupportedException` before the header (and any data row) is written and never runs the batch, so the destination is never left with a partial file; materialise the query first (for example `ToList`/`ToListAsync`) and write the rows yourself.
@@ -179,6 +287,7 @@ await ctx.From<Order>().WriteCsvAsync(file);
 
 ## See also
 
+* [JSON support across providers](14-json.md) — the per-provider SQL JSON surfaces (`ForJson`, `jsonb`, text JSON, `openjson`).
 * [Projections](../querying/01-projections.md)
 * [Streaming large objects (BLOB/CLOB)](26-large-objects.md)
 * [Raw SQL](12-raw-sql.md)
@@ -187,4 +296,4 @@ await ctx.From<Order>().WriteCsvAsync(file);
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommandExtensions.cs`, `src/nextorm.core/Builders/EntityBuilderExtensions.cs`, `src/nextorm.core/Query/CsvStreamOptions.cs`.
+Source: `src/nextorm.core/Query/QueryCommand.TResult.cs`, `src/nextorm.core/Query/QueryCommandExtensions.cs`, `src/nextorm.core/Builders/EntityBuilderExtensions.cs`, `src/nextorm.core/Query/Json/JsonStreamOptions.cs`, `src/nextorm.core/Query/CsvStreamOptions.cs`.

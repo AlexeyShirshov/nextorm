@@ -304,4 +304,15 @@ Prefixes: `PG-N` = `tests/nextorm.postgres.tests/ExtremeRowNativeSqlGenerationTe
 8. `EfCoreQueryFilterLifecycleTests` timing flake is pre-existing — reference issue **#125**, not #144.
 9. Process note: pin the mandatory anchor list at PLAN time so CHECK does not loop on evidence completeness.
 
+#### Debts tracked as GitHub issues (milestone 1.0.9-b)
+- debt 1 (sealed->class) -> **#153** https://github.com/AlexeyShirshov/nextorm/issues/153
+- debt 2 (internal ctor DTOs) -> **#154** https://github.com/AlexeyShirshov/nextorm/issues/154
+- debt 3 (unused payload / duplicate alias) -> **#155** https://github.com/AlexeyShirshov/nextorm/issues/155
+- debt 4 (XML cref to internal SqlBuilder) -> **#156** https://github.com/AlexeyShirshov/nextorm/issues/156
+- debt 5 (CH float/double parity) -> **#150** https://github.com/AlexeyShirshov/nextorm/issues/150
+- debt 6 (register finding 25) -> **#157** https://github.com/AlexeyShirshov/nextorm/issues/157
+- debt 7 (Stryker re-run) -> **#151** https://github.com/AlexeyShirshov/nextorm/issues/151
+- debt 8 (lifecycle flake) -> **#149** https://github.com/AlexeyShirshov/nextorm/issues/149
+- debt 9 (pin anchor list at PLAN) -> **#152** https://github.com/AlexeyShirshov/nextorm/issues/152
+
 - Verified: closed by escalation; `## Closing addendum (ACT)` anchors above + full suite **7447 / 0 failed** (run1/run2) + coverage **line 88.2 / branch 78.9**.

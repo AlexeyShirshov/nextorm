@@ -68,8 +68,8 @@
       href: guide/26-large-objects.md
     - name: Динамические колонки
       href: guide/27-dynamic-columns.md
-    - name: Потоковая выдача результатов запроса в CSV
-      href: guide/28-csv-export.md
+    - name: Потоковое сохранение данных
+      href: guide/28-streaming-data.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

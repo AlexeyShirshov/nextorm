@@ -51,4 +51,6 @@
 - Both tasks closed r=1 via `escalate` acceptance (evidence-completeness objections only after three CHECKs each; no established product defect; all thresholds met); two real defects found and fixed with red→green (#143 derived parity + alias fail-closed; #144 temp-table native throw + alias collision).
 - Known pre-existing flake `EfCoreQueryFilterLifecycleTests.Lifecycle_ClearOrEvict_ColdWarmPrepared_Live` recorded under #125 deferred-with-trigger; passed in the final runs.
 - Branch `1.0.9-b` ahead of `origin/1.0.9-b` by 7 commits; push never performed.
+- GitHub: #143 and #144 closed with commit links.
+- Follow-up debts filed as separate issues in milestone `1.0.9-b`: #149 (lifecycle flake), #150 (CH float/double extreme parity), #151 (Stryker re-run), #152 (pin CHECK anchors at PLAN), #153 (sealed->class API decision), #154 (capability DTO ctors), #155 (unused payload / duplicate alias), #156 (XML cref to internal SqlBuilder), #157 (register finding 25).
 - Status: CLOSED.

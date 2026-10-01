@@ -16,6 +16,8 @@
 
 Объявите фильтр там, где настраивается отображение сущности через `From<T>`. Объявление выполняется один раз, при первом построении метаданных типа, поэтому условие становится частью отображения, а не одного запроса:
 
+> В примерах на этой странице используется сущность `Document`, отображённая на `documents(id, tenant_id, is_deleted)`, и сущность `Attachment`, отображённая на `attachments(id, document_id, is_deleted)`. `Document` объявляет фильтр soft-delete с ключом `"soft-delete"` и фильтр тенанта с ключом `"tenant"`, читающий идентификатор тенанта из `c.Properties["tenant"]`; `Attachment` объявляет анонимный фильтр soft-delete; в примерах записи используется сущность `ArchivedDocument`, отображённая на `archived_documents(id, tenant_id, is_deleted)`, как цель `INSERT … SELECT`.
+
 ```csharp
 ctx.From<Document>(m => m.HasQueryFilter(d => !d.IsDeleted));
 ```
@@ -44,6 +46,25 @@ public EntityMetadataBuilder<T> HasQueryFilter(string filterKey, Expression<Func
 ctx.From<Document>(m => m
     .HasQueryFilter("soft-delete", (d, c) => !d.IsDeleted)
     .HasQueryFilter("tenant", (d, c) => d.TenantId == (int)c.Properties["tenant"]));
+```
+
+Оба предиката затем добавляются через `and` в каждое чтение `Document`; значение тенанта — связанный параметр, а не встроенный литерал:
+
+```csharp
+var ids = ctx.From<Document>()
+    .Where(d => d.Id == 10)
+    .Select(d => d.Id)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from documents
+ where ((id = 10 and not (is_deleted)) and tenant_id = @p0)
+
+-- SQL Server
+select id from documents
+ where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
 Именованный фильтр занимает **слот**: повторный вызов с тем же ключом **заменяет** прежний фильтр, а передача `null` в `filter` **удаляет** слот. Анонимные фильтры (объявленные без ключа) аддитивны — несколько объединяются через `and` — и доступны под ключом [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey), то есть под пустой строкой `""`.
@@ -145,6 +166,18 @@ var deleted = ctx.From<Document>()
     .ToList();
 ```
 
+Фильтр тенанта всё ещё применяется; отброшен только предикат soft-delete:
+
+```sql
+-- PostgreSQL
+select id from documents
+ where (id = 10 and tenant_id = @p0)
+
+-- SQL Server
+select id from documents
+ where (id = 10 and tenant_id = @p0)
+```
+
 Исходный билдер не меняется; фильтры игнорирует только возвращённая копия. **Повторные вызовы накапливаются (объединение), а не заменяют друг друга**: `IgnoreFilters(["a"]).IgnoreFilters(["b"])` отключает и `a`, и `b`, причём порядок вызовов и дубликаты ключей значения не имеют. Селекторы «только типы» и «только ключи» тоже накапливаются независимо, а один вызов `IgnoreFilters(keys, types)` — это **пересечение**: каждый его ключ применяется только к перечисленным типам. Такой комбинированный вызов никогда не сворачивается в объединение с другим селектором. Пустая область (пустой или `null` список ключей/типов) не отключает ничего, а all-or-nothing вызов `IgnoreFilters()` доминирует над любой селективной областью, объединённой с ним.
 
 Когда команда запроса уже построена, [`QueryCommand.IgnoreFilters`](xref:NextORM.Core.QueryCommand.IgnoreFilters) возвращает результат чтения: `true`, когда отключён **любой** фильтр — и через all-or-nothing форму, и через селективную область, — и `false`, когда не отключён ни один. Его сеттер работает по принципу all-or-nothing (`true` отключает все фильтры, `false` очищает область), потому что `bool` не может выразить селективное отключение; авторитетное состояние — сама селективная область.
@@ -160,6 +193,51 @@ var deleted = ctx.From<Document>()
 | Подзапрос | в подзапрос при его подготовке |
 | Цель мутации (`UPDATE` / `DELETE`) | в `WHERE` инструкции, в сочетании с предикатом или равенством по ключу |
 | Цель `MERGE` (SQL Server, PostgreSQL) | в условие `MERGE ... ON` и в каждую ветку `WHEN NOT MATCHED BY SOURCE` (см. [Изоляция цели записи](#изоляция-цели-записи)) |
+
+Например, фильтр присоединяемой сущности подмешивается в `ON` этого соединения, а фильтр основного источника остаётся в `WHERE`:
+
+```csharp
+var rows = ctx.From<Attachment>()
+    .Join(ctx.From<Document>(), (a, d) => a.DocumentId == d.Id)
+    .Select(p => p.Item1.Id)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id from attachments as "t1"
+ join documents as "t2" on ((t1.document_id = t2.id and not (t2.is_deleted)) and t2.tenant_id = @p0)
+ where not (t1.is_deleted)
+
+-- SQL Server
+select t1.id from attachments as [t1]
+ join documents as [t2] on ((t1.document_id = t2.id and not ((t2.is_deleted) = 1)) and t2.tenant_id = @p0)
+ where not ((t1.is_deleted) = 1)
+```
+
+Подзапрос, подготавливаемый в составе внешнего запроса, фильтруется так же:
+
+```csharp
+var rows = ctx.From<Document>()
+    .Select(d => new { d.Id, sid = ctx.From<Attachment>()
+        .Where(a => a.DocumentId == d.Id)
+        .Select(a => a.Id)
+        .First() })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, (select t2.id from attachments as "t2"
+ where (t2.document_id = t1.id and not (t2.is_deleted))
+limit 1) as "sid" from documents as "t1"
+ where (not (t1.is_deleted) and t1.tenant_id = @p0)
+
+-- SQL Server
+select t1.id, (select top(1) t2.id from attachments as [t2]
+ where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid] from documents as [t1]
+ where (not ((t1.is_deleted) = 1) and t1.tenant_id = @p0)
+```
 
 Основной источник соединения — первая таблица, поэтому фильтр, объявленный для `T1`, применяется к `Item1` так же, как в обычном запросе.
 
@@ -197,6 +275,20 @@ ctx.Update<Document>()
     .Update();
 ```
 
+Эти правила видны в отрендеренной инструкции — активный фильтр и предикат делят один `WHERE`, а `IgnoreFilters(["soft-delete"])` убирает только часть soft-delete:
+
+```sql
+-- PostgreSQL
+update documents set is_deleted = @p0 where ((id = 10 and not (is_deleted)) and tenant_id = @p1)
+
+delete from documents where (is_deleted and tenant_id = @p0)
+
+-- SQL Server
+update documents set is_deleted = @p0 where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p1)
+
+delete from documents where ((is_deleted) = 1 and tenant_id = @p0)
+```
+
 `INSERT` / `MERGE` не подмешивают фильтр цели через `FROM` источника (у цели нет `FROM`); при активном фильтре полный `MERGE` ограничивает цель внутри инструкции, а формы key upsert, которые этого не могут, **отказывают** (см. [Изоляция цели записи](#изоляция-цели-записи)). `INSERT … SELECT` фильтрует свой источник как обычное чтение — а записываемые строки при этом проходят проверку (см. [INSERT и MERGE (проверка)](#insert-и-merge-проверка)).
 
 ## INSERT и MERGE (проверка)
@@ -210,6 +302,36 @@ ctx.Update<Document>()
 | `MergeInto<T>().Using(...)` | строки-источники **каждой** ветки `MERGE` — insert, update-only и delete-only |
 | `InsertInto<T>().Values(source, mapping)` (`INSERT … SELECT`) | серверный pre-check строк источника |
 | `MergeInto<T>().Using(query)` (`MERGE` из запроса) | серверный pre-check строк источника |
+
+`INSERT` никогда не несёт фильтр цели; `INSERT … SELECT` фильтрует только свой источник:
+
+```csharp
+// Цель INSERT никогда не фильтруется; записываемая строка вместо этого проверяется.
+ctx.InsertInto<Document>()
+    .Values(new Document { Id = 1, TenantId = 1, IsDeleted = false })
+    .Insert();
+
+// INSERT … SELECT фильтрует свой источник как чтение и предварительно проверяет записываемые строки.
+ctx.InsertInto<ArchivedDocument>()
+    .Values(ctx.From<Document>().Where(d => d.Id > 0), d => new { d.Id, d.TenantId, d.IsDeleted })
+    .Insert();
+```
+
+```sql
+-- PostgreSQL
+insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
+
+insert into archived_documents (id, tenant_id, is_deleted)
+select id, tenant_id as "TenantId", is_deleted as "IsDeleted" from documents
+ where (((id > 0) and not (is_deleted)) and tenant_id = @p0)
+
+-- SQL Server
+insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
+
+insert into archived_documents (id, tenant_id, is_deleted)
+select id, tenant_id as [TenantId], is_deleted as [IsDeleted] from documents
+ where (((id > 0) and not ((is_deleted) = 1)) and tenant_id = @p0)
+```
 
 На поддерживаемой форме полного `MERGE` проверка значений источника покрывает **каждую комбинацию веток** — `MERGE` только с update- или только с delete-веткой проверяет входящие строки источника так же, как вставляющий, — и не проходящая проверку строка источника бросает [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) до любой мутации, даже если инструкция не вставляла бы строку.
 
@@ -238,6 +360,31 @@ ctx.InsertInto<Document>()
 - у **цели** нет `FROM`, поэтому её фильтр не входит ни в один исходный запрос. При активном, не проигнорированном фильтре цели операция ограничивается атомарно в самой инструкции там, где диалект это выражает; где не может — команда **отказывает** с `NotSupportedException` до любой мутации. Отказ по возможности/форме происходит до любого чтения, но merge с источником-запросом может сначала выполнить pre-check-чтение источника, прежде чем отказ по трансляции/рендерингу. Предикат никогда не отбрасывается молча: активный фильтр, который невозможно транслировать в предикат цели, — это fail-closed-ошибка, а не обход.
 
 Для формы полного `MERGE` (SQL Server, PostgreSQL) предикат цели подмешивается в условие `MERGE ... ON` и — в SQL Server, у которого есть эта ветка — дописывается в каждую ветку `WHEN NOT MATCHED BY SOURCE`. Поэтому строка цели, скрытая фильтром, никогда не сопоставляется, не обновляется и не удаляется merge'ем, включая его ветку удаления. Key upsert SQL Server рендерится той же формой `MERGE` и получает тот же предикат, поэтому тоже фильтруется.
+
+```csharp
+ctx.MergeInto<Document>()
+    .Using(new Document { Id = 1, TenantId = 1, IsDeleted = true })
+    .OnKeys()
+    .WhenMatched().ThenUpdate()
+    .WhenNotMatched().ThenInsert()
+    .Merge();
+```
+
+На форме полного `MERGE` активный фильтр цели присоединяется к условию поиска `ON`:
+
+```sql
+-- PostgreSQL
+merge into documents as target using (values (@p1, @p2, @p3)) as source (id, tenant_id, is_deleted)
+ on target.id = source.id and ((not (target.is_deleted) and target.tenant_id = @p0))
+ when matched then update set tenant_id = source.tenant_id, is_deleted = source.is_deleted
+ when not matched then insert (id, tenant_id, is_deleted) values (source.id, source.tenant_id, source.is_deleted)
+
+-- SQL Server
+merge into documents as target using (values (@p1, @p2, @p3)) as source (id, tenant_id, is_deleted)
+ on target.id = source.id and ((not ((target.is_deleted) = 1) and target.tenant_id = @p0))
+ when matched then update set target.tenant_id = source.tenant_id, target.is_deleted = source.is_deleted
+ when not matched then insert (id, tenant_id, is_deleted) values (source.id, source.tenant_id, source.is_deleted);
+```
 
 **Правило формы.** Атомарная форма — настоящий много-веточный `MERGE`, требующий реальных веток `WhenMatched()`/`WhenNotMatched()`. Вызов `.On(...)` не превращает key-upsert-сокращение (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`) в полный `MERGE`; это две разные формы. Поэтому на провайдере без поддержки полного `MERGE` (SQLite, MySQL, MariaDB, in-memory) безветочный `.On(...)` при активном фильтре отказывает с `NotSupportedException` до любого чтения источника.
 
@@ -330,10 +477,21 @@ ctx.From<Document>(m => m.HasQueryFilter((b, c) =>
 
 ```csharp
 var rows = dataContext
-    .FromSql("select id, tenant_id from documents where archived = 0")
-    .BindEntity<Document>(["id", "tenant_id"])
-    .Where(t => t["id"].AsInt > 10)
+    .FromSql("select id, tenant_id, is_deleted from documents")
+    .BindEntity<Document>(["id", "tenant_id", "is_deleted"])
+    .Where(t => t.Id > 10)
+    .Select(t => t.Id)
     .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from (select id, tenant_id, is_deleted from documents) as "t1"
+ where (((t1.id > 10) and not (t1.is_deleted)) and t1.tenant_id = @p0)
+
+-- SQL Server
+select id from (select id, tenant_id, is_deleted from documents) as [t1]
+ where (((t1.id > 10) and not ((t1.is_deleted) = 1)) and t1.tenant_id = @p0)
 ```
 
 `availableColumns` — это **выходные/SQL-имена** сырого списка `select` (сконфигурированное отображение столбца имеет приоритет, иначе берётся имя, которое ожидает проекция); сравнение регистронезависимо. Список — это объявление вызывающего, а не чтение схемы: nextorm не разбирает SQL и не запрашивает схему, а привязка не добавляет и не переименовывает выходные столбцы, поэтому столбцы, которые вы проецируете, остаются вашей ответственностью.

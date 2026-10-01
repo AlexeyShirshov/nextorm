@@ -18,6 +18,12 @@ await ctx.DeleteFrom<ISimpleEntity>()
     .DeleteAsync(cancellationToken);
 ```
 
+```sql
+-- PostgreSQL
+delete from simple_entity where id = 1
+delete from simple_entity where (age > 10)
+```
+
 `Where` принимает те же выражения-предикаты, что и запрос (`From<T>().Where(...)`), а повторный вызов объединяет предикаты через `and`. `DeleteFrom<T>().ToSql()` рендерит инструкцию, не открывая соединение.
 
 * Захваченные в предикате значения становятся параметрами (`x => x.Id == id` рендерит `id = @id`); встроенные литералы подставляются как есть, точно как в `WHERE` запроса.
@@ -38,6 +44,11 @@ ctx.DeleteFrom<ISimpleEntity>().All().Delete();   // delete from simple_entity
 ```csharp
 ctx.Delete(new SimpleEntity { Id = 1 });          // delete from simple_entity where id = @p0
 await ctx.DeleteAsync(new SimpleEntity { Id = 1 });
+```
+
+```sql
+-- PostgreSQL
+delete from simple_entity where id = @p0
 ```
 
 ## Глобальные фильтры запросов
@@ -85,6 +96,12 @@ var one = ctx.DeleteFrom<ISimpleEntity>()
     .Single();
 ```
 
+```sql
+-- PostgreSQL
+delete from simple_entity where (age > 10) returning id, name
+delete from simple_entity where id = 1 returning id, name, age
+```
+
 | Провайдер | Форма |
 |---|---|
 | SQLite, PostgreSQL | `DELETE ... RETURNING <cols>` |
@@ -114,6 +131,11 @@ var removed = await ctx.From<ISimpleEntity>()
     .DeleteAsync(cancellationToken);
 ```
 
+```sql
+-- PostgreSQL
+delete from simple_entity as "t1" using complex_entity as "t2" where cast(t1.id as bigint) = t2.id and t2.somestring = 'archived'
+```
+
 | Провайдер | Рендеримая форма |
 |---|---|
 | PostgreSQL | `DELETE FROM <t> AS a USING <u> AS b WHERE ...` |
@@ -133,6 +155,32 @@ var all = await ctx.From<IOrder>()
     .Returning()          // эквивалент .Returning(p => p)
     .ToListAsync(cancellationToken);
 ```
+
+### DELETE как тело модифицирующего CTE (PostgreSQL)
+
+На PostgreSQL возвращающий строки соединённый `DELETE` может быть телом модифицирующего CTE: передайте
+его в `With(имя, delete)` и читайте удалённые строки типизированно через `From(имя)`:
+
+```csharp
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { r.OrderId, r.CustomerName })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+```
+
+Проекция `RETURNING` обязательна (мутация только с побочным эффектом вне области охвата), и такая
+инструкция никогда не кэшируется. См. [Common table expressions](08-cte.md).
 
 ### Удаление по CTE
 
