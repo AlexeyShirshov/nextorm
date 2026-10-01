@@ -3,7 +3,7 @@ using System.Text;
 namespace NextORM.Core;
 
 /// <summary>
-/// Renders the SQL text of a mutation command. The DML analogue of <see cref="SqlBuilder"/>: it turns
+/// Renders the SQL text of a mutation command. The DML analogue of <c>SqlBuilder</c>: it turns
 /// the command's target table, columns and values into a parameterised statement, resolving the naming
 /// convention and identifier quoting for the target provider. Split from the statement model
 /// (<see cref="MutationCommand"/>) and from execution (<see cref="QueryExecutor"/>) so each stays

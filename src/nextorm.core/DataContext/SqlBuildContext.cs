@@ -4,7 +4,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// The collaborators a SQL build needs for one command, bundled so that statement assembly
-/// (<see cref="SqlBuilder"/>) and source rendering (<see cref="SqlSourceRenderer"/>) share them
+/// (<c>SqlBuilder</c>) and source rendering (<see cref="SqlSourceRenderer"/>) share them
 /// without either type owning the other's concerns. Immutable: a build only reads these and mutates
 /// the referenced <see cref="Params"/> / <see cref="ColumnsProvider"/> state. Derive a variant with
 /// <c>with</c> (for example a CTE rendered with a fresh columns provider).

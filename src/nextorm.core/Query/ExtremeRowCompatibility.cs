@@ -3,7 +3,7 @@ using System.Linq.Expressions;
 namespace NextORM.Core;
 
 /// <summary>
-/// Fail-closed validation shared by the SQL lowering (<see cref="SqlBuilder"/>) and the in-memory
+/// Fail-closed validation shared by the SQL lowering (<c>SqlBuilder</c>) and the in-memory
 /// evaluator (<see cref="InMemoryExtremeRow"/>) of <c>SelectWhereMax</c>/<c>SelectWhereMin</c>.
 /// <para>
 /// The window-ranked lowering can express a single physical source with a WHERE condition and a

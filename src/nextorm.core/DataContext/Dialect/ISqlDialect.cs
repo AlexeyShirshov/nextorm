@@ -6,7 +6,7 @@ namespace NextORM.Core;
 /// Rendering contract of a SQL dialect: everything that differs between providers when SQL text is
 /// produced. Kept separate from <see cref="DataContext"/> so that SQL generation does not depend on the
 /// whole execution pipeline (connection lifecycle, plan cache, materialization) — see
-/// <see cref="SqlBuilder"/> and the expression visitors, which depend on this interface only.
+/// <c>SqlBuilder</c> and the expression visitors, which depend on this interface only.
 /// <para>
 /// Connection/parameter creation (<c>CreateConnection</c>/<c>CreateParam</c>) and column mapping
 /// (<c>MapColumnExpression</c>) are deliberately not part of this contract: they are separate axes.
@@ -776,7 +776,7 @@ public interface ISqlDialect
     /// Renders the opening keyword of a common table expression list (<c>with</c>). Dialects that
     /// support and require the <c>recursive</c> modifier for recursive CTEs (SQLite, PostgreSQL)
     /// emit <c>with recursive</c>; SQL Server declares a recursive CTE with <c>with</c> alone, so the
-    /// flag is ignored there. Keeping this on the dialect avoids provider names in <see cref="SqlBuilder"/>.
+    /// flag is ignored there. Keeping this on the dialect avoids provider names in <c>SqlBuilder</c>.
     /// </summary>
     string MakeWith(bool recursive, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>

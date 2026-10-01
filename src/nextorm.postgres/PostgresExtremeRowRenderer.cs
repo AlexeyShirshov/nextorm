@@ -8,7 +8,7 @@ namespace NextORM.Postgres;
 /// form is a <c>DISTINCT ON (&lt;group&gt;) ... ORDER BY &lt;group&gt;, &lt;extreme key&gt;</c> that
 /// keeps the extreme row per group; the global form appends an inner
 /// <c>ORDER BY &lt;extreme key&gt; LIMIT 1</c> to the filtered source. The shared
-/// <see cref="SqlBuilder"/> still applies the outer projection, <c>DISTINCT</c> and the user's output
+/// <c>SqlBuilder</c> still applies the outer projection, <c>DISTINCT</c> and the user's output
 /// ordering, so the native clauses never legalize user paging and never interleave the user ordering
 /// into winner selection.
 /// </summary>

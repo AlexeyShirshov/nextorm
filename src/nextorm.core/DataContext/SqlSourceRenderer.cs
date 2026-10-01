@@ -8,7 +8,7 @@ namespace NextORM.Core;
 /// <summary>
 /// Renders the source/condition parts of a statement — CTEs, FROM (tables, derived tables and
 /// table-valued functions), JOIN/APPLY, WHERE/HAVING, ORDER BY and columns. Split out of
-/// <see cref="SqlBuilder"/> (which keeps the statement assembly) so both stay cohesive and under the
+/// <c>SqlBuilder</c> (which keeps the statement assembly) so both stay cohesive and under the
 /// god-class threshold; the emitted SQL and the walk order are unchanged.
 /// </summary>
 internal static class SqlSourceRenderer

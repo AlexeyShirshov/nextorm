@@ -14,7 +14,7 @@ namespace NextORM.ClickHouse;
 /// <item>grouped: <c>argMax(tuple(payload), key) as t</c> next to the group columns and a
 /// <c>group by</c>, so every group yields one whole winner row.</item>
 /// </list>
-/// A composite key is passed as a lexicographic tuple argument. The shared <see cref="SqlBuilder"/>
+/// A composite key is passed as a lexicographic tuple argument. The shared <c>SqlBuilder</c>
 /// still applies the outer projection, <c>DISTINCT</c> and the user's output ordering, so the native
 /// aggregate never legalizes user paging and never interleaves the user ordering into winner
 /// selection. Nullable keys are excluded before aggregation by the shared source filter and nullable
