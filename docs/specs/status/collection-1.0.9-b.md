@@ -10,7 +10,7 @@
 
 | id | tasks (order) | worktree | branch | status |
 |---|---|---|---|---|
-| group-1 | 116,136,115,113,135,39,112,123,124,125,118 | (current worktree) | `1.0.9-b` (current) | in-progress |
+| group-1 | 116,136,115,113,135,39,112,123,124,125,118 | (current worktree) | `1.0.9-b` (current) | done |
 
 ## Tasks
 
@@ -58,3 +58,21 @@
 ## Stopped
 
 (2026-09-30) Autonomous run stopped after #112 by the model's own decision, **not** a task failure: #123/#124/#125/#118 were never attempted and are `pending` (lane mislabeled them). `blocked` status is retired: a non-completed task is `incomplete` (patch + reason) and the pipeline continues. The Tasks table above is the source of truth for the queue; resume from the first `pending` (#123). Fix applied: `lane.md` + `pdca-collection` skill now make `lane` re-read this file for the queue instead of holding it in context. #113 remains skipped (user decision) and is not part of the queue.
+
+## Verified (phase C, 2026-10-01, HEAD abfaf28)
+
+- Build Debug+Release: 0 Warning / 0 Error.
+- Full solution (DOCKER_HOST): 7115 total / 6927 passed / 0 failed / 188 skipped (all capability-only; PostgreSQL/SQL Server/MySQL/ClickHouse containers executed).
+- Coverage (configured core+sqlite+postgres+sqlserver): line 88.2% / branch 78.9% (>=85/75).
+- Perf acceptance: 7 cases / 0 failures, wall 45.69 s, `Cached_ToList/Prepared_ToList` 1.95 (within band).
+- DocFX: 0 warnings / 0 errors.
+- No in-progress merge; no worktree on `1.0.9-b`.
+
+## Report
+
+- Group `group-1`: single lane, no worktree/branch, no merge (`merge --no-ff` not needed); all commits on `1.0.9-b`.
+- Done (10): #116, #136, #115, #135, #39, #112, #123, #124, #125, #118.
+- Incomplete (1): #113 (user-skipped; patch `/tmp/opencode/task-4-113-withalias.patch`).
+- `1.0.9-b` ahead of `origin/1.0.9-b` by 9 commits; push never performed.
+- Cleanup: removed clean worktrees `exp-a3-pdca` / `exp112/upstream`; removed branches `exp/a3-pdca`, `exp112/upstream`, `todo-ch2`, `todo-mssql2`, `todo-pg2`. Kept dirty worktrees `exp-a1-bare` / `exp-a2-skill` (and their branches) plus `main`, release branches, `wip/94-dynamic-columns`, `wip/95-eager-loading` and detached experiment worktrees. Removed stale unregistered dir `collection-1.0.9-b`; `worktree prune` ran clean.
+- Status: CLOSED (queue empty; #113 remains incomplete by user decision).
