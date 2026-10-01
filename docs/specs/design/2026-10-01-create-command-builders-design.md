@@ -53,6 +53,13 @@ Tracking: GitHub issue [#147](https://github.com/AlexeyShirshov/nextorm/issues/1
 Для `UpdateJoin` receiver остаётся `JoinedEntityBuilder<T1..Tn>` — метод не переезжает в контекст.
 Новые имена сохраняют generic-арность исходного члена.
 
+> **Примечание (#145, добавлено отдельной задачей).** Задача #145 добавляет независимую публичную
+> фабрику `CreateDeleteJoinBuilder<T1..Tn>()` (арности 2–8) поверх `JoinedEntityBuilder<T1..Tn>`; она
+> стартует только row-returning multi-table `DELETE ... USING ... RETURNING` и не исполняет мутацию.
+> Таблица и правило ренейма выше этой задачей **не затрагиваются**: #147 по-прежнему переименовывает
+> `UpdateJoin` в `CreateUpdateJoinBuilder`, а `CreateDeleteJoinBuilder` — отдельное новое имя, не
+> переименование `UpdateJoin`. `Delete`/`DeleteAsync`/`UpdateJoin().Returning` не меняются.
+
 ## 4. Query API — 11 аддитивных forwarder'ов
 
 Все — новые публичные `static` extension-члены на `NextORM.Core.DataContextExtensions`, добавленные

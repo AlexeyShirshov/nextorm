@@ -56,6 +56,7 @@ public class DataModifyingCteRejectionTests
 
         var act = () => ctx.With("del", ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*data-modifying*");
@@ -87,6 +88,7 @@ public class DataModifyingCteRejectionTests
         // through DataContext.BuildReturningSql -> BuildDeleteJoinSql before returning any rows.
         var act = () => ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => new { p.Item1.Id })
             .ToList();
 
@@ -129,6 +131,7 @@ public class DataModifyingCteRejectionTests
 
         var act = () => ctx.With("del", ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateDeleteJoinBuilder()
             .Returning());
 
         act.Should().Throw<NotSupportedException>().WithMessage("*data-modifying*");
@@ -156,6 +159,7 @@ public class DataModifyingCteRejectionTests
 
         var act = () => ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateDeleteJoinBuilder()
             .Returning()
             .ToList();
 

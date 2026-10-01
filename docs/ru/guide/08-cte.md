@@ -308,10 +308,12 @@ PostgreSQL — единственный поддерживаемый прова�
 арностей 2–8: multi-table `UPDATE ... FROM` через
 [`UpdateJoinBuilder<TProjection>.Returning()`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning) или
 [`Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})),
-а multi-table `DELETE ... USING` — через расширение
-[`Returning()`](xref:NextORM.Core.DataContextExtensions.Returning``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))/`Returning(projection)`
-на соединённом билдере. `Returning()` — эквивалент `Returning(p => p)` — возвращает всю соединённую
-проекцию; форма с явной проекцией не меняется. Остальные провайдеры отклоняют
+а multi-table `DELETE ... USING` — через
+[`CreateDeleteJoinBuilder()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteJoinBuilder``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))
+у соединённого билдера, возвращающий [`DeleteJoinBuilder<TProjection>`](xref:NextORM.Core.DeleteJoinBuilder`1),
+чей [`Returning()`](xref:NextORM.Core.DeleteJoinBuilder`1.Returning)/[`Returning(projection)`](xref:NextORM.Core.DeleteJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+переключает на терминал возврата строк. `Returning()` — эквивалент `Returning(p => p)` — возвращает всю
+соединённую проекцию; форма с явной проекцией не меняется. Остальные провайдеры отклоняют
 `With(имя, mutation)` с `NotSupportedException`, так как их тело CTE обязано быть `SELECT`. В отличие от
 read-CTE, инструкция, в `WITH` которой есть модифицирующий CTE, никогда не попадает в кэш планов (она
 имеет побочный эффект) и планируется заново при каждом вызове.
@@ -338,6 +340,7 @@ with upd as (update orders set total = @p0 where customer_id = 7 returning id, t
 var doomed = dataContext
     .From<IOrder>()
     .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
     .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
 
 var removed = dataContext
@@ -357,6 +360,7 @@ with del as (delete from orders as "t1" using customers as "t2" where t1.custome
 var doomed = dataContext
     .From<IOrder>()
     .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
     .Returning();   // эквивалент .Returning(p => p)
 
 var removed = dataContext

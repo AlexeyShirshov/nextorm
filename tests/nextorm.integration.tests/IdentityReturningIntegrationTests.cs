@@ -567,6 +567,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
             var row = ctx.From<IdnEntity>()
                 .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
+                .CreateDeleteJoinBuilder()
                 .Returning()
                 .Single();
 
@@ -637,6 +638,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
             var builder = ctx.From<IdnEntity>()
                 .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
+                .CreateDeleteJoinBuilder()
                 .Returning();
 
             var sql = builder.ToSql();
@@ -708,6 +710,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
             var scope = ctx.With("del", ctx.From<IdnEntity>()
                 .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
+                .CreateDeleteJoinBuilder()
                 .Returning());
 
             var sql = SqlOf(ctx, scope.From("del").Select(r => r));
@@ -757,6 +760,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
                     .ToSql()
                 : () => ctx.From<IdnEntity>()
                     .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
+                    .CreateDeleteJoinBuilder()
                     .Returning()
                     .ToSql();
 
@@ -798,6 +802,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
                         .Returning())
                     : ctx.With("del", ctx.From<IdnEntity>()
                         .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
+                        .CreateDeleteJoinBuilder()
                         .Returning());
 
                 _ = SqlOf(ctx, scope.From(update ? "upd" : "del").Select(r => r));
@@ -851,6 +856,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
             var rows = ctx.From<IdnEntity>()
                 .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
                 .Where(p => p.Item1.Id < 0)
+                .CreateDeleteJoinBuilder()
                 .Returning()
                 .ToList();
 
@@ -985,29 +991,29 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning(p => p);
 
     private static D2 Delete2(IDataContext ctx) => ctx.From<IdnEntity>()
-        .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2).Returning();
+        .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2).CreateDeleteJoinBuilder().Returning();
 
     private static D3 Delete3(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3).Returning();
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3).CreateDeleteJoinBuilder().Returning();
 
     private static D4 Delete4(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4).Returning();
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4).CreateDeleteJoinBuilder().Returning();
 
     private static D5 Delete5(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5).Returning();
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5).CreateDeleteJoinBuilder().Returning();
 
     private static D6 Delete6(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6).Returning();
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6).CreateDeleteJoinBuilder().Returning();
 
     private static D7 Delete7(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
@@ -1015,7 +1021,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 7).Returning();
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 7).CreateDeleteJoinBuilder().Returning();
 
     private static D8 Delete8(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
@@ -1024,14 +1030,14 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 7)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 8).Returning();
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 8).CreateDeleteJoinBuilder().Returning();
 
     private static D2 Delete2Lambda(IDataContext ctx) => ctx.From<IdnEntity>()
-        .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2).Returning(p => p);
+        .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2).CreateDeleteJoinBuilder().Returning(p => p);
 
     private static D3 Delete3Lambda(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3).Returning(p => p);
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3).CreateDeleteJoinBuilder().Returning(p => p);
 
     private static D8 Delete8Lambda(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
@@ -1040,7 +1046,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 7)
-        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 8).Returning(p => p);
+        .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 8).CreateDeleteJoinBuilder().Returning(p => p);
 
     private static void RunUpdateIdentity(IDataContext ctx, int arity)
     {

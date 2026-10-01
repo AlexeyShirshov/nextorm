@@ -145,13 +145,14 @@ delete from simple_entity as "t1" using complex_entity as "t2" where cast(t1.id 
 
 * Цель — первая таблица (`Item1`); принимается только `Join` (INNER). `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin` и `APPLY`-соединения бросают `NotSupportedException`, потому что меняют набор удаляемых строк.
 * Терминалы — extension-методы на соединённом билдере для арностей 2–8; `Delete()`/`DeleteAsync()` возвращают число затронутых строк. `ToSql()` рендерит инструкцию без открытия соединения и бросает на in-memory контексте.
-* `Returning()`/`Returning(projection)` доступен на multi-table delete только на PostgreSQL (`DELETE ... USING ... RETURNING`), на INNER-соединениях и для арностей 2–8. `Returning()` — эквивалент `Returning(p => p)` — возвращает всю соединённую проекцию (`Projection<T1, ...>`): каждое returnable mapped-свойство каждого item-слота, в порядке слотов. `Item1` — цель удаления, а повторяющийся CLR-тип остаётся различимым по слоту, поэтому self-join одной сущности сохраняет значения `Item1`/`Item2` раздельно. Delete возвращает значения удалённых строк. `Returning(p => new { p.Item1.Id, p.Item2.Name })` возвращает явную проекцию, читается через `Single()`/`ToList()`; возвращённые колонки получают детерминированные per-slot алиасы, а явные проекции не меняются. Ни один вызов `Returning()` не добавляет список `RETURNING` неявно. Работает и как обычный терминал, и как тело модифицирующего CTE через `With(имя, delete)`. Возвращаемый item, чьё mapped-свойство — многоколоночный `Range<T>`, отклоняется, а обязательный член без соответствия в форме соединённого источника отклоняется с указанием слота и члена. См. [Common table expressions](08-cte.md).
+* `CreateDeleteJoinBuilder()` запускает форму multi-table delete с возвратом строк; его терминалы `Returning()`/`Returning(projection)` доступны только на PostgreSQL (`DELETE ... USING ... RETURNING`), на INNER-соединениях и для арностей 2–8. `Returning()` — эквивалент `Returning(p => p)` — возвращает всю соединённую проекцию (`Projection<T1, ...>`): каждое returnable mapped-свойство каждого item-слота, в порядке слотов. `Item1` — цель удаления, а повторяющийся CLR-тип остаётся различимым по слоту, поэтому self-join одной сущности сохраняет значения `Item1`/`Item2` раздельно. Delete возвращает значения удалённых строк. `Returning(p => new { p.Item1.Id, p.Item2.Name })` возвращает явную проекцию, читается через `Single()`/`ToList()`; возвращённые колонки получают детерминированные per-slot алиасы, а явные проекции не меняются. Ни один вызов `Returning()` не добавляет список `RETURNING` неявно. Работает и как обычный терминал, и как тело модифицирующего CTE через `With(имя, delete)`. Возвращаемый item, чьё mapped-свойство — многоколоночный `Range<T>`, отклоняется, а обязательный член без соответствия в форме соединённого источника отклоняется с указанием слота и члена. См. [Common table expressions](08-cte.md).
 * Присоединяемая сторона может быть CTE, его объявление поднимается перед `DELETE` (PostgreSQL `with c as (…) delete from <t> as "t1" using c as "t2" where …`); целью остаётся первая физическая таблица, а CTE может стоять на любой позиции join. См. [Common table expressions](08-cte.md).
 
 ```csharp
 var all = await ctx.From<IOrder>()
     .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
     .Where(p => p.Item2.Tier == "gold")
+    .CreateDeleteJoinBuilder()
     .Returning()          // эквивалент .Returning(p => p)
     .ToListAsync(cancellationToken);
 ```
@@ -165,6 +166,7 @@ var all = await ctx.From<IOrder>()
 var doomed = dataContext
     .From<IOrder>()
     .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
     .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
 
 var removed = dataContext

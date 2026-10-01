@@ -2,9 +2,11 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent terminal for a multi-table <c>DELETE</c> that returns the removed rows through PostgreSQL's
-/// <c>DELETE ... USING ... RETURNING</c> form, started with the
-/// <see cref="DataContextExtensions.Returning{T1, T2, TResult}(JoinedEntityBuilder{T1, T2}, System.Linq.Expressions.Expression{System.Func{Projection{T1, T2}, TResult}})"/>
-/// extension. The whole-projection (identity) form returns every returnable mapped property of every
+/// <c>DELETE ... USING ... RETURNING</c> form, started with
+/// <see cref="DataContextExtensions.CreateDeleteJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> and
+/// switched to a returning selector with
+/// <see cref="DeleteJoinBuilder{TProjection}.Returning{TResult}(System.Linq.Expressions.Expression{System.Func{TProjection, TResult}})"/>.
+/// The whole-projection (identity) form returns every returnable mapped property of every
 /// item slot, in slot order, so a self-join of one type keeps its <c>Item1</c>/<c>Item2</c> values
 /// distinct (a repeated CLR type stays separated by slot); explicit projections are unchanged and no
 /// call adds a <c>RETURNING</c> list implicitly. The returned rows are materialised with the same

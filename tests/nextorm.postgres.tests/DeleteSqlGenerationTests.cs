@@ -222,6 +222,7 @@ public class DeleteSqlGenerationTests
 
         var delete = ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id });
 
         var sql = SqlOf(ctx, ctx.With("del", delete).From("del").Select(r => new { r.TargetId, r.JoinedId }));
@@ -242,6 +243,7 @@ public class DeleteSqlGenerationTests
 
         var delete = ctx.From<IComplexEntity>()
             .Join(scope.From("src"), (c, s) => c.Id == s["id"].AsInt)
+            .CreateDeleteJoinBuilder()
             .Returning(p => new { TargetId = p.Item1.Id });
 
         var sql = SqlOf(ctx, ctx.With("del", delete).From("del").Select(r => new { r.TargetId }));
@@ -261,6 +263,7 @@ public class DeleteSqlGenerationTests
         // body must not alias it to the CLR member name or the outer read references a missing "Id".
         var scope = ctx.With("del", ctx.From<IComplexEntity>()
                 .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { p.Item1.Id }))
             .From("del")
             .Select(r => new { r.Id });
@@ -278,6 +281,7 @@ public class DeleteSqlGenerationTests
         // DataContext.BuildReturningSql DeleteJoinCommand arm feeds the same renderer.
         var sql = ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id })
             .ToSql();
 
@@ -292,6 +296,7 @@ public class DeleteSqlGenerationTests
 
         var sql = ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => p.Item1.Id)
             .ToSql();
 

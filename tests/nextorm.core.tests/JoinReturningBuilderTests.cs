@@ -20,7 +20,18 @@ public class JoinReturningBuilderTests
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(projection);
+
+        act.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void CreateDeleteJoinBuilder_NullReceiver_ShouldThrow()
+    {
+        JoinedEntityBuilder<ConventionalEntity, ConventionalEntity> query = null!;
+
+        var act = () => query.CreateDeleteJoinBuilder();
 
         act.Should().Throw<ArgumentNullException>();
     }
@@ -47,12 +58,14 @@ public class JoinReturningBuilderTests
 
         var builder = ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => p);
 
         builder.Should().NotBeNull();
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning();
 
         act.Should().NotThrow();
@@ -86,6 +99,7 @@ public class JoinReturningBuilderTests
         var builder = ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Item1.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning();
 
         builder.Should().NotBeNull();
@@ -127,6 +141,7 @@ public class JoinReturningBuilderTests
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => new { p.Item1.Id })
             .ToList();
 
@@ -155,6 +170,7 @@ public class JoinReturningBuilderTests
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning(p => new { p.Item1.Id })
             .ToSql();
 
@@ -201,14 +217,17 @@ public class JoinReturningBuilderTests
         {
             ctx.From<ConventionalEntity>()
                 .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => p.Item1.Id);
 
             ctx.From<ConventionalEntity>()
                 .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new JoinedReturningDto(p.Item1.Id, p.Item2.Id));
 
             ctx.From<ConventionalEntity>()
                 .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new JoinedReturningDto { TargetId = p.Item1.Id, SourceId = p.Item2.Id });
         };
 

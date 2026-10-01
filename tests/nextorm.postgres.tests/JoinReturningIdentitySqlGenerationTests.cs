@@ -143,7 +143,7 @@ public class JoinReturningIdentitySqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var scope = ctx.With("del", Join2(ctx).Returning());
+        var scope = ctx.With("del", Join2(ctx).CreateDeleteJoinBuilder().Returning());
         var sql = SqlOf(ctx, scope.From("del").Select(r => new { A = r.Item1.Id, B = r.Item2.Id }));
 
         sql.Should().Contain("delete from merge_entity as \"t1\"");
@@ -200,6 +200,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var direct = ctx.From<IdentityDerivedEntity>()
             .Join(derived, (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning()
             .ToSql();
 
@@ -247,6 +248,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var direct = ctx.From<IdentityDerivedEntity>()
             .Join(derived, (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning()
             .ToSql();
 
@@ -255,6 +257,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var scope = ctx.With("del", ctx.From<IdentityDerivedEntity>()
             .Join(derived, (a, b) => a.Id == b.Id)
+            .CreateDeleteJoinBuilder()
             .Returning());
         var read = SqlOf(ctx, scope.From("del").Select(r => r));
 
@@ -317,10 +320,12 @@ public class JoinReturningIdentitySqlGenerationTests
         {
             "left" => () => ctx.From<IMergeEntity>()
                 .LeftJoin(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
+                .CreateDeleteJoinBuilder()
                 .Returning()
                 .ToSql(),
             "cross" => () => ctx.From<IMergeEntity>()
                 .CrossJoin(ctx.From<IMergeEntity>())
+                .CreateDeleteJoinBuilder()
                 .Returning()
                 .ToSql(),
             _ => throw new ArgumentOutOfRangeException(nameof(joinForm)),
@@ -380,13 +385,13 @@ public class JoinReturningIdentitySqlGenerationTests
     }
 
     private static DeleteJoinReturningBuilder<Projection<IMergeEntity, IMergeEntity>, Projection<IMergeEntity, IMergeEntity>> BuildDelete2(IDataContext ctx, bool lambda)
-        => lambda ? Join2(ctx).Returning(p => p) : Join2(ctx).Returning();
+        => lambda ? Join2(ctx).CreateDeleteJoinBuilder().Returning(p => p) : Join2(ctx).CreateDeleteJoinBuilder().Returning();
 
     private static DeleteJoinReturningBuilder<Projection<IMergeEntity, IMergeEntity, IMergeEntity>, Projection<IMergeEntity, IMergeEntity, IMergeEntity>> BuildDelete3(IDataContext ctx, bool lambda)
-        => lambda ? Join3(ctx).Returning(p => p) : Join3(ctx).Returning();
+        => lambda ? Join3(ctx).CreateDeleteJoinBuilder().Returning(p => p) : Join3(ctx).CreateDeleteJoinBuilder().Returning();
 
     private static DeleteJoinReturningBuilder<Projection<IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity>, Projection<IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity>> BuildDelete8(IDataContext ctx, bool lambda)
-        => lambda ? Join8(ctx).Returning(p => p) : Join8(ctx).Returning();
+        => lambda ? Join8(ctx).CreateDeleteJoinBuilder().Returning(p => p) : Join8(ctx).CreateDeleteJoinBuilder().Returning();
 
     private static JoinedEntityBuilder<IMergeEntity, IMergeEntity> Join2(IDataContext ctx)
         => ctx.From<IMergeEntity>().Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id);

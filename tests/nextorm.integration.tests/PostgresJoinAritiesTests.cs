@@ -84,11 +84,11 @@ public sealed class PostgresJoinAritiesTests : ProviderTestSuite
         var b7 = b6.Join(_sut.SimpleEntity, (p, c) => p.Item6.Id == c.Id);
         var b8 = b7.Join(_sut.ComplexEntity, (p, c) => p.Item7.Id == c.Id);
 
-        b3.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
-        b4.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
-        b5.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
-        b6.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
-        b7.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
-        b8.Where(p => p.Item1.Id < 0).Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b3.Where(p => p.Item1.Id < 0).CreateDeleteJoinBuilder().Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b4.Where(p => p.Item1.Id < 0).CreateDeleteJoinBuilder().Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b5.Where(p => p.Item1.Id < 0).CreateDeleteJoinBuilder().Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b6.Where(p => p.Item1.Id < 0).CreateDeleteJoinBuilder().Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b7.Where(p => p.Item1.Id < 0).CreateDeleteJoinBuilder().Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
+        b8.Where(p => p.Item1.Id < 0).CreateDeleteJoinBuilder().Returning(p => new { p.Item1.Id }).ToList().Should().BeEmpty();
     }
 }

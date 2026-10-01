@@ -751,6 +751,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var delete = ctx.From<IDmCteTarget>()
                 .Join(ctx.From<IDmCteSource>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name });
 
             var returned = ctx.With("del", delete)
@@ -821,6 +822,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var returned = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .ToList();
 
@@ -1086,6 +1088,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var returned = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .Single();
 
@@ -1114,6 +1117,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var single = await ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .SingleAsync(ct);
 
@@ -1126,6 +1130,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var all = await ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .ToListAsync(ct);
 
@@ -1152,6 +1157,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var scalar = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => p.Item1.Id)
                 .Single();
             scalar.Should().Be(1);
@@ -1160,6 +1166,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var sameNames = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { TargetId = p.Item1.Id, SourceId = p.Item2.Id })
                 .Single();
 
@@ -1187,6 +1194,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             var empty = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
                 .Where(p => p.Item1.Id < 0)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { p.Item1.Id })
                 .ToList();
             empty.Should().BeEmpty();
@@ -1194,6 +1202,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             var act = () => ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
                 .Where(p => p.Item1.Id < 0)
+                .CreateDeleteJoinBuilder()
                 .Returning(p => new { p.Item1.Id })
                 .Single();
 
@@ -1256,6 +1265,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var scope = ctx.With("del", ctx.From<DmCteTargetRow>()
                     .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                    .CreateDeleteJoinBuilder()
                     .Returning(p => new { p.Item1.Id }))
                 .From("del")
                 .Select(r => new { r.Id });

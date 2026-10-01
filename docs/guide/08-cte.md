@@ -306,9 +306,11 @@ join/multi-table mutations are accepted on PostgreSQL INNER joins for arities 2�
 `UPDATE ... FROM` through
 [`UpdateJoinBuilder<TProjection>.Returning()`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning) or
 [`Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})),
-and a multi-table `DELETE ... USING` through the
-[`Returning()`](xref:NextORM.Core.DataContextExtensions.Returning``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))/`Returning(projection)`
-extension on the joined builder. `Returning()` — equivalent to `Returning(p => p)` — returns the whole
+and a multi-table `DELETE ... USING` through the joined
+builder's [`CreateDeleteJoinBuilder()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteJoinBuilder``2(NextORM.Core.JoinedEntityBuilder{``0,``1})),
+which returns a [`DeleteJoinBuilder<TProjection>`](xref:NextORM.Core.DeleteJoinBuilder`1) whose
+[`Returning()`](xref:NextORM.Core.DeleteJoinBuilder`1.Returning)/[`Returning(projection)`](xref:NextORM.Core.DeleteJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))
+switches to the row-returning terminal. `Returning()` — equivalent to `Returning(p => p)` — returns the whole
 joined projection; the explicit projection form is unchanged. Every other provider rejects
 `With(name, mutation)` with `NotSupportedException`, because its CTE body must be a `SELECT`. Unlike a read
 CTE, a statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
@@ -336,6 +338,7 @@ with upd as (update orders set total = @p0 where customer_id = 7 returning id, t
 var doomed = dataContext
     .From<IOrder>()
     .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
     .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
 
 var removed = dataContext
@@ -355,6 +358,7 @@ with del as (delete from orders as "t1" using customers as "t2" where t1.custome
 var doomed = dataContext
     .From<IOrder>()
     .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
     .Returning();   // equivalent to .Returning(p => p)
 
 var removed = dataContext

@@ -19,7 +19,7 @@
 | id | issue | slice | group | branch | status | task status file |
 |---|---|---|---|---|---|---|
 | 1 | #149 | - | group-1 | 1.0.9-b | done | cache-eviction-149-1.md |
-| 2 | #145 | - | group-1 | 1.0.9-b | pending | - |
+| 2 | #145 | - | group-1 | 1.0.9-b | done | delete-join-145-1.md |
 | 3 | #147 | - | group-1 | 1.0.9-b | pending | - |
 | 4 | #155 | - | group-1 | 1.0.9-b | pending | - |
 | 5 | #146 | A | group-1 | 1.0.9-b | pending | - |
@@ -32,11 +32,13 @@
 - Clustering (planner, 2026-10-01): one group. #145/#146/#147/#155/#148 form one overlapping footprint component (`DataContextExtensions.cs`, `QueryCommand*`, `SqlBuilder.cs`, docs EN+RU); #149 is independent but coalesced (sequential harness). No new worktrees/branches/merge.
 - Order: #149 → #145 → #147 → #155 → #146-A → #146-B → #148-A → #148-B.
 - Approval gates for #147/#148: the user explicitly requested autonomous execution of all open 1.0.9-b tasks — that supersedes the historical "not authorized / approval pending" text. Proceed; ordinary PDCA gates apply.
+- #145 (planner): public seam `CreateDeleteJoinBuilder<T1..Tn>() -> DeleteJoinBuilder<TProjection>.Returning()/Returning<TResult>()`; remove the 14 ambiguous joined `Returning` overloads; DELETE/UPDATE SQL + #143 behavior unchanged; compile-negative tests in `nextorm.alias.tests`.
 - Lane unavailable (nested Task) → flat primary.
 
 ## Done / Verified / Incomplete
 
 - #149 done — deterministic eviction (internal timestamp-aging hooks, 8 tests); CHECK PASS; 20/20 live lifecycle runs; coverage 88.2/78.9; commit 1568992
+- #145 done — explicit CreateDeleteJoinBuilder<T1..Tn> starter; 14 ambiguous joined Returning overloads removed; compile-contract + mutation campaign; CHECK PASS; coverage 86.4/77.8; commit <hash>
 
 ## Report
 
