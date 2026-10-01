@@ -10,13 +10,13 @@
 
 | id | tasks (order) | worktree | branch | status |
 |---|---|---|---|---|
-| group-1 | 143,144 | (current worktree) | `1.0.9-b` (current) | pending |
+| group-1 | 143,144 | (current worktree) | `1.0.9-b` (current) | in-progress |
 
 ## Tasks
 
 | id | issue | group | branch | status | task status file |
 |---|---|---|---|---|---|
-| 1 | #143 | group-1 | 1.0.9-b | pending | - |
+| 1 | #143 | group-1 | 1.0.9-b | in-progress | identity-returning-143-1.md |
 | 2 | #144 | group-1 | 1.0.9-b | pending | - |
 
 ## Decisions
