@@ -35,7 +35,7 @@ public class AliasExpressionOnlyContractTests
     [Fact]
     public void Reading_a_single_alias_member_outside_an_expression_tree_throws()
     {
-        var projection = new AliasProjection_Buyer<Order, Person, Person>();
+        var projection = new AliasProjection_Buyer<Order, Person>();
 
         Action readBuyer = () => _ = projection.Buyer;
 

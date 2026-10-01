@@ -84,28 +84,6 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
     internal new JoinedEntityBuilder<T1, T2, T3> PasteJoin<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
-    /// <summary>
-    /// Alias-join seam over an existing join chain; mirrors <see cref="JoinCore{T3}"/> but returns the
-    /// caller-created generated builder, serving every <see cref="JoinType"/> through
-    /// <paramref name="joinType"/> so a positional join can be followed by a generated alias join.
-    /// </summary>
-    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
-    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
-    /// <typeparam name="T3">The entity type being joined.</typeparam>
-    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
-    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
-    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
-    /// <param name="joinType">The kind of join to add.</param>
-    /// <param name="options">Optional per-join configuration.</param>
-    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
-    public new TNext JoinAlias<TNext, TNextEntity, T3>(
-        Func<IDataContext, TNext> create,
-        EntityBuilder<T3> _,
-        Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition,
-        JoinType joinType = JoinType.Inner,
-        Action<JoinOptions>? options = null)
-        where TNext : EntityBuilder<TNextEntity>
-        => base.JoinAlias<TNext, TNextEntity, T3>(create, _, joinCondition, joinType, options);
     private JoinedEntityBuilder<T1, T2, T3> JoinCore<T3>(EntityBuilder<T3> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         if (Condition is not null)
@@ -236,28 +214,6 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
     internal new JoinedEntityBuilder<T1, T2, T3, T4> PasteJoin<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
-    /// <summary>
-    /// Alias-join seam over an existing join chain; mirrors <see cref="JoinCore{T4}"/> but returns the
-    /// caller-created generated builder, serving every <see cref="JoinType"/> through
-    /// <paramref name="joinType"/>.
-    /// </summary>
-    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
-    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
-    /// <typeparam name="T4">The entity type being joined.</typeparam>
-    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
-    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
-    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
-    /// <param name="joinType">The kind of join to add.</param>
-    /// <param name="options">Optional per-join configuration.</param>
-    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
-    public new TNext JoinAlias<TNext, TNextEntity, T4>(
-        Func<IDataContext, TNext> create,
-        EntityBuilder<T4> _,
-        Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition,
-        JoinType joinType = JoinType.Inner,
-        Action<JoinOptions>? options = null)
-        where TNext : EntityBuilder<TNextEntity>
-        => base.JoinAlias<TNext, TNextEntity, T4>(create, _, joinCondition, joinType, options);
     private JoinedEntityBuilder<T1, T2, T3, T4> JoinCore<T4>(EntityBuilder<T4> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -372,28 +328,6 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
     internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> PasteJoin<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
-    /// <summary>
-    /// Alias-join seam over an existing join chain; mirrors <see cref="JoinCore{T5}"/> but returns the
-    /// caller-created generated builder, serving every <see cref="JoinType"/> through
-    /// <paramref name="joinType"/>.
-    /// </summary>
-    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
-    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
-    /// <typeparam name="T5">The entity type being joined.</typeparam>
-    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
-    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
-    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
-    /// <param name="joinType">The kind of join to add.</param>
-    /// <param name="options">Optional per-join configuration.</param>
-    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
-    public new TNext JoinAlias<TNext, TNextEntity, T5>(
-        Func<IDataContext, TNext> create,
-        EntityBuilder<T5> _,
-        Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition,
-        JoinType joinType = JoinType.Inner,
-        Action<JoinOptions>? options = null)
-        where TNext : EntityBuilder<TNextEntity>
-        => base.JoinAlias<TNext, TNextEntity, T5>(create, _, joinCondition, joinType, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5> JoinCore<T5>(EntityBuilder<T5> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -508,28 +442,6 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
     internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> PasteJoin<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
-    /// <summary>
-    /// Alias-join seam over an existing join chain; mirrors <see cref="JoinCore{T6}"/> but returns the
-    /// caller-created generated builder, serving every <see cref="JoinType"/> through
-    /// <paramref name="joinType"/>.
-    /// </summary>
-    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
-    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
-    /// <typeparam name="T6">The entity type being joined.</typeparam>
-    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
-    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
-    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
-    /// <param name="joinType">The kind of join to add.</param>
-    /// <param name="options">Optional per-join configuration.</param>
-    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
-    public new TNext JoinAlias<TNext, TNextEntity, T6>(
-        Func<IDataContext, TNext> create,
-        EntityBuilder<T6> _,
-        Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition,
-        JoinType joinType = JoinType.Inner,
-        Action<JoinOptions>? options = null)
-        where TNext : EntityBuilder<TNextEntity>
-        => base.JoinAlias<TNext, TNextEntity, T6>(create, _, joinCondition, joinType, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> JoinCore<T6>(EntityBuilder<T6> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -644,28 +556,6 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
     internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> PasteJoin<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
-    /// <summary>
-    /// Alias-join seam over an existing join chain; mirrors <see cref="JoinCore{T7}"/> but returns the
-    /// caller-created generated builder, serving every <see cref="JoinType"/> through
-    /// <paramref name="joinType"/>.
-    /// </summary>
-    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
-    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
-    /// <typeparam name="T7">The entity type being joined.</typeparam>
-    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
-    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
-    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
-    /// <param name="joinType">The kind of join to add.</param>
-    /// <param name="options">Optional per-join configuration.</param>
-    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
-    public new TNext JoinAlias<TNext, TNextEntity, T7>(
-        Func<IDataContext, TNext> create,
-        EntityBuilder<T7> _,
-        Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition,
-        JoinType joinType = JoinType.Inner,
-        Action<JoinOptions>? options = null)
-        where TNext : EntityBuilder<TNextEntity>
-        => base.JoinAlias<TNext, TNextEntity, T7>(create, _, joinCondition, joinType, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> JoinCore<T7>(EntityBuilder<T7> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();
@@ -780,28 +670,6 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
     internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> PasteJoin<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.Paste, null, options);
-    /// <summary>
-    /// Alias-join seam over an existing join chain; mirrors <see cref="JoinCore{T8}"/> but returns the
-    /// caller-created generated builder, serving every <see cref="JoinType"/> through
-    /// <paramref name="joinType"/>.
-    /// </summary>
-    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
-    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
-    /// <typeparam name="T8">The entity type being joined.</typeparam>
-    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
-    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
-    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
-    /// <param name="joinType">The kind of join to add.</param>
-    /// <param name="options">Optional per-join configuration.</param>
-    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
-    public new TNext JoinAlias<TNext, TNextEntity, T8>(
-        Func<IDataContext, TNext> create,
-        EntityBuilder<T8> _,
-        Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition,
-        JoinType joinType = JoinType.Inner,
-        Action<JoinOptions>? options = null)
-        where TNext : EntityBuilder<TNextEntity>
-        => base.JoinAlias<TNext, TNextEntity, T8>(create, _, joinCondition, joinType, options);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> JoinCore<T8>(EntityBuilder<T8> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         var opts = new JoinOptions();

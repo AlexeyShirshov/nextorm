@@ -176,13 +176,13 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
             if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined)) return null;
 
-            var prefix = ResolveChain(memberAccess.Expression, semanticModel, ct);
-            if (prefix is null) return null;
+            var receiver = ResolveChain(memberAccess.Expression, semanticModel, ct);
+            if (receiver is null) return null;
 
-            var steps = new AliasStep[prefix.Steps.Count + 1];
-            for (var i = 0; i < prefix.Steps.Count; i++) steps[i] = prefix.Steps[i];
-            steps[prefix.Steps.Count] = new AliasStep(alias, Display(joined), operation, conditionless, aliasLocation);
-            return new Candidate(true, alias, new ChainModel(prefix.BaseType, prefix.Prefix, new EquatableArray<AliasStep>(steps)), aliasLocation);
+            var steps = new AliasStep[receiver.Steps.Count + 1];
+            for (var i = 0; i < receiver.Steps.Count; i++) steps[i] = receiver.Steps[i];
+            steps[receiver.Steps.Count] = new AliasStep(alias, Display(joined), operation, conditionless, aliasLocation);
+            return new Candidate(true, alias, new ChainModel(receiver.BaseType, new EquatableArray<AliasStep>(steps)), aliasLocation);
         }
 
         // The argument is member-access rooted at 'Alias' (per the predicate) but not the approved
@@ -201,13 +201,13 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             case InvocationExpressionSyntax invocation:
                 if (TryReadAliasStep(invocation, semanticModel, ct, out var receiver, out var step))
                 {
-                    var prefix = ResolveChain(receiver, semanticModel, ct);
-                    if (prefix is null) return null;
+                    var previous = ResolveChain(receiver, semanticModel, ct);
+                    if (previous is null) return null;
 
-                    var steps = new AliasStep[prefix.Steps.Count + 1];
-                    for (var i = 0; i < prefix.Steps.Count; i++) steps[i] = prefix.Steps[i];
-                    steps[prefix.Steps.Count] = step;
-                    return new ChainModel(prefix.BaseType, prefix.Prefix, new EquatableArray<AliasStep>(steps));
+                    var steps = new AliasStep[previous.Steps.Count + 1];
+                    for (var i = 0; i < previous.Steps.Count; i++) steps[i] = previous.Steps[i];
+                    steps[previous.Steps.Count] = step;
+                    return new ChainModel(previous.BaseType, new EquatableArray<AliasStep>(steps));
                 }
 
                 break;
@@ -223,9 +223,10 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Recovers the chain roots the generator understands from a builder type: a plain
-    /// <c>EntityBuilder&lt;T&gt;</c> (no positional prefix) or a <c>JoinedEntityBuilder&lt;T1..Tn&gt;</c>
-    /// whose extra type arguments are the positional joins accumulated before the first alias.
+    /// Recovers the chain root the generator understands from a builder type: a plain
+    /// <c>EntityBuilder&lt;T&gt;</c>. A receiver that accumulated positional joins
+    /// (<c>JoinedEntityBuilder&lt;T1..Tn&gt;</c>) is intentionally not recognized, because
+    /// positional-to-alias chaining is unsupported: aliases are a self-contained chained API.
     /// </summary>
     private static ChainModel? ResolveBuilderSymbol(INamedTypeSymbol builder)
     {
@@ -233,14 +234,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             && builder.TypeArguments.Length == 1
             && builder.TypeArguments[0] is { } entity)
         {
-            return new ChainModel(Display(entity), EquatableArray<string>.Empty, EquatableArray<AliasStep>.Empty);
-        }
-
-        if (builder.Name == "JoinedEntityBuilder" && builder.TypeArguments.Length >= 2)
-        {
-            var prefix = new string[builder.TypeArguments.Length - 1];
-            for (var i = 1; i < builder.TypeArguments.Length; i++) prefix[i - 1] = Display(builder.TypeArguments[i]);
-            return new ChainModel(Display(builder.TypeArguments[0]), new EquatableArray<string>(prefix), EquatableArray<AliasStep>.Empty);
+            return new ChainModel(Display(entity), EquatableArray<AliasStep>.Empty);
         }
 
         return null;
@@ -304,28 +298,17 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
             var aliases = aliasText.Split('_');
             var typeArguments = generic.TypeArgumentList.Arguments;
-            if (typeArguments.Count < aliases.Length + 1) return null;
+            if (typeArguments.Count != aliases.Length + 1) return null;
             if (semanticModel.GetTypeInfo(typeArguments[0], ct).Type is not INamedTypeSymbol baseType) return null;
-
-            // The positional prefix is not encoded in the name, but its length follows from the generic
-            // arity: arity = 1 (base) + prefix + alias steps. Recover it so a method signature that
-            // names a mixed generated type still round-trips into the same chain.
-            var prefixCount = typeArguments.Count - 1 - aliases.Length;
-            var prefix = new string[prefixCount];
-            for (var i = 0; i < prefixCount; i++)
-            {
-                if (semanticModel.GetTypeInfo(typeArguments[i + 1], ct).Type is not INamedTypeSymbol prefixType) return null;
-                prefix[i] = Display(prefixType);
-            }
 
             var steps = new AliasStep[aliases.Length];
             for (var i = 0; i < aliases.Length; i++)
             {
-                if (semanticModel.GetTypeInfo(typeArguments[prefixCount + i + 1], ct).Type is not INamedTypeSymbol joined) return null;
+                if (semanticModel.GetTypeInfo(typeArguments[i + 1], ct).Type is not INamedTypeSymbol joined) return null;
                 steps[i] = new AliasStep(aliases[i], Display(joined), "Join", false, default);
             }
 
-            return new ChainModel(Display(baseType), new EquatableArray<string>(prefix), new EquatableArray<AliasStep>(steps));
+            return new ChainModel(Display(baseType), new EquatableArray<AliasStep>(steps));
         }
 
         if (semanticModel.GetTypeInfo(type, ct).Type is INamedTypeSymbol builder)
@@ -461,18 +444,17 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         }
 
         // Builder/projection types are generic over the entity types and depend on the ordered alias
-        // sequence plus the number of positional joins preceding it (both fix the projection arity and
-        // the 1-based slot of every alias), including every prefix a valid chain relies on.
+        // sequence (which fixes the projection arity and the 1-based slot of every alias), including
+        // every prefix a valid chain relies on.
         var sequences = new Dictionary<string, EmittedType>(StringComparer.Ordinal);
         foreach (var chain in validChains)
         {
-            var prefixCount = chain.Prefix.Count;
             for (var count = 1; count <= chain.Steps.Count; count++)
             {
                 var aliases = new string[count];
                 for (var i = 0; i < count; i++) aliases[i] = chain.Steps[i].Alias;
-                var arity = 1 + prefixCount + count;
-                sequences[string.Join("_", aliases) + "#" + arity] = new EmittedType(arity, prefixCount, aliases);
+                var arity = 1 + count;
+                sequences[string.Join("_", aliases) + "#" + arity] = new EmittedType(arity, aliases);
             }
         }
 
@@ -559,7 +541,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     private static bool ValidateChain(ChainModel chain, List<Diagnostic> diagnostics)
     {
         var steps = chain.Steps;
-        var arity = steps.Count + 1 + chain.Prefix.Count;
+        var arity = steps.Count + 1;
         var valid = true;
 
         if (arity > MaxSlots)
@@ -638,7 +620,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             emitter.AppendLine("    {");
             for (var i = 0; i < sequence.Aliases.Length; i++)
             {
-                var position = 2 + sequence.PrefixCount + i;
+                var position = 2 + i;
                 emitter.AppendLine("        [global::NextORM.Core.JoinSlot(" + position + ")]");
                 emitter.AppendLine("        public T" + position + " " + Escape(sequence.Aliases[i]) + " => throw new global::System.NotSupportedException();");
             }
@@ -661,47 +643,32 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         {
             var steps = chain.Steps;
             var count = steps.Count;
-            var prefixCount = chain.Prefix.Count;
             var aliases = new string[count];
             for (var i = 0; i < count; i++) aliases[i] = steps[i].Alias;
             var suffix = string.Join("_", aliases);
             var last = steps[count - 1];
 
-            // Root arguments of the projection: the base entity plus every positional join that preceded
-            // the alias chain. They shift the alias slots past the positional ItemN members.
-            var rootArguments = new List<string> { chain.BaseType };
-            for (var i = 0; i < prefixCount; i++) rootArguments.Add(chain.Prefix[i]);
-            var rootArgumentsText = string.Join(", ", rootArguments);
-
+            // The first alias join starts from the plain entity source; every later one extends a
+            // previously generated AliasJoin_* builder. Aliases are a self-contained chained API: a
+            // positional prefix is never part of a chain.
             string receiverType;
             string conditionArgumentType;
             if (count == 1)
             {
-                if (prefixCount == 0)
-                {
-                    receiverType = "global::NextORM.Core.EntityBuilder<" + chain.BaseType + ">";
-                    conditionArgumentType = chain.BaseType;
-                }
-                else
-                {
-                    // Positional prefix: the receiver is the accumulated JoinedEntityBuilder and the
-                    // condition sees its Projection<T1..Tn>; the existing per-arity JoinAlias overload
-                    // forwards it.
-                    receiverType = "global::NextORM.Core.JoinedEntityBuilder<" + rootArgumentsText + ">";
-                    conditionArgumentType = "global::NextORM.Core.Projection<" + rootArgumentsText + ">";
-                }
+                receiverType = "global::NextORM.Core.EntityBuilder<" + chain.BaseType + ">";
+                conditionArgumentType = chain.BaseType;
             }
             else
             {
                 var receiverSuffix = string.Join("_", aliases.Take(count - 1));
-                var receiverArguments = new List<string>(rootArguments);
+                var receiverArguments = new List<string> { chain.BaseType };
                 for (var i = 0; i < count - 1; i++) receiverArguments.Add(steps[i].JoinedType);
                 var receiverArgumentsText = string.Join(", ", receiverArguments);
                 receiverType = generatedNamespace + ".AliasJoin_" + receiverSuffix + "<" + receiverArgumentsText + ">";
                 conditionArgumentType = generatedNamespace + ".AliasProjection_" + receiverSuffix + "<" + receiverArgumentsText + ">";
             }
 
-            var returnArguments = new List<string>(rootArguments);
+            var returnArguments = new List<string> { chain.BaseType };
             for (var i = 0; i < count - 1; i++) returnArguments.Add(steps[i].JoinedType);
             returnArguments.Add("TJoin");
             var returnArgumentsText = string.Join(", ", returnArguments);
@@ -752,9 +719,6 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     private static string ChainKey(ChainModel chain)
     {
         var builder = new StringBuilder(chain.BaseType);
-        for (var i = 0; i < chain.Prefix.Count; i++)
-            builder.Append("|pos:").Append(chain.Prefix[i]);
-
         for (var i = 0; i < chain.Steps.Count; i++)
         {
             var step = chain.Steps[i];
@@ -824,15 +788,14 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     private sealed record AliasStep(string Alias, string JoinedType, string Operator, bool Conditionless, AliasLocation Location);
 
     /// <summary>
-    /// One ordered alias chain: the base entity type, the positional joins that precede the first alias
-    /// (<see cref="Prefix"/>, one entity type each) and the alias steps. The positional prefix keeps the
-    /// projection arity and the 1-based alias slot positions aligned with the tables a mixed chain
-    /// actually joins.
+    /// One ordered alias chain: the base entity type and the alias steps. Aliases are a self-contained
+    /// chained API, so the chain never carries a positional prefix — a positional join must not be mixed
+    /// into an alias chain.
     /// </summary>
-    private sealed record ChainModel(string BaseType, EquatableArray<string> Prefix, EquatableArray<AliasStep> Steps);
+    private sealed record ChainModel(string BaseType, EquatableArray<AliasStep> Steps);
 
-    /// <summary>Projection/builder type to emit: its generic arity, positional prefix length and aliases.</summary>
-    private sealed record EmittedType(int Arity, int PrefixCount, string[] Aliases);
+    /// <summary>Projection/builder type to emit: its generic arity and aliases.</summary>
+    private sealed record EmittedType(int Arity, string[] Aliases);
 
     private sealed record Candidate(bool Approved, string Alias, ChainModel? Chain, AliasLocation Location);
 

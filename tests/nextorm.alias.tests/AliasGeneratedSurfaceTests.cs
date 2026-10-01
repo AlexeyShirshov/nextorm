@@ -40,10 +40,8 @@ public class AliasGeneratedSurfaceTests
             "Alias",
             "AliasJoin_Buyer_Approver`3",
             "AliasJoin_Buyer`2",
-            "AliasJoin_Buyer`3",
             "AliasProjection_Buyer_Approver`3",
             "AliasProjection_Buyer`2",
-            "AliasProjection_Buyer`3",
             "JoinAliasExtensions");
     }
 
@@ -67,12 +65,6 @@ public class AliasGeneratedSurfaceTests
             typeof(AliasJoin_Buyer<Order, Person>),
             typeof(Projection<,>),
             ("Buyer", 2, typeof(Person)));
-
-        AssertPair(
-            typeof(AliasProjection_Buyer<Order, Person, Person>),
-            typeof(AliasJoin_Buyer<Order, Person, Person>),
-            typeof(Projection<,,>),
-            ("Buyer", 3, typeof(Person)));
 
         AssertPair(
             typeof(AliasProjection_Buyer_Approver<Order, Person, Person>),

@@ -35,9 +35,21 @@
 - Loop-back fixes (after CHECK #1 FAIL): ItemN fast-path before attribute probe + per-`MemberInfo` memoization; `Where` before/around a second alias join (real defect found + fixed, `AliasJoinWhereTests.cs`); positional→alias mixed chain works (generator emits `JoinedEntityBuilder<...>` receivers); alias→positional fails closed at construction.
 - Verification (fresh): `nextorm.slnx -c Debug` 0/0; alias tests 31/31; core 1215/1215; provider units all 0 failed (sqlite 866[865/1skip], postgres 669, sqlserver 545, mysql 249, mariadb 149, clickhouse 437); integration Total 2912 / 0 failed / 187 capability skips; perf acceptance 7 cases / 0 failed / ~50 s / cached-prepared ratio 2.01 vs baseline 1.87 (+7.6%, <20%); local coverage (without containers) overall 80.7% line / 73.7% branch.
 - CHECK #2 verdict: FAIL — acceptance/evidence gates, NOT a functional failure. CHECK status in this cycle: FAIL (2 fails; both evidence/completeness-driven).
-- OPEN / needs owner:
-  * alias→positional mixed chain is a fail-closed exception (nested-projection alias inheritance not implemented). If PLAN promised successful alias→positional composition, this is a NARROWING and needs owner approval; otherwise it is an open slice with trigger in milestone 1.0.9-b.
-  * Block B (JoinInto aliases): blocked — owner must define what an alias means for `JoinInto` (it returns `EntityBuilder<TEntity>`, no projection).
+- RESOLVED (owner decision 2026-10-01) — join aliases are alias-only, `JoinInto` excluded: `JoinInto` gets no alias surface at all. The generator `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs` has no `JoinInto` handling (grep for `JoinInto` over the source generator: no match) and emits no alias receiver/overload for it; its `JoinOperators` set is the seven projection operators only. Nothing had to be removed.
+- RESOLVED (owner decision 2026-10-01) — positional mixing removed: the generator no longer reconstructs a positional prefix (chain resolution accepts only a plain `EntityBuilder<T>` root or a generated `AliasJoin_*`), the dead `JoinedEntityBuilder<…>.JoinAlias<…>` overloads were removed, and `tests/nextorm.alias.tests/MixedJoinChainTests.cs` was deleted; the positional `ItemN` API itself is untouched. Join aliases are a self-contained chained API; alias→alias inheritance (an aliased join chained onto a previous alias chain) remains in scope and supported.
+- Verification after the removals: `nextorm.slnx -c Debug` 0 Warning(s)/0 Error(s); `tests/nextorm.alias.tests` 29/29 pass; `tests/nextorm.core.tests` 1215/1215; `tests/nextorm.postgres.tests` 669/669; `tests/nextorm.sqlserver.tests` 545/545; PoC green.
 - OPEN evidence work (before ACT can be considered complete for a future cycle): full matrix→test/guard `file:line` pack; full-scope coverage >=85/75 with a baseline (integration included); mutation testing on changed runtime logic; package-consumer certification.
 - Remains open in milestone 1.0.9-b; nothing moved out.
 - Worktree left UNCOMMITTED (autocommit not requested).
+
+## Block A CLOSED (owner decision 2026-10-01)
+- Owner resolved both scope decisions: the alias feature is ALIAS-ONLY (no mixing with positional joins; positional API untouched), and `JoinInto` is EXCLUDED from aliases. Feature surface = the 7 projection operators (Join/LeftJoin/RightJoin/FullJoin/CrossJoin/CrossApply/OuterApply).
+- Resulting functional state (fresh): `nextorm.slnx -c Debug` 0 Warning(s)/0 Error(s); `tests/nextorm.alias.tests` 29/29; core 1215/1215; provider units 0 failed (postgres 669, sqlserver 545, sqlite 866, mysql 249, mariadb 149, clickhouse 437); integration `JoinAlias` 7/7 per provider (Postgres/SqlServer/MySql/Sqlite); perf acceptance 7 cases / 0 failed / ~50 s / cached-prepared ratio +7.6% (<20%); PoC green.
+- CAVEAT — owner-accepted deviation from the CHECK gate: the final CHECK verdict was FAIL solely on acceptance/evidence gates, not on functionality. Still OPEN and tracked in milestone 1.0.9-b:
+  * full variant-matrix -> test/guard evidence pack with file:line;
+  * full-scope coverage >=85% line / >=75% branch INCLUDING integration containers (local coverage without containers was 80.7% line / 73.7% branch; core 80.9/74.0, sqlite 82.6/58.9, postgres 74.6/72.4, sqlserver 77.5/75.3);
+  * mutation testing of changed runtime logic (ProjectionAliasCache / MemberTranslator / EntityBuilder alias path);
+  * package-consumer certification beyond the single packed-consumer e2e check;
+  * API-freeze tooling (`PublicAPI.*` / ApiCompat) — tracked in `docs/specs/roadmap/todo_public_api_freeze.md`.
+- Intentional limitations (documented EN/RU): alias members are expression-only (direct read throws `NotSupportedException`); `JoinInto` has no alias surface; aliases are alias-only; arity cap 8; SQL providers only (in-memory fail-closed).
+- Status file retained because the tracked OPEN evidence items above remain.

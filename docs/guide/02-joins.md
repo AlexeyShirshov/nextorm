@@ -107,10 +107,13 @@ side, list each of them explicitly.
 
 ## Named join aliases
 
-The positional addressing above is unchanged and always available. When two joined sources share the
-same CLR type — for example a buyer and an approver are both `Person` — positional members cannot tell
-them apart. Every join operator accepts an optional trailing `Alias.<Name>` argument that names the new
-slot, and the projection then exposes that name as a typed property:
+The positional addressing above is unchanged and always available for purely positional queries. When
+two joined sources share the same CLR type — for example a buyer and an approver are both `Person` —
+positional members cannot tell them apart. Named aliases are a **separate, self-contained chained
+API**: once the first `Alias.<Name>` argument is used, every join in that chain must be aliased, and an
+alias chain must never be mixed with positional joins. Every join operator accepts an optional trailing
+`Alias.<Name>` argument that names the new slot, and the generated projection exposes that name as a
+typed property:
 
 ```csharp
 using NextORM.Generated.MyAssembly; // Alias lives in NextORM.Generated.<your assembly name>
@@ -144,7 +147,9 @@ throws `NotSupportedException` by design instead of returning a defaulted value;
 you need (`Select(p => p.Buyer.Id)`) instead. The retained positional `ItemN` members remain ordinary
 properties.
 
-All seven operators accept an alias; the conditionless three take only the source and the marker:
+All seven projection join operators accept an alias; `JoinInto` is not one of them and has no aliased
+surface, so the single-query relationship loader never takes an `Alias.<Name>` argument. The
+conditionless three take only the source and the marker:
 
 ```csharp
 var rows = await dataContext.From<Order>(b => b.Table("orders"))
@@ -153,11 +158,14 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
     .ToListAsync();
 ```
 
-Named and positional addressing coexist: once `Alias.Buyer` was used, `p.Buyer` and `p.Item2` are the
-same slot. An alias must be a valid C# identifier without `_` (reserved for composing the generated
-type names); a reserved keyword is emitted escaped (`@class`). The marker class is the only approved
-alias argument form — `Alias.Buyer<int>` or `Alias.Buyer.Approver` is rejected. The arity is capped at
-eight slots by `Projection<T1..T8>`.
+Within one alias chain the generated projection still retains the positional `ItemN` members: after
+`Alias.Buyer` was used, `p.Buyer` and `p.Item2` are the same slot. The two APIs must not be mixed,
+however: a positional join applied after an aliased one is rejected at construction, and an aliased
+join applied after a positional one is not generated, so a query is either entirely positional or
+entirely aliased. An alias must be a valid C# identifier without `_` (reserved for composing the
+generated type names); a reserved keyword is emitted escaped (`@class`). The marker class is the only
+approved alias argument form — `Alias.Buyer<int>` or `Alias.Buyer.Approver` is rejected. The arity is
+capped at eight slots by `Projection<T1..T8>`.
 
 The named path is SQL-provider only: the in-memory provider throws `NotSupportedException`. A query may
 cross a method boundary, but the method must name the generated builder type in its signature, because
