@@ -9,7 +9,7 @@ namespace NextORM.ClickHouse;
 /// standard-deviation/variance aggregate names. ClickHouse has no recursive CTE support, so the
 /// <c>recursive</c> modifier is omitted.
 /// </summary>
-public sealed class ClickHouseDialect : SqlDialectBase
+public class ClickHouseDialect : SqlDialectBase
 {
     /// <summary>The shared ClickHouse dialect instance.</summary>
     public static readonly ClickHouseDialect Instance = new();
@@ -270,6 +270,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     /// <summary>ClickHouse 21+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
     public override bool SupportsSelectWhereMinMax => true;
+
+    /// <summary>ClickHouse renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>argMin</c>/<c>argMax</c> over a payload tuple; the rest falls back to the portable window function.</summary>
+    public override IExtremeRowRenderer? ExtremeRowRenderer => ClickHouseExtremeRowRenderer.Instance;
 
     /// <summary>ClickHouse supports the <c>GROUPS</c> window frame unit.</summary>
     public override bool SupportsWindowFrameGroups => true;

@@ -10,14 +10,14 @@
 
 | id | tasks (order) | worktree | branch | status |
 |---|---|---|---|---|
-| group-1 | 143,144 | (current worktree) | `1.0.9-b` (current) | in-progress |
+| group-1 | 143,144 | (current worktree) | `1.0.9-b` (current) | done |
 
 ## Tasks
 
 | id | issue | group | branch | status | task status file |
 |---|---|---|---|---|---|
 | 1 | #143 | group-1 | 1.0.9-b | done | identity-returning-143-1.md |
-| 2 | #144 | group-1 | 1.0.9-b | pending | - |
+| 2 | #144 | group-1 | 1.0.9-b | done | native-extreme-row-144-1.md |
 
 ## Decisions
 
@@ -29,6 +29,6 @@
 
 ## Done / Verified / Incomplete
 
-- Done: task 1 (#143 identity joined Returning) passed via escalate acceptance (CHECK#3 evidence-only, closed by the evidence ledger in `identity-returning-143-1.md`).
-- Verified:
-- Incomplete:
+- Done: task 1 (#143 identity joined Returning) passed via escalate acceptance (CHECK#3 evidence-only, closed by the evidence ledger in `identity-returning-143-1.md`); task 2 (#144 native `SelectWhereMax`/`SelectWhereMin` fast paths for PostgreSQL/ClickHouse) closed by escalation via the `## Closing addendum (ACT)` in `native-extreme-row-144-1.md`.
+- Verified: task 2 — full suite 7447 / 0 failed (run1/run2), coverage line 88.2 / branch 78.9, DocFX 0 errors; accepted debts recorded in the addendum.
+- Incomplete: none — collection complete.

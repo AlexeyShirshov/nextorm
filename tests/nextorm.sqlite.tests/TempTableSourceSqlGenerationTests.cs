@@ -111,6 +111,25 @@ public class TempTableSourceSqlGenerationTests
     }
 
     [Fact]
+    public void Read_WithExtremeRow_ShouldRenderPortableWindowLowering()
+    {
+        // SQLite has no native extreme-row renderer, so this pins the pre-existing portable policy that a
+        // temp-table source relies on: the read materialises the table and then applies the window-rank
+        // lowering, never a native LIMIT/DISTINCT ON.
+        using var ctx = SqliteTestContext.Create();
+        var source = ctx.From<ISimpleEntity>().Select(x => new { x.Id }).AsTempTable();
+
+        var sql = ctx.From(source)
+            .SelectWhereMax(t => t.GetInt32("id"), t => new { Id = t.GetInt32("id") })
+            .ToBatchSql();
+
+        sql.Should().Contain("create temporary table " + source.Name + " as select id from simple_entity");
+        sql.Should().Contain("row_number() over (order by id desc)");
+        sql.Should().NotContain("limit 1");
+        sql.Should().NotContain("distinct on");
+    }
+
+    [Fact]
     public void ToBatchSql_OnAPlainQuery_ShouldThrow()
     {
         using var ctx = SqliteTestContext.Create();

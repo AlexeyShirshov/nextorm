@@ -195,6 +195,163 @@ public interface IDistinctOnRenderer
 }
 
 /// <summary>
+/// One prepared extreme-row column as the dialect's optional <see cref="IExtremeRowRenderer"/> reasons
+/// about it. It carries only shape facts (CLR type, nullability, whether the key is a direct mapped
+/// column) and never the expression, command or build context.
+/// </summary>
+/// <remarks>
+/// This is a read-only input constructed by the core and handed to an external
+/// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
+/// <see cref="IExtremeRowRenderer.CanRender"/>; the constructor is intentionally not part of the public
+/// contract, so no external code needs to (or can) construct one.
+/// </remarks>
+public sealed record ExtremeRowRenderColumn
+{
+    internal ExtremeRowRenderColumn(Type clrType, bool isNullable, bool isDirectMappedColumn, bool usesConverter)
+    {
+        ClrType = clrType;
+        IsNullable = isNullable;
+        IsDirectMappedColumn = isDirectMappedColumn;
+        UsesConverter = usesConverter;
+    }
+
+    /// <summary>The CLR type of the value produced by the column (the model type of a key/group selector).</summary>
+    public Type ClrType { get; }
+
+    /// <summary>Whether <see cref="ClrType"/> can hold <c>null</c> (a reference type or a <see cref="Nullable{T}"/>).</summary>
+    public bool IsNullable { get; }
+
+    /// <summary>
+    /// Whether the column is a direct access to a mapped entity property (no computed expression and no
+    /// converter). Only such columns can participate in the initial native eligibility.
+    /// </summary>
+    public bool IsDirectMappedColumn { get; }
+
+    /// <summary>Whether a value converter is attached to the mapped property.</summary>
+    public bool UsesConverter { get; }
+}
+
+/// <summary>
+/// A side-effect-free description of a prepared <c>SelectWhereMax</c>/<c>SelectWhereMin</c> command,
+/// handed to <see cref="IExtremeRowRenderer.CanRender"/> so a dialect can decide - before any SQL,
+/// alias or parameter side effect - whether its native strategy applies. An empty
+/// <see cref="Groups"/> list means the global form; a non-empty one the grouped form.
+/// </summary>
+/// <remarks>
+/// This is a read-only input constructed by the core and handed to an external
+/// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
+/// <see cref="IExtremeRowRenderer.CanRender"/>; the constructor is intentionally not part of the public
+/// contract, so no external code needs to (or can) construct one.
+/// </remarks>
+public sealed record ExtremeRowDescription
+{
+    internal ExtremeRowDescription(
+        bool isMax,
+        IReadOnlyList<ExtremeRowRenderColumn> keys,
+        IReadOnlyList<ExtremeRowRenderColumn> groups,
+        IReadOnlyList<ExtremeRowRenderColumn> payload)
+    {
+        IsMax = isMax;
+        Keys = keys;
+        Groups = groups;
+        Payload = payload;
+    }
+
+    /// <summary><see langword="true"/> for a maximum (<c>SelectWhereMax</c>), <see langword="false"/> for a minimum.</summary>
+    public bool IsMax { get; }
+
+    /// <summary>The extreme-key components in selector order (composite keys have more than one).</summary>
+    public IReadOnlyList<ExtremeRowRenderColumn> Keys { get; }
+
+    /// <summary>The group-by components in selector order; empty for the global form.</summary>
+    public IReadOnlyList<ExtremeRowRenderColumn> Groups { get; }
+
+    /// <summary>The source payload columns the winning row must expose, in mapping declaration order.</summary>
+    public IReadOnlyList<ExtremeRowRenderColumn> Payload { get; }
+}
+
+/// <summary>
+/// The already-prepared inputs of one native extreme-row render: the filtered source SQL, the canonical
+/// payload aliases the returned source must expose, and the ordered key/group aliases that source
+/// exposes for the native construct.
+/// </summary>
+/// <remarks>
+/// This is a read-only input constructed by the core and handed to an external
+/// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
+/// <see cref="IExtremeRowRenderer.Render"/>; the constructor is intentionally not part of the public
+/// contract, so no external code needs to (or can) construct one.
+/// </remarks>
+public sealed record ExtremeRowRenderRequest
+{
+    internal ExtremeRowRenderRequest(
+        string sourceSql,
+        bool isMax,
+        IReadOnlyList<string> payloadAliases,
+        IReadOnlyList<string> keyAliases,
+        IReadOnlyList<string> groupAliases,
+        KeywordCase keywordCase)
+    {
+        SourceSql = sourceSql;
+        IsMax = isMax;
+        PayloadAliases = payloadAliases;
+        KeyAliases = keyAliases;
+        GroupAliases = groupAliases;
+        KeywordCase = keywordCase;
+    }
+
+    /// <summary>
+    /// The prepared filtered source: <c>select * from &lt;source&gt; where &lt;key-component IS NOT
+    /// NULL&gt; [and &lt;condition&gt;]</c>. The renderer wraps it and returns the winning-row source.
+    /// </summary>
+    public string SourceSql { get; }
+
+    /// <summary><see langword="true"/> for a maximum, <see langword="false"/> for a minimum.</summary>
+    public bool IsMax { get; }
+
+    /// <summary>The canonical aliases of the payload columns the returned source must expose, in order.</summary>
+    public IReadOnlyList<string> PayloadAliases { get; }
+
+    /// <summary>The aliases of the extreme-key components, in selector order.</summary>
+    public IReadOnlyList<string> KeyAliases { get; }
+
+    /// <summary>The aliases of the group-by components, in selector order; empty for the global form.</summary>
+    public IReadOnlyList<string> GroupAliases { get; }
+
+    /// <summary>The keyword casing the returned SQL should use.</summary>
+    public KeywordCase KeywordCase { get; }
+}
+
+/// <summary>
+/// A dialect's optional native renderer for <c>SelectWhereMax</c>/<c>SelectWhereMin</c> (PostgreSQL
+/// <c>DISTINCT ON</c>/<c>ORDER BY ... LIMIT 1</c>, ClickHouse <c>argMin</c>/<c>argMax</c>). The
+/// object's presence is the capability: a dialect that returns <see langword="null"/> keeps the
+/// shared portable window-function lowering, as does a renderer whose <see cref="CanRender"/> answers
+/// <c>false</c>.
+/// </summary>
+/// <remarks>
+/// <see cref="CanRender"/> runs before the shared path builds any SQL, alias or parameter, so it must
+/// be side-effect free; only a positive answer leads to <see cref="Render"/>, whose failure is
+/// propagated (there is no late fallback to the portable path).
+/// </remarks>
+public interface IExtremeRowRenderer
+{
+    /// <summary>
+    /// True when this dialect can natively express the described command. Called with a prepared,
+    /// immutable description before any SQL is assembled; must not mutate shared state.
+    /// </summary>
+    bool CanRender(ExtremeRowDescription description);
+
+    /// <summary>
+    /// Renders the native winning-row source over the already-prepared
+    /// <see cref="ExtremeRowRenderRequest.SourceSql"/>, exposing the request's
+    /// <see cref="ExtremeRowRenderRequest.PayloadAliases"/>. The shared path already applied the
+    /// compatibility validation and the source filter, and applies the outer projection, DISTINCT and
+    /// output ordering afterwards.
+    /// </summary>
+    string Render(ExtremeRowRenderRequest request);
+}
+
+/// <summary>
 /// A dialect's renderer for <c>TABLESAMPLE</c>. The predicate and the renderer live on one object, so a
 /// sampling method the dialect reports as supported always has a rendering.
 /// </summary>

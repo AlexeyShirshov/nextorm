@@ -80,6 +80,7 @@
 - [Eager loading child collections](advanced/eager-loading.md)
 - [Relationships and single-query loading](advanced/relationships.md)
 - [Limitations and out-of-scope features](advanced/limitations.md)
+- [Native extreme-row strategies](advanced/select-where-extrema-native.md)
 - [API reference](advanced/api-reference.md)
 
 ### Русская документация

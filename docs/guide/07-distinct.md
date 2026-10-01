@@ -202,6 +202,20 @@ var perGroup = dataContext.From<ExtremaEntity>()
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+-- global: an eligible integral key renders the native ORDER BY ... LIMIT 1
+select t1.id, t1.score, t1.category, t1.label
+from (select * from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+
+-- per group: a string group key is not native-eligible, so the portable window lowering is kept
+select t1.id, t1.score, t1.category, t1.label
+from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn" from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
 [`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) controls ties. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (the default) keeps a single
 row — when values tie the provider picks one — while [`All`](xref:NextORM.Core.ExtremeRowTies.All) keeps every row tied on the extreme
 value. Ties are decided only by the selector, so an `All` result contains all of them and a `One`
@@ -216,6 +230,13 @@ projection and apply it to each surviving row, returning a typed query command:
 var projected = dataContext.From<ExtremaEntity>()
     .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
     .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, t1.label
+from (select * from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
 ```
 
 **NULL semantics.** `null` comparison values are ignored, so they never win the extremum and never
@@ -236,8 +257,10 @@ select <projection> from (
 ```
 
 This is the implementation on every SQL provider (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB and
-ClickHouse) and on the in-memory provider. Native shortcuts such as PostgreSQL `DISTINCT ON` or
-ClickHouse `argMax` are a possible future optimization; the current implementation is the portable one.
+ClickHouse) and on the in-memory provider. On PostgreSQL and ClickHouse a native-eligible `One`
+request is instead rendered natively, automatically, from the provider and the query form — see
+[Native extreme-row strategies](../advanced/select-where-extrema-native.md). Every other shape keeps
+the portable lowering above.
 
 The request is rejected at SQL build time when combined with another row-shaping modifier the
 derived-table lowering cannot express: [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a join, `Having`, named windows,

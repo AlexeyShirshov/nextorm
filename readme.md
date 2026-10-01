@@ -21,6 +21,9 @@ with no change tracking and no mandatory entity class.
 * **Rich projection targets** — classes, interfaces, records, anonymous types, tuples, scalars and nested projections.
 * **No change tracking** — lean, allocation-conscious materialization built for read-heavy data access.
 * **Six database engines** — SQLite, SQL Server, PostgreSQL, MySQL, MariaDB, ClickHouse, plus a built-in in-memory provider.
+* **Native extreme-row selection** — [`SelectWhereMax`/`SelectWhereMin`](https://alexeyshirshov.github.io/nextorm/advanced/select-where-extrema-native.html)
+  automatically use PostgreSQL `DISTINCT ON`/`LIMIT 1` and ClickHouse `argMin`/`argMax`, with a
+  portable window-function fallback elsewhere.
 
 ## Installation
 

@@ -10,5 +10,7 @@
   href: relationships.md
 - name: Limitations and out-of-scope features
   href: limitations.md
+- name: Native extreme-row strategies
+  href: select-where-extrema-native.md
 - name: API quick reference
   href: api-reference.md

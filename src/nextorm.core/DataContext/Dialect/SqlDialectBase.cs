@@ -232,7 +232,10 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; PostgreSQL opts into <c>DISTINCT ON</c>.</summary>
     public virtual IDistinctOnRenderer? DistinctOn => null;
 
-    /// <summary>Defaults to <c>false</c>; no provider opts into <c>SelectWhereMax</c>/<c>SelectWhereMin</c> yet.</summary>
+    /// <summary>Defaults to <c>null</c>; a dialect with a native <c>SelectWhereMax</c>/<c>SelectWhereMin</c> strategy opts in.</summary>
+    public virtual IExtremeRowRenderer? ExtremeRowRenderer => null;
+
+    /// <summary>Defaults to <c>false</c>; every built-in dialect opts into <c>SelectWhereMax</c>/<c>SelectWhereMin</c>.</summary>
     public virtual bool SupportsSelectWhereMinMax => false;
 
     /// <summary>

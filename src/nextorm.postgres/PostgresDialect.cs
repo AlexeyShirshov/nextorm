@@ -7,7 +7,7 @@ namespace NextORM.Postgres;
 /// PostgreSQL dialect: <c>||</c> concatenation, <c>@name</c> parameters, double-quoted identifiers,
 /// <c>limit/offset</c> paging and the aggregate name mapping (<c>stdev</c> -> <c>stddev</c>, ...).
 /// </summary>
-public sealed class PostgresDialect : SqlDialectBase
+public class PostgresDialect : SqlDialectBase
 {
     /// <summary>Gets the shared PostgreSQL dialect instance.</summary>
     public static readonly PostgresDialect Instance = new();
@@ -364,7 +364,10 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL supports the <c>SELECT DISTINCT ON (expr, ...)</c> modifier.</summary>
     public override IDistinctOnRenderer DistinctOn => PostgresDistinctOnRenderer.Instance;
 
-    /// <summary>PostgreSQL renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+    /// <summary>PostgreSQL renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>DISTINCT ON</c>/<c>ORDER BY ... LIMIT 1</c>; the rest falls back to the portable window function.</summary>
+    public override IExtremeRowRenderer? ExtremeRowRenderer => PostgresExtremeRowRenderer.Instance;
+
+    /// <summary>PostgreSQL supports the <c>SelectWhereMax</c>/<c>SelectWhereMin</c> feature (native or portable).</summary>
     public override bool SupportsSelectWhereMinMax => true;
 
     /// <summary>PostgreSQL supports the <c>TABLESAMPLE</c> table modifier (both <c>SYSTEM</c> and <c>BERNOULLI</c>).</summary>

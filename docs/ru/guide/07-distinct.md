@@ -204,6 +204,20 @@ var perGroup = dataContext.From<ExtremaEntity>()
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+-- глобально: целочисленный ключ проходит нативно — ORDER BY ... LIMIT 1
+select t1.id, t1.score, t1.category, t1.label
+from (select * from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+
+-- по группам: строковый ключ группировки не проходит нативно, остаётся переносимое оконное понижение
+select t1.id, t1.score, t1.category, t1.label
+from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn" from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
 [`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) управляет обработкой совпадающих значений. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (по умолчанию)
 оставляет одну строку — при равенстве значений провайдер выбирает одну из них, — а [`All`](xref:NextORM.Core.ExtremeRowTies.All)
 оставляет все строки, совпадающие по экстремальному значению. Совпадение определяется только
@@ -218,6 +232,13 @@ var perGroup = dataContext.From<ExtremaEntity>()
 var projected = dataContext.From<ExtremaEntity>()
     .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
     .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, t1.label
+from (select * from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
 ```
 
 **Семантика NULL.** Сравниваемые значения `null` игнорируются, поэтому они никогда не выигрывают
@@ -239,8 +260,10 @@ select <проекция> from (
 ```
 
 Это реализация на каждом SQL-провайдере (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB и
-ClickHouse) и на провайдере in-memory. Нативные сокращения — например, `DISTINCT ON` в PostgreSQL
-или `argMax` в ClickHouse — возможная будущая оптимизация; текущая реализация переносимая.
+ClickHouse) и на провайдере in-memory. На PostgreSQL и ClickHouse нативно подходящий запрос с `One`
+вместо этого рендерится нативно, автоматически, по провайдеру и форме запроса — см.
+[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md). Любая
+другая форма сохраняет переносимое понижение выше.
 
 Запрос отклоняется на этапе построения SQL при сочетании с другим модификатором формы строк, который
 не выражается через производную таблицу: [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), соединение, `Having`,

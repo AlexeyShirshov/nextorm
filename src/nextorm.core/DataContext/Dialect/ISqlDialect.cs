@@ -1248,6 +1248,14 @@ public interface ISqlDialect
     IDistinctOnRenderer? DistinctOn => null;
 
     /// <summary>
+    /// The provider's optional native renderer for <c>SelectWhereMax</c>/<c>SelectWhereMin</c>;
+    /// <c>null</c> means the provider has no native strategy and the portable window-function lowering
+    /// is used. Declared as a default interface method returning <c>null</c> so existing external
+    /// implementations keep compiling; the generic builder never branches on the provider name.
+    /// </summary>
+    IExtremeRowRenderer? ExtremeRowRenderer => null;
+
+    /// <summary>
     /// Whether the dialect can express the <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection
     /// request from <see cref="NextORM.Core.ExtremeRowClause"/>. When <c>false</c>, a command that
     /// carries one is rejected when its SQL is built. Declared as a default interface method returning

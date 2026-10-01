@@ -103,6 +103,8 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists query_filter_target;
         drop table if exists query_filter_entity;
         drop table if exists extrema_entity;
+        drop table if exists extreme_parity_144;
+        drop table if exists extreme_alias_144;
         drop table if exists orders;
         drop table if exists person;
 
@@ -264,6 +266,45 @@ internal sealed class PostgresTestProvider : ITestProvider
             (9, 4, 'c', 'nine'),
             (10, 1, 'b', 'ten'),
             (11, null, 'd', 'eleven');
+
+        -- Extreme-row native/portable parity fixture (#144 D7): nullable integral extreme/group keys
+        -- (k1, k2, g), a nullable string payload (label) and a nullable integral payload (n).
+        create table extreme_parity_144
+        (
+            id integer primary key,
+            g integer,
+            k1 integer,
+            k2 integer,
+            label varchar(50),
+            n integer
+        );
+        insert into extreme_parity_144 (id, g, k1, k2, label, n) values
+            (1, 10, 1, 99, null, null),
+            (2, 10, 1, 9, 'a-1-9', 7),
+            (3, 10, 1, 9, 'a-1-9b', 8),
+            (4, 10, null, 1, 'null-k1', 6),
+            (5, 20, 2, 1, 'b-2-1', 1),
+            (6, 20, 3, 0, 'b-3-0', 2),
+            (7, null, 5, 5, 'null-group', 3),
+            (8, 30, null, 4, 'null-k1-30', 4),
+            (9, 30, null, null, 'allnull', 5),
+            (10, 40, 1, 5, 'd-1-5', 9);
+
+        -- Alias-collision fixture (#144): mapped physical column names equal to the native renderers'
+        -- internal aliases (PG derived-table alias, CH source/tuple aliases).
+        create table extreme_alias_144
+        (
+            id integer primary key,
+            "__nextorm_extreme" integer,
+            "__nextorm_extreme_src" integer,
+            "__nextorm_extreme_tuple" integer,
+            g integer,
+            k integer
+        );
+        insert into extreme_alias_144 (id, "__nextorm_extreme", "__nextorm_extreme_src", "__nextorm_extreme_tuple", g, k) values
+            (1, 5, 1, 1, 10, 1),
+            (2, 7, 2, 2, 10, 3),
+            (3, 6, 3, 3, 20, 2);
 
         -- Join-alias fixtures (#113): one order whose buyer and approver are two different people,
         -- plus an unlinked person so RIGHT/FULL alias joins have an unmatched row to return.

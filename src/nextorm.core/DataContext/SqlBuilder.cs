@@ -599,7 +599,10 @@ internal readonly struct SqlBuilder
     }
 
     /// <summary>
-    /// Lowers a <c>SelectWhereMax</c>/<c>SelectWhereMin</c> command to a portable window-function query:
+    /// Renders a <c>SelectWhereMax</c>/<c>SelectWhereMin</c> command. Compatibility is validated first,
+    /// then the dialect's optional <see cref="ISqlDialect.ExtremeRowRenderer"/> decides - from a
+    /// prepared description, before any side effect - whether to render natively; otherwise the command
+    /// is lowered to the portable window-function query:
     /// <code>
     /// select &lt;projection&gt; from (
     ///     select *, row_number() | rank() over (partition by ... order by ... desc|asc) as rn
@@ -618,10 +621,44 @@ internal readonly struct SqlBuilder
 
         EnsureExtremeRowCompatible(cmd, selectInto);
 
+        // Native generation is an optional dialect capability, limited to the single-row One form: All
+        // keeps every tied winner and stays on the portable rank lowering. The eligibility decision is
+        // made from a side-effect-free description BEFORE any build-context/parameter/alias work; a
+        // missing capability or a negative answer keeps the portable window-function lowering. A
+        // renderer failure propagates as an error and never falls back late.
+        var renderer = _ctx.Dialect.ExtremeRowRenderer;
+        if (renderer is not null
+            && cmd.ExtremeRow!.Ties == ExtremeRowTies.One
+            // A source without mapped metadata (a name-addressed or temporary table) cannot provide the
+            // canonical payload aliases and column types the native renderer decides on. Such a source
+            // keeps the portable lowering instead of failing the read on a native-capable provider.
+            && DataContextCache.Metadata.TryGetValue(cmd.EntityType!, out _)
+            && renderer.CanRender(MakeExtremeRowDescription(cmd)))
+            return MakeNativeExtremeRowSelect(cmd, renderer);
+
+        return MakePortableExtremeRowSelect(cmd);
+    }
+
+    /// <summary>
+    /// Builds the portable lowering: the ranked inner derived table plus the outer statement that
+    /// projects the select list and keeps <c>rn = 1</c>.
+    /// </summary>
+    private string? MakePortableExtremeRowSelect(QueryCommand cmd)
+    {
         var entityType = cmd.EntityType!;
         var from = cmd.From!;
         var rankColumn = MakeExtremeRowRankName(entityType);
+        var innerSql = MakePortableExtremeRowInner(cmd, entityType, from, rankColumn);
+        return MakeExtremeRowOuter(cmd, entityType, innerSql, rankColumn);
+    }
 
+    /// <summary>
+    /// Builds the inner derived table of the portable lowering: the filtered source rows plus the
+    /// synthetic window-rank column. The filter (key components <c>IS NOT NULL</c> ANDed with the
+    /// source condition) is shared with the native source builder.
+    /// </summary>
+    private string? MakePortableExtremeRowInner(QueryCommand cmd, Type entityType, FromExpression from, string rankColumn)
+    {
         // --- inner derived table: the source rows plus the window rank ---
         string? innerSql = null;
         _ctx.ColumnsProvider.PushSourceScope();
@@ -636,40 +673,7 @@ internal readonly struct SqlBuilder
                 if (!_ctx.ParamMode)
                     inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(Kw(" from ")).Append(fromSql);
 
-                // Comparison nulls must not participate in the extremum: a NULL `order by` value wins
-                // MIN under SQLite's (and PostgreSQL's) default null ordering and would surface an
-                // all-null group. Filtering the value expressions out of the source makes such rows
-                // invisible to rank()/row_number() and drops all-null partitions entirely. The filter
-                // is ANDed with the source's own condition (if any) and, like the rank expression,
-                // walks the value expressions in parameter mode so numbering stays in step with SQL.
-                var valueColumns = cmd.ExtremeRowColumns ?? [];
-                var hasNotNullFilter = valueColumns.Length > 0;
-                var hasCondition = cmd.PreparedCondition is not null;
-
-                if (hasNotNullFilter || hasCondition)
-                {
-                    if (!_ctx.ParamMode)
-                        inner!.AppendLine().Append(Kw(" where "));
-
-                    if (hasNotNullFilter)
-                    {
-                        for (var i = 0; i < valueColumns.Length; i++)
-                        {
-                            if (!_ctx.ParamMode && i > 0)
-                                inner!.Append(Kw(" and "));
-
-                            var (_, valueColumn) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
-                            if (!_ctx.ParamMode)
-                                inner!.Append(valueColumn).Append(' ').Append(Kw("is not null"));
-                        }
-
-                        if (hasCondition && !_ctx.ParamMode)
-                            inner!.Append(Kw(" and "));
-                    }
-
-                    if (cmd.PreparedCondition is { } condition)
-                        SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
-                }
+                AppendExtremeRowSourceFilter(cmd, entityType, inner);
 
                 innerSql = inner?.ToString();
             }
@@ -683,6 +687,233 @@ internal readonly struct SqlBuilder
             _ctx.ColumnsProvider.PopSourceScope();
         }
 
+        return innerSql;
+    }
+
+    /// <summary>
+    /// Appends the source filter shared by the portable inner derived table and the native source: an
+    /// <c>IS NOT NULL</c> predicate per extreme-key component (comparison nulls must not win the
+    /// extremum and would surface an all-null group) ANDed with the source's own condition. In
+    /// parameter mode it walks the same expressions in the same order and emits nothing; a
+    /// condition-only source still opens the <c>where</c>.
+    /// </summary>
+    private void AppendExtremeRowSourceFilter(QueryCommand cmd, Type entityType, StringBuilder? inner)
+    {
+        var valueColumns = cmd.ExtremeRowColumns ?? [];
+        var hasNotNullFilter = valueColumns.Length > 0;
+        var hasCondition = cmd.PreparedCondition is not null;
+
+        if (!hasNotNullFilter && !hasCondition)
+            return;
+
+        if (!_ctx.ParamMode)
+            inner!.AppendLine().Append(Kw(" where "));
+
+        if (hasNotNullFilter)
+        {
+            for (var i = 0; i < valueColumns.Length; i++)
+            {
+                if (!_ctx.ParamMode && i > 0)
+                    inner!.Append(Kw(" and "));
+
+                var (_, valueColumn) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
+                if (!_ctx.ParamMode)
+                    inner!.Append(valueColumn).Append(' ').Append(Kw("is not null"));
+            }
+
+            if (hasCondition && !_ctx.ParamMode)
+                inner!.Append(Kw(" and "));
+        }
+
+        if (cmd.PreparedCondition is { } condition)
+            SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
+    }
+
+    /// <summary>
+    /// Renders the command through the dialect's optional native extreme-row capability. The shared
+    /// path builds the same filtered source as the portable lowering (without the rank), hands it to
+    /// the renderer together with the canonical payload/key/group aliases, and wraps the returned
+    /// winning-row source in the same outer projection/order statement. A renderer exception
+    /// propagates unchanged.
+    /// </summary>
+    private string? MakeNativeExtremeRowSelect(QueryCommand cmd, IExtremeRowRenderer renderer)
+    {
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+
+        var sourceSql = MakeNativeExtremeRowSource(cmd, entityType, from);
+
+        // Parameter mode emits no SQL; the outer call still walks the projection and ordering so the
+        // collected parameters stay in step with the SQL pass.
+        if (_ctx.ParamMode || sourceSql is null)
+            return MakeExtremeRowOuter(cmd, entityType, null, rankColumn: null);
+
+        var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entityType);
+        var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
+            sourceSql,
+            cmd.ExtremeRow!.Kind == ExtremeKind.Max,
+            payloadAliases,
+            keyAliases,
+            groupAliases,
+            _ctx.KeywordCase));
+
+        return MakeExtremeRowOuter(cmd, entityType, winnerSql, rankColumn: null);
+    }
+
+    /// <summary>
+    /// Builds the native strategy's filtered source: <c>select * from &lt;source&gt; where
+    /// &lt;key-component IS NOT NULL&gt; [and &lt;condition&gt;]</c> - the portable inner minus the
+    /// synthetic rank. The renderer turns this into the winning-row source. Parameter mode walks the
+    /// same expressions in the same order and emits nothing.
+    /// </summary>
+    private string? MakeNativeExtremeRowSource(QueryCommand cmd, Type entityType, FromExpression from)
+    {
+        string? sourceSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var source = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+
+                if (!_ctx.ParamMode)
+                    source!.Append(Kw("select ")).Append('*').Append(Kw(" from ")).Append(fromSql);
+
+                AppendExtremeRowSourceFilter(cmd, entityType, source);
+
+                sourceSql = source?.ToString();
+            }
+            finally
+            {
+                if (source is not null) StringBuilderPool.Shared.Return(source);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return sourceSql;
+    }
+
+    /// <summary>
+    /// Resolves the canonical payload aliases (every mapped source column, in declaration order) and
+    /// the key/group aliases (the physical column names of the direct mapped key components). Only
+    /// reached after <see cref="IExtremeRowRenderer.CanRender"/> accepted the description, which
+    /// constraints the key/group components to direct mapped columns.
+    /// </summary>
+    private (string[] Payload, string[] Keys, string[] Groups) MakeExtremeRowAliases(QueryCommand cmd, Type entityType)
+    {
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
+
+        var (entityColumns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
+        var payload = new string[entityColumns.Length];
+        for (var i = 0; i < entityColumns.Length; i++)
+        {
+            var column = entityColumns[i];
+            payload[i] = column.RangeColumns is not null
+                ? column.PropertyName!
+                : column.PropertyInfo!.GetPropertyColumnName(_ctx.NamingConvention);
+        }
+
+        return (payload, MakeExtremeRowKeyAliases(cmd.ExtremeRowColumns), MakeExtremeRowKeyAliases(cmd.ExtremeRowGroupByColumns));
+    }
+
+    private string[] MakeExtremeRowKeyAliases(SelectExpression[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return [];
+
+        var aliases = new string[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            if (columns[i].Expression is not MemberExpression { Member: PropertyInfo property })
+                throw new InvalidOperationException("The native extreme-row renderer requires direct mapped key columns.");
+
+            aliases[i] = property.GetPropertyColumnName(_ctx.NamingConvention);
+        }
+
+        return aliases;
+    }
+
+    /// <summary>
+    /// Builds the side-effect-free description the dialect's optional native renderer decides on. It
+    /// reads only prepared metadata: it never renders SQL, allocates an alias or touches the parameter
+    /// list, so a rejected candidate leaves no state behind for the portable lowering.
+    /// </summary>
+    private ExtremeRowDescription MakeExtremeRowDescription(QueryCommand cmd)
+        => new(
+            cmd.ExtremeRow!.Kind == ExtremeKind.Max,
+            MakeExtremeRowDescriptionColumns(cmd.ExtremeRowColumns),
+            MakeExtremeRowDescriptionColumns(cmd.ExtremeRowGroupByColumns),
+            MakeExtremeRowPayloadDescription(cmd.EntityType!));
+
+    private static ExtremeRowRenderColumn[] MakeExtremeRowDescriptionColumns(SelectExpression[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return [];
+
+        var result = new ExtremeRowRenderColumn[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var expression = columns[i].Expression;
+            var property = (expression as MemberExpression)?.Member as PropertyInfo;
+            IPropertyMetadata? metadata = null;
+            var hasMetadata = property is not null
+                && DataContextCache.Metadata.TryGetValue(property.DeclaringType!, property, out metadata);
+
+            result[i] = new ExtremeRowRenderColumn(
+                columns[i].PropertyType,
+                columns[i].Nullable,
+                hasMetadata && metadata!.Converter is null && !metadata.IsComputed,
+                hasMetadata && metadata!.Converter is not null);
+        }
+
+        return result;
+    }
+
+    private static ExtremeRowRenderColumn[] MakeExtremeRowPayloadDescription(Type entityType)
+    {
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
+
+        var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
+        var result = new ExtremeRowRenderColumn[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var column = columns[i];
+
+            // EntitySelectListBuilder stores the property access wrapped in a LambdaExpression, unlike
+            // the key/group columns (which carry the bare member-access body), so the lambda must be
+            // unwrapped before the direct-mapped test. A Range<T> property expands into two physical
+            // columns and a computed property is not a plain mapped column, so neither is native-eligible
+            // as payload; both keep the portable lowering.
+            var body = column.Expression is LambdaExpression lambda ? lambda.Body : column.Expression;
+            IPropertyMetadata? metadata = null;
+            var hasMetadata = body is MemberExpression { Member: PropertyInfo property }
+                && DataContextCache.Metadata.TryGetValue(property.DeclaringType!, property, out metadata);
+
+            result[i] = new ExtremeRowRenderColumn(
+                column.PropertyType,
+                column.Nullable,
+                hasMetadata && metadata!.Converter is null && !metadata.IsComputed && column.RangeColumns is null,
+                hasMetadata && metadata!.Converter is not null);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Wraps the already-rendered <paramref name="innerSql"/> (the portable ranked derived table or the
+    /// native winning-row source) in the outer statement: the command's projection, DISTINCT, the
+    /// user's output ordering, and - for the portable strategy - the <c>rn = 1</c> filter on
+    /// <paramref name="rankColumn"/>. <paramref name="rankColumn"/> is <see langword="null"/> for the
+    /// native strategy, whose source already selects the winners.
+    /// </summary>
+    private string? MakeExtremeRowOuter(QueryCommand cmd, Type entityType, string? innerSql, string? rankColumn)
+    {
         // --- outer statement over the derived table ---
         string? result = null;
         _ctx.ColumnsProvider.PushSourceScope();
@@ -753,8 +984,11 @@ internal readonly struct SqlBuilder
                     outer.AppendLine().Append(Kw("from ")).Append('(').Append(innerSql).Append(')')
                         .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
 
-                    outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
-                        .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
+                    if (rankColumn is not null)
+                    {
+                        outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
+                            .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
+                    }
 
                     AppendOrderBy(cmd, entityType, outer);
                 }

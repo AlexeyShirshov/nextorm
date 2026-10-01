@@ -80,6 +80,7 @@
 - [Жадная загрузка дочерних коллекций](advanced/eager-loading.md)
 - [Связи и однозапросная загрузка](advanced/relationships.md)
 - [Ограничения и что вне области](advanced/limitations.md)
+- [Нативные стратегии выбора экстремальной строки](advanced/select-where-extrema-native.md)
 - [Краткий справочник API](advanced/api-reference.md)
 
 ### Введение

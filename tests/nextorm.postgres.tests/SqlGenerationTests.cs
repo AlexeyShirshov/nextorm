@@ -4403,6 +4403,11 @@ public class SqlGenerationTests
     }
 
     // --- SelectWhereMax / SelectWhereMin: the window-rank lowering and its guards ---
+    //
+    // PostgreSQL has a native extreme-row strategy for direct integral keys (see
+    // ExtremeRowNativeSqlGenerationTests). The global cases below deliberately use a non-integral
+    // (DateTime?) key so they keep exercising the portable window-rank lowering; an integral key would
+    // now dispatch into the native branch.
 
     private static string Dequoted(string sql) => sql
         .Replace("\r\n", " ")
@@ -4428,11 +4433,11 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime).Select(x => new { x.Id })));
 
-        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().Contain("where ").And.Contain("= 1");
-        norm.Should().Contain("nullableint is not null");
+        norm.Should().Contain("dt is not null");
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 
@@ -4474,11 +4479,11 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime, x => new { x.Id, x.String })));
 
-        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().Contain("= 1");
-        norm.Should().Contain("nullableint is not null");
+        norm.Should().Contain("dt is not null");
         OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
@@ -4489,11 +4494,11 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int, x => new { x.Id, x.String })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Datetime, x => new { x.Id, x.String })));
 
-        norm.Should().Contain("row_number() over (order by nullableint)");
-        norm.Should().NotContain("nullableint desc");
-        norm.Should().Contain("nullableint is not null");
+        norm.Should().Contain("row_number() over (order by dt)");
+        norm.Should().NotContain("dt desc");
+        norm.Should().Contain("dt is not null");
         norm.Should().Contain("= 1");
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
@@ -4664,9 +4669,9 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id == 1L).SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id == 1L).SelectWhereMax(x => x.Datetime).Select(x => new { x.Id })));
 
-        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("row_number() over (order by dt desc)");
         norm.Should().Contain("id = ");
         norm.Should().Contain("= 1");
     }
@@ -4679,7 +4684,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.Distinct().SelectWhereMax(x => x.Int, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.Distinct().SelectWhereMax(x => x.Datetime, x => new { x.Id })));
 
         norm.Should().Contain("select distinct ");
         norm.Should().Contain("= 1");

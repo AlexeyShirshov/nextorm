@@ -160,5 +160,7 @@
       href: advanced/relationships.md
     - name: Ограничения и что вне области
       href: advanced/limitations.md
+    - name: Нативные стратегии выбора экстремальной строки
+      href: advanced/select-where-extrema-native.md
     - name: Краткий справочник API
       href: advanced/api-reference.md
