@@ -326,3 +326,18 @@ SQL Server requires the derived table to be aliased, and PostgreSQL likewise:
 select id, Calc from (select id, (somestring + somestring) as [Calc] from complex_entity) as [t1]
 ```
 
+## Named join aliases
+
+A joined query can name its slots instead of addressing them positionally:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join<Person>(people, (o, buyer) => o.BuyerId == buyer.Id, Alias.Buyer)
+    .Select(p => new { Buyer = p.Buyer.Id })
+    .ToListAsync();
+```
+
+`p.Buyer` is an ordinary projection member generated for the `Alias.Buyer` slot, so `p.Buyer.Id` can
+be used anywhere a positional `p.Item2.Id` would be — in `Select`, `Where` and later joins. See
+[Joins](../guide/02-joins.md#named-join-aliases).
+

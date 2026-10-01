@@ -18,6 +18,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
+    <!-- The join-alias generator runs as an analyzer over this test assembly so Alias.Buyer and the
+         generated projection/builder types bind in JoinAliasSqlGenerationTests. -->
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

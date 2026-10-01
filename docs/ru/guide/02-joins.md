@@ -107,6 +107,78 @@ select t1.id as 'Order', t2.requiredstring as 'Customer' from simple_entity as '
 целиком (`Order = p.Item1`) колонкой не является и отклоняется. Если нужны несколько колонок одной
 стороны, перечислите их явно.
 
+## Именованные псевдонимы соединений
+
+Позиционная адресация выше не меняется и доступна всегда. Когда два соединённых источника имеют один
+CLR-тип — например покупатель и утверждающий оба `Person`, — позиционные члены их не различают.
+Каждый оператор соединения принимает необязательный завершающий аргумент `Alias.<Name>`, который
+именует новый слот, и проекция затем раскрывает это имя как типизированное свойство:
+
+```csharp
+using NextORM.Generated.MyAssembly; // Alias живёт в NextORM.Generated.<имя вашей сборки>
+
+var people = dataContext.From<Person>(b => b.Table("person"));
+
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join<Person>(people, (o, buyer) => o.BuyerId == buyer.Id, Alias.Buyer)
+    .Join<Person>(people, (o, approver) => o.Item1.ApproverId == approver.Id, Alias.Approver)
+    .Select(p => new { Buyer = p.Buyer.Id, Approver = p.Approver.Id })
+    .ToListAsync();
+```
+
+```sql
+select t2.id as 'Buyer', t3.id as 'Approver' from orders as 't1' join person as 't2' on t1.buyerid = t2.id join person as 't3' on t1.approverid = t3.id
+```
+
+`Alias.<Name>` — маркер времени компиляции. Генератор исходного кода, поставляемый внутри пакета
+`nextorm` как анализатор Roslyn (дополнительный пакет или ссылка не нужны), для каждой найденной
+цепочки псевдонимов генерирует `public`-тип проекции `AliasProjection_<aliases>` с одним свойством на
+псевдоним и `public`-тип построителя `AliasJoin_<aliases>`, повторяющий операторы соединения. Всё это
+попадает в зарезервированное пространство имён `NextORM.Generated.<имя сборки>`, поэтому проекцию не
+нужно объявлять заранее. Сгенерированные свойства несут
+[`JoinSlot(n)`](xref:NextORM.Core.JoinSlotAttribute) — 1-базовую позицию сущности в цепочке: первый
+псевдоним — слот `2`, следующий — `3` и так далее. Поскольку слот задан явно, два псевдонима одного
+CLR-типа разрешаются в разные таблицы.
+
+Сгенерированные члены-псевдонимы **существуют только для выражений**: они нужны, чтобы выражение
+`Select`/`Where` могло назвать соединённую таблицу слота, и транслятор переписывает их в эту таблицу.
+Чтение такого члена вне дерева выражений — например, при прямой материализации `p.Buyer` — по
+проекту бросает `NotSupportedException`, а не возвращает значение по умолчанию; вместо этого
+проецируйте нужную колонку (`Select(p => p.Buyer.Id)`). Позиционные члены `ItemN` остаются обычными
+свойствами.
+
+Все семь операторов принимают псевдоним; три без условия принимают только источник и маркер:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .CrossJoin(people, Alias.Person)
+    .Select(p => p.Person.Id)
+    .ToListAsync();
+```
+
+Именованная и позиционная адресация сосуществуют: после `Alias.Buyer` члены `p.Buyer` и `p.Item2` —
+это один и тот же слот. Псевдоним должен быть корректным идентификатором C# без `_` (зарезервирован
+для сборки имён сгенерированных типов); зарезервированное ключевое слово генерируется экранированным
+(`@class`). Класс-маркер — единственная допустимая форма аргумента псевдонима: `Alias.Buyer<int>`
+или `Alias.Buyer.Approver` отклоняются. Арность ограничена восемью слотами через `Projection<T1..T8>`.
+
+Именованный путь доступен только на SQL-провайдерах: провайдер in-memory бросает
+`NotSupportedException`. Запрос может пересекать границу метода, но метод обязан назвать в своей
+сигнатуре сгенерированный тип построителя, потому что этот тип генерируется и не может быть выведен
+из написанного вручную имени:
+
+```csharp
+private static AliasJoin_Buyer_Approver<Order, Person, Person> AddApprover(
+    AliasJoin_Buyer<Order, Person> builder,
+    EntityBuilder<Person> people)
+    => builder.Join<Person>(people, (o, a) => o.Item1.ApproverId == a.Id, Alias.Approver);
+```
+
+Генератор сообщает диагностики `NORMGEN001`–`NORMGEN006` (дубликат псевдонима; коллизия псевдонима
+со сгенерированным членом; недопустимый идентификатор; арность больше восьми; аргумент не в форме
+`Alias.<Name>`; имя сборки, которое не нормализуется в пространство имён). См.
+[Ограничения](../advanced/limitations.md).
+
 ## Внешние соединения
 
 [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) сохраняет каждую строку левой стороны и заполняет правую сторону значением `NULL`, когда
@@ -489,7 +561,7 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 
 ## Различия между провайдерами
 
-| Провайдер | Псевдонимы соединений | Псевдоним производной таблицы | Внешние соединения | APPLY / LATERAL |
+| Провайдер | Позиционные SQL-псевдонимы таблиц | Псевдоним производной таблицы | Внешние соединения | APPLY / LATERAL |
 |---|---|---|---|---|
 | SQLite | `as 't1'` | выдаётся всегда (в самом SQLite необязателен) | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
 | SQL Server | `as [t1]` | обязателен | поддержаны left/right/full | `CROSS APPLY` / `OUTER APPLY` |

@@ -327,3 +327,18 @@ SQL Server требует, чтобы производная таблица им
 select id, Calc from (select id, (somestring + somestring) as [Calc] from complex_entity) as [t1]
 ```
 
+## Именованные псевдонимы соединений
+
+Соединённый запрос может именовать свои слоты вместо позиционной адресации:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join<Person>(people, (o, buyer) => o.BuyerId == buyer.Id, Alias.Buyer)
+    .Select(p => new { Buyer = p.Buyer.Id })
+    .ToListAsync();
+```
+
+`p.Buyer` — обычный член проекции, сгенерированный для слота `Alias.Buyer`, поэтому `p.Buyer.Id`
+можно использовать везде, где использовался бы позиционный `p.Item2.Id` — в `Select`, `Where` и
+последующих соединениях. См. [Соединения](../guide/02-joins.md#именованные-псевдонимы-соединений).
+

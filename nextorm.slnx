@@ -28,6 +28,7 @@
   <Project Path="src/nextorm.postgres/nextorm.postgres.csproj" />
   <Project Path="src/nextorm.sqlite/nextorm.sqlite.csproj" />
   <Project Path="src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
+  <Project Path="tests/nextorm.alias.tests/nextorm.alias.tests.csproj" />
   <Project Path="tests/nextorm.core.tests/nextorm.core.tests.csproj" />
   <Project Path="tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj" />
   <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />

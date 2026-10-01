@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
@@ -57,6 +58,25 @@ public static class TypeExtensions
         }
         return false;
     }
+    /// <summary>
+    /// Determines whether a projection exposes generated lexical alias members (marked with
+    /// <see cref="JoinSlotAttribute"/>, for example <c>Buyer</c>/<c>Approver</c>) rather than only the
+    /// engine <c>Item1</c>..<c>Item8</c> slots. Such a projection is produced by the source generator
+    /// and supported on SQL providers only.
+    /// </summary>
+    /// <param name="type">The projection type to inspect.</param>
+    /// <returns><see langword="true"/> when at least one public property carries a join slot; otherwise <see langword="false"/>.</returns>
+    internal static bool HasJoinSlotMembers(this Type type)
+    {
+        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (Attribute.IsDefined(property, typeof(JoinSlotAttribute), false))
+                return true;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Determines whether the two types are assignment-compatible in either direction. Equal types and
     /// types assignable to one another match; a nullable type is also compared through its underlying

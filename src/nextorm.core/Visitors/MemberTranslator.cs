@@ -476,17 +476,13 @@ internal static class MemberTranslator
                     if (lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)))
                     {
                         // When a type repeats inside the projection, the columns provider has to be
-                        // told which occurrence is meant. The member name ("Item1".."Item8") carries
-                        // the 1-based position among all projection items; the occurrence for every
+                        // told which occurrence is meant. The member carries its 1-based slot: the
+                        // digits of "Item1".."Item8" for engine projections, or JoinSlotAttribute for
+                        // a generated alias member ("Buyer"/"Approver"). The occurrence for every
                         // position of a given projection shape is cached (it is a pure function of
                         // the generic arguments).
                         var propExp = (MemberExpression)node.Expression!;
-                        var name = propExp.Member.Name;
-                        var digitsStart = name.Length;
-                        while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
-                        var position = 0;
-                        for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
-                        position--;
+                        var position = ProjectionAliasCache.GetMemberPosition(propExp.Member);
                         var paramIdx = ProjectionAliasCache.GetOccurrence(lambdaParameter.Type, position);
                         tableAliasForColumn = AliasResolver.GetAliasFromParam(visitor, node.Expression!.Type, paramIdx, false);
                     }

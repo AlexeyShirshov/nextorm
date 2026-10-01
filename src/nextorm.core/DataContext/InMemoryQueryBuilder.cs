@@ -254,6 +254,13 @@ internal static class InMemoryQueryBuilder
 
             if (queryCommand.Joins?.Length > 0 && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
             {
+                // A generated alias projection exposes Buyer/Approver-like members that the engine's
+                // Projection<T1..Tn> materializer cannot fill. Refuse it explicitly instead of failing
+                // later with an InvalidCastException when the built projection is cast to TEntity.
+                if (typeof(TEntity).HasJoinSlotMembers())
+                    throw new NotSupportedException(
+                        "Named alias join projections are not supported by the in-memory provider; run the query against a SQL provider.");
+
                 var dim = 2;
                 object? joinResult = null;
                 Type? firstType = null;

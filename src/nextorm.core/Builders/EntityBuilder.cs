@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -82,7 +83,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         _table = table;
     }
     #region Properties
-    internal ILogger? Logger { get; init; }
+    internal ILogger? Logger { get; set; }
     internal QueryCommand? Query { get => _query; set => _query = value; }
     /// <summary>
     /// Provider-specific hint attached to a derived-table primary source, or <c>null</c> when there is
@@ -2648,6 +2649,342 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
 
     /// <summary>
+    /// Seam for generated alias-join builders (issue #113): adds <paramref name="_"/> as a join and
+    /// returns the caller-created builder of a different projection shape, carrying this builder's join
+    /// chain. The generated extension method supplies the target type through <paramref name="create"/>
+    /// so the projection can expose lexical alias properties (for example <c>p.Buyer</c>) whose
+    /// <see cref="JoinSlotAttribute"/> maps them to the right joined table. This overload serves the
+    /// conditional operators (<c>Join</c>/<c>LeftJoin</c>/<c>RightJoin</c>/<c>FullJoin</c>) and delegates
+    /// to the same construction path as their positional counterparts, parameterized by
+    /// <paramref name="joinType"/>; the in-memory provider refuses it explicitly at construction.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The entity type being joined.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="joinType">The kind of join to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        EntityBuilder<TJoinEntity> _,
+        Expression<Func<TEntity, TJoinEntity, bool>> joinCondition,
+        JoinType joinType = JoinType.Inner,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(_);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _, joinCondition, joinType, options);
+    }
+
+    /// <summary>
+    /// Alias-join seam for the conditionless operators (<c>CrossJoin</c>/<c>CrossApply</c>/
+    /// <c>OuterApply</c>): mirrors the positional conditionless overloads, so the resulting
+    /// <see cref="JoinExpression"/> carries no <c>ON</c> predicate and an explicit
+    /// <see cref="JoinExpression.EntityType"/>.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The entity type being joined.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="_">The builder identifying the table to join; only its table metadata is used.</param>
+    /// <param name="joinType">The conditionless join kind to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        EntityBuilder<TJoinEntity> _,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(_);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _, null, joinType, options);
+    }
+
+    /// <summary>
+    /// Correlated alias <c>CROSS APPLY</c>/<c>OUTER APPLY</c>: mirrors the positional
+    /// <see cref="CrossApply{TJoinEntity}(Expression{Func{TEntity, EntityBuilder{TJoinEntity}}}, Action{JoinOptions})"/>
+    /// overload and carries the source through
+    /// <see cref="JoinExpression.ApplySource"/> instead of a plain <c>ON</c> condition.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The entity type yielded by the applied source.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="source">A lambda receiving the left-hand row and returning the applied builder.</param>
+    /// <param name="joinType">The APPLY kind to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the applied source.</returns>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Expression<Func<TEntity, EntityBuilder<TJoinEntity>>> source,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+        => JoinAliasApply<TNext, TNextEntity, TJoinEntity>(create, source, joinType, options);
+
+    /// <summary>
+    /// Correlated alias <c>CROSS APPLY</c>/<c>OUTER APPLY</c> over a derived query; mirrors the
+    /// positional <see cref="CrossApply{TJoinEntity}(Expression{Func{TEntity, QueryCommand{TJoinEntity}}}, Action{JoinOptions})"/>
+    /// overload.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The entity type yielded by the applied query.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="source">A lambda receiving the left-hand row and returning the applied query.</param>
+    /// <param name="joinType">The APPLY kind to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the applied query.</returns>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Expression<Func<TEntity, QueryCommand<TJoinEntity>>> source,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+        => JoinAliasApply<TNext, TNextEntity, TJoinEntity>(create, source, joinType, options);
+
+    /// <summary>
+    /// Builds an alias join over a table-shaped <paramref name="_"/>, sharing the positional join
+    /// construction path (<see cref="CreateAliasJoined{TNext,TNextEntity}"/> mirrors
+    /// <see cref="CreateJoined{TJoinEntity}"/>), including <c>SourceFrom</c>/CTE propagation and a
+    /// pre-join <c>Where</c> being moved onto the alias projection.
+    /// </summary>
+    private TNext JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        EntityBuilder<TJoinEntity> _,
+        LambdaExpression? joinCondition,
+        JoinType joinType,
+        Action<JoinOptions>? options)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "Named alias join projections are not supported by the in-memory provider; run the query against a SQL provider.");
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var join = new JoinExpression(joinCondition, joinType)
+        {
+            From = GetJoinSource(_),
+            EntityType = joinCondition is null ? typeof(TJoinEntity) : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        };
+
+        return CreateAliasJoined<TNext, TNextEntity>(create, join, _.Ctes, ResolveAliasJoinBase());
+    }
+
+    /// <summary>
+    /// Builds a correlated alias APPLY, sharing the positional correlated-apply path
+    /// (<see cref="JoinApply{TJoinEntity}"/>): the source is converted to a
+    /// <see cref="QueryCommand"/> lambda and stored as <see cref="JoinExpression.ApplySource"/>.
+    /// </summary>
+    private TNext JoinAliasApply<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        LambdaExpression source,
+        JoinType joinType,
+        Action<JoinOptions>? options)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(source);
+
+        if (typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "A correlated CROSS/OUTER APPLY source cannot reference a join projection; apply it to a single-entity source instead.");
+
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
+
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
+
+        var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
+        var applySource = Expression.Lambda(body, source.Parameters);
+
+        var join = new JoinExpression(null, joinType)
+        {
+            From = new FromExpression(typeof(TJoinEntity)),
+            EntityType = typeof(TJoinEntity),
+            ApplySource = applySource,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        };
+
+        return CreateAliasJoined<TNext, TNextEntity>(create, join, null, ResolveAliasJoinBase());
+    }
+
+    /// <summary>
+    /// Wraps an alias join into the caller-created <typeparamref name="TNext"/>, carrying this
+    /// builder's query state (via <see cref="ApplyJoinStateTo{TOther}"/>), join chain, CTE declarations
+    /// and a pre-join <c>Where</c> onto the alias projection. The generic analogue of
+    /// <see cref="CreateJoined{TJoinEntity}"/>.
+    /// </summary>
+    private TNext CreateAliasJoined<TNext, TNextEntity>(
+        Func<IDataContext, TNext> create,
+        JoinExpression join,
+        IReadOnlyList<CteDefinition>? rightCtes,
+        QueryCommand? query)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        if (_joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
+
+        EnsureNoEagerLoadState("Join/Apply");
+
+        var joined = create(_dataProvider);
+        ApplyJoinStateTo(joined, query);
+
+        var joins = _joins is null ? new List<JoinExpression>() : new List<JoinExpression>(_joins);
+        joins.Add(join);
+        joined.Joins = joins;
+
+        joined.Ctes = CteMerge.Merge(Ctes, rightCtes);
+        ApplyWhereToAliasJoined(joined);
+        return joined;
+    }
+
+    /// <summary>
+    /// Copies the query state a join builder carries onto <paramref name="target"/>, which may have a
+    /// different projection type. Shared by the positional <see cref="CreateJoined{TJoinEntity}"/> and
+    /// the alias <see cref="CreateAliasJoined{TNext,TNextEntity}"/> so both observe the same
+    /// <c>_query</c>/<c>SourceFrom</c>/modifier propagation. Overrides are copied only when the source
+    /// stayed unresolved for the planner (<paramref name="query"/> is <see langword="null"/>), mirroring
+    /// the positional path.
+    /// </summary>
+    private void ApplyJoinStateTo<TOther>(EntityBuilder<TOther> target, QueryCommand? query)
+    {
+        target.Logger = Logger;
+        target.Table = Table;
+        target.Query = query;
+        target.IsDistinct = IsDistinct;
+        target.GroupingType = GroupingType;
+        target.GroupingSets = GroupingSets;
+        target.GroupByWithTotals = GroupByWithTotals;
+        target.LimitByClause = LimitByClause;
+        target.DistinctOnClause = DistinctOnClause;
+        target.TableSampleClause = TableSampleClause;
+        target.TemporalClause = TemporalClause;
+        target.RowLockClause = RowLockClause;
+        target.IsFinal = IsFinal;
+        target.SampleRatio = SampleRatio;
+        target.SampleOffset = SampleOffset;
+        target.SettingsList = SettingsList;
+        target.PreWhereCondition = PreWhereCondition;
+        target.ArrayJoins = ArrayJoins;
+        target.ArrayJoinKind = ArrayJoinKind;
+        target.TableHints = TableHints;
+        target.IndexHints = IndexHints;
+        target.IndexHintKind = IndexHintKind;
+        target.TablesInScopeHints = TablesInScopeHints;
+        target.Ctes = Ctes;
+        target.QuoteIdentifiers = QuoteIdentifiers;
+        target.NamingConvention = NamingConvention;
+        target.KeywordCase = KeywordCase;
+        target.SourceFrom = SourceFrom;
+        target.FilterScope = _filterScope;
+
+        if (query is null)
+        {
+            target._tableNameOverride = _tableNameOverride;
+            target._schemaOverride = _schemaOverride;
+            target._databaseOverride = _databaseOverride;
+            target._serverOverride = _serverOverride;
+            target._tableExpression = _tableExpression;
+        }
+    }
+
+    /// <summary>
+    /// Moves a <c>Where</c> written before an alias join onto the alias projection. Two shapes are
+    /// handled: a <c>Where</c> over a derived query source is re-rooted onto the projection's
+    /// <c>Item1</c> (mirroring <see cref="ApplyWhereToJoined{TJoinEntity}"/>), while a <c>Where</c>
+    /// written between two alias joins is over the previous alias projection and each of its members is
+    /// mapped by slot onto the extended projection (<c>Item1</c>-&gt;<c>Item1</c>,
+    /// <c>Item2</c>/<c>Buyer</c>-&gt;<c>Item2</c>), so the predicate keeps pointing at the table it named.
+    /// </summary>
+    private void ApplyWhereToAliasJoined<TNextEntity>(EntityBuilder<TNextEntity> joined)
+    {
+        if (_condition is null)
+            return;
+
+        var sourceParameter = _condition.Parameters[0];
+        var param = Expression.Parameter(typeof(TNextEntity), sourceParameter.Name);
+
+        if (sourceParameter.Type.TryGetProjectionDimension(out _))
+        {
+            var rebased = new RebaseAliasProjectionVisitor(sourceParameter, param, typeof(TNextEntity)).Visit(_condition.Body);
+            joined.Condition = Expression.Lambda<Func<TNextEntity, bool>>(rebased, param);
+            return;
+        }
+
+        // A plain entity source turned the pre-join Where into the join's base subquery; it must not be
+        // applied twice. Only a genuine derived query source (already a QueryCommand) is re-rooted here.
+        if (_query is null)
+            return;
+
+        var item1 = typeof(TNextEntity).GetProperty(nameof(Projection<TEntity, object>.Item1), BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new NotSupportedException(
+                $"An alias join over a derived source requires the alias projection '{typeof(TNextEntity)}' to derive from a Projection type exposing Item1.");
+
+        var item1Access = Expression.Property(param, item1);
+        var body = new ReplaceTargetParameterVisitor(sourceParameter, item1Access).Visit(_condition.Body);
+        joined.Condition = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+    }
+
+    /// <summary>
+    /// Maps member accesses on a previous alias projection onto the extended projection by slot. A
+    /// member's slot comes from <see cref="ProjectionAliasCache.GetMemberPosition"/> (the digits of
+    /// <c>ItemN</c> or the <see cref="JoinSlotAttribute"/> of a generated alias), and the extended
+    /// projection retains the same slot as <c>ItemN</c>.
+    /// </summary>
+    private sealed class RebaseAliasProjectionVisitor(ParameterExpression source, ParameterExpression target, Type targetType) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node)
+            => ReferenceEquals(node, source) ? target : base.VisitParameter(node);
+
+        protected override Expression VisitMember(MemberExpression node)
+        {
+            if (ReferenceEquals(node.Expression, source))
+            {
+                var position = ProjectionAliasCache.GetMemberPosition(node.Member);
+                if (position >= 0)
+                {
+                    var itemName = "Item" + (position + 1).ToString(CultureInfo.InvariantCulture);
+                    var targetMember = targetType.GetProperty(itemName, BindingFlags.Public | BindingFlags.Instance);
+                    if (targetMember is not null && targetMember.PropertyType == node.Type)
+                        return Expression.Property(target, targetMember);
+                }
+            }
+
+            return base.VisitMember(node);
+        }
+    }
+
+    /// <summary>
     /// Resolves the joined side of a <c>Join</c>. A builder over a raw table or CTE name (the
     /// <c>From(string)</c> / CTE shape) carries the name in <see cref="Table"/> rather than a
     /// <see cref="FromExpression"/>, so it must be turned back into a table source here; otherwise the
@@ -2791,26 +3128,20 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             throw new NotSupportedException(
                 "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
 
+        // A positional Join/Apply applied to a projection-shaped builder (a generated alias-join
+        // builder, or any other source whose entity is a join projection) would nest that projection
+        // as the result's Item1. The planner resolves the physical primary table from Item1, so a
+        // nested projection cannot be mapped to a table and only fails later with a confusing
+        // BuildSqlCommandException. Fail closed here, at construction, with an actionable message.
+        // A derived query (query is not null) keeps its own resolution path and is unaffected.
+        if (query is null && typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "A positional Join/Apply cannot follow an alias Join: the alias projection cannot be nested as the joined source. Keep the chain alias-based, or use positional joins without aliases.");
+
         EnsureNoEagerLoadState("Join/Apply");
 
-        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, TablesInScopeHints = TablesInScopeHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
-        cb.SourceFrom = SourceFrom;
-        // The joined builder renders the whole query; carry the pre-join builder's selective filter
-        // scope so an IgnoreFilters call before Join keeps disabling the same filters.
-        cb.FilterScope = _filterScope;
-
-        // Overrides on the pre-join builder are already folded into the materialised left command
-        // (ResolveJoinBase); carrying them as well would make the joined builder reject its own derived
-        // source. Only propagate them when the source stayed unresolved for the planner.
-        if (query is null)
-        {
-            cb._tableNameOverride = _tableNameOverride;
-            cb._schemaOverride = _schemaOverride;
-            cb._databaseOverride = _databaseOverride;
-            cb._serverOverride = _serverOverride;
-            cb._tableExpression = _tableExpression;
-        }
-
+        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join);
+        ApplyJoinStateTo(cb, query);
         return cb;
     }
     private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
@@ -2852,7 +3183,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             throw new NotSupportedException(
                 "A derived query as the primary FROM source cannot be joined by the in-memory provider.");
 
-        if (typeof(TEntity).TryGetProjectionDimension(out _))
+        // A projection source can be joined only once when it is the primary FROM source (its shape
+        // cannot be reconstructed). An alias join chain already carries its joins and reconstructs the
+        // extended projection explicitly, so a further alias join over it is valid.
+        if (typeof(TEntity).TryGetProjectionDimension(out _) && _joins is not { Count: > 0 })
             throw new NotSupportedException(
                 "A derived query as the primary FROM source can be joined only once; add further joins to the derived query instead.");
 
@@ -2861,6 +3195,21 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         throw new NotSupportedException(
             "A derived query as the primary FROM source supports only a Where clause before Join; put OrderBy/GroupBy/Distinct and other modifiers into the derived query.");
+    }
+
+    /// <summary>
+    /// Resolves the base command for an alias join. A <c>Where</c> written between two alias joins is
+    /// over the previous alias projection and is moved onto the extended projection by
+    /// <see cref="ApplyWhereToAliasJoined{TNextEntity}"/>; wrapping it into a derived subquery would make
+    /// the second join's condition reference the previous projection shape instead. Everything else
+    /// keeps the positional behavior.
+    /// </summary>
+    private QueryCommand? ResolveAliasJoinBase()
+    {
+        if (_query is null && _condition is not null && _condition.Parameters[0].Type.TryGetProjectionDimension(out _))
+            return null;
+
+        return ResolveJoinBase();
     }
     /// <summary>
     /// True when no builder modifier other than <c>Where</c> is set. Such a modifier would be relocated

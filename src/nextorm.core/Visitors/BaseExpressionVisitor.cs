@@ -432,8 +432,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     /// <summary>
     /// Appends the table alias of the source that carries a by-name column. A projection member
-    /// (<c>p.Item1</c>) is resolved by its 1-based occurrence, so a type repeated in the projection
-    /// picks the right table instead of the first one.
+    /// (<c>p.Item1</c> or a generated alias such as <c>p.Buyer</c>) is resolved by its 1-based
+    /// occurrence, so a type repeated in the projection picks the right table instead of the first one.
     /// </summary>
     private void AppendColumnAlias(Expression source)
     {
@@ -450,12 +450,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
         if (target.Type.IsAssignableTo(typeof(IProjection)) && source is MemberExpression member)
         {
-            var name = member.Member.Name;
-            var digitsStart = name.Length;
-            while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
-            var position = 0;
-            for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
-            position--;
+            var position = ProjectionAliasCache.GetMemberPosition(member.Member);
             var paramIdx = ProjectionAliasCache.GetOccurrence(target.Type, position);
             tableAliasForColumn = AliasResolver.GetAliasFromParam(this, member.Type, paramIdx, false);
         }

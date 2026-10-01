@@ -105,6 +105,8 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists query_filter_target;
         drop table if exists query_filter_entity;
         drop table if exists extrema_entity;
+        drop table if exists orders;
+        drop table if exists person;
 
         create table simple_entity (id int not null primary key);
 
@@ -278,5 +280,13 @@ internal sealed class SqlServerTestProvider : ITestProvider
             (9, 4, 'c', 'nine'),
             (10, 1, 'b', 'ten'),
             (11, null, 'd', 'eleven');
+
+        -- Join-alias fixtures (#113): one order whose buyer and approver are two different people,
+        -- plus an unlinked person so RIGHT/FULL alias joins have an unmatched row to return.
+        create table person (id int not null primary key, name nvarchar(100) null);
+        insert into person (id, name) values (10, N'Buyer'), (20, N'Approver'), (30, N'Unlinked');
+
+        create table orders (id int not null primary key, buyer_id int not null, approver_id int not null);
+        insert into orders (id, buyer_id, approver_id) values (1, 10, 20), (2, 20, 10);
         """;
 }

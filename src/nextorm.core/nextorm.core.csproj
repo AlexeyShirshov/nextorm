@@ -17,6 +17,37 @@
     <None Include="..\..\readme.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <!-- Pack the join-alias Roslyn generator into analyzers/dotnet/cs of the `nextorm` package so
+         consumers get it automatically. The referenced project is build-only: it is NOT added to
+         core's own compilation as an Analyzer. -->
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_AddSourceGeneratorToPackage</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ReferenceOutputAssembly=false: build-ordering only, no compile reference to the generator.
+         PrivateAssets=all: its Microsoft.CodeAnalysis.* package deps never leak into core's nuspec. -->
+    <ProjectReference Include="..\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Resolve the generator's built output through its own GetTargetPath so the per-host-OS
+       bin/<os>/ redirect is honored (no hardcoded bin path), then place the DLL under
+       analyzers/dotnet/cs. TargetFramework is removed so the net10.0 core TFM does not override
+       the generator's own netstandard2.0. -->
+  <Target Name="_AddSourceGeneratorToPackage">
+    <MSBuild Projects="..\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework">
+      <Output TaskParameter="TargetOutputs" ItemName="_SourceGeneratorAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(_SourceGeneratorAssembly)" PackagePath="analyzers/dotnet/cs" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <!-- The streaming wrappers (LobStream/LobTextReader) and CommandReaderOwner are internal; the
          core tests exercise the wrapper operations and the reader/command lifecycle directly. -->

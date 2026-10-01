@@ -105,6 +105,76 @@ A projection member must be a column of one of the joined entities (`p.Item1.Id`
 as a whole (`Order = p.Item1`) is not a column and is rejected. When you need several columns from the same
 side, list each of them explicitly.
 
+## Named join aliases
+
+The positional addressing above is unchanged and always available. When two joined sources share the
+same CLR type — for example a buyer and an approver are both `Person` — positional members cannot tell
+them apart. Every join operator accepts an optional trailing `Alias.<Name>` argument that names the new
+slot, and the projection then exposes that name as a typed property:
+
+```csharp
+using NextORM.Generated.MyAssembly; // Alias lives in NextORM.Generated.<your assembly name>
+
+var people = dataContext.From<Person>(b => b.Table("person"));
+
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join<Person>(people, (o, buyer) => o.BuyerId == buyer.Id, Alias.Buyer)
+    .Join<Person>(people, (o, approver) => o.Item1.ApproverId == approver.Id, Alias.Approver)
+    .Select(p => new { Buyer = p.Buyer.Id, Approver = p.Approver.Id })
+    .ToListAsync();
+```
+
+```sql
+select t2.id as 'Buyer', t3.id as 'Approver' from orders as 't1' join person as 't2' on t1.buyerid = t2.id join person as 't3' on t1.approverid = t3.id
+```
+
+`Alias.<Name>` is a compile-time marker. The source generator that ships inside the `nextorm` package
+as a Roslyn analyzer (no additional package or reference is needed) emits, for every discovered alias
+chain, a `public` projection type `AliasProjection_<aliases>` with one property per alias and a
+`public` builder type `AliasJoin_<aliases>` that mirrors the join operators. All of it lands in the
+reserved namespace `NextORM.Generated.<assembly name>`, so no projection has to be pre-declared. The
+generated properties carry [`JoinSlot(n)`](xref:NextORM.Core.JoinSlotAttribute), the 1-based entity
+position in the chain: the first alias is slot `2`, the next is `3`, and so on. Because the slot is
+explicit, two aliases of the same CLR type resolve to different tables.
+
+The generated alias members are **expression-only**: they exist so that a `Select`/`Where`
+expression tree can name the joined table of the slot, and the translator rewrites them to that
+table. Reading one outside an expression tree — for example materialising `p.Buyer` directly —
+throws `NotSupportedException` by design instead of returning a defaulted value; project the column
+you need (`Select(p => p.Buyer.Id)`) instead. The retained positional `ItemN` members remain ordinary
+properties.
+
+All seven operators accept an alias; the conditionless three take only the source and the marker:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .CrossJoin(people, Alias.Person)
+    .Select(p => p.Person.Id)
+    .ToListAsync();
+```
+
+Named and positional addressing coexist: once `Alias.Buyer` was used, `p.Buyer` and `p.Item2` are the
+same slot. An alias must be a valid C# identifier without `_` (reserved for composing the generated
+type names); a reserved keyword is emitted escaped (`@class`). The marker class is the only approved
+alias argument form — `Alias.Buyer<int>` or `Alias.Buyer.Approver` is rejected. The arity is capped at
+eight slots by `Projection<T1..T8>`.
+
+The named path is SQL-provider only: the in-memory provider throws `NotSupportedException`. A query may
+cross a method boundary, but the method must name the generated builder type in its signature, because
+that type is generated and cannot be inferred from a hand-written name:
+
+```csharp
+private static AliasJoin_Buyer_Approver<Order, Person, Person> AddApprover(
+    AliasJoin_Buyer<Order, Person> builder,
+    EntityBuilder<Person> people)
+    => builder.Join<Person>(people, (o, a) => o.Item1.ApproverId == a.Id, Alias.Approver);
+```
+
+The generator reports `NORMGEN001`–`NORMGEN006` (a duplicate alias; an alias colliding with a generated
+member; an invalid identifier; an arity over eight; an argument that is not in the `Alias.<Name>` form;
+and an assembly name that cannot be normalised to a namespace). See
+[Limitations](../advanced/limitations.md).
+
 ## Outer joins
 
 [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions})) keeps every row of the left side and fills the right side with `NULL` when there is no
@@ -482,7 +552,7 @@ every other provider and the in-memory context reject them with `NotSupportedExc
 
 ## Provider differences
 
-| Provider | Join aliases | Derived-table alias | Outer joins | APPLY / LATERAL |
+| Provider | Positional SQL table aliases | Derived-table alias | Outer joins | APPLY / LATERAL |
 |---|---|---|---|---|
 | SQLite | `as 't1'` | always emitted (optional in SQLite itself) | left/right/full supported | not supported (`NotSupportedException`) |
 | SQL Server | `as [t1]` | required | left/right/full supported | `CROSS APPLY` / `OUTER APPLY` |
