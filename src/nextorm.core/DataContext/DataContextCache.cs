@@ -138,4 +138,20 @@ public static class DataContextCache
         QueryPlanStore.Clear();
         MemberInfoExtensions.ClearColumnNames();
     }
+
+    /// <summary>
+    /// Test-only helper that ages every timed entry in the process-wide caches this class owns past the
+    /// current <see cref="CacheSlidingExpiration"/> window, so the real lazy-expiration path can be
+    /// exercised deterministically without a wall-clock sleep. It only ages entries; the next read
+    /// evicts them. A non-positive window leaves every store untouched. Internal: not part of the
+    /// public cache surface.
+    /// </summary>
+    internal static void ExpireTimedEntriesForTesting()
+    {
+        _metadata.ExpireEntriesForTesting();
+        _tvpMetadata.ExpireEntriesForTesting();
+        _selectListCache.ExpireEntriesForTesting();
+        _expCache.ExpireEntriesForTesting();
+        _inValuesCache.ExpireEntriesForTesting();
+    }
 }

@@ -93,7 +93,7 @@ public sealed class EfCoreQueryFilterLifecycleTests
             var kept = next.From<LifecycleRow>().OrderBy(row => row.Id).Select(row => row.Id);
             kept.ToList().Should().Equal(1, 3);
 
-            Thread.Sleep(1500);
+            DataContextCache.ExpireTimedEntriesForTesting();
 
             var act = () => next.From<LifecycleRow>().OrderBy(row => row.Id).Select(row => row.Id).ToList();
             act.Should().Throw<InvalidOperationException>().WithMessage("*unfiltered*");

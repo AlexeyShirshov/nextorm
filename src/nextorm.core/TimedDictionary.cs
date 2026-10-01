@@ -83,6 +83,26 @@ internal sealed class TimedDictionary<TKey, TValue> : IDictionary<TKey, TValue>
         return result;
     }
 
+    /// <summary>
+    /// Test-only helper that ages every timed entry past the current sliding window without touching the
+    /// wall clock, so a test can exercise the real lazy-expiration path deterministically. It only
+    /// rewrites the entry timestamp; the next access performs the actual eviction. A non-positive
+    /// <see cref="DataContextCache.CacheSlidingExpiration"/> leaves the store untouched.
+    /// </summary>
+    internal void ExpireEntriesForTesting()
+    {
+        var ttl = DataContextCache.CacheSlidingExpiration;
+        if (ttl <= TimeSpan.Zero)
+            return;
+
+        var agedStamp = UtcNowTicks - ttl.Ticks - 1;
+        foreach (var pair in _inner)
+        {
+            if (pair.Value.Timed)
+                pair.Value.Stamp = agedStamp;
+        }
+    }
+
     /// <summary>Gets or sets the value associated with <paramref name="key"/>.</summary>
     /// <param name="key">The key to look up.</param>
     /// <returns>The live cached value.</returns>
