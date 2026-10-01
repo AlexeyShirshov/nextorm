@@ -365,6 +365,46 @@ IReadOnlyList<int> second = result.Read<int>();  // [2]
 // result.Read<int>(); now throws InvalidOperationException
 ```
 
+#### Result-set cursors (`ReadSets`)
+
+Positional `Read<T>()` always reads the *next* set as the same `T`, so it cannot handle a command whose sets need different element types. `ReadSets()` instead enumerates the column-bearing result sets as [`ResultSet`](xref:NextORM.Core.ResultSet) cursors; every cursor reads **its own** set with a per-set `T`, either eagerly with `Read<T>()` or lazily with `ReadAsync<T>(ct)`. The async twin is `ReadSetsAsync(ct)`.
+
+```csharp
+using var result = dataContext.ExecuteRaw("select 1 as id; select 'two' as label");
+
+foreach (var set in result.ReadSets())
+{
+    if (set.Index == 0)
+    {
+        IReadOnlyList<int> ids = set.Read<int>();            // [1]
+    }
+    else
+    {
+        IReadOnlyList<string> labels = set.Read<string>();   // ["two"]
+    }
+
+    // ...or, asynchronously:
+    // await foreach (var value in set.ReadAsync<int>(cancellationToken)) { }
+}
+```
+
+A cursor exposes:
+
+- `Index` — its 0-based position among the **column-bearing** sets only.
+- `FieldCount` — the number of columns in the set.
+- `ColumnNames` — a snapshot taken when the cursor was produced; it stays valid after the outer traversal advances.
+- `Read<T>()` / `ReadAsync<T>(ct)` — the one-shot read of this set (eager or lazy).
+
+Traversal rules:
+
+- **One-shot and forward-only.** The sequence can be enumerated once; re-enumerating it, or mixing it with positional `Read<T>()`/`ReadAsync<T>()`, throws `InvalidOperationException`. Each set can be read once; a second read, or a cursor used after the outer traversal advanced or ended, throws `InvalidOperationException`. A cursor whose owning result was disposed throws `ObjectDisposedException`.
+- **Column-less sets are skipped.** Leading, intermediate and trailing sets without columns (DDL/DML) are skipped and do not count toward `Index`; a set with columns but no rows is still yielded. Rows of the current set that were not read are dropped automatically when the traversal advances, so the next set is read intact.
+- **Cancellation.** `ReadSetsAsync(ct)` cancels the outer traversal; `set.ReadAsync<T>(ct)` honors its own token. Cancellation throws `OperationCanceledException` and ends the traversal for good.
+- **Outputs.** `OutputParameters`/`ReturnValue` remain available once the sets are exhausted, but reading them first closes the reader, so a later `ReadSets()` throws `InvalidOperationException`; accessing outputs while a traversal is active is rejected.
+- **Ownership.** Disposing the outer enumerator (for example `break` in a `foreach`) invalidates its cursors but does not dispose the `ProcedureResult`; `using`/`await using` still releases the reader and command.
+
+A buffering `ReadAllAsync` that materialises every set at once is intentionally not provided: the traversal is forward-only and consumes one set at a time.
+
 ### Async
 
 `ExecuteRawAsync` opens the reader asynchronously; `ReadAsync<T>()` returns an `IAsyncEnumerable<T>` over the rows of the current set. `await using` disposes the result asynchronously. A `params` parameter must be last, so a `CancellationToken` cannot be combined with the expanded form: pass the token with the collection form `ExecuteRawAsync(sql, [p1, p2], cancellationToken)`, or use the token-less expanded form `ExecuteRawAsync(sql, new ProcedureParameter(...))`.

@@ -756,6 +756,75 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void Procedure_ReadSets_Heterogeneous_OutputsAfterExhaustion()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "#raw_sets_" + Guid.NewGuid().ToString("N");
+
+        Execute(ctx, $"create procedure {proc} @o int output as begin set @o = 5; select 1 as a; select 'two' as b; return 9; end;");
+
+        try
+        {
+            using var result = ctx.ExecuteProcedure(
+                proc,
+                [
+                    new ProcedureParameter("o", null, Direction: ParameterDirection.Output, DbType: DbType.Int32),
+                    new ProcedureParameter("rv", null, Direction: ParameterDirection.ReturnValue, DbType: DbType.Int32),
+                ]);
+
+            var indices = new List<int>();
+            var ints = new List<int>();
+            var strings = new List<string>();
+            foreach (var set in result.ReadSets())
+            {
+                indices.Add(set.Index);
+                if (set.Index == 0)
+                    ints.AddRange(set.Read<int>());
+                else
+                    strings.AddRange(set.Read<string>());
+            }
+
+            indices.Should().Equal(0, 1);
+            ints.Should().Equal(1);
+            strings.Should().Equal("two");
+
+            // Outputs are still available once every set has been read to exhaustion.
+            result.OutputParameters.Single().Value.Should().Be(5);
+            result.ReturnValue.Should().Be(9);
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc};");
+        }
+    }
+
+    [Fact]
+    public void Procedure_OutputsFirst_ReadSetsThrows()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "#raw_setsout_" + Guid.NewGuid().ToString("N");
+
+        Execute(ctx, $"create procedure {proc} @o int output as begin set @o = 5; select 1 as a; end;");
+
+        try
+        {
+            using var result = ctx.ExecuteProcedure(
+                proc,
+                [new ProcedureParameter("o", null, Direction: ParameterDirection.Output, DbType: DbType.Int32)]);
+
+            result.OutputParameters.Single().Value.Should().Be(5);
+
+            Action act = () => result.ReadSets().ToList();
+
+            act.Should().Throw<InvalidOperationException>();
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc};");
+        }
+    }
+
+    [Fact]
     public void ExecuteProcedure_OutputAndInputOutputParameters_ShouldReturnValues()
     {
         var ctx = _sut.DataProvider;

@@ -137,6 +137,204 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_HeterogeneousPerSetTypes_ShouldReadInOrder()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select 1 as a; select 'two' as b");
+
+        var indices = new List<int>();
+        var ints = new List<int>();
+        var strings = new List<string>();
+        foreach (var set in result.ReadSets())
+        {
+            indices.Add(set.Index);
+            if (set.Index == 0)
+                ints.AddRange(set.Read<int>());
+            else
+                strings.AddRange(set.Read<string>());
+        }
+
+        indices.Should().Equal(0, 1);
+        ints.Should().Equal(1);
+        strings.Should().Equal("two");
+    }
+
+    [Fact]
+    public async Task ExecuteRawAsync_MultipleResultSets_ReadSetsAsync_HeterogeneousPerSetTypes_ShouldReadInOrder()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+        var ct = TestContext.Current.CancellationToken;
+
+        await using var result = await ctx.ExecuteRawAsync("select 1 as a; select 'two' as b", [], ct);
+
+        var ints = new List<int>();
+        var strings = new List<string>();
+        await foreach (var set in result.ReadSetsAsync(ct))
+        {
+            if (set.Index == 0)
+            {
+                await foreach (var value in set.ReadAsync<int>(ct))
+                    ints.Add(value);
+            }
+            else
+            {
+                await foreach (var value in set.ReadAsync<string>(ct))
+                    strings.Add(value);
+            }
+        }
+
+        ints.Should().Equal(1);
+        strings.Should().Equal("two");
+    }
+
+    [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_SkipsLeadingIntermediateAndTrailingColumnLessSets()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        // The no-op DML statements match no rows but still surface as zero-column results between and
+        // around the selects, so they exercise leading/intermediate/trailing skipping.
+        using var result = ctx.ExecuteRaw(
+            "delete from delete_entity where 1 = 0; " +
+            "select 1 as a; " +
+            "update delete_entity set name = name where 1 = 0; " +
+            "select 2 as b; " +
+            "delete from delete_entity where 1 = 0");
+
+        var indices = new List<int>();
+        var values = new List<int>();
+        foreach (var set in result.ReadSets())
+        {
+            indices.Add(set.Index);
+            values.Add(set.Read<int>().Single());
+        }
+
+        indices.Should().Equal(0, 1);
+        values.Should().Equal(1, 2);
+    }
+
+    [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_CursorFromAdvancedSet_IsStale()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
+
+        using var sets = result.ReadSets().GetEnumerator();
+        sets.MoveNext().Should().BeTrue();
+        var first = sets.Current;
+        sets.MoveNext().Should().BeTrue();
+
+        Action act = () => first.Read<int>();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_ColumnNamesRemainStableAfterOuterAdvance()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select 1 as a, 2 as b; select 3 as c");
+
+        using var sets = result.ReadSets().GetEnumerator();
+        sets.MoveNext().Should().BeTrue();
+        var first = sets.Current;
+        sets.MoveNext().Should().BeTrue();
+
+        first.Index.Should().Be(0);
+        first.FieldCount.Should().Be(2);
+        first.ColumnNames.Should().Equal("a", "b");
+        sets.Current.ColumnNames.Should().Equal("c");
+    }
+
+    [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_UnreadRowsAreAutoSkippedAndNextSetStaysIntact()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select 1 as a union all select 10; select 2 as b");
+
+        using var sets = result.ReadSets().GetEnumerator();
+        sets.MoveNext().Should().BeTrue();
+        // Deliberately leave set 0's rows unread: advancing must auto-skip them.
+        sets.MoveNext().Should().BeTrue();
+        sets.Current.Read<int>().Should().Equal(2);
+    }
+
+    [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_OutputsRemainReadableAfterExhaustion()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
+
+        var indices = new List<int>();
+        foreach (var set in result.ReadSets())
+        {
+            indices.Add(set.Index);
+            set.Read<int>().Should().NotBeEmpty();
+        }
+
+        indices.Should().Equal(0, 1);
+
+        // The traversal ended cleanly, so the result (and its output snapshot) stays usable.
+        result.OutputParameters.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_WhenOutputsReadFirst_TraversalThrows()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
+
+        // Reading outputs first closes the reader; the result sets are gone.
+        result.OutputParameters.Should().BeEmpty();
+
+        Action act = () => result.ReadSets().ToList();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void ExecuteRaw_MultipleResultSets_ReadSets_EarlyBreak_KeepsOwnerUsable()
+    {
+        Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot execute a multi-statement batch in one round trip.");
+
+        var ctx = _sut.DataProvider;
+
+        using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
+
+        foreach (var set in result.ReadSets())
+        {
+            set.Read<int>().Should().Equal(1);
+            break;
+        }
+
+        // Breaking disposes the outer enumerator and invalidates its cursors, but the ProcedureResult
+        // (and therefore its output snapshot) is still owned by the caller.
+        result.OutputParameters.Should().BeEmpty();
+    }
+
+    [Fact]
     public void ExecuteRaw_TransactionRollback_ShouldDiscardRawInsert()
     {
         Assert.SkipUnless(Provider.SupportsTransactions, "This provider does not support transactions.");

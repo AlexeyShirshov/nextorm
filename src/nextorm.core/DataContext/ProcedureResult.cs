@@ -24,6 +24,11 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
     private int _resultSetIndex = -1;
     private bool _outputsRead;
     private bool _disposed;
+    private bool _legacyReadUsed;
+    private bool _setsStarted;
+    private bool _setsEnumerated;
+    private bool _traversalActive;
+    private bool _currentCursorConsumed;
     private IReadOnlyList<ProcedureOutputParameter>? _outputs;
     private object? _returnValue;
 
@@ -64,6 +69,46 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
     }
 
     /// <summary>
+    /// Enumerates the column-bearing result sets of the command in order, yielding a <see cref="ResultSet"/>
+    /// cursor for each. Leading, intermediate and trailing result sets without columns (DDL/DML) are
+    /// skipped and do not count toward <see cref="ResultSet.Index"/>; a set with columns but no rows is
+    /// still yielded. Each set can be consumed once, eagerly with <see cref="ResultSet.Read{T}"/> or lazily
+    /// with <see cref="ResultSet.ReadAsync{T}"/>.
+    /// </summary>
+    /// <returns>A one-shot, forward-only sequence of result-set cursors; empty when there is none.</returns>
+    /// <remarks>
+    /// The outer iteration is one-shot and must not be mixed with the legacy <see cref="Read{T}"/> /
+    /// <see cref="ReadAsync{T}"/> sequence or with <see cref="OutputParameters"/>/<see cref="ReturnValue"/>
+    /// while it is active. Disposing the outer enumerator invalidates its cursors but does not dispose this
+    /// result or its reader.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Result sets were already traversed or read another way.</exception>
+    /// <exception cref="ObjectDisposedException">The result has been disposed.</exception>
+    public IEnumerable<ResultSet> ReadSets()
+    {
+        ThrowIfDisposed();
+        ThrowIfReaderClosed();
+        BeginSetTraversal();
+        return ReadSetsCore();
+    }
+
+    /// <summary>
+    /// Asynchronously enumerates the column-bearing result sets of the command in order, yielding a
+    /// <see cref="ResultSet"/> cursor for each. See <see cref="ReadSets"/> for the traversal semantics.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the traversal (including a slow provider move).</param>
+    /// <returns>A one-shot, forward-only async sequence of result-set cursors; empty when there is none.</returns>
+    /// <exception cref="InvalidOperationException">Result sets were already traversed or read another way.</exception>
+    /// <exception cref="ObjectDisposedException">The result has been disposed.</exception>
+    public IAsyncEnumerable<ResultSet> ReadSetsAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        ThrowIfReaderClosed();
+        BeginSetTraversal();
+        return ReadSetsAsyncCore(cancellationToken);
+    }
+
+    /// <summary>
     /// Advances to the next result set (the first call reads the current one) and materializes all of
     /// its rows into <typeparamref name="T"/>. Each call returns one set; when there are no more sets,
     /// an <see cref="InvalidOperationException"/> is thrown.
@@ -76,6 +121,8 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
     {
         ThrowIfDisposed();
         ThrowIfReaderClosed();
+        ThrowIfSetTraversalStarted();
+        _legacyReadUsed = true;
 
         var reader = MoveToNextResultSet();
         // Advance the cursor before mapping/building the mapper: a mapping failure must not make the
@@ -109,6 +156,8 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
     {
         ThrowIfDisposed();
         ThrowIfReaderClosed();
+        ThrowIfSetTraversalStarted();
+        _legacyReadUsed = true;
 
         var reader = await MoveToNextResultSetAsync(cancellationToken).ConfigureAwait(false);
         // See Read<T>: advance the cursor before mapping so a mapping failure cannot re-read this set.
@@ -126,6 +175,7 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
             return;
 
         _disposed = true;
+        _traversalActive = false;
         _owner.Dispose();
     }
 
@@ -137,6 +187,7 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
             return;
 
         _disposed = true;
+        _traversalActive = false;
         await _owner.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -189,6 +240,9 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
         if (_outputsRead)
             return;
 
+        if (_traversalActive)
+            throw new InvalidOperationException("Output parameters cannot be read while result sets are being enumerated; finish or dispose the traversal first.");
+
         // Closing the reader is what makes ADO.NET output/return-value parameters available; it also
         // means any result set that was not read is discarded.
         _owner.CloseReader();
@@ -214,6 +268,171 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
         _returnValue = returnValue;
         _outputsRead = true;
     }
+
+    private IEnumerable<ResultSet> ReadSetsCore()
+    {
+        if (_setsEnumerated)
+            throw AlreadyEnumerated();
+
+        _setsEnumerated = true;
+        // Outputs may have drained the reader between ReadSets() and the first MoveNext; the already
+        // returned sequence must not resurrect it.
+        ThrowIfReaderClosed();
+        // Activation happens on the first MoveNext, not when ReadSets() was called, so an
+        // un-enumerated sequence does not block OutputParameters/ReturnValue.
+        _traversalActive = true;
+
+        var reader = _owner.Reader;
+        try
+        {
+            ResultSetNavigator.AdvanceToResultSet(reader);
+            if (reader.FieldCount == 0)
+                yield break;
+
+            var index = 0;
+            while (true)
+            {
+                _resultSetIndex = index;
+                _currentCursorConsumed = false;
+                yield return new ResultSet(this, index, SnapshotColumns(reader));
+
+                InvalidateCurrentCursor();
+                if (!ResultSetNavigator.MoveToNextResultSet(reader))
+                    yield break;
+
+                index++;
+            }
+        }
+        finally
+        {
+            InvalidateCurrentCursor();
+            _traversalActive = false;
+        }
+    }
+
+    private async IAsyncEnumerable<ResultSet> ReadSetsAsyncCore([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        if (_setsEnumerated)
+            throw AlreadyEnumerated();
+
+        _setsEnumerated = true;
+        cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfReaderClosed();
+        // See ReadSetsCore: activation is deferred to the first MoveNextAsync.
+        _traversalActive = true;
+
+        var reader = _owner.Reader;
+        try
+        {
+            await ResultSetNavigator.AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
+            if (reader.FieldCount == 0)
+                yield break;
+
+            var index = 0;
+            while (true)
+            {
+                _resultSetIndex = index;
+                _currentCursorConsumed = false;
+                yield return new ResultSet(this, index, SnapshotColumns(reader));
+
+                InvalidateCurrentCursor();
+                if (!await ResultSetNavigator.MoveToNextResultSetAsync(reader, cancellationToken).ConfigureAwait(false))
+                    yield break;
+
+                index++;
+            }
+        }
+        finally
+        {
+            InvalidateCurrentCursor();
+            _traversalActive = false;
+        }
+    }
+
+    internal IReadOnlyList<T> ReadCurrentSet<T>(ResultSet cursor)
+    {
+        var reader = BeginCursorRead(cursor);
+        // Advance the cursor before mapping/building the mapper, mirroring Read<T>: a mapping failure
+        // must not make the set re-readable.
+        var mapper = RawMapperFactory.GetOrBuild<T>(_context, reader);
+
+        var list = new List<T>();
+        while (reader.Read())
+            list.Add(mapper(reader));
+
+        return list;
+    }
+
+    internal async IAsyncEnumerable<T> ReadCurrentSetAsync<T>(ResultSet cursor, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var reader = BeginCursorRead(cursor);
+        // See ReadCurrentSet<T>: consume the set before building the mapper.
+        var mapper = RawMapperFactory.GetOrBuild<T>(_context, reader);
+
+        // The cursor is spent from BeginCursorRead on (the consumed flag stays set until the outer
+        // traversal advances), so a stale copy cannot re-read the set. Deliberately do NOT invalidate
+        // here: an inner read that finishes after the outer advanced would otherwise zero the owner's
+        // current-set index and impersonate that advance.
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            yield return mapper(reader);
+    }
+
+    private DbDataReader BeginCursorRead(ResultSet cursor)
+    {
+        ThrowIfDisposed();
+        ThrowIfReaderClosed();
+
+        if (!cursor.IsInitialized
+            || !ReferenceEquals(cursor.Owner, this)
+            || !_traversalActive
+            || cursor.Index != _resultSetIndex)
+        {
+            throw new InvalidOperationException("The result-set cursor is stale: the outer traversal has advanced or ended, and a cursor is valid only while its set is current.");
+        }
+
+        if (_currentCursorConsumed)
+            throw new InvalidOperationException("This result set has already been read; each set can be read once, either eagerly or lazily.");
+
+        _currentCursorConsumed = true;
+        return _owner.Reader;
+    }
+
+    private static string[] SnapshotColumns(DbDataReader reader)
+    {
+        var names = new string[reader.FieldCount];
+        for (var i = 0; i < names.Length; i++)
+            names[i] = reader.GetName(i);
+
+        return names;
+    }
+
+    private void InvalidateCurrentCursor()
+    {
+        _resultSetIndex = -1;
+        _currentCursorConsumed = false;
+    }
+
+    private void BeginSetTraversal()
+    {
+        if (_legacyReadUsed)
+            throw new InvalidOperationException("Result sets were already read with Read<T>/ReadAsync<T>; a command supports a single traversal style.");
+
+        if (_setsStarted)
+            throw new InvalidOperationException("Result sets were already enumerated; each command supports a single traversal.");
+
+        // The one-shot/mode guard is claimed eagerly so mixing legacy Read<T> is rejected even before
+        // the sequence is enumerated; activity itself starts on the first MoveNext (see the cores).
+        _setsStarted = true;
+    }
+
+    private void ThrowIfSetTraversalStarted()
+    {
+        if (_setsStarted)
+            throw new InvalidOperationException("Result sets are being read with ReadSets/ReadSetsAsync; Read<T>/ReadAsync<T> cannot be mixed with that traversal.");
+    }
+
+    private static InvalidOperationException AlreadyEnumerated()
+        => new("This result-set enumeration has already been consumed; each command supports a single traversal.");
 
     private static object? Normalize(object? value) => value is DBNull ? null : value;
 
