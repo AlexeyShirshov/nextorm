@@ -46,10 +46,29 @@
 - Owner resolved both scope decisions: the alias feature is ALIAS-ONLY (no mixing with positional joins; positional API untouched), and `JoinInto` is EXCLUDED from aliases. Feature surface = the 7 projection operators (Join/LeftJoin/RightJoin/FullJoin/CrossJoin/CrossApply/OuterApply).
 - Resulting functional state (fresh): `nextorm.slnx -c Debug` 0 Warning(s)/0 Error(s); `tests/nextorm.alias.tests` 29/29; core 1215/1215; provider units 0 failed (postgres 669, sqlserver 545, sqlite 866, mysql 249, mariadb 149, clickhouse 437); integration `JoinAlias` 7/7 per provider (Postgres/SqlServer/MySql/Sqlite); perf acceptance 7 cases / 0 failed / ~50 s / cached-prepared ratio +7.6% (<20%); PoC green.
 - CAVEAT — owner-accepted deviation from the CHECK gate: the final CHECK verdict was FAIL solely on acceptance/evidence gates, not on functionality. Still OPEN and tracked in milestone 1.0.9-b:
-  * full variant-matrix -> test/guard evidence pack with file:line;
-  * full-scope coverage >=85% line / >=75% branch INCLUDING integration containers (local coverage without containers was 80.7% line / 73.7% branch; core 80.9/74.0, sqlite 82.6/58.9, postgres 74.6/72.4, sqlserver 77.5/75.3);
-  * mutation testing of changed runtime logic (ProjectionAliasCache / MemberTranslator / EntityBuilder alias path);
-  * package-consumer certification beyond the single packed-consumer e2e check;
-  * API-freeze tooling (`PublicAPI.*` / ApiCompat) — tracked in `docs/specs/roadmap/todo_public_api_freeze.md`.
+  * full variant-matrix -> test/guard evidence pack with file:line — DONE (see Evidence pack, item 1);
+  * full-scope coverage >=85% line / >=75% branch INCLUDING integration containers — DONE (see Evidence pack, item 2; PASS with containers);
+  * mutation testing of changed runtime logic (ProjectionAliasCache / MemberTranslator / EntityBuilder alias path) — BLOCKED (tooling; see Evidence pack, item 3);
+  * OPEN — package-consumer certification beyond the single packed-consumer e2e check;
+  * OPEN — API-freeze tooling (`PublicAPI.*` / ApiCompat) — tracked in `docs/specs/roadmap/todo_public_api_freeze.md`.
 - Intentional limitations (documented EN/RU): alias members are expression-only (direct read throws `NotSupportedException`); `JoinInto` has no alias surface; aliases are alias-only; arity cap 8; SQL providers only (in-memory fail-closed).
 - Status file retained because the tracked OPEN evidence items above remain.
+
+## Evidence pack (items 1-3, 2026-10-01)
+### Item 1 - variant matrix (done)
+- Added `docs/specs/design/join-alias-variant-matrix.md`: every alias variant mapped to its test or runtime guard with `file:line` (7 operators, chain shape, Where interplay, plan cache, guards, generator diagnostics, frozen surface, cross-provider integration).
+- Gaps recorded there (small, single-test each): (a) positional-after-alias guard `EntityBuilder.cs:3137` has no direct test; (b) correlated `CrossApply`/`OuterApply` alias has no positive SQL test; (c) `ProjectionAliasCache.TryParseItemPosition` digit-edge (e.g. `Buyer2`) untested.
+
+### Item 2 - coverage WITH integration containers (done, PASS)
+- Recipe (CI-equivalent): `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"` then `dotnet tool run reportgenerator`.
+- Tests: 7220 total, 0 failed, 188 skipped (all providers ran); collection 1m42s.
+- Overall: **Line 88.1% (>=85 PASS), Branch 78.8% (>=75 PASS)**. Assemblies: core 87.9, postgres 88.9, sqlite 89.3, sqlserver 94.3.
+- Alias units: `ProjectionAliasCache` 96.9%, `JoinSlotAttribute` 100%, `AliasFromProjectionVisitor` 83.3%, `MemberTranslator` 86.3%, `EntityBuilder<TEntity>` 91.3/92.1%, `RebaseAliasProjectionVisitor` 81.2%.
+- Artifacts: `tests/coverage/report/Summary.txt`, `tests/coverage/coverage.cobertura.xml`.
+
+### Item 3 - mutation testing (BLOCKED - tooling, no trustworthy score)
+- Tool: Stryker.NET 5.0.0 (global). Must run from the source-project dir (`src/nextorm.core`) with `-tp ../../tests/nextorm.alias.tests/nextorm.alias.tests.csproj`; solution-context runs select all 7189 tests.
+- Scope: the alias-specific runtime units `ProjectionAliasCache.cs`, `AliasFromProjectionVisitor.cs`, `JoinSlotAttribute.cs` (whole-file mutation of the 700-line `MemberTranslator.cs` / 4100-line `EntityBuilder.cs` is out of scope for a targeted run).
+- Result: mutation score 0.00%; Killed 0, Survived all; all 53 mutant test runs reported "success", 0 failed runs.
+- Decisive evidence this is a tooling failure, not a test-quality finding: the mutant `ProjectionAliasCache.cs:46` (`position - 1` -> `position + 1`) survives, although `tests/nextorm.alias.tests/AliasProjectionShapeTests.cs:56` asserts `GetMemberPosition(Item2) == 1`. Coverage capture also failed ("It looks like the test coverage capture failed"). Stryker used its bundled **net8.0** `vstest.console` against the repo's **net10.0** xunit.v3 tests while `global.json` forces the Microsoft.Testing.Platform runner, so mutant activation/result surfacing does not work.
+- Verdict: mutation score COULD NOT be produced on this toolchain; tracked as a tooling task (candidate: Stryker+MTP/VSTest integration), not a defect in the alias code. Logs: `/tmp/opencode/stryker.log`, `/tmp/opencode/stryker2.log`.
