@@ -372,7 +372,23 @@ public partial class QueryCommand
                     // (Stream/TextReader) is not one of the scalar types in IsSingleColumnProjection.
                     var bodyIsStreaming = TableAliasAccessors.IsStreaming(cmd._exp.Body);
 
-                    if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
+                    // A whole-projection (identity) read over a column-shape source
+                    // (a data-modifying CTE or an equivalent derived shape) reuses that slot-tagged shape
+                    // instead of falling through with no columns. TryBuildProjectionSelectList's reuse
+                    // branch supplies the per-slot columns and their stored aliases.
+                    if (TypeFacts.UnwrapConvert(cmd._exp.Body) is ParameterExpression
+                        && cmd._from?.ColumnShape is not null
+                        && (cmd.ProjectionType ?? srcType!).IsAssignableTo(typeof(IProjection))
+                        && TryBuildProjectionSelectList(cmd, noHash, cmd.ProjectionType ?? srcType!, cancellationToken, out var identityProjectionColumns))
+                    {
+                        selectList = identityProjectionColumns;
+                        if (!cmd._dontCache && !noHash)
+                            for (var i = 0; i < identityProjectionColumns.Length; i++) unchecked
+                            {
+                                columnsPlanHash = columnsPlanHash * 13 + identityProjectionColumns[i].PlanHashCode;
+                            }
+                    }
+                    else if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
                         var args = ctor.Arguments;
                         var argsCount = args.Count;
@@ -599,8 +615,29 @@ public partial class QueryCommand
         private static bool TryBuildProjectionSelectList(QueryCommand cmd, bool noHash, Type srcType, CancellationToken cancellationToken, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SelectExpression[]? selectList)
         {
             selectList = null;
-            if (cmd._joins is not { Length: > 0 } || !srcType.IsAssignableTo(typeof(IProjection)))
+            if (!srcType.IsAssignableTo(typeof(IProjection)))
                 return false;
+
+            // A derived/CTE source that already exposes a full identity shape
+            // (slot-tagged item columns) is reused directly, so From("mut").ToList() materializes the
+            // complete Projection without re-expanding onto non-existent physical item tables.
+            if (cmd._joins is not { Length: > 0 })
+            {
+                var shape = cmd._from?.ColumnShape;
+                if (shape?.SelectList is { Length: > 0 } derived)
+                {
+                    for (var i = 0; i < derived.Length; i++)
+                    {
+                        if (derived[i].ProjectionItem is null)
+                            return false;
+                    }
+
+                    selectList = derived;
+                    return true;
+                }
+
+                return false;
+            }
 
             var itemTypes = srcType.GetGenericArguments();
             var projectionParam = Expression.Parameter(srcType);
@@ -621,12 +658,37 @@ public partial class QueryCommand
 
                 // Every item must be a mapped entity; a scalar item cannot be expanded from an entity
                 // source and is left to the caller's existing (rejecting) path rather than materialized
-                // as a wrong shape.
-                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot))
+                // as a wrong shape. A mutation-CTE identity shape additionally accepts a metadata-less
+                // derived/read-CTE item by expanding its readable CLR surface, mirroring
+                // JoinedReturningProjection.ParseIdentity and the mutation's RETURNING list. The gate on
+                // IdentitySlotAliases keeps ordinary joined projection queries on their existing path.
+                if (!TryExpandEntityItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), null, output, cancellationToken, reRoot)
+                    && !(cmd.IdentitySlotAliases && TryAppendShapeItem(itemTypes[i], itemExpression, i, srcType.GetProperty(memberName), output)))
                     return false;
             }
 
             var columns = output.ToArray();
+
+            // For an identity CTE shape, tag every flattened item column with the
+            // collision-free per-slot alias BEFORE the per-column plan hash is computed, so the prepared
+            // shape and its cached plan consistently carry the alias the mutation's RETURNING list emits.
+            // The pairs are the same ordered (slot, physical column) list SqlBuilder.EnumerateIdentityMembers
+            // uses, so the outer CTE read resolves p.ItemN.Property to exactly the emitted alias.
+            if (cmd.IdentitySlotAliases && columns.Length > 0)
+            {
+                var pairs = new (int Slot, string Column)[columns.Length];
+                for (var i = 0; i < columns.Length; i++)
+                {
+                    var column = columns[i];
+                    pairs[i] = (column.ProjectionItem!.Slot,
+                        column.PhysicalColumnName ?? column.PropertyName ?? column.PropertyInfo?.Name ?? "col");
+                }
+
+                var aliases = ProjectionAliasCache.AllocateIdentityAliases(pairs);
+                for (var i = 0; i < columns.Length; i++)
+                    columns[i].PhysicalColumnName = aliases[i];
+            }
+
             for (var i = 0; i < columns.Length; i++)
             {
                 columns[i].Index = i;
@@ -675,6 +737,41 @@ public partial class QueryCommand
 
                 column.ProjectionItem = group;
                 output.Add(column);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Expands one metadata-less derived/read-CTE projection item (a slot whose CLR type is not a
+        /// mapped entity) into its readable CLR-surface columns, tagged with the same slot group the
+        /// materializer uses. Mirrors <c>JoinedReturningProjection.ShapeColumns</c> so the mutation's
+        /// RETURNING aliases and this CTE read shape agree. Returns <see langword="false"/> when the item
+        /// exposes no readable column, leaving the caller's rejecting path in place.
+        /// </summary>
+        private static bool TryAppendShapeItem(
+            Type itemType,
+            Expression itemExpression,
+            int slot,
+            PropertyInfo? member,
+            List<SelectExpression> output)
+        {
+            var shapeColumns = JoinedReturningProjection.ShapeColumns(itemType);
+            if (shapeColumns.Count == 0)
+                return false;
+
+            var group = new ProjectionEntityItem(slot, itemType, member);
+            for (var i = 0; i < shapeColumns.Count; i++)
+            {
+                var property = shapeColumns[i];
+                output.Add(new SelectExpression(property.PropertyInfo.PropertyType)
+                {
+                    Index = output.Count,
+                    PropertyName = property.PropertyInfo.Name,
+                    PropertyInfo = property.PropertyInfo,
+                    Expression = Expression.Property(itemExpression, property.PropertyInfo),
+                    ProjectionItem = group,
+                });
             }
 
             return true;

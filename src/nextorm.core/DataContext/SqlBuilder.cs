@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -1217,18 +1218,36 @@ internal readonly struct SqlBuilder
         {
             var items = EnumerateReturningMembers(projection);
             var rendered = new List<string>(items.Count);
+            var isIdentity = TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression;
             for (var i = 0; i < items.Count; i++)
             {
                 using var visitor = _ctx.CreateColumnVisitor(parameter.Type, 0, dontNeedAlias: false);
-                visitor.Visit(items[i].Expression);
+                try
+                {
+                    visitor.Visit(items[i].Expression);
+                }
+                catch (BuildSqlCommandException ex) when (isIdentity && TryGetIdentityAddress(items[i].Expression, out var addressSlot, out var addressMember))
+                {
+                    // A joined source that exposes only a partial shape cannot satisfy the full returned
+                    // item; fail before the database with the slot/member identity rather than the raw
+                    // column-resolution error.
+                    var itemOrdinal = addressSlot + 1;
+                    throw new QueryPreparationException(
+                        $"The identity multi-table RETURNING form cannot resolve member '{addressMember}' of item {itemOrdinal} ({projection.Parameters[0].Type.GetProperty("Item" + itemOrdinal)?.PropertyType.Name ?? "item"}) against the joined source shape; add the member to the joined source projection or drop it from the returned item.", ex);
+                }
 
                 // The outer CTE read addresses a derived-style member under the name the body exposes:
                 // a projection member that keeps its source name (p.Item1.Id -> "Id") is read back under
                 // the mapped column name ("id"), so aliasing it to the CLR name would make the outer
                 // reference miss it. Only a renamed member (TargetId = p.Item1.Id) exposes the alias and
                 // must be aliased with the dialect's quoted-identifier style.
-                var renamed = visitor.ColumnName is { } physical
-                    && !string.Equals(physical, items[i].Name, StringComparison.OrdinalIgnoreCase);
+                //
+                // An identity member's name IS the deterministic per-slot alias the
+                // outer CTE shape stores, so it must be emitted unconditionally — including on a derived
+                // joined slot, where the visitor exposes no physical column name to compare against.
+                var renamed = isIdentity
+                    || (visitor.ColumnName is { } physical
+                        && !string.Equals(physical, items[i].Name, StringComparison.OrdinalIgnoreCase));
                 rendered.Add(renamed
                     ? visitor.ToString() + _ctx.Dialect.MakeColumnAlias(items[i].Name, _ctx.KeywordCase)
                     : visitor.ToString());
@@ -1249,6 +1268,12 @@ internal readonly struct SqlBuilder
     {
         var body = TypeFacts.UnwrapConvert(projection.Body);
         List<(Expression, string)> members;
+
+        // The identity form expands every mapped property of every slot and exposes
+        // each under a deterministic per-slot alias, so a self-join of the same type keeps its Item1/Item2
+        // columns distinct in the RETURNING list and in the outer CTE read.
+        if (body is ParameterExpression)
+            return EnumerateIdentityMembers(projection);
 
         switch (body)
         {
@@ -1285,7 +1310,7 @@ internal readonly struct SqlBuilder
 
             default:
                 throw new NotSupportedException(
-                    "A joined RETURNING projection must select at least one mapped member; the whole-projection form is not supported. Provide an explicit projection, for example p => new { p.Item1.Id, p.Item2.Name }.");
+                    $"A joined RETURNING projection member of node kind '{body.NodeType}' is not supported; select a mapped member. Project the returned columns explicitly, for example p => new {{ p.Item1.Id, p.Item2.Name }}.");
         }
 
         // Fail closed: an empty RETURNING list is never valid, so a selector that expands to zero members
@@ -1293,10 +1318,103 @@ internal readonly struct SqlBuilder
         if (members.Count == 0)
         {
             throw new NotSupportedException(
-                "A joined RETURNING projection must select at least one mapped member; the whole-projection form is not supported. Provide an explicit projection, for example p => new { p.Item1.Id, p.Item2.Name }.");
+                "A joined RETURNING projection selected no mapped members; project at least one explicitly, for example p => new { p.Item1.Id, p.Item2.Name }.");
         }
 
         return members;
+    }
+
+    // Expands the identity selector into p.ItemN.Property expressions, one per
+    // mapped property of every slot, paired with the deterministic per-slot alias the outer CTE read
+    // addresses. Mirrors JoinedReturningProjection.ParseIdentity's slot/property order.
+    private static List<(Expression Expression, string Name)> EnumerateIdentityMembers(LambdaExpression projection)
+    {
+        var projectionType = projection.Parameters[0].Type;
+        var entityTypes = projectionType.GetGenericArguments();
+        var parameter = projection.Parameters[0];
+        var entries = new List<(Expression Expression, int Slot, string Column)>();
+
+        for (var slot = 0; slot < entityTypes.Length; slot++)
+        {
+            // Same eligibility as JoinedReturningProjection.ParseIdentity: registered metadata when it
+            // exists, otherwise the slot's readable CLR surface (a metadata-less derived/read-CTE joined
+            // side). Keeping the two in lockstep is what lets the parse-accepted slot render instead of
+            // throwing only at ToSql()/Single().
+            IReadOnlyList<IPropertyMetadata> slotProperties;
+            if (DataContextCache.Metadata.TryGetValue(entityTypes[slot], out var metadata) && metadata.Properties.Count > 0)
+            {
+                slotProperties = metadata.Properties;
+            }
+            else
+            {
+                slotProperties = JoinedReturningProjection.ShapeColumns(entityTypes[slot]);
+                if (slotProperties.Count == 0)
+                    throw new QueryPreparationException(
+                        $"No metadata is registered for {entityTypes[slot].Name} and it exposes no readable columns, so the identity multi-table RETURNING form cannot expand item {slot + 1} ('{projectionType.GetProperty("Item" + (slot + 1))?.Name ?? "Item" + (slot + 1)}' of {projectionType.Name}). Register every joined entity with From<T>/Join<T> on the same data context.");
+            }
+
+            var itemAccess = Expression.Property(parameter, "Item" + (slot + 1));
+            foreach (var property in slotProperties)
+            {
+                if (property.RangeColumns is not null)
+                    throw RangeColumnPairs.NotReturnable(property);
+
+                entries.Add((Expression.Property(itemAccess, property.PropertyInfo), slot, property.ColumnName));
+            }
+        }
+
+        // Allocate across the whole flattened output so a repeated column or an alias-shaped column name
+        // cannot collapse two slots onto one alias. The same ordered pairs drive the prepared CTE shape
+        // (see MutationCteQuery.BuildShape), so the RETURNING list and the outer read always agree.
+        var pairs = new (int Slot, string Column)[entries.Count];
+        for (var i = 0; i < entries.Count; i++)
+            pairs[i] = (entries[i].Slot, entries[i].Column);
+
+        var aliases = ProjectionAliasCache.AllocateIdentityAliases(pairs);
+        var members = new List<(Expression, string)>(entries.Count);
+        for (var i = 0; i < entries.Count; i++)
+            members.Add((entries[i].Expression, aliases[i]));
+
+        return members;
+    }
+
+    /// <summary>
+    /// Recognizes an identity member access of the form <c>p.ItemN.Member</c> and yields the zero-based
+    /// item slot (<c>ItemN</c> is one-based, so <c>slot = ordinal - 1</c>) and the CLR member name. Used
+    /// to report a member of a returned identity item that the joined source shape cannot resolve, with
+    /// the slot/member address instead of the raw column-resolution error.
+    /// </summary>
+    /// <param name="expression">The returning member expression to inspect.</param>
+    /// <param name="slot">The zero-based item slot when the expression addresses an identity member.</param>
+    /// <param name="member">The CLR member name when the expression addresses an identity member.</param>
+    /// <returns><see langword="true"/> when the expression is a <c>p.ItemN.Member</c> access.</returns>
+    private static bool TryGetIdentityAddress(Expression expression, out int slot, out string member)
+    {
+        slot = -1;
+        member = string.Empty;
+
+        if (expression is not MemberExpression memberAccess || memberAccess.Member is not PropertyInfo memberProperty)
+            return false;
+
+        var target = memberAccess.Expression;
+        while (target is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            target = unary.Operand;
+
+        if (target is not MemberExpression itemAccess || itemAccess.Member is not PropertyInfo itemProperty)
+            return false;
+
+        var itemName = itemProperty.Name;
+        if (itemName.Length <= 4
+            || !itemName.StartsWith("Item", StringComparison.Ordinal)
+            || !int.TryParse(itemName.AsSpan(4), out var ordinal)
+            || ordinal < 1)
+        {
+            return false;
+        }
+
+        slot = ordinal - 1;
+        member = memberProperty.Name;
+        return true;
     }
 
     /// <summary>

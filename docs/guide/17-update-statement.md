@@ -165,9 +165,17 @@ selects a column of the first (`Item1`) table; the value may be a constant or an
 references any joined table (`p.Item2...`). `Where` filters on the whole projection, and the terminal is
 `Update()`/`UpdateAsync()` (affected-row count) or `ToSql()`.
 
-Multi-table `Returning(projection)` is available on PostgreSQL only (`UPDATE ... FROM ... RETURNING`) and
-requires an explicit projection — the whole-projection form is not supported. It works
-both as a normal terminal and as a data-modifying CTE body through `With(name, update)`:
+Multi-table `Returning()`/`Returning(projection)` is available on PostgreSQL only
+(`UPDATE ... FROM ... RETURNING`), on INNER joins and for arities 2–8. `Returning()` — equivalent to
+`Returning(p => p)` — returns the whole joined projection (`Projection<T1, ...>`): every returnable mapped
+property of every item slot, in source order, where `Item1` is the update target and every repeated CLR
+type stays distinct by slot, so a self-join of one entity keeps its `Item1`/`Item2` values apart. An
+update returns the post-update target values. `Returning(p => new { ... })` returns an explicit projection
+instead; returned columns get deterministic per-slot aliases, and explicit projections are unchanged. No
+`Returning()` call adds a `RETURNING` list implicitly. A returned item whose mapped property is a
+multi-column `Range<T>` is rejected, and a required member with no counterpart in the joined source shape
+is rejected naming the slot and member. It works both as a normal terminal and as a data-modifying CTE
+body through `With(name, update)`:
 
 ```csharp
 var updated = ctx.From<IOrder>()
@@ -182,6 +190,19 @@ var updated = ctx.From<IOrder>()
 ```sql
 -- PostgreSQL
 update orders as "t1" set status = @p0 from customers as "t2" where t1.customer_id = t2.id and t2.tier = 'gold' returning t1.id as "OrderId", t2.name as "CustomerName"
+```
+
+The parameterless form returns every returnable column of both slots under deterministic per-slot aliases
+(`__s1_*`, `__s2_*`, …):
+
+```csharp
+var whole = ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "priority")
+    .Where(p => p.Item2.Tier == "gold")
+    .Returning()          // equivalent to .Returning(p => p)
+    .ToList();
 ```
 
 Only INNER `Join` joins are supported: the join conditions are folded into the filter (or kept as the

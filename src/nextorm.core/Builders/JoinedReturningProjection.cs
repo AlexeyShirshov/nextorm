@@ -8,8 +8,8 @@ namespace NextORM.Core;
 /// positional join projection (<c>Projection&lt;T1, ...&gt;</c>), so a selected member may belong to any
 /// joined entity; the parser resolves each reflected member against the metadata of every entity the
 /// selector actually reads and returns the same column/select-list shape the single-table
-/// <see cref="ReturningProjection"/> produces. Only the explicit projection form is accepted: the
-/// whole-join-projection (identity) form cannot address the projection's item slots in the CTE read shape.
+/// <see cref="ReturningProjection"/> produces. The whole-join-projection (identity) form is accepted and
+/// expands every returnable mapped property of every item slot.
 /// </summary>
 internal static class JoinedReturningProjection
 {
@@ -24,12 +24,12 @@ internal static class JoinedReturningProjection
     {
         var projectionType = projection.Parameters[0].Type;
 
-        // The whole-projection (identity) form cannot address the projection's item slots in the CTE read
-        // shape: it would reach EnumerateReturningMembers' default and emit a bare RETURNING with no
-        // columns. Reject it up front instead.
-        if (TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression || projection.ReturnType == projectionType)
-            throw new NotSupportedException(
-                "The whole-projection (identity) RETURNING form is not supported for a multi-table mutation; provide an explicit projection, for example p => new { p.Item1.Id, p.Item2.Name }.");
+        // The whole-projection (identity) form expands every returnable mapped
+        // property of every item slot, tagged with a shared ProjectionEntityItem per slot so the row
+        // materializer rebuilds each item and assigns it to ItemN. Slot-aware SQL aliases are generated
+        // from the same position/column pair by ProjectionAliasCache.SlotAlias.
+        if (TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression)
+            return ParseIdentity(projectionType);
 
         var entityTypes = projectionType.GetGenericArguments();
         var referencedSlots = ReferencedSlots(projection);
@@ -72,6 +72,60 @@ internal static class JoinedReturningProjection
         }
 
         return ReturningProjection.Parse(projection, allProperties, Find);
+    }
+
+    /// <summary>
+    /// Expands the whole-projection (identity) selector: every returnable mapped property of every item
+    /// slot, in slot order, tagged with a shared <see cref="ProjectionEntityItem"/> so the materializer
+    /// rebuilds each item. A slot with no registered entity metadata falls back to its readable CLR
+    /// surface (a derived/read-CTE joined side), mirroring the explicit path.
+    /// </summary>
+    private static (IReadOnlyList<IPropertyMetadata> Columns, SelectExpression[] SelectList, bool OneColumn) ParseIdentity(Type projectionType)
+    {
+        var entityTypes = projectionType.GetGenericArguments();
+        var columns = new List<IPropertyMetadata>();
+        var selectList = new List<SelectExpression>();
+
+        for (var slot = 0; slot < entityTypes.Length; slot++)
+        {
+            IReadOnlyList<IPropertyMetadata> slotProperties;
+            if (DataContextCache.Metadata.TryGetValue(entityTypes[slot], out var metadata) && metadata.Properties.Count > 0)
+            {
+                slotProperties = metadata.Properties;
+            }
+            else
+            {
+                slotProperties = ShapeColumns(entityTypes[slot]);
+                if (slotProperties.Count == 0)
+                    throw new QueryPreparationException(
+                        $"No metadata is registered for {entityTypes[slot].Name} and it exposes no readable columns, so the identity multi-table RETURNING projection {projectionType.Name} cannot expand item {slot + 1} ('{projectionType.GetProperty("Item" + (slot + 1))?.Name ?? "Item" + (slot + 1)}'). Register every joined entity with From<T>/Join<T> on the same data context.");
+            }
+
+            var member = projectionType.GetProperty("Item" + (slot + 1));
+            var group = new ProjectionEntityItem(slot, entityTypes[slot], member);
+
+            for (var i = 0; i < slotProperties.Count; i++)
+            {
+                var property = slotProperties[i];
+                if (property.RangeColumns is not null)
+                    throw RangeColumnPairs.NotReturnable(property);
+
+                columns.Add(property);
+                selectList.Add(new SelectExpression(property.PropertyInfo.PropertyType)
+                {
+                    Index = selectList.Count,
+                    PropertyName = property.PropertyInfo.Name,
+                    PropertyInfo = property.PropertyInfo,
+                    DurationUnit = property.DurationUnit,
+                    DurationPrecision = property.DurationPrecision,
+                    ProviderType = property.Converter?.ProviderType,
+                    Converter = property.Converter,
+                    ProjectionItem = group,
+                });
+            }
+        }
+
+        return (columns, selectList.ToArray(), false);
     }
 
     /// <summary>
@@ -187,9 +241,11 @@ internal static class JoinedReturningProjection
 
     /// <summary>
     /// Treats the public instance properties of a non-entity slot type as its readable source columns
-    /// (the projection/CTE read shape), preserving the ordered surface the selector references.
+    /// (the projection/CTE read shape), preserving the ordered surface the selector references. Shared
+    /// with the SQL renderer and the mutation-CTE shape builder so the parse, RETURNING list and CTE read
+    /// shape all define the derived slot's columns from the same ordered surface.
     /// </summary>
-    private static IReadOnlyList<IPropertyMetadata> ShapeColumns(Type shape)
+    internal static IReadOnlyList<IPropertyMetadata> ShapeColumns(Type shape)
     {
         var properties = shape.GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var columns = new List<IPropertyMetadata>(properties.Length);

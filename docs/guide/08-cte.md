@@ -302,10 +302,14 @@ through the `With(name, mutation)` overloads on `IDataContext`/`CteQuery`, which
 `INSERT`, `UPDATE` or `DELETE` and return a
 [`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1) typed by the `RETURNING` projection.
 A `RETURNING` projection is required — a side-effect-only body is out of scope — and both single-table and
-join/multi-table mutations are accepted (a multi-table `UPDATE ... FROM` through
-[`UpdateJoinBuilder<TProjection>.Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), a multi-table
-`DELETE ... USING` through the `Returning(projection)` extension on the joined builder; both require an
-explicit projection — the whole-projection form is not supported). Every other provider rejects
+join/multi-table mutations are accepted on PostgreSQL INNER joins for arities 2–8: a multi-table
+`UPDATE ... FROM` through
+[`UpdateJoinBuilder<TProjection>.Returning()`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning) or
+[`Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})),
+and a multi-table `DELETE ... USING` through the
+[`Returning()`](xref:NextORM.Core.DataContextExtensions.Returning``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))/`Returning(projection)`
+extension on the joined builder. `Returning()` — equivalent to `Returning(p => p)` — returns the whole
+joined projection; the explicit projection form is unchanged. Every other provider rejects
 `With(name, mutation)` with `NotSupportedException`, because its CTE body must be a `SELECT`. Unlike a read
 CTE, a statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
 side-effecting), so it is re-planned on every call.
@@ -322,6 +326,11 @@ var updated = dataContext
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+```
+
 ```csharp
 // Join/multi-table DELETE body: delete the target rows matched by the join, returning columns from both sides.
 var doomed = dataContext
@@ -334,6 +343,34 @@ var removed = dataContext
     .From("del")
     .Select(r => new { r.OrderId, r.CustomerName })
     .ToList();
+```
+
+```sql
+-- PostgreSQL
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+```
+
+```csharp
+// Whole-projection body: .Returning() returns every slot, and the read side addresses them by ItemN.
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Returning();   // equivalent to .Returning(p => p)
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { OrderId = r.Item1.Id, CustomerName = r.Item2.Name })
+    .ToList();
+```
+
+The whole-projection body emits **every** returnable column of both slots under deterministic
+`__sN_*` aliases (`__s1_*` for the target, `__s2_*` for the joined side), so the read side addresses the
+stored alias rather than the CLR member name:
+
+```sql
+-- PostgreSQL: read side of the whole-projection body above
+select "__s1_id", "__s2_name" from del as "t1"
 ```
 
 The write CTE is documented together with the write surface it belongs to — typed read-back via

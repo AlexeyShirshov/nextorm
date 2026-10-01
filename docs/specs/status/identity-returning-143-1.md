@@ -1,7 +1,7 @@
 # PDCA 01 — Issue #143 identity joined Returning
 
 - collection: `1.0.9-b-2`, task 1, group-1, branch `1.0.9-b`
-- cycle: N=1, revision r=1, attempt n=1
+- cycle: N=1, revision r=1, attempt n=2
 - mode: autonomous + auto-commit; single group → current worktree, no worktree/branch/merge
 - issue: #143 (https://github.com/AlexeyShirshov/nextorm/issues/143)
 - design spec: `docs/specs/design/issue-143-identity-returning.md` (approved; user requested the run)
@@ -72,6 +72,43 @@ Update EN+RU: `docs/guide/08-cte.md`, `docs/guide/17-update-statement.md`, `docs
 
 ## Progress log
 - 2026-10-01 PLAN(r1): plan recorded by coder; DO starting autonomously.
-- Done:
-- Verified:
+- 2026-10-01 D1: baseline captured — HEAD 781846a, Debug/Release 0/0, acceptance 7/7 ratio 2.10 wall 52s; coverage baseline 88.2/78.9; DOCKER_HOST socket present.
+- 2026-10-01 D2 PoC GATE PASSED: throwaway PG probe 6/6 (two-slot self-join, UPDATE+DELETE, standalone+CTE, derived source); unique `__s1_*`/`__s2_*` aliases; patch retained as D3 seed.
+- 2026-10-01 D3/D4/D5: production identity-Returning (slot+member address, collision-proof whole-output aliases, prepared-shape-stable, slot+member diagnostics); parameterless UPDATE `Returning()` + DELETE `Returning()` arities 2..8; `p=>p` equivalence; explicit paths unchanged; non-PG rejection unchanged. Build 0/0.
+- 2026-10-01 D6: core 1237/0, postgres 690/0, sqlite 870/0; new core identity tests 20; new PG SQL-gen identity tests 21; non-PG rejection tests (sqlite 11, sqlserver/mysql/mariadb/clickhouse 6 each); new PG integration `IdentityReturningIntegrationTests` 40/40 + PostgresSpecific/JoinArities 101/101, container live. Two production defects found by tests and fixed (derived-source translation; derived joined-slot alias).
+- 2026-10-01 D7: docs EN+RU (08-cte, 16-delete, 17-update) + API reference + XML on new overloads; DocFX 0 error / 2 pre-existing warnings.
+- 2026-10-01 D8: coverage 88.1 line / 78.8 branch (>=85/75); full solution 7315/0 failed/188 capability skips (all 4 containers live); perf acceptance 7/7 ratio 2.14 (baseline 2.10, noise); Stryker 5.0.0 present globally (not run).
+- Done: D1-D8 closed; entering CHECK.
+- 2026-10-01 CHECK(r1) FAIL → loop-back CHECK→DO (attempt n=2): fix metadata-less derived parse/render parity (P1); contradictory DeleteJoinReturningBuilder XML (P1); alias-resolution fail-closed regression; guard/test matrix rows; PoC markers/spec status.
+- Verified: evidence ledger below + escalate acceptance (CHECK#3 evidence-only closed).
 - Incomplete:
+- 2026-10-01 DO(n=2) derived parity FIXED: metadata-less full-shape derived slot supported end-to-end (renderer mirrors ParseIdentity eligibility; shape-item select-list; translator derived-first); partial shape rejected with slot/member. PG values tested.
+- 2026-10-01 DO(n=2) matrix closed: outer/cross rejection; non-PG standalone+CTE rejection all providers; alias-collision slots (SQL-gen + integration e2e); Range/missing-member diagnostics at higher arities.
+
+## Evidence ledger (closes CHECK#3 evidence-only objections)
+
+- Build: `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning/0 Error (`/tmp/opencode/nextorm-run/build.log`); Release likewise 0/0.
+- Full suite: `dotnet test nextorm.slnx -c Debug --no-build` exit 0 — 7345 total / 7157 passed / 0 failed / 188 skipped (all capability/env-gated; 0 availability; PostgreSQL/SQL Server/MySQL/ClickHouse containers executed) (`/tmp/opencode/nextorm-run/test-full.log`).
+- Per project: core 1241/0, postgres 698/0, sqlite 870 (1 pre-existing skip), sqlserver 549/0, mysql 253/0, mariadb 153/0, clickhouse 441/0. Integration `IdentityReturning` 50/50 live PG.
+- Coverage: line 88.1% / branch 78.8% (thresholds 85/75) (`tests/coverage/report/Summary.txt`). Perf acceptance 7/7 ratio 1.94 vs 2.10 (`/tmp/opencode/pdca143/bench-acceptance.log`).
+- Plan matrix: recorded in this file (Variant matrix section above).
+
+### Matrix row → test file:line
+| Row | Test |
+|---|---|
+| metadata-less derived full shape | `IdentityReturningIntegrationTests.cs:590,629,664,700`; `JoinReturningIdentitySqlGenerationTests.cs:211,241` |
+| outer/cross rejection | `JoinReturningIdentitySqlGenerationTests.cs:283-333` |
+| non-PG standalone rejection | `DataModifyingCteRejectionTests.cs:91,108` (sqlserver/mysql/mariadb/clickhouse); `sqlite/DataModifyingCteRejectionTests.cs:65,82,97,138,153` |
+| non-PG CTE rejection | per provider `DataModifyingCteRejectionTests.cs`: identity arms `:65` (update) and `:79` (delete), `*data-modifying*`; standard return body `:39,:53` |
+| repeated-type + alias-shaped collision | `JoinReturningIdentitySqlGenerationTests.cs:96`; `IdentityReturningIntegrationTests.cs:191,353,380`; `JoinReturningIdentityTests.cs:125` |
+| Range / missing-member diagnostics | `JoinReturningIdentityTests.cs:166,180,193,208`; `IdentityReturningIntegrationTests.cs:740,778` |
+| explicit / no-call | `JoinReturningIdentityTests.cs:223`; `IdentityReturningIntegrationTests.cs:869`; `JoinReturningIdentitySqlGenerationTests.cs:265,273` |
+
+### Verdict
+CHECK#3 = evidence-only; closed by this ledger (escalate ruling 2026-10-01). No residual #143 P1/P2.
+
+### Debts recorded
+- **D1 (P2):** pre-existing flake `EfCoreQueryFilterLifecycleTests.Lifecycle_ClearOrEvict_ColdWarmPrepared_Live` (`:96,99`) — baseline `781846a` 2/6 failures (MySQL, SqlServer), provider-agnostic, unrelated to #143; needs deterministic (non-sleep) eviction. Deferred-with-trigger from #125 (`docs/specs/status/procedure-result-sets-1.md:111-112`); second confirmed recurrence → move to nearest backlog; if it blocks CI, mark known-flake, do not reopen #143.
+- **D2 (process):** CHECK briefs must require the evidence ledger (exit codes, matrix refs, file:line) in the DO handoff.
+- **D3 (scope):** #143 is PostgreSQL + INNER + built-in `Projection<T1..T8>`; OUTER/CROSS rejected; non-PG standalone/CTE rejected; custom projections and multi-column Range out of scope with diagnostics.
+- **D4 (info):** 188 skips all capability/env-gated (0 availability); the 1 sqlite skip is pre-existing.

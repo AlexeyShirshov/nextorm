@@ -128,8 +128,16 @@ var removed = await ctx.From<ISimpleEntity>()
 
 * The target is the first table (`Item1`); only `Join` (INNER) is accepted. `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin` and the `APPLY` joins throw `NotSupportedException`, because they change which rows are deleted.
 * The terminals are extension methods on the joined builder for arities 2–8; `Delete()`/`DeleteAsync()` return the affected-row count. `ToSql()` renders the statement without opening a connection and throws on an in-memory context.
-* `Returning(projection)` is available on a multi-table delete on PostgreSQL only (`DELETE ... USING ... RETURNING`) and requires an explicit projection (`Returning(p => new { p.Item1.Id, p.Item2.Name })`, read through `Single()`/`ToList()`); the whole-projection form is not supported — provide an explicit projection. It works both as a normal terminal and as a data-modifying CTE body through `With(name, delete)`. See [Common table expressions](08-cte.md).
+* `Returning()`/`Returning(projection)` is available on a multi-table delete on PostgreSQL only (`DELETE ... USING ... RETURNING`), on INNER joins and for arities 2–8. `Returning()` — equivalent to `Returning(p => p)` — returns the whole joined projection (`Projection<T1, ...>`): every returnable mapped property of every item slot, in source order. `Item1` is the delete target and every repeated CLR type stays distinct by slot, so a self-join of one entity keeps its `Item1`/`Item2` values apart. A delete returns the removed-row values. `Returning(p => new { p.Item1.Id, p.Item2.Name })` returns an explicit projection instead, read through `Single()`/`ToList()`; returned columns get deterministic per-slot aliases, and explicit projections are unchanged. No `Returning()` call adds a `RETURNING` list implicitly. It works both as a normal terminal and as a data-modifying CTE body through `With(name, delete)`. A returned item whose mapped property is a multi-column `Range<T>` is rejected, and a required member with no counterpart in the joined source shape is rejected naming the slot and member. See [Common table expressions](08-cte.md).
 * A joined side may be a CTE, whose declaration is hoisted before the `DELETE` (PostgreSQL `with c as (…) delete from <t> as "t1" using c as "t2" where …`); the target stays the first physical table and the CTE may sit on any join position. See [Common table expressions](08-cte.md).
+
+```csharp
+var all = await ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Where(p => p.Item2.Tier == "gold")
+    .Returning()          // equivalent to .Returning(p => p)
+    .ToListAsync(cancellationToken);
+```
 
 ### Delete based on a CTE
 

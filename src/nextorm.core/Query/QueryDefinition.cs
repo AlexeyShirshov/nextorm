@@ -26,6 +26,12 @@ public sealed record QueryDefinition
     /// <see cref="SrcType"/> remains the parent entity type, or <c>null</c> for an ordinary command.
     /// </summary>
     internal Type? ProjectionType { get; init; }
+    /// <summary>
+    /// True for a prepared identity (whole-projection) CTE shape over an <see cref="IProjection"/>
+    /// source: the flattened item columns are tagged with the deterministic, collision-free per-slot
+    /// aliases the mutation's <c>RETURNING</c> list emits.
+    /// </summary>
+    internal bool IdentitySlotAliases { get; init; }
     /// <summary>Optional predicate applied as a <c>WHERE</c> clause.</summary>
     public LambdaExpression? Condition { get; init; }
     /// <summary>Joins accumulated by the builder.</summary>

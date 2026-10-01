@@ -835,6 +835,140 @@ public static class DataContextExtensions
         return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>>(query, typeof(T1));
     }
 
+    /// <summary>
+    /// Switches a two-table multi-table <c>DELETE</c> to the whole-projection (identity) row-returning
+    /// terminal: every returnable mapped property of every item slot is returned, in slot order, so a
+    /// self-join of one type keeps its <c>Item1</c>/<c>Item2</c> values distinct (a repeated CLR type stays
+    /// separated by slot). Equivalent to <c>Returning(p =&gt; p)</c>. The removed rows carry the deleted-row
+    /// values, and the builder can be consumed directly or as a data-modifying CTE body through
+    /// <c>With(name, delete)</c>. Returned columns get deterministic per-slot aliases; explicit projections
+    /// are unchanged and no call adds a <c>RETURNING</c> list implicitly.
+    /// <para>
+    /// PostgreSQL only, on INNER joins and for arities 2–8; every other provider and every outer join
+    /// rejects. A returned item whose mapped property is a multi-column <see cref="Range{T}"/> is rejected,
+    /// as is a required member with no counterpart in the joined source shape.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A returning builder whose terminals produce the full <see cref="Projection{T1, T2}"/>.</returns>
+    /// <exception cref="NotSupportedException">A returned mapped property is a multi-column <see cref="Range{T}"/>, or the provider/join is unsupported.</exception>
+    /// <exception cref="QueryPreparationException">A returned item slot has no registered entity metadata and exposes no readable columns.</exception>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2>, Projection<T1, T2>> Returning<T1, T2>(this JoinedEntityBuilder<T1, T2> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var parameter = Expression.Parameter(typeof(Projection<T1, T2>), "p");
+        var identity = Expression.Lambda<Func<Projection<T1, T2>, Projection<T1, T2>>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2>, Projection<T1, T2>>(query, typeof(T1), columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>Switches a three-table multi-table <c>DELETE</c> to the whole-projection (identity) row-returning terminal. See the two-table overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A returning builder whose terminals produce the full <see cref="Projection{T1, T2, T3}"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3>, Projection<T1, T2, T3>> Returning<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var parameter = Expression.Parameter(typeof(Projection<T1, T2, T3>), "p");
+        var identity = Expression.Lambda<Func<Projection<T1, T2, T3>, Projection<T1, T2, T3>>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3>, Projection<T1, T2, T3>>(query, typeof(T1), columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>Switches a four-table multi-table <c>DELETE</c> to the whole-projection (identity) row-returning terminal. See the two-table overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A returning builder whose terminals produce the full <see cref="Projection{T1, T2, T3, T4}"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>> Returning<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var parameter = Expression.Parameter(typeof(Projection<T1, T2, T3, T4>), "p");
+        var identity = Expression.Lambda<Func<Projection<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4>, Projection<T1, T2, T3, T4>>(query, typeof(T1), columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>Switches a five-table multi-table <c>DELETE</c> to the whole-projection (identity) row-returning terminal. See the two-table overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A returning builder whose terminals produce the full <see cref="Projection{T1, T2, T3, T4, T5}"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>> Returning<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var parameter = Expression.Parameter(typeof(Projection<T1, T2, T3, T4, T5>), "p");
+        var identity = Expression.Lambda<Func<Projection<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5>, Projection<T1, T2, T3, T4, T5>>(query, typeof(T1), columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>Switches a six-table multi-table <c>DELETE</c> to the whole-projection (identity) row-returning terminal. See the two-table overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A returning builder whose terminals produce the full <see cref="Projection{T1, T2, T3, T4, T5, T6}"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>> Returning<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var parameter = Expression.Parameter(typeof(Projection<T1, T2, T3, T4, T5, T6>), "p");
+        var identity = Expression.Lambda<Func<Projection<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6>, Projection<T1, T2, T3, T4, T5, T6>>(query, typeof(T1), columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>Switches a seven-table multi-table <c>DELETE</c> to the whole-projection (identity) row-returning terminal. See the two-table overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A returning builder whose terminals produce the full <see cref="Projection{T1, T2, T3, T4, T5, T6, T7}"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>> Returning<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var parameter = Expression.Parameter(typeof(Projection<T1, T2, T3, T4, T5, T6, T7>), "p");
+        var identity = Expression.Lambda<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>, Projection<T1, T2, T3, T4, T5, T6, T7>>(query, typeof(T1), columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>Switches an eight-table multi-table <c>DELETE</c> to the whole-projection (identity) row-returning terminal. See the two-table overload for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="T8">The eighth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A returning builder whose terminals produce the full <see cref="Projection{T1, T2, T3, T4, T5, T6, T7, T8}"/>.</returns>
+    public static DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>> Returning<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        var parameter = Expression.Parameter(typeof(Projection<T1, T2, T3, T4, T5, T6, T7, T8>), "p");
+        var identity = Expression.Lambda<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new DeleteJoinReturningBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, Projection<T1, T2, T3, T4, T5, T6, T7, T8>>(query, typeof(T1), columns, selectList, oneColumn, identity);
+    }
+
     /// <summary>Switches a multi-table <c>DELETE</c> to a row-returning terminal over a projection of the removed rows; a selected member may reference any joined table. See <c>Returning</c> projection overload for the full contract.</summary>
     /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
     /// <typeparam name="T2">The second joined entity type.</typeparam>

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -127,6 +128,48 @@ internal static class ProjectionAliasCache
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Builds the deterministic base SQL alias an identity multi-table RETURNING exposes for one mapped
+    /// column (<c>__s1_id</c> for slot 1, <c>__s2_id</c> for slot 2). The alias is stable for a prepared
+    /// shape and unique across slots even when the same CLR type/column name repeats, so the outer CTE
+    /// read can address <c>ItemN.Property</c> through its stored alias without a name-only lookup.
+    /// </summary>
+    internal static string SlotAlias(int slot, string column) => $"__s{slot + 1}_{column}";
+
+    /// <summary>
+    /// Allocates a collision-free alias for the WHOLE flattened identity RETURNING output. The input is
+    /// the ordered list of <c>(slot, physical column)</c> pairs (slot-ascending, declaration order
+    /// within a slot), exactly the order the RETURNING list and the prepared CTE shape emit. Each pair
+    /// starts from <see cref="SlotAlias"/>; when that base is already taken (by an earlier generated
+    /// alias, a repeated column, or a column literally named like an alias) a deterministic
+    /// <c>_2</c>, <c>_3</c>, ... disambiguator is appended. The result is a pure function of the
+    /// ordered pair list, so the same projection shape always yields the same aliases and the prepared
+    /// shape stays cacheable.
+    /// </summary>
+    /// <param name="pairs">The flattened <c>(slot, physical column)</c> pairs in emission order.</param>
+    /// <returns>One unique alias per pair, in the same order.</returns>
+    internal static string[] AllocateIdentityAliases(IReadOnlyList<(int Slot, string Column)> pairs)
+    {
+        var aliases = new string[pairs.Count];
+        var used = new HashSet<string>(StringComparer.Ordinal);
+
+        for (var i = 0; i < pairs.Count; i++)
+        {
+            var baseAlias = SlotAlias(pairs[i].Slot, pairs[i].Column);
+            var alias = baseAlias;
+            var disambiguator = 2;
+            while (!used.Add(alias))
+            {
+                alias = string.Concat(baseAlias, "_", disambiguator.ToString(CultureInfo.InvariantCulture));
+                disambiguator++;
+            }
+
+            aliases[i] = alias;
+        }
+
+        return aliases;
     }
 
     public static void Clear() => _occurrences.Clear();

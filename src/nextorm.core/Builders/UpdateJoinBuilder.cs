@@ -132,10 +132,34 @@ public sealed class UpdateJoinBuilder<TProjection>
     }
 
     /// <summary>
+    /// Switches the builder to the whole-projection (identity) row-returning terminal: every returnable
+    /// mapped property of every item slot is returned, in slot order, so a self-join of one type keeps its
+    /// <c>Item1</c>/<c>Item2</c> values distinct (a repeated CLR type stays separated by slot). Equivalent
+    /// to <c>Returning(p =&gt; p)</c>. The updated rows carry the post-update target values, and the builder
+    /// can be consumed directly or as a data-modifying CTE body through <c>With(name, update)</c>. Returned
+    /// columns get deterministic per-slot aliases; explicit projections are unchanged and no call adds a
+    /// <c>RETURNING</c> list implicitly.
+    /// <para>
+    /// PostgreSQL only, on INNER joins and for arities 2–8; every other provider and every outer join
+    /// rejects. A returned item whose mapped property is a multi-column <see cref="Range{T}"/> is rejected,
+    /// as is a required member with no counterpart in the joined source shape.
+    /// </para>
+    /// </summary>
+    /// <returns>A returning builder whose terminals produce the full <typeparamref name="TProjection"/>.</returns>
+    /// <exception cref="NotSupportedException">A returned mapped property is a multi-column <see cref="Range{T}"/>, or the provider/join is unsupported.</exception>
+    /// <exception cref="QueryPreparationException">A returned item slot has no registered entity metadata and exposes no readable columns.</exception>
+    public UpdateJoinReturningBuilder<TProjection, TProjection> Returning()
+    {
+        var parameter = Expression.Parameter(typeof(TProjection), "p");
+        var identity = Expression.Lambda<Func<TProjection, TProjection>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new UpdateJoinReturningBuilder<TProjection, TProjection>(this, columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>
     /// Switches the builder to a row-returning terminal that materialises a projection of the updated rows
     /// through PostgreSQL's <c>UPDATE ... FROM ... RETURNING</c> form. A selected member may reference any
-    /// joined table (for example <c>Returning(p =&gt; new { p.Item1.Id, p.Item2.Name })</c>). A projection
-    /// is required: the whole-projection (identity) form is not supported for a multi-table update. Only
+    /// joined table (for example <c>Returning(p =&gt; new { p.Item1.Id, p.Item2.Name })</c>). Only
     /// PostgreSQL supports returning rows from a multi-table update; every other provider rejects it.
     /// </summary>
     /// <typeparam name="TResult">The projected row shape.</typeparam>

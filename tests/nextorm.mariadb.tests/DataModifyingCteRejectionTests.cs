@@ -60,4 +60,60 @@ public class DataModifyingCteRejectionTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*data-modifying*");
     }
+
+    [Fact]
+    public void DataModifyingCte_UpdateJoinIdentityReturningBody_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var act = () => ctx.With("upd", ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .UpdateJoin()
+            .Set(p => p.Item1.String, "a")
+            .Returning());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*data-modifying*");
+    }
+
+    [Fact]
+    public void DataModifyingCte_DeleteJoinIdentityReturningBody_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var act = () => ctx.With("del", ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Returning());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*data-modifying*");
+    }
+
+    [Fact]
+    public void Standalone_UpdateJoinIdentityReturning_ToList_ShouldRejectProvider()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        // MariaDB has no UPDATE ... RETURNING, so the standalone identity terminal (not wrapped in
+        // With(...)) must reject before returning any rows.
+        var act = () => ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .UpdateJoin()
+            .Set(p => p.Item1.String, "a")
+            .Returning()
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*cannot return written rows*");
+    }
+
+    [Fact]
+    public void Standalone_DeleteJoinIdentityReturning_ToList_ShouldRejectProvider()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var act = () => ctx.From<IComplexEntity>()
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Returning()
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*cannot return written rows*");
+    }
 }

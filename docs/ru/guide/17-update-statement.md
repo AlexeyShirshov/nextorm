@@ -167,8 +167,16 @@ update orders as "t1" set status = @p0, total = (t1.total + t2.credit) from cust
 присоединённую таблицу (`p.Item2...`). `Where` фильтрует по всей проекции, а терминал —
 `Update()`/`UpdateAsync()` (число затронутых строк) или `ToSql()`.
 
-Multi-table `Returning(projection)` доступен только на PostgreSQL (`UPDATE ... FROM ... RETURNING`) и требует
-явной проекции — форма по всей проекции не поддерживается. Работает и как обычный терминал, и
+Multi-table `Returning()`/`Returning(projection)` доступен только на PostgreSQL
+(`UPDATE ... FROM ... RETURNING`), на INNER-соединениях и для арностей 2–8. `Returning()` — эквивалент
+`Returning(p => p)` — возвращает всю соединённую проекцию (`Projection<T1, ...>`): каждое returnable
+mapped-свойство каждого item-слота, в порядке слотов, где `Item1` — цель обновления, а повторяющийся
+CLR-тип остаётся различимым по слоту, поэтому self-join одной сущности сохраняет значения
+`Item1`/`Item2` раздельно. Update возвращает значения цели после обновления. `Returning(p => new { ... })`
+возвращает явную проекцию; возвращённые колонки получают детерминированные per-slot алиасы, а явные
+проекции не меняются. Ни один вызов `Returning()` не добавляет список `RETURNING` неявно. Возвращаемый
+item, чьё mapped-свойство — многоколоночный `Range<T>`, отклоняется, а обязательный член без соответствия
+в форме соединённого источника отклоняется с указанием слота и члена. Работает и как обычный терминал, и
 как тело модифицирующего CTE через `With(имя, update)`:
 
 ```csharp
@@ -184,6 +192,19 @@ var updated = ctx.From<IOrder>()
 ```sql
 -- PostgreSQL
 update orders as "t1" set status = @p0 from customers as "t2" where t1.customer_id = t2.id and t2.tier = 'gold' returning t1.id as "OrderId", t2.name as "CustomerName"
+```
+
+Форма без параметров возвращает все returnable-колонки обоих слотов под детерминированными per-slot
+алиасами (`__s1_*`, `__s2_*`, …):
+
+```csharp
+var whole = ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "priority")
+    .Where(p => p.Item2.Tier == "gold")
+    .Returning()          // эквивалент .Returning(p => p)
+    .ToList();
 ```
 
 Поддерживаются только INNER `Join`: условия join складываются в фильтр (или остаются `ON` join), поэтому

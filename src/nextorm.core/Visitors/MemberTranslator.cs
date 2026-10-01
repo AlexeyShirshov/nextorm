@@ -484,7 +484,15 @@ internal static class MemberTranslator
                         var propExp = (MemberExpression)node.Expression!;
                         var position = ProjectionAliasCache.GetMemberPosition(propExp.Member);
                         var paramIdx = ProjectionAliasCache.GetOccurrence(lambdaParameter.Type, position);
-                        tableAliasForColumn = AliasResolver.GetAliasFromParam(visitor, node.Expression!.Type, paramIdx, false);
+
+                        var sourceIdx = ResolveProjectionItemAliasIndex(
+                            visitor.ColumnsProvider,
+                            node.Expression.Type,
+                            paramIdx,
+                            lambdaParameter,
+                            visitor.IncludeNestedSources);
+
+                        tableAliasForColumn = visitor.AliasProvider!.FindAlias(sourceIdx);
                     }
                     else if (visitor.Dim >= 2)
                     {
@@ -498,13 +506,24 @@ internal static class MemberTranslator
                     else
                         tableAliasForColumn = AliasResolver.GetAliasFromParam(visitor, lambdaParameter, false);
 
-                    visitor.Builder!.Append(tableAliasForColumn).Append('.');
-
-                    hasTableAliasForColumn = true;
+                    if (tableAliasForColumn is not null)
+                    {
+                        visitor.Builder!.Append(tableAliasForColumn).Append('.');
+                        hasTableAliasForColumn = true;
+                    }
                 }
 
                 if (!visitor.IsParamMode)
                 {
+                    // A projection-item access (p.ItemN.Member) over a derived/read-CTE source resolves
+                    // through the source's slot-tagged shape. A metadata-less shape item has no mapped
+                    // column name, so the mapped-name branch below would skip the shape lookup and fail;
+                    // try the derived shape first for a projection-item access.
+                    if (lambdaParameter.Type!.IsAssignableTo(typeof(IProjection))
+                        && node.Expression is MemberExpression
+                        && TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))
+                        return node;
+
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
                         ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
@@ -575,15 +594,88 @@ internal static class MemberTranslator
         MemberExpression node,
         bool hasTableAliasForColumn)
     {
-        var found = node.Expression is ParameterExpression parameter
-            ? visitor.ColumnsProvider.FindInScopeQueryCommand(parameter, fromProjection: false)
-            : visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+        (int Index, QueryCommand? Command)? found;
+        var slot = -1;
+        var isProjectionItem = false;
+
+        // An identity join/CTE item member (p.ItemN.Property) resolves its source
+        // command through the projection parameter and its column by slot + property name, so a
+        // self-join of one type does not collapse the two items onto the first matching column.
+        if (node.Expression is MemberExpression itemAccess
+            && itemAccess.Expression is ParameterExpression projectionParameter
+            && projectionParameter.Type.IsAssignableTo(typeof(IProjection)))
+        {
+            isProjectionItem = true;
+            slot = ProjectionAliasCache.GetMemberPosition(itemAccess.Member);
+            found = visitor.ColumnsProvider.FindInScopeQueryCommand(projectionParameter, fromProjection: false);
+
+            // The projection-parameter lookup only matches an identity CTE shape, which exposes
+            // slot-tagged columns. A plain derived query is registered by its item type instead, so
+            // fall back to the type-based lookup (and drop the slot) when the parameter lookup misses
+            // or its columns are not slot-tagged. Without this, an ordinary p.ItemN.Member reference
+            // over a derived source loses its projected-name translation and emits the physical column.
+            if (found is not { Command.SelectList: { } projectionColumns }
+                || !projectionColumns.Any(col => col.ProjectionItem?.Slot == slot && col.PropertyName == node.Member.Name))
+            {
+                found = visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+                slot = -1;
+            }
+        }
+        else
+        {
+            found = node.Expression is ParameterExpression parameter
+                ? visitor.ColumnsProvider.FindInScopeQueryCommand(parameter, fromProjection: false)
+                : visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+        }
+
         if (found is not { Command: { } innerQuery } || innerQuery.SelectList is null)
             return false;
 
-        var innerCol = innerQuery.SelectList.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+        SelectExpression? innerCol = null;
+        if (slot >= 0)
+        {
+            foreach (var candidate in innerQuery.SelectList)
+            {
+                if (candidate.ProjectionItem?.Slot == slot && candidate.PropertyName == node.Member.Name)
+                {
+                    innerCol = candidate;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            innerCol = innerQuery.SelectList.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+        }
+
         if (innerCol is null)
+        {
+            // A projection-item access (p.ItemN.Member) over a derived/read shape that does not expose
+            // the member is unresolvable. Fail closed instead of letting the caller fall back to a
+            // physical column the derived source lacks; the identity mutation RETURNING converts this
+            // exception into a slot/member diagnostic before any database execution.
+            if (isProjectionItem)
+                throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+
             return false;
+        }
+
+        // An identity shape column carries its stored per-slot alias; reference it
+        // directly instead of re-deriving a name from the item's expression tree.
+        if (slot >= 0
+            && innerCol.PhysicalColumnName is { Length: > 0 } storedAlias
+            && storedAlias.StartsWith("__s", StringComparison.Ordinal))
+        {
+            if (!visitor.IsParamMode)
+            {
+                if (!hasTableAliasForColumn && !visitor.DontNeedAlias)
+                    visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(found.Value.Index)).Append('.');
+
+                visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(storedAlias));
+            }
+
+            return true;
+        }
 
         visitor.ColumnsProvider.PushSourceScope();
         string column;
@@ -612,6 +704,33 @@ internal static class MemberTranslator
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves the alias index of a projection-item member access (<c>p.ItemN.Member</c>). The item
+    /// type is the primary lookup. Over a derived/CTE source the item type may not be a registered
+    /// source while the projection shape is; only the identity (whole-projection) joined-returning shape
+    /// registers that way, so the projection-parameter fallback is gated on the source command carrying
+    /// <see cref="QueryCommand.IdentitySlotAliases"/>. Every other miss fails closed with the same
+    /// <see cref="InvalidOperationException"/> the previous <c>AliasResolver.GetAliasFromParam</c> call
+    /// produced, rather than silently emitting an unqualified column.
+    /// </summary>
+    internal static int ResolveProjectionItemAliasIndex(
+        IColumnsProvider columnsProvider,
+        Type itemType,
+        int? itemOccurrence,
+        ParameterExpression projectionParameter,
+        bool includeNestedSources)
+    {
+        var sourceIdx = columnsProvider.FindAlias(itemType, itemOccurrence, false, includeNestedSources);
+        if (sourceIdx is null)
+        {
+            var projectionSource = columnsProvider.FindQueryCommand(projectionParameter.Type, includeNestedSources);
+            if (projectionSource.Item2?.IdentitySlotAliases == true)
+                sourceIdx = columnsProvider.FindAlias(projectionParameter, false, includeOuterScopes: false, includeNestedSources: includeNestedSources);
+        }
+
+        return sourceIdx ?? throw new InvalidOperationException();
     }
 
     /// <summary>

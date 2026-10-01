@@ -41,30 +41,68 @@ public class JoinReturningBuilderTests
     }
 
     [Fact]
-    public void DeleteJoinReturning_IdentityProjection_ShouldThrow()
+    public void DeleteJoinReturning_IdentityProjection_ShouldBeAccepted()
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.From<ConventionalEntity>()
+        var builder = ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
             .Returning(p => p);
 
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage("*whole-projection*explicit projection*");
+        builder.Should().NotBeNull();
+
+        var act = () => ctx.From<ConventionalEntity>()
+            .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .Returning();
+
+        act.Should().NotThrow();
     }
 
     [Fact]
-    public void UpdateJoinReturning_IdentityProjection_ShouldThrow()
+    public void UpdateJoinReturning_IdentityProjection_ShouldBeAccepted()
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.From<ConventionalEntity>()
+        var builder = ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
             .UpdateJoin()
             .Returning(p => p);
 
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage("*whole-projection*explicit projection*");
+        builder.Should().NotBeNull();
+
+        var act = () => ctx.From<ConventionalEntity>()
+            .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .UpdateJoin()
+            .Returning();
+
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void DeleteJoinReturning_IdentityProjection_Arity3_ShouldParse()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var builder = ctx.From<ConventionalEntity>()
+            .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Item1.Id == b.Id)
+            .Returning();
+
+        builder.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void UpdateJoinReturning_IdentityProjection_Arity3_ShouldParse()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var builder = ctx.From<ConventionalEntity>()
+            .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
+            .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Item1.Id == b.Id)
+            .UpdateJoin()
+            .Returning();
+
+        builder.Should().NotBeNull();
     }
 
     [Fact]

@@ -16,7 +16,7 @@
 
 | id | issue | group | branch | status | task status file |
 |---|---|---|---|---|---|
-| 1 | #143 | group-1 | 1.0.9-b | in-progress | identity-returning-143-1.md |
+| 1 | #143 | group-1 | 1.0.9-b | done | identity-returning-143-1.md |
 | 2 | #144 | group-1 | 1.0.9-b | pending | - |
 
 ## Decisions
@@ -29,6 +29,6 @@
 
 ## Done / Verified / Incomplete
 
-- Done:
+- Done: task 1 (#143 identity joined Returning) passed via escalate acceptance (CHECK#3 evidence-only, closed by the evidence ledger in `identity-returning-143-1.md`).
 - Verified:
 - Incomplete:

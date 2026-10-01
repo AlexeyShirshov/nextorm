@@ -183,15 +183,27 @@ public sealed class MutationCteQuery<TResult>
 
     private static QueryCommand BuildShape<TShape>(IDataContext dataContext, LambdaExpression projection, Type sourceType, QueryCommand? joinedSource = null)
     {
+        // An identity projection has no column-producing body for the normal
+        // projector path, so the shape is built as a bare projection over TShape and expanded by
+        // TryBuildProjectionSelectList into slot-tagged item columns (mirroring the mutation's
+        // RETURNING list). Non-identity shapes keep their selector.
+        var isIdentity = TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression;
         var shape = dataContext.CreateCommand<TShape>(new QueryDefinition
         {
-            Exp = projection,
-            SrcType = sourceType,
+            Exp = isIdentity ? null : projection,
+            SrcType = isIdentity ? typeof(TShape) : sourceType,
             Joins = joinedSource?.Joins,
         });
+        // Mark the identity shape BEFORE preparation so TryBuildProjectionSelectList tags every item
+        // column with its deterministic, collision-free per-slot alias before the column plan hash is
+        // finalized. Assigning it afterwards (after PrepareCommand) would leave PlanHashCode and the
+        // command's ColumnsPlanHash describing a shape without the alias.
+        if (isIdentity)
+            shape.IdentitySlotAliases = true;
         if (joinedSource?.From is { } from)
             shape.From = from;
         shape.PrepareCommand(false, CancellationToken.None);
+
         return shape;
     }
 

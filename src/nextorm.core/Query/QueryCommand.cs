@@ -44,6 +44,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see cref="_srcType"/> stays the parent entity type, or <c>null</c> for an ordinary command.
     /// </summary>
     internal Type? ProjectionType { get; init; }
+    /// <summary>
+    /// True for a prepared identity (whole-projection) CTE shape: its flattened item columns are tagged
+    /// with the deterministic, collision-free per-slot aliases the mutation's <c>RETURNING</c> list
+    /// emits. Set before preparation so the alias is folded into the column plan hash.
+    /// </summary>
+    internal bool IdentitySlotAliases { get; set; }
     private bool _dontCache;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     internal int ColumnsPlanHash;
@@ -151,6 +157,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _exp = definition.Exp;
         _srcType = definition.SrcType;
         ProjectionType = definition.ProjectionType;
+        IdentitySlotAliases = definition.IdentitySlotAliases;
         _condition = definition.Condition;
         _filterScope = definition.FilterScope ?? (definition.IgnoreFilters ? QueryFilterScope.AllFilters : QueryFilterScope.None);
         // Own a private array: the clone boundaries (CreateSelf/CreateSelfForClone, the with-derived
@@ -193,6 +200,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Exp = _exp,
         SrcType = _srcType,
         ProjectionType = ProjectionType,
+        IdentitySlotAliases = IdentitySlotAliases,
         Condition = _condition,
         IgnoreFilters = !_filterScope.IsEmpty,
         FilterScope = _filterScope,

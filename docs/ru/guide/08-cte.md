@@ -304,10 +304,14 @@ PostgreSQL — единственный поддерживаемый прова�
 `INSERT`, `UPDATE` или `DELETE`, и возвращающими
 [`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1), типизированный по проекции
 `RETURNING`. Проекция `RETURNING` обязательна — тело только с побочным эффектом вне области охвата — и
-принимаются как однотабличные мутации, так и join/multi-table (multi-table `UPDATE ... FROM` через
-[`UpdateJoinBuilder<TProjection>.Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), multi-table
-`DELETE ... USING` через расширение `Returning(projection)` на соединённом билдере; обе формы требуют
-явной проекции — форма по всей проекции не поддерживается). Остальные провайдеры отклоняют
+принимаются как однотабличные мутации, так и join/multi-table на INNER-соединениях PostgreSQL для
+арностей 2–8: multi-table `UPDATE ... FROM` через
+[`UpdateJoinBuilder<TProjection>.Returning()`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning) или
+[`Returning(projection)`](xref:NextORM.Core.UpdateJoinBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})),
+а multi-table `DELETE ... USING` — через расширение
+[`Returning()`](xref:NextORM.Core.DataContextExtensions.Returning``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))/`Returning(projection)`
+на соединённом билдере. `Returning()` — эквивалент `Returning(p => p)` — возвращает всю соединённую
+проекцию; форма с явной проекцией не меняется. Остальные провайдеры отклоняют
 `With(имя, mutation)` с `NotSupportedException`, так как их тело CTE обязано быть `SELECT`. В отличие от
 read-CTE, инструкция, в `WITH` которой есть модифицирующий CTE, никогда не попадает в кэш планов (она
 имеет побочный эффект) и планируется заново при каждом вызове.
@@ -324,6 +328,11 @@ var updated = dataContext
     .ToList();
 ```
 
+```sql
+-- PostgreSQL
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+```
+
 ```csharp
 // Тело multi-table DELETE: удаляем строки цели, совпавшие по соединению, возвращая колонки обеих сторон.
 var doomed = dataContext
@@ -336,6 +345,34 @@ var removed = dataContext
     .From("del")
     .Select(r => new { r.OrderId, r.CustomerName })
     .ToList();
+```
+
+```sql
+-- PostgreSQL
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+```
+
+```csharp
+// Тело по всей проекции: .Returning() возвращает каждый слот, а читающая сторона адресует их по ItemN.
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Returning();   // эквивалент .Returning(p => p)
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { OrderId = r.Item1.Id, CustomerName = r.Item2.Name })
+    .ToList();
+```
+
+Тело по всей проекции выводит **каждую** возвращаемую колонку обоих слотов под детерминированными
+алиасами `__sN_*` (`__s1_*` — цель, `__s2_*` — присоединённая сторона), поэтому читающая сторона
+адресует сохранённый алиас, а не имя CLR-члена:
+
+```sql
+-- PostgreSQL: читающая сторона тела по всей проекции выше
+select "__s1_id", "__s2_name" from del as "t1"
 ```
 
 Write-CTE документируется вместе с поверхностью записи, к которой принадлежит — типизированное чтение через
