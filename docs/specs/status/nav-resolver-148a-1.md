@@ -1,6 +1,6 @@
 # NavigationPathResolver foundation — #148-A (cycle 1, r2, attempt 1/3)
 
-- status: DONE — #148-A slice A committed (`ACT-HASH-PLACEHOLDER`); #148 stays OPEN for slice B
+- status: DONE — #148-A slice A committed (`8393f822d4fe99d45972e9c15142f27b2a899583`); #148 stays OPEN for slice B
 - cycle: 1, revision r2, attempt 1/3 (autonomous mode)
 - issue: #148 (milestone 1.0.9-rc1); source design `docs/specs/design/implicit-navigation-queries.md` (uncommitted)
 - goal: implement the internal, expression-only `NavigationPathResolver` foundation that resolves an exact
@@ -102,7 +102,7 @@
 ## ACT — #148-A slice A DONE / committed — 2026-10-02T15:52Z
 
 - status: **DONE (slice A)** — cycle 1, revision r2, attempt 1/3, no further attempt. **r2 CHECK PASS (3/3)**. **#148 stays OPEN for slice B.**
-- ACT commit: `ACT-HASH-PLACEHOLDER` — subject `#148 Add navigation path resolver foundation (slice A)`.
+- ACT commit: `8393f822d4fe99d45972e9c15142f27b2a899583` — subject `#148 Add navigation path resolver foundation (slice A)`.
 - **Verification (r2 CHECK):** whole-solution Debug+Release build exit 0, 0 Warning(s)/0 Error(s); focused navigation tests **51 passed / 0 failed**; core regression **470 passed / 0 failed**; coverage **line 86.8 / branch 78.2** (>= 85/75); mutation **8 killed + 1 proven equivalent** (0 unexplained survivors); perf acceptance exit 0, **7 cases / 0 failures**, cached-vs-prepared ratio **1.95** (< 2.244 investigate trigger); full integration exit 0, **3042 passed / 0 failed / 187 pre-existing capability skips** (SQLite 559/0/41, PostgreSQL 575/0/25, SQL Server 559/0/41, MySQL 523/0/77, ClickHouse 103/0/0). Evidence: `/tmp/opencode/148a/d5/` (`build-debug.log`, `build-release.log`, `focused.log`, `regression.log`, `coverage-reportgen.log`, `mutation/SUMMARY.md`, `perf-acceptance.log`, `integration-run.log`, `per-provider.log`).
 - **Defects fixed red→green (r2, no new revision):**
   - `C1` OneToOne direction inverted — fixed once; red `/tmp/opencode/148a/fix/c1-red.log` (2 failed on the inverted `DependentToPrincipal`) → green `/tmp/opencode/148a/fix/test-navigation-focused.log` (2 passed).
@@ -110,4 +110,4 @@
   - additional r2 fixes: T1 cache isolation (`[Collection("Query cache controls")]`), C2 `SameIdentity` null guard, S3 unused helper removal, C3/C4 test gaps.
 - **Committed scope:** 3 production (`Visitors/NavigationPathResolver.cs`, `NavigationResolutionScope.cs`, `ResolvedNavigationPath.cs`) + 1 test (`NavigationPathResolverTests.cs`) + 7 docs (design/roadmap/API-naming/limitations EN+RU) + 2 status files — #148-A artifacts only; no public API change; resolver internal/unwired. **No push; no merge.**
 - **Slice B not included:** `NavigationExpansion` + `Any`/`Count`/`LongCount`/`Count` + `AsEntityBuilder<T>` + SQL/InMemory paths + end-to-end rejection remain; #148 stays OPEN.
-- 2026-10-02T15:52Z | ACT | r2 | 1/3 | #148-A slice A committed (`ACT-HASH-PLACEHOLDER`); r2 CHECK PASS (3/3); defects C1 + 148A-immutable-list-exposure red→green; #148 OPEN for slice B | `/tmp/opencode/148a/d5/`, `/tmp/opencode/148a/fix2/`
+- 2026-10-02T15:52Z | ACT | r2 | 1/3 | #148-A slice A committed (`8393f822d4fe99d45972e9c15142f27b2a899583`); r2 CHECK PASS (3/3); defects C1 + 148A-immutable-list-exposure red→green; #148 OPEN for slice B | `/tmp/opencode/148a/d5/`, `/tmp/opencode/148a/fix2/`
