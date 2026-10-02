@@ -1,6 +1,6 @@
 # Typed CTE — ordinary (slice A) — #146
 
-- status: DONE — #146-A slice A committed (`ACT-HASH-PLACEHOLDER`); slice B remains (#146 OPEN)
+- status: DONE — #146-A slice A committed (`a2f229582620073e5f132d58f2e289d8270d95e5`); slice B remains (#146 OPEN)
 - cycle: 1, revision r2, attempt 1/3
 - issue: #146 (milestone 1.0.9-b)
 - collection: 1.0.9-b-3, slice A
@@ -721,11 +721,11 @@ Runner `dotnet test tests/nextorm.<p>.tests -c Debug --no-build`, output tee'd t
 ## ACT — #146-A slice A DONE / committed — 2026-10-02T10:55Z
 
 - status: **DONE (slice A)** — cycle 1, revision r2, attempt 1/3, no further attempt. **#146 stays OPEN for slice B.**
-- ACT commit: `ACT-HASH-PLACEHOLDER` — subject `#146 Add typed ordinary CTE (slice A)`.
+- ACT commit: `a2f229582620073e5f132d58f2e289d8270d95e5` — subject `#146 Add typed ordinary CTE (slice A)`.
 - **G1 evidence ledger** (resolved absolute paths): `/tmp/opencode/146a/final2/artifact-ledger.md` — Debug build (`build-debug.log`, exit 0, 0/0), Release build (`build-release.log`, exit 0, 0/0), 10/10 unit projects (`ledger-*.log`, all exit 0, subtotal 4598 total / 4597 succeeded / 0 failed / 1 skip), coverage collect (`/tmp/opencode/146a/final/coverage-collect.log`, exit 0, total 7616 / failed 0) + reportgenerator (`/tmp/opencode/146a/final/coverage-report.log`, exit 0, **line 86.6 / branch 78.0**), full integration (`/tmp/opencode/146a/final2/integration.log`, exit 0, 3019 / 0 failed / 187 skipped), filtered typed integration (`/tmp/opencode/146a/final2/integration-typed.log`, exit 0, 24 / 0 failed), DocFX (`/tmp/opencode/146a/r2/docfx.log`, exit 0, 2 warnings / 0 errors), acceptance (`/tmp/opencode/146a/final/acceptance.log`, exit 0, 7 cases / 0 failures, ratio 2.16 < 2.244).
 - **G2 ClickHouse backslash-quoting follow-up: issue #161** — https://github.com/AlexeyShirshov/nextorm/issues/161 (milestone `1.0.9-rc2`); anchor `src/nextorm.clickhouse/ClickHouseDialect.cs:469`; disposition `/tmp/opencode/146a/r2/security-disposition.md`; triggers (verbatim) **untrusted-name ingestion / changed quoting defaults / exploitability witness**. Creation log `/tmp/opencode/146a/final2/gh-issue-create.log`.
 - **G3 test anchors: 36** resolved with `roslyn members` (core `TypedCteTests` 18, sqlite `TypedCteTests` 8, postgres + provider suites 10, alias `TypedCteAliasTests` 3) — full `file:line` list in `/tmp/opencode/146a/final2/artifact-ledger.md`.
 - **Integrity freeze: OK, no drift.** All 11 changed production files md5-match a recorded frozen preimage (`/tmp/opencode/146a/final/preimage.md5` 7/7; `r2/preimage.md5` + `md5-pre.txt` cover the remaining 4); `git status --short` composition unchanged (19 tracked-modified + 14 untracked).
 - **Slice B not included:** `AsRecursiveCte` / `CteReference<>` absent (reflection smoke); #146 remains open.
 - Committed scope: 16 tracked-modified + 10 untracked-new #146-A artifacts only; preserved user files excluded (`opencode.json`, `.opencode/skills/nextorm-brainstorming/SKILL.md`, `docs/specs/comparison/linq2db-backlog-gap-analysis.md`, `docs/specs/design/issue-150-*`, `issue-152-*`, join-alias/cte-join-overloads design). **No push.**
-- 2026-10-02T10:55Z | ACT | r2 | 1/3 | #146-A slice A committed (`ACT-HASH-PLACEHOLDER`); G1 ledger + G2 issue #161 + G3 36 anchors + integrity OK; slice B remains, #146 OPEN | `/tmp/opencode/146a/final2/artifact-ledger.md`, `gh-issue-create.log`
+- 2026-10-02T10:55Z | ACT | r2 | 1/3 | #146-A slice A committed (`a2f229582620073e5f132d58f2e289d8270d95e5`); G1 ledger + G2 issue #161 + G3 36 anchors + integrity OK; slice B remains, #146 OPEN | `/tmp/opencode/146a/final2/artifact-ledger.md`, `gh-issue-create.log`
