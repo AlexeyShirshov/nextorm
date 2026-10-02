@@ -39,7 +39,7 @@
 
 - #149 done — deterministic eviction (internal timestamp-aging hooks, 8 tests); CHECK PASS; 20/20 live lifecycle runs; coverage 88.2/78.9; commit 1568992
 - #145 done — explicit CreateDeleteJoinBuilder<T1..Tn> starter; 14 ambiguous joined Returning overloads removed; compile-contract + mutation campaign; CHECK PASS; coverage 86.4/77.8; commit 3a6b44d
-- #147 done — 16 DML factory renames to Create…Builder + 11 additive CreateQueryBuilder* forwarders; executing Update/UpdateAsync unchanged; CHECK PASS; coverage 88.3/78.9; integration 2995/0; commit <hash>
+- #147 done — 16 DML factory renames to Create…Builder + 11 additive CreateQueryBuilder* forwarders; executing Update/UpdateAsync unchanged; CHECK PASS; coverage 88.3/78.9; integration 2995/0; commit ed3d475
 
 ## Report
 
