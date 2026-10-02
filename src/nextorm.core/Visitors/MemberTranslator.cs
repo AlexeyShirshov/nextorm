@@ -725,6 +725,43 @@ internal static class MemberTranslator
     }
 
     /// <summary>
+    /// Renders a bare lambda parameter that is itself the value of a single-column projection source,
+    /// for example a scalar typed CTE read (<c>From(scalarCte).Select(n =&gt; n + 1)</c>) or the scalar
+    /// step of a recursive typed CTE (<c>Where(n =&gt; n &lt; 5)</c>). Such a source exposes no member
+    /// to resolve, so the whole parameter denotes the source's one readable output column; without this
+    /// the parameter would emit no SQL and produce a malformed expression (<c>( + 1)</c>). A multi-column
+    /// or non-projection source is left to the default parameter handling.
+    /// </summary>
+    /// <returns><see langword="true"/> when the parameter was rendered as the scalar source's column.</returns>
+    internal static bool TryVisitScalarSourceParameter(BaseExpressionVisitor visitor, ParameterExpression node)
+    {
+        if (node.Type != visitor.EntityType)
+            return false;
+
+        var (index, shape) = visitor.ColumnsProvider.FindQueryCommand(visitor.EntityType, visitor.IncludeNestedSources);
+
+        // Only a projection source (a command registered as a column shape) with exactly one readable
+        // column whose type is the row type itself can stand for the bare parameter.
+        if (shape?.SelectList is not { Length: 1 } || shape.SelectList[0].PropertyType != node.Type)
+            return false;
+
+        var name = shape.SelectList[0].PropertyName ?? shape.SelectList[0].OutputName;
+        if (string.IsNullOrEmpty(name))
+            return false;
+
+        // Parameter mode only walks the tree without emitting text.
+        if (visitor.IsParamMode)
+            return true;
+
+        if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases && visitor.AliasProvider is { } aliases)
+            visitor.Builder!.Append(aliases.FindAlias(index)).Append('.');
+
+        visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(name));
+        visitor.ColumnName = name;
+        return true;
+    }
+
+    /// <summary>
     /// True when <paramref name="innerQuery"/> is the defining body of a typed CTE (<c>AsCte</c>)
     /// declared on the command currently being rendered. Such a body exposes its columns under the
     /// projection's property names (see <see cref="SqlBuildContext.ExactProjectionAliases"/>), so a
@@ -735,13 +772,28 @@ internal static class MemberTranslator
     /// </summary>
     private static bool IsTypedCteProducer(BaseExpressionVisitor visitor, QueryCommand innerQuery)
     {
+        // The anchor of a typed recursive CTE is not reachable through the owner's declaration set while
+        // the body itself is being rendered (the renderer wraps the body, not the consumer, so its
+        // QueryProvider carries no Ctes). The marker set by Cte<TResult>.CreateRecursive identifies it.
+        if (innerQuery.TypedRecursiveAnchor is not null)
+            return true;
+
         if (visitor.QueryProvider is not QueryCommand owner || owner.Ctes is not { Count: > 0 } definitions)
             return false;
 
         for (var i = 0; i < definitions.Count; i++)
         {
             var definition = definitions[i];
-            if (definition.TypedProjection && ReferenceEquals(definition.Query, innerQuery))
+            if (!definition.TypedProjection)
+                continue;
+
+            // A recursive definition's body is anchor UNION ALL step, so a member read of the self-reference
+            // resolves against the anchor command, not the body stored in Query. Binding the anchor shape
+            // here makes the step reference the CTE's declared output alias (the anchor's property name)
+            // instead of re-rendering the anchor body — which for a constant/non-column anchor would inline
+            // a literal (`1`) and produce an unqualified, unaddressable column such as `t1.1`.
+            if (ReferenceEquals(definition.Query, innerQuery)
+                || ReferenceEquals(definition.RecursiveReference?.AnchorShape, innerQuery))
                 return true;
         }
 

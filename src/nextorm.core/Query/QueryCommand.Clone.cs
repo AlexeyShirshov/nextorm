@@ -130,9 +130,15 @@ public partial class QueryCommand
             {
                 // The cached plan must own clones of the CTE queries (like From/Union/ReferencedQueries)
                 // so later re-preparation of the live command cannot mutate what the cache compares against.
+                // The typed-projection flag and the recursive reference travel with the declaration: a plan
+                // served from cache must keep the typed aliasing and the recursive shape validation.
                 dst._ctes = _ctes.Select(c => c.Mutation is not null
                     ? new CteDefinition(c.Name, c.Query.CloneForCache(), c.Mutation)
-                    : new CteDefinition(c.Name, c.Query.CloneForCache(), c.Recursive, c.MaxRecursion)).ToList();
+                    : new CteDefinition(c.Name, c.Query.CloneForCache(), c.Recursive, c.MaxRecursion)
+                    {
+                        TypedProjection = c.TypedProjection,
+                        RecursiveReference = c.RecursiveReference,
+                    }).ToList();
             }
 
             if (_referencedQueries?.Count > 0)

@@ -191,6 +191,15 @@ public sealed class FromExpression
      /// </summary>
      internal EntityBinding? SourceBinding { get; init; }
 
+     /// <summary>
+     /// Set when this source reads a recursive CTE through a typed self-reference
+     /// (<see cref="CteReference"/>). The value is the reference's non-public owner token: the source is
+     /// only a valid self-edge while that owner's scope is active (inside the defining step). A source
+     /// carrying an owner that is not active is a foreign/unbound reference and is rejected during
+     /// preparation, before any SQL is emitted. <c>null</c> for every ordinary source.
+     /// </summary>
+     internal object? RecursiveOwner { get; init; }
+
      /// <summary>Copies every source slot and applies the given overrides, falling back to the source's own.</summary>
      private FromExpression(FromExpression source, string? tableName, string? schema, string? database, string? server, string? tableExpression, EntityBinding? sourceBinding = null)
      {
@@ -213,7 +222,16 @@ public sealed class FromExpression
           TableExpressionOverride = tableExpression ?? source.TableExpressionOverride;
           SubQueryHint = source.SubQueryHint;
           SourceBinding = sourceBinding ?? source.SourceBinding;
+          RecursiveOwner = source.RecursiveOwner;
      }
+
+     /// <summary>
+     /// Creates a named source whose readable columns come from the recursive anchor's shape
+     /// (<paramref name="reference"/>'s <see cref="CteReference.AnchorShape"/>) and which is bound to
+     /// <paramref name="reference"/>'s owner token. Used by <c>From(CteReference&lt;TResult&gt;)</c>.
+     /// </summary>
+     internal static FromExpression ForRecursiveReference(CteReference reference)
+          => new(reference.Name, reference.AnchorShape) { RecursiveOwner = reference.Owner };
 
      /// <summary>Whether any table-name/schema/database/server qualifier override is present.</summary>
      internal bool HasQualificationOverride => TableNameOverride is not null || SchemaOverride is not null || DatabaseOverride is not null || ServerOverride is not null;

@@ -1581,6 +1581,65 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #146 slice B: T-SQL-specific recursion depth. The 2-arg overload omits `option (maxrecursion)`
+    // and relies on the 100-level engine default; the 3-arg overload emits the explicit limit and both
+    // must still materialize the bounded series.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Cte_TypedRecursive_DefaultMaxRecursion_ShouldMaterializeSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CommonTestSuite.CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_default", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CommonTestSuite.CteNumberRow { n = r.n + 1 }));
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public void Cte_TypedRecursive_BoundedMaxRecursion_ShouldMaterializeSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CommonTestSuite.CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_bounded", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CommonTestSuite.CteNumberRow { n = r.n + 1 }), 10);
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public void Cte_TypedRecursive_UnlimitedMaxRecursion_ShouldMaterializeSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        // T-SQL `maxrecursion 0` means "no limit" (the option must be emitted, not folded away). The
+        // explicit unlimited run must materialize the same bounded series as the default/finite runs.
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CommonTestSuite.CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_unlimited", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CommonTestSuite.CteNumberRow { n = r.n + 1 }), 0);
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

@@ -44,4 +44,37 @@ public class TypedCteSqlGenerationTests
         sql.Should().Contain(", low as (");
         sql.Should().Contain("join low as");
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // #146 slice B: ClickHouse declares SupportRecursiveCte=false, so the NEW typed recursion is
+    // rejected before any database command; ordinary (non-recursive) typed CTEs keep working.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Recursive_ShouldThrowNotSupportedBeforeAnyCommand()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var nums = ctx.From<IComplexEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+
+        var act = () => SqlOf(ctx, ctx.From(nums).Limit(20).Select(n => n));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*not supported*");
+    }
+
+    [Fact]
+    public void OrdinaryTypedCte_ShouldStillRender_Regression()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var recent = ctx.From<IComplexEntity>().Where(x => x.Id > 1).Select(x => new { x.Id, x.Int }).AsCte("recent");
+        var sql = SqlOf(ctx, ctx.From(recent).Select(r => new { r.Id, r.Int }));
+
+        sql.Should().Contain("with recent");
+        sql.Should().Contain("from recent");
+        sql.Should().NotContain("from (select");
+    }
 }

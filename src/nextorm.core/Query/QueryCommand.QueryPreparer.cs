@@ -266,6 +266,19 @@ public partial class QueryCommand
                 for (var (i, cnt) = (0, cmd._ctes!.Count); i < cnt; i++)
                 {
                     var cte = cmd._ctes[i];
+
+                    if (cte.RecursiveReference is { } recursive)
+                    {
+                        // The typed recursive step shape is validated on every preparation (not only on
+                        // the cache miss), so the plan cache cannot bypass the anchor/step contract.
+                        if (!cte.Query.IsPrepared)
+                            cte.Query.PrepareCommand(noHash, cancellationToken);
+
+                        TransferNestedFilterSkips(cte.Query, cmd);
+                        ValidateRecursiveShape(cte, recursive);
+                        continue;
+                    }
+
                     if (!cte.Query.IsPrepared)
                         cte.Query.PrepareCommand(noHash, cancellationToken);
                     TransferNestedFilterSkips(cte.Query, cmd);
@@ -956,6 +969,88 @@ public partial class QueryCommand
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Validates a typed recursive definition's step against its anchor per leaf: equal column
+        /// count and, per position, the self-reference member slot, the declared CLR type, the bound
+        /// provider type (converter bound type or prepared provider type) and nullability must agree.
+        /// A mismatch names the CTE and the step position. Runs on every preparation (including an
+        /// already-prepared body), so a cached plan cannot bypass the contract.
+        /// </summary>
+        private static void ValidateRecursiveShape(CteDefinition cte, CteReference reference)
+        {
+            var anchor = reference.AnchorShape.SelectList;
+            var step = cte.Query.UnionQuery?.SelectList;
+
+            // The shape is not available when preparation was aborted (cancellation) or the command has
+            // no projection; there is nothing to compare then.
+            if (anchor is not { Length: > 0 } || step is null)
+                return;
+
+            if (anchor.Length != step.Length)
+                throw ShapeError(cte.Name, 0, $"the anchor projects {anchor.Length} column(s) but the recursive step projects {step.Length}.");
+
+            for (var i = 0; i < anchor.Length; i++)
+                ValidateRecursiveColumn(cte.Name, i, anchor[i], step[i]);
+        }
+
+        /// <summary>
+        /// Validates one step column against the matching anchor column: the self-reference member slot,
+        /// the declared CLR type, the bound provider type and nullability must agree. Exposed to the unit
+        /// tests so a synthetic <see cref="SelectExpression"/> pair can drive each predicate directly —
+        /// the public <c>AsRecursiveCte</c> surface fixes <c>TResult</c> across anchor and step and cannot
+        /// produce most of these mismatches.
+        /// <para>
+        /// The nullability check is type-enforced: it only runs after <see cref="SelectExpression.PropertyType"/>
+        /// equality passed, and nullability is derived from that same type, so a mismatch can never occur.
+        /// It is kept as a defensive statement of the contract; see the D8 coverage note.
+        /// </para>
+        /// </summary>
+        internal static void ValidateRecursiveColumn(string name, int position, SelectExpression anchor, SelectExpression step)
+        {
+            var anchorName = anchor.PropertyName ?? anchor.OutputName;
+
+            if (TryReadSelfReferenceMember(step.Expression, out var memberName)
+                && !string.Equals(memberName, anchorName, StringComparison.Ordinal))
+            {
+                throw ShapeError(name, position,
+                    $"the step reads the self-reference member '{memberName}' at position {position}, but the anchor names that column '{anchorName}'.");
+            }
+
+            if (anchor.PropertyType != step.PropertyType)
+                throw ShapeError(name, position, $"the declared CLR type differs: the anchor has {anchor.PropertyType} at position {position}, the step has {step.PropertyType}.");
+
+            var anchorProvider = anchor.Converter?.ProviderType ?? anchor.ProviderType;
+            var stepProvider = step.Converter?.ProviderType ?? step.ProviderType;
+            if (anchorProvider != stepProvider)
+                throw ShapeError(name, position,
+                    $"the bound provider type differs: the anchor binds {anchorProvider?.Name ?? "<none>"} at position {position}, the step binds {stepProvider?.Name ?? "<none>"}.");
+
+            var anchorNullable = Nullable.GetUnderlyingType(anchor.PropertyType) is not null;
+            var stepNullable = Nullable.GetUnderlyingType(step.PropertyType) is not null;
+            if (anchorNullable != stepNullable)
+                throw ShapeError(name, position,
+                    $"the nullability differs at position {position}: the anchor is {(anchorNullable ? "nullable" : "non-nullable")}, the step is {(stepNullable ? "nullable" : "non-nullable")}.");
+        }
+
+        private static InvalidOperationException ShapeError(string name, int position, string detail)
+            => new($"The recursive common table expression '{name}' is invalid at step position {position}: {detail}");
+
+        // Extracts the member read of the recursive self-reference from a prepared projection column.
+        // Only a bare member read participates in the slot-identity contract; a computed expression has
+        // no slot to compare and is skipped.
+        private static bool TryReadSelfReferenceMember(Expression? expression, out string memberName)
+        {
+            memberName = string.Empty;
+            if (expression is not null)
+                expression = TypeFacts.UnwrapConvert(expression);
+
+            if (expression is not MemberExpression { Member: PropertyInfo pi })
+                return false;
+
+            memberName = pi.Name;
+            return true;
         }
 
         private static int PrepareJoin(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)

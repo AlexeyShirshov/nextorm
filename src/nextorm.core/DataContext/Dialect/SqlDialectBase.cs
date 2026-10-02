@@ -960,6 +960,13 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public virtual bool SupportsDataModifyingCtes => false;
 
+    /// <summary>
+    /// Defaults to <c>true</c>: the relational dialects can render a recursive CTE. ClickHouse has no
+    /// recursive <c>WITH</c> and overrides this to <c>false</c>. The flag gates only the new typed
+    /// recursive API, never a legacy <c>WithRecursive</c> declaration.
+    /// </summary>
+    public virtual bool SupportsRecursiveCte => true;
+
     /// <summary>Defaults to <c>false</c>; only PostgreSQL returns the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>.</summary>
     public virtual bool SupportsUpdateJoinReturning => false;
 

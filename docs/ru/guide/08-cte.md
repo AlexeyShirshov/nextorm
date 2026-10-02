@@ -94,7 +94,8 @@ whole-entity `TResult` не делает внешний источник таб�
 определяющей проекции, перенося её алиасы и сконфигурированные конвертеры/provider-типы — без DTO-remapping.
 
 Строковый API не меняется: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` по-прежнему
-объявляют и читают CTE по имени и остаются единственным способом написать рекурсивный CTE вручную.
+объявляют и читают CTE по имени и остаются доступными. Рекурсивный CTE можно также объявить через
+типизированную поверхность `AsRecursiveCte`, описанную ниже.
 
 Типизированное объявление переиспользует тот же механизм, поэтому разнородные дескрипторы и self-join
 компонуются обычным образом. Один и тот же экземпляр дескриптора, использованный дважды, объявляется один
@@ -129,9 +130,175 @@ set-операций), в порядке «зависимость раньше �
 Глобальные entity-фильтры **не** внедряются в типизированный источник — ни в основной `From(Cte<T>)`, ни в
 присоединённый; собственные фильтры определяющего запроса остаются внутри тела CTE.
 
-> **Типизированная рекурсия пока недоступна.** `AsCte` объявляет только обычный, нерекурсивный CTE.
-> Для рекурсивных CTE по-прежнему используется [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))
-> ниже; типизированного дескриптора самоссылки в этом API нет.
+## Типизированный рекурсивный CTE
+
+Типизированный рекурсивный CTE объявляется из своего **якоря** через `AsRecursiveCte`. Он принимает имя,
+колбэк, строящий шаг из типизированной самоссылки, и (во второй перегрузке) обязательный предел глубины
+рекурсии:
+
+```csharp
+public Cte<TResult> AsRecursiveCte(string name,
+    Func<CteReference<TResult>, QueryCommand<TResult>> step);
+
+public Cte<TResult> AsRecursiveCte(string name,
+    Func<CteReference<TResult>, QueryCommand<TResult>> step, int maxRecursion);
+```
+
+Колбэк вызывается **ровно один раз**, во время вызова `AsRecursiveCte`; он никогда не вызывается повторно
+при подготовке, генерации SQL или выполнении. Внутри него
+[`dataContext.From(reference)`](xref:NextORM.Core.CteReference`1) возвращает обычный
+[`EntityBuilder<TResult>`](xref:NextORM.Core.EntityBuilder`1), читающий CTE, а доступ к членам разрешается по
+форме проекции якоря. Шаговый запрос объединяется с якорем как `anchor UNION ALL step`
+**автоматически** — ручного `UnionAll` и второго объявления нет.
+
+Самоссылка **привязана к владельцу**: [`CteReference<TResult>`](xref:NextORM.Core.CteReference`1) действительна
+только пока выполняется получивший её колбэк. Чтение её вне этого колбэка (захваченная или чужая ссылка,
+даже с тем же именем) либо чтение самоссылки из якоря бросает `InvalidOperationException`
+**до построения любой команды БД**. Взаимной рекурсии нет: рекурсивный CTE может ссылаться только на
+собственную самоссылку и никогда на другое рекурсивное определение.
+
+```csharp
+// Якорь: id 1. Шаг: прибавляем 1, пока значение меньше 5 -> 1, 2, 3, 4, 5.
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => s.Id)
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n < 5)
+        .Select(n => n + 1));
+
+var rows = dataContext.From(numbers).ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'Id' from simple_entity
+ where id = 1
+ union all
+ select (Id + 1) as 'c0' from nums as 't1'
+ where (t1.Id < 5)) select id from nums as 't1'
+```
+
+Та же поверхность покрывает анонимную проекцию с несколькими слотами:
+
+```csharp
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => new { s.Id, Next = s.Id + 1 })
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n.Id < 4)
+        .Select(n => new { Id = n.Id + 1, Next = n.Next + 1 }));
+
+var rows = dataContext.From(numbers)
+    .Select(n => new { n.Id, n.Next })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'Id', (id + 1) as 'Next' from simple_entity
+ where id = 1
+ union all
+ select (id + 1) as 'Id', (Next + 1) as 'Next' from nums as 't1'
+ where (t1.Id < 4)) select Id, Next from nums as 't1'
+```
+
+... и DTO-проекция, например member-init `CteNumberRow` из строкового API ниже:
+
+```csharp
+public sealed class CteNumberRow
+{
+    public int n { get; set; }
+}
+
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => new CteNumberRow { n = s.Id })
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n.n < 5)
+        .Select(n => new CteNumberRow { n = n.n + 1 }));
+
+var rows = dataContext.From(numbers)
+    .Select(n => new CteNumberRow { n = n.n })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'n' from simple_entity
+ where id = 1
+ union all
+ select (n + 1) as 'n' from nums as 't1'
+ where (t1.n < 5)) select n from nums as 't1'
+```
+
+### Форму задаёт якорь
+
+Читаемые столбцы рекурсивного CTE, их порядок и алиасы берутся из проекции **якоря**, а не шага. Шаг
+должен воспроизвести эту форму слот в слот; собственные алиасы шага не переименовывают столбцы CTE. До
+того как любой SQL достигнет базы, каждая подготовка проверяет шаг против якоря по каждому листу и
+бросает `InvalidOperationException`, если различается:
+
+* **число** столбцов;
+* **слот члена** самоссылки в этой позиции (простой доступ к члену должен называть столбец якоря);
+* объявленный **тип CLR**;
+* связанный **provider-тип** (тип, привязанный конвертером, или подготовленный provider-тип);
+* **nullability** (является ли тип CLR типом `Nullable<T>`).
+
+Сообщение называет CTE и позицию шага, например:
+
+```text
+The recursive common table expression 'reordered' is invalid at step position 0: the step reads the
+self-reference member 'Total' at position 0, but the anchor names that column 'Id'.
+```
+
+Проверка выполняется при каждой подготовке, включая попадание в кэш планов, поэтому кэшированный план не
+может обойти контракт «якорь/шаг».
+
+### Глубина рекурсии (`maxRecursion`)
+
+Двухаргументная перегрузка **не** выводит подсказку глубины: SQL Server использует собственное значение
+по умолчанию (`100`). Трёхаргументная перегрузка принимает обязательный `int` (nullable-значения по
+умолчанию нет) и выводит `option (maxrecursion n)` только на SQL Server; `0` означает «без ограничения»,
+положительное значение — максимальная глубина рекурсии. Остальные провайдеры игнорируют подсказку и
+используют собственное значение по умолчанию — ровно как строковый API.
+
+```csharp
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => s.Id)
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n < 5)
+        .Select(n => n + 1), 100);
+
+var rows = dataContext.From(numbers).ToList();
+```
+
+```sql
+-- SQL Server: без ключевого слова `recursive`, опция глубины в конце
+with nums as (select id as [Id] from simple_entity
+ where id = 1
+ union all
+ select (Id + 1) as [c0] from nums as [t1]
+ where (t1.Id < 5)) select id from nums as [t1] option (maxrecursion 100)
+```
+
+### Различия провайдеров (типизированная рекурсия)
+
+| Провайдер | Типизированный рекурсивный CTE |
+|---|---|
+| SQLite | Поддерживается; объявляет `with recursive`; `maxRecursion` игнорируется. |
+| PostgreSQL | Поддерживается; объявляет `with recursive`; `maxRecursion` игнорируется. |
+| SQL Server | Поддерживается; объявляет `with` (без ключевого слова `recursive`); двухаргументная перегрузка не выводит подсказку (значение сервера по умолчанию), трёхаргументная выводит `option (maxrecursion n)` (`0` = без ограничения, положительное = глубина). |
+| MySQL | Поддерживается; объявляет `with recursive`; `maxRecursion` игнорируется. |
+| MariaDB | Поддерживается; объявляет `with recursive`; `maxRecursion` игнорируется. |
+| ClickHouse | **Исключён**: типизированный рекурсивный CTE бросает `NotSupportedException` до вывода любого SQL. Обычный (нерекурсивный) типизированный CTE на ClickHouse по-прежнему работает. |
+| In-memory | Не применимо: рекурсию рендерят SQL-диалекты. |
+
+Устаревший строковый `WithRecursive` **не** гейтится этой проверкой возможности и сохраняет прежнее
+поведение на каждом провайдере.
+
+Каждый пример выше ограничен завершающим предикатом в шаге; никогда не стройте неограниченный
+рекурсивный CTE.
 
 ## Цепочка объявлений
 
@@ -297,7 +464,7 @@ var numbers = dataContext
 
 ```sql
 -- SQLite: `with recursive` prefix
-with recursive nums as (select id as 'n' from simple_entity where (id = 1) union all select (n + 1) as 'n' from nums where (n < 5)) select n from nums
+with recursive nums as (select id as 'n' from simple_entity where id = 1 union all select (n + 1) as 'n' from nums where (n < 5)) select n from nums
 ```
 
 Вывод:
@@ -324,7 +491,7 @@ var numbers = dataContext
 
 ```sql
 -- SQL Server: no `recursive` keyword, depth option appended
-with nums as (select id as [n] from simple_entity where (id = 1) union all select (n + 1) as [n] from nums where (n < 5)) select n from nums option (maxrecursion 100)
+with nums as (select id as [n] from simple_entity where id = 1 union all select (n + 1) as [n] from nums where (n < 5)) select n from nums option (maxrecursion 100)
 ```
 
 ## CTE и захваченный параметр
@@ -482,6 +649,9 @@ Write-CTE документируется вместе с поверхность�
 Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
 `tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:14`, `tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:33`;
 `tests/nextorm.core.tests/CteQueryTests.cs:8`;
+типизированный рекурсивный CTE: `src/nextorm.core/Cte.cs:15`, `src/nextorm.core/Query/QueryCommand.TResult.cs:1100`,
+`src/nextorm.core/DataContext/SqlSourceRenderer.cs:35`, `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:981`;
+`tests/nextorm.core.tests/TypedCteTests.cs:1057`, `tests/nextorm.sqlite.tests/TypedCteTests.cs:718`;
 `tests/nextorm.sqlite.tests/PlanCacheTests.cs:190`, `tests/nextorm.sqlite.tests/PlanCacheTests.cs:343`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:827`, `:856`;

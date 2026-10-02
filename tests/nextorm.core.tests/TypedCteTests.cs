@@ -10,9 +10,10 @@ using NextORM.Core;
 namespace NextORM.Core.Tests;
 
 /// <summary>
-/// #146 slice A: the ordinary typed CTE surface (<c>AsCte</c>/<c>Cte&lt;T&gt;</c>/<c>From(Cte&lt;T&gt;)</c>).
-/// Renders SQL through a provider-free fake context (never opens a database) and pins the public surface:
-/// the slice-B recursive API must be absent and the legacy CTE surface must stay intact.
+/// #146 typed CTE surface: the ordinary slice-A API (<c>AsCte</c>/<c>Cte&lt;T&gt;</c>/<c>From(Cte&lt;T&gt;)</c>)
+/// and the slice-B recursive API (<c>CteReference</c>/<c>AsRecursiveCte</c>/<c>From(CteReference&lt;T&gt;)</c>).
+/// Renders SQL through a provider-free fake context (never opens a database) and pins the public surface
+/// while keeping the legacy CTE surface intact.
 /// </summary>
 public class TypedCteTests
 {
@@ -73,16 +74,24 @@ public class TypedCteTests
 
     private sealed class TestContext : DataContext
     {
+        private readonly FakeConnection _connection = new();
+
         public TestContext() : base(new DataContextBuilder())
         {
         }
+
+        // Spy on the existing provider boundary (no new production seam): the fail-fast rejections must
+        // never open the connection or execute a command.
+        public int DbConnectionsOpened => _connection.OpenCount;
+
+        public int DbCommandsExecuted => _connection.CommandsExecuted;
 
         public override ISqlDialect Dialect => TestDialect.Instance;
 
         // Only the SQL text is asserted; the planner mints parameters while building the command.
         public override DbParameter CreateParam(string name, object? value) => new FakeParameter(name) { Value = value };
 
-        protected override DbConnection CreateDbConnection(string? connectionString) => new FakeConnection();
+        protected override DbConnection CreateDbConnection(string? connectionString) => _connection;
     }
 
     private sealed class FakeParameter(string name) : DbParameter
@@ -112,6 +121,10 @@ public class TypedCteTests
 
     private sealed class FakeConnection : DbConnection
     {
+        public int OpenCount { get; private set; }
+
+        public int CommandsExecuted { get; private set; }
+
         [AllowNull]
         public override string ConnectionString { get; set; } = string.Empty;
 
@@ -129,16 +142,16 @@ public class TypedCteTests
         {
         }
 
-        public override void Open()
-        {
-        }
+        public override void Open() => OpenCount++;
+
+        internal void RecordExecution() => CommandsExecuted++;
 
         protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
 
-        protected override DbCommand CreateDbCommand() => new FakeCommand();
+        protected override DbCommand CreateDbCommand() => new FakeCommand(this);
     }
 
-    private sealed class FakeCommand : DbCommand
+    private sealed class FakeCommand(FakeConnection connection) : DbCommand
     {
         private readonly FakeParameterCollection _parameters = new();
 
@@ -167,15 +180,27 @@ public class TypedCteTests
         {
         }
 
-        public override int ExecuteNonQuery() => throw new NotSupportedException();
+        public override int ExecuteNonQuery()
+        {
+            connection.RecordExecution();
+            throw new NotSupportedException();
+        }
 
-        public override object ExecuteScalar() => throw new NotSupportedException();
+        public override object ExecuteScalar()
+        {
+            connection.RecordExecution();
+            throw new NotSupportedException();
+        }
 
         public override void Prepare()
         {
         }
 
-        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => throw new NotSupportedException();
+        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        {
+            connection.RecordExecution();
+            throw new NotSupportedException();
+        }
     }
 
     private sealed class FakeParameterCollection : DbParameterCollection
@@ -326,14 +351,30 @@ public class TypedCteTests
     }
 
     [Fact]
-    public void TypedCte_Surface_ShouldExposeSliceAAndRejectSliceB()
+    public void TypedCte_Surface_ShouldExposeSliceAAndSliceB()
     {
         var core = typeof(DataContextExtensions).Assembly;
 
-        // Slice B must be absent, not even as a stub.
-        core.GetTypes().Should().NotContain(t => t.Name.StartsWith("CteReference", StringComparison.Ordinal));
-        typeof(QueryCommand<>).GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Should().NotContain(m => m.Name == "AsRecursiveCte");
+        // Slice B public surface present: the non-generic abstract identity, the generic typed
+        // self-reference, both AsRecursiveCte overloads and the typed From(CteReference<T>).
+        var nonGenericReference = core.GetType("NextORM.Core.CteReference");
+        nonGenericReference.Should().NotBeNull();
+        nonGenericReference!.IsAbstract.Should().BeTrue();
+        core.GetType("NextORM.Core.CteReference`1").Should().NotBeNull();
+
+        var recursiveOverloads = typeof(QueryCommand<>).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name == "AsRecursiveCte")
+            .ToList();
+        recursiveOverloads.Should().HaveCount(2);
+        recursiveOverloads.Should().Contain(m => m.GetParameters().Length == 2);
+        var withLimit = recursiveOverloads.Single(m => m.GetParameters().Length == 3);
+        withLimit.GetParameters()[2].ParameterType.Should().Be(typeof(int));
+        withLimit.GetParameters()[2].HasDefaultValue.Should().BeFalse();
+
+        typeof(DataContextExtensions).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Should().Contain(m => m.Name == "From" && m.GetParameters().Length == 2
+                && m.GetParameters()[1].ParameterType.IsGenericType
+                && m.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(CteReference<>));
 
         // Slice A public surface present.
         typeof(QueryCommand<>).GetMethods(BindingFlags.Public | BindingFlags.Instance)
@@ -365,6 +406,11 @@ public class TypedCteTests
 
         sql.Should().Contain("from s");
         sql.Should().NotContain("from (select");
+        // Slice-A regression (#146-B): the bare scalar source parameter must render once as the
+        // source's readable column, not be re-visited by the lambda walk (which produced "(Id + 1)Id").
+        sql.Should().Contain("(Id + 1)");
+        sql.Should().NotContain("(Id + 1)Id");
+        sql.Should().NotContain("( + 1)");
     }
 
     [Fact]
@@ -625,6 +671,28 @@ public class TypedCteTests
         var act = () => CteHoister.Hoist(new[] { a });
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*cycle*");
+    }
+
+    [Fact]
+    public void CteHoister_RecursiveCteNonSelfDependency_ShouldOrderDependencyBeforeConsumer()
+    {
+        using var ctx = new TestContext();
+
+        // Only the matching self-edge of a recursive declaration is exempt from the cycle check. A
+        // different declaration that a recursive CTE references must still be ordered before it;
+        // exempting every edge out of a recursive declaration would emit the dependency after its
+        // consumer (and hide a real cycle through that dependency).
+        var depBody = ctx.From<TypedCteEntity>().Select(x => new { x.Id });
+        var dep = new CteDefinition("dep", depBody);
+
+        var recursiveBody = ctx.From<TypedCteEntity>().Select(x => new { x.Id });
+        recursiveBody.From = new FromExpression("dep");
+        var recursive = new CteDefinition("rec", recursiveBody, recursive: true);
+
+        // 'dep' is declared after its consumer; the hoister must still move it first.
+        var ordered = CteHoister.Hoist([recursive, dep]);
+
+        ordered!.Select(d => d.Name).Should().Equal("dep", "rec");
     }
 
     [Fact]
@@ -1026,5 +1094,377 @@ public class TypedCteTests
         }
 
         return count;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #146 slice B: recursive typed CTE surface, callback lifecycle, owner scope and shape contract.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Recursive_ShouldReturnCteDescriptor_AndInvokeCallbackExactlyOnce()
+    {
+        using var ctx = new TestContext();
+        var calls = 0;
+        EntityBuilder<long>? selfBuilder = null;
+
+        var cte = ctx.From<TypedCteEntity>().Select(x => x.Id).AsRecursiveCte("nums", self =>
+        {
+            calls++;
+            selfBuilder = ctx.From(self);
+            return ctx.From(self).Where(n => n < 3).Select(n => n + 1);
+        });
+
+        calls.Should().Be(1);
+        selfBuilder.Should().NotBeNull();
+        cte.Should().BeOfType<Cte<long>>();
+        cte.Name.Should().Be("nums");
+        cte.Definitions.Should().ContainSingle().Which.Name.Should().Be("nums");
+        cte.Definitions[0].Recursive.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Recursive_ShouldRenderWithRecursiveAndUnionAll()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+
+        var sql = SqlOf(ctx, ctx.From(cte).Select(n => n));
+
+        sql.Should().Contain("with recursive");
+        sql.Should().Contain("union all");
+        sql.Should().Contain("from nums");
+
+        // The scalar step read the self-reference as a bare parameter; it must render as the source's
+        // one readable column and never be emitted twice by the lambda walk.
+        sql.Should().Contain("(Id + 1)").And.NotContain("(Id + 1)Id");
+    }
+
+    [Fact]
+    public void Recursive_MultipleSelfReferenceOccurrences_ShouldReferenceCteOutputNameForEachOccurrence()
+    {
+        using var ctx = new TestContext();
+
+        // V12: the same self-reference is read at two positions of one step expression (the reference
+        // value combined with itself). Standard SQL allows the recursive table to appear only once in
+        // the step's FROM (a self-join of the recursive CTE is rejected by every engine), so multiple
+        // occurrences means multiple member reads: both must render the CTE output alias `Id`.
+        var cte = ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => new { x.Id })
+            .AsRecursiveCte("nums", self => ctx.From(self)
+                .Where(n => n.Id < 5)
+                .Select(n => new { Id = n.Id + n.Id + 1 }));
+
+        var sql = SqlOf(ctx, ctx.From(cte).Limit(20).Select(n => n.Id));
+
+        sql.Should().Contain("with recursive");
+        sql.Should().Contain("union all");
+        sql.Should().Contain("from nums");
+        // Each occurrence reads the declared output name, never an inlined anchor body/ordinal.
+        sql.Should().Contain("Id + Id");
+        sql.Should().NotContain("t1.1");
+    }
+
+    [Fact]
+    public void Recursive_CapturedReferenceOutsideStep_ShouldThrowBeforeAnyCommand()
+    {
+        using var ctx = new TestContext();
+        CteReference<long>? captured = null;
+
+        _ = ctx.From<TypedCteEntity>().Select(x => x.Id).AsRecursiveCte("nums", self =>
+        {
+            captured = self;
+            return ctx.From(self).Where(n => n < 3).Select(n => n + 1);
+        });
+
+        captured.Should().NotBeNull();
+        var act = () => ctx.From(captured!);
+        act.Should().Throw<InvalidOperationException>().WithMessage("*outside its defining step*");
+    }
+
+    [Fact]
+    public void Recursive_ShapeMismatch_ShouldThrowBeforeAnyCommand()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>()
+            .Select(x => new TypedCteMemberInit { Id = x.Id, Total = x.Total })
+            .AsRecursiveCte("reordered", self =>
+                ctx.From(self).Select(x => new TypedCteMemberInit { Total = x.Total, Id = x.Id }));
+
+        var act = () => SqlOf(ctx, ctx.From(cte).Select(x => new { x.Id, x.Total }));
+        act.Should().Throw<InvalidOperationException>().WithMessage("*reordered*");
+    }
+
+    [Fact]
+    public void Recursive_ShouldNotEmitRecursionHint_WhenOmitted()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>().Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 3).Select(n => n + 1));
+
+        cte.Definitions[0].MaxRecursion.Should().BeNull();
+
+        var withHint = ctx.From<TypedCteEntity>().Select(x => x.Id)
+            .AsRecursiveCte("nums2", self => ctx.From(self).Where(n => n < 3).Select(n => n + 1), 10);
+
+        withHint.Definitions[0].MaxRecursion.Should().Be(10);
+    }
+
+    [Fact]
+    public void Recursive_NullStep_ShouldThrowArgumentNullException()
+    {
+        using var ctx = new TestContext();
+        var q = ctx.From<TypedCteEntity>().Select(x => x.Id);
+
+        // AC2: a null callback is a caller error rejected by the argument guard before any owner/shape
+        // work or command preparation. Both overloads share the same contract.
+        ((Action)(() => q.AsRecursiveCte("nums", null!))).Should().Throw<ArgumentNullException>();
+        ((Action)(() => q.AsRecursiveCte("nums", null!, 10))).Should().Throw<ArgumentNullException>();
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #146-B D5: callback lifecycle, owner scope, pre-DB rejection and shared-command hygiene.
+    // Every rejection asserts the existing connection/command boundary was never opened or executed.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Recursive_Callback_ShouldRunOnceAcrossPreparationAndMultipleConsumers()
+    {
+        using var ctx = new TestContext();
+        var calls = 0;
+
+        var nums = ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id)
+            .AsRecursiveCte("nums", self =>
+            {
+                calls++;
+                return ctx.From(self).Where(n => n < 5).Select(n => n + 1);
+            });
+
+        calls.Should().Be(1);
+
+        var first = SqlOf(ctx, ctx.From(nums).Select(n => n));
+        var second = SqlOf(ctx, ctx.From(nums).Where(n => n > 1).Select(n => n));
+        var third = SqlOf(ctx, ctx.From(nums).Select(n => n));
+
+        first.Should().Contain("union all");
+        second.Should().Contain("union all");
+        third.Should().Contain("union all");
+        calls.Should().Be(1, "preparation, generation and a second consumer must never re-invoke the step callback");
+    }
+
+    [Fact]
+    public void Recursive_ShouldNotMutateSharedAnyCommand()
+    {
+        using var ctx = new TestContext();
+
+        // Materialise the context-shared Any command (without executing: the fake boundary has no reader).
+        var parent = ctx.From<TypedCteEntity>().ToCommand();
+        var shared = EntityBuilderExtensions.GetAnyCommand(ctx, parent);
+        ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+        shared.Cache.Should().BeTrue();
+        var sharedFrom = shared.From;
+
+        var nums = ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+        SqlOf(ctx, ctx.From(nums).Where(n => n > 1).Select(n => n));
+
+        ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+        shared.Cache.Should().BeTrue("preparing a recursive consumer must not flip the shared command's sticky flag");
+        shared.From.Should().BeSameAs(sharedFrom);
+    }
+
+    [Fact]
+    public void Recursive_ForeignReferenceSameName_ShouldThrowBeforeAnyCommand()
+    {
+        using var ctx = new TestContext();
+
+        var act = () => ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id)
+            .AsRecursiveCte("nums", outer =>
+            {
+                var innerAnchor = ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id);
+                // Same declared name, different owner: name equality is not owner equality.
+                var inner = innerAnchor.AsRecursiveCte("nums", _ =>
+                    ctx.From(outer).Where(n => n < 3).Select(n => n + 1));
+                return ctx.From(inner).Select(n => n);
+            });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*in its step*different recursive definition*");
+        ctx.DbConnectionsOpened.Should().Be(0);
+        ctx.DbCommandsExecuted.Should().Be(0);
+    }
+
+    [Fact]
+    public void Recursive_AnchorSelfAccess_ShouldThrowBeforeAnyCommand()
+    {
+        using var ctx = new TestContext();
+
+        var act = () => ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id)
+            .AsRecursiveCte("outer", outer =>
+            {
+                // The inner definition's anchor reads the outer self-reference; an anchor must never
+                // carry one, even while the outer owner scope is still active.
+                var innerAnchor = ctx.From(outer).Where(n => n < 3).Select(n => n + 1);
+                var inner = innerAnchor.AsRecursiveCte("inner", _ =>
+                    ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id));
+                return ctx.From(inner).Select(n => n);
+            });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*in its anchor*different recursive definition*");
+        ctx.DbConnectionsOpened.Should().Be(0);
+        ctx.DbCommandsExecuted.Should().Be(0);
+    }
+
+    [Fact]
+    public void Recursive_NullStepResult_ShouldThrowBeforeAnyCommand()
+    {
+        using var ctx = new TestContext();
+
+        var act = () => ctx.From<TypedCteEntity>().Select(x => x.Id)
+            .AsRecursiveCte("nullStep", _ => null!);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*nullStep*returned null*");
+        ctx.DbConnectionsOpened.Should().Be(0);
+        ctx.DbCommandsExecuted.Should().Be(0);
+    }
+
+    [Fact]
+    public void Recursive_MemberSlotMismatch_ShouldNameCteBranchAndPosition()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>()
+            .Select(x => new TypedCteMemberInit { Id = x.Id, Total = x.Total })
+            .AsRecursiveCte("slot", self =>
+                ctx.From(self).Select(x => new TypedCteMemberInit { Total = x.Total, Id = x.Id }));
+
+        var act = () => SqlOf(ctx, ctx.From(cte).Select(x => new { x.Id, x.Total }));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'slot'*step position 0*self-reference member 'Total'*anchor names that column 'Id'*");
+        ctx.DbConnectionsOpened.Should().Be(0);
+        ctx.DbCommandsExecuted.Should().Be(0);
+    }
+
+    [Fact]
+    public void Recursive_ShapeCountMismatch_ShouldNameCteBranchAndPosition()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>()
+            .Select(x => new TypedCteMemberInit { Id = x.Id, Total = x.Total })
+            .AsRecursiveCte("counted", self =>
+                ctx.From(self).Select(x => new TypedCteMemberInit { Id = x.Id }));
+
+        var act = () => SqlOf(ctx, ctx.From(cte).Select(x => new { x.Id, x.Total }));
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'counted'*step position 0*anchor projects 2 column(s)*step projects 1*");
+        ctx.DbConnectionsOpened.Should().Be(0);
+        ctx.DbCommandsExecuted.Should().Be(0);
+    }
+
+    // The public AsRecursiveCte surface fixes TResult across anchor and step, so a per-leaf mismatch of
+    // the declared CLR type or the bound provider type cannot be produced through it. The per-column
+    // predicate is exercised directly over synthetic SelectExpression pairs instead, so a regression in
+    // either comparison is caught. (Nullability is type-enforced by the preceding CLR equality check and
+    // cannot be driven independently; it is recorded as a D8 coverage note.)
+    [Fact]
+    public void RecursiveColumn_DeclaredClrTypeMismatch_ShouldThrowWithPosition()
+    {
+        var anchor = new SelectExpression(typeof(int)) { PropertyName = "Id" };
+        var step = new SelectExpression(typeof(long)) { PropertyName = "Id" };
+
+        var act = () => QueryCommand.QueryPreparer.ValidateRecursiveColumn("clr", 2, anchor, step);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'clr'*step position 2*declared CLR type differs*");
+    }
+
+    [Fact]
+    public void RecursiveColumn_BoundProviderTypeMismatch_ShouldThrowWithPosition()
+    {
+        var anchor = new SelectExpression(typeof(int)) { PropertyName = "Id", ProviderType = typeof(int) };
+        var step = new SelectExpression(typeof(int)) { PropertyName = "Id", ProviderType = typeof(long) };
+
+        var act = () => QueryCommand.QueryPreparer.ValidateRecursiveColumn("provider", 1, anchor, step);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'provider'*step position 1*bound provider type differs*");
+    }
+
+    // r2.2 branch closure: `anchor.PropertyName ?? anchor.OutputName` (QueryPreparer.cs:1012). A
+    // positional/computed anchor column has no PropertyName, so the self-reference-slot diagnostic must
+    // fall back to the internal OutputName instead of reporting a null name. The internal
+    // ValidateRecursiveColumn seam drives the predicate directly, like the V10 tests above.
+    [Fact]
+    public void RecursiveColumn_OutputNameFallback_ShouldNameAnchorColumnInDiagnostic()
+    {
+        var anchor = new SelectExpression(typeof(int)) { OutputName = "Co" };
+        var step = new SelectExpression(typeof(int))
+        {
+            PropertyName = "Id",
+            Expression = System.Linq.Expressions.Expression.Property(
+                System.Linq.Expressions.Expression.Parameter(typeof(TypedCteEntity), "x"),
+                nameof(TypedCteEntity.Id)),
+        };
+
+        var act = () => QueryCommand.QueryPreparer.ValidateRecursiveColumn("outname", 0, anchor, step);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'outname'*step position 0*self-reference member 'Id'*anchor names that column 'Co'*");
+    }
+
+    // r2.2 branch closure: the provider-type diagnostic's anchor `<none>` arm
+    // (QueryPreparer.cs:1028, `anchorProvider?.Name ?? "<none>"`). A column with neither a converter nor
+    // a bound ProviderType reads as its CLR type, so the mismatch must render `<none>` for the anchor.
+    [Fact]
+    public void RecursiveColumn_AnchorProviderTypeMissing_ShouldReportNone()
+    {
+        var anchor = new SelectExpression(typeof(int)) { PropertyName = "Id" };
+        var step = new SelectExpression(typeof(int)) { PropertyName = "Id", ProviderType = typeof(long) };
+
+        var act = () => QueryCommand.QueryPreparer.ValidateRecursiveColumn("none-anchor", 3, anchor, step);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'none-anchor'*step position 3*bound provider type differs*anchor binds <none>*step binds Int64*");
+    }
+
+    // r2.2 branch closure: the symmetric step `<none>` arm (QueryPreparer.cs:1028).
+    [Fact]
+    public void RecursiveColumn_StepProviderTypeMissing_ShouldReportNone()
+    {
+        var anchor = new SelectExpression(typeof(int)) { PropertyName = "Id", ProviderType = typeof(int) };
+        var step = new SelectExpression(typeof(int)) { PropertyName = "Id" };
+
+        var act = () => QueryCommand.QueryPreparer.ValidateRecursiveColumn("none-step", 1, anchor, step);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*'none-step'*step position 1*bound provider type differs*anchor binds Int32*step binds <none>*");
+    }
+
+    // r2.2 branch closure: `anchor.Converter?.ProviderType ?? anchor.ProviderType` and its step twin
+    // (QueryPreparer.cs:1024-1025). When a converter is bound, the provider type comes from the
+    // converter, not the column's ProviderType. StatusToStringConverter is a ValueConverter<,> whose
+    // ProviderType is string; the two acts cover the anchor-side and step-side converter arms.
+    [Fact]
+    public void RecursiveColumn_ConverterProviderType_ShouldBeComparedInsteadOfColumnProviderType()
+    {
+        var anchorConverted = new SelectExpression(typeof(int))
+            { PropertyName = "Id", ProviderType = typeof(int), Converter = new StatusToStringConverter() };
+        var stepPlain = new SelectExpression(typeof(int)) { PropertyName = "Id", ProviderType = typeof(int) };
+
+        var anchorAct = () => QueryCommand.QueryPreparer.ValidateRecursiveColumn("conv-anchor", 0, anchorConverted, stepPlain);
+        anchorAct.Should().Throw<InvalidOperationException>()
+            .WithMessage("*anchor binds String*step binds Int32*");
+
+        var anchorPlain = new SelectExpression(typeof(int)) { PropertyName = "Id", ProviderType = typeof(int) };
+        var stepConverted = new SelectExpression(typeof(int))
+            { PropertyName = "Id", ProviderType = typeof(int), Converter = new StatusToStringConverter() };
+
+        var stepAct = () => QueryCommand.QueryPreparer.ValidateRecursiveColumn("conv-step", 0, anchorPlain, stepConverted);
+        stepAct.Should().Throw<InvalidOperationException>()
+            .WithMessage("*anchor binds Int32*step binds String*");
     }
 }

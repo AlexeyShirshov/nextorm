@@ -97,4 +97,45 @@ public class TypedCteSqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*ValueTuple*");
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #146 slice B: recursive typed CTE SQL generation. PostgreSQL uses the ANSI `with recursive`
+    // keyword and ignores the recursion-depth hint (only SQL Server renders it).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Recursive_ShouldEmitWithRecursiveUnionAllAndBoundedStep()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var nums = ctx.From<IComplexEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+
+        var sql = SqlOf(ctx, ctx.From(nums).Limit(20).Select(n => n));
+
+        sql.Should().Contain("with recursive");
+        sql.Should().Contain("nums as (");
+        sql.Should().Contain("union all");
+        sql.Should().Contain("from nums");
+        // The step's terminating predicate must be present before the recursive read is executed.
+        sql.Should().Contain("where").And.Contain("< 5");
+    }
+
+    [Fact]
+    public void Recursive_WithMaxRecursionHint_ShouldIgnoreHint()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var nums = ctx.From<IComplexEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1), 10);
+
+        var sql = SqlOf(ctx, ctx.From(nums).Limit(20).Select(n => n));
+
+        sql.Should().Contain("with recursive");
+        // Only SQL Server turns the hint into an OPTION clause; PostgreSQL relies on its engine default.
+        sql.Should().NotContain("maxrecursion");
+    }
 }

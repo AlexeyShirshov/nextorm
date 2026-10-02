@@ -94,7 +94,8 @@ whole-entity `TResult` does not make the outer source a table, and members resol
 projection's output aliases, carrying its aliases and configured converters/provider types — no DTO remapping.
 
 The string API is unchanged: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` still declare and
-read CTEs by name, and remain the only way to write a recursive CTE by hand.
+read CTEs by name and remain available. A recursive CTE can also be declared through the typed
+`AsRecursiveCte` surface described below.
 
 Typed declaration reuses the same machinery, so heterogeneous descriptors and a self-join compose normally.
 The same descriptor instance used twice is declared once; different `TResult`s are independent:
@@ -128,9 +129,174 @@ sharing a name are still rejected, as with the string API.
 Entity filters are **not** injected on the typed source — neither on the main `From(Cte<T>)` source nor on a
 joined one; the defining query's own filters stay inside the CTE body.
 
-> **Typed recursion is not available yet.** `AsCte` declares an ordinary, non-recursive CTE only. Recursive
-> CTEs keep using [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))
-> documented below; there is no typed self-reference descriptor in this API.
+## Typed recursive CTE
+
+A typed recursive CTE is declared from its **anchor** with `AsRecursiveCte`. It takes the name, a callback
+that builds the step from a typed self-reference, and (on the second overload) a required recursion-depth
+limit:
+
+```csharp
+public Cte<TResult> AsRecursiveCte(string name,
+    Func<CteReference<TResult>, QueryCommand<TResult>> step);
+
+public Cte<TResult> AsRecursiveCte(string name,
+    Func<CteReference<TResult>, QueryCommand<TResult>> step, int maxRecursion);
+```
+
+The callback runs **exactly once**, during the `AsRecursiveCte` call; it is never re-invoked by
+preparation, SQL generation or execution. Inside it [`dataContext.From(reference)`](xref:NextORM.Core.CteReference`1)
+returns the regular [`EntityBuilder<TResult>`](xref:NextORM.Core.EntityBuilder`1) reading the CTE, and member
+access resolves against the anchor's projection shape. The step query is combined with the anchor as
+`anchor UNION ALL step` **automatically** — there is no manual `UnionAll` and no second declaration.
+
+The self-reference is **owner-scoped**: a [`CteReference<TResult>`](xref:NextORM.Core.CteReference`1) is valid
+only while the callback that received it is running. Reading it outside that callback (a captured or foreign
+reference, even one carrying the same name) or reading a self-reference from the anchor throws
+`InvalidOperationException` **before any database command is built**. There is no mutual recursion: a
+recursive CTE may reference only its own self-reference, never another recursive definition.
+
+```csharp
+// Anchor: id 1. Step: add 1 while the value is below 5 -> 1, 2, 3, 4, 5.
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => s.Id)
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n < 5)
+        .Select(n => n + 1));
+
+var rows = dataContext.From(numbers).ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'Id' from simple_entity
+ where id = 1
+ union all
+ select (Id + 1) as 'c0' from nums as 't1'
+ where (t1.Id < 5)) select id from nums as 't1'
+```
+
+The same surface covers an anonymous projection with several slots:
+
+```csharp
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => new { s.Id, Next = s.Id + 1 })
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n.Id < 4)
+        .Select(n => new { Id = n.Id + 1, Next = n.Next + 1 }));
+
+var rows = dataContext.From(numbers)
+    .Select(n => new { n.Id, n.Next })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'Id', (id + 1) as 'Next' from simple_entity
+ where id = 1
+ union all
+ select (id + 1) as 'Id', (Next + 1) as 'Next' from nums as 't1'
+ where (t1.Id < 4)) select Id, Next from nums as 't1'
+```
+
+... and a DTO projection, for example the member-init `CteNumberRow` used by the string API below:
+
+```csharp
+public sealed class CteNumberRow
+{
+    public int n { get; set; }
+}
+
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => new CteNumberRow { n = s.Id })
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n.n < 5)
+        .Select(n => new CteNumberRow { n = n.n + 1 }));
+
+var rows = dataContext.From(numbers)
+    .Select(n => new CteNumberRow { n = n.n })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recursive nums as (select id as 'n' from simple_entity
+ where id = 1
+ union all
+ select (n + 1) as 'n' from nums as 't1'
+ where (t1.n < 5)) select n from nums as 't1'
+```
+
+### The anchor defines the shape
+
+The recursive CTE's readable columns, their order and their aliases come from the **anchor's** projection,
+not the step's. The step must reproduce that shape slot-for-slot; the step's own aliases do not rename the
+CTE's columns. Before any SQL reaches a database, every preparation validates the step against the anchor
+per leaf and throws `InvalidOperationException` when any of the following differs:
+
+* the column **count**;
+* the self-reference **member slot** at that position (a bare member read must name the anchor's column);
+* the declared **CLR type**;
+* the bound **provider type** (the converter-bound type, or the prepared provider type);
+* the **nullability** (whether the CLR type is a `Nullable<T>`).
+
+The message names the CTE and the step position, for example:
+
+```text
+The recursive common table expression 'reordered' is invalid at step position 0: the step reads the
+self-reference member 'Total' at position 0, but the anchor names that column 'Id'.
+```
+
+The validation runs on every preparation, including a plan-cache hit, so a cached plan cannot bypass the
+anchor/step contract.
+
+### Recursion depth (`maxRecursion`)
+
+The two-argument overload emits **no** depth hint: SQL Server uses its own default (`100`). The
+three-argument overload takes a required `int` (there is no nullable default) and emits
+`option (maxrecursion n)` on SQL Server only; `0` means "no limit" and a positive value is the maximum
+recursion depth. Every other provider ignores the hint and uses its own default, exactly as the legacy
+string API does.
+
+```csharp
+var numbers = dataContext.From<ISimpleEntity>()
+    .Where(s => s.Id == 1)
+    .Select(s => s.Id)
+    .AsRecursiveCte("nums", self => dataContext.From(self)
+        .Where(n => n < 5)
+        .Select(n => n + 1), 100);
+
+var rows = dataContext.From(numbers).ToList();
+```
+
+```sql
+-- SQL Server: no `recursive` keyword, depth option appended
+with nums as (select id as [Id] from simple_entity
+ where id = 1
+ union all
+ select (Id + 1) as [c0] from nums as [t1]
+ where (t1.Id < 5)) select id from nums as [t1] option (maxrecursion 100)
+```
+
+### Provider differences (typed recursion)
+
+| Provider | Typed recursive CTE |
+|---|---|
+| SQLite | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| PostgreSQL | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| SQL Server | Supported; declares `with` (no `recursive` keyword); two-argument overload emits no hint (server default), three-argument overload emits `option (maxrecursion n)` (`0` = no limit, positive = depth). |
+| MySQL | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| MariaDB | Supported; declares `with recursive`; `maxRecursion` ignored. |
+| ClickHouse | **Excluded**: a typed recursive CTE throws `NotSupportedException` before any SQL is emitted. An ordinary (non-recursive) typed CTE still works on ClickHouse. |
+| In-memory | Not applicable: recursion is rendered by the SQL dialects. |
+
+The legacy string `WithRecursive` is **not** gated by this capability check and keeps its existing behavior on
+every provider.
+
+Every example above is bounded by a terminating predicate in the step; never build an unbounded recursive
+CTE.
 
 ## Chained declarations
 
@@ -294,7 +460,7 @@ var numbers = dataContext
 
 ```sql
 -- SQLite: `with recursive` prefix
-with recursive nums as (select id as 'n' from simple_entity where (id = 1) union all select (n + 1) as 'n' from nums where (n < 5)) select n from nums
+with recursive nums as (select id as 'n' from simple_entity where id = 1 union all select (n + 1) as 'n' from nums where (n < 5)) select n from nums
 ```
 
 Output:
@@ -321,7 +487,7 @@ var numbers = dataContext
 
 ```sql
 -- SQL Server: no `recursive` keyword, depth option appended
-with nums as (select id as [n] from simple_entity where (id = 1) union all select (n + 1) as [n] from nums where (n < 5)) select n from nums option (maxrecursion 100)
+with nums as (select id as [n] from simple_entity where id = 1 union all select (n + 1) as [n] from nums where (n < 5)) select n from nums option (maxrecursion 100)
 ```
 
 ## CTE plus a captured parameter
@@ -479,6 +645,9 @@ For the general `UPDATE` surface see [Data modification (UPDATE)](17-update-stat
 Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
 `tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:14`, `tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:33`;
 `tests/nextorm.core.tests/CteQueryTests.cs:8`;
+typed recursive CTE: `src/nextorm.core/Cte.cs:15`, `src/nextorm.core/Query/QueryCommand.TResult.cs:1100`,
+`src/nextorm.core/DataContext/SqlSourceRenderer.cs:35`, `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:981`;
+`tests/nextorm.core.tests/TypedCteTests.cs:1057`, `tests/nextorm.sqlite.tests/TypedCteTests.cs:718`;
 `tests/nextorm.sqlite.tests/PlanCacheTests.cs:190`, `tests/nextorm.sqlite.tests/PlanCacheTests.cs:343`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:827`, `:856`;

@@ -31,6 +31,9 @@ public class ClickHouseDialect : SqlDialectBase
     /// <summary>A ClickHouse derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
+    /// <summary>ClickHouse has no recursive <c>WITH</c>, so the new typed recursive CTE API fails closed.</summary>
+    public override bool SupportsRecursiveCte => false;
+
     /// <summary>ClickHouse supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
 

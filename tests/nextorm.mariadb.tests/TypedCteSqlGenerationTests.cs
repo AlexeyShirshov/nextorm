@@ -44,4 +44,29 @@ public class TypedCteSqlGenerationTests
         sql.Should().Contain(", low as (");
         sql.Should().Contain("join low as");
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // #146 slice B: recursive typed CTE SQL generation. MariaDB uses the ANSI `with recursive`
+    // keyword and ignores the recursion-depth hint (only SQL Server renders it).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Recursive_ShouldEmitWithRecursiveUnionAllAndBoundedStep()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var nums = ctx.From<IComplexEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+
+        var sql = SqlOf(ctx, ctx.From(nums).Limit(20).Select(n => n));
+
+        sql.Should().Contain("with recursive");
+        sql.Should().Contain("nums as (");
+        sql.Should().Contain("union all");
+        sql.Should().Contain("from nums");
+        sql.Should().Contain("where").And.Contain("< 5");
+        sql.Should().NotContain("maxrecursion");
+    }
 }

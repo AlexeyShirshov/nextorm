@@ -213,4 +213,86 @@ public abstract partial class CommonTestSuite
 
         rows.OrderBy(id => id).Should().Equal(2, 3);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Typed recursive CTE (#146 slice B): anchor UNION ALL step, read through From(cte). Every shared
+    // suite provider (SQLite/PostgreSQL/SQL Server/MySQL) must materialize the bounded series.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>The anchor defines the shape; the bounded step advances it and the read materializes it.</summary>
+    [Fact]
+    public void Cte_TypedRecursive_ShouldMaterializeBoundedSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CteNumberRow { n = r.n + 1 }));
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    /// <summary>An anchor that matches no rows yields an empty recursive CTE (no phantom step row).</summary>
+    [Fact]
+    public void Cte_TypedRecursive_EmptyAnchor_ShouldReturnEmpty()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == int.MaxValue)
+            .Select(s => new CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_empty", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CteNumberRow { n = r.n + 1 }));
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// The body is joined with <c>UNION ALL</c>, not <c>UNION</c>: two anchor rows projecting the same
+    /// value stay two rows (the step predicate never fires, so it contributes nothing).
+    /// </summary>
+    [Fact]
+    public void Cte_TypedRecursive_DuplicateAnchorRows_ShouldBeRetained()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id <= 2)
+            .Select(_ => new CteNumberRow { n = 1 })
+            .AsRecursiveCte("typed_nums_dupes", self => ctx.From(self)
+                .Where(r => r.n < 1)
+                .Select(r => new CteNumberRow { n = r.n + 1 }));
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.Should().HaveCount(2);
+        rows.Should().OnlyContain(n => n == 1);
+    }
+
+    /// <summary>A recursive CTE read through From(Cte&lt;T&gt;) can feed an ordinary consumer CTE.</summary>
+    [Fact]
+    public void Cte_TypedRecursive_ChainedConsumer_ShouldReadThroughTheRecursiveDeclaration()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_chain", self => ctx.From(self)
+                .Where(r => r.n < 4)
+                .Select(r => new CteNumberRow { n = r.n + 1 }));
+
+        var consumer = ctx.From(nums).Select(r => new { r.n }).AsCte("typed_nums_consumer");
+        var rows = ctx.From(consumer).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4);
+    }
 }

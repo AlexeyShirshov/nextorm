@@ -117,6 +117,86 @@ public class TypedCteAliasTests
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #146 slice B / D5: a recursive typed CTE through the alias-slot machinery. The recursive
+    // declaration is hoisted once (`with recursive`), read by its bare name, and its columns bind to
+    // the join alias; a consumer CTE built From the recursive one reads through a distinct alias.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Recursive_typed_cte_joined_as_alias_slot_gets_its_own_alias_and_binds_columns()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            // Bounded Person series: 10 then 20 (the step stops once the current Id reaches 20).
+            var peopleCte = ctx.From<Person>(b => b.Table("person"))
+                .Where(p => p.Id == 10)
+                .ToCommand()
+                .AsRecursiveCte("people_nums", self => ctx.From(self)
+                    .Where(p => p.Id < 20)
+                    .Select(p => new Person { Id = p.Id + 10, Name = p.Name }));
+
+            var rows = ctx.From<Order>(b => b.Table("orders"))
+                .Join<Person>(ctx.From(peopleCte), (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+                .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, BuyerName = p.Buyer.Name })
+                .ToList();
+
+            rows.Should().ContainSingle();
+            rows[0].OrderId.Should().Be(1);
+            rows[0].BuyerId.Should().Be(AliasSqliteDatabase.BuyerId);
+            rows[0].BuyerName.Should().Be("Buyer");
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("with recursive people_nums as (");
+            last.Should().Contain("union all");
+            last.Should().Contain("join people_nums as 't2'");
+            last.Should().Contain("t2.Id");
+            last.Should().Contain("t2.Name");
+            last.Should().NotContain("join (select");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Recursive_typed_cte_as_source_and_chained_consumer_read_through_name()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var peopleCte = ctx.From<Person>(b => b.Table("person"))
+                .Where(p => p.Id == 10)
+                .ToCommand()
+                .AsRecursiveCte("nums", self => ctx.From(self)
+                    .Where(p => p.Id < 30)
+                    .Select(p => new Person { Id = p.Id + 10, Name = p.Name }));
+
+            // From(Cte<T>) outside the step: the recursive CTE is the main source, read by name.
+            var direct = ctx.From(peopleCte).Select(p => new { p.Id, p.Name }).ToList();
+            direct.Select(r => r.Id).OrderBy(id => id).Should().Equal(10, 20, 30);
+
+            // A consumer CTE depends on the recursive declaration and is ordered after it.
+            var consumer = ctx.From(peopleCte).Select(p => new { p.Id }).AsCte("consumer");
+            var rows = ctx.From(consumer).Select(r => r.Id).ToList();
+            rows.OrderBy(id => id).Should().Equal(10, 20, 30);
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("with recursive nums as (");
+            last.Should().Contain(", consumer as (");
+            last.Should().Contain("from nums");
+            last.Should().Contain("from consumer");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     private static int CountOccurrences(string text, string value)
     {
         var count = 0;

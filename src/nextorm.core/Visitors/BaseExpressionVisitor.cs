@@ -744,6 +744,25 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         => MemberTranslator.VisitMember(this, node) ?? base.VisitMember(node);
 
     /// <inheritdoc/>
+    protected override Expression VisitParameter(ParameterExpression node)
+        => MemberTranslator.TryVisitScalarSourceParameter(this, node) ? node : base.VisitParameter(node);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Only the body is visited. A projection lambda stored as a <see cref="SelectExpression.Expression"/>
+    /// (the single-column scalar form, for example <c>From(scalarCte).Select(n =&gt; n + 1)</c>) denotes its
+    /// body's value; the parameter list is not a separate SQL operand, so the default
+    /// <see cref="ExpressionVisitor"/> walk would visit the parameter after the body and emit the source
+    /// column a second time (<c>(n + 1)n</c>). Higher-order array/JSON lambdas are extracted and walked by
+    /// their own translators, so they do not rely on this method visiting a parameter list.
+    /// </remarks>
+    protected override Expression VisitLambda<T>(Expression<T> node)
+    {
+        Visit(node.Body);
+        return node;
+    }
+
+    /// <inheritdoc/>
     protected override Expression VisitUnary(UnaryExpression node)
         => PredicateTranslator.VisitUnary(this, node) ?? base.VisitUnary(node);
 

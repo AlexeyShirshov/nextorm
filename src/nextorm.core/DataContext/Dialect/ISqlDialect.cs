@@ -1403,6 +1403,15 @@ public interface ISqlDialect
     bool SupportsDataModifyingCtes => false;
 
     /// <summary>
+    /// Whether the dialect can render a recursive common table expression produced through the new
+    /// typed API (<c>AsRecursiveCte</c>). Declared as a default interface method returning <c>false</c>
+    /// so an external implementation fails closed. The relational dialects opt in; ClickHouse, whose
+    /// dialect has no recursive <c>WITH</c>, overrides it to <c>false</c>. This flag gates only the new
+    /// typed recursive API: a legacy <c>WithRecursive</c> declaration is never checked against it.
+    /// </summary>
+    bool SupportsRecursiveCte => false;
+
+    /// <summary>
     /// Whether the dialect can return the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>
     /// through a <c>RETURNING</c> clause (PostgreSQL). Declared as a default interface method returning
     /// <c>false</c> so existing external implementations keep compiling.

@@ -76,6 +76,14 @@ public sealed class CteDefinition
     /// <c>With</c>/<c>WithRecursive</c> declarations keep the physical/mapped output names.
     /// </summary>
     internal bool TypedProjection { get; init; }
+
+    /// <summary>
+    /// The typed self-reference of a recursive typed CTE, or <c>null</c> for an ordinary / legacy
+    /// declaration. Presence marks the declaration as the new typed recursive API: only such a
+    /// declaration is gated by <c>ISqlDialect.SupportsRecursiveCte</c> and shape-validated against its
+    /// anchor. Legacy <c>WithRecursive</c> declarations leave it <c>null</c> and keep their behavior.
+    /// </summary>
+    internal CteReference? RecursiveReference { get; init; }
 }
 
 /// <summary>

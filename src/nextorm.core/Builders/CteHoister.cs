@@ -235,7 +235,12 @@ internal static class CteHoister
 
             foreach (var referenced in ReferencedNames(cte))
             {
-                if (_byName.TryGetValue(referenced, out var dependency) && !ReferenceEquals(dependency, cte))
+                // Only the matching self-edge of a recursive declaration is exempt from the cycle check
+                // (a recursive CTE body may reference its own name). An ordinary definition that
+                // references its own name is a real cycle and must still be rejected. The self-edge is
+                // identified by instance, not by name.
+                if (_byName.TryGetValue(referenced, out var dependency)
+                    && !(cte.Recursive && ReferenceEquals(dependency, cte)))
                     VisitDeclaration(dependency, ordered);
             }
 

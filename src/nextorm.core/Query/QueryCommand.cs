@@ -415,6 +415,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public IReadOnlyList<CteDefinition>? Ctes { get => _ctes; internal set => _ctes = value; }
 
     /// <summary>
+    /// The typed recursive self-reference for which this command is the anchor, or <c>null</c> when the
+    /// command is not the anchor of a typed recursive CTE. A member read over this command must resolve
+    /// to the anchor projection's declared output aliases (the recursive CTE's column names) instead of
+    /// re-rendering the anchor body: a constant or other non-column anchor projection would otherwise
+    /// inline a literal and emit an unaddressable column such as <c>t1.1</c>.
+    /// </summary>
+    internal CteReference? TypedRecursiveAnchor { get; set; }
+
+    /// <summary>
     /// True when any common table expression carried by this command, at any declaration depth, has a
     /// data-modifying body (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE ... RETURNING</c>). Such a statement is
     /// side-effecting and its plan must not be shared; the planner reads this to bypass the plan cache

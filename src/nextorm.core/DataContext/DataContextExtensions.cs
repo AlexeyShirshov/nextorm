@@ -1260,6 +1260,35 @@ public static class DataContextExtensions
     }
 
     /// <summary>
+    /// Starts the self-referencing read of a recursive common table expression inside the step callback
+    /// of <c>AsRecursiveCte</c>. The returned builder reads the CTE by its declared name and resolves
+    /// member access against the anchor's projection shape. A reference is only valid while its owning
+    /// step callback runs; using a captured or foreign reference (owner mismatch, even under the same
+    /// name) throws before any database command is built.
+    /// </summary>
+    /// <typeparam name="TResult">The recursive CTE's projection shape.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="reference">The self-reference handed to the step callback.</param>
+    /// <returns>A builder reading the recursive CTE from within its own step.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="reference"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The reference is used outside its defining step (a captured or foreign reference).</exception>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, CteReference<TResult> reference)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(reference);
+
+        if (!RecursiveCteScope.IsActive(reference.Owner))
+            throw new InvalidOperationException(
+                $"The recursive common table expression reference '{reference.Name}' is used outside its defining step; a self-reference is only valid inside the AsRecursiveCte callback that receives it.");
+
+        return new EntityBuilder<TResult>(dataContext)
+        {
+            Logger = dataContext.CommandLogger,
+            SourceFrom = FromExpression.ForRecursiveReference(reference),
+        };
+    }
+
+    /// <summary>
     /// Starts a query from an existing <see cref="QueryCommand{TResult}"/> with per-source options. The
     /// values set on <paramref name="options"/> (currently the derived-table <c>SubQueryHint</c>) are
     /// copied into the returned builder; the options object is not retained.

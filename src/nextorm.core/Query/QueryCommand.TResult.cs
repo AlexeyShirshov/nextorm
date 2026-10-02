@@ -1084,6 +1084,51 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     }
 
     /// <summary>
+    /// Wraps this command as the anchor of a recursive common table expression declared under
+    /// <paramref name="name"/>. <paramref name="step"/> is invoked <b>exactly once</b>, during this
+    /// call, with a typed self-reference bound to the anchor's shape; the returned step query is
+    /// combined with the anchor as <c>anchor UNION ALL step</c>. The descriptor is read with
+    /// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>. No recursion-depth hint is
+    /// emitted by this overload. Legacy <c>WithRecursive</c> behavior is unchanged.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="step">Builds the recursive step from the typed self-reference; invoked once.</param>
+    /// <returns>An immutable descriptor of the recursive CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="step"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="step"/> returned <see langword="null"/>.</exception>
+    public Cte<TResult> AsRecursiveCte(string name, Func<CteReference<TResult>, QueryCommand<TResult>> step)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(step);
+
+        return Cte<TResult>.CreateRecursive(this, name, step, null);
+    }
+
+    /// <summary>
+    /// Wraps this command as the anchor of a recursive common table expression with an explicit
+    /// recursion-depth limit. See the two-argument <c>AsRecursiveCte</c> overload for the callback
+    /// contract. <paramref name="maxRecursion"/> is required (no default): it is
+    /// rendered only by dialects that expose a depth option (SQL Server
+    /// <c>option (maxrecursion n)</c>) and ignored by the others, matching legacy <c>WithRecursive</c>
+    /// semantics; omitting the hint is expressed by the two-argument overload.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="step">Builds the recursive step from the typed self-reference; invoked once.</param>
+    /// <param name="maxRecursion">The recursion-depth limit (SQL Server <c>maxrecursion n</c>); required.</param>
+    /// <returns>An immutable descriptor of the recursive CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="step"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="step"/> returned <see langword="null"/>.</exception>
+    public Cte<TResult> AsRecursiveCte(string name, Func<CteReference<TResult>, QueryCommand<TResult>> step, int maxRecursion)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(step);
+
+        return Cte<TResult>.CreateRecursive(this, name, step, maxRecursion);
+    }
+
+    /// <summary>
     /// Resets the prepared state while preserving the from-expression. <see cref="QueryCommand.ResetPreparation"/>
     /// clears <c>_from</c>, but a typed-CTE (or equivalent projection-source) read stores its
     /// <c>ColumnShape</c> marker there; an operator that resets after cloning must restore it, exactly

@@ -29,6 +29,13 @@ internal static class SqlSourceRenderer
         for (var (i, cnt) = (0, ctes.Count); i < cnt; i++)
         {
             var cte = ctes[i];
+
+            // Only the new typed recursive API is gated by the dialect capability; a legacy
+            // WithRecursive declaration keeps its existing (ungated) rendering.
+            if (cte.RecursiveReference is not null && !ctx.Dialect.SupportsRecursiveCte)
+                throw new NotSupportedException(
+                    $"Recursive common table expressions are not supported by this SQL dialect (common table expression '{cte.Name}').");
+
             if (cte.Recursive) anyRecursive = true;
             if (maxRecursion is null && cte.MaxRecursion is int value) maxRecursion = value;
         }
@@ -1079,6 +1086,16 @@ internal static class SqlSourceRenderer
                 && visitor.ColumnName is not null
                 && selExp.PropertyName is not null
                 && !string.Equals(visitor.ColumnName, selExp.PropertyName, comparison))
+            // A typed CTE declaration must expose a bare literal under its declared identifier: a
+            // constant projects no column, so a recursive step or consumer cannot address the CTE's
+            // output by name unless the declaration aliases it (otherwise the step inlines the literal
+            // and renders an unaddressable `t1.1`). A column-valued projection already carries its name
+            // in ColumnName / NeedAliasForColumn; only a literal has none.
+            || (ctx.ExactProjectionAliases
+                && renameAware
+                && selExp.PropertyName is not null
+                && selExp.Expression is not null
+                && TypeFacts.UnwrapConvert(selExp.Expression) is ConstantExpression)
             // An unaliased computed scalar in a typed CTE declaration has no property name to compare
             // against, so the declaration must still alias it to its generated output identifier; the
             // consumer then references that identifier (see IsProjectionOutputReference).

@@ -711,5 +711,238 @@ public class TypedCteTests
         finally { ctx.Dispose(); File.Delete(path); }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #146-B: typed recursive CTE executes end-to-end on SQLite.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void RecursiveNumbers_ShouldMaterializeAnchorAndBoundedStep()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Scalar anchor: id 1; step: add 1 while the current value is below 5 -> 1..5.
+            var nums = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id == 1)
+                .Select(p => p.Id)
+                .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+
+            var sql = SqlOf(ctx, ctx.From(nums).Select(n => n));
+            sql.Should().Contain("with recursive");
+            sql.Should().Contain("union all");
+            // The step's scalar self-reference and its terminating predicate must both render before any
+            // execution; a broken predicate would otherwise recurse without bound.
+            sql.Should().Contain("Id < 5");
+            sql.Should().Contain("(Id + 1)").And.NotContain("(Id + 1)Id");
+
+            var rows = ctx.From(nums).Limit(20).ToList();
+            rows.OrderBy(n => n).Should().Equal(1L, 2L, 3L, 4L, 5L);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void Recursive_MultipleSelfReferenceOccurrences_ShouldReferenceCteOutputNameForEachOccurrence()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // V12: the same self-reference is read at two positions of one step expression. Standard SQL
+            // permits only one recursive-table reference in the step's FROM (a self-join is rejected by
+            // every engine), so multiple occurrences means multiple member reads: each must render the
+            // CTE output alias, and the bounded recursion must terminate and materialize.
+            var nums = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id == 1)
+                .Select(p => new { p.Id })
+                .AsRecursiveCte("nums", self => ctx.From(self)
+                    .Where(n => n.Id < 5)
+                    .Select(n => new { Id = n.Id + n.Id + 1 }));
+
+            var sql = SqlOf(ctx, ctx.From(nums).Limit(20).Select(n => n.Id));
+
+            sql.Should().Contain("with recursive");
+            sql.Should().Contain("union all");
+            sql.Should().Contain("from nums");
+            sql.Should().Contain("Id + Id");
+            sql.Should().NotContain("t1.1");
+
+            // 1 -> (1+1+1)=3 -> (3+3+1)=7; 7 is not < 5, so the step stops.
+            var rows = ctx.From(nums).Limit(20).Select(n => n.Id).ToList();
+            rows.OrderBy(n => n).Should().Equal(1L, 3L, 7L);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void RecursiveConstantAnchor_ShouldReferenceDeclaredOutputAlias()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // D8 regression: the anchor projects a bare constant, so it has no physical column to
+            // re-render. The declaration must alias it to the projection name and the recursive step
+            // must read that CTE output alias — inlining the anchor body produced `t1.1`, a syntax
+            // error on SQLite and an unaddressable column everywhere.
+            var nums = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id <= 2)
+                .Select(_ => new { n = 1 })
+                .AsRecursiveCte("nums", self => ctx.From(self)
+                    .Where(r => r.n < 1)
+                    .Select(r => new { n = r.n + 1 }));
+
+            var sql = SqlOf(ctx, ctx.From(nums).Limit(20).Select(r => r.n));
+
+            sql.Should().Contain("select 1 as 'n'");
+            sql.Should().Contain("select (n + 1) as 'n'");
+            sql.Should().Contain("(t1.n < 1)");
+            sql.Should().NotContain("t1.1").And.NotContain("(1 + 1)");
+
+            var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+            // The step predicate never fires (n < 1 is false for the anchor rows), so both duplicate
+            // anchor rows survive; UNION ALL (not UNION) is what keeps them.
+            rows.Should().HaveCount(2).And.OnlyContain(n => n == 1);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void RecursiveAnonymousForm_ShouldPreserveSlotOrder()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // DTO/anonymous shape: two slots, the step recomputes both from the self-reference and
+            // advances Id. The anchor's slot order/names must drive the recursive CTE's columns, not
+            // the step's aliases. Without advancing Id the step would reuse the same row forever.
+            var nums = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id == 1)
+                .Select(p => new { p.Id, Next = p.Id + 1 })
+                .AsRecursiveCte("nums", self => ctx.From(self)
+                    .Where(n => n.Id < 4)
+                    .Select(n => new { Id = n.Id + 1, Next = n.Next + 1 }));
+
+            var sql = SqlOf(ctx, ctx.From(nums).Select(n => new { n.Id, n.Next }));
+            sql.Should().Contain("with recursive");
+            sql.Should().Contain("union all");
+            // The step resolves the self-reference through the anchor's declared output aliases
+            // (`Id`/`Next`), not the anchor's physical `id` column.
+            sql.Should().Contain("t1.Id < 4");
+            sql.Should().Contain("(Id + 1)").And.Contain("(Next + 1)");
+
+            var rows = ctx.From(nums).Select(n => new { n.Id, n.Next }).Limit(20).ToList();
+
+            rows.Select(r => r.Id).OrderBy(id => id).Should().Equal(1L, 2L, 3L, 4L);
+            rows.OrderBy(r => r.Id).Select(r => r.Next).Should().Equal(2L, 3L, 4L, 5L);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void RecursiveCapturedReference_ShouldThrowBeforeAnyCommand()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            CteReference<long>? captured = null;
+            _ = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id == 1)
+                .Select(p => p.Id)
+                .AsRecursiveCte("nums", self =>
+                {
+                    captured = self;
+                    return ctx.From(self).Where(n => n < 3).Select(n => n + 1);
+                });
+
+            captured.Should().NotBeNull();
+            var act = () => ctx.From(captured!);
+
+            act.Should().Throw<InvalidOperationException>().WithMessage("*outside its defining step*");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void RecursiveCallback_ShouldRunOnceAcrossPreparationAndExecution()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var calls = 0;
+            var nums = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id == 1)
+                .Select(p => p.Id)
+                .AsRecursiveCte("nums", self =>
+                {
+                    calls++;
+                    return ctx.From(self).Where(n => n < 5).Select(n => n + 1);
+                });
+
+            calls.Should().Be(1);
+
+            var sql = SqlOf(ctx, ctx.From(nums).Limit(20).Select(n => n));
+            sql.Should().Contain("union all");
+
+            var rows = ctx.From(nums).Limit(20).ToList();
+
+            rows.OrderBy(n => n).Should().Equal(1L, 2L, 3L, 4L, 5L);
+            calls.Should().Be(1, "preparation and execution must not re-invoke the step callback");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void RecursiveCachedPlan_ShouldReuseAndReturnCorrectRows()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var nums = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id == 1)
+                .Select(p => p.Id)
+                .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+
+            // The same command executed twice: cache miss then hit, both from the recursive body.
+            var command = ctx.From(nums).Limit(20).Select(n => n);
+
+            var first = command.ToList();
+            var second = command.ToList();
+
+            first.OrderBy(n => n).Should().Equal(1L, 2L, 3L, 4L, 5L);
+            second.OrderBy(n => n).Should().Equal(1L, 2L, 3L, 4L, 5L);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void RecursiveCacheHit_ShouldNotBypassShapeValidation()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Warm the plan cache under the name 'nums' with a valid recursive definition.
+            var good = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id == 1)
+                .Select(p => p.Id)
+                .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 3).Select(n => n + 1));
+            ctx.From(good).Limit(20).ToList().Should().HaveCount(3);
+
+            // A distinct definition under the same name with a one-column step must still be rejected
+            // during preparation: a cached plan for the name may not bypass the anchor/step contract.
+            var bad = ctx.From<ITypedCtePerson>()
+                .Select(p => new TypedCteInit { Id = p.Id, Total = p.Total })
+                .AsRecursiveCte("nums", self => ctx.From(self).Select(p => new TypedCteInit { Id = p.Id }));
+
+            // The consumer must project through a supported form: a whole-DTO read of the CTE would hit
+            // the unsupported whole-row projection before the CTE body is validated, masking the shape
+            // diagnostic this test pins.
+            var act = () => ctx.From(bad).Limit(20).Select(r => new { r.Id, r.Total }).ToList();
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*'nums'*anchor projects 2 column(s)*step projects 1*");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
 }
 
