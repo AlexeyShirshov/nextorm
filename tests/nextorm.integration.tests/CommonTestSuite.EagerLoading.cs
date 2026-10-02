@@ -19,13 +19,13 @@ public abstract partial class CommonTestSuite
         var one = zero + 1;
         var many = zero + 2;
 
-        ctx.InsertInto<EagerParent>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([
             new EagerParent { Id = zero, Name = "zero" },
             new EagerParent { Id = one, Name = "one" },
             new EagerParent { Id = many, Name = "many" },
         ]).Insert();
 
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = zero + 100, ParentId = one, Name = "one-a" },
             new EagerChild { Id = zero + 103, ParentId = many, Name = "many-c" },
             new EagerChild { Id = zero + 101, ParentId = many, Name = "many-a" },
@@ -53,7 +53,7 @@ public abstract partial class CommonTestSuite
         var second = first + 1;
         var orphan = first + 2;
 
-        ctx.InsertInto<EagerParent>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([
             new EagerParent { Id = first, Name = "first" },
             new EagerParent { Id = second, Name = "second" },
         ]).Insert();
@@ -61,7 +61,7 @@ public abstract partial class CommonTestSuite
         var firstA = first + 100;
         var firstB = first + 101;
         var secondA = first + 102;
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = firstA, ParentId = first, Name = "first-a" },
             new EagerChild { Id = secondA, ParentId = second, Name = "second-a" },
             new EagerChild { Id = firstB, ParentId = first, Name = "first-b" },
@@ -103,11 +103,11 @@ public abstract partial class CommonTestSuite
         var childA = parent + 100;
         var childB = parent + 101;
 
-        ctx.InsertInto<EagerParent>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([
             new EagerParent { Id = parent, Name = "async" },
         ]).Insert();
 
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = childA, ParentId = parent, Name = "async-a" },
             new EagerChild { Id = childB, ParentId = parent, Name = "async-b" },
         ]).Insert();
@@ -144,7 +144,7 @@ public abstract partial class CommonTestSuite
             for (var i = 0; i < count; i++)
                 batch.Add(rows[offset + i]);
 
-            ctx.InsertInto<T>().Values(batch).Insert();
+            ctx.CreateInsertBuilder<T>().Values(batch).Insert();
         }
     }
 
@@ -228,14 +228,14 @@ public abstract partial class CommonTestSuite
         var drop = keep + 1;
         var none = keep + 2;
 
-        ctx.InsertInto<EagerParent>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([
             new EagerParent { Id = keep, Name = "keep" },
             new EagerParent { Id = drop, Name = "drop" },
             new EagerParent { Id = none, Name = "none" },
         ]).Insert();
 
         var keptChild = keep + 100;
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = keptChild, ParentId = keep, Name = "keep" },
             new EagerChild { Id = keep + 101, ParentId = keep, Name = "drop" },
             new EagerChild { Id = keep + 102, ParentId = drop, Name = "drop" },
@@ -267,7 +267,7 @@ public abstract partial class CommonTestSuite
         // note-only parent, so every combination is present to detect cross-assignment between collections.
         var (many, one, none) = SeedJoinInto();
 
-        _sut.DataProvider.InsertInto<JoinIntoNote>().Values([
+        _sut.DataProvider.CreateInsertBuilder<JoinIntoNote>().Values([
             new JoinIntoNote { Id = none + 200, ParentId = none, Text = "none-n1" },
         ]).Insert();
 
@@ -305,12 +305,12 @@ public abstract partial class CommonTestSuite
         var second = first + 1;
         var sharedName = "dup-" + first;
 
-        ctx.InsertInto<EagerParent>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([
             new EagerParent { Id = first, Name = sharedName },
             new EagerParent { Id = second, Name = sharedName },
         ]).Insert();
 
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = first + 100, ParentId = first, Name = sharedName },
             new EagerChild { Id = first + 101, ParentId = second, Name = sharedName },
         ]).Insert();
@@ -337,8 +337,8 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var parent = NextEagerId();
 
-        ctx.InsertInto<EagerParent>().Values([new EagerParent { Id = parent, Name = "array" }]).Insert();
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([new EagerParent { Id = parent, Name = "array" }]).Insert();
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = parent + 100, ParentId = parent, Name = "a" },
             new EagerChild { Id = parent + 101, ParentId = parent, Name = "b" },
         ]).Insert();
@@ -362,8 +362,8 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var parent = NextEagerId();
 
-        ctx.InsertInto<EagerParent>().Values([new EagerParent { Id = parent, Name = "array" }]).Insert();
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([new EagerParent { Id = parent, Name = "array" }]).Insert();
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = parent + 100, ParentId = parent, Name = "a" },
             new EagerChild { Id = parent + 101, ParentId = parent, Name = "b" },
         ]).Insert();
@@ -399,11 +399,11 @@ public abstract partial class CommonTestSuite
         var visible = NextEagerId();
         var hidden = visible + 1;
 
-        ctx.InsertInto<EagerParent>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([
             new EagerParent { Id = visible, Name = "visible" },
             new EagerParent { Id = hidden, Name = "hidden" },
         ]).Insert();
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = visible + 100, ParentId = visible, Name = "visible-child" },
             new EagerChild { Id = visible + 101, ParentId = visible, Name = "hidden-child" },
             new EagerChild { Id = visible + 102, ParentId = hidden, Name = "other-child" },
@@ -455,12 +455,12 @@ public abstract partial class CommonTestSuite
         var keep = NextEagerId();
         var drop = keep + 1;
 
-        ctx.InsertInto<EagerParent>().Values([
+        ctx.CreateInsertBuilder<EagerParent>().Values([
             new EagerParent { Id = keep, Name = "keep" },
             new EagerParent { Id = drop, Name = "drop" },
         ]).Insert();
 
-        ctx.InsertInto<EagerChild>().Values([
+        ctx.CreateInsertBuilder<EagerChild>().Values([
             new EagerChild { Id = keep + 100, ParentId = keep, Name = "visible" },
             new EagerChild { Id = keep + 101, ParentId = keep, Name = "hidden-child" },
             new EagerChild { Id = keep + 102, ParentId = drop, Name = "hidden-child" },

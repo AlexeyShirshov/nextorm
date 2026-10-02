@@ -15,7 +15,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.Batch()
+        var act = () => ctx.CreateBatchBuilder()
             .CreateTable("archive_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
@@ -28,7 +28,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.Batch()
+        var act = () => ctx.CreateBatchBuilder()
             .AddQuery(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .AddQuery(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Execute();

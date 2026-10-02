@@ -70,7 +70,7 @@ public class DurationColumnTests
         using var ctx = ContextFor(conn);
 
         var value = new TimeSpan(0, 0, 90);
-        ctx.InsertInto<IDurationEntity>()
+        ctx.CreateInsertBuilder<IDurationEntity>()
             .Values(new DurationEntity { Id = 1, Ticks = value, Seconds = value, Nullable = TimeSpan.FromMilliseconds(1500) })
             .Insert();
 
@@ -91,7 +91,7 @@ public class DurationColumnTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IDurationEntity>()
+        ctx.CreateInsertBuilder<IDurationEntity>()
             .Values(new DurationEntity { Id = 1, Ticks = TimeSpan.Zero, Seconds = TimeSpan.Zero, Nullable = null })
             .Insert();
 
@@ -108,7 +108,7 @@ public class DurationColumnTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IDurationEntity>()
+        ctx.CreateInsertBuilder<IDurationEntity>()
             .Values([
                 new DurationEntity { Id = 1, Ticks = TimeSpan.FromSeconds(30), Seconds = TimeSpan.FromSeconds(30) },
                 new DurationEntity { Id = 2, Ticks = TimeSpan.FromSeconds(120), Seconds = TimeSpan.FromSeconds(120) },
@@ -129,7 +129,7 @@ public class DurationColumnTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IDurationEntity>()
+        ctx.CreateInsertBuilder<IDurationEntity>()
             .Values([
                 new DurationEntity { Id = 1, Ticks = TimeSpan.FromSeconds(30), Seconds = TimeSpan.FromSeconds(30) },
                 new DurationEntity { Id = 2, Ticks = TimeSpan.FromSeconds(120), Seconds = TimeSpan.FromSeconds(120) },
@@ -148,7 +148,7 @@ public class DurationColumnTests
         using var ctx = ContextFor(conn);
 
         var value = TimeSpan.FromSeconds(-45);
-        ctx.InsertInto<IDurationEntity>()
+        ctx.CreateInsertBuilder<IDurationEntity>()
             .Values(new DurationEntity { Id = 1, Ticks = value, Seconds = value })
             .Insert();
 
@@ -162,7 +162,7 @@ public class DurationColumnTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IDurationEntity>()
+        ctx.CreateInsertBuilder<IDurationEntity>()
             .Values(new DurationEntity { Id = 1, Ticks = TimeSpan.FromSeconds(90), Seconds = TimeSpan.FromSeconds(90) })
             .Insert();
 

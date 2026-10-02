@@ -51,7 +51,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var result = ctx.Batch()
+            var result = ctx.CreateBatchBuilder()
                 .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > 1).Select(x => x.Id))
                 .AddQuery(ctx.From<ISimpleEntity>().OrderBy(x => x.Id).Select(x => x.Id))
                 .Execute();
@@ -73,7 +73,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var result = await ctx.Batch()
+            var result = await ctx.CreateBatchBuilder()
                 .AddQuery(ctx.From<ISimpleEntity>().OrderBy(x => x.Id).Select(x => x.Id))
                 .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > 1).Select(x => x.Id))
                 .ExecuteAsync(TestContext.Current.CancellationToken);
@@ -95,7 +95,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var result = ctx.Batch()
+            var result = ctx.CreateBatchBuilder()
                 .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > 100).Select(x => x.Id))
                 .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > 1).Select(x => x.Id))
                 .Execute();
@@ -117,7 +117,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var result = ctx.Batch()
+            var result = ctx.CreateBatchBuilder()
                 .AddQuery(ctx.From<IBatchMixedEntity>().OrderBy(x => x.Id).Select(x => x.Id))
                 .AddQuery(ctx.From<IBatchMixedEntity>().OrderBy(x => x.Id).Select(x => x.Label!))
                 .Execute();
@@ -139,7 +139,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var result = ctx.Batch()
+            var result = ctx.CreateBatchBuilder()
                 .AddQuery(ctx.From<IBatchMixedEntity>().OrderBy(x => x.Id).Select(x => x.Id))
                 .AddQuery(ctx.From<IBatchMixedEntity>().OrderBy(x => x.Id).Select(x => x.Label!))
                 .Execute();
@@ -165,7 +165,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var result = ctx.Batch()
+            var result = ctx.CreateBatchBuilder()
                 .AddQuery(ctx.From<ISimpleEntity>().Select(x => x.Id))
                 .Execute();
 
@@ -186,7 +186,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var result = ctx.Batch()
+            var result = ctx.CreateBatchBuilder()
                 .AddQuery(ctx.From<ISimpleEntity>().Select(x => x.Id))
                 .Execute();
 
@@ -209,10 +209,10 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var batch = ctx.Batch();
+            var batch = ctx.CreateBatchBuilder();
             batch.AddQuery(ctx.From<ISimpleEntity>().Select(x => x.Id));
 
-            var act = () => batch.Delete(ctx.DeleteFrom<ISimpleEntity>().Where(x => x.Id == 1));
+            var act = () => batch.Delete(ctx.CreateDeleteBuilder<ISimpleEntity>().Where(x => x.Id == 1));
 
             act.Should().Throw<InvalidOperationException>();
         }
@@ -229,7 +229,7 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var batch = ctx.Batch();
+            var batch = ctx.CreateBatchBuilder();
             batch.AddQuery(ctx.From<ISimpleEntity>().Select(x => x.Id));
 
             var act = () => batch.Query(ctx.From<ISimpleEntity>().Select(x => x.Id));
@@ -249,8 +249,8 @@ public class BatchMultipleResultTests
         var (ctx, path) = CreateDb();
         try
         {
-            var batch = ctx.Batch();
-            batch.Delete(ctx.DeleteFrom<ISimpleEntity>().Where(x => x.Id == 1));
+            var batch = ctx.CreateBatchBuilder();
+            batch.Delete(ctx.CreateDeleteBuilder<ISimpleEntity>().Where(x => x.Id == 1));
 
             var act = () => batch.Execute();
 

@@ -45,7 +45,7 @@ public class JoinReturningBuilderTests
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Returning(projection);
 
         act.Should().Throw<ArgumentNullException>();
@@ -78,14 +78,14 @@ public class JoinReturningBuilderTests
 
         var builder = ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Returning(p => p);
 
         builder.Should().NotBeNull();
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Returning();
 
         act.Should().NotThrow();
@@ -113,7 +113,7 @@ public class JoinReturningBuilderTests
         var builder = ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Item1.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Returning();
 
         builder.Should().NotBeNull();
@@ -126,7 +126,7 @@ public class JoinReturningBuilderTests
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "a")
             .Returning(p => new { p.Item1.Id })
             .ToList();
@@ -155,7 +155,7 @@ public class JoinReturningBuilderTests
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "a")
             .Returning(p => new { p.Item1.Id })
             .ToSql();
@@ -186,22 +186,22 @@ public class JoinReturningBuilderTests
         {
             ctx.From<ConventionalEntity>()
                 .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Returning(p => p.Item1.Id);
 
             ctx.From<ConventionalEntity>()
                 .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Returning(p => new { TargetId = p.Item1.Id, SourceId = p.Item2.Id });
 
             ctx.From<ConventionalEntity>()
                 .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Returning(p => new JoinedReturningDto(p.Item1.Id, p.Item2.Id));
 
             ctx.From<ConventionalEntity>()
                 .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Returning(p => new JoinedReturningDto { TargetId = p.Item1.Id, SourceId = p.Item2.Id });
         };
 

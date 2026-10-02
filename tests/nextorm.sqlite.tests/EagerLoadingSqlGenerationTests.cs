@@ -151,8 +151,8 @@ public class EagerLoadingSqlGenerationTests
                 children.Add(new EagerChild { Id = id * 10, ParentId = id, Name = "c" + id });
             }
 
-            ctx.InsertInto<EagerParent>().Values(parents).Insert();
-            ctx.InsertInto<EagerChild>().Values(children).Insert();
+            ctx.CreateInsertBuilder<EagerParent>().Values(parents).Insert();
+            ctx.CreateInsertBuilder<EagerChild>().Values(children).Insert();
         }
 
         return (ctx, path);

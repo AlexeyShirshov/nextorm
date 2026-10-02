@@ -63,7 +63,7 @@ public class SqlGenerationTests
 
         // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
         // every dynamic key is backtick-quoted even though the global identifier-quoting flag is off.
-        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+        Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
             .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
@@ -74,7 +74,7 @@ public class SqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        Normalize(ctx.Update<DynamicColumnsEntity>()
+        Normalize(ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
@@ -86,7 +86,7 @@ public class SqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -106,7 +106,7 @@ public class SqlGenerationTests
         using var ctx = MariaDbTestContext.Create();
 
         // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
             .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");

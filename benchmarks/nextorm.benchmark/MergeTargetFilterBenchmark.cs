@@ -69,7 +69,7 @@ public class MergeTargetFilterBenchmark
         var len = 0;
         for (var i = 0; i < Iterations; i++)
         {
-            len = _sqlServer.MergeInto<MergeFilterBenchEntity>()
+            len = _sqlServer.CreateMergeBuilder<MergeFilterBenchEntity>()
                 .Using(_filteredRow)
                 .OnKeys()
                 .WhenMatchedUpdate()
@@ -87,7 +87,7 @@ public class MergeTargetFilterBenchmark
         var len = 0;
         for (var i = 0; i < Iterations; i++)
         {
-            len = _sqlServer.MergeInto<MergeFilterBenchEntity>()
+            len = _sqlServer.CreateMergeBuilder<MergeFilterBenchEntity>()
                 .Using(_filteredRow)
                 .OnKeys()
                 .WhenMatchedUpdate()
@@ -105,7 +105,7 @@ public class MergeTargetFilterBenchmark
     {
         var affected = 0;
         for (var i = 0; i < Iterations; i++)
-            affected = _inMemory.MergeInto<MergeNoFilterBenchEntity>()
+            affected = _inMemory.CreateMergeBuilder<MergeNoFilterBenchEntity>()
                 .Using(_plainRow)
                 .OnKeys()
                 .WhenMatchedUpdate()
@@ -126,7 +126,7 @@ public class MergeTargetFilterBenchmark
         {
             try
             {
-                affected = _inMemoryFiltered.MergeInto<MergeFilterBenchEntity>()
+                affected = _inMemoryFiltered.CreateMergeBuilder<MergeFilterBenchEntity>()
                     .Using(_filteredRow)
                     .OnKeys()
                     .WhenMatchedUpdate()

@@ -60,7 +60,7 @@ public sealed class ConcurrencyException(string message) : Exception(message);
 
 var originalVersion = order.Version;
 
-var affected = ctx.Update<IOrder>()
+var affected = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Set(o => o.Version, o => o.Version + 1)          // переносимо: инкремент в SQL
     .Where(o => o.Id == order.Id && o.Version == originalVersion)
@@ -91,7 +91,7 @@ update orders set status = @p0, version = version + 1 where (id = @p1 and versio
 значение в том же утверждении:
 
 ```csharp
-var row = ctx.Update<IOrder>()
+var row = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Set(o => o.Version, o => o.Version + 1)
     .Where(o => o.Id == order.Id && o.Version == order.Version)
@@ -139,13 +139,13 @@ write-back такие же, как для любого токена — срав
 значение через `Returning`:
 
 ```csharp
-var affected = ctx.Update<IOrder>()
+var affected = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Where(o => o.Id == order.Id && o.Revision == order.Revision)
     .Update();                                        // устаревший токен → 0 строк
 
 // Ту же проверку и чтение назад можно объединить в одном утверждении:
-var row = ctx.Update<IOrder>()
+var row = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Where(o => o.Id == order.Id && o.Revision == order.Revision)
     .Returning(o => new { o.Id, o.Revision })         // UPDATE ... RETURNING xmin
@@ -175,7 +175,7 @@ update orders set status = @p0 where (id = @p1 and xmin = @p2) returning xmin
 отклонить устаревшее совпадение — на провайдерах, рендерящих условные ветки (SQL Server, PostgreSQL 15+):
 
 ```csharp
-ctx.MergeInto<IOrder>()
+ctx.CreateMergeBuilder<IOrder>()
     .Using(order)                                     // сущность, батч или серверный запрос
     .OnKeys()
     .WhenMatched((t, s) => t.Version == s.Version)
@@ -229,7 +229,7 @@ public sealed class OrderTracker
             if (entity.Status == status)                          // обнаружение изменения
                 continue;
 
-            var n = _ctx.Update<IOrder>()
+            var n = _ctx.CreateUpdateBuilder<IOrder>()
                 .Set(o => o.Status, entity.Status)
                 .Set(o => o.Version, o => o.Version + 1)
                 .Where(o => o.Id == id && o.Version == version)

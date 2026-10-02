@@ -249,13 +249,13 @@ A filter declared for the target entity applies to a mutation of that entity exa
 
 | Statement | Filter |
 |---|---|
-| `Update<T>().Where(...).Update()` | `and`-ed into the `WHERE` with the predicate |
+| `CreateUpdateBuilder<T>().Where(...).Update()` | `and`-ed into the `WHERE` with the predicate |
 | `Update(entity)` (key form) | `WHERE <pk> = @p and <filter>` — a row excluded by the filter is not updated |
-| `DeleteFrom<T>().Where(...).Delete()` | `and`-ed into the `WHERE` with the predicate |
+| `CreateDeleteBuilder<T>().Where(...).Delete()` | `and`-ed into the `WHERE` with the predicate |
 | `Delete(entity)` (key form) | `WHERE <pk> = @p and <filter>` — a row excluded by the filter is not deleted |
-| `Update<T>().Set(...).Update()` with no `Where` | every **filtered** row is updated (the filter still applies) |
-| `DeleteFrom<T>().All()` | explicit full-table delete: **no** filter is applied |
-| `UpdateJoin(...)` / join `Delete()` | the target (first table) and every joined source are filtered |
+| `CreateUpdateBuilder<T>().Set(...).Update()` with no `Where` | every **filtered** row is updated (the filter still applies) |
+| `CreateDeleteBuilder<T>().All()` | explicit full-table delete: **no** filter is applied |
+| `CreateUpdateJoinBuilder(...)` / join `Delete()` | the target (first table) and every joined source are filtered |
 
 For the key forms, the filter is `and`-ed to the key equality, so `ctx.Delete(entity)` returns `0` if the filter excludes that key. The filter is injected into the mutation's prepared condition, so the rendered SQL reflects the effective filter set. Unlike a read, a mutation is neither prepared nor plan-cached, so there is no plan key for the filter to take part in.
 
@@ -263,13 +263,13 @@ For the key forms, the filter is `and`-ed to the key equality, so `ctx.Delete(en
 
 ```csharp
 // Ignore only the soft-delete filter; the tenant filter still applies.
-ctx.DeleteFrom<Document>()
+ctx.CreateDeleteBuilder<Document>()
     .IgnoreFilters(["soft-delete"])
     .Where(d => d.IsDeleted)
     .Delete();
 
 // Ignore every target filter, then update only the named column.
-ctx.Update<Document>()
+ctx.CreateUpdateBuilder<Document>()
     .IgnoreFilters()
     .Set(d => d.Archived, true)
     .Update();
@@ -297,22 +297,22 @@ Neither an `INSERT` nor a `MERGE` injects a target filter through a source `FROM
 
 | Statement | What is validated |
 |---|---|
-| `InsertInto<T>().Value(...)` / `Values(entity)` / batch `Values(...)` | every written row against the target filters |
-| `BulkInsertInto<T>()` | every row in the source |
-| `MergeInto<T>().Using(...)` | the source rows of **every** `MERGE` branch — insert, update-only and delete-only |
-| `InsertInto<T>().Values(source, mapping)` (`INSERT … SELECT`) | a server-side pre-check of the source rows |
-| `MergeInto<T>().Using(query)` (query-sourced `MERGE`) | a server-side pre-check of the source rows |
+| `CreateInsertBuilder<T>().Value(...)` / `Values(entity)` / batch `Values(...)` | every written row against the target filters |
+| `CreateBulkInsertBuilder<T>()` | every row in the source |
+| `CreateMergeBuilder<T>().Using(...)` | the source rows of **every** `MERGE` branch — insert, update-only and delete-only |
+| `CreateInsertBuilder<T>().Values(source, mapping)` (`INSERT … SELECT`) | a server-side pre-check of the source rows |
+| `CreateMergeBuilder<T>().Using(query)` (query-sourced `MERGE`) | a server-side pre-check of the source rows |
 
 An `INSERT` never carries a target filter; an `INSERT … SELECT` filters only its source:
 
 ```csharp
 // A target INSERT is never filtered; the written row is validated instead.
-ctx.InsertInto<Document>()
+ctx.CreateInsertBuilder<Document>()
     .Values(new Document { Id = 1, TenantId = 1, IsDeleted = false })
     .Insert();
 
 // INSERT … SELECT filters its source as a read and pre-checks the written rows.
-ctx.InsertInto<ArchivedDocument>()
+ctx.CreateInsertBuilder<ArchivedDocument>()
     .Values(ctx.From<Document>().Where(d => d.Id > 0), d => new { d.Id, d.TenantId, d.IsDeleted })
     .Insert();
 ```
@@ -344,7 +344,7 @@ A multi-row or bulk write is not atomic either. A synchronous bulk source is val
 `IgnoreFilters` on the [`InsertBuilder<T>`](xref:NextORM.Core.InsertBuilder`1), [`BulkInsertBuilder<T>`](xref:NextORM.Core.BulkInsertBuilder`1) and [`MergeBuilder<T>`](xref:NextORM.Core.MergeBuilder`1) disables the corresponding filters from validation too, with the same four overloads and semantics as the read builder:
 
 ```csharp
-ctx.InsertInto<Document>()
+ctx.CreateInsertBuilder<Document>()
     .IgnoreFilters(["soft-delete"])
     .Values(document)
     .Insert();
@@ -362,7 +362,7 @@ A write is filtered on two sides, and they are independent:
 For the full `MERGE` form (SQL Server, PostgreSQL) the target predicate is injected into the `MERGE ... ON` condition and — on SQL Server, which has the arm — appended to every `WHEN NOT MATCHED BY SOURCE` branch. A target row hidden by the filter is therefore never matched, never updated and never deleted by the merge, including its delete arm. The SQL Server key upsert renders as the same `MERGE` form and takes the same predicate, so it is filtered too.
 
 ```csharp
-ctx.MergeInto<Document>()
+ctx.CreateMergeBuilder<Document>()
     .Using(new Document { Id = 1, TenantId = 1, IsDeleted = true })
     .OnKeys()
     .WhenMatched().ThenUpdate()
@@ -555,6 +555,6 @@ public interface IQueryFilterMetadata
 
 - **Process-global, first-registration-wins.** Filters are registered **process-globally** and the first registration for an entity type wins (consistent with nextorm metadata): a later `From<T>(cfg)` / `HasQueryFilter` for the same type is ignored — filters are not scoped to a `DataContext`.
 - **Disable scope follows the entry builder.** The selective scope is carried by the builder that starts the query; calling `IgnoreFilters` on a builder that is then used as a join source is not propagated. Use one of the type/key overloads on the query's entry builder instead. Eagerly-loaded `LoadWith` children are the exception: they inherit the entry builder's scope by union (see [Eager loading](eager-loading.md)).
-- **Key-form mutations apply filters but do not expose `IgnoreFilters`.** `Update(entity)` and `Delete(entity)` honour the target filter, but their immediate terminal has no fluent `IgnoreFilters`; use the predicate form (`Update<T>().Where(...)` / `DeleteFrom<T>().Where(...)`) when you need to disable a filter on a mutation.
+- **Key-form mutations apply filters but do not expose `IgnoreFilters`.** `Update(entity)` and `Delete(entity)` honour the target filter, but their immediate terminal has no fluent `IgnoreFilters`; use the predicate form (`CreateUpdateBuilder<T>().Where(...)` / `CreateDeleteBuilder<T>().Where(...)`) when you need to disable a filter on a mutation.
 - **Plan lifetime.** A context value read by a filter is captured as a runtime parameter (plan-cache safe). The prepared plan retains the first `IDataContext` instance for its lifetime (bounded, one per plan shape).
 - **Open adapter units.** The ClickHouse no-EF-adapter slice and the MariaDB-specific shared-connection certification are tracked open units in milestone `1.0.9-b`; until they land, use the supported EF adapters (see [EF Core query-filter bridge](ef-core-query-filters.md)).

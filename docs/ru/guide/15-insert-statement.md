@@ -1,6 +1,6 @@
 # Изменение данных (INSERT)
 
-> В nextorm появилась небольшая, но явная поверхность DML: [`InsertInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.InsertInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `INSERT ... VALUES` и возвращает число затронутых строк, сгенерированный ключ или вставленные строки. Тут нет ни change tracking, ни `SaveChanges`: каждый терминал выполняет ровно одну команду.
+> В nextorm появилась небольшая, но явная поверхность DML: [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `INSERT ... VALUES` и возвращает число затронутых строк, сгенерированный ключ или вставленные строки. Тут нет ни change tracking, ни `SaveChanges`: каждый терминал выполняет ровно одну команду.
 
 **Что нужно знать:** [Запросы и проекции](../querying/index.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../providers/overview.md)
 
@@ -13,7 +13,7 @@ nextorm всегда был **конструктором запросов**; з�
 ```csharp
 using var ctx = new DataContextBuilder().UsePostgres(connectionString).CreateDataContext();
 
-var affected = ctx.InsertInto<ISimpleEntity>()
+var affected = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Id, 1)
     .Value(x => x.Name, "a")
     .Insert();
@@ -49,7 +49,7 @@ public interface ISimpleEntity
 ```
 
 Либо объявите то же отображение флюентно на обычном POCO, вовсе без атрибутов - делегат передаётся в
-`InsertInto<T>` (тот же `cfg` можно передать в `From<T>`, чтобы зарегистрировать отображение заранее):
+`CreateInsertBuilder<T>` (тот же `cfg` можно передать в `From<T>`, чтобы зарегистрировать отображение заранее):
 
 ```csharp
 public class Order            // без атрибутов
@@ -59,7 +59,7 @@ public class Order            // без атрибутов
     public decimal TotalWithVat { get; set; }
 }
 
-ctx.InsertInto<Order>(cfg =>
+ctx.CreateInsertBuilder<Order>(cfg =>
 {
     cfg.Table("orders");
     cfg.Property(x => x.Id).HasColumnName("id").Key().Identity();
@@ -79,7 +79,7 @@ ctx.InsertInto<Order>(cfg =>
 **По колонкам** (одна строка). Значение — CLR-значение:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>()
+ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Id, 1)
     .Value(x => x.Name, "a")
     .Insert();
@@ -94,7 +94,7 @@ insert into simple_entity (id, name) values (@p0, @p1)
 а не параметр:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>()
+ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, x => x.OtherName)
     .Insert();
 ```
@@ -111,7 +111,7 @@ insert into simple_entity (name) values (other_name)
 исключаются автоматически:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Values(entity).Insert();
+ctx.CreateInsertBuilder<ISimpleEntity>().Values(entity).Insert();
 ```
 
 ```sql
@@ -122,7 +122,7 @@ insert into simple_entity (name) values (@p0)
 **Батчем сущностей.** То же самое, повторённое для последовательности:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Values(new[] { e1, e2, e3 }).Insert();
+ctx.CreateInsertBuilder<ISimpleEntity>().Values(new[] { e1, e2, e3 }).Insert();
 ```
 
 ```sql
@@ -135,11 +135,11 @@ insert into simple_entity (name) values (@p0), (@p1), (@p2)
 должно совпадать со свойством сущности:
 
 ```csharp
-ctx.InsertInto<Order>()
+ctx.CreateInsertBuilder<Order>()
     .Values(dtos, d => new Order { Total = d.Total })
     .Insert();
 
-ctx.InsertInto<ISimpleEntity>()
+ctx.CreateInsertBuilder<ISimpleEntity>()
     .Values(dtos, d => new { Name = d.Name })
     .Insert();
 ```
@@ -157,7 +157,7 @@ insert into simple_entity (name) values (@p0), (@p1)
 выше:
 
 ```csharp
-ctx.InsertInto<IOrder>()
+ctx.CreateInsertBuilder<IOrder>()
     .Values(ctx.From<OrderDto>().Where(d => d.Active), d => new { d.Id, d.Amount })
     .Insert();
 ```
@@ -188,7 +188,7 @@ var source = ctx
         .Select(s => new { s.Id }))
     .From("recent");
 
-ctx.InsertInto<IOrder>()
+ctx.CreateInsertBuilder<IOrder>()
     .Values(source, t => new { CustomerId = t.GetInt32("id") })
     .Insert();
 // with recent as (select id from simple_entity where (id > 1))
@@ -206,7 +206,7 @@ ctx.InsertInto<IOrder>()
 ```csharp
 var ids = new long[] { 1, 2, 3 };
 
-ctx.InsertInto<IdRow>()
+ctx.CreateInsertBuilder<IdRow>()
     .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
     .Insert();
 // insert into id_row (value) select unnest as "Value" from (select unnest from unnest(@ids)) as "t1"
@@ -218,8 +218,8 @@ ctx.InsertInto<IdRow>()
 `Computed`), значение или значения передаются напрямую, без селектора и проекции:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Value("a").Insert();                      // одна строка
-ctx.InsertInto<ISimpleEntity>().Values(new[] { "a", "b", "c" }).Insert(); // три строки
+ctx.CreateInsertBuilder<ISimpleEntity>().Value("a").Insert();                      // одна строка
+ctx.CreateInsertBuilder<ISimpleEntity>().Values(new[] { "a", "b", "c" }).Insert(); // три строки
 ```
 
 ```sql
@@ -232,13 +232,13 @@ insert into simple_entity (name) values (@p0), (@p1), (@p2)
 Скалярной форме нужна **ровно одна** записываемая колонка: если их несколько — используйте проекцию или
 укажите колонку явно (скалярный вызов в обоих случаях бросает `InvalidOperationException`). Если
 записываемых колонок нет (все `Identity`/`Computed`) — передавать нечего: строка целиком из дефолтов
-вставляется через `ctx.InsertInto<T>().Insert()` (см. [Дефолты](#запись-значений)).
+вставляется через `ctx.CreateInsertBuilder<T>().Insert()` (см. [Дефолты](#запись-значений)).
 
 **Батч по колонкам.** Для колоночно-ориентированных данных — по одному вызову на колонку; все колонки
 обязаны дать одинаковое число значений:
 
 ```csharp
-ctx.InsertInto<Product>()
+ctx.CreateInsertBuilder<Product>()
     .Values(x => x.Name, new[] { "a", "b" })
     .Values(x => x.Price, new[] { 1m, 2m })
     .Insert();
@@ -257,10 +257,10 @@ insert into product (name, price) values (@p0, @p1), (@p2, @p3)
 из дефолтов:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, SqlDefault.Value).Insert();
+ctx.CreateInsertBuilder<ISimpleEntity>().Value(x => x.Name, SqlDefault.Value).Insert();
 
 // все колонки — Identity/Computed:
-ctx.InsertInto<AuditRow>().Insert();
+ctx.CreateInsertBuilder<AuditRow>().Insert();
 ```
 
 ```sql
@@ -288,7 +288,7 @@ PostgreSQL — единственный поддерживаемый прова�
 
 ```csharp
 var rows = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.Id, x.Total }))
     .From("ins")
@@ -310,7 +310,7 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 
 ```csharp
 var rows = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.Id }))
     .With("src", dataContext.From<IOrder>().Select(x => new { x.Total }))
@@ -338,7 +338,7 @@ var scope = dataContext.With("src",
     dataContext.From<ICustomer>().Where(c => c.Active).Select(c => new { c.Id }));
 
 var rows = scope
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Values(scope.From("src"), a => new { CustomerId = a.GetInt32("Id") })
         .Returning(x => new { x.Id }))
     .From("ins")
@@ -357,12 +357,12 @@ with src as (select id from customers
 
 ```csharp
 var source = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.CustomerId }))
     .From("ins");
 
-dataContext.InsertInto<IOrder>()
+dataContext.CreateInsertBuilder<IOrder>()
     .Values(source, r => new { r.CustomerId })
     .Insert();
 ```
@@ -403,17 +403,17 @@ with ins as (insert into orders (customer_id) values (@p0) returning customer_id
 | In-memory | невыразимо | невыразимо (только чтение) |
 
 ```csharp
-long fromColumn = ctx.InsertInto<ISimpleEntity>()
+long fromColumn = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningIdentity(x => x.Id)
     .Single();
 
-long fromFunction = ctx.InsertInto<ISimpleEntity>()
+long fromFunction = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningIdentity<long>()
     .Single();
 
-long fromMetadata = ctx.InsertInto<ISimpleEntity>()
+long fromMetadata = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningKey<long>()
     .Single();
@@ -444,17 +444,17 @@ insert into simple_entity (name) values (@p0); select lastval()
 второго `SELECT`:
 
 ```csharp
-var row = ctx.InsertInto<Order>()
+var row = ctx.CreateInsertBuilder<Order>()
     .Value(x => x.Name, "a")
     .Returning()
     .Single();                        // Order с сгенерированным Id
 
-var projected = ctx.InsertInto<Order>()
+var projected = ctx.CreateInsertBuilder<Order>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .Single();                        // анонимный { Id, Name }
 
-var rows = ctx.InsertInto<Order>()
+var rows = ctx.CreateInsertBuilder<Order>()
     .Values([o1, o2])
     .Returning()
     .ToList();                        // IReadOnlyList<Order>, по элементу на строку
@@ -498,14 +498,14 @@ SQL Server умеет записывать изменённые строки в 
 
 ```csharp
 // записать вставленные строки в audit_log; клиенту ничего не возвращается
-var written = ctx.InsertInto<ISimpleEntity>()
+var written = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputInto("audit_log")
     .Execute();                       // int: число затронутых строк
 
 // записать в audit_log и вернуть те же строки клиенту (второй OUTPUT)
-var rows = ctx.InsertInto<ISimpleEntity>()
+var rows = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputIntoThenOutput("audit_log")
@@ -541,7 +541,7 @@ insert into simple_entity (name) output inserted.id, inserted.name into audit_lo
 
 ## Upsert и MERGE
 
-Тот же билдер пишет строки и через `MERGE`: переносимый **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, рендерится как `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) и общий **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`, произвольными условиями, `THEN DELETE`/`THEN DO NOTHING` и `RETURNING`/`OUTPUT`. Оба стартуют с `ctx.MergeInto<TEntity>()` и описаны в отдельном гайде:
+Тот же билдер пишет строки и через `MERGE`: переносимый **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, рендерится как `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) и общий **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`, произвольными условиями, `THEN DELETE`/`THEN DO NOTHING` и `RETURNING`/`OUTPUT`. Оба стартуют с `ctx.CreateMergeBuilder<TEntity>()` и описаны в отдельном гайде:
 
 - [Слияние данных (MERGE / upsert)](19-merge-statement.md)
 
@@ -553,7 +553,7 @@ insert into simple_entity (name) output inserted.id, inserted.name into audit_lo
 бы обычный `Insert()`, не открывая соединение. Полезно для диагностики и SQL-generation тестов.
 
 ```csharp
-var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
+var sql = ctx.CreateInsertBuilder<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 // insert into simple_entity (name) values (@p0)
 ```
 
@@ -569,7 +569,7 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 | ClickHouse | да (малые батчи) | — | — | массовая вставка — портируемый `INSERT ... VALUES`; ограничивайте `MaxBatchSize` |
 | In-memory | — | — | — | контекст только для чтения; `NotSupportedException` |
 
-Сам `INSERT ... VALUES` кросс-провайдерный и не гейтится: одно и то же API `InsertInto<T>()` работает
+Сам `INSERT ... VALUES` кросс-провайдерный и не гейтится: одно и то же API `CreateInsertBuilder<T>()` работает
 на всех SQL-провайдерах. Отличается лишь форма возврата ключа, и провайдер, который её не выражает,
 отклоняет `ReturningIdentity`/`ReturningKey` через `NotSupportedException`, а не генерирует некорректный SQL.
 SQL Server дополнительно записывает изменённые строки в существующую таблицу через `OUTPUT INTO`; см.
@@ -592,7 +592,7 @@ SQL Server дополнительно записывает изменённые 
 * **Число затронутых строк.** `Insert()`/`InsertAsync()` возвращают число строк, которое сообщает
   провайдер. ClickHouse для `INSERT ... VALUES` его не сообщает и возвращает `0`, хотя строка
   записана — не используйте счётчик для подтверждения вставки в ClickHouse.
-* **Дробление большого батча.** `InsertInto<T>()` пишет одно утверждение; для всего набора используйте
+* **Дробление большого батча.** `CreateInsertBuilder<T>()` пишет одно утверждение; для всего набора используйте
   [Массовая вставка](20-bulk-insert.md), включая необязательное дробление
   (`MaxBatchSize`/`MaxParameters`/`MaxSqlLength`) и нативные bulk-пути.
 * **Глобальные фильтры запросов не добавляются в цель.** Фильтр, объявленный для типа сущности, никогда

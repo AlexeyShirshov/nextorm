@@ -14,7 +14,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .ToSql()
             .Should().Be("alter table merge_entity delete where id = 1 settings mutations_sync = 1");
@@ -25,7 +25,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .All()
             .ToSql()
             .Should().Be("alter table merge_entity delete where 1 settings mutations_sync = 1");
@@ -36,7 +36,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.Truncate<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
+        ctx.CreateTruncateBuilder<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
     }
 
     [Fact]

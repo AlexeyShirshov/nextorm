@@ -39,7 +39,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -53,7 +53,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using([
                 new MergeEntity { Id = 1, Name = "a", Age = 1 },
                 new MergeEntity { Id = 2, Name = "b", Age = 2 },

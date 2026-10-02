@@ -1,6 +1,6 @@
 # Executing statements in one batch
 
-> A batch sends several statements to the database as **one round trip on one server session**. It is what makes a session-scoped temporary table usable under a connection-level pooler, keeps a mutation and the query that reads it on the same backend, and removes a round trip when a materialisation is immediately read back. Build one with [`BatchExtensions.Batch`](xref:NextORM.Core.BatchExtensions).
+> A batch sends several statements to the database as **one round trip on one server session**. It is what makes a session-scoped temporary table usable under a connection-level pooler, keeps a mutation and the query that reads it on the same backend, and removes a round trip when a materialisation is immediately read back. Build one with [`BatchExtensions.CreateBatchBuilder`](xref:NextORM.Core.BatchExtensions).
 
 **Prerequisites:** [Materializing a query into a table](18-create-table-as.md) · [Transactions](21-transactions.md) · [Provider overview](../providers/overview.md)
 
@@ -26,7 +26,7 @@ var orders = ctx.From("recent_orders")
 Those are **two commands**, which a connection-level pooler can route to different backends, making the read fail with `relation "…" does not exist`. The materialisation and the reading query go into one batch instead:
 
 ```csharp
-var orders = ctx.Batch()
+var orders = ctx.CreateBatchBuilder()
     .CreateTempTable("recent_orders", ctx.From<IOrder>()
         .Where(x => x.Total > minTotal)
         .Select(x => new { x.Id, x.Total }))
@@ -84,12 +84,12 @@ select id, total from __nextorm_temp_xxxxxxxx
 
 ## Building a batch directly
 
-`ctx.Batch()` returns a `BatchBuilder` for more than one statement, a side-effecting DML or raw SQL step, or an explicit order.
+`ctx.CreateBatchBuilder()` returns a `BatchBuilder` for more than one statement, a side-effecting DML or raw SQL step, or an explicit order.
 
 Materialisation + read:
 
 ```csharp
-var rows = ctx.Batch()
+var rows = ctx.CreateBatchBuilder()
     .CreateTempTable("recent_orders", ctx.From<IOrder>().Where(x => x.Total > minTotal).Select(x => new { x.Id, x.Total }))
     .CreateTempTable("recent_ids", ctx.From("recent_orders").Select(t => new { Id = t.GetInt32("id") }))
     .Query(ctx.From("recent_ids").Select(t => new { Id = t.GetInt32("id") }))
@@ -107,7 +107,7 @@ select id from recent_ids
 Replacing a persistent table — `CreateTable` with `DropExisting` drops it first, so the step can run again instead of failing on the second run:
 
 ```csharp
-var rows = ctx.Batch()
+var rows = ctx.CreateBatchBuilder()
     .CreateTable("order_archive", ctx.From<IOrder>().Select(x => new { x.Id, x.Total }),
         o => o.DropExisting())
     .Query(ctx.From("order_archive").Select(t => new { Id = t.GetInt32("id") }))
@@ -126,8 +126,8 @@ select id from order_archive
 Mutation + read — the query observes the update on the same session:
 
 ```csharp
-var updated = ctx.Batch()
-    .Update(ctx.Update<IOrder>().Set(x => x.Status, "shipped").Where(x => x.Id == id))
+var updated = ctx.CreateBatchBuilder()
+    .Update(ctx.CreateUpdateBuilder<IOrder>().Set(x => x.Status, "shipped").Where(x => x.Id == id))
     .Query(ctx.From<IOrder>().Where(x => x.Id == id).Select(x => new { x.Id, x.Status }))
     .ToList();
 ```
@@ -140,7 +140,7 @@ select id, status from orders
 ```
 
 * `CreateTempTable(name, source, options?)` and `CreateTable(name, source, options?)` add materialisations, in order, any number. Options can be passed as `CreateTableOptions` or as a `CreateTableOptionsBuilder` callback (`o => o.DropExisting()`); a persistent `CreateTable` with `DropExisting` prepends a `DROP TABLE IF EXISTS` so the step replaces an existing table.
-* `Insert(insert)`, `Update(update)`, `Delete(delete)` and `Truncate(truncate)` add a side-effecting DML statement, in order, any number. They take the same builders as `ctx.InsertInto<T>()`, `ctx.Update<T>()`, `ctx.DeleteFrom<T>()` and `ctx.Truncate<T>()`; the builder's terminal (`Insert()`, `Update()`, …) is never called — the batch runs it.
+* `Insert(insert)`, `Update(update)`, `Delete(delete)` and `Truncate(truncate)` add a side-effecting DML statement, in order, any number. They take the same builders as `ctx.CreateInsertBuilder<T>()`, `ctx.CreateUpdateBuilder<T>()`, `ctx.CreateDeleteBuilder<T>()` and `ctx.CreateTruncateBuilder<T>()`; the builder's terminal (`Insert()`, `Update()`, …) is never called — the batch runs it.
 * `Raw(sql)` adds a verbatim, side-effecting SQL step, in order, any number: the text is emitted unchanged and no parameters are bound. It follows the same ordering rule as the other side-effecting steps — it must precede `Query`/`AddQuery` (see [Raw steps](#raw-steps)).
 * `Query<TResult>(query)` adds the single result-bearing query and returns the terminal; it must be the last statement. A second `Query`, or any statement after `Query`, throws `InvalidOperationException`. To carry several result sets use `AddQuery<TResult>` and `Execute`/`ExecuteAsync` instead (see [Multiple result sets](#multiple-result-sets)).
 * Every statement must be built from the batch's own context; a statement bound to a different `IDataContext` is rejected with `ArgumentException`.
@@ -163,7 +163,7 @@ select id, total from #recent_orders
 `Raw` participates in `ToSql()`, and in the multi-result `AddQuery`/`Execute` form it is one of the side-effecting steps that precede the queries. SQL Server can read a stored-procedure result through a temp table in one batch, without a transaction:
 
 ```csharp
-var rows = ctx.Batch()
+var rows = ctx.CreateBatchBuilder()
     .Raw("create table #r (id int, total decimal(18,2))")
     .Raw("insert into #r (id, total) exec dbo.MyProc @p = 42")
     .Query(ctx.From("#r").Select(t => new { Id = t.GetInt32("id") }))
@@ -180,7 +180,7 @@ A batch may carry **more than one** result-bearing query. Add each one with `Add
 record OrderTotal(int Id, decimal Total);
 record OrderLine(int Id, string Status);
 
-var result = ctx.Batch()
+var result = ctx.CreateBatchBuilder()
     .AddQuery(ctx.From<IOrder>().Where(x => x.Status == "open")
         .Select(x => new OrderTotal(x.Id, x.Total)))
     .AddQuery(ctx.From<IOrder>().Where(x => x.Status == "shipped")
@@ -231,7 +231,7 @@ The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.Su
 
 * A batch ends with one or more result-bearing queries — one added with the `Query<TResult>` terminal, several with `AddQuery<TResult>` and `Execute`/`ExecuteAsync` — and they are the last statements. The statements before them are side-effecting — materialisations, DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`) and raw SQL steps — which return no columns.
 * Multi-result execution is **sequential and eager**: `BatchResult.Read<TResult>()` returns the sets in the order the queries were added, each set may be read once, and every set is fully buffered in memory before `Execute()`/`ExecuteAsync()` returns — there is no streaming and no random access. Only the single-result `BatchQuery<TResult>` terminal streams, through `ToAsyncEnumerable`.
-* A mutation added to a batch may not request returned rows: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted. Multi-table `UpdateJoin`/`DeleteJoin` and `Merge` are not batch steps. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
+* A mutation added to a batch may not request returned rows: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted. Multi-table `CreateUpdateJoinBuilder`/`DeleteJoin` and `Merge` are not batch steps. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
 * `ToSql()` shows the `;`-joined text without executing: on the single-result `BatchQuery<TResult>` terminal and on `BatchBuilder` for the multi-result `AddQuery`/`Execute` form (`BatchBuilder.ToSql()` renders the whole batch and requires at least one result step). On a `DbBatch` provider the statements are still sent as separate commands of one batch when the batch executes.
 * Batch execution is **not** routed through the query interceptors: their events carry a `DbCommand`, while a `DbBatch` command is a `DbBatchCommand`.
 * `SqlFunctions.Parameter` runtime placeholders cannot be used in a batched query; capture the value in a local variable instead (as in any query rendered as a source). Captured variables become parameters automatically.

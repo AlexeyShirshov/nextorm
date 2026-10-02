@@ -13,7 +13,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var affected = ctx.InsertInto<IInsertEntity>()
+        var affected = ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 42)
             .Insert();
@@ -35,7 +35,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(new InsertEntity { Id = 123456, Name = marker, Age = 7 })
             .Insert();
 
@@ -54,7 +54,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values([
                 new InsertEntity { Name = marker, Age = 1 },
                 new InsertEntity { Name = marker, Age = 2 },
@@ -75,12 +75,12 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 10)
             .Insert();
 
-        var affected = ctx.InsertInto<IInsertEntity>()
+        var affected = ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<IInsertEntity>().Where(x => x.Name == marker), x => new { x.Name, x.Age })
             .Insert();
 
@@ -102,14 +102,14 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values([
                 new InsertEntity { Name = marker, Age = 1 },
                 new InsertEntity { Name = marker, Age = 2 },
             ])
             .Insert();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<IInsertEntity>().Where(x => x.Name == marker), x => new { x.Name, x.Age })
             .Returning(x => new { x.Age })
             .Single();
@@ -123,7 +123,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var id = ctx.InsertInto<IInsertEntity>()
+        var id = ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 3)
             .ReturningIdentity<long>()
@@ -146,7 +146,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var id = ctx.InsertInto<IInsertEntity>()
+        var id = ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 4)
             .ReturningKey<long>()
@@ -171,7 +171,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var id = ctx.InsertInto<InsertEntity>()
+        var id = ctx.CreateInsertBuilder<InsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 5)
             .ReturningIdentity(x => x.Id)
@@ -188,7 +188,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var ids = ctx.InsertInto<InsertEntity>()
+        var ids = ctx.CreateInsertBuilder<InsertEntity>()
             .Values([
                 new InsertEntity { Name = marker, Age = 1 },
                 new InsertEntity { Name = marker, Age = 2 },
@@ -208,7 +208,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var row = ctx.InsertInto<InsertEntity>()
+        var row = ctx.CreateInsertBuilder<InsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 42)
             .Returning()
@@ -227,7 +227,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var row = ctx.InsertInto<IInsertEntity>()
+        var row = ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 7)
             .Returning(x => new { x.Id, x.Name })
@@ -245,7 +245,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var rows = ctx.InsertInto<InsertEntity>()
+        var rows = ctx.CreateInsertBuilder<InsertEntity>()
             .Values([
                 new InsertEntity { Name = marker, Age = 1 },
                 new InsertEntity { Name = marker, Age = 2 },
@@ -266,7 +266,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        var age = ctx.InsertInto<InsertEntity>()
+        var age = ctx.CreateInsertBuilder<InsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 7)
             .Returning(x => (long)x.Age)
@@ -282,7 +282,7 @@ public abstract partial class CommonTestSuite
 
         var ctx = _sut.DataProvider;
 
-        var id = ctx.InsertInto<InsertEntity>()
+        var id = ctx.CreateInsertBuilder<InsertEntity>()
             .Value(x => x.Name, InsertMarker())
             .ReturningKey<long?>()
             .Single();
@@ -298,7 +298,7 @@ public abstract partial class CommonTestSuite
 
         var ctx = _sut.DataProvider;
 
-        var act = () => ctx.InsertInto<InsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<InsertEntity>()
             .Value(x => x.Name, InsertMarker())
             .Returning()
             .Single();
@@ -313,7 +313,7 @@ public abstract partial class CommonTestSuite
 
         var ctx = _sut.DataProvider;
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, InsertMarker())
             .Returning()
             .Single();
@@ -328,7 +328,7 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var sources = new[] { new InsertSource(marker, 1), new InsertSource(marker, 2) };
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { s.Name, s.Age })
             .Insert();
 
@@ -348,7 +348,7 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var sources = new[] { new InsertSource(marker, 4), new InsertSource(marker, 5) };
 
-        ctx.InsertInto<InsertEntity>()
+        ctx.CreateInsertBuilder<InsertEntity>()
             .Values(sources, s => new InsertEntity { Name = s.Name, Age = s.Age })
             .Insert();
 
@@ -369,7 +369,7 @@ public abstract partial class CommonTestSuite
         var nameA = marker + "a";
         var nameB = marker + "b";
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(x => x.Name, new[] { nameA, nameB })
             .Values(x => x.Age, new[] { 6, 7 })
             .Insert();
@@ -386,7 +386,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void Insert_ToSql_ShouldRenderInsert()
     {
-        var sql = _sut.DataProvider.InsertInto<IInsertEntity>()
+        var sql = _sut.DataProvider.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "x")
             .Value(x => x.Age, 1)
             .ToSql();
@@ -400,7 +400,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        await ctx.InsertInto<IInsertEntity>()
+        await ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 11)
             .InsertAsync(TestContext.Current.CancellationToken);
@@ -414,7 +414,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var marker = InsertMarker();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, x => 21)
             .Insert();

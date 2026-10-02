@@ -14,12 +14,12 @@ public abstract partial class CommonTestSuite
         var second = "batch-multi-b-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = id, Name = first, Age = 1 },
             new DeleteEntity { Id = id + 1, Name = second, Age = 2 },
         ]).Insert();
 
-        var result = ctx.Batch()
+        var result = ctx.CreateBatchBuilder()
             .AddQuery(ctx.From<IDeleteEntity>().Where(x => x.Name == first).Select(x => x.Name))
             .AddQuery(ctx.From<IDeleteEntity>().Where(x => x.Name == second).Select(x => x.Name))
             .Execute();
@@ -38,12 +38,12 @@ public abstract partial class CommonTestSuite
         var second = "batch-multi-async-b-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = id, Name = first, Age = 1 },
             new DeleteEntity { Id = id + 1, Name = second, Age = 2 },
         ]).Insert();
 
-        var result = await ctx.Batch()
+        var result = await ctx.CreateBatchBuilder()
             .AddQuery(ctx.From<IDeleteEntity>().Where(x => x.Name == first).Select(x => x.Name))
             .AddQuery(ctx.From<IDeleteEntity>().Where(x => x.Name == second).Select(x => x.Name))
             .ExecuteAsync(TestContext.Current.CancellationToken);
@@ -63,13 +63,13 @@ public abstract partial class CommonTestSuite
         var updated = "batch-multi-side-updated-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = id, Name = first, Age = 1 },
             new DeleteEntity { Id = id + 1, Name = second, Age = 2 },
         ]).Insert();
 
-        var result = ctx.Batch()
-            .Update(ctx.Update<IDeleteEntity>().Set(x => x.Name, updated).Where(x => x.Id == id))
+        var result = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<IDeleteEntity>().Set(x => x.Name, updated).Where(x => x.Id == id))
             .AddQuery(ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => x.Name))
             .AddQuery(ctx.From<IDeleteEntity>().Where(x => x.Id == id + 1).Select(x => x.Name))
             .Execute();

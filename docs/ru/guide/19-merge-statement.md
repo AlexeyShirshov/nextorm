@@ -1,12 +1,12 @@
 # Слияние данных (`MERGE` / upsert)
 
-> nextorm строит `MERGE` (upsert) через [`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): одна точка входа покрывает и переносимый **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`), и общий много-веточный **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`. Изменения не отслеживаются, `SaveChanges` нет: каждый терминал выполняет ровно одну команду.
+> nextorm строит `MERGE` (upsert) через [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): одна точка входа покрывает и переносимый **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`), и общий много-веточный **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`. Изменения не отслеживаются, `SaveChanges` нет: каждый терминал выполняет ровно одну команду.
 
 **Предварительно:** [Изменение данных (INSERT)](15-insert-statement.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Обзор провайдеров](../providers/overview.md)
 
 ## Обзор
 
-`MergeInto<TEntity>()` записывает набор строк-источника в целевую таблицу и позволяет базе построчно решить, что делать. Источник — отображённая сущность, батч или серверный запрос; совпадение — либо объявленный ключ (`OnKeys()`), либо произвольное условие (`On(...)`); действия задаются ветками. `Merge()`/`MergeAsync()` выполняют команду и возвращают число затронутых строк, а `ToSql()` рендерит утверждение без соединения.
+`CreateMergeBuilder<TEntity>()` записывает набор строк-источника в целевую таблицу и позволяет базе построчно решить, что делать. Источник — отображённая сущность, батч или серверный запрос; совпадение — либо объявленный ключ (`OnKeys()`), либо произвольное условие (`On(...)`); действия задаются ветками. `Merge()`/`MergeAsync()` выполняют команду и возвращают число затронутых строк, а `ToSql()` рендерит утверждение без соединения.
 
 Один билдер обслуживает две формы:
 
@@ -15,10 +15,10 @@
 
 ## Upsert (key merge)
 
-[`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) записывает набор строк-источника в таблицу и позволяет базе по объявленному ключу решить: обновить существующую строку или вставить новую. Источник — одна сущность или батч, ключ совпадения разрешается из маппинга сущности через `OnKeys()`, и обе ветки — `WhenMatchedUpdate()` (присвоить все не-key записываемые колонки из источника) и `WhenNotMatchedInsert()` — обязательны:
+[`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) записывает набор строк-источника в таблицу и позволяет базе по объявленному ключу решить: обновить существующую строку или вставить новую. Источник — одна сущность или батч, ключ совпадения разрешается из маппинга сущности через `OnKeys()`, и обе ветки — `WhenMatchedUpdate()` (присвоить все не-key записываемые колонки из источника) и `WhenNotMatchedInsert()` — обязательны:
 
 ```csharp
-ctx.MergeInto<ISimpleEntity>()
+ctx.CreateMergeBuilder<ISimpleEntity>()
     .Using(new SimpleEntity { Id = 1, Name = "a" })   // или Using(new[] { e1, e2 })
     .OnKeys()
     .WhenMatchedUpdate()
@@ -57,7 +57,7 @@ merge into simple_entity as target using (values (@p0, @p1)) as source (id, name
 [`WhenMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenMatched) / [`WhenNotMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatched) / [`WhenNotMatchedBySource()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatchedBySource) расширяют тот же билдер до общего много-веточного `MERGE` на провайдерах, которые рендерят его нативно (SQL Server, PostgreSQL; сервер 15+). Каждая ветка завершается действием, и ветки выполняются в порядке объявления:
 
 ```csharp
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(source)                            // сущность, батч или запрос: Using(ctx.From<IDest>().Where(...))
     .OnKeys()                                 // или .On((t, s) => t.Id == s.Id && s.Age > 0)
     .WhenMatched().ThenUpdate()               // или .WhenMatched((t, s) => t.Name != s.Name).ThenUpdate()
@@ -79,7 +79,7 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 
 ```csharp
 // не поддерживается: Total — computed, поэтому источник VALUES не объявляет колонку Total
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(new Dest { Name = "a" })
     .On((t, s) => t.Name == s.Name && s.Total > 0)
     .WhenMatched().ThenUpdate()
@@ -87,7 +87,7 @@ ctx.MergeInto<IDest>()
     .ToSql();   // NotSupportedException
 
 // поддерживается: источник-запрос проецирует всю строку, включая Total
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(ctx.From<IDest>())
     .On((t, s) => t.Name == s.Name && s.Total > 0)
     .WhenMatched().ThenUpdate()
@@ -114,7 +114,7 @@ ctx.MergeInto<IDest>()
 [`Returning()`](xref:NextORM.Core.MergeBuilder`1.Returning) и [`Returning(x => new { ... })`](xref:NextORM.Core.MergeBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) материализуют слитые строки через выходную клаузу провайдера. Читаются через `Single()`/`SingleAsync()`/`ToList()`/`ToListAsync()`:
 
 ```csharp
-var rows = ctx.MergeInto<IDest>()
+var rows = ctx.CreateMergeBuilder<IDest>()
     .Using(source)
     .OnKeys()
     .WhenMatched().ThenUpdate()
@@ -143,7 +143,7 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 [`ToSql()`](xref:NextORM.Core.MergeBuilder`1.ToSql) рендерит параметризованный SQL, который выполнил бы `Merge()`, не открывая соединение:
 
 ```csharp
-var sql = ctx.MergeInto<ISimpleEntity>()
+var sql = ctx.CreateMergeBuilder<ISimpleEntity>()
     .Using(new SimpleEntity { Id = 1, Name = "a" })
     .OnKeys()
     .WhenMatchedUpdate()

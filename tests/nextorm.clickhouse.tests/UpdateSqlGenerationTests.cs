@@ -15,7 +15,7 @@ public class UpdateSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.Update<IMergeEntity>()
+        ctx.CreateUpdateBuilder<IMergeEntity>()
             .Set(x => x.Name, "a")
             .Where(x => x.Id == 1)
             .ToSql()
@@ -27,7 +27,7 @@ public class UpdateSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.Update<IMergeEntity>()
+        ctx.CreateUpdateBuilder<IMergeEntity>()
             .Set(x => x.Name, "a")
             .ToSql()
             .Should().Be("alter table merge_entity update name = @p0 where 1 settings mutations_sync = 1");
@@ -38,7 +38,7 @@ public class UpdateSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.Update<IMergeEntity>()
+        ctx.CreateUpdateBuilder<IMergeEntity>()
             .Set(x => x.Age, x => x.Age + 1)
             .Where(x => x.Id == 1)
             .ToSql()
@@ -50,7 +50,7 @@ public class UpdateSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.Update<IMergeEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).Returning().ToSql();
+        var act = () => ctx.CreateUpdateBuilder<IMergeEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).Returning().ToSql();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -62,7 +62,7 @@ public class UpdateSqlGenerationTests
 
         var act = () => ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .ToSql();
 

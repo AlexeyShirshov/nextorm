@@ -53,32 +53,32 @@ public abstract partial class CommonTestSuite
         var one = many + 1;
         var none = many + 2;
 
-        ctx.InsertInto<JoinIntoParent>().Values([
+        ctx.CreateInsertBuilder<JoinIntoParent>().Values([
             new JoinIntoParent { Id = many, Name = "many" },
             new JoinIntoParent { Id = one, Name = "one" },
             new JoinIntoParent { Id = none, Name = "none" },
         ]).Insert();
 
-        ctx.InsertInto<JoinIntoChild>().Values([
+        ctx.CreateInsertBuilder<JoinIntoChild>().Values([
             new JoinIntoChild { Id = many + 100, ParentId = many, Name = "many-a" },
             new JoinIntoChild { Id = many + 101, ParentId = many, Name = "many-b" },
             new JoinIntoChild { Id = many + 102, ParentId = one, Name = "one-a" },
         ]).Insert();
 
-        ctx.InsertInto<JoinIntoNote>().Values([
+        ctx.CreateInsertBuilder<JoinIntoNote>().Values([
             new JoinIntoNote { Id = many + 200, ParentId = many, Text = "many-n1" },
             new JoinIntoNote { Id = many + 201, ParentId = many, Text = "many-n2" },
         ]).Insert();
 
         // Many-to-many fixtures (#135): two tags for "many" plus one for "one", linked through a
         // junction that repeats a (parent, child) pair and carries one dangling child foreign key.
-        ctx.InsertInto<JoinIntoTag>().Values([
+        ctx.CreateInsertBuilder<JoinIntoTag>().Values([
             new JoinIntoTag { Id = many + 300, Name = "many-t1" },
             new JoinIntoTag { Id = many + 301, Name = "many-t2" },
             new JoinIntoTag { Id = many + 302, Name = "one-t1" },
         ]).Insert();
 
-        ctx.InsertInto<JoinIntoTagLink>().Values([
+        ctx.CreateInsertBuilder<JoinIntoTagLink>().Values([
             new JoinIntoTagLink { Id = many + 400, ParentId = many, ChildId = many + 300 },
             new JoinIntoTagLink { Id = many + 401, ParentId = many, ChildId = many + 301 },
             new JoinIntoTagLink { Id = many + 402, ParentId = many, ChildId = many + 300 },

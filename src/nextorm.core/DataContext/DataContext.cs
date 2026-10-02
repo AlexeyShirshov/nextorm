@@ -1141,7 +1141,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     {
         if (!Dialect.SupportsTruncate)
             throw new NotSupportedException(
-                $"{GetType().Name} does not support TRUNCATE; remove every row with DeleteFrom<T>().All() instead.");
+                $"{GetType().Name} does not support TRUNCATE; remove every row with CreateDeleteBuilder<T>().All() instead.");
 
         return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase), []);
     }

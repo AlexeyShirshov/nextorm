@@ -10,7 +10,7 @@ namespace NextORM.Benchmark;
 /// <summary>
 /// DML write-path benchmark for the dynamic-columns store (#104): a plain mapped <c>INSERT</c> versus the
 /// same <c>INSERT</c> whose entity carries a populated store. The measured region is the real
-/// <c>InsertInto&lt;T&gt;().Values(...)</c> build (store key extraction + ordinal sort inside it), the SQL
+/// <c>CreateInsertBuilder&lt;T&gt;().Values(...)</c> build (store key extraction + ordinal sort inside it), the SQL
 /// render and the execution against a benchmark-owned SQLite database, so the dynamic-key work is not
 /// hoisted out of the measurement and the statement actually runs. Each invocation executes inside a
 /// transaction that is rolled back, so the writes are real but repeated runs neither fsync per row nor
@@ -62,7 +62,7 @@ public class SqliteBenchmarkDynamicInsert
         for (var i = 0; i < Iterations; i++)
         {
             var entity = new StaticInsertEntity { Id = ++_nextId, Name = "static" };
-            written += _db.InsertInto<StaticInsertEntity>().Values(entity).Insert();
+            written += _db.CreateInsertBuilder<StaticInsertEntity>().Values(entity).Insert();
         }
 
         tx.Rollback();
@@ -81,7 +81,7 @@ public class SqliteBenchmarkDynamicInsert
             var entity = new DynamicInsertEntity { Id = ++_nextId, Name = "dynamic" };
             entity.Extra["age"] = 30;
             entity.Extra["city"] = "NY";
-            written += _db.InsertInto<DynamicInsertEntity>().Values(entity).Insert();
+            written += _db.CreateInsertBuilder<DynamicInsertEntity>().Values(entity).Insert();
         }
 
         tx.Rollback();

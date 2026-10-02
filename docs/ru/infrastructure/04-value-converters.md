@@ -162,7 +162,7 @@ b.Property(x => x.Address).JsonColumn(o =>
 `DateTimeOffset` конвертера не требуют — `System.Text.Json` пишет их как ISO 8601:
 
 ```csharp
-ctx.InsertInto<Customer>()
+ctx.CreateInsertBuilder<Customer>()
     .Values(new Customer
     {
         Id = 1,
@@ -269,7 +269,7 @@ select id, address from customers
 **Запись.** INSERT передаёт представление провайдера связанным параметром:
 
 ```csharp
-ctx.InsertInto<Order>()
+ctx.CreateInsertBuilder<Order>()
     .Values(new Order { Id = 1, Status = Status.Active })
     .Insert();
 ```
@@ -282,7 +282,7 @@ insert into orders (id, status) values (@p0, @p1)
 перечисления. Константа в списке `SET` конвертируется так же:
 
 ```csharp
-ctx.Update<Order>()
+ctx.CreateUpdateBuilder<Order>()
     .Set(x => x.Status, Status.Closed)
     .Where(x => x.Id == 1)
     .Update();

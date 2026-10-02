@@ -11,7 +11,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .ToSql()
             .Should().Be("delete from merge_entity where id = 1");
@@ -22,7 +22,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .All()
             .ToSql()
             .Should().Be("delete from merge_entity");
@@ -33,7 +33,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = MySqlTestContext.CreateQuoted();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .ToSql()
             .Should().Be("delete from `merge_entity` where `id` = 1");
@@ -44,7 +44,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        var act = () => ctx.DeleteFrom<IMergeEntity>().Where(x => x.Id == 1).Returning().ToSql();
+        var act = () => ctx.CreateDeleteBuilder<IMergeEntity>().Where(x => x.Id == 1).Returning().ToSql();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -54,7 +54,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        ctx.Truncate<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
+        ctx.CreateTruncateBuilder<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
     }
 
     [Fact]

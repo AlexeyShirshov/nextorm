@@ -210,7 +210,7 @@ public class DynamicColumnsWriteTests
             },
         };
 
-        var sql = ctx.InsertInto<DynamicRowEntity>().Values(entity).ToSql();
+        var sql = ctx.CreateInsertBuilder<DynamicRowEntity>().Values(entity).ToSql();
 
         // The global identifier-quoting flag is off, so the mapped columns stay unquoted while every
         // dynamic key is quoted through the dialect regardless.
@@ -232,7 +232,7 @@ public class DynamicColumnsWriteTests
             Name = "row",
             Extra = new Dictionary<string, object?> { ["b"] = 2, ["a"] = 1 },
         };
-        var fluentSql = ctx.InsertInto<FluentDynamicRowEntity>(b =>
+        var fluentSql = ctx.CreateInsertBuilder<FluentDynamicRowEntity>(b =>
             {
                 b.Property(x => x.Id).Key();
                 b.Property(x => x.Name!);
@@ -262,7 +262,7 @@ public class DynamicColumnsWriteTests
             },
         };
 
-        var sql = ctx.InsertInto<DynamicRowEntity>().Values(entity).ToSql();
+        var sql = ctx.CreateInsertBuilder<DynamicRowEntity>().Values(entity).ToSql();
 
         sql.Should().Contain("\"a\"");
         sql.Should().Contain("\"b\"");
@@ -278,7 +278,7 @@ public class DynamicColumnsWriteTests
         var first = new DynamicRowEntity { Id = 1, Extra = new() { ["a"] = 1 } };
         var second = new DynamicRowEntity { Id = 2, Extra = new() { ["b"] = 2 } };
 
-        var act = () => ctx.InsertInto<DynamicRowEntity>().Values([first, second]);
+        var act = () => ctx.CreateInsertBuilder<DynamicRowEntity>().Values([first, second]);
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*same dynamic-column keys*");
     }
@@ -290,7 +290,7 @@ public class DynamicColumnsWriteTests
 
         // The first row's empty store fixes the batch's key set at "no keys"; a later row with a key is a
         // mismatch and must be rejected rather than silently dropping that key's column.
-        var firstEmpty = () => ctx.InsertInto<DynamicRowEntity>().Values(
+        var firstEmpty = () => ctx.CreateInsertBuilder<DynamicRowEntity>().Values(
         [
             new DynamicRowEntity { Id = 1, Name = "first", Extra = new() },
             new DynamicRowEntity { Id = 2, Name = "second", Extra = new() { ["a"] = 1 } },
@@ -298,7 +298,7 @@ public class DynamicColumnsWriteTests
         firstEmpty.Should().Throw<InvalidOperationException>().WithMessage("*same dynamic-column keys*");
 
         // The reverse order is rejected too: a later empty store does not match the first row's key.
-        var laterEmpty = () => ctx.InsertInto<DynamicRowEntity>().Values(
+        var laterEmpty = () => ctx.CreateInsertBuilder<DynamicRowEntity>().Values(
         [
             new DynamicRowEntity { Id = 3, Name = "third", Extra = new() { ["a"] = 1 } },
             new DynamicRowEntity { Id = 4, Name = "fourth", Extra = new() },
@@ -311,15 +311,15 @@ public class DynamicColumnsWriteTests
     {
         using var ctx = new TestContext();
 
-        var insertEmpty = () => ctx.InsertInto<DynamicRowEntity>()
+        var insertEmpty = () => ctx.CreateInsertBuilder<DynamicRowEntity>()
             .Values(new DynamicRowEntity { Id = 1, Extra = new() { [""] = 1 } });
-        var insertNul = () => ctx.InsertInto<DynamicRowEntity>()
+        var insertNul = () => ctx.CreateInsertBuilder<DynamicRowEntity>()
             .Values(new DynamicRowEntity { Id = 1, Extra = new() { ["a\0b"] = 1 } });
-        var updateEmpty = () => ctx.Update<DynamicRowEntity>()
+        var updateEmpty = () => ctx.CreateUpdateBuilder<DynamicRowEntity>()
             .Set(new DynamicRowEntity { Id = 1, Extra = new() { [""] = 1 } });
-        var updateNul = () => ctx.Update<DynamicRowEntity>()
+        var updateNul = () => ctx.CreateUpdateBuilder<DynamicRowEntity>()
             .Set(new DynamicRowEntity { Id = 1, Extra = new() { ["a\0b"] = 1 } });
-        var mergeEmpty = () => ctx.MergeInto<DynamicRowEntity>()
+        var mergeEmpty = () => ctx.CreateMergeBuilder<DynamicRowEntity>()
             .Using(new DynamicRowEntity { Id = 1, Extra = new() { [""] = 1 } });
 
         insertEmpty.Should().Throw<ArgumentException>();
@@ -340,7 +340,7 @@ public class DynamicColumnsWriteTests
             Extra = new Dictionary<string, object?> { ["a"] = 1 },
         };
 
-        var sql = ctx.Update<DynamicRowEntity>()
+        var sql = ctx.CreateUpdateBuilder<DynamicRowEntity>()
             .Set(entity)
             .Where(x => x.Id == 1)
             .ToSql();
@@ -362,7 +362,7 @@ public class DynamicColumnsWriteTests
             Extra = new Dictionary<string, object?> { ["a"] = 1, ["b"] = 2 },
         };
 
-        var sql = ctx.MergeInto<DynamicRowEntity>()
+        var sql = ctx.CreateMergeBuilder<DynamicRowEntity>()
             .Using(entity)
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -388,10 +388,10 @@ public class DynamicColumnsWriteTests
     {
         using var ctx = new TestContext();
 
-        var insert = ctx.InsertInto<PlainRowEntity>()
+        var insert = ctx.CreateInsertBuilder<PlainRowEntity>()
             .Values(new PlainRowEntity { Id = 1, Name = "row" })
             .ToSql();
-        var update = ctx.Update<PlainRowEntity>()
+        var update = ctx.CreateUpdateBuilder<PlainRowEntity>()
             .Set(new PlainRowEntity { Id = 1, Name = "row" })
             .Where(x => x.Id == 1)
             .ToSql();
@@ -414,7 +414,7 @@ public class DynamicColumnsWriteTests
             DynamicRow(3, "c", beta: "B3", alpha: 3),
         };
 
-        var sql = ctx.InsertInto<DynamicRowEntity>().Values(rows).ToSql();
+        var sql = ctx.CreateInsertBuilder<DynamicRowEntity>().Values(rows).ToSql();
 
         // The column list is rendered once for the whole statement, ordinal-sorted ("alpha" before "beta").
         sql.Split("(Id, Name, \"alpha\", \"beta\")", StringSplitOptions.None).Should().HaveCount(2);
@@ -433,18 +433,18 @@ public class DynamicColumnsWriteTests
 
         // The bulk path writes only mapped columns, so a populated store would be silently dropped: it
         // fails closed instead.
-        var nonEmpty = () => ctx.BulkInsertInto<DynamicRowEntity>()
+        var nonEmpty = () => ctx.CreateBulkInsertBuilder<DynamicRowEntity>()
             .Values([new DynamicRowEntity { Id = 1, Name = "x", Extra = new() { ["a"] = 1 } }])
             .ToSql();
         nonEmpty.Should().Throw<NotSupportedException>();
 
         // An empty or null store contributes no dynamic columns, so the bulk write is unaffected.
-        var emptySql = ctx.BulkInsertInto<DynamicRowEntity>()
+        var emptySql = ctx.CreateBulkInsertBuilder<DynamicRowEntity>()
             .Values([new DynamicRowEntity { Id = 1, Name = "x", Extra = new() }])
             .ToSql();
         emptySql.Should().Be("insert into dynamic_row (Id, Name) values (@p0, @p1)");
 
-        var nullSql = ctx.BulkInsertInto<DynamicRowEntity>()
+        var nullSql = ctx.CreateBulkInsertBuilder<DynamicRowEntity>()
             .Values([new DynamicRowEntity { Id = 2, Name = "y", Extra = null! }])
             .ToSql();
         nullSql.Should().Be("insert into dynamic_row (Id, Name) values (@p0, @p1)");
@@ -457,19 +457,19 @@ public class DynamicColumnsWriteTests
 
         // The store is a custom IReadOnlyDictionary that is NOT an ICollection; the non-empty probe must
         // still see it (a populated store would otherwise be silently dropped).
-        var nonEmpty = () => ctx.BulkInsertInto<ReadOnlyDynamicRowEntity>()
+        var nonEmpty = () => ctx.CreateBulkInsertBuilder<ReadOnlyDynamicRowEntity>()
             .Values([new ReadOnlyDynamicRowEntity { Id = 1, Name = "x", Extra = new ReadOnlyOnlyStore(new() { ["a"] = 1 }) }])
             .ToSql();
         nonEmpty.Should().Throw<NotSupportedException>();
 
         // An empty implementation of the same shape contributes no dynamic column: the bulk write is
         // unaffected, exactly as for a plain Dictionary.
-        var emptySql = ctx.BulkInsertInto<ReadOnlyDynamicRowEntity>()
+        var emptySql = ctx.CreateBulkInsertBuilder<ReadOnlyDynamicRowEntity>()
             .Values([new ReadOnlyDynamicRowEntity { Id = 1, Name = "x", Extra = new ReadOnlyOnlyStore(new()) }])
             .ToSql();
         emptySql.Should().Be("insert into readonly_dynamic_row (Id, Name) values (@p0, @p1)");
 
-        var nullSql = ctx.BulkInsertInto<ReadOnlyDynamicRowEntity>()
+        var nullSql = ctx.CreateBulkInsertBuilder<ReadOnlyDynamicRowEntity>()
             .Values([new ReadOnlyDynamicRowEntity { Id = 2, Name = "y", Extra = null! }])
             .ToSql();
         nullSql.Should().Be("insert into readonly_dynamic_row (Id, Name) values (@p0, @p1)");
@@ -480,7 +480,7 @@ public class DynamicColumnsWriteTests
     {
         using var ctx = new TestContext();
 
-        var merge = ctx.MergeInto<PlainRowEntity>()
+        var merge = ctx.CreateMergeBuilder<PlainRowEntity>()
             .Using(new PlainRowEntity { Id = 1, Name = "row" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -501,12 +501,12 @@ public class DynamicColumnsWriteTests
         using var ctx = new TestContext();
         const string colliding = "Name";
 
-        var insert = () => ctx.InsertInto<DynamicRowEntity>()
+        var insert = () => ctx.CreateInsertBuilder<DynamicRowEntity>()
             .Values(new DynamicRowEntity { Id = 1, Extra = new() { [colliding] = "x" } })
             .ToSql();
-        var update = () => ctx.Update<DynamicRowEntity>()
+        var update = () => ctx.CreateUpdateBuilder<DynamicRowEntity>()
             .Set(new DynamicRowEntity { Id = 1, Extra = new() { [colliding] = "x" } });
-        var merge = () => ctx.MergeInto<DynamicRowEntity>()
+        var merge = () => ctx.CreateMergeBuilder<DynamicRowEntity>()
             .Using(new DynamicRowEntity { Id = 1, Extra = new() { [colliding] = "x" } });
 
         // A key that names a mapped physical column would silently shadow it; it is rejected and the
@@ -530,7 +530,7 @@ public class DynamicColumnsWriteTests
             Extra = new() { ["During"] = 5 },
         };
 
-        var sql = ctx.InsertInto<RangeDynamicRowEntity>().Values(entity).ToSql();
+        var sql = ctx.CreateInsertBuilder<RangeDynamicRowEntity>().Values(entity).ToSql();
 
         sql.Should().Contain("(Id, during_lower, during_upper, \"During\")");
         sql.Should().Contain("\"During\"");
@@ -544,7 +544,7 @@ public class DynamicColumnsWriteTests
         // The mapped property's CLR name (Renamed) differs from its physical column (physical_name). A
         // dynamic key naming the physical column would silently shadow the mapped one, so it is rejected
         // and the message names the offending key.
-        var insert = () => ctx.InsertInto<RenamedDynamicRowEntity>()
+        var insert = () => ctx.CreateInsertBuilder<RenamedDynamicRowEntity>()
             .Values(new RenamedDynamicRowEntity { Id = 1, Renamed = "x", Extra = new() { ["physical_name"] = "y" } })
             .ToSql();
 
@@ -557,7 +557,7 @@ public class DynamicColumnsWriteTests
         using var ctx = new TestContext();
         var quoted = new DynamicRowEntity { Id = 1, Extra = new() { ["a\"b"] = 1 } };
 
-        var sql = ctx.InsertInto<DynamicRowEntity>().Values(quoted).ToSql();
+        var sql = ctx.CreateInsertBuilder<DynamicRowEntity>().Values(quoted).ToSql();
 
         // The embedded quote is doubled by QuoteIdentifier; the raw "a"b" never reaches the SQL text.
         sql.Should().Contain("\"a\"\"b\"");
@@ -567,7 +567,7 @@ public class DynamicColumnsWriteTests
         using var bracketCtx = new BracketContext();
         var bracketed = new DynamicRowEntity { Id = 1, Extra = new() { ["c]d"] = 2 } };
 
-        var bracketSql = bracketCtx.InsertInto<DynamicRowEntity>().Values(bracketed).ToSql();
+        var bracketSql = bracketCtx.CreateInsertBuilder<DynamicRowEntity>().Values(bracketed).ToSql();
 
         bracketSql.Should().Contain("[c]]d]");
         bracketSql.Should().NotContain("[c]d]");
@@ -581,7 +581,7 @@ public class DynamicColumnsWriteTests
 
         // The store is the only writable non-key column: the key upsert must not reject the merge for
         // having no mapped column to update, and the dynamic key must reach the SET list.
-        var sql = ctx.MergeInto<StoreOnlyRowEntity>()
+        var sql = ctx.CreateMergeBuilder<StoreOnlyRowEntity>()
             .Using(entity)
             .OnKeys()
             .WhenMatchedUpdate()
@@ -595,7 +595,7 @@ public class DynamicColumnsWriteTests
         // selector-less update branch has no mapped column left (the key is skipped), so the dynamic
         // store must supply it. The dynamic key extends the derived source, the INSERT and the SET,
         // and never the ON match.
-        var fullMerge = ctx.MergeInto<StoreOnlyRowEntity>()
+        var fullMerge = ctx.CreateMergeBuilder<StoreOnlyRowEntity>()
             .Using(entity)
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -623,7 +623,7 @@ public class DynamicColumnsWriteTests
         // USING source, so OnKeys rejects it explicitly instead of rendering an ON that references a
         // source column which does not exist. This is a match-key constraint, not the source/selection
         // guard a store-only entity relaxes.
-        var act = () => ctx.MergeInto<IdentityStoreOnlyRowEntity>()
+        var act = () => ctx.CreateMergeBuilder<IdentityStoreOnlyRowEntity>()
             .Using(entity)
             .OnKeys();
 
@@ -639,10 +639,10 @@ public class DynamicColumnsWriteTests
         // The On(...) path reaches the same rejection as OnKeys: the identity key is absent from the
         // VALUES-derived source, so matching on it is not expressible. The check now lives in
         // BuildCommand (not in On(...)), because a query source projects the identity column and is valid.
-        var onKeys = () => ctx.MergeInto<IdentityStoreOnlyRowEntity>().Using(entity).OnKeys();
+        var onKeys = () => ctx.CreateMergeBuilder<IdentityStoreOnlyRowEntity>().Using(entity).OnKeys();
         onKeys.Should().Throw<NotSupportedException>();
 
-        var on = () => ctx.MergeInto<IdentityStoreOnlyRowEntity>()
+        var on = () => ctx.CreateMergeBuilder<IdentityStoreOnlyRowEntity>()
             .Using(entity)
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()
@@ -662,7 +662,7 @@ public class DynamicColumnsWriteTests
         // The guard belongs to BuildCommand, not On(...), so it catches the store-only identity key
         // whatever the On/Using call order: the source is VALUES-derived either way and never declares
         // the generated Id column.
-        var usingFirst = () => ctx.MergeInto<IdentityStoreOnlyRowEntity>()
+        var usingFirst = () => ctx.CreateMergeBuilder<IdentityStoreOnlyRowEntity>()
             .Using(new IdentityStoreOnlyRowEntity { Id = 1, Extra = new() { ["alpha"] = 1 } })
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()
@@ -671,7 +671,7 @@ public class DynamicColumnsWriteTests
 
         usingFirst.Should().Throw<NotSupportedException>().WithMessage("*is not a column of the VALUES-derived merge source*");
 
-        var onFirst = () => ctx.MergeInto<IdentityStoreOnlyRowEntity>()
+        var onFirst = () => ctx.CreateMergeBuilder<IdentityStoreOnlyRowEntity>()
             .On((t, s) => t.Id == s.Id)
             .Using(new IdentityStoreOnlyRowEntity { Id = 1, Extra = new() { ["alpha"] = 1 } })
             .WhenMatched().ThenUpdate()
@@ -689,7 +689,7 @@ public class DynamicColumnsWriteTests
         // A store-only entity whose store is empty (or null) supplies no dynamic column, so a key upsert
         // has nothing to update: it must report the missing non-key column, not the misleading
         // "No source rows were specified" guard. The mapped key means the source is not actually absent.
-        var emptyStore = () => ctx.MergeInto<StoreOnlyRowEntity>()
+        var emptyStore = () => ctx.CreateMergeBuilder<StoreOnlyRowEntity>()
             .Using(new StoreOnlyRowEntity { Id = 1, Extra = new() })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -699,7 +699,7 @@ public class DynamicColumnsWriteTests
         var emptyEx = emptyStore.Should().Throw<NotSupportedException>().Which;
         emptyEx.Message.Should().NotContain("No source rows");
 
-        var nullStore = () => ctx.MergeInto<StoreOnlyRowEntity>()
+        var nullStore = () => ctx.CreateMergeBuilder<StoreOnlyRowEntity>()
             .Using(new StoreOnlyRowEntity { Id = 2, Extra = null! })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -721,7 +721,7 @@ public class DynamicColumnsWriteTests
         // guard rejected every store-only entity (the store supplied no mapped selection) even though
         // this match is valid; it has been removed and the guard now lives in BuildCommand, which only
         // rejects source columns absent from the derived source (see the identity case below).
-        var sql = ctx.MergeInto<StoreOnlyRowEntity>()
+        var sql = ctx.CreateMergeBuilder<StoreOnlyRowEntity>()
             .Using(entity)
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()

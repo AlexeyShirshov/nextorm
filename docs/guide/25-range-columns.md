@@ -52,7 +52,7 @@ Both columns must be nullable so an unbounded side can be stored as `NULL`.
 A pair property reads and writes like any other property. Writing a `Range<int>(1, 10)` stores `1` and `10` in the two columns; reading rebuilds `new Range<int>(lower, upper, …, lowerIsNull, upperIsNull, …)` with the mapping's inclusivity:
 
 ```csharp
-ctx.InsertInto<Reservation>()
+ctx.CreateInsertBuilder<Reservation>()
     .Values(new Reservation { Id = 1, During = new Range<int>(1, 10) })
     .Insert();
 
@@ -137,7 +137,7 @@ The `<=`/`>=` terms carry the boundary equality; with another inclusivity the eq
 * **An empty range cannot be represented.** A pair of `NULL` bounds is the *unbounded* range, so `Range<T>.Empty` is rejected on write and during translation with a `NotSupportedException`.
 * **Range-returning operators are rejected.** `range_union`, `range_intersection`, `range_difference`, the range constructors and the `range_agg`/`range_intersect_agg` aggregates have no scalar form over a pair; they raise a `NotSupportedException`. Use PostgreSQL when you need them.
 * **Multiranges are not a pair.** A `Range<T>[]` maps only to a native PostgreSQL multirange column.
-* **Selector-based writes and returning are rejected.** `InsertInto<T>().Value(x => x.During, …)`, a mapping-based `Values(source, mapping)` and `Returning(x => x.During)` address a single column and raise a `NotSupportedException`; use the entity-value forms instead.
+* **Selector-based writes and returning are rejected.** `CreateInsertBuilder<T>().Value(x => x.During, …)`, a mapping-based `Values(source, mapping)` and `Returning(x => x.During)` address a single column and raise a `NotSupportedException`; use the entity-value forms instead.
 * A `[RangeColumns]` property cannot be combined with `[ValueConverter]` or `[JsonColumn]`.
 
 ## See also

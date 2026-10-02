@@ -92,7 +92,7 @@ public class SqliteBenchmarkWriteJson
             var take = Math.Min(InsertBatchSize, rows.Length - offset);
             var batch = new JsonBenchEntity[take];
             Array.Copy(rows, offset, batch, 0, take);
-            _db.InsertInto<JsonBenchEntity>().Values(batch).Insert();
+            _db.CreateInsertBuilder<JsonBenchEntity>().Values(batch).Insert();
         }
     }
 

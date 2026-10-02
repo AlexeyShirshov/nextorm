@@ -84,7 +84,7 @@ public sealed class EfQueryFilterFailClosedTests : EfCoreMetadataCleanup
 
         // Build the key-upsert commands while the imported metadata is still present; the builders have
         // already captured the EF mapping, so they can be rendered after the metadata is dropped.
-        var upsert = next.MergeInto<FailClosedRow>()
+        var upsert = next.CreateMergeBuilder<FailClosedRow>()
             .Using(new FailClosedRow { Id = 1, TenantId = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -92,7 +92,7 @@ public sealed class EfQueryFilterFailClosedTests : EfCoreMetadataCleanup
 
         // An explicit IgnoreFilters() skips the metadata-resolution guard, so this arm reaches the
         // context-wide DML render guard in MakeMerge; either way the context must fail closed.
-        var ignoredUpsert = next.MergeInto<FailClosedRow>()
+        var ignoredUpsert = next.CreateMergeBuilder<FailClosedRow>()
             .IgnoreFilters()
             .Using(new FailClosedRow { Id = 2, TenantId = 1 })
             .OnKeys()

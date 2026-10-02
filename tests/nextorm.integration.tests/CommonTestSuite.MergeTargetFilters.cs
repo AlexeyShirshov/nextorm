@@ -24,7 +24,7 @@ public abstract partial class CommonTestSuite
     }
 
     private void SeedMergeTargetFilterRows(params MergeTargetFilterEntity[] rows)
-        => _sut.DataProvider.InsertInto<MergeTargetFilterEntity>().IgnoreFilters().Values(rows).Insert();
+        => _sut.DataProvider.CreateInsertBuilder<MergeTargetFilterEntity>().IgnoreFilters().Values(rows).Insert();
 
     private string? MergeTargetFilterName(int id)
         => _sut.DataProvider.From<MergeTargetFilterEntity>()
@@ -41,7 +41,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(new MergeTargetFilterEntity { Id = MergeTargetFilterKey(), Name = "x", Age = 200 })
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -58,7 +58,7 @@ public abstract partial class CommonTestSuite
             new MergeTargetFilterEntity { Id = visibleId, Name = "visible-old", Age = 150 },
             new MergeTargetFilterEntity { Id = hiddenId, Name = "hidden", Age = 10 });
 
-        ctx.MergeInto<MergeTargetFilterEntity>()
+        ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = visibleId, Name = "visible-new", Age = 200 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -84,7 +84,7 @@ public abstract partial class CommonTestSuite
         Exception? captured = null;
         try
         {
-            ctx.MergeInto<MergeTargetFilterEntity>()
+            ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(new MergeTargetFilterEntity { Id = hiddenId, Name = "incoming", Age = 200 })
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -115,7 +115,7 @@ public abstract partial class CommonTestSuite
 
         // A matched delete with no insert branch: the hidden row is filtered out of the match, so the
         // delete must not reach it.
-        ctx.MergeInto<MergeTargetFilterEntity>()
+        ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = hiddenId, Name = "x", Age = 200 })
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -141,7 +141,7 @@ public abstract partial class CommonTestSuite
 
         // The stale-target delete arm must exclude hidden rows, otherwise a full-sync MERGE would wipe
         // them.
-        ctx.MergeInto<MergeTargetFilterEntity>()
+        ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = visibleId, Name = "visible-new", Age = 150 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -165,7 +165,7 @@ public abstract partial class CommonTestSuite
             var visibleId = MergeTargetFilterKey();
             SeedMergeTargetFilterRows(new MergeTargetFilterEntity { Id = visibleId, Name = "old", Age = 150 });
 
-            ctx.MergeInto<MergeTargetFilterEntity>()
+            ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(new MergeTargetFilterEntity { Id = visibleId, Name = "new", Age = 200 })
                 .OnKeys()
                 .WhenMatchedUpdate()
@@ -177,7 +177,7 @@ public abstract partial class CommonTestSuite
         }
 
         // ON CONFLICT / ON DUPLICATE KEY / ClickHouse: the filtered upsert refuses before any read.
-        var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = MergeTargetFilterKey(), Name = "x", Age = 200 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -199,7 +199,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(new MergeTargetFilterEntity { Id = id, Name = "x", Age = 10 })
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -210,7 +210,7 @@ public abstract partial class CommonTestSuite
 
         ConfigureMergeTargetFilter(ctx, minAge: 100);
 
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = id, Name = "x", Age = 10 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -230,7 +230,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(new MergeTargetFilterEntity { Id = id, Name = "x", Age = 10 })
                 .OnKeys()
                 .WhenMatched().ThenDelete()
@@ -242,7 +242,7 @@ public abstract partial class CommonTestSuite
         ConfigureMergeTargetFilter(ctx, minAge: 100);
         SeedMergeTargetFilterRows(new MergeTargetFilterEntity { Id = id, Name = "keep", Age = 10 });
 
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = id, Name = "x", Age = 10 })
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -267,7 +267,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == visibleId))
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -282,7 +282,7 @@ public abstract partial class CommonTestSuite
             new MergeTargetFilterEntity { Id = visibleId, Name = "visible-old", Age = 150 },
             new MergeTargetFilterEntity { Id = hiddenId, Name = "hidden", Age = 10 });
 
-        ctx.MergeInto<MergeTargetFilterEntity>()
+        ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == visibleId))
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -302,7 +302,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == id))
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -314,7 +314,7 @@ public abstract partial class CommonTestSuite
         ConfigureMergeTargetFilter(ctx, minAge: 100);
         SeedMergeTargetFilterRows(new MergeTargetFilterEntity { Id = id, Name = "keep", Age = 10 });
 
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == id))
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -333,7 +333,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == id))
                 .OnKeys()
                 .WhenMatched().ThenDelete()
@@ -345,7 +345,7 @@ public abstract partial class CommonTestSuite
         ConfigureMergeTargetFilter(ctx, minAge: 100);
         SeedMergeTargetFilterRows(new MergeTargetFilterEntity { Id = id, Name = "keep", Age = 10 });
 
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == id))
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -370,7 +370,7 @@ public abstract partial class CommonTestSuite
         var source = ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == id);
         if (dialect.SupportsMergeStatement)
         {
-            ctx.MergeInto<MergeTargetFilterEntity>()
+            ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(source)
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -380,7 +380,7 @@ public abstract partial class CommonTestSuite
         }
         else
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using(source)
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -400,7 +400,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterNullableEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterNullableEntity>()
                 .Using(new MergeTargetFilterNullableEntity { Id = id, Name = "x", Age = null })
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -412,7 +412,7 @@ public abstract partial class CommonTestSuite
 
         ConfigureMergeTargetFilter(ctx, minAge: 100);
 
-        var act = () => ctx.MergeInto<MergeTargetFilterNullableEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterNullableEntity>()
             .Using(new MergeTargetFilterNullableEntity { Id = id, Name = "x", Age = null })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -434,7 +434,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<MergeTargetFilterEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
                 .Using([
                     new MergeTargetFilterEntity { Id = visibleId, Name = "updated", Age = 150 },
                     new MergeTargetFilterEntity { Id = newId, Name = "bad", Age = 10 },
@@ -450,7 +450,7 @@ public abstract partial class CommonTestSuite
         ConfigureMergeTargetFilter(ctx, minAge: 100);
         SeedMergeTargetFilterRows(new MergeTargetFilterEntity { Id = visibleId, Name = "old", Age = 150 });
 
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using([
                 new MergeTargetFilterEntity { Id = visibleId, Name = "updated", Age = 150 },
                 new MergeTargetFilterEntity { Id = newId, Name = "bad", Age = 10 },
@@ -479,7 +479,7 @@ public abstract partial class CommonTestSuite
         SeedMergeTargetFilterRows(new MergeTargetFilterEntity { Id = id, Name = "old", Age = 150 });
 
         // 1. filtered full MERGE updates the visible row.
-        ctx.MergeInto<MergeTargetFilterEntity>()
+        ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = id, Name = "v1", Age = 150 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -488,7 +488,7 @@ public abstract partial class CommonTestSuite
         MergeTargetFilterName(id).Should().Be("v1", "the active filter still matches the visible row");
 
         // 2. IgnoreFilters writes a below-threshold row; the bypass is local to this call.
-        ctx.MergeInto<MergeTargetFilterEntity>()
+        ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = id, Name = "ignored", Age = 10 })
             .IgnoreFilters()
             .OnKeys()
@@ -499,7 +499,7 @@ public abstract partial class CommonTestSuite
 
         // 3. the next unfiltered call sees the filter active again: no predicate, parameter or
         //    shared-command state leaks out of the bypass.
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(new MergeTargetFilterEntity { Id = id, Name = "x", Age = 10 })
             .OnKeys()
             .WhenMatched().ThenUpdate()

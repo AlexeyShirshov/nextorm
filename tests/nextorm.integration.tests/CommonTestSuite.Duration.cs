@@ -61,10 +61,10 @@ public abstract partial class CommonTestSuite
         {
             // Whole-second values only: MySQL/MariaDB's bare TIME stores no fractional part.
             var value = TimeSpan.FromSeconds(90);
-            ctx.InsertInto<IDurationProbe>()
+            ctx.CreateInsertBuilder<IDurationProbe>()
                 .Values(new DurationProbe { Id = 1, Span = value, SpanSeconds = value, SpanNull = TimeSpan.FromSeconds(2) })
                 .Insert();
-            ctx.InsertInto<IDurationProbe>()
+            ctx.CreateInsertBuilder<IDurationProbe>()
                 .Values(new DurationProbe { Id = 2, Span = TimeSpan.FromSeconds(30), SpanSeconds = TimeSpan.FromSeconds(30), SpanNull = null })
                 .Insert();
 
@@ -79,7 +79,7 @@ public abstract partial class CommonTestSuite
 
             // Bulk insert uses the provider's native path where available (SqlBulkCopy) and the
             // portable path otherwise; both must store the declared unit.
-            ctx.BulkInsertInto<IDurationProbe>()
+            ctx.CreateBulkInsertBuilder<IDurationProbe>()
                 .Values([
                     new DurationProbe { Id = 3, Span = TimeSpan.FromSeconds(45), SpanSeconds = TimeSpan.FromSeconds(45), SpanNull = null },
                     new DurationProbe { Id = 4, Span = TimeSpan.FromSeconds(75), SpanSeconds = TimeSpan.FromSeconds(75), SpanNull = TimeSpan.FromSeconds(5) },

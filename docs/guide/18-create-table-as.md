@@ -64,7 +64,7 @@ await tx.CommitAsync();
 A materialisation and the query that reads it can be sent as one batch — one round trip on one server session, which keeps a session-scoped table visible under a connection-level pooler. Use the general [`BatchBuilder`](xref:NextORM.Core.BatchBuilder); it is covered in [Executing statements in one batch](23-sql-batch.md).
 
 ```csharp
-var orders = ctx.Batch()
+var orders = ctx.CreateBatchBuilder()
     .CreateTempTable("recent_orders", ctx.From<IOrder>()
         .Where(x => x.Total > minTotal)
         .Select(x => new { x.Id, x.Total }))

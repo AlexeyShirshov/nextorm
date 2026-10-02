@@ -15,7 +15,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .ToSql()
             .Should().Be("delete from merge_entity where id = 1");
@@ -27,7 +27,7 @@ public class DeleteSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var id = 5L;
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == id)
             .ToSql()
             .Should().Be("delete from merge_entity where id = @id");
@@ -38,7 +38,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .All()
             .ToSql()
             .Should().Be("delete from merge_entity");
@@ -49,7 +49,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.CreateQuoted();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .ToSql()
             .Should().Be("delete from \"merge_entity\" where \"id\" = 1");
@@ -60,7 +60,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => ctx.DeleteFrom<IMergeEntity>().ToSql();
+        var act = () => ctx.CreateDeleteBuilder<IMergeEntity>().ToSql();
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -70,7 +70,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .Returning()
             .ToSql()
@@ -82,7 +82,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .Returning(x => new { x.Id, x.Name })
             .ToSql()
@@ -94,7 +94,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .All()
             .Returning(x => x.Id)
             .ToSql()
@@ -106,7 +106,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.Truncate<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
+        ctx.CreateTruncateBuilder<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.CreateQuoted();
 
-        ctx.Truncate<IMergeEntity>().ToSql().Should().Be("truncate table \"merge_entity\"");
+        ctx.CreateTruncateBuilder<IMergeEntity>().ToSql().Should().Be("truncate table \"merge_entity\"");
     }
 
     [Fact]
@@ -207,7 +207,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.With("del", ctx.DeleteFrom<IMergeEntity>()
+        SqlOf(ctx, ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
                 .Where(x => x.Id == 1)
                 .Returning(x => new { x.Id, x.Name }))
             .From("del")

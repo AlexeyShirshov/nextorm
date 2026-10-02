@@ -17,7 +17,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .ToSql()
             .Should().Be("update merge_entity as `t1` join merge_entity as `t2` on t1.id = t2.id set t1.name = @p0");
@@ -33,7 +33,7 @@ public class UpdateJoinSqlGenerationTests
 
         var sql = e
             .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
@@ -48,7 +48,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Id, p => p.Item2.Id)
             .Where(p => p.Item1.Id == 1)
             .ToSql()

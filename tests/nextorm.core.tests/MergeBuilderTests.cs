@@ -13,7 +13,7 @@ public class MergeBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var toSql = () => ctx.MergeInto<ConventionalEntity>()
+        var toSql = () => ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -30,7 +30,7 @@ public class MergeBuilderTests
         var rows = new List<ConventionalEntity>();
         ctx.Data[typeof(ConventionalEntity)] = rows;
 
-        var affected = ctx.MergeInto<ConventionalEntity>()
+        var affected = ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -49,7 +49,7 @@ public class MergeBuilderTests
         var rows = new List<ConventionalEntity> { new() { Id = 1, Name = "old" } };
         ctx.Data[typeof(ConventionalEntity)] = rows;
 
-        var affected = ctx.MergeInto<ConventionalEntity>()
+        var affected = ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "new" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -68,7 +68,7 @@ public class MergeBuilderTests
         var rows = new List<ConventionalEntity> { new() { Id = 1, Name = "old" } };
         ctx.Data[typeof(ConventionalEntity)] = rows;
 
-        var affected = ctx.MergeInto<ConventionalEntity>()
+        var affected = ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using([
                 new ConventionalEntity { Id = 1, Name = "new" },
                 new ConventionalEntity { Id = 2, Name = "b" },
@@ -90,7 +90,7 @@ public class MergeBuilderTests
         using var ctx = new InMemoryDataContext();
         ctx.Data[typeof(ConventionalEntity)] = new List<ConventionalEntity>();
 
-        var affected = await ctx.MergeInto<ConventionalEntity>()
+        var affected = await ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -105,7 +105,7 @@ public class MergeBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.MergeInto<ConventionalEntity>()
+        var act = () => ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -120,7 +120,7 @@ public class MergeBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.MergeInto<ConventionalEntity>()
+        var act = () => ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
             .Merge();
@@ -133,7 +133,7 @@ public class MergeBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.MergeInto<ConventionalEntity>()
+        var act = () => ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate(x => new { x.Id, x.Name })
@@ -147,7 +147,7 @@ public class MergeBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.MergeInto<NoKeyEntity>()
+        var act = () => ctx.CreateMergeBuilder<NoKeyEntity>()
             .Using(new NoKeyEntity { Name = "a" })
             .OnKeys();
 
@@ -161,7 +161,7 @@ public class MergeBuilderTests
         var rows = new List<ConventionalEntity>();
         ctx.Data[typeof(ConventionalEntity)] = rows;
 
-        await ctx.MergeInto<ConventionalEntity>()
+        await ctx.CreateMergeBuilder<ConventionalEntity>()
             .Using(new ConventionalEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -176,7 +176,7 @@ public class MergeBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.MergeInto<ConventionalEntity>().Using([]);
+        var act = () => ctx.CreateMergeBuilder<ConventionalEntity>().Using([]);
 
         act.Should().Throw<ArgumentException>();
     }

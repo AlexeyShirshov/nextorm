@@ -54,7 +54,7 @@ public sealed class ClickHouseMergeTargetFilterRefusalTests : ProviderTestSuite
         var id = NextId();
 
         // The query source would require a real read; the capability refusal must happen before it.
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == id))
             .OnKeys()
             .WhenMatchedUpdate()
@@ -73,7 +73,7 @@ public sealed class ClickHouseMergeTargetFilterRefusalTests : ProviderTestSuite
         using var _ = ctx;
         var id = NextId();
 
-        var act = () => ctx.MergeInto<MergeTargetFilterEntity>()
+        var act = () => ctx.CreateMergeBuilder<MergeTargetFilterEntity>()
             .Using(ctx.From<MergeTargetFilterEntity>().IgnoreFilters().Where(x => x.Id == id))
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()

@@ -436,7 +436,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         ConfigureSelective(ctx);
 
-        var sql = Normalize(ctx.Update<FilterSelectiveEntity>()
+        var sql = Normalize(ctx.CreateUpdateBuilder<FilterSelectiveEntity>()
             .Set(x => x.IsDeleted, true)
             .Where(x => x.Id > 10)
             .ToSql());
@@ -452,7 +452,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         ConfigureSelective(ctx);
 
-        var sql = Normalize(ctx.Update<FilterSelectiveEntity>()
+        var sql = Normalize(ctx.CreateUpdateBuilder<FilterSelectiveEntity>()
             .Set(x => x.IsDeleted, true)
             .Where(x => x.Id > 10)
             .IgnoreFilters(["tenant"])
@@ -472,7 +472,7 @@ public class QueryFilterSqlGenerationTests
         ConfigureSelective(ctx);
 
         var sql = Normalize(RenderMutation(ctx,
-            ctx.Update<FilterSelectiveEntity>().BuildEntityCommand(new FilterSelectiveEntity { Id = 3 })));
+            ctx.CreateUpdateBuilder<FilterSelectiveEntity>().BuildEntityCommand(new FilterSelectiveEntity { Id = 3 })));
 
         sql.Should().Contain("where id = $");
         sql.Should().Contain("id > 5");
@@ -486,7 +486,7 @@ public class QueryFilterSqlGenerationTests
         ConfigureSelective(ctx);
 
         var sql = Normalize(RenderMutation(ctx,
-            ctx.Update<FilterSelectiveEntity>()
+            ctx.CreateUpdateBuilder<FilterSelectiveEntity>()
                 .Where(x => x.Id > 10)
                 .BuildEntityCommand(new FilterSelectiveEntity { Id = 3 })));
 
@@ -505,7 +505,7 @@ public class QueryFilterSqlGenerationTests
         ConfigureSelective(ctx);
 
         var sql = Normalize(RenderMutation(ctx,
-            ctx.Update<FilterSelectiveEntity>().IgnoreFilters().BuildEntityCommand(new FilterSelectiveEntity { Id = 3 })));
+            ctx.CreateUpdateBuilder<FilterSelectiveEntity>().IgnoreFilters().BuildEntityCommand(new FilterSelectiveEntity { Id = 3 })));
 
         sql.Should().Contain("where id = $");
         sql.Should().NotContain("id > 5");
@@ -518,7 +518,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         ConfigureSelective(ctx);
 
-        var sql = Normalize(ctx.DeleteFrom<FilterSelectiveEntity>().Where(x => x.Id > 10).ToSql());
+        var sql = Normalize(ctx.CreateDeleteBuilder<FilterSelectiveEntity>().Where(x => x.Id > 10).ToSql());
 
         sql.Should().Contain("id > 10");
         sql.Should().Contain("id > 5");
@@ -532,7 +532,7 @@ public class QueryFilterSqlGenerationTests
         ConfigureSelective(ctx);
 
         var sql = Normalize(RenderMutation(ctx,
-            ctx.DeleteFrom<FilterSelectiveEntity>().BuildKeyCommand(new FilterSelectiveEntity { Id = 3 })));
+            ctx.CreateDeleteBuilder<FilterSelectiveEntity>().BuildKeyCommand(new FilterSelectiveEntity { Id = 3 })));
 
         sql.Should().Contain("where id = $");
         sql.Should().Contain("id > 5");
@@ -546,9 +546,9 @@ public class QueryFilterSqlGenerationTests
         ConfigureSelective(ctx);
 
         var named = Normalize(RenderMutation(ctx,
-            ctx.DeleteFrom<FilterSelectiveEntity>().IgnoreFilters(["tenant"]).BuildKeyCommand(new FilterSelectiveEntity { Id = 3 })));
+            ctx.CreateDeleteBuilder<FilterSelectiveEntity>().IgnoreFilters(["tenant"]).BuildKeyCommand(new FilterSelectiveEntity { Id = 3 })));
         var anonymous = Normalize(RenderMutation(ctx,
-            ctx.DeleteFrom<FilterSelectiveEntity>().IgnoreFilters([QueryFilters.AnonymousKey]).BuildKeyCommand(new FilterSelectiveEntity { Id = 3 })));
+            ctx.CreateDeleteBuilder<FilterSelectiveEntity>().IgnoreFilters([QueryFilters.AnonymousKey]).BuildKeyCommand(new FilterSelectiveEntity { Id = 3 })));
 
         named.Should().Contain("id > 5");
         named.Should().NotContain("tenant_id");
@@ -562,7 +562,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         ConfigureSelective(ctx);
 
-        var sql = Normalize(ctx.DeleteFrom<FilterSelectiveEntity>().All().ToSql());
+        var sql = Normalize(ctx.CreateDeleteBuilder<FilterSelectiveEntity>().All().ToSql());
 
         sql.Should().Be("delete from filter_selective_entity");
     }
@@ -590,7 +590,7 @@ public class QueryFilterSqlGenerationTests
 
         var sql = Normalize(ctx.From<FilterDmlTargetEntity>()
             .Join(ctx.From<FilterDmlRightEntity>(), (l, r) => l.Id == r.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.TenantId, 9)
             .ToSql());
 
@@ -606,7 +606,7 @@ public class QueryFilterSqlGenerationTests
 
         var sql = Normalize(ctx.From<FilterDmlTargetEntity>()
             .Join(ctx.From<FilterDmlRightEntity>(), (l, r) => l.Id == r.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .IgnoreFilters(typeof(FilterDmlTargetEntity))
             .Set(p => p.Item1.TenantId, 9)
             .ToSql());
@@ -623,7 +623,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         ConfigureDmlTarget(ctx);
 
-        var sql = Normalize(ctx.InsertInto<FilterDmlTargetEntity>()
+        var sql = Normalize(ctx.CreateInsertBuilder<FilterDmlTargetEntity>()
             .Values(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
             .ToSql());
 
@@ -639,7 +639,7 @@ public class QueryFilterSqlGenerationTests
         ctx.From<FilterInsertSourceEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[DmlTenantKey]));
 
-        var sql = Normalize(ctx.InsertInto<FilterDmlTargetEntity>()
+        var sql = Normalize(ctx.CreateInsertBuilder<FilterDmlTargetEntity>()
             .Values(
                 ctx.From<FilterInsertSourceEntity>().Where(x => x.Id > 0),
                 s => new FilterDmlTargetEntity { Id = s.Id, TenantId = s.TenantId })
@@ -658,7 +658,7 @@ public class QueryFilterSqlGenerationTests
         // #123: the ON CONFLICT key upsert cannot isolate a filtered-out target row atomically, so an
         // active target filter refuses instead of silently bypassing it (the old assertion expected the
         // native unfiltered SQL).
-        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<FilterDmlTargetEntity>()
             .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -675,7 +675,7 @@ public class QueryFilterSqlGenerationTests
         ConfigureDmlTarget(ctx);
 
         // Control for the refusal above: IgnoreFilters opts out and restores the pre-change SQL.
-        var sql = Normalize(ctx.MergeInto<FilterDmlTargetEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<FilterDmlTargetEntity>()
             .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
             .IgnoreFilters()
             .OnKeys()
@@ -730,7 +730,7 @@ public class QueryFilterSqlGenerationTests
         var (ctx, connection, query) = CreateCountedContext();
         using var _ = ctx;
 
-        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<FilterDmlTargetEntity>()
             .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -749,7 +749,7 @@ public class QueryFilterSqlGenerationTests
     {
         var (ctx, connection, query) = CreateCountedContext();
         using var _ = ctx;
-        var command = ctx.MergeInto<FilterDmlTargetEntity>()
+        var command = ctx.CreateMergeBuilder<FilterDmlTargetEntity>()
             .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -785,7 +785,7 @@ public class QueryFilterSqlGenerationTests
             ctx.EnsureConnectionOpen();
             ConfigureDmlTarget(ctx);
 
-            var act = () => ctx.InsertInto<FilterDmlTargetEntity>()
+            var act = () => ctx.CreateInsertBuilder<FilterDmlTargetEntity>()
                 .Values(ctx.From<FilterInsertAllSourceEntity>(), s => new FilterDmlTargetEntity { Id = s.Id, TenantId = s.TenantId })
                 .Insert();
 
@@ -1024,7 +1024,7 @@ public class QueryFilterSqlGenerationTests
         var (ctx, connection, query) = CreateCountedContext();
         using var _ = ctx;
 
-        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<FilterDmlTargetEntity>()
             .Using(ctx.From<FilterDmlTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
             .On((t, s) => t.Id == s.Id)
             .Merge();
@@ -1039,7 +1039,7 @@ public class QueryFilterSqlGenerationTests
     {
         var (ctx, connection, query) = CreateCountedContext();
         using var _ = ctx;
-        var command = ctx.MergeInto<FilterDmlTargetEntity>()
+        var command = ctx.CreateMergeBuilder<FilterDmlTargetEntity>()
             .Using(ctx.From<FilterDmlTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
             .On((t, s) => t.Id == s.Id);
 
@@ -1056,7 +1056,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         ConfigureDmlTarget(ctx);
 
-        var act = () => ctx.MergeInto<FilterDmlTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<FilterDmlTargetEntity>()
             .Using(new FilterDmlTargetEntity { Id = 1, TenantId = 1 })
             .IgnoreFilters()
             .On((t, s) => t.Id == s.Id)
@@ -1072,7 +1072,7 @@ public class QueryFilterSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.MergeInto<BranchlessPlainEntity>()
+        var act = () => ctx.CreateMergeBuilder<BranchlessPlainEntity>()
             .Using(new BranchlessPlainEntity { Id = 1, TenantId = 1 })
             .On((t, s) => t.Id == s.Id)
             .ToSql();

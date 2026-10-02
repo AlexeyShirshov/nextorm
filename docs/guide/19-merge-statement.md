@@ -1,12 +1,12 @@
 # Data merging (`MERGE` / upsert)
 
-> nextorm builds a `MERGE` (upsert) through [`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): one entry point covers both the portable **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and the general, multi-branch **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> nextorm builds a `MERGE` (upsert) through [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): one entry point covers both the portable **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and the general, multi-branch **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
 
 **Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../providers/overview.md)
 
 ## Overview
 
-`MergeInto<TEntity>()` writes a source row set into the target table and lets the database decide, row by row, what to do. The source is a mapped entity, a batch, or a server-side query; the match is either the declared key (`OnKeys()`) or an arbitrary condition (`On(...)`); and the actions are attached as branches. `Merge()`/`MergeAsync()` execute and return the affected-row count, while `ToSql()` renders the statement without a connection.
+`CreateMergeBuilder<TEntity>()` writes a source row set into the target table and lets the database decide, row by row, what to do. The source is a mapped entity, a batch, or a server-side query; the match is either the declared key (`OnKeys()`) or an arbitrary condition (`On(...)`); and the actions are attached as branches. `Merge()`/`MergeAsync()` execute and return the affected-row count, while `ToSql()` renders the statement without a connection.
 
 Two forms share the same builder:
 
@@ -15,10 +15,10 @@ Two forms share the same builder:
 
 ## Upsert (key merge)
 
-[`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) writes a source row set into the table and lets the database decide, per declared key, whether to update the existing row or insert a new one. The source is a single mapped entity or a batch, the match key is resolved from the entity mapping with `OnKeys()`, and both branches — `WhenMatchedUpdate()` (set every non-key writable column from the source) and `WhenNotMatchedInsert()` — are required:
+[`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) writes a source row set into the table and lets the database decide, per declared key, whether to update the existing row or insert a new one. The source is a single mapped entity or a batch, the match key is resolved from the entity mapping with `OnKeys()`, and both branches — `WhenMatchedUpdate()` (set every non-key writable column from the source) and `WhenNotMatchedInsert()` — are required:
 
 ```csharp
-ctx.MergeInto<ISimpleEntity>()
+ctx.CreateMergeBuilder<ISimpleEntity>()
     .Using(new SimpleEntity { Id = 1, Name = "a" })   // or Using(new[] { e1, e2 })
     .OnKeys()
     .WhenMatchedUpdate()
@@ -57,7 +57,7 @@ merge into simple_entity as target using (values (@p0, @p1)) as source (id, name
 [`WhenMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenMatched) / [`WhenNotMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatched) / [`WhenNotMatchedBySource()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatchedBySource) extend the same builder into a general, multi-branch `MERGE` on the providers that render it natively (SQL Server, PostgreSQL; server 15+). Each branch is finished with an action, and the branches run in the order they are declared:
 
 ```csharp
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(source)                            // entity, batch, or a query: Using(ctx.From<IDest>().Where(...))
     .OnKeys()                                 // or .On((t, s) => t.Id == s.Id && s.Age > 0)
     .WhenMatched().ThenUpdate()               // or .WhenMatched((t, s) => t.Name != s.Name).ThenUpdate()
@@ -79,7 +79,7 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 
 ```csharp
 // unsupported: Total is computed, so the VALUES source declares no Total column
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(new Dest { Name = "a" })
     .On((t, s) => t.Name == s.Name && s.Total > 0)
     .WhenMatched().ThenUpdate()
@@ -87,7 +87,7 @@ ctx.MergeInto<IDest>()
     .ToSql();   // NotSupportedException
 
 // supported: a query source projects the whole row, including Total
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(ctx.From<IDest>())
     .On((t, s) => t.Name == s.Name && s.Total > 0)
     .WhenMatched().ThenUpdate()
@@ -114,7 +114,7 @@ Under an active [global query filter](../advanced/query-filters.md), the full `M
 [`Returning()`](xref:NextORM.Core.MergeBuilder`1.Returning) and [`Returning(x => new { ... })`](xref:NextORM.Core.MergeBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) materialise the merged rows through the provider's output clause. Read them with `Single()`/`SingleAsync()`/`ToList()`/`ToListAsync()`:
 
 ```csharp
-var rows = ctx.MergeInto<IDest>()
+var rows = ctx.CreateMergeBuilder<IDest>()
     .Using(source)
     .OnKeys()
     .WhenMatched().ThenUpdate()
@@ -143,7 +143,7 @@ and PostgreSQL 17+ `RETURNING target.<col>`. MySQL/MariaDB have no row-returning
 [`ToSql()`](xref:NextORM.Core.MergeBuilder`1.ToSql) renders the parameterised SQL a `Merge()` would execute, without opening a connection:
 
 ```csharp
-var sql = ctx.MergeInto<ISimpleEntity>()
+var sql = ctx.CreateMergeBuilder<ISimpleEntity>()
     .Using(new SimpleEntity { Id = 1, Name = "a" })
     .OnKeys()
     .WhenMatchedUpdate()

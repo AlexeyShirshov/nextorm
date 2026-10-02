@@ -11,7 +11,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .ToSql()
             .Should().Be("delete from merge_entity where id = 1");
@@ -22,7 +22,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .All()
             .ToSql()
             .Should().Be("delete from merge_entity");
@@ -33,7 +33,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.CreateUppercase();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .ToSql()
             .Should().Be("DELETE FROM merge_entity WHERE id = 1");
@@ -44,7 +44,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .Returning()
             .ToSql()
@@ -56,7 +56,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .Returning(x => new { x.Id, x.Name })
             .ToSql()
@@ -68,7 +68,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .Returning(x => new { x.Id, x.Name })
             .OutputInto("audit_log")
@@ -81,7 +81,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.DeleteFrom<IMergeEntity>()
+        ctx.CreateDeleteBuilder<IMergeEntity>()
             .Where(x => x.Id == 1)
             .Returning(x => new { x.Id, x.Name })
             .OutputIntoThenOutput("audit_log")
@@ -94,7 +94,7 @@ public class DeleteSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.Truncate<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
+        ctx.CreateTruncateBuilder<IMergeEntity>().ToSql().Should().Be("truncate table merge_entity");
     }
 
     [Fact]

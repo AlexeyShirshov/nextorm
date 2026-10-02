@@ -178,7 +178,7 @@ var recent = dataContext
 
 dataContext.From<IOrder>()
     .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "archived")
     .Update();
 ```
@@ -321,7 +321,7 @@ read-CTE, инструкция, в `WITH` которой есть модифиц
 ```csharp
 // Тело UPDATE по одной таблице: обновляем, затем типизированно читаем обновлённые строки.
 var updated = dataContext
-    .With("upd", dataContext.Update<IOrder>()
+    .With("upd", dataContext.CreateUpdateBuilder<IOrder>()
         .Set(x => x.Total, 0)
         .Where(x => x.CustomerId == 7)
         .Returning(x => new { x.Id, x.Total }))

@@ -1,6 +1,6 @@
 # Bulk insert
 
-`BulkInsertInto<TEntity>()` writes a whole set in one explicit call, without change tracking. Where the
+`CreateBulkInsertBuilder<TEntity>()` writes a whole set in one explicit call, without change tracking. Where the
 provider has a native bulk API it is used — PostgreSQL binary `COPY` and SQL Server `SqlBulkCopy` —
 otherwise the set is written as a parameterised `INSERT ... VALUES`, optionally chunked.
 
@@ -48,7 +48,7 @@ var orders = new[]
 };
 
 // native COPY on PostgreSQL; portable INSERT ... VALUES on the other providers
-var written = ctx.BulkInsertInto<IOrder>().Values(orders).BulkInsert();
+var written = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).BulkInsert();
 // written == 3
 ```
 
@@ -77,7 +77,7 @@ A source streams only when you pass an `IAsyncEnumerable<TEntity>` **and** finis
 // any IAsyncEnumerable<IOrder> — a Channel reader, an async paging loop, EF's AsAsyncEnumerable(), ...
 IAsyncEnumerable<IOrder> ordersStream = ...;
 
-await ctx.BulkInsertInto<IOrder>()
+await ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(ordersStream)
     .BulkInsertAsync(cancellationToken);
 ```
@@ -114,7 +114,7 @@ in full first. nextorm reads the source exactly once and never disposes it. See
 shape can be copied into a differently named table without a second `[SqlTable]` mapping:
 
 ```csharp
-var written = ctx.BulkInsertInto<IOrder>(o => o.Table("archive", "orders_2024"))
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Table("archive", "orders_2024"))
     .Values(orders)
     .BulkInsert();
 ```
@@ -133,27 +133,27 @@ terminals are `ToList()` / `ToListAsync()`.
 
 ```csharp
 // keys only — ReturningKey<TKey>() reads the key column declared in metadata
-IReadOnlyList<int> ids = ctx.BulkInsertInto<IOrder>()
+IReadOnlyList<int> ids = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .ReturningKey<int>()
     .ToList();
 // ids = [1, 2, 3]
 
 // a projection per written row
-var rows = ctx.BulkInsertInto<IOrder>()
+var rows = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .Returning(o => new { o.Id, o.CustomerId })
     .ToList();
 // rows = [ { Id = 1, CustomerId = 1 }, { Id = 2, CustomerId = 2 }, ... ]
 
 // a single scalar projection
-IReadOnlyList<int> customerIds = ctx.BulkInsertInto<IOrder>()
+IReadOnlyList<int> customerIds = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .Returning(o => o.CustomerId)
     .ToList();
 
 // async
-IReadOnlyList<int> keys = await ctx.BulkInsertInto<IOrder>()
+IReadOnlyList<int> keys = await ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(ordersStream)
     .ReturningKey<int>()
     .ToListAsync(cancellationToken);
@@ -163,7 +163,7 @@ IReadOnlyList<int> keys = await ctx.BulkInsertInto<IOrder>()
 > `OUTPUT` promises it). Correlate rows by a business key, not by position:
 
 ```csharp
-var idByCustomer = ctx.BulkInsertInto<IOrder>()
+var idByCustomer = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .Returning(o => new { o.CustomerId, o.Id })
     .ToList()
@@ -174,18 +174,18 @@ var orderIdForCustomer2 = idByCustomer[2];
 
 `Returning*` requires a provider with `RETURNING`/`OUTPUT`: PostgreSQL and SQLite 3.35+ (via
 `RETURNING`) and SQL Server (via `OUTPUT`). MySQL, MariaDB and ClickHouse reject it with a clear
-`NotSupportedException` — read the keys with a plain `InsertInto` there.
+`NotSupportedException` — read the keys with a plain `CreateInsertBuilder` there.
 
 ## Bounding the batch and reporting progress
 
 The portable path sends the whole set as one statement by default. Chunk limits and progress are write
-options, passed to `BulkInsertInto<TEntity>` — either as a `BulkInsertOptions` record or through the
+options, passed to `CreateBulkInsertBuilder<TEntity>` — either as a `BulkInsertOptions` record or through the
 fluent `BulkInsertOptionsBuilder` callback:
 
 ```csharp
 var written = 0;
 
-await ctx.BulkInsertInto<IOrder>(o => o
+await ctx.CreateBulkInsertBuilder<IOrder>(o => o
         .MaxBatchSize(1_000)                                 // rows per statement
         .MaxParameters(20_000)                               // bound parameters per statement
         .NotifyAfter(10_000, (total, _) => written = total)) // called with the cumulative count
@@ -209,7 +209,7 @@ callback returns:
 ```csharp
 using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
-await ctx.BulkInsertInto<IOrder>(o => o
+await ctx.CreateBulkInsertBuilder<IOrder>(o => o
         .ProgressCancellationTokenSource(budget)
         .NotifyAfter(10_000, (total, token) => Report(total, token)))
     .Values(ordersStream)
@@ -232,10 +232,10 @@ var pinned = new[]
     new Order { Id = 9001, CustomerId = 1, Total = 5m },
     new Order { Id = 9002, CustomerId = 2, Total = 6m },
 };
-ctx.BulkInsertInto<IOrder>(o => o.KeepIdentity()).Values(pinned).BulkInsert();
+ctx.CreateBulkInsertBuilder<IOrder>(o => o.KeepIdentity()).Values(pinned).BulkInsert();
 
 // insert a batch that repeats 9001: the duplicate is skipped, the other rows are written
-var written = ctx.BulkInsertInto<IOrder>(o => o.KeepIdentity().IgnoreDuplicates())
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.KeepIdentity().IgnoreDuplicates())
     .Values([
         new Order { Id = 9001, CustomerId = 1, Total = 5m },   // conflicts -> skipped
         new Order { Id = 9003, CustomerId = 3, Total = 7m },   // written
@@ -261,7 +261,7 @@ The native `SqlBulkCopy` path exposes four flags that the PostgreSQL `COPY` path
 `INSERT ... VALUES` path cannot express. They are off by default, matching `SqlBulkCopyOptions.Default`:
 
 ```csharp
-var written = ctx.BulkInsertInto<IOrder>(o => o
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o
         .TableLock()          // SqlBulkCopyOptions.TableLock
         .CheckConstraints()   // SqlBulkCopyOptions.CheckConstraints
         .KeepNulls()          // SqlBulkCopyOptions.KeepNulls
@@ -289,21 +289,21 @@ write to the portable path (so `KeepIdentity` and the bulk-copy flags cannot be 
 opening a connection:
 
 ```csharp
-var sql = ctx.BulkInsertInto<IOrder>().Values(orders).ToSql();
+var sql = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).ToSql();
 // insert into orders (customer_id, total) values (@p0, @p1), (@p2, @p3), (@p4, @p5)
 
-var returningSql = ctx.BulkInsertInto<IOrder>().Values(orders).ReturningKey<int>().ToSql();
+var returningSql = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).ReturningKey<int>().ToSql();
 // insert into orders (customer_id, total) values (@p0, @p1), ... returning id
 ```
 
 ## Options
 
-Write options are passed to `BulkInsertInto<TEntity>` — as a `BulkInsertOptions` record or, more
+Write options are passed to `CreateBulkInsertBuilder<TEntity>` — as a `BulkInsertOptions` record or, more
 concisely, through the `BulkInsertOptionsBuilder` callback:
 
 ```csharp
-ctx.BulkInsertInto<IOrder>(new BulkInsertOptions { MaxBatchSize = 1_000, IgnoreDuplicates = true });
-ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
+ctx.CreateBulkInsertBuilder<IOrder>(new BulkInsertOptions { MaxBatchSize = 1_000, IgnoreDuplicates = true });
+ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 ```
 
 | Option | Builder method | Effect |

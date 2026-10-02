@@ -28,7 +28,7 @@ public abstract partial class CommonTestSuite
     }
 
     private void SeedQueryFilterRows(params QueryFilterEntity[] rows)
-        => _sut.DataProvider.InsertInto<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
+        => _sut.DataProvider.CreateInsertBuilder<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
 
     // The three fixture rows for a test live at base, base - 1 and base - 2; restricting the query to
     // that id range keeps the assertions independent of the rows the other tests leave behind.
@@ -45,7 +45,7 @@ public abstract partial class CommonTestSuite
         => new() { Id = id, TenantId = 2, IsDeleted = false, Name = name };
 
     private void SeedQueryFilterSourceRows(params QueryFilterSourceEntity[] rows)
-        => _sut.DataProvider.InsertInto<QueryFilterSourceEntity>().IgnoreFilters().Values(rows).Insert();
+        => _sut.DataProvider.CreateInsertBuilder<QueryFilterSourceEntity>().IgnoreFilters().Values(rows).Insert();
 
     // --- SELECT: the keyed tenant filter and the anonymous soft-delete filter, plus every selective
     // --- IgnoreFilters form (by key, by type, intersection, empty scope, AnonymousKey).
@@ -171,7 +171,7 @@ public abstract partial class CommonTestSuite
         var foreignId = NextQueryFilterBase();
         SeedQueryFilterRows(ForeignTenant(foreignId, "target"));
 
-        var affected = ctx.Update<QueryFilterEntity>()
+        var affected = ctx.CreateUpdateBuilder<QueryFilterEntity>()
             .Set(x => x.Name, "updated")
             .Where(x => x.Id == foreignId)
             .Update();
@@ -187,7 +187,7 @@ public abstract partial class CommonTestSuite
         var foreignId = NextQueryFilterBase();
         SeedQueryFilterRows(ForeignTenant(foreignId, "target"));
 
-        var affected = ctx.Update<QueryFilterEntity>()
+        var affected = ctx.CreateUpdateBuilder<QueryFilterEntity>()
             .IgnoreFilters()
             .Set(x => x.Name, "updated")
             .Where(x => x.Id == foreignId)
@@ -217,7 +217,7 @@ public abstract partial class CommonTestSuite
         var foreignId = NextQueryFilterBase();
         SeedQueryFilterRows(ForeignTenant(foreignId, "target"));
 
-        var affected = ctx.Update<QueryFilterEntity>()
+        var affected = ctx.CreateUpdateBuilder<QueryFilterEntity>()
             .IgnoreFilters()
             .UpdateEntity(new QueryFilterEntity { Id = foreignId, TenantId = 1, IsDeleted = false, Name = "key-ignored" });
 
@@ -232,7 +232,7 @@ public abstract partial class CommonTestSuite
         var foreignId = NextQueryFilterBase();
         SeedQueryFilterRows(ForeignTenant(foreignId, "target"));
 
-        var affected = ctx.DeleteFrom<QueryFilterEntity>().Where(x => x.Id == foreignId).Delete();
+        var affected = ctx.CreateDeleteBuilder<QueryFilterEntity>().Where(x => x.Id == foreignId).Delete();
 
         affected.Should().Be(0, "the tenant filter excludes the row from the delete");
         ctx.From<QueryFilterEntity>().IgnoreFilters().Where(x => x.Id == foreignId).Select(x => x.Id).ToList().Should().ContainSingle();
@@ -245,7 +245,7 @@ public abstract partial class CommonTestSuite
         var foreignId = NextQueryFilterBase();
         SeedQueryFilterRows(ForeignTenant(foreignId, "target"));
 
-        var affected = ctx.DeleteFrom<QueryFilterEntity>().IgnoreFilters().Where(x => x.Id == foreignId).Delete();
+        var affected = ctx.CreateDeleteBuilder<QueryFilterEntity>().IgnoreFilters().Where(x => x.Id == foreignId).Delete();
 
         affected.Should().Be(1);
         ctx.From<QueryFilterEntity>().IgnoreFilters().Where(x => x.Id == foreignId).Select(x => x.Id).ToList().Should().BeEmpty();
@@ -271,7 +271,7 @@ public abstract partial class CommonTestSuite
         var foreignId = NextQueryFilterBase();
         SeedQueryFilterRows(ForeignTenant(foreignId, "target"));
 
-        var affected = ctx.DeleteFrom<QueryFilterEntity>()
+        var affected = ctx.CreateDeleteBuilder<QueryFilterEntity>()
             .IgnoreFilters()
             .DeleteEntity(new QueryFilterEntity { Id = foreignId });
 
@@ -287,7 +287,7 @@ public abstract partial class CommonTestSuite
         var ctx = QueryFilterContext(1);
         var marker = "qf-ins-" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<QueryFilterTargetEntity>()
+        ctx.CreateInsertBuilder<QueryFilterTargetEntity>()
             .Values(new QueryFilterTargetEntity { TenantId = 1, IsDeleted = false, Name = marker })
             .Insert();
 
@@ -299,7 +299,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.InsertInto<QueryFilterTargetEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterTargetEntity>()
             .Values(new QueryFilterTargetEntity { TenantId = 2, IsDeleted = false, Name = "qf-ins-foreign" })
             .Insert();
 
@@ -311,7 +311,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.InsertInto<QueryFilterEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterEntity>()
             .Values(new QueryFilterEntity { Id = NextQueryFilterBase(), TenantId = 1, IsDeleted = true, Name = "qf-ins-deleted" })
             .Insert();
 
@@ -323,7 +323,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.InsertInto<QueryFilterTargetEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterTargetEntity>()
             .Value(x => x.TenantId, 2)
             .Value(x => x.Name, "qf-ins-value")
             .Insert();
@@ -336,7 +336,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.InsertInto<QueryFilterTargetEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterTargetEntity>()
             .Value(x => x.Name, "qf-ins-unwritten")
             .Value(x => x.IsDeleted, false)
             .Insert();
@@ -351,7 +351,7 @@ public abstract partial class CommonTestSuite
         var ctx = QueryFilterContext(1);
         var marker = "qf-ins-written-" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<QueryFilterTargetEntity>()
+        ctx.CreateInsertBuilder<QueryFilterTargetEntity>()
             .Value(x => x.TenantId, 1)
             .Value(x => x.IsDeleted, false)
             .Value(x => x.Name, marker)
@@ -366,8 +366,8 @@ public abstract partial class CommonTestSuite
         Assert.SkipUnless(Provider.SupportsBatch, "This provider cannot run batches.");
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.Batch()
-            .Insert(ctx.InsertInto<QueryFilterTargetEntity>().Values(
+        var act = () => ctx.CreateBatchBuilder()
+            .Insert(ctx.CreateInsertBuilder<QueryFilterTargetEntity>().Values(
                 new QueryFilterTargetEntity { TenantId = 2, IsDeleted = false, Name = "qf-batch" }))
             .Execute();
 
@@ -380,7 +380,7 @@ public abstract partial class CommonTestSuite
         var ctx = QueryFilterContext(1);
         var marker = "qf-bulk-" + Guid.NewGuid().ToString("N");
 
-        var act = () => ctx.BulkInsertInto<QueryFilterTargetEntity>()
+        var act = () => ctx.CreateBulkInsertBuilder<QueryFilterTargetEntity>()
             .Values(
             [
                 new QueryFilterTargetEntity { TenantId = 1, IsDeleted = false, Name = marker },
@@ -397,7 +397,7 @@ public abstract partial class CommonTestSuite
         var ctx = QueryFilterContext(1);
         var id = NextQueryFilterBase();
 
-        ctx.InsertInto<QueryFilterEntity>()
+        ctx.CreateInsertBuilder<QueryFilterEntity>()
             .IgnoreFilters()
             .Values(new QueryFilterEntity { Id = id, TenantId = 2, IsDeleted = false, Name = "qf-ins-ignored" })
             .Insert();
@@ -419,7 +419,7 @@ public abstract partial class CommonTestSuite
             new QueryFilterSourceEntity { Id = b, TenantId = 1, IsDeleted = false, Name = keepMarker },
             new QueryFilterSourceEntity { Id = b - 1, TenantId = 2, IsDeleted = false, Name = dropMarker });
 
-        var affected = ctx.InsertInto<QueryFilterTargetEntity>()
+        var affected = ctx.CreateInsertBuilder<QueryFilterTargetEntity>()
             .Values(
                 ctx.From<QueryFilterSourceEntity>().Where(x => x.Name == keepMarker || x.Name == dropMarker),
                 x => new QueryFilterTargetEntity { TenantId = x.TenantId, IsDeleted = x.IsDeleted, Name = x.Name })
@@ -442,7 +442,7 @@ public abstract partial class CommonTestSuite
             new QueryFilterSourceEntity { Id = b, TenantId = 1, IsDeleted = false, Name = keepMarker },
             new QueryFilterSourceEntity { Id = b - 1, TenantId = 2, IsDeleted = false, Name = dropMarker });
 
-        var act = () => ctx.InsertInto<QueryFilterTargetEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterTargetEntity>()
             .Values(
                 ctx.From<QueryFilterSourceEntity>().IgnoreFilters().Where(x => x.Name == keepMarker || x.Name == dropMarker),
                 x => new QueryFilterTargetEntity { TenantId = x.TenantId, IsDeleted = x.IsDeleted, Name = x.Name })
@@ -456,7 +456,7 @@ public abstract partial class CommonTestSuite
     // --- rows, the DML target filter and the INSERT ... SELECT source are checked on every provider.
 
     private void SeedQueryFilterFuncRows(params QueryFilterFuncEntity[] rows)
-        => _sut.DataProvider.InsertInto<QueryFilterFuncEntity>().IgnoreFilters().Values(rows).Insert();
+        => _sut.DataProvider.CreateInsertBuilder<QueryFilterFuncEntity>().IgnoreFilters().Values(rows).Insert();
 
     private static QueryFilterFuncEntity FuncActive(int id, string name)
         => new() { Id = id, TenantId = 1, IsDeleted = false, Name = name };
@@ -507,7 +507,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.InsertInto<QueryFilterFuncTargetEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterFuncTargetEntity>()
             .Values(new QueryFilterFuncTargetEntity { TenantId = 1, IsDeleted = false, Name = "qf-func-ins" })
             .Insert();
 
@@ -521,7 +521,7 @@ public abstract partial class CommonTestSuite
         var ctx = QueryFilterContext(1);
         var marker = "qf-func-ins-ignored-" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<QueryFilterFuncTargetEntity>()
+        ctx.CreateInsertBuilder<QueryFilterFuncTargetEntity>()
             .IgnoreFilters()
             .Values(new QueryFilterFuncTargetEntity { TenantId = 2, IsDeleted = false, Name = marker })
             .Insert();
@@ -536,14 +536,14 @@ public abstract partial class CommonTestSuite
         var foreignId = NextQueryFilterBase();
         SeedQueryFilterFuncRows(FuncForeignTenant(foreignId, "func-target"));
 
-        ctx.Update<QueryFilterFuncEntity>().Set(x => x.Name, "func-updated").Where(x => x.Id == foreignId).Update()
+        ctx.CreateUpdateBuilder<QueryFilterFuncEntity>().Set(x => x.Name, "func-updated").Where(x => x.Id == foreignId).Update()
             .Should().Be(0, "the function tenant filter excludes the foreign row from the update");
-        ctx.DeleteFrom<QueryFilterFuncEntity>().Where(x => x.Id == foreignId).Delete()
+        ctx.CreateDeleteBuilder<QueryFilterFuncEntity>().Where(x => x.Id == foreignId).Delete()
             .Should().Be(0, "the function tenant filter excludes the foreign row from the delete");
 
-        ctx.Update<QueryFilterFuncEntity>().IgnoreFilters().Set(x => x.Name, "func-updated").Where(x => x.Id == foreignId).Update()
+        ctx.CreateUpdateBuilder<QueryFilterFuncEntity>().IgnoreFilters().Set(x => x.Name, "func-updated").Where(x => x.Id == foreignId).Update()
             .Should().Be(1);
-        ctx.DeleteFrom<QueryFilterFuncEntity>().IgnoreFilters().Where(x => x.Id == foreignId).Delete()
+        ctx.CreateDeleteBuilder<QueryFilterFuncEntity>().IgnoreFilters().Where(x => x.Id == foreignId).Delete()
             .Should().Be(1);
     }
 
@@ -556,7 +556,7 @@ public abstract partial class CommonTestSuite
         var dropMarker = "qf-func-drop-" + Guid.NewGuid().ToString("N");
         SeedQueryFilterFuncRows(FuncActive(b, keepMarker), FuncForeignTenant(b - 1, dropMarker));
 
-        var affected = ctx.InsertInto<QueryFilterFuncSelectTargetEntity>()
+        var affected = ctx.CreateInsertBuilder<QueryFilterFuncSelectTargetEntity>()
             .Values(
                 ctx.From<QueryFilterFuncEntity>().Where(x => x.Name == keepMarker || x.Name == dropMarker),
                 x => new QueryFilterFuncSelectTargetEntity { TenantId = x.TenantId, IsDeleted = x.IsDeleted, Name = x.Name })

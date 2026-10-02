@@ -1,19 +1,19 @@
 # Изменение данных (DELETE)
 
-> nextorm удаляет строки в той же модели явных команд, что и `INSERT`: [`DeleteFrom<TEntity>()`](xref:NextORM.Core.DataContextExtensions.DeleteFrom``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `DELETE FROM <table> [WHERE ...]`, расширение контекста [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) удаляет по объявленному ключу сущности, а соединённый запрос может завершаться multi-table удалением. Тут нет ни change tracking, ни `SaveChanges`: каждый терминал выполняет ровно одну команду.
+> nextorm удаляет строки в той же модели явных команд, что и `INSERT`: [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) строит параметризованный `DELETE FROM <table> [WHERE ...]`, расширение контекста [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) удаляет по объявленному ключу сущности, а соединённый запрос может завершаться multi-table удалением. Тут нет ни change tracking, ни `SaveChanges`: каждый терминал выполняет ровно одну команду.
 
 **Что нужно знать:** [Изменение данных (INSERT)](15-insert-statement.md) · [Фильтрация (WHERE)](01-filtering-where.md) · [Соединения (JOIN)](02-joins.md) · [Обзор провайдеров](../providers/overview.md)
 
 ## Удаление строк по предикату
 
-[`DeleteFrom<TEntity>()`](xref:NextORM.Core.DataContextExtensions.DeleteFrom``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) удаляет строки и возвращает число удалённых строк:
+[`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) удаляет строки и возвращает число удалённых строк:
 
 ```csharp
-var deleted = ctx.DeleteFrom<ISimpleEntity>()
+var deleted = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Delete();
 
-await ctx.DeleteFrom<ISimpleEntity>()
+await ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .DeleteAsync(cancellationToken);
 ```
@@ -24,7 +24,7 @@ delete from simple_entity where id = 1
 delete from simple_entity where (age > 10)
 ```
 
-`Where` принимает те же выражения-предикаты, что и запрос (`From<T>().Where(...)`), а повторный вызов объединяет предикаты через `and`. `DeleteFrom<T>().ToSql()` рендерит инструкцию, не открывая соединение.
+`Where` принимает те же выражения-предикаты, что и запрос (`From<T>().Where(...)`), а повторный вызов объединяет предикаты через `and`. `CreateDeleteBuilder<T>().ToSql()` рендерит инструкцию, не открывая соединение.
 
 * Захваченные в предикате значения становятся параметрами (`x => x.Id == id` рендерит `id = @id`); встроенные литералы подставляются как есть, точно как в `WHERE` запроса.
 * `Delete()`/`DeleteAsync()` возвращают число затронутых строк (`0`, если ничего не совпало). ClickHouse число не возвращает (мутация его не отдаёт).
@@ -34,7 +34,7 @@ delete from simple_entity where (age > 10)
 Удаление всех строк требует явного маркера `All()`, поэтому нефильтрованное удаление всей таблицы нельзя записать случайно. Совместное использование `Where` и `All` бросает `InvalidOperationException`:
 
 ```csharp
-ctx.DeleteFrom<ISimpleEntity>().All().Delete();   // delete from simple_entity
+ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple_entity
 ```
 
 ## Удаление по ключу
@@ -61,7 +61,7 @@ delete from simple_entity where id = @p0
 `All()` — явное удаление всей таблицы, фильтр к нему **не** применяется. Соединённое удаление фильтрует цель (первую таблицу) и все источники соединений. [`DeleteBuilder<TEntity>`](xref:NextORM.Core.DeleteBuilder`1) предоставляет четыре перегрузки `IgnoreFilters` (все, по типу сущности, по ключу фильтра, пересечение ключа и типа); вызов хранит состояние, а повторные вызовы накапливаются:
 
 ```csharp
-ctx.DeleteFrom<Document>()
+ctx.CreateDeleteBuilder<Document>()
     .IgnoreFilters(["soft-delete"])   // оставляем ограничение по тенанту, убираем soft-delete
     .Where(d => d.IsDeleted)
     .Delete();
@@ -85,12 +85,12 @@ ctx.DeleteFrom<Document>()
 `Returning()` / `Returning(projection)` материализуют удалённые строки через `RETURNING`/`OUTPUT` провайдера и читаются через `Single()`/`ToList()`:
 
 ```csharp
-var removed = ctx.DeleteFrom<ISimpleEntity>()
+var removed = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .Returning(x => new { x.Id, x.Name })
     .ToList();
 
-var one = ctx.DeleteFrom<ISimpleEntity>()
+var one = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Returning()
     .Single();
@@ -112,10 +112,10 @@ delete from simple_entity where id = 1 returning id, name, age
 
 ## Очистка таблицы (`TRUNCATE`)
 
-`Truncate<TEntity>()` рендерит родной `TRUNCATE TABLE`, сбрасывая таблицу быстрее, чем `DeleteFrom<T>().All()`:
+`CreateTruncateBuilder<TEntity>()` рендерит родной `TRUNCATE TABLE`, сбрасывая таблицу быстрее, чем `CreateDeleteBuilder<T>().All()`:
 
 ```csharp
-var cleared = ctx.Truncate<ISimpleEntity>().Execute();   // truncate table simple_entity
+var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncate table simple_entity
 ```
 
 `TRUNCATE TABLE` есть у SQL Server, PostgreSQL, MySQL, MariaDB и ClickHouse; у SQLite его нет — бросается `NotSupportedException`, а in-memory-контекст только для запросов и тоже бросает `NotSupportedException`. `Execute()`/`ExecuteAsync()` возвращают число затронутых строк там, где провайдер его отдаёт (`0` иначе).
@@ -204,7 +204,7 @@ with c as (select id from complex_entity where (id > 0)) delete from complex_ent
 
 ## Примечания и что вне области
 
-* In-memory-контекст только для запросов: `Delete`/`DeleteAsync`/`Truncate` (как и любая другая запись) бросают `NotSupportedException`; запрашивайте собственные коллекции. `INSERT` в in-memory-провайдере тоже вне области по замыслу.
+* In-memory-контекст только для запросов: `Delete`/`DeleteAsync`/`CreateTruncateBuilder` (как и любая другая запись) бросают `NotSupportedException`; запрашивайте собственные коллекции. `INSERT` в in-memory-провайдере тоже вне области по замыслу.
 * `DELETE` не готовится и не кладётся в кэш планов — оптимизация в nextorm нацелена только на read-only запросы (`Prepare`, неявный кэш планов, бенчмарки); мутация всегда рендерит и выполняет одну команду за вызов.
 * Встроенного поведения soft delete намеренно нет; soft delete выражается [глобальным фильтром запроса](../advanced/query-filters.md) плюс явным `UPDATE`. Полный `MERGE` с произвольными ветками в эту поверхность не входит, а `UPDATE` живёт в своём гайде ([Изменение данных (UPDATE)](17-update-statement.md)).
 

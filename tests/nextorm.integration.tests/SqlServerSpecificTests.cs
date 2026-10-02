@@ -350,11 +350,11 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var deleteId = MergeTestKey();
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = deleteId, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = deleteId, Name = "ignored", Age = 0 })
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -371,10 +371,10 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var orphanId = MergeTestKey();
         var matchedId = orphanId + 1;
 
-        ctx.InsertInto<IMergeEntity>().Values(new MergeEntity { Id = orphanId, Name = "orphan", Age = 1 }).Insert();
-        ctx.InsertInto<IMergeEntity>().Values(new MergeEntity { Id = matchedId, Name = "keep", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = orphanId, Name = "orphan", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = matchedId, Name = "keep", Age = 1 }).Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = matchedId, Name = "updated", Age = 9 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -393,7 +393,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         using (var transaction = ((ITransactionManager)ctx).BeginTransaction())
         {
-            ctx.BulkInsertInto<IInsertEntity>().Values([new InsertEntity { Name = marker, Age = 1 }]).BulkInsert();
+            ctx.CreateBulkInsertBuilder<IInsertEntity>().Values([new InsertEntity { Name = marker, Age = 1 }]).BulkInsert();
             transaction.Rollback();
         }
 
@@ -438,7 +438,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var name = "#batch_" + Guid.NewGuid().ToString("N");
         var ctx = _sut.DataProvider;
 
-        var rows = ctx.Batch()
+        var rows = ctx.CreateBatchBuilder()
             .CreateTable(name, _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { x.Id }))
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
             .ToList();
@@ -456,7 +456,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var name = "#raw_" + Guid.NewGuid().ToString("N");
         var ctx = _sut.DataProvider;
 
-        var rows = ctx.Batch()
+        var rows = ctx.CreateBatchBuilder()
             .Raw($"create table {name} (id int not null)")
             .Raw($"insert into {name} (id) select id from simple_entity where id <= 3")
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
@@ -486,7 +486,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             {
             }
 
-            var rows = ctx.Batch()
+            var rows = ctx.CreateBatchBuilder()
                 .Raw("create table #r (id int not null)")
                 .Raw("insert into #r (id) exec dbo.nextorm_batch_raw_proc")
                 .Query(ctx.From("#r").Select(t => new { Id = t.GetInt32("id") }))
@@ -622,7 +622,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IMergeEntity>()
+            ctx.CreateInsertBuilder<IMergeEntity>()
                 .Values(new MergeEntity { Id = id, Name = marker, Age = 1 })
                 .Returning(x => new { x.Id, x.Name })
                 .OutputInto("output_audit")
@@ -655,7 +655,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         try
         {
-            var returned = ctx.InsertInto<IMergeEntity>()
+            var returned = ctx.CreateInsertBuilder<IMergeEntity>()
                 .Values(new MergeEntity { Id = id, Name = marker, Age = 1 })
                 .Returning(x => new { x.Id, x.Name })
                 .OutputIntoThenOutput("output_audit")

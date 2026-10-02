@@ -6,7 +6,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Builder for a bulk insert over a mapped entity, started with
-/// <c>BulkInsertInto&lt;TEntity&gt;</c> (passing a <see cref="BulkInsertOptions"/> or a
+/// <c>CreateBulkInsertBuilder&lt;TEntity&gt;</c> (passing a <see cref="BulkInsertOptions"/> or a
 /// <see cref="BulkInsertOptionsBuilder"/> callback). Supply the rows with
 /// <see cref="Values(IEnumerable{TEntity})"/> and finish with a terminal. It writes
 /// through the provider's native bulk API where one exists, and through a chunked parameterised
@@ -315,7 +315,7 @@ public sealed class BulkInsertBuilder<TEntity>
             && HasAnyDynamicColumn(_dynamicStoreProperty.GetValue(entity)))
         {
             throw new NotSupportedException(
-                $"Bulk insert of dynamic columns is not supported: entity {typeof(TEntity)} has a non-empty dynamic-columns store. Clear the store or use InsertInto<{typeof(TEntity).Name}>().Values(...) instead.");
+                $"Bulk insert of dynamic columns is not supported: entity {typeof(TEntity)} has a non-empty dynamic-columns store. Clear the store or use CreateInsertBuilder<{typeof(TEntity).Name}>().Values(...) instead.");
         }
 
         var row = new object?[columns.Count];

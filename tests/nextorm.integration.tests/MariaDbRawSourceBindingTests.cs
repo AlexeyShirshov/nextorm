@@ -50,7 +50,7 @@ public sealed class MariaDbRawSourceBindingTests : IDisposable
     }
 
     private void SeedRows(int b)
-        => _ctx.InsertInto<MariaDbRawBindEntity>().IgnoreFilters().Values([
+        => _ctx.CreateInsertBuilder<MariaDbRawBindEntity>().IgnoreFilters().Values([
             new MariaDbRawBindEntity { Id = b, TenantId = 1, IsDeleted = false, Name = "maria-active" },
             new MariaDbRawBindEntity { Id = b - 1, TenantId = 1, IsDeleted = true, Name = "maria-deleted" },
             new MariaDbRawBindEntity { Id = b - 2, TenantId = 2, IsDeleted = false, Name = "maria-foreign" },

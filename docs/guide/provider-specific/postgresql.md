@@ -295,7 +295,7 @@ typed by the `RETURNING` projection, and `From(name)` reads those rows with the 
 
 ```csharp
 var rows = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.Id, x.Total }))
     .From("ins")

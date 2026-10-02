@@ -99,7 +99,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var sql = ctx.From<AliasCollisionEntity>()
             .Join(ctx.From<AliasCollisionEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning()
             .ToSql();
@@ -130,7 +130,7 @@ public class JoinReturningIdentitySqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var scope = ctx.With("upd", Join2(ctx).UpdateJoin().Set(p => p.Item1.Name, "x").Returning());
+        var scope = ctx.With("upd", Join2(ctx).CreateUpdateJoinBuilder().Set(p => p.Item1.Name, "x").Returning());
         var sql = SqlOf(ctx, scope.From("upd").Select(r => new { A = r.Item1.Id, B = r.Item2.Id }));
 
         sql.Should().Contain("update merge_entity as \"t1\"");
@@ -156,7 +156,7 @@ public class JoinReturningIdentitySqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var scope = ctx.With("upd", Join2(ctx).UpdateJoin().Set(p => p.Item1.Name, "x").Returning());
+        var scope = ctx.With("upd", Join2(ctx).CreateUpdateJoinBuilder().Set(p => p.Item1.Name, "x").Returning());
         var sql = SqlOf(ctx, scope.From("upd").Where(r => r.Item1.Id == 1).Select(r => new { A = r.Item1.Id, B = r.Item2.Id }));
 
         sql.Should().Contain("where t1.\"__s1_id\" = 1");
@@ -172,7 +172,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var direct = ctx.From<IdentityDerivedEntity>()
             .Join(derived, (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning()
             .ToSql();
@@ -182,7 +182,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var scope = ctx.With("upd", ctx.From<IdentityDerivedEntity>()
             .Join(derived, (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning());
         var read = SqlOf(ctx, scope.From("upd").Select(r => new { A = r.Item1.Id, B = r.Item2.Id }));
@@ -218,7 +218,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var direct = ctx.From<IdentityDerivedEntity>()
             .Join(derived, (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning()
             .ToSql();
@@ -230,7 +230,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var scope = ctx.With("upd", ctx.From<IdentityDerivedEntity>()
             .Join(derived, (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning());
         var read = SqlOf(ctx, scope.From("upd").Select(r => r));
@@ -269,7 +269,7 @@ public class JoinReturningIdentitySqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        Join2(ctx).UpdateJoin().Set(p => p.Item1.Name, "x").ToSql().Should().NotContain("returning");
+        Join2(ctx).CreateUpdateJoinBuilder().Set(p => p.Item1.Name, "x").ToSql().Should().NotContain("returning");
     }
 
     [Fact]
@@ -293,13 +293,13 @@ public class JoinReturningIdentitySqlGenerationTests
         {
             "left" => () => ctx.From<IMergeEntity>()
                 .LeftJoin(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, "x")
                 .Returning()
                 .ToSql(),
             "cross" => () => ctx.From<IMergeEntity>()
                 .CrossJoin(ctx.From<IMergeEntity>())
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, "x")
                 .Returning()
                 .ToSql(),
@@ -341,7 +341,7 @@ public class JoinReturningIdentitySqlGenerationTests
 
         var act = () => ctx.With("upd", ctx.From<IMergeEntity>()
             .LeftJoin(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning());
 
@@ -368,19 +368,19 @@ public class JoinReturningIdentitySqlGenerationTests
 
     private static UpdateJoinReturningBuilder<Projection<IMergeEntity, IMergeEntity>, Projection<IMergeEntity, IMergeEntity>> BuildUpdate2(IDataContext ctx, bool lambda)
     {
-        var update = Join2(ctx).UpdateJoin().Set(p => p.Item1.Name, "x");
+        var update = Join2(ctx).CreateUpdateJoinBuilder().Set(p => p.Item1.Name, "x");
         return lambda ? update.Returning(p => p) : update.Returning();
     }
 
     private static UpdateJoinReturningBuilder<Projection<IMergeEntity, IMergeEntity, IMergeEntity>, Projection<IMergeEntity, IMergeEntity, IMergeEntity>> BuildUpdate3(IDataContext ctx, bool lambda)
     {
-        var update = Join3(ctx).UpdateJoin().Set(p => p.Item1.Name, "x");
+        var update = Join3(ctx).CreateUpdateJoinBuilder().Set(p => p.Item1.Name, "x");
         return lambda ? update.Returning(p => p) : update.Returning();
     }
 
     private static UpdateJoinReturningBuilder<Projection<IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity>, Projection<IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity, IMergeEntity>> BuildUpdate8(IDataContext ctx, bool lambda)
     {
-        var update = Join8(ctx).UpdateJoin().Set(p => p.Item1.Name, "x");
+        var update = Join8(ctx).CreateUpdateJoinBuilder().Set(p => p.Item1.Name, "x");
         return lambda ? update.Returning(p => p) : update.Returning();
     }
 

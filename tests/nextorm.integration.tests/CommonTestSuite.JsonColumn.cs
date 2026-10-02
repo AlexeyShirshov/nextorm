@@ -52,10 +52,10 @@ public abstract partial class CommonTestSuite
         {
             var updatedAt = new DateTimeOffset(2026, 9, 25, 12, 34, 56, TimeSpan.Zero);
             var withNull = new JsonColumnProbePoco { Name = "second", Values = [4, 5], UpdatedAt = updatedAt };
-            ctx.InsertInto<IJsonColumnProbe>()
+            ctx.CreateInsertBuilder<IJsonColumnProbe>()
                 .Values(new JsonColumnProbe { Id = 1, Data = new JsonColumnProbePoco { Name = "first", Values = [1, 2, 3], UpdatedAt = updatedAt }, DataNull = null })
                 .Insert();
-            ctx.InsertInto<IJsonColumnProbe>()
+            ctx.CreateInsertBuilder<IJsonColumnProbe>()
                 .Values(new JsonColumnProbe { Id = 2, Data = withNull, DataNull = withNull })
                 .Insert();
 
@@ -72,7 +72,7 @@ public abstract partial class CommonTestSuite
             second.DataNull!.Values.Should().Equal(4, 5);
 
             // A JSON value in a SET list goes through the same converter.
-            ctx.Update<IJsonColumnProbe>()
+            ctx.CreateUpdateBuilder<IJsonColumnProbe>()
                 .Set(x => x.Data, new JsonColumnProbePoco { Name = "updated", Values = [9], UpdatedAt = updatedAt })
                 .Where(x => x.Id == 1)
                 .Update();
@@ -103,7 +103,7 @@ public abstract partial class CommonTestSuite
 
         try
         {
-            var row = ctx.InsertInto<JsonColumnProbe>()
+            var row = ctx.CreateInsertBuilder<JsonColumnProbe>()
                 .Values(new JsonColumnProbe { Id = 10, Data = new JsonColumnProbePoco { Name = "returned", Values = [7] }, DataNull = null })
                 .Returning()
                 .Single();
@@ -132,7 +132,7 @@ public abstract partial class CommonTestSuite
         {
             var updatedAt = new DateTimeOffset(2026, 9, 25, 12, 34, 56, TimeSpan.Zero);
             var data = new JsonColumnProbePoco { Name = "first", Values = [1, 2, 3], UpdatedAt = updatedAt };
-            ctx.InsertInto<IJsonColumnProbe>()
+            ctx.CreateInsertBuilder<IJsonColumnProbe>()
                 .Values(new JsonColumnProbe { Id = 1, Data = data, DataNull = null })
                 .Insert();
 

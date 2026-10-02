@@ -5,7 +5,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a <c>DELETE</c> statement, started with
-/// <see cref="DataContextExtensions.DeleteFrom{TEntity}"/>. The rows to remove are selected either by a
+/// <see cref="DataContextExtensions.CreateDeleteBuilder{TEntity}"/>. The rows to remove are selected either by a
 /// predicate (<see cref="Where"/>) or explicitly as the whole table (<see cref="All"/>); both render a
 /// parameterised <c>DELETE FROM &lt;table&gt; [WHERE ...]</c>. There is deliberately no change tracking:
 /// the terminal issues exactly one explicit command.
@@ -230,7 +230,7 @@ public sealed class DeleteBuilder<TEntity>
 
         if (keys.Count == 0)
             throw new InvalidOperationException(
-                $"Entity {typeof(TEntity)} has no key property. Mark one with [Key]/.Key() before deleting by entity, or use DeleteFrom<T>().Where(...).");
+                $"Entity {typeof(TEntity)} has no key property. Mark one with [Key]/.Key() before deleting by entity, or use CreateDeleteBuilder<T>().Where(...).");
 
         // The key form carries the target entity's global filter through a no-predicate source command:
         // preparing it injects the filter (minus the IgnoreFilters scope) into the condition, which the

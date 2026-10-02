@@ -174,7 +174,7 @@ public class MergeTargetFilterFailClosedTests
         {
             using var ctx = new RenderingContext(FullMergeDialect.Instance);
 
-            var act = () => ctx.MergeInto<UntranslatableEntity>()
+            var act = () => ctx.CreateMergeBuilder<UntranslatableEntity>()
                 .Using(new UntranslatableEntity { Id = 1, Name = "a" })
                 .On((t, s) => t.Id == s.Id)
                 .WhenMatched().ThenUpdate()
@@ -198,7 +198,7 @@ public class MergeTargetFilterFailClosedTests
         {
             using var ctx = new RenderingContext(FullMergeDialect.Instance);
 
-            var act = () => ctx.MergeInto<UntranslatableEntity>()
+            var act = () => ctx.CreateMergeBuilder<UntranslatableEntity>()
                 .Using(new UntranslatableEntity { Id = 1, Name = "a" })
                 .On((t, s) => t.Id == s.Id)
                 .WhenMatched().ThenUpdate()
@@ -222,7 +222,7 @@ public class MergeTargetFilterFailClosedTests
         {
             using var ctx = new RenderingContext(FullMergeDialect.Instance);
 
-            var sql = ctx.MergeInto<UntranslatableEntity>()
+            var sql = ctx.CreateMergeBuilder<UntranslatableEntity>()
                 .Using(new UntranslatableEntity { Id = 1, Name = "a" })
                 .IgnoreFilters()
                 .On((t, s) => t.Id == s.Id)
@@ -249,7 +249,7 @@ public class MergeTargetFilterFailClosedTests
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey])
             .HasQueryFilter("soft-delete", (e, _) => !e.IsDeleted));
 
-        var sql = ctx.MergeInto<MultiFilterEntity>()
+        var sql = ctx.CreateMergeBuilder<MultiFilterEntity>()
             .Using(new MultiFilterEntity { Id = 1, TenantId = 1, Name = "a" })
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()
@@ -275,7 +275,7 @@ public class MergeTargetFilterFailClosedTests
         ctx.From<BranchlessEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
 
-        var act = () => ctx.MergeInto<BranchlessEntity>()
+        var act = () => ctx.CreateMergeBuilder<BranchlessEntity>()
             .Using(ctx.From<BranchlessEntity>().Where(x => x.Id == 1))
             .On((t, s) => t.Id == s.Id)
             .Merge();
@@ -293,7 +293,7 @@ public class MergeTargetFilterFailClosedTests
         ctx.From<BranchlessEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
 
-        var command = ctx.MergeInto<BranchlessEntity>()
+        var command = ctx.CreateMergeBuilder<BranchlessEntity>()
             .Using(ctx.From<BranchlessEntity>().Where(x => x.Id == 1))
             .On((t, s) => t.Id == s.Id);
 
@@ -312,7 +312,7 @@ public class MergeTargetFilterFailClosedTests
         ctx.From<BranchlessEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
 
-        var act = () => ctx.MergeInto<BranchlessEntity>()
+        var act = () => ctx.CreateMergeBuilder<BranchlessEntity>()
             .Using(new BranchlessEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters()
             .On((t, s) => t.Id == s.Id)
@@ -330,7 +330,7 @@ public class MergeTargetFilterFailClosedTests
 
         // A dedicated type that no test ever registers a filter for, so the metadata cache cannot leak
         // an active filter into this control.
-        var act = () => ctx.MergeInto<BranchlessPlainEntity>()
+        var act = () => ctx.CreateMergeBuilder<BranchlessPlainEntity>()
             .Using(new BranchlessPlainEntity { Id = 1, TenantId = 1, Name = "a" })
             .On((t, s) => t.Id == s.Id)
             .ToSql();

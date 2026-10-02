@@ -42,7 +42,7 @@ public class ValueConverterSqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        ctx.InsertInto<ConverterEntity>()
+        ctx.CreateInsertBuilder<ConverterEntity>()
             .Values(new ConverterEntity { Id = 1, State = SqlGenState.Active })
             .ToSql()
             .Should().Contain("state");
@@ -53,7 +53,7 @@ public class ValueConverterSqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        ctx.Update<ConverterEntity>()
+        ctx.CreateUpdateBuilder<ConverterEntity>()
             .Set(x => x.State, SqlGenState.Active)
             .Where(x => x.Id == 1)
             .ToSql()

@@ -15,7 +15,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTempTable("recent_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("recent_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
@@ -29,7 +29,7 @@ public class BatchSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var min = 5;
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTempTable("recent_ids", ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .Query(ctx.From("recent_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
@@ -42,7 +42,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTable("archive_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("archive_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
@@ -56,7 +56,7 @@ public class BatchSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var min = 5;
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTempTable("recent_ids", ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .Query(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .ToSql();
@@ -70,7 +70,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTempTable("first_ids", ctx.From<ISimpleEntity>().Where(x => x.Id > 1).Select(x => new { x.Id }))
             .CreateTempTable("second_ids", ctx.From("first_ids").Select(t => new { Id = t["id"].AsInt }))
             .Query(ctx.From("second_ids").Select(t => new { Id = t["id"].AsInt }))
@@ -87,7 +87,7 @@ public class BatchSqlGenerationTests
     public void Batch_MaterialisationAfterQuery_ShouldThrow()
     {
         using var ctx = PostgresTestContext.Create();
-        var batch = ctx.Batch();
+        var batch = ctx.CreateBatchBuilder();
         batch.Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
 
         var act = () => batch.CreateTempTable("late_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
@@ -99,7 +99,7 @@ public class BatchSqlGenerationTests
     public void Batch_SecondQuery_ShouldThrow()
     {
         using var ctx = PostgresTestContext.Create();
-        var batch = ctx.Batch();
+        var batch = ctx.CreateBatchBuilder();
         batch.Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
 
         var act = () => batch.Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
@@ -122,7 +122,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
         using var other = PostgresTestContext.Create();
-        var batch = ctx.Batch();
+        var batch = ctx.CreateBatchBuilder();
 
         var act = () => batch.Query(other.From<ISimpleEntity>().Select(x => new { x.Id }));
 
@@ -136,8 +136,8 @@ public class BatchSqlGenerationTests
         var value = 42;
         var min = 5;
 
-        var sql = ctx.Batch()
-            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+        var sql = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
             .Query(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .ToSql();
 
@@ -155,8 +155,8 @@ public class BatchSqlGenerationTests
         var min = 5;
         var max = 6;
 
-        var sql = ctx.Batch()
-            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+        var sql = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id < max).Select(x => new { x.Id }))
             .ToSql();
@@ -173,8 +173,8 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = ctx.Batch()
-            .Insert(ctx.InsertInto<IInsertEntity>().Value(x => x.Name, "a").Value(x => x.Age, 5))
+        var sql = ctx.CreateBatchBuilder()
+            .Insert(ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, "a").Value(x => x.Age, 5))
             .Query(ctx.From<IInsertEntity>().Select(x => new { x.Name }))
             .ToSql();
 
@@ -190,8 +190,8 @@ public class BatchSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var max = 5;
 
-        var sql = ctx.Batch()
-            .Delete(ctx.DeleteFrom<ISimpleEntity>().Where(x => x.Id > max))
+        var sql = ctx.CreateBatchBuilder()
+            .Delete(ctx.CreateDeleteBuilder<ISimpleEntity>().Where(x => x.Id > max))
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
 
@@ -206,8 +206,8 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = ctx.Batch()
-            .Truncate(ctx.Truncate<ISimpleEntity>())
+        var sql = ctx.CreateBatchBuilder()
+            .Truncate(ctx.CreateTruncateBuilder<ISimpleEntity>())
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
 
@@ -221,10 +221,10 @@ public class BatchSqlGenerationTests
     public void Batch_ExecuteAfterQuery_ShouldThrow()
     {
         using var ctx = PostgresTestContext.Create();
-        var batch = ctx.Batch();
+        var batch = ctx.CreateBatchBuilder();
         batch.Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
 
-        var act = () => batch.Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, 1));
+        var act = () => batch.Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, 1));
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -235,7 +235,7 @@ public class BatchSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         using var other = PostgresTestContext.Create();
 
-        var act = () => ctx.Batch().Update(other.Update<ISimpleEntity>().Set(x => x.Id, 1));
+        var act = () => ctx.CreateBatchBuilder().Update(other.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, 1));
 
         act.Should().Throw<ArgumentException>();
     }
@@ -245,7 +245,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTempTable("first_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("first_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
@@ -259,7 +259,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = PostgresTestContext.CreateMultiline();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTempTable("first_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("first_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();

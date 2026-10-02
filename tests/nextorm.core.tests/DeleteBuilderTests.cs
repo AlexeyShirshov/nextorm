@@ -14,7 +14,7 @@ public class DeleteBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var toSql = () => ctx.DeleteFrom<ConventionalEntity>().Where(x => x.Id == 1).ToSql();
+        var toSql = () => ctx.CreateDeleteBuilder<ConventionalEntity>().Where(x => x.Id == 1).ToSql();
 
         toSql.Should().Throw<NotSupportedException>();
     }
@@ -24,7 +24,7 @@ public class DeleteBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.DeleteFrom<ConventionalEntity>().Where(x => x.Id == 1).Delete();
+        var act = () => ctx.CreateDeleteBuilder<ConventionalEntity>().Where(x => x.Id == 1).Delete();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -34,7 +34,7 @@ public class DeleteBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.DeleteFrom<ConventionalEntity>().Where(x => x.Id == 1).DeleteAsync();
+        var act = () => ctx.CreateDeleteBuilder<ConventionalEntity>().Where(x => x.Id == 1).DeleteAsync();
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
@@ -44,7 +44,7 @@ public class DeleteBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.Truncate<ConventionalEntity>().Execute();
+        var act = () => ctx.CreateTruncateBuilder<ConventionalEntity>().Execute();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -54,7 +54,7 @@ public class DeleteBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.DeleteFrom<ConventionalEntity>().Delete();
+        var act = () => ctx.CreateDeleteBuilder<ConventionalEntity>().Delete();
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -74,7 +74,7 @@ public class DeleteBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.DeleteFrom<ConventionalEntity>().Where(x => x.Id == 1).All();
+        var act = () => ctx.CreateDeleteBuilder<ConventionalEntity>().Where(x => x.Id == 1).All();
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -84,7 +84,7 @@ public class DeleteBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.DeleteFrom<ConventionalEntity>().All().Where(x => x.Id == 1);
+        var act = () => ctx.CreateDeleteBuilder<ConventionalEntity>().All().Where(x => x.Id == 1);
 
         act.Should().Throw<InvalidOperationException>();
     }

@@ -1,19 +1,19 @@
 # Data modification (DELETE)
 
-> nextorm removes rows with the same explicit-command model as `INSERT`: [`DeleteFrom<TEntity>()`](xref:NextORM.Core.DataContextExtensions.DeleteFrom``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `DELETE FROM <table> [WHERE ...]`, the context extension [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) deletes by the entity's declared key, and a joined query can end in a multi-table delete. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> nextorm removes rows with the same explicit-command model as `INSERT`: [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `DELETE FROM <table> [WHERE ...]`, the context extension [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) deletes by the entity's declared key, and a joined query can end in a multi-table delete. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
 
 **Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Filtering (WHERE)](01-filtering-where.md) · [Joins](02-joins.md) · [Provider overview](../providers/overview.md)
 
 ## Deleting rows by predicate
 
-[`DeleteFrom<TEntity>()`](xref:NextORM.Core.DataContextExtensions.DeleteFrom``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) removes rows and returns the number of deleted rows:
+[`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) removes rows and returns the number of deleted rows:
 
 ```csharp
-var deleted = ctx.DeleteFrom<ISimpleEntity>()
+var deleted = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Delete();
 
-await ctx.DeleteFrom<ISimpleEntity>()
+await ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .DeleteAsync(cancellationToken);
 ```
@@ -24,7 +24,7 @@ delete from simple_entity where id = 1
 delete from simple_entity where (age > 10)
 ```
 
-`Where` accepts the same predicate expressions as a query (`From<T>().Where(...)`), and repeating it combines the predicates with `and`. `DeleteFrom<T>().ToSql()` renders the statement without opening a connection.
+`Where` accepts the same predicate expressions as a query (`From<T>().Where(...)`), and repeating it combines the predicates with `and`. `CreateDeleteBuilder<T>().ToSql()` renders the statement without opening a connection.
 
 * Values captured in the predicate become parameters (`x => x.Id == id` renders `id = @id`); inline literals are emitted verbatim, exactly as in a query `WHERE`.
 * `Delete()`/`DeleteAsync()` return the affected-row count (`0` when nothing matched). ClickHouse reports no count (its mutation returns none).
@@ -34,7 +34,7 @@ delete from simple_entity where (age > 10)
 Deleting every row requires the explicit `All()` marker, so an unfiltered full-table delete cannot be written by accident. Combining `Where` and `All` throws `InvalidOperationException`:
 
 ```csharp
-ctx.DeleteFrom<ISimpleEntity>().All().Delete();   // delete from simple_entity
+ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple_entity
 ```
 
 ## Deleting by key
@@ -66,7 +66,7 @@ the four `IgnoreFilters` overloads (all, by entity type, by filter key, key-and-
 is stateful and repeated calls accumulate:
 
 ```csharp
-ctx.DeleteFrom<Document>()
+ctx.CreateDeleteBuilder<Document>()
     .IgnoreFilters(["soft-delete"])   // keep tenant scoping, drop soft-delete
     .Where(d => d.IsDeleted)
     .Delete();
@@ -90,12 +90,12 @@ See [UPDATE and DELETE (DML)](../advanced/query-filters.md#update-and-delete-dml
 `Returning()` / `Returning(projection)` materialise the removed rows through the provider's `RETURNING`/`OUTPUT` form, read through `Single()`/`ToList()`:
 
 ```csharp
-var removed = ctx.DeleteFrom<ISimpleEntity>()
+var removed = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .Returning(x => new { x.Id, x.Name })
     .ToList();
 
-var one = ctx.DeleteFrom<ISimpleEntity>()
+var one = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Returning()
     .Single();
@@ -117,10 +117,10 @@ delete from simple_entity where id = 1 returning id, name, age
 
 ## Truncating a table
 
-`Truncate<TEntity>()` renders the provider's native `TRUNCATE TABLE`, resetting a table faster than `DeleteFrom<T>().All()`:
+`CreateTruncateBuilder<TEntity>()` renders the provider's native `TRUNCATE TABLE`, resetting a table faster than `CreateDeleteBuilder<T>().All()`:
 
 ```csharp
-var cleared = ctx.Truncate<ISimpleEntity>().Execute();   // truncate table simple_entity
+var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncate table simple_entity
 ```
 
 SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse have `TRUNCATE TABLE`; SQLite has no `TRUNCATE` and throws `NotSupportedException`, and the in-memory context is query-only and throws `NotSupportedException` too. `Execute()`/`ExecuteAsync()` return the affected-row count where the provider reports one (`0` otherwise).
@@ -209,7 +209,7 @@ The `with …` is emitted before the mutation on every provider with a multi-tab
 
 ## Notes and out-of-scope
 
-* The in-memory context is query-only: `Delete`/`DeleteAsync`/`Truncate` (like every other write) throw `NotSupportedException`; query your own collections instead. `INSERT` on the in-memory provider is likewise out of scope by design.
+* The in-memory context is query-only: `Delete`/`DeleteAsync`/`CreateTruncateBuilder` (like every other write) throw `NotSupportedException`; query your own collections instead. `INSERT` on the in-memory provider is likewise out of scope by design.
 * `DELETE` is not prepared or plan-cached — optimisation in nextorm targets read-only queries only (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one command per call.
 * There is deliberately no built-in soft-delete behaviour; soft delete is expressed with a [global query filter](../advanced/query-filters.md) plus an explicit `UPDATE`. A full `MERGE` with arbitrary branches is not part of this surface, and `UPDATE` lives in its own guide ([Data modification (UPDATE)](17-update-statement.md)).
 

@@ -139,7 +139,7 @@ public sealed class EfCoreServerSharedTransactionTests
         var marker = Marker();
         using (var next = db.CreateNextOrmContext())
         {
-            next.InsertInto<EfServerRow>()
+            next.CreateInsertBuilder<EfServerRow>()
                 .Value(x => x.Name, marker)
                 .Value(x => x.Age, 11)
                 .Insert();
@@ -169,7 +169,7 @@ public sealed class EfCoreServerSharedTransactionTests
         var marker = Marker();
         using (var next = db.CreateNextOrmContext())
         {
-            next.InsertInto<EfServerRow>()
+            next.CreateInsertBuilder<EfServerRow>()
                 .Value(x => x.Name, marker)
                 .Value(x => x.Age, 13)
                 .Insert();
@@ -250,7 +250,7 @@ public sealed class EfCoreServerSharedTransactionTests
 
         // Parameterised write; its parameter is minted by the Oracle command.
         var inserted = "efs_p_" + Guid.NewGuid().ToString("N");
-        next.InsertInto<EfServerRow>().Value(x => x.Name, inserted).Value(x => x.Age, 31).Insert();
+        next.CreateInsertBuilder<EfServerRow>().Value(x => x.Name, inserted).Value(x => x.Age, 31).Insert();
         next.From<EfServerRow>().Where(x => x.Name == inserted).Select(x => x.Age).ToList().Should().Equal(31);
 
         await efTransaction.RollbackAsync(TestContext.Current.CancellationToken);
@@ -323,7 +323,7 @@ public sealed class EfCoreServerSharedTransactionTests
         Assert.False(connection.CanCreateBatch, "batch path requires command-aware minting");
 
         var name = "efs_batch_" + Guid.NewGuid().ToString("N")[..20];
-        var rows = next.Batch()
+        var rows = next.CreateBatchBuilder()
             .CreateTempTable(name, next.From("ef_shared_tx")
                 .Where(t => t["name"].AsString == marker)
                 .Select(t => new { Id = t.GetInt32("id"), Name = t.GetString("name") }))

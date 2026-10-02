@@ -6,7 +6,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a key upsert (a "merge" of a source row set into the target table), started with
-/// <see cref="DataContextExtensions.MergeInto{TEntity}"/>. The source is a mapped entity or a batch of
+/// <see cref="DataContextExtensions.CreateMergeBuilder{TEntity}"/>. The source is a mapped entity or a batch of
 /// entities; the database decides, per key, whether to update the existing row or insert a new one. The
 /// statement is rendered through the active dialect as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>
 /// (PostgreSQL, SQLite), <c>INSERT ... ON DUPLICATE KEY UPDATE</c> (MySQL, MariaDB) or <c>MERGE</c>

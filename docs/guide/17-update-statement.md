@@ -1,7 +1,7 @@
 # Data modification (UPDATE)
 
 > nextorm changes rows with the same explicit-command model as `INSERT` and `DELETE`:
-> [`Update<TEntity>()`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+> [`CreateUpdateBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
 > builds a parameterised `UPDATE <table> SET ... [WHERE ...]`, and the context extension
 > [`Update<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,``0))
 > updates by the entity's declared key. There is no change tracking and no `SaveChanges`: every terminal
@@ -11,18 +11,18 @@
 
 ## Updating rows by predicate
 
-[`Update<TEntity>()`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+[`CreateUpdateBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
 returns a [`UpdateBuilder<TEntity>`](xref:NextORM.Core.UpdateBuilder`1). Add one `Set` per written column, then
 `Where`, and finish with `Update()`/`UpdateAsync()` to get the affected-row count:
 
 ```csharp
-var updated = ctx.Update<ISimpleEntity>()
+var updated = ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Name, "renamed")
     .Set(x => x.Age, 42)
     .Where(x => x.Id == 1)
     .Update();
 
-await ctx.Update<ISimpleEntity>()
+await ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Name, "renamed")
     .Where(x => x.Age > 10)
     .UpdateAsync(cancellationToken);
@@ -58,7 +58,7 @@ mapped columns, captured values and the supported scalar functions. `Set(entity)
 non-key, non-identity, non-computed column of the entity at once:
 
 ```csharp
-ctx.Update<ISimpleEntity>()
+ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(entity)
     .Where(x => x.Id == entity.Id)
     .Update();
@@ -73,7 +73,7 @@ Unlike `DELETE`, which requires the explicit `All()` marker, `UPDATE` without `W
 table:
 
 ```csharp
-ctx.Update<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update simple_entity set archived = @p0
+ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update simple_entity set archived = @p0
 ```
 
 When the entity declares [global query filters](../advanced/query-filters.md), the predicate still applies,
@@ -92,14 +92,14 @@ statement's `WHERE` — with the predicate form, with the key form
 call is stateful and repeated calls accumulate:
 
 ```csharp
-ctx.Update<Document>()
+ctx.CreateUpdateBuilder<Document>()
     .IgnoreFilters(["soft-delete"])   // keep the tenant filter, drop soft-delete
     .Set(d => d.Archived, true)
     .Where(d => d.IsDeleted)
     .Update();
 ```
 
-For the multi-table `UpdateJoin`, the target (first table) and every joined source are filtered. `INSERT`
+For the multi-table `CreateUpdateJoinBuilder`, the target (first table) and every joined source are filtered. `INSERT`
 and `MERGE` do not filter their target. See
 [UPDATE and DELETE (DML)](../advanced/query-filters.md#update-and-delete-dml) for the full matrix.
 
@@ -121,13 +121,13 @@ The entity type must declare a key; otherwise the call throws `InvalidOperationE
 `RETURNING`/`OUTPUT` form, read through `Single()`/`ToList()`:
 
 ```csharp
-var updated = ctx.Update<ISimpleEntity>()
+var updated = ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Archived, true)
     .Where(x => x.Age > 10)
     .Returning(x => new { x.Id, x.Name })
     .ToList();
 
-var one = ctx.Update<ISimpleEntity>()
+var one = ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Archived, true)
     .Where(x => x.Id == 1)
     .Returning()
@@ -141,14 +141,14 @@ touched no row or more than one. `Returning` is only available on the predicate 
 
 ## Updating from a join
 
-[`UpdateJoin()`](xref:NextORM.Core.DataContextExtensions.UpdateJoin``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))
+[`CreateUpdateJoinBuilder()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateJoinBuilder``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))
 on a joined query builds a multi-table `UPDATE` whose target is the **first** table of the join and whose
 `SET` values may read any joined table:
 
 ```csharp
 var updated = ctx.From<IOrder>()
     .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Set(p => p.Item1.Total, p => p.Item1.Total + p.Item2.Credit)
     .Where(p => p.Item2.Tier == "gold")
@@ -180,7 +180,7 @@ body through `With(name, update)`:
 ```csharp
 var updated = ctx.From<IOrder>()
     .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Where(p => p.Item2.Tier == "gold")
     .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name })
@@ -198,7 +198,7 @@ The parameterless form returns every returnable column of both slots under deter
 ```csharp
 var whole = ctx.From<IOrder>()
     .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Where(p => p.Item2.Tier == "gold")
     .Returning()          // equivalent to .Returning(p => p)
@@ -219,7 +219,7 @@ var recent = ctx.With("recent", ctx.From<IOrder>().Where(o => o.Id > 1000).Selec
 
 var updated = ctx.From<IOrder>()
     .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Update();
 ```
@@ -242,7 +242,7 @@ On PostgreSQL a row-returning `UPDATE` can be the body of a data-modifying CTE: 
 
 ```csharp
 var updated = dataContext
-    .With("upd", dataContext.Update<IOrder>()
+    .With("upd", dataContext.CreateUpdateBuilder<IOrder>()
         .Set(x => x.Total, 0)
         .Where(x => x.CustomerId == 7)
         .Returning(x => new { x.Id, x.Total }))
@@ -257,7 +257,7 @@ with upd as (update orders set total = @p0 where customer_id = 7 returning id, t
 ```
 
 The joined form works the same way — `With(name, update)` over a multi-table
-`UpdateJoin().Returning(...)`. A `RETURNING` projection is required (a side-effect-only mutation is out of
+`CreateUpdateJoinBuilder().Returning(...)`. A `RETURNING` projection is required (a side-effect-only mutation is out of
 scope), and such a statement is never plan-cached. See [Common table expressions](08-cte.md).
 
 ## Provider support at a glance

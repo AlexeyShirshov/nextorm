@@ -54,7 +54,7 @@ public class MergeTargetFilterGuardTests
     }
 
     private static MergeBuilder<GuardedEntity> KeyUpsert(InMemoryDataContext ctx, GuardedEntity source)
-        => ctx.MergeInto<GuardedEntity>()
+        => ctx.CreateMergeBuilder<GuardedEntity>()
             .Using(source)
             .OnKeys()
             .WhenMatchedUpdate()
@@ -144,7 +144,7 @@ public class MergeTargetFilterGuardTests
         var rows = new List<PlainEntity>();
         ctx.Data[typeof(PlainEntity)] = rows;
 
-        var affected = ctx.MergeInto<PlainEntity>()
+        var affected = ctx.CreateMergeBuilder<PlainEntity>()
             .Using(new PlainEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -162,7 +162,7 @@ public class MergeTargetFilterGuardTests
         var rows = new List<PlainEntity>();
         ctx.Data[typeof(PlainEntity)] = rows;
 
-        var affected = await ctx.MergeInto<PlainEntity>()
+        var affected = await ctx.CreateMergeBuilder<PlainEntity>()
             .Using(new PlainEntity { Id = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -227,7 +227,7 @@ public class MergeTargetFilterGuardTests
             .HasQueryFilter("code", (e, c) => e.Code == (string)c.Properties[CodeKey]));
         ctx.Data[typeof(ReferenceValueEntity)] = new List<ReferenceValueEntity>();
 
-        var act = () => ctx.MergeInto<ReferenceValueEntity>()
+        var act = () => ctx.CreateMergeBuilder<ReferenceValueEntity>()
             .Using(new ReferenceValueEntity { Id = 1, Code = "visible", Rank = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -242,9 +242,9 @@ public class MergeTargetFilterGuardTests
     {
         using var ctx = GuardedContext(1, out _);
 
-        var nullEntity = () => ctx.MergeInto<GuardedEntity>().Using((GuardedEntity)null!);
-        var nullBatch = () => ctx.MergeInto<GuardedEntity>().Using((IEnumerable<GuardedEntity>)null!);
-        var emptyBatch = () => ctx.MergeInto<GuardedEntity>().Using(Array.Empty<GuardedEntity>());
+        var nullEntity = () => ctx.CreateMergeBuilder<GuardedEntity>().Using((GuardedEntity)null!);
+        var nullBatch = () => ctx.CreateMergeBuilder<GuardedEntity>().Using((IEnumerable<GuardedEntity>)null!);
+        var emptyBatch = () => ctx.CreateMergeBuilder<GuardedEntity>().Using(Array.Empty<GuardedEntity>());
 
         nullEntity.Should().Throw<ArgumentNullException>("an active filter must not shadow the source guard");
         nullBatch.Should().Throw<ArgumentNullException>();

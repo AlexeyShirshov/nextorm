@@ -17,7 +17,7 @@ public abstract partial class CommonTestSuite
         var drop = keep + 1;
         var name = CreateTableAsName(keep);
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = keep, Name = marker, Age = 1 },
             new DeleteEntity { Id = drop, Name = marker, Age = 2 },
         ]).Insert();
@@ -44,7 +44,7 @@ public abstract partial class CommonTestSuite
         var marker = "lazy-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
@@ -70,7 +70,7 @@ public abstract partial class CommonTestSuite
         var marker = "lazy-repeat-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
@@ -82,7 +82,7 @@ public abstract partial class CommonTestSuite
         ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToList().Should().ContainSingle();
 
         // A second read must not fail with "table already exists": each read drops and re-creates it.
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id + 1, Name = marker, Age = 2 })
             .Insert();
 
@@ -97,7 +97,7 @@ public abstract partial class CommonTestSuite
         var marker = "lazy-nested-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
@@ -118,7 +118,7 @@ public abstract partial class CommonTestSuite
         var marker = "lazy-any-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
@@ -139,7 +139,7 @@ public abstract partial class CommonTestSuite
         var marker = "lazy-stream-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
@@ -163,7 +163,7 @@ public abstract partial class CommonTestSuite
         var marker = "lazy-scalar-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values([
                 new DeleteEntity { Id = id, Name = marker, Age = 1 },
                 new DeleteEntity { Id = id + 1, Name = marker, Age = 2 },
@@ -202,7 +202,7 @@ public abstract partial class CommonTestSuite
         var name = CreateTableAsName(id);
         var options = new CreateTableOptions { IfNotExists = true };
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "ctas-repeat", Age = 1 })
             .Insert();
 
@@ -220,7 +220,7 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "ctas-cte", Age = 1 })
             .Insert();
 
@@ -242,7 +242,7 @@ public abstract partial class CommonTestSuite
         var keep = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(keep);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = keep, Name = marker, Age = 1 })
             .Insert();
 
@@ -281,7 +281,7 @@ public abstract partial class CommonTestSuite
         var second = first + 1;
         var name = CreateTableAsName(first);
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = first, Name = marker, Age = 1 },
             new DeleteEntity { Id = second, Name = marker, Age = 2 },
         ]).Insert();
@@ -327,11 +327,11 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
-        var rows = ctx.Batch()
+        var rows = ctx.CreateBatchBuilder()
             .CreateTempTable(name, ctx.From<IDeleteEntity>()
                 .Where(x => x.Id == id)
                 .Select(x => new { x.Id, x.Name }))
@@ -352,11 +352,11 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
-        var rows = await ctx.Batch()
+        var rows = await ctx.CreateBatchBuilder()
             .CreateTempTable(name, ctx.From<IDeleteEntity>()
                 .Where(x => x.Id == id)
                 .Select(x => new { x.Id, x.Name }))
@@ -376,12 +376,12 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "batch-stream", Age = 1 })
             .Insert();
 
         var rows = new List<int>();
-        await foreach (var row in ctx.Batch()
+        await foreach (var row in ctx.CreateBatchBuilder()
             .CreateTempTable(name, ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => new { x.Id }))
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
             .ToAsyncEnumerable(TestContext.Current.CancellationToken))
@@ -400,7 +400,7 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values([
                 new DeleteEntity { Id = id, Name = "batch-collide-a", Age = 1 },
                 new DeleteEntity { Id = id + 1, Name = "batch-collide-b", Age = 2 },
@@ -408,7 +408,7 @@ public abstract partial class CommonTestSuite
             .Insert();
 
         var limit = id;
-        var rows = ctx.Batch()
+        var rows = ctx.CreateBatchBuilder()
             .CreateTempTable(name, ctx.From<IDeleteEntity>().Where(x => x.Id >= limit).Select(x => new { x.Id }))
             .Query(ctx.From<IDeleteEntity>().Where(x => x.Id == limit).Select(x => new { x.Id }))
             .ToList();
@@ -425,12 +425,12 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var marker = "batch-update-" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
             .Insert();
 
-        var rows = ctx.Batch()
-            .Update(ctx.Update<IDeleteEntity>().Set(x => x.Name, marker).Where(x => x.Id == id))
+        var rows = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<IDeleteEntity>().Set(x => x.Name, marker).Where(x => x.Id == id))
             .Query(ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => new { x.Name }))
             .ToList();
 
@@ -446,12 +446,12 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var marker = "batch-update-async-" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
             .Insert();
 
-        var rows = await ctx.Batch()
-            .Update(ctx.Update<IDeleteEntity>().Set(x => x.Name, marker).Where(x => x.Id == id))
+        var rows = await ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<IDeleteEntity>().Set(x => x.Name, marker).Where(x => x.Id == id))
             .Query(ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => new { x.Name }))
             .ToListAsync(TestContext.Current.CancellationToken);
 
@@ -466,15 +466,15 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values([
                 new DeleteEntity { Id = id, Name = "batch-delete-a", Age = 1 },
                 new DeleteEntity { Id = id + 1, Name = "batch-delete-b", Age = 2 },
             ])
             .Insert();
 
-        var rows = ctx.Batch()
-            .Delete(ctx.DeleteFrom<IDeleteEntity>().Where(x => x.Id == id || x.Id == id + 1))
+        var rows = ctx.CreateBatchBuilder()
+            .Delete(ctx.CreateDeleteBuilder<IDeleteEntity>().Where(x => x.Id == id || x.Id == id + 1))
             .Query(ctx.From<IDeleteEntity>().Where(x => x.Id == id || x.Id == id + 1).Select(x => new { x.Id }))
             .ToList();
 
@@ -489,8 +489,8 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var marker = "batch-insert-" + Guid.NewGuid().ToString("N");
 
-        var rows = ctx.Batch()
-            .Insert(ctx.InsertInto<IDeleteEntity>().Values(new DeleteEntity { Id = id, Name = marker, Age = 1 }))
+        var rows = ctx.CreateBatchBuilder()
+            .Insert(ctx.CreateInsertBuilder<IDeleteEntity>().Values(new DeleteEntity { Id = id, Name = marker, Age = 1 }))
             .Query(ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => new { x.Name }))
             .ToList();
 
@@ -506,16 +506,16 @@ public abstract partial class CommonTestSuite
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var marker = "batch-two-" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values([
                 new DeleteEntity { Id = id, Name = "before", Age = 1 },
                 new DeleteEntity { Id = id + 1, Name = "remove", Age = 2 },
             ])
             .Insert();
 
-        var rows = ctx.Batch()
-            .Update(ctx.Update<IDeleteEntity>().Set(x => x.Name, marker).Where(x => x.Id == id))
-            .Delete(ctx.DeleteFrom<IDeleteEntity>().Where(x => x.Id == id + 1))
+        var rows = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<IDeleteEntity>().Set(x => x.Name, marker).Where(x => x.Id == id))
+            .Delete(ctx.CreateDeleteBuilder<IDeleteEntity>().Where(x => x.Id == id + 1))
             .Query(ctx.From<IDeleteEntity>().Where(x => x.Id == id || x.Id == id + 1).Select(x => new { x.Id, x.Name }))
             .ToList();
 
@@ -531,7 +531,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var name = CreateTableAsName(1);
 
-        var act = () => ctx.Batch()
+        var act = () => ctx.CreateBatchBuilder()
             .CreateTable(name, ctx.From<IDeleteEntity>().Select(x => new { x.Id }))
             .Query(ctx.From<IDeleteEntity>().Select(x => new { x.Id }))
             .ToSql();

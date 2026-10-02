@@ -24,7 +24,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
     }
 
     private void SeedQueryFilterRows(params QueryFilterEntity[] rows)
-        => _sut.DataProvider.InsertInto<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
+        => _sut.DataProvider.CreateInsertBuilder<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
 
     private static QueryFilterEntity Active(int id, string name)
         => new() { Id = id, TenantId = 1, IsDeleted = false, Name = name };
@@ -57,7 +57,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
     {
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.InsertInto<QueryFilterEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterEntity>()
             .Values(ForeignTenant(NextQueryFilterBase(), "ch-foreign"))
             .Insert();
 
@@ -70,7 +70,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
         var ctx = QueryFilterContext(1);
         var id = NextQueryFilterBase();
 
-        ctx.InsertInto<QueryFilterEntity>()
+        ctx.CreateInsertBuilder<QueryFilterEntity>()
             .IgnoreFilters()
             .Values(ForeignTenant(id, "ch-foreign-ignored"))
             .Insert();
@@ -85,7 +85,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
     {
         var ctx = QueryFilterContext(1);
         var b = NextQueryFilterBase();
-        _sut.DataProvider.InsertInto<QueryFilterFuncEntity>().IgnoreFilters().Values(
+        _sut.DataProvider.CreateInsertBuilder<QueryFilterFuncEntity>().IgnoreFilters().Values(
         [
             new QueryFilterFuncEntity { Id = b, TenantId = 1, IsDeleted = false, Name = "func-active" },
             new QueryFilterFuncEntity { Id = b - 1, TenantId = 1, IsDeleted = true, Name = "func-deleted" },

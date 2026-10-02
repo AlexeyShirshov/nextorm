@@ -14,12 +14,12 @@ public abstract partial class CommonTestSuite
         var keep = DeleteKey();
         var remove = keep + 1;
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = keep, Name = "keep", Age = 1 },
             new DeleteEntity { Id = remove, Name = "remove", Age = 2 },
         ]).Insert();
 
-        var affected = ctx.DeleteFrom<IDeleteEntity>().Where(x => x.Id == remove).Delete();
+        var affected = ctx.CreateDeleteBuilder<IDeleteEntity>().Where(x => x.Id == remove).Delete();
 
         affected.Should().Be(1);
         ctx.From<IDeleteEntity>().Where(x => x.Id == keep).Select(x => x.Id).ToList().Should().ContainSingle();
@@ -32,7 +32,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = DeleteKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "e", Age = 3 })
             .Insert();
 
@@ -47,7 +47,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = _sut.DataProvider;
 
-        ctx.DeleteFrom<IDeleteEntity>().Where(x => x.Id == DeleteKey()).Delete().Should().Be(0);
+        ctx.CreateDeleteBuilder<IDeleteEntity>().Where(x => x.Id == DeleteKey()).Delete().Should().Be(0);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = DeleteKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "once", Age = 4 })
             .Insert();
 
@@ -69,12 +69,12 @@ public abstract partial class CommonTestSuite
     {
         var ctx = _sut.DataProvider;
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = DeleteKey(), Name = "a", Age = 1 },
             new DeleteEntity { Id = DeleteKey(), Name = "b", Age = 2 },
         ]).Insert();
 
-        ctx.DeleteFrom<IDeleteEntity>().All().Delete();
+        ctx.CreateDeleteBuilder<IDeleteEntity>().All().Delete();
 
         ctx.From<IDeleteEntity>().Select(x => x.Id).ToList().Should().BeEmpty();
     }
@@ -86,11 +86,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = DeleteKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "ret", Age = 7 })
             .Insert();
 
-        var removed = ctx.DeleteFrom<IDeleteEntity>()
+        var removed = ctx.CreateDeleteBuilder<IDeleteEntity>()
             .Where(x => x.Id == id)
             .Returning(x => new { x.Id, x.Name })
             .ToList();
@@ -107,11 +107,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = DeleteKey();
 
-        await ctx.InsertInto<IDeleteEntity>()
+        await ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "ret2", Age = 8 })
             .InsertAsync(TestContext.Current.CancellationToken);
 
-        var removed = await ctx.DeleteFrom<IDeleteEntity>()
+        var removed = await ctx.CreateDeleteBuilder<IDeleteEntity>()
             .Where(x => x.Id == id)
             .Returning(x => x.Name)
             .ToListAsync(TestContext.Current.CancellationToken);
@@ -126,12 +126,12 @@ public abstract partial class CommonTestSuite
         Assert.SkipUnless(Provider.SupportsTruncate, "This provider has no TRUNCATE.");
         var ctx = _sut.DataProvider;
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = DeleteKey(), Name = "t1", Age = 1 },
             new DeleteEntity { Id = DeleteKey(), Name = "t2", Age = 2 },
         ]).Insert();
 
-        ctx.Truncate<IDeleteEntity>().Execute();
+        ctx.CreateTruncateBuilder<IDeleteEntity>().Execute();
 
         ctx.From<IDeleteEntity>().Select(x => x.Id).ToList().Should().BeEmpty();
     }
@@ -145,11 +145,11 @@ public abstract partial class CommonTestSuite
         var remove = DeleteKey();
         var keep = remove + 1;
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = remove, Name = marker, Age = 1 })
             .Insert();
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = remove, Name = "remove", Age = 1 },
             new DeleteEntity { Id = keep, Name = "keep", Age = 2 },
         ]).Insert();
@@ -172,7 +172,7 @@ public abstract partial class CommonTestSuite
         var remove = DeleteKey();
         var keep = remove + 1;
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = remove, Name = "remove", Age = 1 },
             new DeleteEntity { Id = keep, Name = "keep", Age = 2 },
         ]).Insert();
@@ -192,7 +192,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void Delete_ToSql_ShouldRenderDelete()
     {
-        var sql = _sut.DataProvider.DeleteFrom<IDeleteEntity>().Where(x => x.Id == 1).ToSql();
+        var sql = _sut.DataProvider.CreateDeleteBuilder<IDeleteEntity>().Where(x => x.Id == 1).ToSql();
 
         sql.Should().ContainEquivalentOf("delete");
     }
@@ -203,11 +203,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = DeleteKey();
 
-        await ctx.InsertInto<IDeleteEntity>()
+        await ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "async", Age = 1 })
             .InsertAsync(TestContext.Current.CancellationToken);
 
-        var affected = await ctx.DeleteFrom<IDeleteEntity>()
+        var affected = await ctx.CreateDeleteBuilder<IDeleteEntity>()
             .Where(x => x.Id == id)
             .DeleteAsync(TestContext.Current.CancellationToken);
 
@@ -222,11 +222,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = DeleteKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "whole", Age = 5 })
             .Insert();
 
-        var rows = ctx.DeleteFrom<DeleteEntity>().Where(x => x.Id == id).Returning().ToList();
+        var rows = ctx.CreateDeleteBuilder<DeleteEntity>().Where(x => x.Id == id).Returning().ToList();
 
         rows.Should().ContainSingle();
         rows[0].Id.Should().Be(id);
@@ -236,7 +236,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void Delete_WithoutFilter_ShouldThrow()
     {
-        var act = () => _sut.DataProvider.DeleteFrom<IDeleteEntity>().Delete();
+        var act = () => _sut.DataProvider.CreateDeleteBuilder<IDeleteEntity>().Delete();
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -244,7 +244,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void Delete_AllThenWhere_ShouldThrow()
     {
-        var act = () => _sut.DataProvider.DeleteFrom<IDeleteEntity>().All().Where(x => x.Id == 1).Delete();
+        var act = () => _sut.DataProvider.CreateDeleteBuilder<IDeleteEntity>().All().Where(x => x.Id == 1).Delete();
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -252,7 +252,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void Delete_WhereThenAll_ShouldThrow()
     {
-        var act = () => _sut.DataProvider.DeleteFrom<IDeleteEntity>().Where(x => x.Id == 1).All().Delete();
+        var act = () => _sut.DataProvider.CreateDeleteBuilder<IDeleteEntity>().Where(x => x.Id == 1).All().Delete();
 
         act.Should().Throw<InvalidOperationException>();
     }

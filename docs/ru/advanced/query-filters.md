@@ -249,13 +249,13 @@ select t1.id, (select top(1) t2.id from attachments as [t2]
 
 | Инструкция | Фильтр |
 |---|---|
-| `Update<T>().Where(...).Update()` | подмешивается в `WHERE` через `and` вместе с предикатом |
+| `CreateUpdateBuilder<T>().Where(...).Update()` | подмешивается в `WHERE` через `and` вместе с предикатом |
 | `Update(entity)` (key-форма) | `WHERE <pk> = @p and <filter>` — строка, отсечённая фильтром, не обновляется |
-| `DeleteFrom<T>().Where(...).Delete()` | подмешивается в `WHERE` через `and` вместе с предикатом |
+| `CreateDeleteBuilder<T>().Where(...).Delete()` | подмешивается в `WHERE` через `and` вместе с предикатом |
 | `Delete(entity)` (key-форма) | `WHERE <pk> = @p and <filter>` — строка, отсечённая фильтром, не удаляется |
-| `Update<T>().Set(...).Update()` без `Where` | обновляются все **отфильтрованные** строки (фильтр всё равно применяется) |
-| `DeleteFrom<T>().All()` | явное удаление всей таблицы: фильтр **не** применяется |
-| `UpdateJoin(...)` / join-`Delete()` | цель (первая таблица) и все источники соединений фильтруются |
+| `CreateUpdateBuilder<T>().Set(...).Update()` без `Where` | обновляются все **отфильтрованные** строки (фильтр всё равно применяется) |
+| `CreateDeleteBuilder<T>().All()` | явное удаление всей таблицы: фильтр **не** применяется |
+| `CreateUpdateJoinBuilder(...)` / join-`Delete()` | цель (первая таблица) и все источники соединений фильтруются |
 
 Для key-форм фильтр добавляется через `and` к равенству по ключу, поэтому `ctx.Delete(entity)` вернёт `0`, если фильтр отсекает этот ключ. Фильтр подмешивается в подготовленное условие мутации, поэтому отображаемый SQL отражает действующий набор фильтров. В отличие от чтения мутация не подготавливается и не кэшируется по плану, поэтому ключа плана, в котором фильтр мог бы участвовать, здесь нет.
 
@@ -263,13 +263,13 @@ select t1.id, (select top(1) t2.id from attachments as [t2]
 
 ```csharp
 // Отключаем только фильтр soft-delete; фильтр тенанта продолжает действовать.
-ctx.DeleteFrom<Document>()
+ctx.CreateDeleteBuilder<Document>()
     .IgnoreFilters(["soft-delete"])
     .Where(d => d.IsDeleted)
     .Delete();
 
 // Отключаем все фильтры цели, затем обновляем только указанный столбец.
-ctx.Update<Document>()
+ctx.CreateUpdateBuilder<Document>()
     .IgnoreFilters()
     .Set(d => d.Archived, true)
     .Update();
@@ -297,22 +297,22 @@ delete from documents where ((is_deleted) = 1 and tenant_id = @p0)
 
 | Инструкция | Что проверяется |
 |---|---|
-| `InsertInto<T>().Value(...)` / `Values(entity)` / пакетный `Values(...)` | каждая записываемая строка против фильтров цели |
-| `BulkInsertInto<T>()` | каждая строка источника |
-| `MergeInto<T>().Using(...)` | строки-источники **каждой** ветки `MERGE` — insert, update-only и delete-only |
-| `InsertInto<T>().Values(source, mapping)` (`INSERT … SELECT`) | серверный pre-check строк источника |
-| `MergeInto<T>().Using(query)` (`MERGE` из запроса) | серверный pre-check строк источника |
+| `CreateInsertBuilder<T>().Value(...)` / `Values(entity)` / пакетный `Values(...)` | каждая записываемая строка против фильтров цели |
+| `CreateBulkInsertBuilder<T>()` | каждая строка источника |
+| `CreateMergeBuilder<T>().Using(...)` | строки-источники **каждой** ветки `MERGE` — insert, update-only и delete-only |
+| `CreateInsertBuilder<T>().Values(source, mapping)` (`INSERT … SELECT`) | серверный pre-check строк источника |
+| `CreateMergeBuilder<T>().Using(query)` (`MERGE` из запроса) | серверный pre-check строк источника |
 
 `INSERT` никогда не несёт фильтр цели; `INSERT … SELECT` фильтрует только свой источник:
 
 ```csharp
 // Цель INSERT никогда не фильтруется; записываемая строка вместо этого проверяется.
-ctx.InsertInto<Document>()
+ctx.CreateInsertBuilder<Document>()
     .Values(new Document { Id = 1, TenantId = 1, IsDeleted = false })
     .Insert();
 
 // INSERT … SELECT фильтрует свой источник как чтение и предварительно проверяет записываемые строки.
-ctx.InsertInto<ArchivedDocument>()
+ctx.CreateInsertBuilder<ArchivedDocument>()
     .Values(ctx.From<Document>().Where(d => d.Id > 0), d => new { d.Id, d.TenantId, d.IsDeleted })
     .Insert();
 ```
@@ -344,7 +344,7 @@ select id, tenant_id as [TenantId], is_deleted as [IsDeleted] from documents
 `IgnoreFilters` на [`InsertBuilder<T>`](xref:NextORM.Core.InsertBuilder`1), [`BulkInsertBuilder<T>`](xref:NextORM.Core.BulkInsertBuilder`1) и [`MergeBuilder<T>`](xref:NextORM.Core.MergeBuilder`1) отключает соответствующие фильтры и от проверки, с теми же четырьмя перегрузками и семантикой, что и у билдера чтения:
 
 ```csharp
-ctx.InsertInto<Document>()
+ctx.CreateInsertBuilder<Document>()
     .IgnoreFilters(["soft-delete"])
     .Values(document)
     .Insert();
@@ -362,7 +362,7 @@ ctx.InsertInto<Document>()
 Для формы полного `MERGE` (SQL Server, PostgreSQL) предикат цели подмешивается в условие `MERGE ... ON` и — в SQL Server, у которого есть эта ветка — дописывается в каждую ветку `WHEN NOT MATCHED BY SOURCE`. Поэтому строка цели, скрытая фильтром, никогда не сопоставляется, не обновляется и не удаляется merge'ем, включая его ветку удаления. Key upsert SQL Server рендерится той же формой `MERGE` и получает тот же предикат, поэтому тоже фильтруется.
 
 ```csharp
-ctx.MergeInto<Document>()
+ctx.CreateMergeBuilder<Document>()
     .Using(new Document { Id = 1, TenantId = 1, IsDeleted = true })
     .OnKeys()
     .WhenMatched().ThenUpdate()
@@ -555,6 +555,6 @@ public interface IQueryFilterMetadata
 
 - **Процессно-глобальная регистрация, побеждает первая.** Фильтры регистрируются **глобально на процесс**, и для типа сущности побеждает первая регистрация (согласовано с метаданными nextorm): последующий `From<T>(cfg)` / `HasQueryFilter` для того же типа игнорируется — фильтры не привязаны к `DataContext`.
 - **Область отключения наследует входной билдер.** Селективную область несёт билдер, который начинает запрос; вызов `IgnoreFilters` на билдере, который затем используется как источник соединения, не пробрасывается. Используйте перегрузку по типам/ключам на входном билдере запроса. Исключение — жадно загружаемые дочерние записи `LoadWith`: они наследуют область входного билдера объединением (см. [Eager loading](eager-loading.md)).
-- **Key-формы мутаций применяют фильтры, но не предоставляют `IgnoreFilters`.** `Update(entity)` и `Delete(entity)` учитывают фильтр цели, но у их немедленного терминала нет fluent-вызова `IgnoreFilters`; используйте предикатную форму (`Update<T>().Where(...)` / `DeleteFrom<T>().Where(...)`), когда нужно отключить фильтр на мутации.
+- **Key-формы мутаций применяют фильтры, но не предоставляют `IgnoreFilters`.** `Update(entity)` и `Delete(entity)` учитывают фильтр цели, но у их немедленного терминала нет fluent-вызова `IgnoreFilters`; используйте предикатную форму (`CreateUpdateBuilder<T>().Where(...)` / `CreateDeleteBuilder<T>().Where(...)`), когда нужно отключить фильтр на мутации.
 - **Время жизни плана.** Значение контекста, читаемое фильтром, захватывается как runtime-параметр (безопасно для кэша плана). Подготовленный план сохраняет первый экземпляр `IDataContext` на всё время существования (ограниченно, один на форму плана).
 - **Открытые единицы по адаптерам.** Срез «ClickHouse без EF-адаптера» и сертификация общего соединения специально для MariaDB отслеживаются как открытые единицы вехи `1.0.9-b`; до их появления используйте поддерживаемые EF-адаптеры (см. [Мост фильтров запросов EF Core](ef-core-query-filters.md)).

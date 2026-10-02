@@ -71,7 +71,7 @@ public class QueryFilterDmlSqlGenerationTests
         ctx.From<FilterMergeTargetEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
 
-        var sql = ctx.MergeInto<FilterMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<FilterMergeTargetEntity>()
             .Using(new FilterMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()

@@ -114,7 +114,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureSelect(ctx);
 
-        var sql = ctx.Update<QfSelectEntity>()
+        var sql = ctx.CreateUpdateBuilder<QfSelectEntity>()
             .Set(x => x.IsDeleted, true)
             .Where(x => x.Id == 10)
             .ToSql()
@@ -131,7 +131,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureSelect(ctx);
 
-        var sql = ctx.DeleteFrom<QfSelectEntity>()
+        var sql = ctx.CreateDeleteBuilder<QfSelectEntity>()
             .Where(x => x.Id == 10)
             .ToSql()
             .Replace("\r\n", "\n");
@@ -147,7 +147,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ctx.Properties[TenantKey] = 1;
 
-        var sql = ctx.InsertInto<QfInsertTargetEntity>(b => b
+        var sql = ctx.CreateInsertBuilder<QfInsertTargetEntity>(b => b
                 .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]))
             .Values(new QfInsertTargetEntity { Id = 1, TenantId = 1, IsDeleted = false })
             .ToSql()
@@ -165,7 +165,7 @@ public class QueryFilterSqlGenerationTests
         ctx.From<QfInsertSourceEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
 
-        var sql = ctx.InsertInto<QfInsertTargetEntity>(b => b
+        var sql = ctx.CreateInsertBuilder<QfInsertTargetEntity>(b => b
                 .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]))
             .Values(
                 ctx.From<QfInsertSourceEntity>().Where(x => x.Id > 0),
@@ -357,7 +357,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -376,7 +376,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .On((t, s) => t.Id == s.Id && (t.Name == s.Name || s.Name == null))
             .WhenMatched().ThenUpdate()
@@ -394,7 +394,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var act = () => ctx.MergeInto<QfMergeTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -410,7 +410,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters()
             .OnKeys()
@@ -428,14 +428,14 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var otherKey = () => ctx.MergeInto<QfMergeTargetEntity>()
+        var otherKey = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters(["other"])
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .ToSql();
-        var targetKey = () => ctx.MergeInto<QfMergeTargetEntity>()
+        var targetKey = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters(["tenant"])
             .OnKeys()
@@ -453,7 +453,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters()
             .OnKeys()
@@ -470,14 +470,14 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var kept = ctx.MergeInto<QfMergeTargetEntity>()
+        var kept = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters(typeof(QfMergeOtherEntity))
             .OnKeys()
             .WhenMatched().ThenUpdate()
             .WhenNotMatched().ThenInsert()
             .ToSql();
-        var dropped = ctx.MergeInto<QfMergeTargetEntity>()
+        var dropped = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters(typeof(QfMergeTargetEntity))
             .OnKeys()
@@ -499,7 +499,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -517,7 +517,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .On((t, s) => t.Id == s.Id && (t.Name == s.Name || s.Name == null))
             .WhenMatched().ThenUpdate()
@@ -535,7 +535,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -559,7 +559,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var act = () => ctx.MergeInto<QfMergeTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .On((t, s) => t.Id == s.Id)
             .ToSql();
@@ -574,7 +574,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var act = () => ctx.MergeInto<QfMergeTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters()
             .On((t, s) => t.Id == s.Id)
@@ -591,7 +591,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         // QfMergeOtherEntity is never registered with a filter, so no active filter applies.
-        var act = () => ctx.MergeInto<QfMergeOtherEntity>()
+        var act = () => ctx.CreateMergeBuilder<QfMergeOtherEntity>()
             .Using(new QfMergeOtherEntity { Id = 1 })
             .On((t, s) => t.Id == s.Id)
             .ToSql();
@@ -626,7 +626,7 @@ public class QueryFilterSqlGenerationTests
         var (ctx, connection) = CreateCountedContext();
         using var _ = ctx;
 
-        var act = () => ctx.MergeInto<QfMergeTargetEntity>()
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(ctx.From<QfMergeTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
             .On((t, s) => t.Id == s.Id)
             .Merge();
@@ -640,7 +640,7 @@ public class QueryFilterSqlGenerationTests
     {
         var (ctx, connection) = CreateCountedContext();
         using var _ = ctx;
-        var command = ctx.MergeInto<QfMergeTargetEntity>()
+        var command = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(ctx.From<QfMergeTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
             .On((t, s) => t.Id == s.Id);
 
@@ -656,7 +656,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()

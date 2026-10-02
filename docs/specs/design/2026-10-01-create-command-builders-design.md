@@ -7,6 +7,8 @@
 Tracking: GitHub issue [#147](https://github.com/AlexeyShirshov/nextorm/issues/147), милстоун
 `1.0.9-b` (создано 2026-10-01). Создание issue не авторизует продуктовую реализацию; ревью спеки
 пользователем остаётся незакрытым, гейт ревью не меняется.
+> **Реализовано (Stage A, 2026-10-02).** #147 выполнен в ветке `1.0.9-b`: 16 DML-фабрик переименованы в `Create<Имя>Builder` (старые имена удалены), 11 `CreateQueryBuilder*`-форвардеров добавлены, `From`/`FromSql`/`FromTableFunction` не тронуты; публичные доки EN+RU обновлены. Доказательства — `docs/specs/status/api-create-builders-147-1.md` и `docs/specs/design/API-NAMING-REVIEW.md` (§«Аудит 02.10.2026 — issue #147»).
+
 
 ## 1. Намерение
 

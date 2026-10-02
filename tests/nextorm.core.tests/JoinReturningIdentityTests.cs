@@ -296,9 +296,9 @@ public class JoinReturningIdentityTests
     {
         object Build() => arity switch
         {
-            2 => identityLambda ? Join2(ctx).UpdateJoin().Returning(p => p) : Join2(ctx).UpdateJoin().Returning(),
-            3 => identityLambda ? Join3(ctx).UpdateJoin().Returning(p => p) : Join3(ctx).UpdateJoin().Returning(),
-            8 => identityLambda ? Join8(ctx).UpdateJoin().Returning(p => p) : Join8(ctx).UpdateJoin().Returning(),
+            2 => identityLambda ? Join2(ctx).CreateUpdateJoinBuilder().Returning(p => p) : Join2(ctx).CreateUpdateJoinBuilder().Returning(),
+            3 => identityLambda ? Join3(ctx).CreateUpdateJoinBuilder().Returning(p => p) : Join3(ctx).CreateUpdateJoinBuilder().Returning(),
+            8 => identityLambda ? Join8(ctx).CreateUpdateJoinBuilder().Returning(p => p) : Join8(ctx).CreateUpdateJoinBuilder().Returning(),
             _ => throw new ArgumentOutOfRangeException(nameof(arity)),
         };
 

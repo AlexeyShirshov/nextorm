@@ -490,3 +490,84 @@ alloc; fresh unbound cold **2.46×** / 2.40×; fresh bound cold **3.00×** / 2.8
 deliberate price of isolation: independent same-SQL sources are a guaranteed cache miss by
 construction. A `GlobalSetup` guard fails the run if independent raw sources share a cached command
 or a reused source misses. Command `--filter '*RawSourcePlanReuseBenchmark*'`.
+
+## Results 2026-10-02 — issue #147 (factory renames + query forwarders)
+
+Perf acceptance runs on the candidate tree (uncommitted #147) on the same host/config/case set as
+the baseline (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12,
+BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `MemoryDiagnoser`,
+`Categories=acceptance`). Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance
+```
+
+### Run 1
+
+**7** cases selected, **0** failures; exit **0**. External shell wall clock **51.98 s**; BDN
+`Global total time` **49.19 s** (executed benchmarks: 7) — both under the 4 min budget. The host was
+**not quiet**: concurrent `opencode`/`roslynq`/`VBCSCompiler` processes held the load average around
+4.3–4.8 on 8 logical / 4 physical cores at run time, and the `Cached_ToList` row's `Error`
+(4,809.4 us) is larger than its `Mean` (2,548.0 us), so the absolute means and the tracked ratio are
+noise-dominated.
+
+| Case | Mean | Allocated |
+|------|------|-----------|
+| `Nextorm_Count` | 3.419 ms | 372.66 KB |
+| `Nextorm_GroupByCount` | 81.59 ms | 50.05 MB |
+| `Nextorm_Cached` | 2.634 ms | 571.15 KB |
+| `Prepared_ToList` | 1,152.7 us | 76.14 KB |
+| `Cached_ToList` | 2,548.0 us | 601.17 KB |
+| `Cached_PlanOnly_Param` | 747.2 us | 525.02 KB |
+| `Nextorm_Cached_ToListAsync` | 3.136 ms | 736.6 KB |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.21** (2548.0 / 1152.7)
+= **+18.2 %** vs the documented baseline **1.87**; the corresponding allocated ratio is **7.90**
+(601.17 / 76.14). The tracked rule is a **>20 %** deterioration, i.e. a ratio above
+**1.87 × 1.20 = 2.244**; **2.21 < 2.244**, so run 1 is **below the investigation threshold**. It is a
+noisy-host measurement (numerator `Error > Mean`), and `ShortRun` on this host is high-variance —
+recorded runs span **1.38–3.89** (`Interpretation`, above; the #106 cycle-2 entry above records the
+1.38 and 3.89 endpoints) — so it is not reported as a regression.
+
+### Run 2 (second consecutive run, same host/config/case set)
+
+**7** cases selected, **0** failures; exit **0**. External shell wall clock **50.49 s**; BDN
+`Global total time` **47.35 s** (executed benchmarks: 7) — both under the 4 min budget.
+
+| Case | Mean | Allocated |
+|------|------|-----------|
+| `Nextorm_Count` | 3.065 ms | 372.66 KB |
+| `Nextorm_GroupByCount` | 79.06 ms | 50.05 MB |
+| `Nextorm_Cached` | 2.487 ms | 571.15 KB |
+| `Prepared_ToList` | 1,222.7 us | 76.14 KB |
+| `Cached_ToList` | 2,435.6 us | 601.17 KB |
+| `Cached_PlanOnly_Param` | 778.8 us | 525.02 KB |
+| `Nextorm_Cached_ToListAsync` | 2.982 ms | 736.6 KB |
+
+Comparable ratio = **1.99** (2435.6 / 1222.7) = **+6.5 %** vs baseline **1.87** and **-9.9 %** vs
+run 1; allocated ratio **7.90** (601.17 / 76.14), unchanged. The two-run spread is **1.99–2.21**;
+neither run reaches the **2.244** trigger.
+
+**Change under acceptance is declaration-only.** #147 is the `Create…Builder` factory renames plus
+the additive `CreateQueryBuilder*` forwarders: the changed hunks in `DataContextExtensions.cs` are
+name/doc updates and one additive forwarder block, and the bodies at `:996`, `:1216`, `:1332` are
+untouched; `QueryPlanner`, `QueryCache`, `QueryExecutor` and the materialization path are unchanged
+(the only other product edit is a `DataContext.cs` error-message string rename at line 1144). The
+cached path therefore cannot have gained per-call work. The overlay's query-path class rule
+(`### Перф-приёмка cached path`, table row «изменение query-path / plan cache») mandates this ratio
+for query-path/plan-cache changes; a declaration-only change does not touch that class, so both runs
+are recorded as protection evidence, not as an improvement or a regression.
+
+**Verdict: no regression** — both runs **7/7**, **0** failures, exit **0**; run 1 **+18.2 %** and
+run 2 **+6.5 %** are each below the 20 % (**2.244**) investigation threshold, and the allocated ratio
+is unchanged across both runs and the baseline.
+
+Before run 1, one invocation of the same command aborted every SQLite case with
+`SQLite Error 14: unable to open database file` because the fixture path `/tmp/nextorm-bench/test.db`
+(`BenchDb`'s WSL fallback) was absent; the fixture was restored byte-for-byte from
+`benchmarks/nextorm.benchmark/data/test.db` (`PRAGMA integrity_check = ok`) and the command re-run,
+producing run 1 above. Raw logs: `/tmp/opencode/147/acceptance.log` (run 1) and
+`/tmp/opencode/147/acceptance-run2.log` (run 2).
+
+acceptance command exit code = 0 (7 cases, 0 failures) — logs `/tmp/opencode/147/acceptance.log`,
+`/tmp/opencode/147/acceptance-run2.log`.

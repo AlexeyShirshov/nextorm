@@ -15,7 +15,7 @@ public class BatchTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.Batch();
+        var act = () => ctx.CreateBatchBuilder();
 
         act.Should().Throw<NotSupportedException>();
     }

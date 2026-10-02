@@ -15,7 +15,7 @@ public class DataModifyingCteRejectionTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.With("upd", ctx.Update<IComplexEntity>()
+        var act = () => ctx.With("upd", ctx.CreateUpdateBuilder<IComplexEntity>()
             .Set(x => x.String, "a")
             .Where(x => x.Id == 1)
             .Returning(x => new { x.Id }));
@@ -28,7 +28,7 @@ public class DataModifyingCteRejectionTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.With("del", ctx.DeleteFrom<IComplexEntity>()
+        var act = () => ctx.With("del", ctx.CreateDeleteBuilder<IComplexEntity>()
             .Where(x => x.Id == 1)
             .Returning(x => new { x.Id }));
 
@@ -42,7 +42,7 @@ public class DataModifyingCteRejectionTests
 
         var act = () => ctx.With("upd", ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "a")
             .Returning(p => new { p.Item1.Id }));
 
@@ -69,7 +69,7 @@ public class DataModifyingCteRejectionTests
 
         var act = () => ctx.With("upd", ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "a")
             .Returning());
 
@@ -98,7 +98,7 @@ public class DataModifyingCteRejectionTests
         // identity terminal (not wrapped in With(...)) must reject before returning any rows.
         var act = () => ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "a")
             .Returning()
             .ToList();

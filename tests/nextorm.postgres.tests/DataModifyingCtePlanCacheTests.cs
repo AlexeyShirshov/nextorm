@@ -32,7 +32,7 @@ public class DataModifyingCtePlanCacheTests
         using var ctx = PostgresTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var dml = ctx.With("del", ctx.DeleteFrom<IMergeEntity>()
+        var dml = ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
                 .Where(x => x.Id == 1)
                 .Returning(x => new { x.Id }))
             .From("del")
@@ -67,7 +67,7 @@ public class DataModifyingCtePlanCacheTests
         // The DML CTE is only declared on the body of the outer read CTE; PrepareCtes hoists it to the
         // top-level WITH during preparation, i.e. after the cache decision. HasDataModifyingCte must
         // still see it through the nested declaration tree.
-        var innerDml = ctx.With("del", ctx.DeleteFrom<IMergeEntity>()
+        var innerDml = ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
                 .Where(x => x.Id == 1)
                 .Returning(x => new { x.Id }))
             .From("del")
@@ -94,7 +94,7 @@ public class DataModifyingCtePlanCacheTests
         // (CteHoister.EnsureNoUnhoistedCtes). HasDataModifyingCte only walks the CTE declaration tree,
         // so it misses this case; preparation then fails fast, before the lookup/store gates, so the
         // command is never cached. This proves the "missed detection" path is not a caching hole.
-        var dml = ctx.With("del", ctx.DeleteFrom<IMergeEntity>()
+        var dml = ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
                 .Where(x => x.Id == 1)
                 .Returning(x => new { x.Id }))
             .From("del")
@@ -112,7 +112,7 @@ public class DataModifyingCtePlanCacheTests
         using var ctx = PostgresTestContext.Create();
         ctx.PurgeQueryCache();
 
-        var dml = ctx.With("del", ctx.DeleteFrom<IMergeEntity>()
+        var dml = ctx.With("del", ctx.CreateDeleteBuilder<IMergeEntity>()
                 .Where(x => x.Id == 1)
                 .Returning(x => new { x.Id }))
             .From("del")

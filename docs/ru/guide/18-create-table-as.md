@@ -76,7 +76,7 @@ await tx.CommitAsync();
 Материализацию и читающий её запрос можно отправить одним батчем — один round trip на одной серверной сессии, поэтому session-scoped таблица видна за пулером уровня соединения. Используйте общий [`BatchBuilder`](xref:NextORM.Core.BatchBuilder); он описан в [Выполнение утверждений одним батчем](23-sql-batch.md).
 
 ```csharp
-var orders = ctx.Batch()
+var orders = ctx.CreateBatchBuilder()
     .CreateTempTable("recent_orders", ctx.From<IOrder>()
         .Where(x => x.Total > minTotal)
         .Select(x => new { x.Id, x.Total }))

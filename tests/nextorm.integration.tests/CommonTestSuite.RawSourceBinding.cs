@@ -29,7 +29,7 @@ public abstract partial class CommonTestSuite
     }
 
     private void SeedRawBindRows(params QueryFilterEntity[] rows)
-        => _sut.DataProvider.InsertInto<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
+        => _sut.DataProvider.CreateInsertBuilder<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
 
     private static QueryFilterEntity RawBindActive(int id)
         => new() { Id = id, TenantId = 1, IsDeleted = false, Name = "raw-bind-active" };

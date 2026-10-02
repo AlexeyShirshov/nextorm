@@ -121,7 +121,7 @@ range-типа) и динамическая схема табличных ист
 `UpdateOptimisticWithRefresh` (оптимистичный update с write-back токена) → ~~G6~~ закрыт как **<span style="color:orange">By design</span>**
 (нет change tracking → write-back не операция фреймворка; паттерн — [гайд](../../guide/24-optimistic-concurrency.md));
 `[Duration]`/`TimeSpan`-колонки → ~~G9~~ <span style="color:green">реализовано</span>; `BulkCopyOptions.MaxSqlLengthForBatch` → <span style="color:green">реализовано</span>
-(`MaxBatchSize`/`MaxParameters`/`MaxSqlLength` у `BulkInsertInto`); F# `option`/single-case discriminated
+(`MaxBatchSize`/`MaxParameters`/`MaxSqlLength` у `CreateBulkInsertBuilder`); F# `option`/single-case discriminated
 unions → **<span style="color:orange">Out-of-scope</span>** (F#);
 LINQPad/gRPC-remote-context → **<span style="color:orange">Out-of-scope</span>**.
 
@@ -150,7 +150,7 @@ MERGE/`Returning`. См. [Value converters и JSON-колонки](../../infrast
 (`JsonTypeInfo<T>`) — вне области.
 
 **~~G3~~. DML `RETURNING`/`OUTPUT` как композируемый источник — <span style="color:green">Done</span> (PostgreSQL).** `linq2db#5717`.
-<span style="color:green">Реализовано</span>: `ctx.With("ins", ctx.InsertInto<T>().Values(v).Returning(x => new { x.Id }))` открывает
+<span style="color:green">Реализовано</span>: `ctx.With("ins", ctx.CreateInsertBuilder<T>().Values(v).Returning(x => new { x.Id }))` открывает
 `MutationCteQuery<TResult>`; `INSERT ... RETURNING` рендерится как data-modifying CTE (гейт
 `ISqlDialect.SupportsDataModifyingCtes`), а его строки читаются через `.From("ins")` и дальше
 фильтруются/джойнятся/проецируются как обычный источник (вплоть до питания внешнего `INSERT ... SELECT`);
@@ -170,20 +170,20 @@ SQL Server `OUTPUT ... INTO <table>` (в т.ч. `INTO` + клиентский р
 Журнал — `todo_output_into.md`. **Несколько result-set'ов — <span style="color:green">реализовано</span> (2026-09-26)** фазой 4 `todo_stored_procedures.md` (#70, включая #25): `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()`; на raw-пути навигация — общий helper из `BatchRunner.AdvanceToResultSet`.
 
 **~~G5~~. Bulk-insert: возврат идентификаторов и конфликтная политика.** `linq2db#2960` (Returning IDs),
-`#5124` (Bulk Insert Ignore), `#3795` (identity insert). **<span style="color:green">Реализовано</span>**: `BulkInsertInto<T>()` —
+`#5124` (Bulk Insert Ignore), `#3795` (identity insert). **<span style="color:green">Реализовано</span>**: `CreateBulkInsertBuilder<T>()` —
 нативный `COPY`/`SqlBulkCopy` для PostgreSQL/SQL Server, портируемый `INSERT ... VALUES` с чанкингом для
 остальных; возврат ключей — batch `RETURNING`/`OUTPUT` (`ReturningKey`/`Returning`), пропуск конфликтов —
 опция `BulkInsertOptions.IgnoreDuplicates` на диалектных хуках
 `SupportsInsertIgnore`/`SupportsOnConflictDoNothing`, запись identity — `BulkInsertOptions.KeepIdentity`
 (`OVERRIDING SYSTEM VALUE`/`SET IDENTITY_INSERT`) и чанкинг `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`
-(опции передаются в `BulkInsertInto<T>(options)` или через `BulkInsertOptionsBuilder`).
+(опции передаются в `CreateBulkInsertBuilder<T>(options)` или через `BulkInsertOptionsBuilder`).
 См. [Массовая вставка](../../guide/20-bulk-insert.md).
 
 **~~G6~~. Оптимистичная конкурентность — <span style="color:orange">By design</span>.** `linq2db#4405` и
 shipped `UpdateOptimisticWithRefresh` (6.5.0). При отсутствии change tracking/identity map фреймворку
 нечем «владеть»: write-back токена — не операция фреймворка, а присваивание в объекте вызывающего кода,
 поэтому 1:1-перенос `UpdateOptimisticWithRefresh` в модель без трекинга смысла не имеет. Достаточно явных
-примитивов, которые уже есть: `Update<T>().Set(...).Where(key && token).Update()` возвращает число
+примитивов, которые уже есть: `CreateUpdateBuilder<T>().Set(...).Where(key && token).Update()` возвращает число
 затронутых строк (`0` = конфликт), `Returning`/`OUTPUT` отдаёт новый токен, а `Merge` с условной веткой
 `WhenMatched((t, s) => t.Version == s.Version)` даёт upsert-с-проверкой (SQL Server, PG15+).
 `IfUnchanged`/`WithRefresh` были бы чистым сахаром над `Where`; вместо API — гайд

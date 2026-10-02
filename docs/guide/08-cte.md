@@ -175,7 +175,7 @@ var recent = dataContext
 
 dataContext.From<IOrder>()
     .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "archived")
     .Update();
 ```
@@ -319,7 +319,7 @@ side-effecting), so it is re-planned on every call.
 ```csharp
 // Single-table UPDATE body: update, then read the updated rows typed.
 var updated = dataContext
-    .With("upd", dataContext.Update<IOrder>()
+    .With("upd", dataContext.CreateUpdateBuilder<IOrder>()
         .Set(x => x.Total, 0)
         .Where(x => x.CustomerId == 7)
         .Returning(x => new { x.Id, x.Total }))

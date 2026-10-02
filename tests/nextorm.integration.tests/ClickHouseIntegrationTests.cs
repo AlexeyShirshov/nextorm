@@ -1252,7 +1252,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "ins_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 42)
             .Insert();
@@ -1271,7 +1271,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     {
         var ctx = _sut.DataProvider;
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "ins_unsupported")
             .ReturningIdentity(x => x.Id)
             .Single();

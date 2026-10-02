@@ -5,7 +5,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for an <c>UPDATE</c> statement, started with
-/// <see cref="DataContextExtensions.Update{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?)"/>.
+/// <see cref="DataContextExtensions.CreateUpdateBuilder{TEntity}(IDataContext, Action{EntityMetadataBuilder{TEntity}}?)"/>.
 /// The columns to write are supplied with <see cref="Set{TValue}(Expression{Func{TEntity, TValue}}, TValue)"/>,
 /// <see cref="Set{TValue}(Expression{Func{TEntity, TValue}}, Expression{Func{TEntity, TValue}})"/> or
 /// <see cref="Set(TEntity)"/>; the rows to change are selected with <see cref="Where"/>. Omitting

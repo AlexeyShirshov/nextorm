@@ -17,8 +17,8 @@ public class BatchSqlGenerationTests
         var value = 42;
         var min = 5;
 
-        var sql = ctx.Batch()
-            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+        var sql = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
             .Query(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .ToSql();
 
@@ -36,8 +36,8 @@ public class BatchSqlGenerationTests
         var min = 5;
         var max = 6;
 
-        var sql = ctx.Batch()
-            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+        var sql = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id < max).Select(x => new { x.Id }))
             .ToSql();
@@ -53,8 +53,8 @@ public class BatchSqlGenerationTests
     public void Batch_ToSql_WithoutResultQuery_ShouldThrow()
     {
         using var ctx = SqliteTestContext.Create();
-        var batch = ctx.Batch();
-        batch.Delete(ctx.DeleteFrom<ISimpleEntity>().Where(x => x.Id == 1));
+        var batch = ctx.CreateBatchBuilder();
+        batch.Delete(ctx.CreateDeleteBuilder<ISimpleEntity>().Where(x => x.Id == 1));
 
         var act = () => batch.ToSql();
 
@@ -66,7 +66,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTable("archive", ctx.From<ISimpleEntity>().Select(x => new { x.Id }), new CreateTableOptions { DropExisting = true })
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
@@ -83,7 +83,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTable("archive", ctx.From<ISimpleEntity>().Select(x => new { x.Id }), o => o.DropExisting())
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
@@ -100,7 +100,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.Batch()
+        var act = () => ctx.CreateBatchBuilder()
             .CreateTempTable("t", ctx.From<ISimpleEntity>().Select(x => new { x.Id }), new CreateTableOptions { DropExisting = true })
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
@@ -113,8 +113,8 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.Batch()
-            .Truncate(ctx.Truncate<ISimpleEntity>())
+        var act = () => ctx.CreateBatchBuilder()
+            .Truncate(ctx.CreateTruncateBuilder<ISimpleEntity>())
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
 
@@ -126,7 +126,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .Raw("drop table if exists archive")
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();
@@ -139,7 +139,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .Raw("create table raw_a (id integer)")
             .Raw("create table raw_b (id integer)")
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
@@ -153,13 +153,13 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var afterQuery = ctx.Batch();
+        var afterQuery = ctx.CreateBatchBuilder();
         afterQuery.Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
         var actAfterQuery = () => afterQuery.Raw("drop table if exists archive");
 
         actAfterQuery.Should().Throw<InvalidOperationException>();
 
-        var afterAddQuery = ctx.Batch();
+        var afterAddQuery = ctx.CreateBatchBuilder();
         afterAddQuery.AddQuery(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
         var actAfterAddQuery = () => afterAddQuery.Raw("drop table if exists archive");
 
@@ -170,7 +170,7 @@ public class BatchSqlGenerationTests
     public void Batch_RawOnly_ShouldThrow()
     {
         using var ctx = SqliteTestContext.Create();
-        var batch = ctx.Batch();
+        var batch = ctx.CreateBatchBuilder();
         batch.Raw("drop table if exists archive");
 
         // A raw-only batch carries no result-bearing query, so it is rejected when rendered: ToSql()
@@ -185,8 +185,8 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var actNull = () => ctx.Batch().Raw(null!);
-        var actWhitespace = () => ctx.Batch().Raw("  ");
+        var actNull = () => ctx.CreateBatchBuilder().Raw(null!);
+        var actWhitespace = () => ctx.CreateBatchBuilder().Raw("  ");
 
         actNull.Should().Throw<ArgumentException>();
         actWhitespace.Should().Throw<ArgumentException>();
@@ -199,7 +199,7 @@ public class BatchSqlGenerationTests
 
         // Raw binds no parameters, so placeholder-looking text must survive byte-for-byte: `@p`, `{0}`
         // and `$1` are emitted as written rather than being rewritten into the batch's parameter scheme.
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .Raw("select @p as v, {0}, $1")
             .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .ToSql();

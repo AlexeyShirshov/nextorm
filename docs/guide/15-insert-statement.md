@@ -1,6 +1,6 @@
 # Data modification (INSERT)
 
-> nextorm adds a small, explicit DML surface: [`InsertInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.InsertInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `INSERT ... VALUES` and returns the affected-row count, the generated key or the inserted rows. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> nextorm adds a small, explicit DML surface: [`CreateInsertBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateInsertBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `INSERT ... VALUES` and returns the affected-row count, the generated key or the inserted rows. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
 
 **Prerequisites:** [Querying and projections](../querying/index.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../providers/overview.md)
 
@@ -13,7 +13,7 @@ builder collects the target table and the columns to write, the active dialect r
 ```csharp
 using var ctx = new DataContextBuilder().UsePostgres(connectionString).CreateDataContext();
 
-var affected = ctx.InsertInto<ISimpleEntity>()
+var affected = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Id, 1)
     .Value(x => x.Name, "a")
     .Insert();
@@ -49,7 +49,7 @@ public interface ISimpleEntity
 ```
 
 Or declare the same mapping fluently on a plain POCO, with no attributes at all - the delegate goes to
-`InsertInto<T>` (the identical `cfg` can be passed to `From<T>` to register the mapping beforehand):
+`CreateInsertBuilder<T>` (the identical `cfg` can be passed to `From<T>` to register the mapping beforehand):
 
 ```csharp
 public class Order            // no attributes
@@ -59,7 +59,7 @@ public class Order            // no attributes
     public decimal TotalWithVat { get; set; }
 }
 
-ctx.InsertInto<Order>(cfg =>
+ctx.CreateInsertBuilder<Order>(cfg =>
 {
     cfg.Table("orders");
     cfg.Property(x => x.Id).HasColumnName("id").Key().Identity();
@@ -79,7 +79,7 @@ Every value is bound as a parameter. Several shapes are available; they are mutu
 **Column by column** (single row). The value is a CLR value:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>()
+ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Id, 1)
     .Value(x => x.Name, "a")
     .Insert();
@@ -94,7 +94,7 @@ The value may also be another mapped column of the same entity, which renders a 
 instead of a parameter:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>()
+ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, x => x.OtherName)
     .Insert();
 ```
@@ -111,7 +111,7 @@ Only a mapped property access (or a parameter-free expression) is accepted here;
 excluded automatically:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Values(entity).Insert();
+ctx.CreateInsertBuilder<ISimpleEntity>().Values(entity).Insert();
 ```
 
 ```sql
@@ -122,7 +122,7 @@ insert into simple_entity (name) values (@p0)
 **A batch of entities.** The same as the previous form, repeated over a sequence:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Values(new[] { e1, e2, e3 }).Insert();
+ctx.CreateInsertBuilder<ISimpleEntity>().Values(new[] { e1, e2, e3 }).Insert();
 ```
 
 ```sql
@@ -135,11 +135,11 @@ select the columns. A concrete entity uses an object initializer, an interface-m
 anonymous type; every member name must match an entity property:
 
 ```csharp
-ctx.InsertInto<Order>()
+ctx.CreateInsertBuilder<Order>()
     .Values(dtos, d => new Order { Total = d.Total })
     .Insert();
 
-ctx.InsertInto<ISimpleEntity>()
+ctx.CreateInsertBuilder<ISimpleEntity>()
     .Values(dtos, d => new { Name = d.Name })
     .Insert();
 ```
@@ -157,7 +157,7 @@ the client - useful for copying or filtering server-side. The mapping selects th
 as above:
 
 ```csharp
-ctx.InsertInto<IOrder>()
+ctx.CreateInsertBuilder<IOrder>()
     .Values(ctx.From<OrderDto>().Where(d => d.Active), d => new { d.Id, d.Amount })
     .Insert();
 ```
@@ -187,7 +187,7 @@ var source = ctx
         .Select(s => new { s.Id }))
     .From("recent");
 
-ctx.InsertInto<IOrder>()
+ctx.CreateInsertBuilder<IOrder>()
     .Values(source, t => new { CustomerId = t.GetInt32("id") })
     .Insert();
 // with recent as (select id from simple_entity where (id > 1))
@@ -204,7 +204,7 @@ variable - the runtime `SqlFunctions.Parameter` placeholder is rejected (as abov
 ```csharp
 var ids = new long[] { 1, 2, 3 };
 
-ctx.InsertInto<IdRow>()
+ctx.CreateInsertBuilder<IdRow>()
     .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(ids)), r => new { r.Value })
     .Insert();
 // insert into id_row (value) select unnest as "Value" from (select unnest from unnest(@ids)) as "t1"
@@ -216,8 +216,8 @@ ctx.InsertInto<IdRow>()
 `Computed`), pass the value or values directly, without a selector or a projection:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Value("a").Insert();                      // one row
-ctx.InsertInto<ISimpleEntity>().Values(new[] { "a", "b", "c" }).Insert(); // three rows
+ctx.CreateInsertBuilder<ISimpleEntity>().Value("a").Insert();                      // one row
+ctx.CreateInsertBuilder<ISimpleEntity>().Values(new[] { "a", "b", "c" }).Insert(); // three rows
 ```
 
 ```sql
@@ -230,13 +230,13 @@ insert into simple_entity (name) values (@p0), (@p1), (@p2)
 The scalar form needs **exactly one** writable column: with several, use a mapping or name the column
 instead (both throw `InvalidOperationException` when called on a scalar). With none (every column is
 `Identity`/`Computed`) there is nothing to pass - insert the all-defaults row with
-`ctx.InsertInto<T>().Insert()` (see [Defaults](#writing-values)).
+`ctx.CreateInsertBuilder<T>().Insert()` (see [Defaults](#writing-values)).
 
 **A batch by column.** For column-oriented data, chain one call per column; every column must supply
 the same number of values:
 
 ```csharp
-ctx.InsertInto<Product>()
+ctx.CreateInsertBuilder<Product>()
     .Values(x => x.Name, new[] { "a", "b" })
     .Values(x => x.Price, new[] { 1m, 2m })
     .Insert();
@@ -254,10 +254,10 @@ explicitly (its value is then taken from the input, not generated).
 is generated (`Identity`/`Computed`) needs no values at all - it inserts a single all-defaults row:
 
 ```csharp
-ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, SqlDefault.Value).Insert();
+ctx.CreateInsertBuilder<ISimpleEntity>().Value(x => x.Name, SqlDefault.Value).Insert();
 
 // every column is Identity/Computed:
-ctx.InsertInto<AuditRow>().Insert();
+ctx.CreateInsertBuilder<AuditRow>().Insert();
 ```
 
 ```sql
@@ -285,7 +285,7 @@ Read the returned rows with `From(name)` (typed):
 
 ```csharp
 var rows = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.Id, x.Total }))
     .From("ins")
@@ -307,7 +307,7 @@ accompanying read CTE as a regular [`TableAlias`](xref:NextORM.Core.TableAlias) 
 
 ```csharp
 var rows = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.Id }))
     .With("src", dataContext.From<IOrder>().Select(x => new { x.Total }))
@@ -335,7 +335,7 @@ var scope = dataContext.With("src",
     dataContext.From<ICustomer>().Where(c => c.Active).Select(c => new { c.Id }));
 
 var rows = scope
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Values(scope.From("src"), a => new { CustomerId = a.GetInt32("Id") })
         .Returning(x => new { x.Id }))
     .From("ins")
@@ -354,12 +354,12 @@ A data-modifying CTE can also feed a main `INSERT ... SELECT`: the `WITH` is hoi
 
 ```csharp
 var source = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.CustomerId }))
     .From("ins");
 
-dataContext.InsertInto<IOrder>()
+dataContext.CreateInsertBuilder<IOrder>()
     .Values(source, r => new { r.CustomerId })
     .Insert();
 ```
@@ -400,17 +400,17 @@ The provider's native form is used:
 | In-memory | not expressible | not expressible (read-only) |
 
 ```csharp
-long fromColumn = ctx.InsertInto<ISimpleEntity>()
+long fromColumn = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningIdentity(x => x.Id)
     .Single();
 
-long fromFunction = ctx.InsertInto<ISimpleEntity>()
+long fromFunction = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningIdentity<long>()
     .Single();
 
-long fromMetadata = ctx.InsertInto<ISimpleEntity>()
+long fromMetadata = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .ReturningKey<long>()
     .Single();
@@ -442,17 +442,17 @@ including identity and computed columns - through the provider's native `RETURNI
 without a second `SELECT`:
 
 ```csharp
-var row = ctx.InsertInto<Order>()
+var row = ctx.CreateInsertBuilder<Order>()
     .Value(x => x.Name, "a")
     .Returning()
     .Single();                        // an Order carrying the generated Id
 
-var projected = ctx.InsertInto<Order>()
+var projected = ctx.CreateInsertBuilder<Order>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .Single();                        // an anonymous { Id, Name }
 
-var rows = ctx.InsertInto<Order>()
+var rows = ctx.CreateInsertBuilder<Order>()
     .Values([o1, o2])
     .Returning()
     .ToList();                        // IReadOnlyList<Order>, one entry per inserted row
@@ -495,14 +495,14 @@ builder and call `OutputInto(targetTable)`:
 
 ```csharp
 // write the inserted rows into audit_log; nothing is returned to the client
-var written = ctx.InsertInto<ISimpleEntity>()
+var written = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputInto("audit_log")
     .Execute();                       // int: affected-row count
 
 // write into audit_log and also return the same rows to the client (second OUTPUT)
-var rows = ctx.InsertInto<ISimpleEntity>()
+var rows = ctx.CreateInsertBuilder<ISimpleEntity>()
     .Value(x => x.Name, "a")
     .Returning(x => new { x.Id, x.Name })
     .OutputIntoThenOutput("audit_log")
@@ -538,7 +538,7 @@ is documented in its own guide: [Bulk insert](20-bulk-insert.md).
 
 ## Upsert and MERGE
 
-The same builder family also writes rows through a `MERGE`: a portable **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, rendered as `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and a general **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches, arbitrary conditions, `THEN DELETE`/`THEN DO NOTHING` and `RETURNING`/`OUTPUT`. Both start from `ctx.MergeInto<TEntity>()` and are documented in their own guide:
+The same builder family also writes rows through a `MERGE`: a portable **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, rendered as `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and a general **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches, arbitrary conditions, `THEN DELETE`/`THEN DO NOTHING` and `RETURNING`/`OUTPUT`. Both start from `ctx.CreateMergeBuilder<TEntity>()` and are documented in their own guide:
 
 - [Data merging (MERGE / upsert)](19-merge-statement.md)
 
@@ -551,7 +551,7 @@ Under an active [global query filter](../advanced/query-filters.md), the portabl
 SQL-generation tests.
 
 ```csharp
-var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
+var sql = ctx.CreateInsertBuilder<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 // insert into simple_entity (name) values (@p0)
 ```
 
@@ -567,7 +567,7 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 | ClickHouse | yes (small batches) | — | — | bulk uses the portable `INSERT ... VALUES` path; bound it with `MaxBatchSize` |
 | In-memory | — | — | — | read-only context; `NotSupportedException` |
 
-`INSERT ... VALUES` itself is cross-provider and ungated: the same `InsertInto<T>()` API works on every
+`INSERT ... VALUES` itself is cross-provider and ungated: the same `CreateInsertBuilder<T>()` API works on every
 SQL provider. Only the generated-key form differs, and a provider that cannot express it rejects
 `ReturningIdentity`/`ReturningKey` with `NotSupportedException` instead of emitting invalid SQL.
 SQL Server additionally writes the modified rows into an existing table with `OUTPUT INTO`; see
@@ -590,7 +590,7 @@ SQL Server additionally writes the modified rows into an existing table with `OU
 * **Affected-row count.** `Insert()`/`InsertAsync()` return the number of rows the provider reports.
   ClickHouse does not report one for `INSERT ... VALUES`, so it returns `0` even though the row is
   written — do not use the count to confirm a ClickHouse insert.
-* **Chunking a large batch.** `InsertInto<T>()` writes one statement; use
+* **Chunking a large batch.** `CreateInsertBuilder<T>()` writes one statement; use
   [Bulk insert](20-bulk-insert.md) for a whole set, including optional chunking
   (`MaxBatchSize`/`MaxParameters`/`MaxSqlLength`) and native bulk paths.
 * **Global query filters are not injected into the target.** A filter declared for the entity type is

@@ -112,7 +112,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureSelect(ctx);
 
-        var sql = ctx.Update<QfSelectEntity>()
+        var sql = ctx.CreateUpdateBuilder<QfSelectEntity>()
             .Set(x => x.IsDeleted, true)
             .Where(x => x.Id == 10)
             .ToSql()
@@ -129,7 +129,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureSelect(ctx);
 
-        var sql = ctx.DeleteFrom<QfSelectEntity>()
+        var sql = ctx.CreateDeleteBuilder<QfSelectEntity>()
             .Where(x => x.Id == 10)
             .ToSql()
             .Replace("\r\n", "\n");
@@ -145,7 +145,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ctx.Properties[TenantKey] = 1;
 
-        var sql = ctx.InsertInto<QfInsertTargetEntity>(b => b
+        var sql = ctx.CreateInsertBuilder<QfInsertTargetEntity>(b => b
                 .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]))
             .Values(new QfInsertTargetEntity { Id = 1, TenantId = 1, IsDeleted = false })
             .ToSql()
@@ -163,7 +163,7 @@ public class QueryFilterSqlGenerationTests
         ctx.From<QfInsertSourceEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
 
-        var sql = ctx.InsertInto<QfInsertTargetEntity>(b => b
+        var sql = ctx.CreateInsertBuilder<QfInsertTargetEntity>(b => b
                 .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]))
             .Values(
                 ctx.From<QfInsertSourceEntity>().Where(x => x.Id > 0),
@@ -366,7 +366,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -385,7 +385,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .On((t, s) => t.Id == s.Id && (t.Name == s.Name || s.Name == null))
             .WhenMatched().ThenUpdate()
@@ -403,7 +403,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -422,7 +422,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -440,7 +440,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -458,7 +458,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters()
             .OnKeys()
@@ -476,14 +476,14 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var kept = ctx.MergeInto<QfMergeTargetEntity>()
+        var kept = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters(typeof(QfMergeOtherEntity))
             .OnKeys()
             .WhenMatched().ThenUpdate()
             .WhenNotMatched().ThenInsert()
             .ToSql();
-        var dropped = ctx.MergeInto<QfMergeTargetEntity>()
+        var dropped = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .IgnoreFilters(typeof(QfMergeTargetEntity))
             .OnKeys()
@@ -504,7 +504,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -522,7 +522,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .On((t, s) => t.Id == s.Id && (t.Name == s.Name || s.Name == null))
             .WhenMatched().ThenUpdate()
@@ -540,7 +540,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         ConfigureMergeTarget(ctx);
 
-        var sql = ctx.MergeInto<QfMergeTargetEntity>()
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
             .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
             .OnKeys()
             .WhenMatched().ThenUpdate()

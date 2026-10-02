@@ -358,7 +358,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_" + Guid.NewGuid().ToString("N");
 
-        var returned = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var returned = ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, marker)
                 .Value(x => x.Age, 11)
                 .Returning(x => new { x.Id, x.Name }))
@@ -383,9 +383,9 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_src_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 31).Insert();
+        ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 31).Insert();
 
-        var returned = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var returned = ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Values(ctx.From<IInsertEntity>().Where(x => x.Name == marker), s => new { s.Name, s.Age })
                 .Returning(x => new { x.Name, x.Age }))
             .From("ins")
@@ -406,10 +406,10 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_ref_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 41).Insert();
+        ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 41).Insert();
 
         var scope = ctx.With("src", ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Name, x.Age }));
-        var insert = ctx.InsertInto<IInsertEntity>()
+        var insert = ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(scope.From("src"), a => new { Name = a.GetString("Name"), Age = a.GetInt32("Age") })
             .Returning(x => new { x.Name, x.Age });
 
@@ -428,13 +428,13 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_main_" + Guid.NewGuid().ToString("N");
 
-        var source = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var source = ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, marker)
                 .Value(x => x.Age, 51)
                 .Returning(x => new { x.Name, x.Age }))
             .From("ins");
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(source, r => new { r.Name, r.Age })
             .Insert()
             .Should().Be(1);
@@ -541,14 +541,14 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IDmCteEntity>()
+            ctx.CreateInsertBuilder<IDmCteEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.Name, "before")
                 .Value(x => x.Age, 5)
                 .Insert();
 
             // The updated value is NULL, so the RETURNING read also exercises a nullable result bound.
-            var returned = ctx.With("upd", ctx.Update<IDmCteEntity>()
+            var returned = ctx.With("upd", ctx.CreateUpdateBuilder<IDmCteEntity>()
                     .Set(x => x.Name, (string?)null)
                     .Set(x => x.Age, 9)
                     .Where(x => x.Id == 1)
@@ -584,13 +584,13 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IDmCteEntity>()
+            ctx.CreateInsertBuilder<IDmCteEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.Name, "keep")
                 .Value(x => x.Age, 5)
                 .Insert();
 
-            var returned = ctx.With("upd", ctx.Update<IDmCteEntity>()
+            var returned = ctx.With("upd", ctx.CreateUpdateBuilder<IDmCteEntity>()
                     .Set(x => x.Name, "changed")
                     .Set(x => x.Age, 9)
                     .Where(x => x.Id == 999)
@@ -623,13 +623,13 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IDmCteEntity>()
+            ctx.CreateInsertBuilder<IDmCteEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.Name, "doomed")
                 .Value(x => x.Age, 3)
                 .Insert();
 
-            var returned = ctx.With("del", ctx.DeleteFrom<IDmCteEntity>()
+            var returned = ctx.With("del", ctx.CreateDeleteBuilder<IDmCteEntity>()
                     .Where(x => x.Id == 1)
                     .Returning(x => new { x.Id, x.Name, x.Age }))
                 .From("del")
@@ -658,13 +658,13 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IDmCteEntity>()
+            ctx.CreateInsertBuilder<IDmCteEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.Name, "keep")
                 .Value(x => x.Age, 3)
                 .Insert();
 
-            var returned = ctx.With("del", ctx.DeleteFrom<IDmCteEntity>()
+            var returned = ctx.With("del", ctx.CreateDeleteBuilder<IDmCteEntity>()
                     .Where(x => x.Id == 999)
                     .Returning(x => new { x.Id, x.Name }))
                 .From("del")
@@ -691,12 +691,12 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IDmCteTarget>()
+            ctx.CreateInsertBuilder<IDmCteTarget>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.Name, "target-before")
                 .Value(x => x.Age, 42)
                 .Insert();
-            ctx.InsertInto<IDmCteSource>()
+            ctx.CreateInsertBuilder<IDmCteSource>()
                 .Value(x => x.Id, 2)
                 .Value(x => x.Name, "source-name")
                 .Value(x => x.Age, 42)
@@ -704,7 +704,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var update = ctx.From<IDmCteTarget>()
                 .Join(ctx.From<IDmCteSource>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name });
 
@@ -738,12 +738,12 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IDmCteTarget>()
+            ctx.CreateInsertBuilder<IDmCteTarget>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.Name, "doomed")
                 .Value(x => x.Age, 42)
                 .Insert();
-            ctx.InsertInto<IDmCteSource>()
+            ctx.CreateInsertBuilder<IDmCteSource>()
                 .Value(x => x.Id, 2)
                 .Value(x => x.Name, "keeper")
                 .Value(x => x.Age, 42)
@@ -784,12 +784,12 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "target-before").Value(x => x.Age, 42).Insert();
-            ctx.InsertInto<DmCteSourceRow>().Value(x => x.Id, 2).Value(x => x.Name, "source-name").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "target-before").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteSourceRow>().Value(x => x.Id, 2).Value(x => x.Name, "source-name").Value(x => x.Age, 42).Insert();
 
             var returned = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .ToList();
@@ -817,8 +817,8 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
-            ctx.InsertInto<DmCteSourceRow>().Value(x => x.Id, 2).Value(x => x.Name, "keeper").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteSourceRow>().Value(x => x.Id, 2).Value(x => x.Name, "keeper").Value(x => x.Age, 42).Insert();
 
             var returned = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
@@ -844,12 +844,12 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
     private static void SeedJoinPair(IDataContext ctx, int targetId, string targetName, int age, int sourceId, string sourceName)
     {
-        ctx.InsertInto<DmCteTargetRow>()
+        ctx.CreateInsertBuilder<DmCteTargetRow>()
             .Value(x => x.Id, targetId)
             .Value(x => x.Name, targetName)
             .Value(x => x.Age, age)
             .Insert();
-        ctx.InsertInto<DmCteSourceRow>()
+        ctx.CreateInsertBuilder<DmCteSourceRow>()
             .Value(x => x.Id, sourceId)
             .Value(x => x.Name, sourceName)
             .Value(x => x.Age, age)
@@ -869,7 +869,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var single = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .Single();
@@ -879,7 +879,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var all = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .ToList();
@@ -908,7 +908,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var single = await ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .SingleAsync(ct);
@@ -918,7 +918,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var all = await ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .ToListAsync(ct);
@@ -949,7 +949,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var scalar = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => p.Item1.Id)
                 .Single();
@@ -957,7 +957,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var viaCtor = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new JoinReturningDto(p.Item1.Id, p.Item2.Name))
                 .Single();
@@ -966,7 +966,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var viaMemberInit = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new JoinReturningDto { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
                 .Single();
@@ -995,7 +995,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             // table alias so the two projected members stay distinct.
             var row = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { TargetId = p.Item1.Id, SourceId = p.Item2.Id })
                 .Single();
@@ -1023,7 +1023,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var empty = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Where(p => p.Item1.Id < 0)
                 .Returning(p => new { p.Item1.Id })
@@ -1032,7 +1032,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var act = () => ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Where(p => p.Item1.Id < 0)
                 .Returning(p => new { p.Item1.Id })
@@ -1057,11 +1057,11 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         try
         {
             SeedJoinPair(ctx, 1, "target-a", 42, 9, "source-name");
-            ctx.InsertInto<DmCteTargetRow>().Value(x => x.Id, 2).Value(x => x.Name, "target-b").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 2).Value(x => x.Name, "target-b").Value(x => x.Age, 42).Insert();
 
             var act = () => ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { p.Item1.Id })
                 .Single();
@@ -1126,7 +1126,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().BeEmpty();
 
             // Re-seed and use the list terminal so both async terminals are exercised.
-            ctx.InsertInto<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
 
             var all = await ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
@@ -1162,7 +1162,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
                 .Single();
             scalar.Should().Be(1);
 
-            ctx.InsertInto<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
 
             var sameNames = ctx.From<DmCteTargetRow>()
                 .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
@@ -1229,7 +1229,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             var scope = ctx.With("upd", ctx.From<DmCteTargetRow>()
                     .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
-                    .UpdateJoin()
+                    .CreateUpdateJoinBuilder()
                     .Set(p => p.Item1.Name, p => p.Item2.Name)
                     .Returning(p => new { p.Item1.Id }))
                 .From("upd")
@@ -1240,7 +1240,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
             // Change the source and re-run the very same scope: the mutation must execute afresh, not
             // return a stale cached result.
-            ctx.Update<DmCteSourceRow>().Set(x => x.Name, "s2").Where(x => x.Id == 2).Update();
+            ctx.CreateUpdateBuilder<DmCteSourceRow>().Set(x => x.Name, "s2").Where(x => x.Id == 2).Update();
 
             scope.ToList().Should().ContainSingle();
             ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Name).Single().Should().Be("s2");
@@ -1273,7 +1273,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             scope.ToList().Should().ContainSingle();
             ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().BeEmpty();
 
-            ctx.InsertInto<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
 
             scope.ToList().Should().ContainSingle();
             ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().BeEmpty();
@@ -1315,7 +1315,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var id = MergeTestKey();
         var marker = "pm_" + Guid.NewGuid().ToString("N");
 
-        var rows = ctx.MergeInto<IMergeEntity>()
+        var rows = ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 3 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -1334,11 +1334,11 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var deleteId = MergeTestKey();
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = deleteId, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = deleteId, Name = "ignored", Age = 0 })
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -1785,15 +1785,15 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IPgRangeEntity>()
+            ctx.CreateInsertBuilder<IPgRangeEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.During, new Range<int>(10, 20))
                 .Insert();
-            ctx.InsertInto<IPgRangeEntity>()
+            ctx.CreateInsertBuilder<IPgRangeEntity>()
                 .Value(x => x.Id, 2)
                 .Value(x => x.During, Range<int>.Empty)
                 .Insert();
-            ctx.InsertInto<IPgRangeEntity>()
+            ctx.CreateInsertBuilder<IPgRangeEntity>()
                 .Value(x => x.Id, 3)
                 .Value(x => x.During, new Range<int>(0, 15, lowerInclusive: true, upperInclusive: false, lowerInfinite: true, upperInfinite: false))
                 .Insert();
@@ -1877,7 +1877,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IPgRangeTypes>()
+            ctx.CreateInsertBuilder<IPgRangeTypes>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.I4, new Range<int>(10, 20))
                 .Value(x => x.I8, new Range<long>(1_000_000_000_000L, 2_000_000_000_000L))
@@ -1887,7 +1887,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
                 .Value(x => x.Dt, new Range<DateOnly>(new DateOnly(2023, 1, 1), new DateOnly(2023, 2, 1)))
                 .Insert();
 
-            ctx.InsertInto<IPgRangeTypes>()
+            ctx.CreateInsertBuilder<IPgRangeTypes>()
                 .Value(x => x.Id, 2)
                 .Value(x => x.I4, Range<int>.Empty)
                 .Value(x => x.I8, Range<long>.Empty)
@@ -1953,7 +1953,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IPgMultirangeEntity>()
+            ctx.CreateInsertBuilder<IPgMultirangeEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.During, new[] { new Range<int>(1, 5), new Range<int>(10, 20) })
                 .Insert();
@@ -2003,7 +2003,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
                 (3, new Range<int>(10, 20))
             })
             {
-                ctx.InsertInto<IPgRangeAggEntity>()
+                ctx.CreateInsertBuilder<IPgRangeAggEntity>()
                     .Value(x => x.Id, id)
                     .Value(x => x.During, range)
                     .Insert();
@@ -2323,7 +2323,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var id = RawProcedureKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
             .Insert();
 
@@ -2343,7 +2343,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using (var tx = transactions.BeginTransaction())
         {
             // The current token matches: the guarded update touches exactly the one row and returns its new xmin.
-            var updated = ctx.Update<IPgXminEntity>()
+            var updated = ctx.CreateUpdateBuilder<IPgXminEntity>()
                 .Set(x => x.Name, "after")
                 .Where(x => x.Id == id && x.Revision == token)
                 .Returning(x => x.Revision)
@@ -2358,7 +2358,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         newToken.Should().NotBe(token);
 
         // The old token is stale and affects zero rows.
-        var stale = ctx.Update<IPgXminEntity>()
+        var stale = ctx.CreateUpdateBuilder<IPgXminEntity>()
             .Set(x => x.Name, "stale")
             .Where(x => x.Id == id && x.Revision == token)
             .Returning(x => x.Revision)
@@ -2367,7 +2367,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         stale.Should().BeEmpty();
 
         // The token observed after the first update is current and still affects exactly one row.
-        var current = ctx.Update<IPgXminEntity>()
+        var current = ctx.CreateUpdateBuilder<IPgXminEntity>()
             .Set(x => x.Name, "current")
             .Where(x => x.Id == id && x.Revision == newToken)
             .Returning(x => x.Revision)

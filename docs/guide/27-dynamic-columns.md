@@ -78,7 +78,7 @@ var product = new Product
     },
 };
 
-ctx.InsertInto<Product>().Values(product).Insert();
+ctx.CreateInsertBuilder<Product>().Values(product).Insert();
 ```
 
 The generated statement (PostgreSQL/SQLite quoting shown; each dialect uses its own):

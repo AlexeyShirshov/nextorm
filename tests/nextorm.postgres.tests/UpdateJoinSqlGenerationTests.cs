@@ -18,7 +18,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .ToSql()
             .Should().Be("update merge_entity as \"t1\" set name = @p0 from merge_entity as \"t2\" where t1.id = t2.id");
@@ -34,7 +34,7 @@ public class UpdateJoinSqlGenerationTests
 
         var sql = e
             .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
@@ -56,7 +56,7 @@ public class UpdateJoinSqlGenerationTests
 
         var sql = ctx.From<ISimpleEntity>()
             .Join(scope.From("o"), (t, c) => t.Id == c["id"].AsInt)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Id, 0)
             .ToSql();
 
@@ -73,7 +73,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<ISimpleEntity>()
             .Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Id, p => p.Item2.Id)
             .Where(p => p.Item1.Id == 1)
             .ToSql()
@@ -87,7 +87,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Age, p => p.Item1.Age + 1)
             .ToSql()
             .Should().Be("update merge_entity as \"t1\" set age = (t1.age + 1) from merge_entity as \"t2\" where t1.id = t2.id");
@@ -100,7 +100,7 @@ public class UpdateJoinSqlGenerationTests
 
         var act = () => ctx.From<IMergeEntity>()
             .LeftJoin(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .ToSql();
 
@@ -114,7 +114,7 @@ public class UpdateJoinSqlGenerationTests
 
         var act = () => ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .ToSql();
 
         act.Should().Throw<InvalidOperationException>();
@@ -128,7 +128,7 @@ public class UpdateJoinSqlGenerationTests
         ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
             .Join(ctx.From<IArrayEntity>(), (p, a) => p.Item2.Id == a.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "x")
             .ToSql()
             .Should().Be("update complex_entity as \"t1\" set somestring = @p0 from simple_entity as \"t2\", array_entity as \"t3\" where t1.id = cast(t2.id as bigint) and t2.id = t3.id");
@@ -145,7 +145,7 @@ public class UpdateJoinSqlGenerationTests
         ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
             .Join(ctx.From<ISimpleEntity>(), (p, s) => p.Item2.Id == s.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "x")
             .ToSql()
             .Should().Be("update complex_entity as \"t1\" set somestring = @p0 from simple_entity as \"t2\", simple_entity as \"t3\" where t1.id = cast(t2.id as bigint) and t2.id = t3.id");
@@ -158,7 +158,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "first")
             .Set(p => p.Item1.Name, "second")
             .ToSql()
@@ -173,7 +173,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Age, p => p.Item2.Age + increment)
             .ToSql()
             .Should().Be("update merge_entity as \"t1\" set age = (t2.age + @increment) from merge_entity as \"t2\" where t1.id = t2.id");
@@ -186,7 +186,7 @@ public class UpdateJoinSqlGenerationTests
 
         var update = ctx.From<IComplexEntity>()
             .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "x")
             .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id });
 
@@ -208,7 +208,7 @@ public class UpdateJoinSqlGenerationTests
 
         var update = ctx.From<IComplexEntity>()
             .Join(scope.From("src"), (c, s) => c.Id == s["id"].AsInt)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "x")
             .Returning(p => new { TargetId = p.Item1.Id });
 
@@ -231,7 +231,7 @@ public class UpdateJoinSqlGenerationTests
 
         var act = () => ctx.From<IComplexEntity>()
             .Join(source, (c, s) => c.Id == s.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.String, "x")
             .Returning(p => new { TargetId = p.Item1.Id, SourceId = p.Item2.Id });
 
@@ -248,7 +248,7 @@ public class UpdateJoinSqlGenerationTests
         // body must not alias it to the CLR member name or the outer read references a missing "Id".
         var scope = ctx.With("upd", ctx.From<IMergeEntity>()
                 .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning(p => new { p.Item1.Id }))
             .From("upd")
@@ -267,7 +267,7 @@ public class UpdateJoinSqlGenerationTests
         // BuildReturningSql routes the UpdateJoinCommand arm to the same renderer as the CTE body.
         var sql = ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning(p => new { TargetId = p.Item1.Id, JoinedId = p.Item2.Id })
             .ToSql();
@@ -283,7 +283,7 @@ public class UpdateJoinSqlGenerationTests
 
         ctx.From<IMergeEntity>()
             .Join(ctx.From<IMergeEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "x")
             .Returning(p => p.Item1.Id)
             .ToSql()

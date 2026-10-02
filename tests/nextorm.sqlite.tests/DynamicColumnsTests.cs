@@ -169,12 +169,12 @@ public class DynamicColumnsTests
             entity.Extra["city"] = "NY";
             entity.Extra["age"] = 30;
 
-            ctx.InsertInto<DynamicWriteEntity>()
+            ctx.CreateInsertBuilder<DynamicWriteEntity>()
                 .Values(entity)
                 .ToSql()
                 .Should().Be("insert into dynamic_write_entity (id, name, \"age\", \"city\") values ($p0, $p1, $p2, $p3)");
 
-            ctx.InsertInto<DynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
+            ctx.CreateInsertBuilder<DynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
 
             var read = ctx.From<DynamicWriteEntity>().ToList().Single(x => x.Id == 1);
             read.Name.Should().Be("Ann");
@@ -198,7 +198,7 @@ public class DynamicColumnsTests
             entity.Extra["age"] = null;
             entity.Extra["city"] = "LA";
 
-            ctx.InsertInto<DynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
+            ctx.CreateInsertBuilder<DynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
 
             var read = ctx.From<DynamicWriteEntity>().ToList().Single(x => x.Id == 2);
             read.Extra.Should().ContainKey("age").WhoseValue.Should().BeNull();
@@ -221,7 +221,7 @@ public class DynamicColumnsTests
             // "age" is deliberately omitted, so the seeded column default (99) must survive.
             entity.Extra["city"] = "SF";
 
-            ctx.InsertInto<DynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
+            ctx.CreateInsertBuilder<DynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
 
             var read = ctx.From<DynamicWriteEntity>().ToList().Single(x => x.Id == 3);
             read.Extra.Should().ContainKey("age").WhoseValue.Should().Be(99L);
@@ -243,19 +243,19 @@ public class DynamicColumnsTests
             var inserted = new DynamicWriteEntity { Id = 4, Name = "Dan" };
             inserted.Extra["age"] = 30;
             inserted.Extra["city"] = "NY";
-            ctx.InsertInto<DynamicWriteEntity>().Values(inserted).Insert().Should().Be(1);
+            ctx.CreateInsertBuilder<DynamicWriteEntity>().Values(inserted).Insert().Should().Be(1);
 
             var update = new DynamicWriteEntity { Id = 4, Name = "Dan2" };
             // "age" is omitted: it must keep 30, never the physical column's default 99.
             update.Extra["city"] = "LA";
 
-            ctx.Update<DynamicWriteEntity>()
+            ctx.CreateUpdateBuilder<DynamicWriteEntity>()
                 .Set(update)
                 .Where(x => x.Id == 4)
                 .ToSql()
                 .Should().Be("update dynamic_write_entity set name = $p0, \"city\" = $p1 where id = 4");
 
-            ctx.Update<DynamicWriteEntity>().Set(update).Where(x => x.Id == 4).Update().Should().Be(1);
+            ctx.CreateUpdateBuilder<DynamicWriteEntity>().Set(update).Where(x => x.Id == 4).Update().Should().Be(1);
 
             var read = ctx.From<DynamicWriteEntity>().ToList().Single(x => x.Id == 4);
             read.Name.Should().Be("Dan2");
@@ -280,7 +280,7 @@ public class DynamicColumnsTests
             var second = new DynamicWriteEntity { Id = 6, Name = "Fox" };
             second.Extra["city"] = "X";
 
-            var act = () => ctx.InsertInto<DynamicWriteEntity>().Values([first, second]);
+            var act = () => ctx.CreateInsertBuilder<DynamicWriteEntity>().Values([first, second]);
 
             act.Should().Throw<InvalidOperationException>();
         }
@@ -302,7 +302,7 @@ public class DynamicColumnsTests
             var entity = new DynamicWriteEntity { Id = 7, Name = "Gus" };
             entity.Extra[key] = 1;
 
-            var act = () => ctx.InsertInto<DynamicWriteEntity>().Values(entity);
+            var act = () => ctx.CreateInsertBuilder<DynamicWriteEntity>().Values(entity);
 
             act.Should().Throw<ArgumentException>();
         }
@@ -320,7 +320,7 @@ public class DynamicColumnsTests
         var entity = new DynamicWriteEntity { Id = 1, Name = "a" };
         entity.Extra["age"] = 5;
 
-        var sql = ctx.MergeInto<DynamicWriteEntity>()
+        var sql = ctx.CreateMergeBuilder<DynamicWriteEntity>()
             .Using(entity)
             .OnKeys()
             .WhenMatchedUpdate()
@@ -349,14 +349,14 @@ public class DynamicColumnsTests
             var rows = new[] { Row(10, 10, "AA"), Row(11, 11, "BB"), Row(12, 12, "CC") };
 
             // One column list for the whole statement, one value tuple per row, parameters sequential.
-            ctx.InsertInto<DynamicWriteEntity>()
+            ctx.CreateInsertBuilder<DynamicWriteEntity>()
                 .Values(rows)
                 .ToSql()
                 .Should().Be(
                     "insert into dynamic_write_entity (id, name, \"age\", \"city\") " +
                     "values ($p0, $p1, $p2, $p3), ($p4, $p5, $p6, $p7), ($p8, $p9, $p10, $p11)");
 
-            ctx.InsertInto<DynamicWriteEntity>().Values(rows).Insert().Should().Be(3);
+            ctx.CreateInsertBuilder<DynamicWriteEntity>().Values(rows).Insert().Should().Be(3);
 
             var read = ctx.From<DynamicWriteEntity>().ToList()
                 .Where(x => x.Id is >= 10 and <= 12)
@@ -387,7 +387,7 @@ public class DynamicColumnsTests
             // "name" is a mapped physical column of dynamic_write_entity; the store must not shadow it.
             entity.Extra["name"] = "shadow";
 
-            var act = () => ctx.InsertInto<DynamicWriteEntity>().Values(entity);
+            var act = () => ctx.CreateInsertBuilder<DynamicWriteEntity>().Values(entity);
 
             act.Should().Throw<InvalidOperationException>().WithMessage("*name*");
         }
@@ -414,7 +414,7 @@ public class DynamicColumnsTests
             // as a dynamic column; on write it must be an ordinary dynamic key, not a collision.
             entity.Extra["During"] = 7;
 
-            ctx.InsertInto<RangeDynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
+            ctx.CreateInsertBuilder<RangeDynamicWriteEntity>().Values(entity).Insert().Should().Be(1);
 
             var read = ctx.From<RangeDynamicWriteEntity>().ToList().Single(x => x.Id == 30);
             read.During.Should().Be(new Range<int>(1, 10));

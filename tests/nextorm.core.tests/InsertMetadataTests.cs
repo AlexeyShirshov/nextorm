@@ -193,10 +193,10 @@ public class InsertMetadataTests
     public void InMemoryContext_ShouldRejectInsert()    {
         using var ctx = new InMemoryDataContext();
 
-        var builder = ctx.InsertInto<ConventionalEntity>().Value(x => x.Name, "a");
+        var builder = ctx.CreateInsertBuilder<ConventionalEntity>().Value(x => x.Name, "a");
 
         var toSql = () => builder.ToSql();
-        var insert = () => ctx.InsertInto<ConventionalEntity>().Value(x => x.Name, "a").Insert();
+        var insert = () => ctx.CreateInsertBuilder<ConventionalEntity>().Value(x => x.Name, "a").Insert();
 
         toSql.Should().Throw<NotSupportedException>();
         insert.Should().Throw<NotSupportedException>();
@@ -207,11 +207,11 @@ public class InsertMetadataTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var builder = ctx.InsertInto<ConventionalEntity>()
+        var builder = ctx.CreateInsertBuilder<ConventionalEntity>()
             .Values(ctx.From<ConventionalEntity>(), x => new { x.Name });
 
         var toSql = () => builder.ToSql();
-        var insert = () => ctx.InsertInto<ConventionalEntity>()
+        var insert = () => ctx.CreateInsertBuilder<ConventionalEntity>()
             .Values(ctx.From<ConventionalEntity>(), x => new { x.Name })
             .Insert();
 
@@ -224,7 +224,7 @@ public class InsertMetadataTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var insert = ctx.InsertInto<ConventionalEntity>()
+        var insert = ctx.CreateInsertBuilder<ConventionalEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new { x.Id });
 
@@ -238,7 +238,7 @@ public class InsertMetadataTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<ConventionalEntity>()
+        var act = () => ctx.CreateInsertBuilder<ConventionalEntity>()
             .Value(x => x.Name, "a")
             .ReturningIdentity(x => x.Id);
 
@@ -249,7 +249,7 @@ public class InsertMetadataTests
     public void ReturningIdentity_Function_OnInMemory_ShouldThrow()
     {
         using var ctx = new InMemoryDataContext();
-        var builder = ctx.InsertInto<ConventionalEntity>().Value(x => x.Name, "a").ReturningIdentity<long>();
+        var builder = ctx.CreateInsertBuilder<ConventionalEntity>().Value(x => x.Name, "a").ReturningIdentity<long>();
 
         var act = () => builder.Single();
 
@@ -261,7 +261,7 @@ public class InsertMetadataTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<NoKeyEntity>()
+        var act = () => ctx.CreateInsertBuilder<NoKeyEntity>()
             .Value(x => x.Name, "a")
             .ReturningKey<int>();
 
@@ -273,7 +273,7 @@ public class InsertMetadataTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<ConventionalEntity>()
+        var act = () => ctx.CreateInsertBuilder<ConventionalEntity>()
             .Value(x => x.Name, "a")
             .ReturningKey<string>();
 
@@ -284,7 +284,7 @@ public class InsertMetadataTests
     public void InMemoryContext_ShouldRejectReturning()
     {
         using var ctx = new InMemoryDataContext();
-        var builder = ctx.InsertInto<ConventionalEntity>().Value(x => x.Name, "a").Returning();
+        var builder = ctx.CreateInsertBuilder<ConventionalEntity>().Value(x => x.Name, "a").Returning();
 
         var toSql = () => builder.ToSql();
         var insert = () => builder.Single();
@@ -298,7 +298,7 @@ public class InsertMetadataTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<GetOnlyMemberEntity>()
+        var act = () => ctx.CreateInsertBuilder<GetOnlyMemberEntity>()
             .Value(x => x.Id, 1)
             .Returning(x => x.Computed);
 
@@ -310,7 +310,7 @@ public class InsertMetadataTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var builder = ctx.InsertInto<IAttributedEntity>()
+        var builder = ctx.CreateInsertBuilder<IAttributedEntity>()
             .Value(x => x.Name, "a")
             .Returning();
 

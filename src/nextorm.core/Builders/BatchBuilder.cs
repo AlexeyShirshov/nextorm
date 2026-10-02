@@ -15,15 +15,15 @@ namespace NextORM.Core;
 /// <para>
 /// A provider capable of a single-round-trip batch opts in through
 /// <see cref="ISqlDialect.SupportsBatch"/> (PostgreSQL, SQL Server, MySQL, MariaDB and SQLite). The
-/// in-memory context has no batch executor, so <see cref="Batch(IDataContext)"/> rejects it immediately;
+/// in-memory context has no batch executor, so <see cref="CreateBatchBuilder(IDataContext)"/> rejects it immediately;
 /// a database-backed provider without the capability throws <see cref="NotSupportedException"/> when the
 /// batch renders instead of silently degrading to separate statements.
 /// </para>
 /// </summary>
 /// <example>
 /// <code>
-/// var rows = ctx.Batch()
-///     .Update(ctx.Update&lt;Order&gt;().Set(o =&gt; o.Status, "shipped").Where(o =&gt; o.Id == id))
+/// var rows = ctx.CreateBatchBuilder()
+///     .Update(ctx.CreateUpdateBuilder&lt;Order&gt;().Set(o =&gt; o.Status, "shipped").Where(o =&gt; o.Id == id))
 ///     .Query(ctx.From&lt;Order&gt;().Where(o =&gt; o.Id == id).Select(o =&gt; new { o.Id, o.Status }))
 ///     .ToList();
 /// </code>
@@ -34,7 +34,7 @@ public static class BatchExtensions
     /// <param name="context">The context that executes the batch.</param>
     /// <returns>A builder for the batch's statements.</returns>
     /// <exception cref="NotSupportedException">The context cannot execute batches (the in-memory context).</exception>
-    public static BatchBuilder Batch(this IDataContext context)
+    public static BatchBuilder CreateBatchBuilder(this IDataContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 

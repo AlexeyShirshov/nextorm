@@ -5,7 +5,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a multi-table <c>UPDATE</c> (the <c>UPDATE ... FROM</c>/join form), started with
-/// <see cref="DataContextExtensions.UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/>. The target is
+/// <see cref="DataContextExtensions.CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/>. The target is
 /// the first table of the join chain; the columns to write are supplied with <c>Set(...)</c>, whose
 /// right-hand side may read any joined table. The rows to change are selected by the join and an
 /// optional <see cref="Where"/>.

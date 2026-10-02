@@ -221,7 +221,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         {
             var builder = ctx.From<IdnAlpha>()
                 .Join(ctx.From<IdnBeta>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning();
 
@@ -252,7 +252,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
             var builder = ctx.From<IdnAlpha>()
                 .Join(ctx.From<IdnBeta>(), (a, b) => a.Id == 1 && b.Id == 2)
                 .Join(ctx.From<IdnAlpha>(), (p, c) => c.Id == 3)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning();
 
@@ -292,7 +292,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
                 .Join(ctx.From<IdnBeta>(), (p, c) => c.Id == 6)
                 .Join(ctx.From<IdnAlpha>(), (p, c) => c.Id == 7)
                 .Join(ctx.From<IdnBeta>(), (p, c) => c.Id == 8)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning();
 
@@ -324,7 +324,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         {
             var builder = ctx.From<IdnMapped>()
                 .Join(ctx.From<IdnMapped>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Label, p => p.Item2.Label)
                 .Returning();
 
@@ -358,7 +358,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         {
             var builder = ctx.From<IdnAliasCollision>()
                 .Join(ctx.From<IdnAliasCollision>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning();
 
@@ -385,7 +385,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         {
             var scope = ctx.With("upd", ctx.From<IdnAliasCollision>()
                 .Join(ctx.From<IdnAliasCollision>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .Returning());
 
@@ -414,7 +414,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         {
             var builder = ctx.From<IdnConverted>()
                 .Join(ctx.From<IdnConverted>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.State, p => p.Item2.State)
                 .Returning();
 
@@ -536,7 +536,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
             var builder = ctx.From<IdnEntity>()
                 .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, "changed")
                 .Returning();
 
@@ -599,7 +599,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
             var builder = ctx.From<IdnEntity>()
                 .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, "changed")
                 .Returning();
 
@@ -674,7 +674,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
             var scope = ctx.With("upd", ctx.From<IdnEntity>()
                 .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, "changed")
                 .Returning());
 
@@ -754,7 +754,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
             Action act = update
                 ? () => ctx.From<IdnEntity>()
                     .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
-                    .UpdateJoin()
+                    .CreateUpdateJoinBuilder()
                     .Set(p => p.Item1.Name, "changed")
                     .Returning()
                     .ToSql()
@@ -797,7 +797,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
                 var scope = update
                     ? ctx.With("upd", ctx.From<IdnEntity>()
                         .Join(_sut.From(derived), (a, b) => a.Id == 1 && b.Id == 2)
-                        .UpdateJoin()
+                        .CreateUpdateJoinBuilder()
                         .Set(p => p.Item1.Name, "changed")
                         .Returning())
                     : ctx.With("del", ctx.From<IdnEntity>()
@@ -831,7 +831,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         {
             var rows = ctx.From<IdnEntity>()
                 .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, "x")
                 .Where(p => p.Item1.Id < 0)
                 .Returning()
@@ -881,7 +881,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
             // No Returning() at all: neither operation emits an implicit RETURNING list.
             ctx.From<IdnAlpha>()
                 .Join(ctx.From<IdnBeta>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name)
                 .ToSql().Should().NotContainEquivalentOf("returning");
             ctx.From<IdnAlpha>()
@@ -890,7 +890,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
             var update = ctx.From<IdnAlpha>()
                 .Join(ctx.From<IdnBeta>(), (a, b) => a.Id == 1 && b.Id == 2)
-                .UpdateJoin()
+                .CreateUpdateJoinBuilder()
                 .Set(p => p.Item1.Name, p => p.Item2.Name);
 
             var scalar = update.Returning(p => p.Item1.Id).Single();
@@ -924,25 +924,25 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
 
     private static U2 Update2(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
 
     private static U3 Update3(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
 
     private static U4 Update4(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
 
     private static U5 Update5(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
 
     private static U6 Update6(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
@@ -950,7 +950,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 4)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
 
     private static U7 Update7(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
@@ -959,7 +959,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 5)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 7)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
 
     private static U8 Update8(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
@@ -969,16 +969,16 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 7)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 8)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning();
 
     private static U2 Update2Lambda(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning(p => p);
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning(p => p);
 
     private static U3 Update3Lambda(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 3)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning(p => p);
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning(p => p);
 
     private static U8 Update8Lambda(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2)
@@ -988,7 +988,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 6)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 7)
         .Join(ctx.From<IdnEntity>(), (p, c) => c.Id == 8)
-        .UpdateJoin().Set(p => p.Item1.Name, p => p.Item2.Name).Returning(p => p);
+        .CreateUpdateJoinBuilder().Set(p => p.Item1.Name, p => p.Item2.Name).Returning(p => p);
 
     private static D2 Delete2(IDataContext ctx) => ctx.From<IdnEntity>()
         .Join(ctx.From<IdnEntity>(), (a, b) => a.Id == 1 && b.Id == 2).CreateDeleteJoinBuilder().Returning();
@@ -1182,7 +1182,7 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         Execute(ctx, "drop table if exists idn_entity");
         Execute(ctx, "create table idn_entity (id integer primary key, name varchar(50), age integer)");
         for (var i = 1; i <= 8; i++)
-            ctx.InsertInto<IdnEntity>().Value(x => x.Id, i).Value(x => x.Name, $"n{i}").Value(x => x.Age, i * 10).Insert();
+            ctx.CreateInsertBuilder<IdnEntity>().Value(x => x.Id, i).Value(x => x.Name, $"n{i}").Value(x => x.Age, i * 10).Insert();
     }
 
     private static void CreateAlphaBeta(IDataContext ctx)
@@ -1193,8 +1193,8 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
         Execute(ctx, "create table idn_beta (id integer primary key, name varchar(50), age integer)");
         for (var i = 1; i <= 8; i++)
         {
-            ctx.InsertInto<IdnAlpha>().Value(x => x.Id, i).Value(x => x.Name, $"a{i}").Value(x => x.Age, i * 10).Insert();
-            ctx.InsertInto<IdnBeta>().Value(x => x.Id, i).Value(x => x.Name, $"b{i}").Value(x => x.Age, i * 10).Insert();
+            ctx.CreateInsertBuilder<IdnAlpha>().Value(x => x.Id, i).Value(x => x.Name, $"a{i}").Value(x => x.Age, i * 10).Insert();
+            ctx.CreateInsertBuilder<IdnBeta>().Value(x => x.Id, i).Value(x => x.Name, $"b{i}").Value(x => x.Age, i * 10).Insert();
         }
     }
 
@@ -1208,8 +1208,8 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
     {
         Execute(ctx, "drop table if exists idn_mapped");
         Execute(ctx, "create table idn_mapped (id integer primary key, phys_code integer, phys_label varchar(50), phys_amount integer)");
-        ctx.InsertInto<IdnMapped>().Value(x => x.Id, 1).Value(x => x.Code, 100).Value(x => x.Label, "one").Value(x => x.Amount, 15).Insert();
-        ctx.InsertInto<IdnMapped>().Value(x => x.Id, 2).Value(x => x.Code, 200).Value(x => x.Label, "two").Value(x => x.Amount, 25).Insert();
+        ctx.CreateInsertBuilder<IdnMapped>().Value(x => x.Id, 1).Value(x => x.Code, 100).Value(x => x.Label, "one").Value(x => x.Amount, 15).Insert();
+        ctx.CreateInsertBuilder<IdnMapped>().Value(x => x.Id, 2).Value(x => x.Code, 200).Value(x => x.Label, "two").Value(x => x.Amount, 25).Insert();
     }
 
     private static void CreateAliasCollision(IDataContext ctx)
@@ -1232,13 +1232,13 @@ public sealed class IdentityReturningIntegrationTests : ProviderTestSuite
     {
         Execute(ctx, "drop table if exists idn_converted");
         Execute(ctx, "create table idn_converted (id integer primary key, state text, span interval, span_sec interval)");
-        ctx.InsertInto<IdnConverted>()
+        ctx.CreateInsertBuilder<IdnConverted>()
             .Value(x => x.Id, 1)
             .Value(x => x.State, IdnState.Active)
             .Value(x => x.Span, TimeSpan.FromSeconds(10))
             .Value(x => x.SpanSeconds, TimeSpan.FromSeconds(90))
             .Insert();
-        ctx.InsertInto<IdnConverted>()
+        ctx.CreateInsertBuilder<IdnConverted>()
             .Value(x => x.Id, 2)
             .Value(x => x.State, IdnState.Closed)
             .Value(x => x.Span, TimeSpan.FromSeconds(20))
