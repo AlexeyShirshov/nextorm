@@ -307,7 +307,16 @@ left join Child as t2 on <predicate>
 3. **PR3 (слайс B2)** — INNER, `Where`, paging парентов, несколько коллекций, docs EN+RU,
    `limitations.md`, обновление gap-анализа.
 
-Слайс C (неявные соединения) — отдельная спека и цикл.
+Слайс C (неявные соединения) — отдельная спека [`implicit-navigation-queries.md`](../design/implicit-navigation-queries.md) и цикл; tracking — [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) (milestone `1.0.9-b`).
+
+### #148 (slice C) — tracking
+
+| Единица | Объём | Статус |
+|---|---|---|
+| **#148-A** | Внутренний фундамент: `NavigationPathResolver` + immutable `ResolvedNavigationPath`/`NavigationResolutionScope`/`NavigationSourceBinding`; metadata-only, scope/alias identity, single-key, fail-closed `NotSupportedException`; **не** подключён к visitor/preparation/execution, публичной поверхности не меняет. | in progress / delivered-internal |
+| **#148-B** | `NavigationExpansion` + четыре прямых терминала (`Any()`/`Count()`/`LongCount()`/свойство `Count`) + `AsEntityBuilder<T>` + SQL/InMemory-семантика + end-to-end отклонение. | pending |
+
+История #105 (слайсы A+B поставлены, CHECK пройден; B1/B2 — §9) сохраняется; #148 — continuation для слайса C.
 
 ## 10. Открытые пункты (решаются при реализации, модель их допускает)
 

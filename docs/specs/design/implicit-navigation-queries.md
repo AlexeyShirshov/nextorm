@@ -4,7 +4,7 @@
 **Tracking issue:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) — верифицировано 2026-10-01 (title/state/milestone/body проверены через gh API; milestone `1.0.9-b` = number 18).
 **Milestone:** 1.0.9-b
 **Предшественник:** [#105](https://github.com/AlexeyShirshov/nextorm/issues/105) — закрыт; поставлены **только слайсы A+B**, слайс C явно отложен.
-**Статус:** разговорные разделы дизайна согласованы; ЭТА письменная спека ожидает одобрения пользователя (user approval); план реализации не составлен, реализация не авторизована.
+**Статус:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) **открыт** (milestone `1.0.9-b`); дизайн согласован. Реализация разделена: **#148-A** — внутренний фундамент (поставлен **internal-only**, публичной поверхности не меняет), **#148-B** — пользовательская поверхность (`NavigationExpansion` + четыре терминала + `AsEntityBuilder<T>` + SQL/InMemory-семантика) **ещё не поставлена**; публичная поверхность неявных навигационных запросов / `AsEntityBuilder` отсутствует.
 
 **Цель.** Эргономичные навигационные запросы на пути к паритету с linq2db / EF Core **БЕЗ** второго полного транслятора `Enumerable`/`Queryable`. Эта ограниченная фича — **НЕ** полный паритет. Существующий публичный API нативного движка и лимиты провайдеров сохраняются.
 
@@ -40,13 +40,30 @@
 
 ## 4. Архитектура / поток данных
 
-- **A** — `NavigationPathResolver` использует immutable resolved metadata, scope/source identity, точный путь членов связи включая junction identity.
-- **B** — стадия до prepare `NavigationExpansion` канонизирует прямые терминалы + адаптер + ref joins **до** компиляции приёмника нативного builder / материализации команды. Имена предварительные, **ВНУТРЕННИЕ** границы, не обязательство по выпущенным публичным типам.
+- **A (#148-A, внутренний фундамент; поставлен internal-only, публичной поверхности не добавляет)** — `NavigationPathResolver` использует immutable resolved metadata, scope/source identity, точный путь членов связи включая junction identity.
+- **B (#148-B, пользовательская поверхность)** — стадия до prepare `NavigationExpansion` канонизирует прямые терминалы + адаптер + ref joins **до** компиляции приёмника нативного builder / материализации команды. Имена предварительные, **ВНУТРЕННИЕ** границы, не обязательство по выпущенным публичным типам.
 - Один и тот же ref-путь в одном query scope/source переиспользуется в `Where`/`Select`/`OrderBy`. Разные nav/scopes/aliases **не** сливаются; никакого сопоставления с произвольным явным `JOIN` по типу сущности.
 - Коллекции — коррелированный `EXISTS`/scalar count, **НИКОГДА** не разворачиваются в основные строки.
 - Источник адаптера — обычный related source `EntityBuilder` с FK/principal корреляцией; junction для M2M; те же нативные вложенные лямбды и outer-ref binding.
 - **C** — существующий planner/SQL renderer/executor (или соответствующая ветка InMemory) исполняет. Sequence-семантика нативного builder сохраняется; адаптер не вводит альтернативный компилятор/политики композиции.
 - InMemory разрешает metadata-based related sources **до** компиляции выражения, null-safe reference-поведение вместо сырого дерева графа.
+
+## 4a. Разделение #148-A / #148-B (ownership и приёмка)
+
+**#148-A — внутренний фундамент (internal-only; публичной поверхности не добавляет).**
+
+- Единицы: `NavigationPathResolver` + immutable `ResolvedNavigationPath` / `NavigationResolutionScope` / `NavigationSourceBinding` (scope/alias identity, single-key, fail-closed `NotSupportedException`).
+- Метаданные: разрешение идёт по существующему **process-wide CLR-type-keyed configured path** — `DataContextExtensions.ResolveMetadata(null, entityType)` (ровно как `RelationshipResolver`), **НЕ** per-source mappings. Это исправляет предположение r1. Резолвер никогда не пишет/не сеет/не перезаписывает/не очищает кэш метаданных.
+- **Не** подключён ни к одному visitor/preparation/execution; `NavigationExpansion`, `AsEntityBuilder<T>`, прямые терминалы и SQL/InMemory-семантика отсутствуют.
+- Приёмка #148-A (аллокация из §8): Roslyn symbol impact (`internal`-типы, отсутствие публичной дельты); сборка Debug/Release `0/0`; source/alias identity; single-column key; identity conversions + safe reference upcasts; fail-closed matrix (undeclared/missing key/intermediate collection/unbound or sibling scope/captured root/method call/downcast); отсутствие evaluation и wiring. Провайдерные/интеграционные прогоны и InMemory parity — **не** приёмка A.
+
+**#148-B — пользовательская поверхность (ожидает реализации).**
+
+- Единицы: `NavigationExpansion` + четыре прямых терминала (`Any()`, `Count()`, `LongCount()`, свойство `Count`) + `AsEntityBuilder<T>` + SQL/InMemory-семантика + end-to-end отклонение.
+- End-to-end отклонение: использование `AsEntityBuilder`/прямого маркера вне поддерживаемого query-выражения всегда бросает `NotSupportedException` (никогда null/default), включая captured enumerable и composite keys.
+- Приёмка #148-B (остаток §8): всё перечисленное в §8 — reference absence/dangling/null/OR/bool projection; adapter equivalence; revision/paging/scalar projections; cache; reject matrix; реальные интеграционные прогоны SQLite/PostgreSQL/SQL Server/MySQL/ClickHouse; InMemory parity; публичные docs EN/RU без ссылок на спеки; DocFX.
+
+Границы: #148-A поставляет только внутренние типы и не меняет поведение запросов; #148-B не переоткрывает resolver-контракт без явной ревизии дизайна (§10).
 
 ## 5. Кэш / инварианты
 
