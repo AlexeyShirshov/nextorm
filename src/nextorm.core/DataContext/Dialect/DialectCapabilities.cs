@@ -245,16 +245,33 @@ public sealed record ExtremeRowRenderColumn
 /// </remarks>
 public sealed record ExtremeRowDescription
 {
+    // The payload is resolved lazily: PostgreSQL's renderer decides from Keys/Groups only, so its
+    // payload projection must never be built on the eligibility path, while ClickHouse reads Payload
+    // exactly once during CanRender. Lazy materializes the factory at most once; the field is excluded
+    // from the record's value semantics (see Equals/GetHashCode below).
+    private Lazy<IReadOnlyList<ExtremeRowRenderColumn>>? _payload;
+
     internal ExtremeRowDescription(
         bool isMax,
         IReadOnlyList<ExtremeRowRenderColumn> keys,
         IReadOnlyList<ExtremeRowRenderColumn> groups,
         IReadOnlyList<ExtremeRowRenderColumn> payload)
+        : this(isMax, keys, groups, () => payload)
+    {
+    }
+
+    internal ExtremeRowDescription(
+        bool isMax,
+        IReadOnlyList<ExtremeRowRenderColumn> keys,
+        IReadOnlyList<ExtremeRowRenderColumn> groups,
+        Func<IReadOnlyList<ExtremeRowRenderColumn>> payloadFactory)
     {
         IsMax = isMax;
         Keys = keys;
         Groups = groups;
-        Payload = payload;
+        _payload = new Lazy<IReadOnlyList<ExtremeRowRenderColumn>>(
+            payloadFactory,
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <summary><see langword="true"/> for a maximum (<c>SelectWhereMax</c>), <see langword="false"/> for a minimum.</summary>
@@ -267,7 +284,29 @@ public sealed record ExtremeRowDescription
     public IReadOnlyList<ExtremeRowRenderColumn> Groups { get; }
 
     /// <summary>The source payload columns the winning row must expose, in mapping declaration order.</summary>
-    public IReadOnlyList<ExtremeRowRenderColumn> Payload { get; }
+    public IReadOnlyList<ExtremeRowRenderColumn> Payload => _payload!.Value;
+
+    // The synthesized record equality would compare the memoization field, so a factory-backed
+    // description would never equal an eager one even when their exposed values match. Compare the
+    // exposed shape instead, with the same default comparers the synthesized members would use.
+    /// <inheritdoc/>
+    public bool Equals(ExtremeRowDescription? other)
+        => other is not null
+            && IsMax == other.IsMax
+            && EqualityComparer<IReadOnlyList<ExtremeRowRenderColumn>>.Default.Equals(Keys, other.Keys)
+            && EqualityComparer<IReadOnlyList<ExtremeRowRenderColumn>>.Default.Equals(Groups, other.Groups)
+            && EqualityComparer<IReadOnlyList<ExtremeRowRenderColumn>>.Default.Equals(Payload, other.Payload);
+
+    /// <inheritdoc/>
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(IsMax);
+        hash.Add(Keys, EqualityComparer<IReadOnlyList<ExtremeRowRenderColumn>>.Default);
+        hash.Add(Groups, EqualityComparer<IReadOnlyList<ExtremeRowRenderColumn>>.Default);
+        hash.Add(Payload, EqualityComparer<IReadOnlyList<ExtremeRowRenderColumn>>.Default);
+        return hash.ToHashCode();
+    }
 }
 
 /// <summary>

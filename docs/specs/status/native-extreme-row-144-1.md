@@ -297,6 +297,7 @@ Prefixes: `PG-N` = `tests/nextorm.postgres.tests/ExtremeRowNativeSqlGenerationTe
 1. `sealed`→`class` on `PostgresDialect`/`ClickHouseDialect` — deliberate public-extensibility decision so tests can force the portable strategy; `Instance` singleton and public surface unchanged.
 2. `ExtremeRowRenderColumn`/`ExtremeRowDescription`/`ExtremeRowRenderRequest` constructors are `internal` (read-only shape facts only).
 3. Unused payload description / duplicate alias resolution computed at prep time.
+   - debt 3 — CLOSED by #155 (see native-extreme-row-155-1.md; PG payload lazy, single native select-list build SqlBuilder.cs:640).
 4. XML `cref` points to the internal `SqlBuilder`.
 5. ClickHouse NaN/extreme parity **deferred with trigger**: revisit if CH float/double keys become native-eligible (currently always portable).
 6. Register finding 25 untouched.

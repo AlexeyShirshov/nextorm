@@ -632,9 +632,19 @@ internal readonly struct SqlBuilder
             // A source without mapped metadata (a name-addressed or temporary table) cannot provide the
             // canonical payload aliases and column types the native renderer decides on. Such a source
             // keeps the portable lowering instead of failing the read on a native-capable provider.
-            && DataContextCache.Metadata.TryGetValue(cmd.EntityType!, out _)
-            && renderer.CanRender(MakeExtremeRowDescription(cmd)))
-            return MakeNativeExtremeRowSelect(cmd, renderer);
+            && DataContextCache.Metadata.TryGetValue(cmd.EntityType!, out var entityMeta))
+        {
+            // Build the entity projection once for the whole native preparation: the eligibility
+            // description resolves its payload lazily from this list (a renderer that only reads
+            // Keys/Groups never builds it), and the alias and outer stages reuse the same instance.
+            var (entitySelectList, _) = EntitySelectListBuilder.Build(
+                cmd.EntityType!,
+                entityMeta,
+                CancellationToken.None);
+
+            if (renderer.CanRender(MakeExtremeRowDescription(cmd, entitySelectList)))
+                return MakeNativeExtremeRowSelect(cmd, renderer, entitySelectList);
+        }
 
         return MakePortableExtremeRowSelect(cmd);
     }
@@ -736,7 +746,7 @@ internal readonly struct SqlBuilder
     /// winning-row source in the same outer projection/order statement. A renderer exception
     /// propagates unchanged.
     /// </summary>
-    private string? MakeNativeExtremeRowSelect(QueryCommand cmd, IExtremeRowRenderer renderer)
+    private string? MakeNativeExtremeRowSelect(QueryCommand cmd, IExtremeRowRenderer renderer, SelectExpression[] entitySelectList)
     {
         var entityType = cmd.EntityType!;
         var from = cmd.From!;
@@ -746,9 +756,9 @@ internal readonly struct SqlBuilder
         // Parameter mode emits no SQL; the outer call still walks the projection and ordering so the
         // collected parameters stay in step with the SQL pass.
         if (_ctx.ParamMode || sourceSql is null)
-            return MakeExtremeRowOuter(cmd, entityType, null, rankColumn: null);
+            return MakeExtremeRowOuter(cmd, entityType, null, rankColumn: null, entitySelectList);
 
-        var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entityType);
+        var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entitySelectList);
         var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
             sourceSql,
             cmd.ExtremeRow!.Kind == ExtremeKind.Max,
@@ -757,7 +767,7 @@ internal readonly struct SqlBuilder
             groupAliases,
             _ctx.KeywordCase));
 
-        return MakeExtremeRowOuter(cmd, entityType, winnerSql, rankColumn: null);
+        return MakeExtremeRowOuter(cmd, entityType, winnerSql, rankColumn: null, entitySelectList);
     }
 
     /// <summary>
@@ -799,16 +809,13 @@ internal readonly struct SqlBuilder
 
     /// <summary>
     /// Resolves the canonical payload aliases (every mapped source column, in declaration order) and
-    /// the key/group aliases (the physical column names of the direct mapped key components). Only
-    /// reached after <see cref="IExtremeRowRenderer.CanRender"/> accepted the description, which
-    /// constraints the key/group components to direct mapped columns.
+    /// the key/group aliases (the physical column names of the direct mapped key components) from the
+    /// projection built once by the native dispatch. Only reached after
+    /// <see cref="IExtremeRowRenderer.CanRender"/> accepted the description, which constraints the
+    /// key/group components to direct mapped columns.
     /// </summary>
-    private (string[] Payload, string[] Keys, string[] Groups) MakeExtremeRowAliases(QueryCommand cmd, Type entityType)
+    private (string[] Payload, string[] Keys, string[] Groups) MakeExtremeRowAliases(QueryCommand cmd, SelectExpression[] entityColumns)
     {
-        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
-            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
-
-        var (entityColumns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
         var payload = new string[entityColumns.Length];
         for (var i = 0; i < entityColumns.Length; i++)
         {
@@ -841,14 +848,17 @@ internal readonly struct SqlBuilder
     /// <summary>
     /// Builds the side-effect-free description the dialect's optional native renderer decides on. It
     /// reads only prepared metadata: it never renders SQL, allocates an alias or touches the parameter
-    /// list, so a rejected candidate leaves no state behind for the portable lowering.
+    /// list, so a rejected candidate leaves no state behind for the portable lowering. The payload is
+    /// projected lazily from the prebuilt <paramref name="entitySelectList"/>, so a renderer that only
+    /// reads <see cref="ExtremeRowDescription.Keys"/>/<see cref="ExtremeRowDescription.Groups"/> never
+    /// materializes it.
     /// </summary>
-    private ExtremeRowDescription MakeExtremeRowDescription(QueryCommand cmd)
+    private static ExtremeRowDescription MakeExtremeRowDescription(QueryCommand cmd, SelectExpression[] entitySelectList)
         => new(
             cmd.ExtremeRow!.Kind == ExtremeKind.Max,
             MakeExtremeRowDescriptionColumns(cmd.ExtremeRowColumns),
             MakeExtremeRowDescriptionColumns(cmd.ExtremeRowGroupByColumns),
-            MakeExtremeRowPayloadDescription(cmd.EntityType!));
+            () => MakeExtremeRowPayloadDescription(entitySelectList));
 
     private static ExtremeRowRenderColumn[] MakeExtremeRowDescriptionColumns(SelectExpression[]? columns)
     {
@@ -874,12 +884,8 @@ internal readonly struct SqlBuilder
         return result;
     }
 
-    private static ExtremeRowRenderColumn[] MakeExtremeRowPayloadDescription(Type entityType)
+    private static ExtremeRowRenderColumn[] MakeExtremeRowPayloadDescription(SelectExpression[] columns)
     {
-        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
-            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
-
-        var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
         var result = new ExtremeRowRenderColumn[columns.Length];
         for (var i = 0; i < columns.Length; i++)
         {
@@ -906,13 +912,33 @@ internal readonly struct SqlBuilder
     }
 
     /// <summary>
+    /// Builds the entity projection on demand for the outer expansion when the native dispatch did not
+    /// already hand one in (the portable lowering). Throws for a source without mapped metadata.
+    /// </summary>
+    private static SelectExpression[] BuildExtremeRowEntitySelectList(Type entityType)
+    {
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
+
+        var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
+        return columns;
+    }
+
+    /// <summary>
     /// Wraps the already-rendered <paramref name="innerSql"/> (the portable ranked derived table or the
     /// native winning-row source) in the outer statement: the command's projection, DISTINCT, the
     /// user's output ordering, and - for the portable strategy - the <c>rn = 1</c> filter on
     /// <paramref name="rankColumn"/>. <paramref name="rankColumn"/> is <see langword="null"/> for the
-    /// native strategy, whose source already selects the winners.
+    /// native strategy, whose source already selects the winners. <paramref name="entitySelectList"/> is
+    /// the projection built once by the native dispatch and reused here; the portable path passes
+    /// <see langword="null"/> and the projection is built on demand.
     /// </summary>
-    private string? MakeExtremeRowOuter(QueryCommand cmd, Type entityType, string? innerSql, string? rankColumn)
+    private string? MakeExtremeRowOuter(
+        QueryCommand cmd,
+        Type entityType,
+        string? innerSql,
+        string? rankColumn,
+        SelectExpression[]? entitySelectList = null)
     {
         // --- outer statement over the derived table ---
         string? result = null;
@@ -949,11 +975,9 @@ internal readonly struct SqlBuilder
                         // The inner derived table selects the source columns plus the synthetic rank
                         // column, so a bare `*` here would leak that rank column into the result. With no
                         // explicit projection, expand the entity's mapped columns explicitly (the same
-                        // shape the normal whole-row select path prepares) so the rank is dropped.
-                        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
-                            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
-
-                        var (entityColumns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
+                        // shape the normal whole-row select path prepares) so the rank is dropped. The
+                        // native dispatch hands its single projection in; the portable path builds it.
+                        var entityColumns = entitySelectList ?? BuildExtremeRowEntitySelectList(entityType);
                         for (var i = 0; i < entityColumns.Length; i++)
                         {
                             if (i > 0) outer.Append(", ");
