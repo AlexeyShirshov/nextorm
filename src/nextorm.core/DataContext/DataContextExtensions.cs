@@ -1234,6 +1234,32 @@ public static class DataContextExtensions
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
 
     /// <summary>
+    /// Starts a typed query from an ordinary CTE descriptor. The returned builder's primary source is
+    /// the CTE name carrying the descriptor's projection shape, so the CTE is read directly (no derived
+    /// <c>SELECT</c> wrapper) and every supported projection form resolves member access to the defining
+    /// query's output columns. The declaration and its reachable dependencies are attached to the
+    /// command, so a statement built over the source emits the required <c>WITH</c>. The descriptor is a
+    /// typed projection source, not a mapped entity. Recursion is not part of this API; ordinary CTEs only.
+    /// </summary>
+    /// <typeparam name="TResult">The CTE's projection shape.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="cte">The descriptor returned by <see cref="QueryCommand{TResult}.AsCte(string)"/>.</param>
+    /// <returns>A builder for composing the query over the CTE.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="cte"/> is <see langword="null"/>.</exception>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, Cte<TResult> cte)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(cte);
+
+        return new EntityBuilder<TResult>(dataContext)
+        {
+            Logger = dataContext.CommandLogger,
+            SourceFrom = new FromExpression(cte.Name, cte.Query),
+            Ctes = cte.Definitions,
+        };
+    }
+
+    /// <summary>
     /// Starts a query from an existing <see cref="QueryCommand{TResult}"/> with per-source options. The
     /// values set on <paramref name="options"/> (currently the derived-table <c>SubQueryHint</c>) are
     /// copied into the returned builder; the options object is not retained.

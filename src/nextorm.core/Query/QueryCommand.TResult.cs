@@ -598,7 +598,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
 
         var cmd = new QueryCommand<TResult>(_dataContext, Definition with { Sorting = reversed });
         CopyTo(cmd, true);
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns the last row of the ordered query and throws when it produces none. Requires an <c>ORDER BY</c>.</summary>
@@ -651,7 +651,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         });
 
         CopyTo(cmd, true);
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command with the 1-based column added to its sort order in ascending direction.</summary>
@@ -684,7 +684,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         });
 
         CopyTo(cmd, true);
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command with <paramref name="orderExp"/> added to its sort order in ascending direction.</summary>
@@ -735,7 +735,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         var cmd = new QueryCommand<TResult>(_dataContext, Definition);
         CopyTo(cmd, true);
         cmd.Paging = paging;
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command that emits <c>DISTINCT</c>, removing duplicate rows from the result.</summary>
@@ -743,7 +743,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Distinct()
     {
         var cmd = (QueryCommand<TResult>)Clone();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         cmd.IsDistinct = true;
         return cmd;
     }
@@ -860,7 +860,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> WithForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false)
     {
         var cmd = (QueryCommand<TResult>)Clone();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         cmd.ForJsonClause = new ForJsonClause(mode, root, includeNullValues);
         return cmd;
     }
@@ -879,7 +879,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> WithForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false)
     {
         var cmd = (QueryCommand<TResult>)Clone();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         cmd.ForXmlClause = new ForXmlClause(mode, elementName, root, elements);
         return cmd;
     }
@@ -952,7 +952,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         cmd.ForJsonClause = configured.ForJsonClause;
         cmd.ForXmlClause = configured.ForXmlClause;
         cmd.DocumentMode = true;
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>UNION</c> (duplicates removed).</summary>
@@ -962,7 +962,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Union<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.Distinct);
         return cmd;
     }
@@ -973,7 +978,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> UnionAll<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.All);
         return cmd;
     }
@@ -984,7 +994,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Intersect<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.Intersect);
         return cmd;
     }
@@ -995,7 +1010,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> IntersectAll<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.IntersectAll);
         return cmd;
     }
@@ -1006,7 +1026,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Except<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.Except);
         return cmd;
     }
@@ -1017,7 +1042,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> ExceptAll<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.ExceptAll);
         return cmd;
     }
@@ -1030,8 +1060,41 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     {
         var cmd = (QueryCommand<TResult>)Clone();
         cmd.ClearUnion();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
+    }
+
+    /// <summary>
+    /// Wraps this command as an ordinary (non-recursive) common table expression declared under
+    /// <paramref name="name"/>. The returned descriptor is read with
+    /// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>; the CTE keeps this command as
+    /// its body and the projection shape <typeparamref name="TResult"/> as its readable columns, so
+    /// member access on the typed source resolves to this command's output columns. The descriptor is a
+    /// typed projection source, not a mapped entity. Recursion is not part of this API: use the legacy
+    /// <c>WithRecursive</c> string API for recursive CTEs.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <returns>An immutable descriptor of the declared CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    public Cte<TResult> AsCte(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return new Cte<TResult>(this, name);
+    }
+
+    /// <summary>
+    /// Resets the prepared state while preserving the from-expression. <see cref="QueryCommand.ResetPreparation"/>
+    /// clears <c>_from</c>, but a typed-CTE (or equivalent projection-source) read stores its
+    /// <c>ColumnShape</c> marker there; an operator that resets after cloning must restore it, exactly
+    /// like the set-operation methods, or preparation re-derives a mapped source from entity metadata
+    /// and fails for a non-mapped projection type.
+    /// </summary>
+    private void ResetPreparationPreservingFrom()
+    {
+        var source = _from;
+        ResetPreparation();
+        _from = source;
     }
 
 }

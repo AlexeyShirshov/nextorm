@@ -122,6 +122,12 @@ internal static class CteHoister
             if (from.SubQuery is { } subQuery)
                 Walk(subQuery);
 
+            // A projection-source marker (a typed/data-modifying CTE read) carries the defining command
+            // as ColumnShape; its own declarations must be checked too, or a nested WITH could survive
+            // the unhoisted-declaration guard.
+            if (from.ColumnShape is { } columnShape)
+                Walk(columnShape);
+
             if (from.Pivot is { } pivot)
                 WalkFrom(pivot.Inner);
         }
@@ -242,12 +248,15 @@ internal static class CteHoister
         /// subqueries, joins, set-operation branches, correlated subqueries and a data-modifying
         /// INSERT source).
         /// </summary>
-        private static HashSet<string> ReferencedNames(CteDefinition cte)
+        private HashSet<string> ReferencedNames(CteDefinition cte)
+            => CollectReferencedNames(cte.Mutation?.Source ?? cte.Query, _byName.Keys);
+
+        internal static HashSet<string> CollectReferencedNames(QueryCommand body, IReadOnlyCollection<string>? knownNames = null)
         {
             var names = new HashSet<string>(StringComparer.Ordinal);
             var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
 
-            Walk(cte.Mutation?.Source ?? cte.Query);
+            Walk(body);
 
             return names;
 
@@ -256,12 +265,12 @@ internal static class CteHoister
                 if (!visited.Add(cmd))
                     return;
 
-                WalkFrom(cmd.From);
+                WalkFrom(cmd, cmd.From);
 
                 if (cmd.Joins is { Length: > 0 } joins)
                 {
                     for (var i = 0; i < joins.Length; i++)
-                        WalkFrom(joins[i].From);
+                        WalkFrom(cmd, joins[i].From);
                 }
 
                 if (cmd.UnionQuery is { } union)
@@ -283,26 +292,136 @@ internal static class CteHoister
                 }
             }
 
-            void WalkFrom(FromExpression? from)
+            void WalkFrom(QueryCommand owner, FromExpression? from)
             {
                 if (from is null)
                     return;
 
-                if (!string.IsNullOrEmpty(from.Table))
+                // Only a source that actually refers to a declaration participates in the CTE closure.
+                // A plain mapped-entity source also exposes a table name (once prepared), and that name
+                // may coincidentally equal a sibling declaration's name; including it would drag the
+                // unrelated declaration into the WITH and shadow the physical table.
+                if (!string.IsNullOrEmpty(from.Table) && IsCteReference(owner, from, knownNames))
                     names.Add(from.Table);
 
                 if (from.SubQuery is { } subQuery)
                     Walk(subQuery);
 
+                // A projection-source marker (a typed/data-modifying CTE read) carries the defining
+                // command as ColumnShape; its own references are dependencies of the enclosing
+                // declaration and must participate in the closure/ordering.
+                if (from.ColumnShape is { } columnShape)
+                    Walk(columnShape);
+
                 if (from.Pivot is { } pivot)
-                    WalkFrom(pivot.Inner);
+                    WalkFrom(owner, pivot.Inner);
+            }
+
+            // A source is a CTE reference when it is a projection-source marker (a typed/data-modifying
+            // read) or when its table name matches a declaration - either one declared on the enclosing
+            // command or one of the candidate declarations being hoisted (a sibling may be declared
+            // later, the fluent API builds the body first). A mapped entity source is a physical table
+            // even when a declaration carries the same name, so the declaration must not shadow it.
+            static bool IsCteReference(QueryCommand owner, FromExpression from, IReadOnlyCollection<string>? knownNames)
+            {
+                if (from.ColumnShape is not null)
+                    return true;
+
+                if (string.IsNullOrEmpty(from.Table))
+                    return false;
+
+                if (from.SourceType is not null || from.IsAutoMapped || IsMappedEntityTable(owner, from.Table))
+                    return false;
+
+                if (owner.Ctes is { Count: > 0 } ctes)
+                {
+                    for (var i = 0; i < ctes.Count; i++)
+                    {
+                        if (string.Equals(ctes[i].Name, from.Table, StringComparison.Ordinal))
+                            return true;
+                    }
+                }
+
+                if (knownNames is not null)
+                {
+                    foreach (var name in knownNames)
+                    {
+                        if (string.Equals(name, from.Table, StringComparison.Ordinal))
+                            return true;
+                    }
+                }
+
+                return false;
             }
         }
+
+        // Whether the owning command reads from a mapped entity whose physical table is exactly
+        // <paramref name="table"/>. Such a source is a physical table, not a CTE reference, even when a
+        // declaration carries the same name. This resolves the owner command's own prepared source type
+        // - a per-command fact - instead of scanning the process-wide entity metadata, so the outcome
+        // cannot depend on which unrelated entity types happen to be registered, evicted or cleared by
+        // another query at hoist time.
+        private static bool IsMappedEntityTable(QueryCommand owner, string table)
+            => owner.EntityType is { } type
+                && DataContextCache.Metadata.TryGetValue(type, out var metadata)
+                && !string.IsNullOrEmpty(metadata.TableName)
+                && string.Equals(metadata.TableName, table, StringComparison.Ordinal);
 
         private enum VisitState
         {
             Visiting,
             Done,
         }
+    }
+
+    /// <summary>
+    /// Returns the subset of <paramref name="candidates"/> reachable from <paramref name="root"/>'s body
+    /// through CTE name references, in discovery order. The root is always included. A referenced name
+    /// pulls in every candidate declared under it, so a conflicting second definition under one name is
+    /// surfaced by the subsequent hoist rather than silently dropped; unreferenced candidates are
+    /// omitted. When nothing is omitted the original list is returned.
+    /// </summary>
+    /// <param name="candidates">The declarations a descriptor carries (its own definition included).</param>
+    /// <param name="root">The declaration whose body seeds the closure.</param>
+    /// <returns>The reachable declarations, or <paramref name="candidates"/> when nothing is omitted.</returns>
+    internal static IReadOnlyList<CteDefinition> Reachable(IReadOnlyList<CteDefinition> candidates, CteDefinition root)
+    {
+        if (candidates.Count <= 1)
+            return candidates;
+
+        var byName = new Dictionary<string, List<CteDefinition>>(StringComparer.Ordinal);
+        for (var i = 0; i < candidates.Count; i++)
+        {
+            var candidate = candidates[i];
+            if (!byName.TryGetValue(candidate.Name, out var sameName))
+                byName[candidate.Name] = sameName = [];
+            sameName.Add(candidate);
+        }
+
+        var seen = new HashSet<CteDefinition>(ReferenceEqualityComparer.Instance);
+        var reachable = new List<CteDefinition>(candidates.Count);
+        var queue = new Queue<CteDefinition>();
+        seen.Add(root);
+        queue.Enqueue(root);
+
+        while (queue.Count > 0)
+        {
+            var cte = queue.Dequeue();
+            reachable.Add(cte);
+
+            foreach (var referenced in Walker.CollectReferencedNames(cte.Mutation?.Source ?? cte.Query, byName.Keys))
+            {
+                if (!byName.TryGetValue(referenced, out var dependencies))
+                    continue;
+
+                for (var i = 0; i < dependencies.Count; i++)
+                {
+                    if (seen.Add(dependencies[i]))
+                        queue.Enqueue(dependencies[i]);
+                }
+            }
+        }
+
+        return reachable.Count == candidates.Count ? candidates : reachable;
     }
 }

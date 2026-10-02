@@ -61,6 +61,77 @@ Output:
 | 2 |
 | 3 |
 
+## Typed CTE
+
+`With` reads a CTE through [`TableAlias`](xref:NextORM.Core.TableAlias), so every column is addressed by a
+string. When you still hold the defining query, [`AsCte`](xref:NextORM.Core.QueryCommand`1.AsCte(System.String))
+declares the same ordinary CTE as a typed descriptor and `From(Cte<T>)` reads it with member access and
+type inference:
+
+```csharp
+var recent = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .AsCte("recent");
+
+var rows = dataContext
+    .From(recent)
+    .Select(r => new { r.Id })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recent as (select id from complex_entity where (id > 1)) select id from recent as 't1'
+```
+
+[`QueryCommand<T>.AsCte`](xref:NextORM.Core.QueryCommand`1.AsCte(System.String)) returns an immutable
+[`Cte<TResult>`](xref:NextORM.Core.Cte`1) whose `TResult` is exactly the `Select` projection;
+`From(Cte<T>)` returns the regular [`EntityBuilder<TResult>`](xref:NextORM.Core.EntityBuilder`1), so the
+**full operator set** (`Where`/`Join`/`GroupBy`/`OrderBy`/`Limit`/`Select`) applies and members (`r.Id`)
+replace `t["id"]` / `t.GetInt64("id")`. A CTE is a **typed projection source, not a mapped entity**: a
+whole-entity `TResult` does not make the outer source a table, and members resolve to the defining
+projection's output aliases, carrying its aliases and configured converters/provider types — no DTO remapping.
+
+The string API is unchanged: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` still declare and
+read CTEs by name, and remain the only way to write a recursive CTE by hand.
+
+Typed declaration reuses the same machinery, so heterogeneous descriptors and a self-join compose normally.
+The same descriptor instance used twice is declared once; different `TResult`s are independent:
+
+```csharp
+var recent = dataContext.From<IComplexEntity>()
+    .Select(x => new { x.Id, x.String })
+    .AsCte("recent");
+var other = dataContext.From<ISimpleEntity>()
+    .Select(y => new { y.Id })
+    .AsCte("other");
+
+var joined = dataContext.From(recent)
+    .Join(dataContext.From(other), (r, o) => r.Id == o.Id)
+    .Select(p => new { Id = p.Item1.Id, Name = p.Item1.String, Other = p.Item2.Id })
+    .ToList();
+
+// self-join: one declaration, two outer aliases
+var pairs = dataContext.From(recent)
+    .Join(dataContext.From(recent), (a, b) => a.Id == b.Id)
+    .Select(p => new { Left = p.Item1.Id, Right = p.Item2.Id })
+    .ToList();
+```
+
+Dependencies are hoisted automatically: `From(Cte<T>)` attaches the descriptor's declaration together with
+every declaration its body transitively references (nested CTE bodies, joins, derived subqueries,
+set-operation branches), ordered dependency-before-consumer, and omits declarations the body carries but never
+references. A descriptor used more than once contributes a single declaration; two different declarations
+sharing a name are still rejected, as with the string API.
+
+Entity filters are **not** injected on the typed source — neither on the main `From(Cte<T>)` source nor on a
+joined one; the defining query's own filters stay inside the CTE body.
+
+> **Typed recursion is not available yet.** `AsCte` declares an ordinary, non-recursive CTE only. Recursive
+> CTEs keep using [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))
+> documented below; there is no typed self-reference descriptor in this API.
+
 ## Chained declarations
 
 Each [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) appends to the previous scope, so a later CTE can be defined in terms of an earlier one.

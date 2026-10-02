@@ -83,7 +83,7 @@ internal static class SqlSourceRenderer
                     // (mirroring how UNION branches are rendered). Any declarations the body itself
                     // carries have already been hoisted into this top-level WITH, so the body must not
                     // emit a nested WITH of its own (invalid on SQL Server).
-                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider(), SuppressCtes = true });
+                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider(), SuppressCtes = true, ExactProjectionAliases = cte.TypedProjection });
                     withBuilder.Append(builder.MakeSelect(cte.Query));
                 }
 
@@ -528,7 +528,11 @@ internal static class SqlSourceRenderer
 #if DEBUG
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
 #endif
-                var sql = new SqlBuilder(in ctx).MakeSelect(cmd);
+                // A nested derived table is an ordinary subquery: the typed-CTE declaration flag scopes
+                // to the declaration's own select list and must not leak here, where a case-only alias
+                // would rename the derived column while the enclosing body still references the physical
+                // name. Clear it so the nested source keeps the default case-insensitive aliasing.
+                var sql = new SqlBuilder(ctx with { ExactProjectionAliases = false }).MakeSelect(cmd);
 
                 if (ctx.ParamMode) return string.Empty;
 
@@ -1050,6 +1054,12 @@ internal static class SqlSourceRenderer
 
     internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
     {
+        // A consumer-side reference to a projection source's output identifier (an unaliased computed
+        // scalar has no member name to re-resolve): render the source's output column directly instead
+        // of re-rendering the defining expression, which references the source's own input columns.
+        if (selExp.IsProjectionOutputReference && selExp.OutputName is { Length: > 0 } outputReference)
+            return (false, ctx.Dialect.MakeColumnReference(outputReference));
+
         using var visitor = ctx.CreateColumnVisitor(entityType, 0, dontNeedAlias);
         visitor.RangeColumnRole = selExp.RangeColumnRole;
         visitor.Visit(selExp.Expression);
@@ -1060,12 +1070,22 @@ internal static class SqlSourceRenderer
         // read from (MyId = t.Id, or two sources exposing the same physical name). Without it an
         // outer query that references the projection by property name emits the wrong identifier,
         // which PostgreSQL rejects as missing or ambiguous. renameAware is only set by callers that
-        // emit a select list - GROUP BY must keep the physical column name.
+        // emit a select list - GROUP BY must keep the physical column name. A typed CTE declaration
+        // body compares case-sensitively: its property-name aliases are the identifiers typed reads
+        // resolve, and PostgreSQL quoted identifiers do not fold case.
+        var comparison = ctx.ExactProjectionAliases ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         var needAliasForColumn = visitor.NeedAliasForColumn
             || (renameAware
                 && visitor.ColumnName is not null
                 && selExp.PropertyName is not null
-                && !string.Equals(visitor.ColumnName, selExp.PropertyName, StringComparison.OrdinalIgnoreCase));
+                && !string.Equals(visitor.ColumnName, selExp.PropertyName, comparison))
+            // An unaliased computed scalar in a typed CTE declaration has no property name to compare
+            // against, so the declaration must still alias it to its generated output identifier; the
+            // consumer then references that identifier (see IsProjectionOutputReference).
+            || (ctx.ExactProjectionAliases
+                && renameAware
+                && selExp.PropertyName is null
+                && selExp.OutputName is not null);
 
         return (needAliasForColumn, visitor.ToString());
     }

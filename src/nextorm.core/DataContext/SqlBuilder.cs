@@ -510,7 +510,11 @@ internal readonly struct SqlBuilder
 
                         if (needAliasForColumn)
                         {
-                            selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                            // A generated output name (an unaliased computed scalar) is an alias only for
+                            // a typed-CTE declaration body; anywhere else the column keeps its implicit
+                            // name (the alias text was null before, and MakeColumnAlias emits nothing).
+                            var alias = item.PropertyName ?? (_ctx.ExactProjectionAliases ? item.OutputName : null);
+                            selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(alias, _ctx.KeywordCase));
                         }
 
                         selectBuilder.Append(", ");

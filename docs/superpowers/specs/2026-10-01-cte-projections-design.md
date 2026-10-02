@@ -42,7 +42,7 @@
 
 | Вариант | Итог |
 |---|---|
-| Независимый дескриптор `Cte<TProjection>` | **рекомендован и выбран** |
+| Независимый дескриптор `Cte<TResult>` | **рекомендован и выбран** |
 | `CteQuery<T>` с типом только на «последнем» CTE | не выдерживает разнородные CTE без доп. машинерии |
 | `From<Row>(string)` | нет вывода анонимного типа, непроверяемые claims о типах |
 
@@ -52,7 +52,7 @@
 
 Имена generic-параметров формальны. Примеры намеренно без `namespace`.
 
-- `sealed` immutable `Cte<TProjection>`; `Cte<TProjection>.Name` — read-only. Определение и shape —
+- `sealed` immutable `Cte<TResult>`; `Cte<TResult>.Name` — read-only. Определение и shape —
   внутреннее состояние; глубокой неизменяемости underlying `QueryCommand` контракт не обещает.
 - `sealed` immutable `CteReference<TProjection>`: нет публичных конструкторов, принимающих
   произвольные имя/тип; создание только через фабричные методы; не `IDisposable`; мутировать

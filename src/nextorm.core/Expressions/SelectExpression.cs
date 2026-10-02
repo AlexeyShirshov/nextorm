@@ -103,6 +103,22 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// reads as SQL <c>NULL</c>, i.e. the row is on the missing side of an outer join).
     /// </summary>
     internal ProjectionEntityItem? ProjectionItem { get; set; }
+
+    /// <summary>
+    /// The stable output identifier of a projection-source column that has no CLR property name (an
+    /// unaliased computed scalar such as <c>Select(x =&gt; x.Total * 2)</c>). A typed CTE declaration
+    /// aliases such a column to this name so a consumer can reference it, because the defining
+    /// expression references the CTE's own input columns and cannot be re-rendered against the CTE.
+    /// <see langword="null"/> for an ordinary named column.
+    /// </summary>
+    internal string? OutputName { get; set; }
+
+    /// <summary>
+    /// True when this column is a consumer-side reference to a projection source's output identifier
+    /// (see <see cref="OutputName"/>) rather than a re-rendered defining expression. Such a column
+    /// renders as the source's output column name.
+    /// </summary>
+    internal bool IsProjectionOutputReference { get; set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     // private readonly IQueryRegistry _queryProvider;

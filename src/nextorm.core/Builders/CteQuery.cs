@@ -67,6 +67,15 @@ public sealed class CteDefinition
     /// need one (SQL Server); ignored by dialects that rely on their own default.
     /// </summary>
     public int? MaxRecursion { get; }
+
+    /// <summary>
+    /// True when this declaration was created through the typed descriptor <c>AsCte</c>. A typed CTE
+    /// body must expose its columns under the projection's property names (not the physical mapped
+    /// names), because a typed read resolves member access to those property names — PostgreSQL quoted
+    /// identifiers are case-sensitive, so a case-only name difference must be aliased explicitly. Legacy
+    /// <c>With</c>/<c>WithRecursive</c> declarations keep the physical/mapped output names.
+    /// </summary>
+    internal bool TypedProjection { get; init; }
 }
 
 /// <summary>

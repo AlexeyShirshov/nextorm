@@ -4026,6 +4026,24 @@ P2-трекинг: `ITupleRenderer` / `ISqlDialect.Tuple` внести в `Publi
 
 **Закрытие (23.09.2026).** IDML25 — новый член учтён; IDML22 (обе перегрузки `With`) распространён и на пару `CteQuery.With`. Публичные доки EN+RU обновлены в том же изменении: guide 09 (тело `INSERT ... SELECT`, ссылка на ранее объявленный read-CTE, главный `INSERT ... SELECT`), guide 19 (снят «источник с CTE не поддерживается» → «CTE поднимается перед `INSERT`»), limitations EN+RU, gap-analysis §4 п.18 (RFC-план закрыт и удалён). `docfx` — **0/0**. Гейт остаётся только для не-PG провайдеров (`SupportsDataModifyingCtes = false`).
 
+### Аудит 02.10.2026 — типизированные обычные CTE, slice A (#146): `Cte<T>`/`AsCte`/`From(Cte<T>)`, uncommitted working tree (P0 — нет; P1 — нет; P2 — 1)
+
+**Область.** Поверхность **аддитивна**, переименований нет. Новое (#146, милстоун 1.0.9-b, slice A; к заморозке Шага 5):
+
+- Новый публичный тип `NextORM.Core.Cte<TResult>` (`src/nextorm.core/Cte.cs:24`, `sealed`, `internal` ctor) — один публичный член: `Name` (`:50`, read-only `string`); `Query`/`Definition`/`Definitions` — `internal`.
+- Новый extension `DataContextExtensions.From<TResult>(this IDataContext, Cte<TResult>) -> EntityBuilder<TResult>` (`src/nextorm.core/DataContext/DataContextExtensions.cs:1249`) — sibling-перегрузка существующего `From<TResult>(this IDataContext, QueryCommand<TResult>)`.
+- Новый метод `QueryCommand<TResult>.AsCte(string name) -> Cte<TResult>` (`src/nextorm.core/Query/QueryCommand.TResult.cs:1049`).
+
+**Slice B явно НЕ добавлен.** Рекурсивной типизированной поверхности нет: `QueryCommand<T>.AsRecursiveCte(...)` отсутствует, публичного типа `CteReference<T>` нет (рефлексия-тест `TypedCteTests.TypedCte_Surface_ShouldExposeSliceAAndRejectSliceB`). Строковые `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` не менялись. В публичных доках `AsRecursiveCte`/`CteReference` не упоминаются как реализованные; рекурсия описана как пока недоступная в типизированном API.
+
+**Именование — P0/P1 по именам нет.** `Cte<T>` продолжает линию `CteQuery`/`CteDefinition` (регистр акронима `Cte`, не `CTE`); `AsCte` — фабрика из глагола+акронима; `From(Cte<T>)` зеркалит существующий `From(QueryCommand<T>)` и **не конфликтует**: `Cte<T>` не `QueryCommand` и implicit-операторов не имеет. BCL-конфликтов нет. XML-doc у всех новых публичных членов полный (summary/typeparam/param/returns/exception).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| IDML26 | P2 (трекинг) | `src/nextorm.core/Cte.cs:24,50`; `src/nextorm.core/Query/QueryCommand.TResult.cs:1049`; `src/nextorm.core/DataContext/DataContextExtensions.cs:1249`; `PublicAPI.*.txt` отсутствуют | Новый публичный тип + член `Name` + 2 метода не трекаются: `PublicApiAnalyzers`/ApiCompat/API-approval не подключены, `PublicAPI.*.txt` нет (Шаг 5 открыт). **Продолжение IDML2/IDML10/IDML11/IDML16/IDML18/IDML21/IDML25, не новая проблема** | При заморозке внести подписи (точный текст — из анализатора): `Cte<TResult>`, `.Name.get`, `QueryCommand<TResult>.AsCte(string)`, `DataContextExtensions.From<TResult>(IDataContext, Cte<TResult>)`. Slice B вносить **не** до его реализации |
+
+ℹ️ **Наблюдения.** Дескриптор immutable, идентичность по ссылке (`Equals`/`GetHashCode` не переопределены), `Name` read-only; тело (`QueryCommand`) не снапшотится — существующий lifecycle-контракт. Публичная поверхность slice A минимальна: дескриптор + фабрика + чтение. Surface-lock: `find PublicAPI*.txt` — **0**, Шаг 5 открыт (IDML26). Публичные доки EN+RU обновлены в том же изменении: guide 08 — раздел «Typed CTE»/«Типизированный CTE» (`docs/guide/08-cte.md`, `docs/ru/guide/08-cte.md`), полный XML-doc у `Cte<T>`/`AsCte`/`From(Cte<T>)`; ссылок на `docs/specs/**` нет.
+
 ### Аудит 23.09.2026 — DML `MERGE` (key upsert): `MergeInto`/`Using`/`OnKeys`/`WhenMatchedUpdate`/`WhenNotMatchedInsert`, uncommitted working tree (P0 — нет; P1 — 1 доковый; P2 — 4)
 
 **Область (uncommitted worktree).** Поверхность **аддитивна**, переименований нет. Новое (к заморозке Шага 5):

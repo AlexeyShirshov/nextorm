@@ -225,6 +225,16 @@ public partial class QueryCommand
                 TransferNestedFilterSkips(from.SubQuery, owner);
             }
 
+            // A projection-source marker (a typed or data-modifying CTE read, or an equivalent derived
+            // shape) exposes its readable columns through the command stored as ColumnShape. Prepare it
+            // here, before PrepareColumns consults ColumnShape.SelectList for the identity/whole-shape
+            // reuse path, so an already-built shape is never mistaken for an empty one.
+            if (from?.ColumnShape is not null && !from.ColumnShape._isPrepared)
+            {
+                from.ColumnShape.PrepareCommand(dontCalculateHash, cancellationToken);
+                TransferNestedFilterSkips(from.ColumnShape, owner);
+            }
+
             if (from?.Pivot is not null)
                 PrepareFrom(from.Pivot.Inner, dontCalculateHash, cancellationToken, owner);
         }
@@ -363,10 +373,32 @@ public partial class QueryCommand
                         ? resolvedSource
                         : null;
 
+                    // §6: a System.Tuple is not a supported whole-row shape for a column-shape source
+                    // (a typed CTE, or a data-modifying CTE read). The tuple is projected as one opaque
+                    // column, which the typed member reader cannot address: an identity read renders an
+                    // empty select list and an ItemN read a positional expression with no row operand
+                    // ("().fN"), i.e. broken SQL. Fail fast with a clear message instead. ValueTuple is
+                    // already rejected while classifying the defining body; the legacy derived-table path
+                    // shares this pre-existing limitation (see the code-smells review finding 65).
+                    if (cmd._from?.ColumnShape?.SelectList is { Length: > 0 } columnShape)
+                    {
+                        for (var i = 0; i < columnShape.Length; i++)
+                        {
+                            if (TypeFacts.IsTupleType(columnShape[i].PropertyType))
+                                throw new NotSupportedException(
+                                    $"The projection source '{cmd._from.Table}' exposes the System.Tuple column '{columnShape[i].PropertyType}', which cannot be read through a typed CTE; project the tuple's elements as separate columns instead.");
+                        }
+                    }
+
                     // A bare member projection of a value-converted property is a single column whose
                     // converter has to reach materialization; computed once so the scalar branch and its
-                    // condition do not each scan the entity metadata.
-                    var bodyConverter = cmd._exp.Body is MemberExpression ? ResolveConverter(srcMetadata, cmd._exp.Body) : null;
+                    // condition do not each scan the entity metadata. A typed-CTE projection source
+                    // (ColumnShape) carries its defining select list, so a member read over it inherits
+                    // the converter even when the projection type itself has no entity metadata (for
+                    // example an anonymous or DTO shape).
+                    var bodyConverter = cmd._exp.Body is MemberExpression
+                        ? ResolveConverter(srcMetadata, cmd._exp.Body) ?? ResolveShapeConverter(cmd, cmd._exp.Body)
+                        : null;
 
                     // A streaming named-column accessor projects one LOB column even though its CLR type
                     // (Stream/TextReader) is not one of the scalar types in IsSingleColumnProjection.
@@ -388,8 +420,33 @@ public partial class QueryCommand
                                 columnsPlanHash = columnsPlanHash * 13 + identityProjectionColumns[i].PlanHashCode;
                             }
                     }
+                    // A scalar (single-column) projection source read as a whole value reuses its one
+                    // readable column. The source parameter has no member to resolve, so without this the
+                    // scalar read would render an empty select list.
+                    else if (TypeFacts.UnwrapConvert(cmd._exp.Body) is ParameterExpression
+                        && cmd._from?.ColumnShape?.SelectList is { Length: 1 } scalarShape
+                        && TypeFacts.IsSingleColumnProjection(scalarShape[0].PropertyType))
+                    {
+                        cmd.OneColumn = true;
+                        selectList = [ProjectionOutputColumn(scalarShape[0])];
+                        if (!cmd._dontCache && !noHash) unchecked
+                        {
+                            columnsPlanHash = columnsPlanHash * 13 + scalarShape[0].PlanHashCode;
+                        }
+                    }
                     else if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
+                        // A ValueTuple construction is not a supported Select projection: this path
+                        // expands a NewExpression into one column per constructor argument, which would
+                        // split the tuple into ItemN columns the row mapper cannot bind (and a typed CTE
+                        // read renders a broken positional element expression). There is no tuple-column
+                        // support in this classification path; fail fast rather than emit a wrong shape.
+                        // The native row-value surface (Tuple.Create / Tuple<...>) is rendered as a single
+                        // column by TupleSqlTranslator; ValueTuple gets no new support here.
+                        if (TypeFacts.IsValueTupleType(ctor.Type))
+                            throw new NotSupportedException(
+                                $"The ValueTuple projection '{ctor.Type}' at Select position 0 is not supported; project an explicit type or use Tuple.Create.");
+
                         var args = ctor.Arguments;
                         var argsCount = args.Count;
 
@@ -414,7 +471,7 @@ public partial class QueryCommand
                                 continue;
 
                             var (durationUnit, durationPrecision) = ResolveDuration(srcMetadata, arg);
-                            var converter = ResolveConverter(srcMetadata, arg);
+                            var converter = ResolveConverter(srcMetadata, arg) ?? ResolveShapeConverter(cmd, arg);
 
                             var selExp = new SelectExpression(ctorParam.ParameterType)
                             {
@@ -457,6 +514,12 @@ public partial class QueryCommand
 
                         var selExp = new SelectExpression(cmd._exp.Body.Type)
                         {
+                            // The output alias of a direct member projection (x.Id) is the member name;
+                            // storing it lets a typed CTE read over this shape resolve the member by its
+                            // output alias (FindQueryCommand matches PropertyName). An unaliased computed
+                            // scalar has no member name, so it carries a stable generated output name
+                            // instead; a typed CTE declaration aliases it and the consumer references it.
+                            PropertyName = (TypeFacts.UnwrapConvert(cmd._exp.Body) as MemberExpression)?.Member.Name,
                             Expression = selectExp,
                             DurationUnit = scalarDurationUnit,
                             DurationPrecision = scalarDurationPrecision,
@@ -464,6 +527,10 @@ public partial class QueryCommand
                             Converter = bodyConverter,
                             IsLobStreaming = bodyIsStreaming,
                         };
+                        // An unaliased computed scalar carries no member name; give it a stable output
+                        // identifier so a typed CTE declaration can alias it and a consumer can read it.
+                        if (selExp.PropertyName is null)
+                            selExp.OutputName = "c0";
                         // A dialect that does not enforce scalar-subquery cardinality (SQLite) would
                         // silently return the first row for Single/SingleOrDefault, so wrap the
                         // projection in a guard that raises a database error on a second row.
@@ -497,7 +564,7 @@ public partial class QueryCommand
 
                             var binding = bindings[idx] as MemberAssignment;
                             var (bindingDurationUnit, bindingDurationPrecision) = ResolveDuration(srcMetadata, binding!.Expression);
-                            var bindingConverter = ResolveConverter(srcMetadata, binding.Expression);
+                            var bindingConverter = ResolveConverter(srcMetadata, binding.Expression) ?? ResolveShapeConverter(cmd, binding.Expression);
 
                             var selExp = new SelectExpression(((PropertyInfo)binding!.Member).PropertyType)
                             {
@@ -530,7 +597,22 @@ public partial class QueryCommand
                     if (srcType is null)
                         throw new QueryPreparationException("Lambda expression or source type must exists");
 
-                    if (cmd._dataContext!.NeedMapping
+                    if ((cmd.ProjectionType ?? srcType) == srcType
+                        && TypeFacts.IsSingleColumnProjection(srcType)
+                        && cmd._from?.ColumnShape?.SelectList is { Length: 1 } scalarIdentityShape
+                        && scalarIdentityShape[0].PropertyType == srcType)
+                    {
+                        // A scalar (single-column) projection source read as a whole value (for example
+                        // ctx.From(scalarCte).ToList()): the source parameter has no member to resolve, so
+                        // reuse the shape's one readable column instead of falling into entity mapping.
+                        cmd.OneColumn = true;
+                        selectList = [ProjectionOutputColumn(scalarIdentityShape[0])];
+                        if (!cmd._dontCache && !noHash) unchecked
+                        {
+                            columnsPlanHash = columnsPlanHash * 13 + scalarIdentityShape[0].PlanHashCode;
+                        }
+                    }
+                    else if (cmd._dataContext!.NeedMapping
                         && (cmd.ProjectionType ?? srcType).IsAssignableTo(typeof(IProjection))
                         && TryBuildProjectionSelectList(cmd, noHash, cmd.ProjectionType ?? srcType, cancellationToken, out var projectionColumns))
                     {
@@ -603,6 +685,33 @@ public partial class QueryCommand
             }
 
             return (selectList, columnsPlanHash);
+        }
+
+        /// <summary>
+        /// Returns the column a consumer reads from a single-column projection source. A named member
+        /// column is reused directly (its defining expression re-resolves to the output alias). An
+        /// unaliased computed scalar carries no member name, so the consumer reads the source's stable
+        /// generated output identifier instead of re-rendering the defining expression (which references
+        /// the source's own input columns and would be unresolved against the source).
+        /// </summary>
+        private static SelectExpression ProjectionOutputColumn(SelectExpression shape)
+        {
+            if (shape.PropertyName is not null || shape.OutputName is not { Length: > 0 } outputName)
+                return shape;
+
+            return new SelectExpression(shape.PropertyType)
+            {
+                Index = shape.Index,
+                PropertyName = outputName,
+                Expression = shape.Expression,
+                OutputName = outputName,
+                IsProjectionOutputReference = true,
+                ProviderType = shape.ProviderType,
+                Converter = shape.Converter,
+                DurationUnit = shape.DurationUnit,
+                DurationPrecision = shape.DurationPrecision,
+                IsLobStreaming = shape.IsLobStreaming,
+            };
         }
 
         /// <summary>
@@ -803,6 +912,52 @@ public partial class QueryCommand
             return null;
         }
 
+        // Resolves the value converter of a member read from a projection-source marker (a typed CTE or
+        // an equivalent derived shape) when the projection type itself has no entity metadata, so an
+        // anonymous or DTO shape still carries its defining select list's converter into the outer
+        // materialization. The member is matched by its output alias against the shape's select list,
+        // which PrepareFrom has already prepared before PrepareColumns runs.
+        private static IPropertyValueConverter? ResolveShapeConverter(QueryCommand cmd, Expression expression)
+        {
+            expression = TypeFacts.UnwrapConvert(expression);
+            if (expression is not MemberExpression { Member: PropertyInfo pi })
+                return null;
+
+            // A joined typed-CTE read exposes its converter on the join source's shape, not on the main
+            // source, so a member read from the joined side would otherwise lose it and fail to
+            // materialize (for example an enum stored through an EnumToStringConverter).
+            if (FindShapeConverter(cmd._from?.ColumnShape, pi.Name) is { } mainConverter)
+                return mainConverter;
+
+            if (cmd._joins is { Length: > 0 } joins)
+            {
+                for (var j = 0; j < joins.Length; j++)
+                {
+                    if (FindShapeConverter(joins[j].From?.ColumnShape, pi.Name) is { } joinConverter)
+                        return joinConverter;
+                }
+            }
+
+            return null;
+        }
+
+        // Matches a member by its output alias against a source's prepared select list. PrepareJoin and
+        // PrepareFrom run before PrepareColumns, so every shape's SelectList is populated here.
+        private static IPropertyValueConverter? FindShapeConverter(QueryCommand? shapeCommand, string memberName)
+        {
+            var shape = shapeCommand?.SelectList;
+            if (shape is null)
+                return null;
+
+            for (var i = 0; i < shape.Length; i++)
+            {
+                if (string.Equals(shape[i].PropertyName, memberName, StringComparison.Ordinal))
+                    return shape[i].Converter;
+            }
+
+            return null;
+        }
+
         private static int PrepareJoin(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
         {
             int joinPlanHash = 7;
@@ -882,7 +1037,13 @@ public partial class QueryCommand
             if (cmd._from?.SourceBinding is { } binding)
                 return InjectBoundSourceFilters(cmd, srcType, binding, isProjectionSource);
 
-            var filters = QueryFilterResolver.GetFilters(filterEntityType, cmd._filterScope, cmd._dataContext);
+            // A projection-source marker (a typed or data-modifying CTE read) is not a mapped entity:
+            // the source exposes projected columns, not a table mapping, so no entity filters are looked
+            // up for it. The defining query already applies its own filters inside its body. An
+            // explicitly bound raw source keeps the bound path above.
+            var filters = cmd._from?.ColumnShape is not null
+                ? Array.Empty<IQueryFilterMetadata>()
+                : QueryFilterResolver.GetFilters(filterEntityType, cmd._filterScope, cmd._dataContext);
             var hasCrossJoinFilters = cmd.PendingCrossJoinFilters is { Count: > 0 };
             if (filters.Count == 0 && !hasCrossJoinFilters)
                 return cmd._condition;
@@ -1074,6 +1235,12 @@ public partial class QueryCommand
         private static void InjectJoinFilters(QueryCommand cmd, JoinExpression join, int sourceOrdinal)
         {
             if (join.From.SubQuery is not null)
+                return;
+
+            // A projection-source marker on the joined side (a typed or data-modifying CTE read) is not
+            // a mapped entity, so no entity filters are injected into its ON; its defining query applies
+            // its own filters inside its body. An explicitly bound raw source keeps the bound path below.
+            if (join.From.ColumnShape is not null && join.From.SourceBinding is null)
                 return;
 
             if (join.OriginalJoinCondition is not { Parameters: { Count: >= 2 } } joinCondition)

@@ -292,8 +292,7 @@ internal static class MemberTranslator
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-                    var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+                    var col = MakeInnerColumn(visitor, innerQuery, innerCol);
                     if (!visitor.IsParamMode)
                     {
                         if (!visitor.DontNeedAlias)
@@ -554,8 +553,7 @@ internal static class MemberTranslator
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-                    var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+                    var col = MakeInnerColumn(visitor, innerQuery, innerCol);
 
                     if (!visitor.IsParamMode)
                     {
@@ -682,8 +680,7 @@ internal static class MemberTranslator
         bool needAliasForColumn;
         try
         {
-            var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-            var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+            var col = MakeInnerColumn(visitor, innerQuery, innerCol);
             column = col.Column;
             needAliasForColumn = col.NeedAliasForColumn;
         }
@@ -704,6 +701,51 @@ internal static class MemberTranslator
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves the SQL text of a column exposed by an inner command. A typed-CTE read registers its
+    /// defining command as the column shape; that command's <see cref="QueryCommand.EntityType"/> is
+    /// its projection shape (not a mapped entity) and its select-list expressions still reference the
+    /// CTE's own input, so rendering them against the consumer re-enters this translator on the same
+    /// projection type. A typed CTE declaration body aliases every projected column to its property
+    /// name, so the consumer must reference that exact output identifier and let the caller qualify it
+    /// with the source alias.
+    /// </summary>
+    private static (bool NeedAliasForColumn, string Column) MakeInnerColumn(
+        BaseExpressionVisitor visitor,
+        QueryCommand innerQuery,
+        SelectExpression innerCol)
+    {
+        if (innerQuery.From?.ColumnShape is not null || IsTypedCteProducer(visitor, innerQuery))
+            return (true, innerCol.PropertyName!);
+
+        var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
+        return sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+    }
+
+    /// <summary>
+    /// True when <paramref name="innerQuery"/> is the defining body of a typed CTE (<c>AsCte</c>)
+    /// declared on the command currently being rendered. Such a body exposes its columns under the
+    /// projection's property names (see <see cref="SqlBuildContext.ExactProjectionAliases"/>), so a
+    /// member read over it must reference the property name rather than the physical mapped column.
+    /// The check is by reference against the command's own declaration set, so a body-to-body read
+    /// (outer typed CTE over an inner one) resolves the inner producer the same way the final consumer
+    /// does, while an ordinary derived subquery or a legacy <c>With</c> declaration is untouched.
+    /// </summary>
+    private static bool IsTypedCteProducer(BaseExpressionVisitor visitor, QueryCommand innerQuery)
+    {
+        if (visitor.QueryProvider is not QueryCommand owner || owner.Ctes is not { Count: > 0 } definitions)
+            return false;
+
+        for (var i = 0; i < definitions.Count; i++)
+        {
+            var definition = definitions[i];
+            if (definition.TypedProjection && ReferenceEquals(definition.Query, innerQuery))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

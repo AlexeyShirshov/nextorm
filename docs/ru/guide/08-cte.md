@@ -61,6 +61,78 @@ with recent as (select id from complex_entity where (id > 1)) select id from rec
 | 2 |
 | 3 |
 
+## Типизированный CTE
+
+`With` читает CTE через [`TableAlias`](xref:NextORM.Core.TableAlias), поэтому к каждому столбцу обращаются
+строкой. Если определяющий запрос ещё под рукой, [`AsCte`](xref:NextORM.Core.QueryCommand`1.AsCte(System.String))
+объявляет тот же обычный CTE типизированным дескриптором, а `From(Cte<T>)` читает его с доступом к членам и
+выводом типов:
+
+```csharp
+var recent = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id })
+    .AsCte("recent");
+
+var rows = dataContext
+    .From(recent)
+    .Select(r => new { r.Id })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with recent as (select id from complex_entity where (id > 1)) select id from recent as 't1'
+```
+
+[`QueryCommand<T>.AsCte`](xref:NextORM.Core.QueryCommand`1.AsCte(System.String)) возвращает неизменяемый
+[`Cte<TResult>`](xref:NextORM.Core.Cte`1), чей `TResult` — ровно проекция `Select`;
+`From(Cte<T>)` возвращает обычный [`EntityBuilder<TResult>`](xref:NextORM.Core.EntityBuilder`1), поэтому
+доступен **полный набор операторов** (`Where`/`Join`/`GroupBy`/`OrderBy`/`Limit`/`Select`), а члены (`r.Id`)
+заменяют `t["id"]` / `t.GetInt64("id")`. CTE — это **типизированный источник проекции, а не mapped-сущность**:
+whole-entity `TResult` не делает внешний источник таблицей, а члены разрешаются в выходные алиасы
+определяющей проекции, перенося её алиасы и сконфигурированные конвертеры/provider-типы — без DTO-remapping.
+
+Строковый API не меняется: `With`/`WithRecursive`/`From(string)`/`From(CteDefinition)` по-прежнему
+объявляют и читают CTE по имени и остаются единственным способом написать рекурсивный CTE вручную.
+
+Типизированное объявление переиспользует тот же механизм, поэтому разнородные дескрипторы и self-join
+компонуются обычным образом. Один и тот же экземпляр дескриптора, использованный дважды, объявляется один
+раз; разные `TResult` независимы:
+
+```csharp
+var recent = dataContext.From<IComplexEntity>()
+    .Select(x => new { x.Id, x.String })
+    .AsCte("recent");
+var other = dataContext.From<ISimpleEntity>()
+    .Select(y => new { y.Id })
+    .AsCte("other");
+
+var joined = dataContext.From(recent)
+    .Join(dataContext.From(other), (r, o) => r.Id == o.Id)
+    .Select(p => new { Id = p.Item1.Id, Name = p.Item1.String, Other = p.Item2.Id })
+    .ToList();
+
+// self-join: одно объявление, два внешних алиаса
+var pairs = dataContext.From(recent)
+    .Join(dataContext.From(recent), (a, b) => a.Id == b.Id)
+    .Select(p => new { Left = p.Item1.Id, Right = p.Item2.Id })
+    .ToList();
+```
+
+Зависимости поднимаются автоматически: `From(Cte<T>)` присоединяет объявление дескриптора вместе с каждым
+объявлением, на которое его тело транзитивно ссылается (вложенные тела CTE, join, derived-подзапросы, ветви
+set-операций), в порядке «зависимость раньше потребителя», и опускает объявления, которые тело несёт, но
+никогда не использует. Дескриптор, использованный более одного раза, даёт одно объявление; два разных
+объявления с одним именем по-прежнему отклоняются, как и в строковом API.
+
+Глобальные entity-фильтры **не** внедряются в типизированный источник — ни в основной `From(Cte<T>)`, ни в
+присоединённый; собственные фильтры определяющего запроса остаются внутри тела CTE.
+
+> **Типизированная рекурсия пока недоступна.** `AsCte` объявляет только обычный, нерекурсивный CTE.
+> Для рекурсивных CTE по-прежнему используется [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))
+> ниже; типизированного дескриптора самоссылки в этом API нет.
+
 ## Цепочка объявлений
 
 Каждый [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) добавляется к предыдущей области видимости, поэтому более поздний CTE может быть определён
