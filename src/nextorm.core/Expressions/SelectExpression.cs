@@ -91,6 +91,17 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     internal bool IsLobStreaming { get; set; }
 
     /// <summary>
+    /// #148-B r3 A3′: true when this <see cref="int"/> column is the checked narrowing of a wide
+    /// (64-bit) navigation collection count. The reader must read the underlying <c>bigint</c> and
+    /// apply a checked <c>long-&gt;int</c> conversion instead of a provider <c>GetInt32</c>, so an
+    /// out-of-range count throws <see cref="OverflowException"/> uniformly on every provider. Set by
+    /// the query preparer from the wide-count provenance (the referenced count command); carried into
+    /// the plan hash and the mapper signature so a nav-count column never shares a cached mapper with
+    /// an ordinary int column.
+    /// </summary>
+    internal bool IsWideCountNarrowed { get; set; }
+
+    /// <summary>
     /// The physical column name the mapped property reads, used by the dynamic-columns store to skip
     /// the columns already read into declared members. <see langword="null"/> for a computed column.
     /// </summary>

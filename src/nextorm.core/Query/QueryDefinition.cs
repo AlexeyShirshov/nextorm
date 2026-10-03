@@ -75,6 +75,12 @@ public sealed record QueryDefinition
     internal TemporalClause? Temporal { get; init; }
     /// <summary>Optional trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause.</summary>
     internal LockClause? RowLock { get; init; }
+    /// <summary>
+    /// The joined parameters injected by a reference-navigation expansion and their display paths
+    /// (#148-B D5). Carried across clones so a cloned command re-checks the projection nullability and
+    /// keeps the provider outer-join null settings. Not part of the plan key.
+    /// </summary>
+    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths { get; init; }
     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
     public bool Final { get; init; }
     /// <summary>The ClickHouse <c>SAMPLE</c> ratio, or <c>null</c> when the modifier is absent.</summary>

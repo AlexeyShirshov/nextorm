@@ -313,10 +313,10 @@ left join Child as t2 on <predicate>
 
 | Единица | Объём | Статус |
 |---|---|---|
-| **#148-A** | Внутренний фундамент: `NavigationPathResolver` + immutable `ResolvedNavigationPath`/`NavigationResolutionScope`/`NavigationSourceBinding`; metadata-only, scope/alias identity, single-key, fail-closed `NotSupportedException`; **не** подключён к visitor/preparation/execution, публичной поверхности не меняет. | in progress / delivered-internal |
-| **#148-B** | `NavigationExpansion` + четыре прямых терминала (`Any()`/`Count()`/`LongCount()`/свойство `Count`) + `AsEntityBuilder<T>` + SQL/InMemory-семантика + end-to-end отклонение. | pending |
+| **#148-A** | Внутренний фундамент: `NavigationPathResolver` + immutable `ResolvedNavigationPath`/`NavigationResolutionScope`/`NavigationSourceBinding`; metadata-only, scope/alias identity, single-key, fail-closed `NotSupportedException`; **не** подключён к visitor/preparation/execution, публичной поверхности не меняет. | delivered-internal (`8393f82`) |
+| **#148-B** | `NavigationExpansion` + четыре прямых терминала (`Any()`/`Count()`/`LongCount()`/свойство `Count`) + `AsEntityBuilder<T>` + SQL/InMemory-семантика + end-to-end отклонение; r2: M2M child-existence cardinality, multi-hop/self/dual reference chains, InMemory whole-reference projection, checked Count through consumers, missing-source diagnostic, null compensation. | **поставлено** (2026-10-02, ветка `1.0.9-b`, DO D0–D10 + r2 R2.1–R2.6; публичный гайд `docs/guide/29-implicit-navigation.md` EN+RU; отложенные пункты — [design §11](../design/implicit-navigation-queries.md#11-статус-реализации-2026-10-02)) |
 
-История #105 (слайсы A+B поставлены, CHECK пройден; B1/B2 — §9) сохраняется; #148 — continuation для слайса C.
+История #105 (слайсы A+B поставлены, CHECK пройден; B1/B2 — §9) сохраняется; #148 — continuation для слайса C. **[#148-A](https://github.com/AlexeyShirshov/nextorm/issues/148) поставлен internal-only, [#148-B](https://github.com/AlexeyShirshov/nextorm/issues/148) поставлен** (reference-цепочки/присутствие, многошаговые/self/dual-цепочки, четыре коллекционных терминала с M2M child-existence, коллекционный `AsEntityBuilder<T>`, whole-reference projection в SQL **и** in-memory, native `LongCount`, checked `Count` во всех потребителях, missing-source диагностика, InMemory parity, ClickHouse `join_use_nulls`), публичная поверхность и гайд EN+RU добавлены; adapter LINQ composition, reference-adapter и оставшиеся fail-closed формы InMemory (multi-hop presence, коллекция через отсутствующую ссылку) отложены fail-closed без неверных результатов (design §11).
 
 ## 10. Открытые пункты (решаются при реализации, модель их допускает)
 

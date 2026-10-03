@@ -310,6 +310,15 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings, KeywordCase keywordCase = KeywordCase.Lower)
         => Kw(keywordCase, " settings ") + string.Join(", ", settings.Select(static s => s.Key + " = " + s.Value));
 
+    /// <summary>
+    /// Provider settings that must be present query-locally so an <c>OUTER JOIN</c> yields SQL <c>NULL</c>
+    /// for the unmatched side instead of the provider's column default. Defaults to <see langword="null"/>
+    /// (every dialect but ClickHouse produces SQL nulls natively). ClickHouse returns
+    /// <c>join_use_nulls=1</c>; the core preparation injects it for a reference-navigation query only and
+    /// rejects a conflicting user-supplied value.
+    /// </summary>
+    public virtual IReadOnlyList<KeyValuePair<string, string>>? OuterJoinNullSettings => null;
+
     /// <inheritdoc/>
     public abstract string MakeParam(string name);
     /// <inheritdoc/>
@@ -775,6 +784,9 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <inheritdoc/>
     public virtual string MakeSubqueryPredicate(string keyword, string query, bool asPredicate) => $"{keyword}({query})";
+
+    /// <inheritdoc/>
+    public virtual bool SupportsReferenceToCollectionNavigation => true;
 
     // ClickHouse's distributed GLOBAL IN predicate; every other dialect rejects it.
     /// <inheritdoc/>

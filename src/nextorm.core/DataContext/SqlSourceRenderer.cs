@@ -229,7 +229,7 @@ internal static class SqlSourceRenderer
 
             if (joinCondition is null)
             {
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -252,7 +252,7 @@ internal static class SqlSourceRenderer
             {
                 var dim = JoinDimension(joinCondition);
 
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -423,7 +423,7 @@ internal static class SqlSourceRenderer
     /// </summary>
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, out string? alias)
     {
-        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints) = options;
+        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints, sourceParameter) = options;
         alias = null;
 
         if (from.LinqSource is not null)
@@ -508,9 +508,9 @@ internal static class SqlSourceRenderer
                     if (from.ColumnShape is not null)
                         ctx.ColumnsProvider.Add(from.ColumnShape, false);
                     else if (hasJoins && typeof(IProjection).IsAssignableFrom(entityType))
-                        ctx.ColumnsProvider.Add(entityType!.GetGenericArguments()[0], false);
+                        ctx.ColumnsProvider.Add(entityType!.GetGenericArguments()[0], false, sourceParameter);
                     else
-                        ctx.ColumnsProvider.Add(entityType!, false);
+                        ctx.ColumnsProvider.Add(entityType!, false, sourceParameter);
 
                     alias = ctx.AliasProvider!.GetNextAlias(from);
                     sqlBuilder.Append(ctx.Dialect.MakeTableAlias(alias, ctx.KeywordCase));

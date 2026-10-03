@@ -12,6 +12,21 @@ internal static class PredicateTranslator
 {
     internal static Expression? VisitUnary(BaseExpressionVisitor visitor, UnaryExpression node)
     {
+        // #148-B r3 A3′: the outer checked Int32 narrowing of a wide navigation count is a CLR-only
+        // materialization boundary. In SQL the correlated scalar stays bigint, so an in-database
+        // predicate/boolean/arithmetic evaluates at 64-bit (exact, never truncated by an int cast).
+        // The command is recognised by provenance (the tagged wide-count command the placeholder
+        // indexes), never by the node shape alone, so an ordinary checked numeric conversion below is
+        // untouched.
+        if (!visitor.IsParamMode
+            && node.NodeType is ExpressionType.Convert or ExpressionType.ConvertChecked
+            && node.Type == typeof(int)
+            && CorrelatedQueryExpressionVisitor.TryGetWideCountCommand(node.Operand, visitor.QueryProvider, out _))
+        {
+            visitor.Visit(node.Operand);
+            return node;
+        }
+
         // Numeric conversions are otherwise dropped, which silently changes the SQL semantics
         // (integer division, SQL Server integer avg, a projection wider than the column type).
         if (!visitor.IsParamMode
@@ -331,6 +346,36 @@ internal static class PredicateTranslator
         if (node.NodeType == ExpressionType.ArrayIndex)
             throw new NotSupportedException(
                 "An array index is supported only on a captured array (arr[i]); server-side array element access has no portable SQL form.");
+
+        // A comparison against a null literal renders with the null-aware is/is not form, so a boolean
+        // value projection (for example an expanded navigation presence check) is a real predicate and
+        // not an UNKNOWN that a driver reads as false. WHERE has its own null-aware path; this covers
+        // value/bool projections where the column visitor uses this translator.
+        if (!visitor.IsParamMode
+            && node.Type == typeof(bool)
+            && node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
+            && (node.Left is ConstantExpression { Value: null } || node.Right is ConstantExpression { Value: null }))
+        {
+            using var nullLeftVisitor = visitor.Clone();
+            nullLeftVisitor.Visit(node.Left);
+
+            using var nullRightVisitor = visitor.Clone();
+            nullRightVisitor.Visit(node.Right);
+
+            var nullLeft = nullLeftVisitor.ToString();
+            var nullRight = nullRightVisitor.ToString();
+
+            if (nullLeft == visitor.Kw("null") || nullRight == visitor.Kw("null"))
+            {
+                visitor.NeedAliasForColumn = true;
+                // A dialect without a boolean type (SQL Server) cannot use a bare predicate in a select
+                // list, so the value context is materialised as a bit scalar; a condition context keeps
+                // the predicate as-is (asPredicate = true is a no-op for such a dialect).
+                var presence = $"{nullLeft}{(node.NodeType == ExpressionType.Equal ? visitor.Kw(" is ") : visitor.Kw(" is not "))}{nullRight}";
+                visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(presence, visitor.IsPredicateContext));
+                return node;
+            }
+        }
 
         visitor.NeedAliasForColumn = true;
 

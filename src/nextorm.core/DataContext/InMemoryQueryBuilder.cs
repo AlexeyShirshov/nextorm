@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Linq.Expressions;
 
 namespace NextORM.Core;
@@ -315,6 +316,13 @@ internal static class InMemoryQueryBuilder
                 data = ev;
             }
 
+            // #148-B R2.1: a many-to-many collection counts only the junction rows whose mapped child
+            // exists. The in-memory provider applies this as a source filter (it cannot nest a child-key
+            // subquery in a correlated subcommand's condition); the child key set is read from the
+            // current context data once per enumerator, so the descriptor is never baked into a plan.
+            if (queryCommand.JunctionChildFilter is { } junctionChildFilter)
+                data = ApplyJunctionChildFilter(context, data!, junctionChildFilter);
+
             if (queryCommand.GroupBy is not null)
                 return InMemoryGrouping.CreateGroupedEnumerator<TResult, TEntity>(context, queryCommand, cacheEntry, data!, @params);
 
@@ -486,6 +494,25 @@ internal static class InMemoryQueryBuilder
             (conditionFactory, conditionDirect) = InMemoryConditionFactory.GetConditionPredicates(context, query, condition, context.ConditionFactoryCache, context.ConditionDirectCache);
         }
         return new InMemoryCompiledQuery<TResult, TEntity>(context.GetMap<TResult, TEntity>(query), conditionDelegate, conditionFactory, conditionDirect);
+    }
+
+    private static IEnumerable<TEntity> ApplyJunctionChildFilter<TEntity>(InMemoryDataContext context, IEnumerable<TEntity> data, JunctionChildFilter filter)
+    {
+        // #148-B R2.1: keep only the junction rows whose mapped child key exists in the registered child
+        // data. The key set is read once per enumerator from the live context data, so a later WithData is
+        // observed and no data is baked into the compiled plan.
+        var childKeys = new HashSet<object?>();
+        if (context.Data.TryGetValue(filter.ChildType, out var childData) && childData is IEnumerable children)
+        {
+            foreach (var child in children)
+                childKeys.Add(filter.ChildKey.GetValue(child));
+        }
+
+        return data.Where(entity =>
+        {
+            var key = filter.JunctionForeignKey.GetValue(entity);
+            return key is not null && childKeys.Contains(key);
+        });
     }
 
     private static bool HasRawSqlJoin(QueryCommand queryCommand)

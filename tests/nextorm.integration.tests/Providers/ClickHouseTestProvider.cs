@@ -315,6 +315,18 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (1, 5, 1, 1, 10, 1),
             (2, 7, 2, 2, 10, 3),
             (3, 6, 3, 3, 20, 2)
-        """
+        """,
+
+        // Implicit-navigation reference fixtures (#148-B D8): ClickHouse does not derive
+        // CommonTestSuite, so the reference-navigation cases are re-pinned by
+        // ClickHouseImplicitNavigationTests over these Memory tables.
+        "drop table if exists eager_link",
+        "drop table if exists eager_tag",
+        "drop table if exists eager_child",
+        "drop table if exists eager_parent",
+        "create table eager_parent (id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_child (id Int32, parent_id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_tag (id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_link (id Int32, parent_id Int32, child_id Int32) engine = Memory"
     ];
 }

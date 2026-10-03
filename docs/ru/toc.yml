@@ -70,6 +70,8 @@
       href: guide/27-dynamic-columns.md
     - name: Потоковое сохранение данных
       href: guide/28-streaming-data.md
+    - name: Неявные навигационные запросы
+      href: guide/29-implicit-navigation.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

@@ -435,6 +435,13 @@ public class ClickHouseDialect : SqlDialectBase
         return call;
     }
 
+    /// <summary>
+    /// ClickHouse cannot correlate a subquery on a joined source alias (the engine reports
+    /// <c>NOT_IMPLEMENTED: can't find correlated column</c>), so a collection reached through a
+    /// reference navigation is rejected by navigation expansion.
+    /// </summary>
+    public override bool SupportsReferenceToCollectionNavigation => false;
+
     /// <summary>ClickHouse implements the distributed <c>GLOBAL IN</c> predicate.</summary>
     public override bool SupportsGlobalPredicates => true;
 
@@ -455,6 +462,13 @@ public class ClickHouseDialect : SqlDialectBase
 
     /// <summary>ClickHouse implements the trailing <c>SETTINGS</c> clause.</summary>
     public override bool SupportsSettings => true;
+
+    /// <summary>
+    /// ClickHouse fills the unmatched side of an outer join with column defaults unless
+    /// <c>join_use_nulls=1</c> is set; reference-navigation materialization needs real SQL nulls to see an
+    /// absent principal, so the core preparation injects it query-locally.
+    /// </summary>
+    public override IReadOnlyList<KeyValuePair<string, string>> OuterJoinNullSettings { get; } = [new("join_use_nulls", "1")];
 
     /// <summary>Renders the trailing <c>with rollup</c>/<c>with cube</c> super-aggregate modifier.</summary>
     public override string MakeGrouping(string columns, GroupingType groupingType, KeywordCase keywordCase = KeywordCase.Lower) => groupingType switch

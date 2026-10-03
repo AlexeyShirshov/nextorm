@@ -13,7 +13,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private IReadOnlyList<string>? _hints;
     private List<QueryCommand>? _referencedQueries;
     private List<Expression>? _outerRefs;
-    private readonly JoinExpression[]? _joins;
+    private JoinExpression[]? _joins;
     /// <summary>The prepared projection columns after <c>PrepareCommand</c>, or <c>null</c> before preparation.</summary>
     protected SelectExpression[]? _selectList;
     private object? _customData;
@@ -22,13 +22,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>The context that executes the command, or <c>null</c> for an unbound cached clone.</summary>
     protected IDataContext? _dataContext;
     /// <summary>The original projection lambda, or <c>null</c> for a command without an explicit projection.</summary>
-    protected readonly LambdaExpression? _exp;
+    protected LambdaExpression? _exp;
     /// <summary>The <c>WHERE</c> predicate lambda before preparation, or <c>null</c> when there is none.</summary>
-    protected readonly LambdaExpression? _condition;
+    protected LambdaExpression? _condition;
     /// <summary>The <c>GROUP BY</c> key selector before preparation, or <c>null</c> when there is no grouping.</summary>
-    protected readonly LambdaExpression? _groupExp;
+    protected LambdaExpression? _groupExp;
     /// <summary>The <c>HAVING</c> predicate before preparation, or <c>null</c> when there is none.</summary>
-    protected readonly LambdaExpression? _having;
+    protected LambdaExpression? _having;
     /// <summary>The ClickHouse <c>PREWHERE</c> predicate before preparation, or <c>null</c> when there is none.</summary>
     protected LambdaExpression? _preWhere;
     /// <summary>The ClickHouse <c>ARRAY JOIN</c> expressions before preparation, or <c>null</c> when the clause is absent.</summary>
@@ -143,7 +143,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private SelectExpression[]? _extremeRowColumns;
     private SelectExpression[]? _extremeRowGroupByColumns;
     /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
-    protected readonly Sorting[]? _sorting;
+    protected Sorting[]? _sorting;
 
     /// <summary>
     /// Initializes a command from a query shape, copying each collaborator and leaving the command
@@ -185,6 +185,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         SampleRatio = definition.SampleRatio;
         SampleOffset = definition.SampleOffset;
         Settings = definition.Settings;
+        NavigationPaths = definition.NavigationPaths;
         _preWhere = definition.PreWhere;
         _arrayJoins = definition.ArrayJoins?.ToArray();
         _windows = definition.Windows;
@@ -227,7 +228,70 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Windows = _windows,
         ArrayJoinKind = ArrayJoinKind,
         BindArrayJoinElement = BindArrayJoinElement,
+        NavigationPaths = NavigationPaths,
     };
+    /// <summary>
+    /// Applies the reference-navigation expansion performed at the start of preparation (#148-B D3):
+    /// installs the rewritten lambdas and appends the injected navigation <c>LEFT JOIN</c>s after the
+    /// command's declared joins. Preparation-local; the rewrite is idempotent so a re-preparation sees
+    /// no navigation access and does not append duplicates.
+    /// </summary>
+    /// <summary>
+    /// The joined parameters injected by a reference-navigation expansion, each mapped to its
+    /// human-readable navigation path (#148-B D5). Preparation-local: set by
+    /// <see cref="NavigationExpansion"/> and read by the projection-nullability check and the provider
+    /// outer-join null-settings injection. Not part of the plan key.
+    /// </summary>
+    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths { get; set; }
+
+    /// <summary>
+    /// #148-B R2.1: the mapped-child-existence leg of a many-to-many collection correlation. Set only
+    /// for the in-memory provider, which cannot nest a child-key subquery in a correlated
+    /// subcommand's condition and so filters the junction source instead (see
+    /// <see cref="InMemoryQueryBuilder"/>). Not part of the plan key; the condition already fixes the
+    /// relationship shape.
+    /// </summary>
+    internal JunctionChildFilter? JunctionChildFilter { get; set; }
+
+    /// <summary>
+    /// #148-B R2.3: the in-memory descriptor of a multi-hop reference-navigation chain. When set, the
+    /// in-memory correlated evaluator walks the hops directly against the registered datasets instead of
+    /// building a nested correlated subquery (which the evaluator cannot bind). Set only for the
+    /// in-memory provider and only on the correlated command the chain was lowered to.
+    /// </summary>
+    internal InMemoryNavigationChain? NavigationChain { get; set; }
+
+    /// <summary>
+    /// #148-B r3 A3′: marks the correlated <c>count_big</c> subcommand a navigation <c>Count()</c> /
+    /// property <c>Count</c> / <c>LongCount()</c> was lowered to. The SQL renderer uses it as the
+    /// provenance of the outer checked <c>long-&gt;int</c> narrowing (so it suppresses the in-database
+    /// <c>cast(... as int)</c> for exactly this origin, never by node shape alone); the query preparer
+    /// uses it to tag the materialized Int32 column. Preparation-local; carried with clones but not
+    /// part of the plan key (the command's own projection/ResultType already describes the shape).
+    /// </summary>
+    internal bool IsWideNavigationCount { get; set; }
+
+    internal void ApplyNavigationExpansion(
+        LambdaExpression? projection,
+        LambdaExpression? condition,
+        LambdaExpression? having,
+        LambdaExpression? group,
+        LambdaExpression? preWhere,
+        Sorting[]? sorting,
+        JoinExpression[] navigationJoins)
+    {
+        ArgumentNullException.ThrowIfNull(navigationJoins);
+
+        if (projection is not null) _exp = projection;
+        if (condition is not null) _condition = condition;
+        if (having is not null) _having = having;
+        if (group is not null) _groupExp = group;
+        if (preWhere is not null) _preWhere = preWhere;
+        if (sorting is not null) _sorting = sorting;
+
+        _joins = _joins is { Length: > 0 } existing ? [.. existing, .. navigationJoins] : navigationJoins;
+    }
+
     /// <summary>The logger that receives command-preparation diagnostics, or <c>null</c> when logging is disabled.</summary>
     public ILogger? Logger { get; }
     /// <summary>The prepared <c>FROM</c> source, or <c>null</c> before preparation.</summary>
@@ -711,6 +775,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         LookupPartitions = null;
         ShapeScanned = false;
         _whereBasePlanHash = 0;
+        // Correlated subqueries and outer references are registered while preparing (#148-B: the
+        // navigation collection terminals add one referenced command per terminal). A re-preparation
+        // rebuilds them from scratch; keeping the previous lists would append duplicates on every
+        // reset/prepare cycle, changing the plan key and growing the registry without bound.
+        _referencedQueries = null;
+        _outerRefs = null;
+        ReferencedQueriesPlanHash = 0;
         InvalidatePlanKey();
 
         _dataContext?.ResetPreparation(this);

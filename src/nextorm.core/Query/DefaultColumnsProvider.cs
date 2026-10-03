@@ -11,15 +11,23 @@ namespace NextORM.Core;
 public class DefaultColumnsProvider : IColumnsProvider
 {
 #if NET8_0_OR_GREATER
-    private ValueList<(Type, QueryCommand?, bool, bool)> _list;
+    private ValueList<(Type, QueryCommand?, bool, bool, ParameterExpression?)> _list;
     private ValueList3<ReadOnlyCollection<ParameterExpression>> _scope;
     private ValueList<int> _sourceScopes;
 
 #else
-    private readonly List<(Type, QueryCommand?, bool, bool)> _list = [];
+    private readonly List<(Type, QueryCommand?, bool, bool, ParameterExpression?)> _list = [];
     private readonly List<ReadOnlyCollection<ParameterExpression>> _scope = [];
     private readonly List<int> _sourceScopes = [];
 #endif
+
+    /// <summary>
+    /// Source entries bound to an explicit occurrence parameter (#148-B R2.2), keyed by reference
+    /// identity. A navigation-injected join registers its right-hand parameter here so
+    /// <see cref="FindAlias(ParameterExpression, bool)"/> binds by occurrence identity rather than by
+    /// CLR type, which keeps two same-typed joined sources distinct.
+    /// </summary>
+    private readonly Dictionary<ParameterExpression, int> _paramSources = new(ReferenceEqualityComparer.Instance);
     /// <summary>The index of the first entry owned by the command currently being rendered.</summary>
     private int SourceScopeStart => _sourceScopes.Count > 0 ? _sourceScopes.Peek() : 0;
 
@@ -39,21 +47,27 @@ public class DefaultColumnsProvider : IColumnsProvider
         {
             var item = _list[i];
             if (!item.Item4)
-                _list[i] = (item.Item1, item.Item2, item.Item3, true);
+                _list[i] = (item.Item1, item.Item2, item.Item3, true, item.Item5);
         }
         _sourceScopes.Pop();
     }
 
     /// <inheritdoc/>
     public void Add(Type entityType, bool fromProjection)
+        => Add(entityType, fromProjection, sourceParameter: null);
+
+    /// <inheritdoc/>
+    public void Add(Type entityType, bool fromProjection, ParameterExpression? sourceParameter)
     {
-        _list.Add((entityType, null, fromProjection, false));
+        _list.Add((entityType, null, fromProjection, false, sourceParameter));
+        if (sourceParameter is not null)
+            _paramSources[sourceParameter] = _list.Count - 1;
     }
 
     /// <inheritdoc/>
     public void Add(QueryCommand queryCommand, bool fromProjection)
     {
-        _list.Add((queryCommand.ResultType!, queryCommand, fromProjection, false));
+        _list.Add((queryCommand.ResultType!, queryCommand, fromProjection, false, null));
     }
 
     /// <inheritdoc/>
@@ -79,6 +93,21 @@ public class DefaultColumnsProvider : IColumnsProvider
 
     private int? FindAliasInScope(ParameterExpression param, bool fromProjection, bool includeOuterScopes, bool onlyNested)
     {
+        // Occurrence identity first (#148-B R2.2): a source registered with this exact parameter binds
+        // by reference, so two same-typed navigation joins never merge. Returning null (rather than
+        // falling through) when the entry is not visible keeps a popped or out-of-scope navigation
+        // source from silently resolving to a same-typed sibling.
+        if (_paramSources.TryGetValue(param, out var direct))
+        {
+            var directItem = _list[direct];
+            if (directItem.Item3 == fromProjection
+                && directItem.Item4 == onlyNested
+                && (onlyNested || includeOuterScopes || direct >= SourceScopeStart))
+                return direct;
+
+            return null;
+        }
+
         var entityType = param.Type;
         var foundIdx = -1;
         ReadOnlyCollection<ParameterExpression>? paramColl = null;

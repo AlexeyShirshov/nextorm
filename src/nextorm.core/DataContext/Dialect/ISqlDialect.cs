@@ -1226,6 +1226,15 @@ public interface ISqlDialect
     /// </summary>
     string MakeSubqueryPredicate(string keyword, string query, bool asPredicate);
     /// <summary>
+    /// True when the provider can evaluate a collection reached through a declared reference navigation
+    /// (for example <c>child.Parent.Children</c>) as a correlated subquery keyed off the reference-join
+    /// alias. ClickHouse cannot correlate a subquery on a joined source, so it opts out and navigation
+    /// expansion rejects the shape with a precise diagnostic instead of emitting an engine-level error.
+    /// Defaults to <c>true</c> (declared as a default interface method so external implementations keep
+    /// compiling).
+    /// </summary>
+    bool SupportsReferenceToCollectionNavigation => true;
+    /// <summary>
     /// True when the provider supports the distributed <c>GLOBAL IN</c> predicate
     /// (<c>SqlFunctions.ClickHouse.global_in</c>). Defaults to <c>false</c>; ClickHouse opts in today.
     /// </summary>
@@ -1333,6 +1342,13 @@ public interface ISqlDialect
     bool SupportsSettings { get; }
     /// <summary>Renders the trailing <c>SETTINGS</c> clause. Only reached through a dialect that set <see cref="SupportsSettings"/>.</summary>
     string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings, KeywordCase keywordCase = KeywordCase.Lower);
+    /// <summary>
+    /// Provider settings that must be present query-locally so an <c>OUTER JOIN</c> yields SQL <c>NULL</c>
+    /// for the unmatched side instead of the provider's column default, or <see langword="null"/> when the
+    /// dialect produces SQL nulls natively. Declared as a default interface method so external
+    /// implementations keep compiling; ClickHouse returns <c>join_use_nulls=1</c>.
+    /// </summary>
+    IReadOnlyList<KeyValuePair<string, string>>? OuterJoinNullSettings => null;
     /// <summary>
     /// Renders a <c>TOP(n)</c>-style limit clause. Returns false when the dialect cannot express the
     /// limit inline and paging must be rendered by <see cref="MakePage"/> instead.

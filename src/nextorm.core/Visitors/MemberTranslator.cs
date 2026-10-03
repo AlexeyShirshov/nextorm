@@ -900,6 +900,13 @@ internal static class MemberTranslator
             var sqlBuilder = new SqlBuilder(visitor.Options);
             var sql = sqlBuilder.MakeSelect(innerQuery);
 
+            // #148-B r3: ClickHouse decorrelates a correlated scalar subquery by a join, so an empty
+            // match yields SQL NULL instead of the aggregate's identity (an empty count would be 0).
+            // Coalesce a navigation count back to 0 before materialization; a dialect that does not
+            // report WrapsCountResult (every other provider) always returns a non-null count.
+            if (innerQuery.IsWideNavigationCount && visitor.Dialect.WrapsCountResult)
+                sql = visitor.Dialect.MakeCoalesce($"({sql})", "0");
+
                 if (!visitor.IsParamMode)
                 {
                     visitor.Builder!.Append(sql).Append(')');

@@ -59,10 +59,22 @@ public partial class QueryCommand
                 srcType = cmd._exp.Parameters[0].Type;
             }
 
+            // #148-B D3: normalize declared reference-navigation member access into LEFT JOINs before
+            // FROM/JOIN/columns/WHERE are prepared. Idempotent: a rewritten command finds no navigation
+            // access on re-preparation.
+            NavigationExpansion.Expand(cmd, srcType);
+            // #148-B D5: a provider whose outer join fills the unmatched side with defaults (ClickHouse)
+            // needs its query-local null-producing setting; inject it before the SQL is built and reject a
+            // conflicting explicit setting. No-op for every other provider.
+            NavigationExpansion.ApplyProviderOuterJoinNullSettings(cmd);
+
             FromExpression? from = cmd._from ?? cmd._dataContext.GetFrom(srcType, cmd);
             PrepareFrom(from, dontCalculateHash, cancellationToken, cmd);
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
+            // #148-B D5/A7: reject an unlifted non-nullable value scalar read through a reference
+            // navigation, naming the path and result type instead of materializing a silent default.
+            NavigationExpansion.ValidateProjectionNullability(cmd, selectList);
             var wherePlanHash = PrepareWhere(cmd, InjectMainSourceFilters(cmd, srcType), dontCalculateHash, cancellationToken);
             PreparePreWhere(cmd, dontCalculateHash, cancellationToken);
             PrepareArrayJoin(cmd, cancellationToken);
@@ -465,7 +477,7 @@ public partial class QueryCommand
 
                         var expanded = new List<SelectExpression>(argsCount);
 
-                        var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                        var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger) { ProjectionMode = true };
                         using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < argsCount; idx++)
                         {
@@ -498,6 +510,8 @@ public partial class QueryCommand
                                 IsLobStreaming = TableAliasAccessors.IsStreaming(arg),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
+                            selExp.IsWideCountNarrowed = selExp.PropertyType == typeof(int)
+                                && CorrelatedQueryExpressionVisitor.ContainsNavigationCountNarrowing(selExp.Expression, cmd);
                             expanded.Add(selExp);
                         }
 
@@ -521,7 +535,7 @@ public partial class QueryCommand
                     {
 
                         cmd.OneColumn = true;
-                        var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                        var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger) { ProjectionMode = true };
                         var selectExp = innerQueryVisitor.Visit(cmd._exp);
                         var (scalarDurationUnit, scalarDurationPrecision) = ResolveDuration(srcMetadata, cmd._exp.Body);
 
@@ -551,6 +565,8 @@ public partial class QueryCommand
                             && (cmd._dataContext as DataContext)?.Dialect is { EnforcesScalarSubqueryCardinality: false })
                             selExp.Expression = WrapSingleScalarCardinalityGuard(selExp.Expression);
                         selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(cmd._exp.Body);
+                        selExp.IsWideCountNarrowed = selExp.PropertyType == typeof(int)
+                            && CorrelatedQueryExpressionVisitor.ContainsNavigationCountNarrowing(selExp.Expression, cmd);
                         if (!cmd._dontCache && !noHash)
                             selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
 
@@ -568,7 +584,7 @@ public partial class QueryCommand
 
                         selectList = new SelectExpression[bindingsCount];
 
-                        var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                        var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger) { ProjectionMode = true };
                         using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < bindingsCount; idx++)
                         {
@@ -591,6 +607,8 @@ public partial class QueryCommand
                                 IsLobStreaming = TableAliasAccessors.IsStreaming(binding.Expression),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(binding.Expression);
+                            selExp.IsWideCountNarrowed = selExp.PropertyType == typeof(int)
+                                && CorrelatedQueryExpressionVisitor.ContainsNavigationCountNarrowing(selExp.Expression, cmd);
                             if (!cmd._dontCache && !noHash)
                                 selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
                             selectList[idx] = selExp;
@@ -724,6 +742,7 @@ public partial class QueryCommand
                 DurationUnit = shape.DurationUnit,
                 DurationPrecision = shape.DurationPrecision,
                 IsLobStreaming = shape.IsLobStreaming,
+                IsWideCountNarrowed = shape.IsWideCountNarrowed,
             };
         }
 

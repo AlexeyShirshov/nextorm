@@ -39,12 +39,14 @@ internal static class InMemoryAggregates
         nameof(CommonFunctions.sum),
         nameof(CommonFunctions.avg),
         nameof(CommonFunctions.count),
+        nameof(CommonFunctions.count_big),
         nameof(CommonFunctions.stdev),
         nameof(CommonFunctions.stdevp),
         nameof(CommonFunctions.var),
         nameof(CommonFunctions.varp),
         nameof(PostgresFunctions.range_agg),
         nameof(PostgresFunctions.range_intersect_agg),
+        "count_big_distinct",
         "min_distinct",
         "max_distinct",
         "sum_distinct",
@@ -99,7 +101,8 @@ internal static class InMemoryAggregates
         var normalized = distinct ? name[..name.IndexOf('_')] : name;
         var resultType = Nullable.GetUnderlyingType(typeof(TResult)) ?? typeof(TResult);
 
-        if (normalized == nameof(CommonFunctions.count))
+        // count_big is the 64-bit collection count the navigation lowering emits; it folds like count.
+        if (normalized is nameof(CommonFunctions.count) or nameof(CommonFunctions.count_big))
         {
             long count = 0;
             if (selector is null)

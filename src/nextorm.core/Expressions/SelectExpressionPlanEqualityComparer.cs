@@ -55,6 +55,10 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.DefaultOnNull != y.DefaultOnNull) return false;
 
+        // #148-B r3 A3′: the wide-count narrowing changes how the value is read (checked long->int from
+        // a bigint rather than a provider int getter), so it must be part of the plan identity.
+        if (x.IsWideCountNarrowed != y.IsWideCountNarrowed) return false;
+
         if (x.DurationUnit != y.DurationUnit) return false;
 
         if (x.ProviderType != y.ProviderType) return false;
@@ -102,6 +106,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             hash.Add(obj.IsDynamicColumnsStore);
 
             hash.Add(obj.DefaultOnNull);
+
+            hash.Add(obj.IsWideCountNarrowed);
 
             hash.Add(obj.DurationUnit);
 

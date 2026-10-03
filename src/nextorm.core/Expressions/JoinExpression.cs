@@ -128,6 +128,13 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// resolved during SQL generation and in the in-memory provider.
     /// </summary>
     public Type? EntityType { get; init; }
+    /// <summary>
+    /// The lambda parameter that denotes this join's right-hand source when it was injected by an
+    /// implicit reference-navigation expansion (#148-B R2.2). Registered with the columns provider so
+    /// alias resolution binds by occurrence identity, keeping two same-typed joined sources distinct.
+    /// <c>null</c> for an ordinary user join.
+    /// </summary>
+    internal ParameterExpression? SourceParameter { get; init; }
     private FromExpression _from = null!;
     /// <summary>The right-hand source being joined.</summary>
     public required FromExpression From { get => _from; init => _from = value; }
@@ -182,6 +189,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
         {
             From = _from,
             EntityType = EntityType,
+            SourceParameter = SourceParameter,
             Strictness = Strictness,
             IsGlobal = IsGlobal,
             JoinHint = JoinHint,
@@ -201,6 +209,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
         {
             From = newFrom!,
             EntityType = EntityType,
+            SourceParameter = SourceParameter,
             Strictness = Strictness,
             IsGlobal = IsGlobal,
             JoinHint = JoinHint,

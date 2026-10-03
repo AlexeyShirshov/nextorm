@@ -4,7 +4,7 @@
 **Tracking issue:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) — верифицировано 2026-10-01 (title/state/milestone/body проверены через gh API; milestone `1.0.9-b` = number 18).
 **Milestone:** 1.0.9-b
 **Предшественник:** [#105](https://github.com/AlexeyShirshov/nextorm/issues/105) — закрыт; поставлены **только слайсы A+B**, слайс C явно отложен.
-**Статус:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) **открыт** (milestone `1.0.9-b`); дизайн согласован. Реализация разделена: **#148-A** — внутренний фундамент (поставлен **internal-only**, публичной поверхности не меняет), **#148-B** — пользовательская поверхность (`NavigationExpansion` + четыре терминала + `AsEntityBuilder<T>` + SQL/InMemory-семантика) **ещё не поставлена**; публичная поверхность неявных навигационных запросов / `AsEntityBuilder` отсутствует.
+**Статус:** [#148](https://github.com/AlexeyShirshov/nextorm/issues/148) **открыт** (milestone `1.0.9-b`); дизайн согласован. Реализация разделена: **#148-A** — внутренний фундамент (поставлен **internal-only**, публичной поверхности не меняет; commit `8393f82`), **#148-B** — пользовательская поверхность (`NavigationExpansion` + четыре терминала + `AsEntityBuilder<T>` + SQL/InMemory-семантика) **поставлена** (ветка `1.0.9-b`, DO D0–D9, статус `docs/specs/status/nav-implicit-148b-1.md`); публичная поверхность неявных навигационных запросов / `AsEntityBuilder<T>` доступна, публичный гайд EN+RU — `docs/guide/29-implicit-navigation.md`. Поставленный объём и явные отложенные пункты — §11.
 
 **Цель.** Эргономичные навигационные запросы на пути к паритету с linq2db / EF Core **БЕЗ** второго полного транслятора `Enumerable`/`Queryable`. Эта ограниченная фича — **НЕ** полный паритет. Существующий публичный API нативного движка и лимиты провайдеров сохраняются.
 
@@ -22,7 +22,7 @@
 
 5. **InMemory включён.** Зарегистрированные наборы данных контекста и метаданные связей **авторитетны** для ОБЪЯВЛЕННЫХ навигационных выражений; предзаполненный граф объектов не требуется; никакой опоры на заполненность enumerable `Children`, никакой lazy loading. Отсутствие/`null` ссылки и количество коллекций согласуются с SQL. Существующие не-навигационные CLR-выражения и обычные лимиты InMemory-движка сохраняются. Отсутствие требуемого зарегистрированного dataset даёт существующую ясную диагностику missing-source, а **не** тихий откат к CLR-графу.
 
-6. **M2M через явный junction**, вложенная навигация/query scopes в пределах существующих возможностей движка; дублирующиеся junction-строки сохраняют вхождения, прямые `Count`/`LongCount` их считают, `Any` проверяет существование. Удаление — только явной нативной distinct-операцией, если она доступна.
+6. **M2M через явный junction**, вложенная навигация/query scopes в пределах существующих возможностей движка. Терминал считает **junction-строки, у которых отображённый ребёнок существует**: висячая junction-связь исключается, а дублирующиеся junction-строки на одного существующего ребёнка сохраняют вхождения и считаются каждая (`Count`/`LongCount`), `Any` проверяет существование. Удаление — только явной нативной distinct-операцией, если она доступна.
 
 ## 2. Вне области (Out of scope)
 
@@ -131,3 +131,27 @@ ctx.From<Parent>()
 ## 10. Согласования / handoff
 
 Принятые разговорные решения — выше; спека ожидает одобрения пользователя; далее `writing-plans`; никакого кода/плана/коммита сегодня. Любое открытие при реализации, требующее расширения нативных возможностей или изменения утверждённой null/API-семантики, требует **явной ревизии дизайна**, а не тихого изменения объёма.
+
+## 11. Статус реализации (2026-10-02)
+
+**A3′ (поправка A3, ревизия r3).** Исходная A3 требовала брошенного `OverflowException` также от предиката/bool/арифметики, вычисляемых внутри БД, что несовместимо с SQL-исполнением. Поправка **одобрена AC-владельцем после эскалации** (§ статус-файл, ESCALATION → AC-OWNER): SQL эмитит широкий 64-битный счёт без `int`-приведения; проверяемое сужение до `int` — только там, где материализуется `int`, с единообразным `OverflowException`; in-DB предикат/bool/арифметика точны на 64-битном счёте; `LongCount()` — 64-бит сквозным; InMemory совпадает с `Enumerable.Count`. Реализация — `D-R3-1/2/3`, тесты `D-R3-7/8`.
+
+**Поставлено (слайсы A+B).**
+
+- **#148-A** (internal-only): `NavigationPathResolver` + immutable `ResolvedNavigationPath`/`NavigationResolutionScope`/`NavigationSourceBinding`; commit `8393f82`.
+- **#148-B** (пользовательская поверхность; ветка `1.0.9-b`, DO D0–D9, статус `docs/specs/status/nav-implicit-148b-1.md`):
+  - **reference**: скалярные цепочки и проверки присутствия; многошаговые цепочки (`e.Parent.Parent.Name`, self-ссылки, два пути одного CLR-типа) — по одному `LEFT JOIN` на переход с распространением отсутствия, каждый путь привязывает собственный псевдоним и не сливается с другим по CLR-типу; материализация ссылки целиком → сущность/`null` по FK/метаданным на SQL **и** in-memory (CLR-граф никогда не читается); lifted nullable и `?? 0`; unlifted non-nullable скаляр → `QueryPreparationException` с путём и типом результата;
+  - **collection**: четыре прямых терминала `Any`/`Count`/`LongCount`/свойство `Count` как коррелированные `EXISTS`/`count_big`; **A3′** — SQL эмитит широкий 64-битный счёт без `int`-приведения, проверяемое сужение до `int` происходит **только при материализации `int`** и бросает единообразный `OverflowException` на каждом провайдере, предикат/bool/арифметика вычисляются в БД на 64-битном счёте и всегда точны (без усечения/переполнения), `LongCount` — 64-бит сквозным, InMemory совпадает с `Enumerable.Count` и бросает для всех потребителей; M2M считает junction-строки, у которых отображённый ребёнок существует (висячая связь исключена; дубликаты на одного существующего ребёнка считаются каждая; только висячие → `false`/`0`); пустая коллекция → `false`/`0`/`0`/`0`;
+  - **reference, ревизия r3**: многошаговая **проверка присутствия** (`a.Parent.Parent == null`/`!= null`) с отсутствием на первом, промежуточном или последнем переходе на SQL **и** in-memory; **reference→collection** через один и более ссылочных переходов (`c.Parent.Children`) — отсутствующая промежуточная ссылка даёт пустую коррелированную коллекцию и никогда не сопоставляется со значением FK по умолчанию (без фантома); **ссылочный адаптер** `AsEntityBuilder<T>(object?)` даёт ссылочную семантику (`Any`/`Count`/`LongCount` ≡ `nav != null`) на SQL **и** in-memory;
+  - **диагностика missing-source**: незарегистрированный related-набор объявленной навигации даёт `BuildSqlCommandException` (`Table name is not registered`), а не тихий пустой/`null` результат;
+  - **adapter**: коллекционная форма `AsEntityBuilder<T>(IEnumerable<T>)` разворачивается в тот же коррелированный запрос; выражение-only, вне query всегда `NotSupportedException`;
+  - native `EntityBuilderExtensions.LongCount`/`LongCountAsync` (`count_big`);
+  - **ClickHouse**: query-local `join_use_nulls=1` (dialect capability `ISqlDialect.OuterJoinNullSettings`) для reference-запросов, явный конфликтующий `join_use_nulls=0` отклоняется до исполнения;
+  - **InMemory** parity для reference и collection (метаданные авторитетны, без CLR-графа);
+  - **conformance**: SQLite/PostgreSQL/SQL Server/MySQL/MariaDB/ClickHouse + in-memory; публичный гайд EN+RU `docs/guide/29-implicit-navigation.md` (+ `docs/ru/guide/29-implicit-navigation.md`), оба `toc`.
+- **Публичная поверхность**: `EntityBuilderExtensions.AsEntityBuilder<T>` (collection + reference overload), `EntityBuilderExtensions.LongCount`/`LongCountAsync`, `ISqlDialect.OuterJoinNullSettings` (DIM) + `SqlDialectBase`/`ClickHouseDialect` override. Реестр имён — `docs/specs/design/API-NAMING-REVIEW.md` (N148B-1/N148B-2).
+
+**Отложено (fail-closed, вне текущего объёма).**
+
+- **Adapter LINQ composition** — цепочки операторов после `AsEntityBuilder<T>` не разворачиваются; распознаются только прямые терминалы. **Проекция самого ссылочного адаптера** (`Select(x => x.Parent.AsEntityBuilder<Parent>())`) — не колонка и отклоняется (fail-closed).
+- Reference navigation в `GROUP BY`/`LIMIT BY`/`DISTINCT ON`/extreme-ключах; temp-table/TVP-навигация (формально отложена: триггер — источник навигации, скомбинированный с temp-table/TVP-путём; issue [#162](https://github.com/AlexeyShirshov/nextorm/issues/162); guarding-тест `tests/nextorm.sqlite.tests/ImplicitNavigationV32TempTableTests.cs`). Статус r3: ClickHouse reference→collection — принятое ограничение провайдера (явный гейт `ISqlDialect.SupportsReferenceToCollectionNavigation`; issue [#163](https://github.com/AlexeyShirshov/nextorm/issues/163)). `>Int32.MaxValue` не сеется сквозным на реальном провайдере: граница A3′ закреплена структурно (широкий счёт без `int`-приведения) и контролируемым widened-count фикстуром при материализации (скалярное чтение вне диапазона бросает `OverflowException`; предикат/bool/арифметика вычисляются в БД на 64-битном счёте).

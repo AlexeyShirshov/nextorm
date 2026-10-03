@@ -87,6 +87,10 @@ public partial class QueryCommand
         dst.SampleRatio = SampleRatio;
         dst.SampleOffset = SampleOffset;
         dst.Settings = Settings;
+        dst.NavigationPaths = NavigationPaths;
+        dst.JunctionChildFilter = JunctionChildFilter;
+        dst.NavigationChain = NavigationChain;
+        dst.IsWideNavigationCount = IsWideNavigationCount;
         dst._preWhere = _preWhere;
         dst._arrayJoins = _arrayJoins;
         dst._windows = _windows;
