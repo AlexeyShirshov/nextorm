@@ -6,7 +6,7 @@
 - cap: 1 (single group; flat primary, no nested Task)
 - base: `f3d1ece`
 - execution: flat primary (nested Task unavailable), current worktree
-- status: IN-PROGRESS
+- status: COMPLETE
 
 ## Group
 
@@ -31,13 +31,21 @@
 
 ## Общая верификация и восстановление
 
-- last C: (none)
+- last C: PASS (independent `check`, 2026-10-03) — full per-row matrices for #158 (R1–R7) and #152 (R1–R9), integrated tree; commits 8722a7f (#158) and 77660b1 (#152); no incomplete group; no merge needed (single group).
 - reason: (none)
 - defect id/history: (none)
 - corrective task status file: (none)
-- next allowed step: collection C (aggregate all task reports -> check verdict)
+- next allowed step: closed
 
 ## Done / Verified / Incomplete
 
 - #158 done — preflight of prior design decisions added to `.opencode/skills/nextorm-brainstorming/SKILL.md` (+31/−4); R1–R7 met; CHECK PASS; commit 8722a7f30dd6aecb5643155cd0d96af7f1d6ccf6; issue closed.
 - #152 done — versioned evidence contract pinned at PLAN in global `pdca-dotnet` (+ its planner/check source+installed mirrors) and project overlay; approved spec included; CHECK PASS (R1–R9 met); repo commit 77660b1220356990d03d3b04879e9a89ff5ecc89; global edits outside VCS (hashes in task status). Deferred-with-trigger: post-restart live loaded-skill validation (follow-up 164). Issue #152 closed.
+- Collection C PASS on the integrated tree (single group, no merge). Both original tasks done/committed; issues #158 and #152 CLOSED (milestone 1.0.9-b). Follow-up #164 OPEN (1.0.9-b) tracks the deferred post-restart live validation of the #152 contract. Unrelated working-tree changes were never staged.
+
+## Report
+
+- Collection `1.0.9-b-4` complete. Input: open issues of milestone `1.0.9-b` (#158, #152). Mode: autonomous + auto-commit; single group; flat primary; no worktree/branch/merge/push.
+- #158 done (commit `8722a7f`; bookkeeping `6b73ce4`): `.opencode/skills/nextorm-brainstorming/SKILL.md` (+31/−4) preflights prior design decisions; CHECK PASS (R1–R7). Issue closed.
+- #152 done (commit `77660b1`; bookkeeping `9335ee3`): repo overlay `.opencode/skills/nextorm-pdca/SKILL.md` (+17) + spec `docs/specs/design/issue-152-pdca-evidence-contract.md`; global `pdca-dotnet` SKILL.md (+54) + planner/check source assets (+12/+12) and installed agents (+15/+13) edited OUTSIDE VCS (backups `/tmp/opencode/1.0.9-b-4/baseline/152/`, hashes `.../152/live-hashes.txt`). CHECK PASS (R1–R9). Issue closed; deferred live validation tracked in #164.
+- Collection CHECK PASS (independent `check`). No D:/P: loop-back.
