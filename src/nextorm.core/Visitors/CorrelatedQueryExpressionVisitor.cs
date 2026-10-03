@@ -923,6 +923,12 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         if (expression is null)
             return false;
 
+        // D4: an absent or empty registry can never hold a wide-count candidate, so skip the probe
+        // (and its visitor allocation) entirely. A non-empty registry is always probed; the probe
+        // filters by index and the IsWideNavigationCount tag.
+        if (registry.ReferencedQueries is not { Count: > 0 })
+            return false;
+
         var probe = new NavigationCountNarrowingProbe(registry);
         probe.Visit(expression);
         return probe.Found;

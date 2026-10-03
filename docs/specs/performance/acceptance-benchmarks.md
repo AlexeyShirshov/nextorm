@@ -571,3 +571,40 @@ producing run 1 above. Raw logs: `/tmp/opencode/147/acceptance.log` (run 1) and
 
 acceptance command exit code = 0 (7 cases, 0 failures) — logs `/tmp/opencode/147/acceptance.log`,
 `/tmp/opencode/147/acceptance-run2.log`.
+
+## Results 2026-10-03 — issue #165 (Iteration-14 allocation recovery)
+
+Acceptance re-run on the same host/config/case set as the Iteration-14 baseline (AMD Ryzen 7 5800HS,
+Ubuntu 22.04.5 LTS, .NET SDK 10.0.401, .NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`,
+`InProcessEmitToolchain`, `MemoryDiagnoser`). Command:
+
+```
+dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance
+```
+
+**7** cases selected, **0** failures, exit **0**; `NEXTORM_BENCH_FULL` unset; inner loop **100**.
+External shell wall clock **0:52.08** before → **0:53.22** after (limit ≤ 4 min).
+
+### Before (HEAD `713dcde`, pre-fix) and After (D2–D4 applied)
+
+| Case | Before Mean | Before Allocated | Before B/op | After Mean | After Allocated | After B/op |
+|------|------------:|-----------------:|------------:|-----------:|----------------:|-----------:|
+| `Nextorm_Count` | 2.408 ms | 381.25 KB | 3,904 | 2.268 ms | 354.69 KB | 3,632 |
+| `Nextorm_GroupByCount` | 57.94 ms | 50.09 MB | 525,232 | 59.38 ms | 50.05 MB | 524,812 |
+| `Nextorm_Cached` (Any) | 1.968 ms | 636.78 KB | 6,521 | 1.837 ms | 568.01 KB | 5,816 |
+| `Cached_PlanOnly_Param` | 646.5 µs | 581.27 KB | 5,952 | 554.4 µs | 520.33 KB | 5,328 |
+| `Prepared_ToList` | 940.9 µs | 76.14 KB | 780 | 902.2 µs | 76.14 KB | 780 |
+| `Cached_ToList` | 2341.5 µs | 657.42 KB | 6,732 | 1793.5 µs | 596.47 KB | 6,108 |
+| `Nextorm_Cached_ToListAsync` | 2.559 ms | 817.83 KB | 8,375 | 2.186 ms | 734.25 KB | 7,519 |
+
+`B/op = Allocated / 100` (inner loop). Cached/prepared ratio (`Cached_ToList / Prepared_ToList`):
+time **2.49 → 1.99**, allocated **8.63 → 7.83**.
+
+Comparability: both runs use the same SDK 10.0.401, the same host and the in-process toolchain; the
+prepared arm `Prepared_ToList` is **unchanged** at **76.14 KB / 780 B/op** across before/after. The
+`>= 20 %` time-ratio investigation rule is **not** triggered: after **1.99 < 2.244** (the documented
+**1.87** baseline × 1.20), so no investigation is required.
+
+The allocation gate that enforces these budgets is `eng/perf/iteration14_gate.py` together with
+`eng/perf/iteration14-budgets.json`; the warm CTE reuse rows (`Cte_Warm_Reused`,
+`RecursiveCte_Warm_Reused`) must be **0 B/op** after warm-up.

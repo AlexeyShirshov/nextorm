@@ -133,6 +133,47 @@ internal static class CteHoister
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="cmd"/> can reach another command through any outgoing edge
+    /// <see cref="EnsureNoUnhoistedCtes"/> walks (plus the lazy temp-table and in-memory LINQ sources,
+    /// which may carry their own declarations). A command with no own declaration and no outgoing edge
+    /// is a leaf, so preparation may skip the unhoisted-declaration diagnostic for it.
+    /// </summary>
+    /// <remarks>
+    /// This mirrors the diagnostic's edge set deliberately: an edge added to <c>Walk</c>/<c>WalkFrom</c>
+    /// must be added here too, or the diagnostic would silently stop seeing it. When in doubt this method
+    /// reports an edge, so the caller runs the diagnostic rather than skipping it.
+    /// </remarks>
+    internal static bool HasOutgoingCommandEdges(QueryCommand cmd)
+    {
+        ArgumentNullException.ThrowIfNull(cmd);
+
+        if (cmd.Ctes is { Count: > 0 })
+            return true;
+
+        if (HasFromCommandEdges(cmd.From))
+            return true;
+
+        if (cmd.Joins is { Length: > 0 })
+            return true;
+
+        if (cmd.UnionQuery is not null)
+            return true;
+
+        if (cmd.ReferencedQueries is { Count: > 0 })
+            return true;
+
+        return false;
+    }
+
+    private static bool HasFromCommandEdges(FromExpression? from)
+        => from is not null
+            && (from.SubQuery is not null
+                || from.ColumnShape is not null
+                || from.Pivot is not null
+                || from.TempTable is not null
+                || from.LinqSource is not null);
+
     private sealed class Walker
     {
         private readonly List<CteDefinition> _flat = [];

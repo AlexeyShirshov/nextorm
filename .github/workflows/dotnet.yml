@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       MIN_LINE_COVERAGE: 85
       MIN_BRANCH_COVERAGE: 75
@@ -43,6 +43,13 @@ jobs:
         run: |
           mkdir -p tests/coverage
           dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
+      - name: Allocation regression gate
+        timeout-minutes: 20
+        run: |
+          mkdir -p /tmp/nextorm-bench-gate
+          export NEXTORM_BENCH_DB=/tmp/nextorm-bench-gate/test.db
+          python3 -m unittest discover -s eng/perf/tests -p 'test_iteration14_gate.py'
+          python3 eng/perf/iteration14_gate.py --timeout 1200
       - name: Coverage report
         run: |
           dotnet tool run reportgenerator \

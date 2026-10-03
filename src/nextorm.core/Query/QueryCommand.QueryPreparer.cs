@@ -317,7 +317,12 @@ public partial class QueryCommand
             // set-operation branch) cannot be hoisted into the top-level WITH; fail before emitting the
             // non-portable nested form instead of rendering invalid SQL. Commands without declarations
             // are checked too, so `From(<query that carries a WITH>)` fails fast rather than nesting.
-            CteHoister.EnsureNoUnhoistedCtes(cmd, cmd._ctes ?? Array.Empty<CteDefinition>());
+            // Iteration 14 proposal 3: a leaf command (no own declaration, no outgoing command edge can
+            // carry one) cannot hide an unhoisted declaration, so the diagnostic walk is skipped. Any
+            // edge keeps the unchanged check, so a declaration below a SubQuery/ColumnShape/Pivot/join/
+            // union/reference/temp-table/LINQ source still fails fast.
+            if (CteHoister.HasOutgoingCommandEdges(cmd))
+                CteHoister.EnsureNoUnhoistedCtes(cmd, cmd._ctes ?? Array.Empty<CteDefinition>());
 
             if (cmd._ctes is not { Count: > 0 } || cmd._dontCache || noHash)
                 return;
@@ -510,8 +515,7 @@ public partial class QueryCommand
                                 IsLobStreaming = TableAliasAccessors.IsStreaming(arg),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
-                            selExp.IsWideCountNarrowed = selExp.PropertyType == typeof(int)
-                                && CorrelatedQueryExpressionVisitor.ContainsNavigationCountNarrowing(selExp.Expression, cmd);
+                            TagWideCountNarrowing(selExp, cmd);
                             expanded.Add(selExp);
                         }
 
@@ -565,8 +569,7 @@ public partial class QueryCommand
                             && (cmd._dataContext as DataContext)?.Dialect is { EnforcesScalarSubqueryCardinality: false })
                             selExp.Expression = WrapSingleScalarCardinalityGuard(selExp.Expression);
                         selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(cmd._exp.Body);
-                        selExp.IsWideCountNarrowed = selExp.PropertyType == typeof(int)
-                            && CorrelatedQueryExpressionVisitor.ContainsNavigationCountNarrowing(selExp.Expression, cmd);
+                        TagWideCountNarrowing(selExp, cmd);
                         if (!cmd._dontCache && !noHash)
                             selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
 
@@ -607,8 +610,7 @@ public partial class QueryCommand
                                 IsLobStreaming = TableAliasAccessors.IsStreaming(binding.Expression),
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(binding.Expression);
-                            selExp.IsWideCountNarrowed = selExp.PropertyType == typeof(int)
-                                && CorrelatedQueryExpressionVisitor.ContainsNavigationCountNarrowing(selExp.Expression, cmd);
+                            TagWideCountNarrowing(selExp, cmd);
                             if (!cmd._dontCache && !noHash)
                                 selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
                             selectList[idx] = selExp;
@@ -2088,6 +2090,17 @@ public partial class QueryCommand
             }
 
             return (groupingList, groupingPlanHash);
+        }
+
+        /// <summary>
+        /// D4: tags a materialized <see cref="int"/> column that derives from a wide navigation count,
+        /// using the shared provenance test. The three projection shapes (constructor/tuple, single
+        /// column, member-init) must agree, so they all call this one helper.
+        /// </summary>
+        private static void TagWideCountNarrowing(SelectExpression selExp, QueryCommand cmd)
+        {
+            selExp.IsWideCountNarrowed = selExp.PropertyType == typeof(int)
+                && CorrelatedQueryExpressionVisitor.ContainsNavigationCountNarrowing(selExp.Expression, cmd);
         }
 
     }

@@ -501,7 +501,50 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see cref="CteHoister.EnsureNoUnhoistedCtes"/> during preparation, before the cache lookup/store
     /// gates, so it cannot be cached either.
     /// </remarks>
-    internal bool HasDataModifyingCte => HasDataModifyingCteIn(this, null);
+    internal bool HasDataModifyingCte
+    {
+        get
+        {
+            // Fast path for a prepared/hoisted command: CteHoister flattens the declaration tree into
+            // one list, so a data-modifying body is found by scanning that list directly. No visited
+            // set and no recursion — the per-lookup walk on the warm read path stays allocation-free.
+            if (_ctes is not { Count: > 0 } ctes)
+                return false;
+
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (ctes[i].Mutation is not null)
+                    return true;
+            }
+
+            // No declaration body carries its own CTEs, so there is no deeper body to search: an
+            // all-read flat list must not allocate a traversal set.
+            var nested = false;
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (ctes[i].Query._ctes is { Count: > 0 })
+                {
+                    nested = true;
+                    break;
+                }
+            }
+
+            if (!nested)
+                return false;
+
+            // A CTE body declares its own CTEs (an unprepared or not-yet-hoisted graph): recurse with a
+            // reference-identity visited set so a mutation nested deeper is still found and a cyclic
+            // declaration graph terminates. The set is allocated only on this rarer path.
+            var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance) { this };
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (HasDataModifyingCteIn(ctes[i].Query, visited))
+                    return true;
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>
     /// Whether this command should emit the <c>JoinInto.MultipleCollections</c> diagnostic on its next
@@ -554,12 +597,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <param name="MissingColumns">The required column names absent from the declared shape, if any.</param>
     internal readonly record struct RawSourceFilterSkip(string EntityType, int SourceOrdinal, string FilterKey, string Reason, string? MissingColumns);
 
-    private static bool HasDataModifyingCteIn(QueryCommand command, HashSet<QueryCommand>? visited)
+    private static bool HasDataModifyingCteIn(QueryCommand command, HashSet<QueryCommand> visited)
     {
         if (command._ctes is not { Count: > 0 } ctes)
             return false;
 
-        visited ??= new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
         if (!visited.Add(command))
             return false;
 

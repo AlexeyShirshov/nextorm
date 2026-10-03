@@ -637,6 +637,52 @@ if (createEnumerator && compiledQuery.Enumerator is null)
   (`todo_warm_path_plan_build.md`) удалён, §4 п.19 помечен closed-by-decision. При необходимости паритет
   оформляется заново как структурная задача M12 #3 с отдельным бенчмарк-гейтом.
 
+## Iteration-14 allocation recovery (issue #165)
+
+Статус: **закрыто** по трём исправленным сайтам; остаточный бюджет CTE prepare-арм'ов — **tracked
+budget row** в `eng/perf/iteration14-budgets.json`, а не переоткрытие settled-находок M*/I*.
+
+### Три корневые причины
+
+1. **CTE-lookup: per-call `HashSet`.** `HasDataModifyingCte` строил `HashSet<QueryCommand>` и его
+   внутренние массивы на каждый lookup для любой команды с CTE
+   (`src/nextorm.core/Query/QueryCommand.cs:562`) — отсюда регресс warm-reuse **176 B/lookup**
+   (`Cte_Warm_Reused`/`RecursiveCte_Warm_Reused`: 0 → 17.19 KB на 100 lookup'ов).
+2. **Eager navigation `ExpansionState`.** `NavigationExpansion.Expand` создавал `ExpansionState`
+   (два словаря, список, `RewriteVisitor` и `List<PropertyInfo>(4)`) даже для запроса без навигаций
+   (`src/nextorm.core/Visitors/NavigationExpansion.cs:60`), платя на каждой простой подготовке.
+3. **Безусловный обход размещения CTE.** `CteHoister.EnsureNoUnhoistedCtes` вызывался и без CTE,
+   создавая два `HashSet` и обход графа команд
+   (`src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:320`).
+
+### Исправления
+
+- **D2** — для уже подготовленной команды проверять `Mutation` прямо в нормализованном списке CTE;
+  рекурсивный обход сохранён для неподготовленной команды (nested DML не потерян).
+- **D3** — ранний выход до создания `ExpansionState`, если у root-типа нет зарегистрированных
+  relationships; отрицательный разбор `it.Id` без выделения списка.
+- **D4** — fast path для leaf-команды без CTE и без рёбер графа; коллекции обхода создаются лениво.
+
+### Измеренный эффект
+
+- Warm CTE reuse возвращён к **0 B/op** (`Cte_Warm_Reused`, `RecursiveCte_Warm_Reused`), проверяется
+  `eng/perf/iteration14_gate.py`.
+- Acceptance allocated-ratio `Cached_ToList / Prepared_ToList` **8.63 → 7.83**; time-ratio **2.49 →
+  1.99**; `Cached_ToList` **657.42 → 596.47 KB**, `Nextorm_Cached` (Any) **636.78 → 568.01 KB**,
+  `Cached_PlanOnly_Param` **581.27 → 520.33 KB**.
+- `Prepared_ToList` без изменений: **76.14 KB / 780 B/op**.
+
+### Остаток CTE prepare-арм'ов: полоса шума и триггер переоткрытия
+
+Оставшиеся увеличения CTE/Join4 `Prepare_*` на **11–16 % от базы v1.0.9-a** лежат внутри
+документированной полосы шума хоста **< ~20 %** и приняты. Триггер переоткрытия: **два сопоставимых
+прогона в одном job'е превышают 120 %** базы v1.0.9-a.
+
+### Бюджетный гейт
+
+`eng/perf/iteration14_gate.py` исполняет `eng/perf/iteration14-budgets.json`: `zero`-строки (warm
+CTE reuse = **0 B/op**), `budget`-строки `ceil(After × 1.25)` и no-growth для `Prepared_ToList`.
+
 ---
 
 ## Приложение: полный прогон всех бенчмарков (ShortRun, 2026-09-16)

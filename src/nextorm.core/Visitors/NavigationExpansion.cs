@@ -57,6 +57,19 @@ internal static class NavigationExpansion
         if (cmd.DataContext is InMemoryDataContext)
             return;
 
+        // Iteration 14 proposal 3: a root whose entity metadata is already known and declares no
+        // relationship cannot produce a navigation path, so building the expansion state, rewriting every
+        // lambda and allocating the join registries would be pure overhead. Only the side-effect-free
+        // cache entry is consulted; an absent/unknown type falls through to the ordinary pass below,
+        // which resolves (and may auto-build) metadata exactly as before, so the pass can never miss a
+        // navigation below a subquery or join.
+        if (DataContextCache.Metadata.TryGetValue(srcType, out var knownMetadata)
+            && !string.IsNullOrEmpty(knownMetadata.TableName)
+            && knownMetadata.Relationships.Count == 0)
+        {
+            return;
+        }
+
         var state = new ExpansionState(cmd, srcType);
 
         var projection = Rewrite(state, cmd.ProjectionExpression);
@@ -282,9 +295,12 @@ internal static class NavigationExpansion
     {
         private readonly QueryCommand _command;
         private readonly Type _srcType;
-        private readonly Dictionary<string, JoinEntry> _byKey = new(StringComparer.Ordinal);
-        private readonly List<JoinEntry> _joins = [];
-        private readonly Dictionary<ParameterExpression, string> _paths = [];
+        // D4: the join registry, its ordered entries and the parameter->path map are created on the
+        // first write. A query whose lambdas navigate nothing (or whose navigations all fail to
+        // resolve) never pays for three empty containers.
+        private Dictionary<string, JoinEntry>? _byKey;
+        private List<JoinEntry>? _joins;
+        private Dictionary<ParameterExpression, string>? _paths;
 
         internal ExpansionState(QueryCommand command, Type srcType)
         {
@@ -299,19 +315,34 @@ internal static class NavigationExpansion
 
         internal object ScopeIdentity { get; }
 
-        internal bool HasNavigation => _joins.Count > 0;
+        internal bool HasNavigation => _joins is { Count: > 0 };
 
-        internal JoinExpression[] JoinExpressions => [.. _joins.Select(static entry => entry.Join)];
+        internal JoinExpression[] JoinExpressions
+        {
+            get
+            {
+                if (_joins is not { Count: > 0 } joins)
+                    return [];
+
+                var result = new JoinExpression[joins.Count];
+                for (var i = 0; i < joins.Count; i++)
+                    result[i] = joins[i].Join;
+                return result;
+            }
+        }
 
         /// <summary>Maps each joined parameter to the display form of the path it was created for.</summary>
-        internal IReadOnlyDictionary<ParameterExpression, string> NavigationPaths => _paths;
+        internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths => _paths;
 
         /// <summary>Whether <paramref name="parameter"/> denotes a navigation join alias.</summary>
         internal bool IsJoinedParameter(ParameterExpression parameter)
         {
-            for (var i = 0; i < _joins.Count; i++)
+            if (_joins is not { } joins)
+                return false;
+
+            for (var i = 0; i < joins.Count; i++)
             {
-                if (ReferenceEquals(_joins[i].Parameter, parameter))
+                if (ReferenceEquals(joins[i].Parameter, parameter))
                     return true;
             }
 
@@ -375,7 +406,7 @@ internal static class NavigationExpansion
 
                 key = key.Length == 0 ? HopKey(hop) : key + ">" + HopKey(hop);
 
-                if (_byKey.TryGetValue(key, out var existing))
+                if (_byKey is not null && _byKey.TryGetValue(key, out var existing))
                 {
                     previous = existing;
                     continue;
@@ -388,7 +419,7 @@ internal static class NavigationExpansion
                 var leftParameter = previous is null
                     ? Expression.Parameter(hop.DeclaringType, "navigationLeft")
                     : previous.Parameter;
-                var rightParameter = Expression.Parameter(hop.RelatedType, "navigation" + _joins.Count);
+                var rightParameter = Expression.Parameter(hop.RelatedType, "navigation" + (_joins?.Count ?? 0));
 
                 var (leftKey, rightKey) = hop.Direction == NavigationDirection.DependentToPrincipal
                     ? (hop.PrimaryLeg.ForeignKey.PropertyInfo, hop.PrimaryLeg.PrincipalKey.PropertyInfo)
@@ -415,13 +446,13 @@ internal static class NavigationExpansion
                     },
                     rightParameter);
 
-                _byKey[key] = entry;
-                _joins.Add(entry);
+                (_byKey ??= new(StringComparer.Ordinal))[key] = entry;
+                (_joins ??= []).Add(entry);
                 previous = entry;
             }
 
             if (recordedPath is not null)
-                _paths[previous!.Parameter] = DisplayPath(recordedPath);
+                (_paths ??= [])[previous!.Parameter] = DisplayPath(recordedPath);
 
             return previous!.Parameter;
         }
@@ -719,19 +750,24 @@ internal static class NavigationExpansion
         if (expression is not MemberExpression member)
             return false;
 
-        var members = new List<PropertyInfo>(4);
-        Expression? current = member;
-        while (current is MemberExpression { Expression: { } inner } node)
-        {
-            if (node.Member is not PropertyInfo property)
-                return false;
-
-            members.Add(property);
-            current = inner;
-        }
-
-        if (current is not ParameterExpression parameter || !ReferenceEquals(parameter, root))
+        // D4: validate the chain before allocating the member list. A non-property member or a chain
+        // that is not rooted at the parameter is a negative path, so it must allocate nothing.
+        if (!IsPureMemberChain(member, root, out var memberCount))
             return false;
+
+        var members = new List<PropertyInfo>(memberCount);
+        var node = member;
+        while (true)
+        {
+            members.Add((PropertyInfo)node.Member);
+            if (node.Expression is MemberExpression inner)
+            {
+                node = inner;
+                continue;
+            }
+
+            break;
+        }
 
         members.Reverse();
 
@@ -755,6 +791,27 @@ internal static class NavigationExpansion
 
         path = NavigationPathResolver.Resolve(navigationExpression, scope);
         return true;
+    }
+
+    /// <summary>
+    /// Walks a member chain, proving every step is a <see cref="PropertyInfo"/> access and that the
+    /// chain is rooted at <paramref name="root"/>, without allocating. On success
+    /// <paramref name="count"/> is the number of member accesses in the chain.
+    /// </summary>
+    private static bool IsPureMemberChain(MemberExpression member, ParameterExpression root, out int count)
+    {
+        count = 0;
+        Expression? current = member;
+        while (current is MemberExpression { Expression: { } inner } node)
+        {
+            if (node.Member is not PropertyInfo)
+                return false;
+
+            count++;
+            current = inner;
+        }
+
+        return current is ParameterExpression parameter && ReferenceEquals(parameter, root);
     }
 
     private static IRelationshipMetadata? FindRelationship(Type entityType, PropertyInfo member)
