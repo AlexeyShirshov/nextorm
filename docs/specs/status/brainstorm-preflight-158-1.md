@@ -26,4 +26,4 @@
 
 ## ACT
 
-- 2026-10-03: committed on branch `1.0.9-b` (commit <H1>); issue #158 closed after the commit.
+- 2026-10-03: committed on branch `1.0.9-b` (commit 8722a7f30dd6aecb5643155cd0d96af7f1d6ccf6); issue #158 closed after the commit.

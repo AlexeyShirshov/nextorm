@@ -39,4 +39,4 @@
 
 ## Done / Verified / Incomplete
 
-- #158 done — preflight of prior design decisions added to `.opencode/skills/nextorm-brainstorming/SKILL.md` (+31/−4); R1–R7 met; CHECK PASS; commit <H1>; issue closed.
+- #158 done — preflight of prior design decisions added to `.opencode/skills/nextorm-brainstorming/SKILL.md` (+31/−4); R1–R7 met; CHECK PASS; commit 8722a7f30dd6aecb5643155cd0d96af7f1d6ccf6; issue closed.
