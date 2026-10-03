@@ -255,7 +255,7 @@ issue `#28` «column collation») на том же примитиве `MakeColla
 (PG 9.2/9.3 не поддерживают `FILTER` в агрегатах). nextorm генерирует `FILTER`-агрегаты на PG и
 имеет единый MariaDB-диалект без версии. Действие: version-flag в `ISqlDialect`/`MariaDbDialect`,
 аналогично существующим `Supports*`. Тикет:
-[#141](https://github.com/AlexeyShirshov/nextorm/issues/141) (милстоун `1.0.9-rc`).
+[#141](https://github.com/AlexeyShirshov/nextorm/issues/141) (милстоун `1.0.9-rc1`).
 
 ### P2 — watchlist / проверить
 
