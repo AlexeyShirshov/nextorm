@@ -40,4 +40,4 @@
 ## Done / Verified / Incomplete
 
 - #158 done — preflight of prior design decisions added to `.opencode/skills/nextorm-brainstorming/SKILL.md` (+31/−4); R1–R7 met; CHECK PASS; commit 8722a7f30dd6aecb5643155cd0d96af7f1d6ccf6; issue closed.
-- #152 done — versioned evidence contract pinned at PLAN in global `pdca-dotnet` (+ its planner/check source+installed mirrors) and project overlay; approved spec included; CHECK PASS (R1–R9 met); repo commit <H1>; global edits outside VCS (hashes in task status). Deferred-with-trigger: post-restart live loaded-skill validation (follow-up <FUP>). Issue #152 closed.
+- #152 done — versioned evidence contract pinned at PLAN in global `pdca-dotnet` (+ its planner/check source+installed mirrors) and project overlay; approved spec included; CHECK PASS (R1–R9 met); repo commit 77660b1220356990d03d3b04879e9a89ff5ecc89; global edits outside VCS (hashes in task status). Deferred-with-trigger: post-restart live loaded-skill validation (follow-up 164). Issue #152 closed.

@@ -33,8 +33,8 @@
 
 ## ACT
 
-- 2026-10-03: repo deliverable committed on `1.0.9-b` (commit <H1>): overlay `.opencode/skills/nextorm-pdca/SKILL.md` (+17) and spec `docs/specs/design/issue-152-pdca-evidence-contract.md`.
+- 2026-10-03: repo deliverable committed on `1.0.9-b` (commit 77660b1220356990d03d3b04879e9a89ff5ecc89): overlay `.opencode/skills/nextorm-pdca/SKILL.md` (+17) and spec `docs/specs/design/issue-152-pdca-evidence-contract.md`.
 - Global edits (OUTSIDE VCS — `/home/alex/.config/opencode` is not a git repo), recorded by path + sha256 + backup:
   - `skills/pdca-dotnet/SKILL.md` sha256 `53e270d3…`; `skills/pdca-dotnet/assets/agents/planner.md` `0807ff2b…`; `skills/pdca-dotnet/assets/agents/check.md` `b92b29b6…`; `agents/planner.md` `7b84cdf0…`; `agents/check.md` `d2fdbca2…`; backups `/tmp/opencode/1.0.9-b-4/baseline/152/`; live hashes `/tmp/opencode/1.0.9-b-4/152/live-hashes.txt`.
-- Deferred-with-trigger (milestone 1.0.9-b): live loaded-skill validation at the first OpenCode session that loads the edited global skill; tracked in follow-up issue <FUP>.
+- Deferred-with-trigger (milestone 1.0.9-b): live loaded-skill validation at the first OpenCode session that loads the edited global skill; tracked in follow-up issue 164.
 - Repo commit does NOT include the global edits; it is not a portable delivery of #152 by itself.
