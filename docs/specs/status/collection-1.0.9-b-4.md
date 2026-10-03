@@ -12,14 +12,14 @@
 
 | id | tasks (order) | worktree | branch | status |
 |---|---|---|---|---|
-| group-1 | 158,152 | (current worktree) | `1.0.9-b` (current) | in-progress |
+| group-1 | 158,152 | (current worktree) | `1.0.9-b` (current) | done |
 
 ## Tasks
 
 | id | issue | group | branch | status | task status file |
 |---|---|---|---|---|---|
 | 1 | #158 | group-1 | 1.0.9-b | done | brainstorm-preflight-158-1.md |
-| 2 | #152 | group-1 | 1.0.9-b | pending | pdca-evidence-152-1.md |
+| 2 | #152 | group-1 | 1.0.9-b | done | pdca-evidence-152-1.md |
 
 ## Decisions
 
@@ -35,8 +35,9 @@
 - reason: (none)
 - defect id/history: (none)
 - corrective task status file: (none)
-- next allowed step: DO #152
+- next allowed step: collection C (aggregate all task reports -> check verdict)
 
 ## Done / Verified / Incomplete
 
 - #158 done — preflight of prior design decisions added to `.opencode/skills/nextorm-brainstorming/SKILL.md` (+31/−4); R1–R7 met; CHECK PASS; commit 8722a7f30dd6aecb5643155cd0d96af7f1d6ccf6; issue closed.
+- #152 done — versioned evidence contract pinned at PLAN in global `pdca-dotnet` (+ its planner/check source+installed mirrors) and project overlay; approved spec included; CHECK PASS (R1–R9 met); repo commit <H1>; global edits outside VCS (hashes in task status). Deferred-with-trigger: post-restart live loaded-skill validation (follow-up <FUP>). Issue #152 closed.
