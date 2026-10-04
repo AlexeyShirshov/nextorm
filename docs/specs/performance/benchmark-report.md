@@ -1787,3 +1787,138 @@ NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 
 Источник чисел — консольные summary BDN в логах прогонов (артефакты `nextorm.benchmark` и базы
 перезаписывают друг друга в fallback-каталоге из-за `nextorm.slnx`).
+
+# Итерация 15 — head-to-head против конкурентов после 1.0.9-b (2026-10-04)
+
+> **Ревизия:** ветка `1.0.9-b`, HEAD `1ad3775` (`v1.0.9-a-67-g1ad3775`, включает правки Итерации 14 /
+> issue #165). Предыдущий полноценный head-to-head — Итерация 10 (2026-09-24, `1.0.5-alpha`,
+> HEAD `dd4482f`); между ними 67 коммитов и раздел `1.0.9`. Feature-level сравнение — Итерации 6–7.
+> **Дата прогона:** 2026-10-04. **Повод:** заново снять конкурентов после серии внутренних A/B (11–14),
+> не дававших конкурентных выводов.
+
+## Окружение и оговорка
+
+- Машина та же: AMD Ryzen 7 5800HS, WSL2, 8 logical / 4 physical ядра, .NET `10.0.12`, BDN 0.15.8.
+  Но прогон шёл **под нагрузкой `loadavg` ≈ 8.5–8.8 на 8 ядрах** (чужие сессии `opencode`, `vitest`
+  в `webpdca`, VS Code + Roslyn language servers), и БД лежит на диске (`/dev/sdd`), **не на tmpfs**,
+  как в Итерации 10.
+- Поэтому **абсолютные времена выше Итерации 10 в ≈ 1.4×** (`Any Nextorm_Prepared` 922.9 µs → 1.289 ms),
+  но **все арм'ы класса измерены в одном прогоне**, значит относительные коэффициенты сопоставимы.
+  **Аллокации детерминированы и совпадают** с Итерацией 10 везде, кроме явно отмеченного `Nextorm_Cached`.
+- Артефакты пишутся в **корневой** `BenchmarkDotNet.Artifacts/`: `BenchmarkArtifacts.Resolve` ищет
+  `nextorm.sln`, а репозиторий — на `nextorm.slnx`, поэтому срабатывает fallback `$CWD`; committed
+  отчёты в `benchmarks/BenchmarkDotNet.Artifacts` после этого устаревшие.
+- Режим: `NEXTORM_BENCH_FULL=1` → `Job.Default` + `MemoryDiagnoser`; классы строго последовательно
+  (Any 444 s, First 583 s, Single 184 s, Join 171 s, Where 626 s, Iteration 660 s, LargeIteration 1149 s,
+  Cache 1154 s; ≈ 1.7 ч). Симметрия категорий прежняя: **A** — `Nextorm_Prepared` ⟷ EF `CompileAsyncQuery`
+  ⟷ linq2db `CompiledQuery.Compile` ⟷ Dapper; **B** — implicit-кэш nextorm ⟷ обычные EF/linq2db ⟷ Dapper.
+
+## Категория A — prepared против compiled/raw (справочно, вне сравнения)
+
+> Сравнение с конкурентами ограничено **категорией Б** (regular-арм'ы). A приведена как справка о
+> prepared-пути и в выводах не участвует.
+
+| Класс (N) | Nextorm_Prepared | Dapper | linq2db compiled | EF compiled | Nextorm ÷ лучший | Alloc nextorm |
+|---|--:|--:|--:|--:|--:|--:|
+| Any (100) | **1.289 ms** | 2.018 | 2.264 | 5.716 | **0.64×** | 85.16 KB |
+| First scalar (10) | **132.1 µs** | 202.5 | 619.7 | 534.1 | **0.65×** | 8.63 KB |
+| First entity (10) | **151.7 µs** | 268.0 | 710.8 | 688.1 | **0.57×** | 12.22 KB |
+| Single (10) | **127.1 µs** | 198.4 | 547.7 | 489.2 | **0.64×** | 8.36 KB |
+| Join (10) | **146.2 µs** | 277.8 | 221.2 | 719.7 | **0.66×** | 13.01 KB |
+| Where stream (100) | **958.1 µs** | 1 353.1 | 1 946.3 | 3 544.6 | **0.71×** | 92.42 KB |
+| Where list (100) | **975.7 µs** | 1 353.1 | 1 946.3 | — | **0.72×** | 107.63 KB |
+| Iteration stream (1) | **13.98 µs** | 23.47 | — | — | **0.60×** | 792 B |
+| Iteration list (1) | **14.45 µs** | 21.40 | 22.12 | 60.19 | **0.68×** | 1 048 B |
+| LargeIteration stream (1) | **11.63 ms** | 26.07 | — | 29.56 | **0.45×** | 2.14 MB |
+| LargeIteration list (1) | **11.58 ms** | 35.91 | 32.48 | 38.18 | **0.36×** | 2.21 MB |
+| Cache I=1 | **9.626 µs** | 266.1 | 16.693 | — | **0.58×** | — |
+| Cache I=15 | **161.99 µs** | — | 270.25 | — | **0.60×** | — |
+| Cache I=30 | **318.08 µs** | — | 568.69 | — | **0.56×** | — |
+
+`Nextorm_Prepared` снова **первый во всех ядровых классах**: против Dapper — 0.32–0.72×, против
+linq2db compiled — 0.21–0.66×, против EF compiled — EF медленнее в 2.5–4.9×. Вывод Итерации 10
+воспроизведён спустя 67 коммитов. Аллокации prepared-пути байт-в-байт совпадают с Итерацией 10.
+
+## Категория B — warm cached против regular-конкурентов
+
+Область сравнения — только regular-арм'ы (Dapper, linq2db без compiled, EF без compiled);
+`÷ лучший регулярный` — отношение `Nextorm_Cached` к самому быстрому из них.
+
+| Класс (N) | Nextorm_Cached | Dapper | linq2db | EF regular | ÷ лучший регулярный |
+|---|--:|--:|--:|--:|--:|
+| Any (100) | 2.492 ms | **2.018** | 3.782 | 9.092 | 1.24× |
+| First scalar (10) | 268.4 µs | **202.5** | 924.6 | — | 1.33× |
+| First entity (10) | 290.3 µs | **268.0** | 863.3 | — | 1.08× |
+| Single (10) | 251.3 µs | **198.4** | 825.7 | 953.9 | 1.27× |
+| Join (10) | 516.5 µs | **277.8** | 575.3 | 1 132.9 | 1.86× |
+| Where for-loop (100) | **1 080.0 µs** | 1 353.1 | 3 638.5 | 7 918.2 | **0.80×** |
+| Where list (100) | 2 546.7 µs | **1 353.1** | 3 638.5 | — | 1.88× |
+| Iteration list (1) | **15.40 µs** | 21.40 | 25.38 | — | **0.72×** |
+| LargeIteration list (1) | **22.30 ms** | 35.91 | 37.63 | 38.18 | **0.62×** |
+
+По времени nextorm обходит **linq2db и EF regular во всех девяти классах**, но проигрывает Dapper на
+точечных Any/First/Single/Join и `Where` list; выигрывает у Dapper на `Where` for-loop, `Iteration`,
+`LargeIteration`.
+
+**Аллокации (regular-only):**
+
+| Класс | Nextorm_Cached | Dapper | linq2db | EF regular | ÷ лучший регулярный |
+|---|--:|--:|--:|--:|--:|
+| Any (×100) | 568.01 KB | **139.06** | 401.56 | 1 211.76 | 4.09× |
+| First scalar (×10) | 71.16 KB | **16.48** | — | — | 4.32× |
+| First entity (×10) | 67.64 KB | **19.24** | 220.81 | — | 3.52× |
+| Single (×10) | 71.65 KB | **16.4** | 221.01 | 149.64 | 4.37× |
+| Join (×10) | 134.84 KB | **21.45** | 106.92 | 182.11 | 6.29× |
+| Where stream (×100) | 734.65 KB | **203.98** | 549.22 | 1 424.33 | 3.60× |
+| Where list (×100) | 731.11 KB | **180.7** | 551.95 | 1 437.36 | 4.05× |
+| Iteration list (×1) | 2 480 B | **1 904** | 2 792 | — | 1.30× |
+| LargeIteration list (×1) | **2.22 MB** | 2.84 | 2.39 | 4.53 | **0.78×** |
+
+По памяти `Nextorm_Cached` **проигрывает Dapper на всех девяти классах** (1.30–6.29×) и
+**linq2db-regular на тяжёлых формах** (Any +41 %, Join +26 %, Where stream +34 %, Where list +32 %),
+выигрывая лишь у EF (везде) и у linq2db на First/Single/LargeIteration.
+
+## Cache — cold-plan (cached) против regular
+
+`NextormCached` (холодный план на каждый вызов) против regular-арм'ов: I=1 53.154 µs (regular linq2db
+30.157 — быстрее, Dapper 266.1 — медленнее); I=10 282.192 (regular 323.304 — быстрее); I=30 857.996
+(regular 1 185.117, Dapper 1 473.438 — быстрее). Т.е. implicit-кэш обгоняет обычный linq2db примерно с
+I≈10; на точечном I=1 linq2db-regular ещё быстрее.
+
+## Вывод (категория Б, regular-only)
+
+На warm/implicit (cached) пути — две явные проблемы:
+
+1. **Join** — худший относительный проигрыш: по времени 1.86× от Dapper (516.5 vs 277.8 µs), по памяти
+   6.29× от Dapper (134.84 vs 21.45 KB) и уже +26 % к linq2db-regular (106.92 KB). Подготовленный Join
+   (категория A) не при чём — по времени он масштабировался ×1.40, как Dapper; провалился именно
+   cached-арм: ×1.77 от Итерации 10 (291.5 → 516.5 µs), потому что каждый вызов заново строит
+   двухтабличный join + проекцию через implicit-путь.
+2. **Аллокации** — системно: `Nextorm_Cached` проигрывает Dapper **на всех девяти классах** (1.30–6.29×)
+   и linq2db-regular на тяжёлых формах (Any +41 %, Join +26 %, Where +32–34 %); выигрывает только у EF
+   (везде) и у linq2db на First/Single/LargeIteration. Аллокации детерминированы — это не шум хост-нагрузки.
+
+По времени cached-путь при этом обходит linq2db и EF regular во всех классах; точечные
+Any/First/Single/Join и `Where` list остаются за Dapper.
+
+## Вывод (справочный, категория A — вне сравнения)
+
+- `Nextorm_Prepared` остаётся первым во всех ядровых классах: против Dapper 0.32–0.72×, против linq2db
+  compiled 0.21–0.66×, против EF compiled EF медленнее в 2.5–4.9×. Аллокации prepared-пути байт-в-байт
+  совпадают с Итерацией 10.
+- **Оговорка (для обеих категорий):** нагрузка ~8.5/8 ядер и БД на диске завышают абсолютные времена
+  ≈ 1.4×; опираться на относительные коэффициенты, а не на абсолютные времена этого прогона.
+
+## Воспроизведение
+
+```bash
+mkdir -p /tmp/nextorm-bench && cp benchmarks/nextorm.benchmark/data/test.db /tmp/nextorm-bench/test.db
+
+# строго последовательно, по одному классу:
+NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- --filter "*SqliteBenchmarkAny*"
+#   … First, Single, Join, Where, Iteration, LargeIteration, Cache
+```
+
+Артефакты: корневой `BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark*-report-github.md`
+(из-за `nextorm.slnx` — см. оговорку выше).

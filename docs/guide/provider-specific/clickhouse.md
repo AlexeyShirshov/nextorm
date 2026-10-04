@@ -255,8 +255,10 @@ See [Table-valued functions](../11-table-valued-functions.md).
 
 ## Not yet supported
 
-The native `JSON` column type (its reader/type-mapping) and distributed
-table functions (`remote`, `cluster`, `s3`, `file`) are out of scope today. See
+The native `JSON` column type (its reader/type-mapping) is not mapped yet. The server/cluster table
+functions (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`, `cluster_all_replicas`) **are**
+pre-declared on `SqlFunctions.ClickHouse` and render their SQL, but exercising them end-to-end against a
+real cluster is not covered and stays out of scope. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also

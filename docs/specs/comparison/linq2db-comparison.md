@@ -4,13 +4,16 @@
 > [SQL capabilities gap analysis](../roadmap/sql-capabilities-gap-analysis.md) and the
 > [capability matrix](capability-matrix.md) (which also cover EF Core). Based on the current tree, it shows
 > nextorm matching or exceeding linq2db across the analytic query surface — join types, `APPLY`/`LATERAL`,
-> full-text/JSON/arrays, cross-provider row values, native range types (and range-over-scalar-pairs),
-> CLR `Regex` translation, `ROLLUP`/`CUBE`/`GROUPING SETS`, date arithmetic,
-> temporal tables, row locking, statement/table/index hints, configurable keyword casing, TVFs and
-> depth-one in-memory correlation — and adding a complete explicit write surface
+> named join aliases, full-text/JSON/arrays, cross-provider row values, native range types (and
+> range-over-scalar-pairs), CLR `Regex` translation, `ROLLUP`/`CUBE`/`GROUPING SETS`, date arithmetic,
+> temporal tables, row locking, statement/table/index hints, configurable keyword casing, TVFs,
+> unmapped-column access, extreme-row selection, per-query source overrides and depth-one in-memory
+> correlation — and adding a complete explicit write surface
 > (`INSERT`/`UPDATE`/`DELETE`/full `MERGE`, PostgreSQL data-modifying CTEs), bulk insert, `CREATE TABLE AS
-> SELECT`, a transactions role, declarative relationships with level-1 eager loading, global query filters,
-> command interceptors and an EF Core integration package.
+> SELECT`, `TRUNCATE`, a transactions role, value converters, JSON columns, a dynamic-columns store,
+> declarative relationships with level-1 eager loading and declared-relationship implicit navigation,
+> global query filters, command interceptors, a SQL batch builder, result-set streaming and export, stored
+> procedures and table-valued parameters, and an EF Core integration package.
 
 **Prerequisites:** [Provider overview](../../providers/overview.md) · [Limitations](../../advanced/limitations.md) · [Query hints](../../guide/13-query-hints.md)
 
@@ -19,14 +22,17 @@
 * **nextorm** is a focused, no-change-tracking SQL builder and mapper purpose-built for reading and
   reporting. It covers the complete analytic query surface, adds a complete explicit write surface
   (`INSERT`/`UPDATE`/`DELETE`/full `MERGE`, bulk insert, `CREATE TABLE AS SELECT`, and data-modifying CTEs on
-  PostgreSQL) plus a transactions role (`ITransactionManager`, own and enlisted) and generates
-  provider-portable SQL for SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse. It is built around a small
-  allocation footprint, parameterisation and query compilation (implicit plan cache / explicit
-  `Prepare()`), with opt-in output controls (identifier quoting, naming conventions, keyword casing) and
-  index hints — and benchmarks at or above Dapper, EF Core and linq2db on the shipped scenarios. It also
-  models relationships declaratively (`[Relationship]`/`HasMany`/`HasOne` + `JoinInto`) with level-1
-  `LoadWith` eager loading, ships command interceptors and global query filters, and integrates with EF
-  Core (`nextorm.entityframeworkcore`).
+  PostgreSQL and `TRUNCATE`) plus a transactions role (`ITransactionManager`, own and enlisted), and
+  generates provider-portable SQL for SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse. It is
+  built around a small allocation footprint, parameterisation and query compilation (implicit plan cache /
+  explicit `Prepare()`), with opt-in output controls (identifier quoting, naming conventions, keyword
+  casing) and index hints — and benchmarks at or above Dapper, EF Core and linq2db on the shipped
+  scenarios. The mapping layer covers value converters, JSON columns and a dynamic-columns store; the
+  execution layer covers raw commands and stored procedures, table-valued parameters, a SQL batch builder
+  and result-set streaming and export. It also models relationships declaratively
+  (`[Relationship]`/`HasMany`/`HasOne` + `JoinInto`) with level-1 `LoadWith` eager loading and
+  declared-relationship implicit navigation, ships command interceptors and global query filters, and
+  integrates with EF Core (`nextorm.entityframeworkcore`).
 * **linq2db** is a broad, mature LINQ-to-SQL ORM: a wider provider matrix, full CRUD (`INSERT`/`UPDATE`/
   `DELETE`/`MERGE`), associations/eager loading, bulk copy, temporary tables, schema code-generation
   tooling, extensibility (interceptors, custom SQL mapping) and an EF Core integration package. That extra
@@ -44,66 +50,80 @@ by the database engine itself is named briefly in parentheses and does not lower
 supports the construct but lacks a capability nextorm has, it is marked **partial** with the missing piece
 named. Evidence for nextorm points at the source that owns the behaviour.
 
-| Area | linq2db | nextorm | nextorm evidence |
-|---|---|---|---|
-| Projection (`SELECT`, DTO/anonymous/record/tuple/scalar) | yes | yes | `EntityBuilder.Select` |
+| Area | nextorm | linq2db | nextorm evidence |
+|---| --- |---|---|
+| Projection (`SELECT`, DTO/anonymous/record/tuple/scalar; unmapped columns via `SqlFunctions.Column`) | yes | yes | `EntityBuilder.Select`, `SqlFunctions.Column` |
 | Predicates (`WHERE`: comparison, `and`/`or`/`!`, arithmetic, bitwise/shift) | yes | yes | `Visitors/WhereExpressionVisitor.cs`, `BaseExpressionVisitor.cs` |
-| `INNER` / `LEFT` / `RIGHT` / `FULL` / `CROSS JOIN` | yes | **yes** (`FULL JOIN` not on MySQL/MariaDB) | `SqlBuilder.MakeJoin`, `EntityBuilder.Join/LeftJoin/RightJoin/FullJoin/CrossJoin`, `ISqlDialect.SupportsFullJoin` |
-| `APPLY` / `LATERAL` | yes | **yes** (gated off on SQLite/ClickHouse) | `JoinType.CrossApply/OuterApply`, `SqlBuilder.MakeApplyJoin`, `ISqlDialect.SupportsApply`/`MakeApply` |
-| Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | no | **yes** on ClickHouse | `JoinStrictness`, `JoinOptions.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
-| Join arity | yes | **yes** — up to 8 | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
-| JOIN to a derived table (subquery) | yes | **yes** | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
-| Subqueries (`FROM`, scalar, correlated `EXISTS/IN/ANY/ALL`) | yes | **yes** (in-memory evaluates depth one only) | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference`, `DataContext/InMemoryCorrelatedPlan.cs` |
-| `IN` over a list/array | partial — no ClickHouse distributed `GLOBAL IN` | **yes** | `Query/InValues.cs`, `Visitors/InValuesTranslator.cs`, `SqlFunctions.ClickHouse.global_in` |
-| `GROUP BY` / `HAVING` / aggregates | yes | **yes** | `EntityBuilder.GroupBy/Having`, `AdvancedAggregateTranslator.cs`, `Supports*Aggregates` |
-| `ROLLUP` / `CUBE` / `GROUPING SETS` / `WITH TOTALS` | yes | **yes** (`WITH TOTALS` on ClickHouse) | `GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`/`WithTotals`, `SupportsRollup`/`SupportsCube`/`SupportsGroupingSets`/`SupportsGroupByWithTotals` |
-| `LIMIT n BY expr` | no | **yes** on ClickHouse | `LimitBy`, `ILimitByRenderer.Render` |
-| `FINAL` / `SAMPLE` / `PREWHERE` / `SETTINGS` | no | **yes** on ClickHouse | `Final`/`Sample`/`PreWhere`/`Settings`, `SupportsFinal`/`SupportsSample`/`SupportsPreWhere`/`SupportsSettings` |
+| `INNER` / `LEFT` / `RIGHT` / `FULL` / `CROSS JOIN` | yes (`FULL JOIN` not on MySQL/MariaDB) | yes | `SqlBuilder.MakeJoin`, `EntityBuilder.Join/LeftJoin/RightJoin/FullJoin/CrossJoin`, `ISqlDialect.SupportsFullJoin` |
+| `APPLY` / `LATERAL` | yes (gated off on SQLite/ClickHouse) | yes | `JoinType.CrossApply/OuterApply`, `SqlBuilder.MakeApplyJoin`, `ISqlDialect.SupportsApply`/`MakeApply` |
+| Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | **yes** on ClickHouse | yes (ClickHouse `ClickHouseHints.Join.*`, incl. `Global*`) | `JoinStrictness`, `JoinOptions.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
+| Join arity | yes — up to 8 | yes | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
+| JOIN to a derived table (subquery) | yes | yes | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
+| Named join aliases (`Alias.<Name>`) | **yes** — generated `AliasProjection_*`/`AliasJoin_*` types address each slot (`JoinSlotAttribute`); SQL-provider only | no | `Alias`, generated `NextORM.Generated.*`, `JoinSlotAttribute` |
+| Subqueries (`FROM`, scalar, correlated `EXISTS/IN/ANY/ALL`) | yes (in-memory evaluates depth one only) | yes | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference`, `DataContext/InMemoryCorrelatedPlan.cs` |
+| `IN` over a list/array | **yes** | partial — no ClickHouse distributed `GLOBAL IN` | `Query/InValues.cs`, `Visitors/InValuesTranslator.cs`, `SqlFunctions.ClickHouse.global_in` |
+| `GROUP BY` / `HAVING` / aggregates (`FILTER`/`-If`, statistical/quantile/ordered families) | yes (ANSI `FILTER` on PostgreSQL/SQLite, `<fn>If` on ClickHouse; provider statistical/quantile/ordered families) | yes (`Sql.Ext` provider aggregates) | `EntityBuilder.GroupBy/Having`, `AdvancedAggregateTranslator.cs`, `Supports*Aggregates`, `AggregateFilterStyle` |
+| `ROLLUP` / `CUBE` / `GROUPING SETS` / `WITH TOTALS` | yes (`WITH TOTALS` on ClickHouse) | yes | `GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`/`WithTotals`, `SupportsRollup`/`SupportsCube`/`SupportsGroupingSets`/`SupportsGroupByWithTotals` |
+| `LIMIT n BY expr` | **yes** on ClickHouse | no | `LimitBy`, `ILimitByRenderer.Render` |
+| `FINAL` / `SAMPLE` / `PREWHERE` / `SETTINGS` | **yes** on ClickHouse | partial — `FINAL` (`ClickHouseHints.Table.Final`) and `SETTINGS` (`ClickHouseHints.Query.Settings`) only; no `SAMPLE`/`PREWHERE` | `Final`/`Sample`/`PreWhere`/`Settings`, `SupportsFinal`/`SupportsSample`/`SupportsPreWhere`/`SupportsSettings` |
 | `ORDER BY` / paging (`LIMIT`/`OFFSET`/`TOP`/`FETCH`) | yes | yes | `SqlBuilder.MakeSelect`, dialect `MakePage`/`MakeTop` |
 | `UNION` / `UNION ALL` | yes | yes | `QueryCommand<TResult>.Union/UnionAll` |
-| `INTERSECT` / `EXCEPT` (+ `ALL` where the engine has it) | yes | yes (provider dependent; `ALL` on PostgreSQL, MariaDB and ClickHouse) | `UnionType`, `ISqlDialect.SupportsIntersectExceptAll` |
+| `INTERSECT` / `EXCEPT` (+ `ALL` where the engine has it) | yes (provider dependent; `ALL` on PostgreSQL, MariaDB and ClickHouse) | yes | `UnionType`, `ISqlDialect.SupportsIntersectExceptAll` |
 | `SELECT DISTINCT` | yes | yes | `QueryCommand<TResult>.Distinct`, `QueryCommand.IsDistinct` |
-| `DISTINCT ON` / `WITH TIES` / `TABLESAMPLE` | no | **yes** per provider (`DISTINCT ON` PostgreSQL; `WITH TIES` PostgreSQL + SQL Server; `TABLESAMPLE` PostgreSQL + SQL Server) | `DistinctOn`/`WithTies`/`FromOptions.TableSample`, `ISqlDialect.SupportsWithTies` |
-| Row locking (`FOR UPDATE`/`FOR SHARE`, `NOWAIT`/`SKIP LOCKED`) | yes (provider-specific `SubQueryTableHint`: PostgreSQL `FOR UPDATE`/`FOR NO KEY UPDATE`/`FOR SHARE`/`FOR KEY SHARE`, MySQL `FOR UPDATE`/`FOR SHARE`/`LOCK IN SHARE MODE`, SQL Server via `UPDLOCK`/`XLOCK` table hints; plus `NOWAIT`/`SKIP LOCKED`) | **yes** — `FOR UPDATE`/`FOR SHARE` per provider (PostgreSQL/MySQL/MariaDB trailing `FOR UPDATE`/`LOCK IN SHARE MODE`; SQL Server via table hints) **plus the `NOWAIT`/`SKIP LOCKED` wait modes** (`LockWaitMode`; MySQL switches a shared lock to `FOR SHARE`, SQL Server uses `READPAST` as the `SKIP LOCKED` approximation) | `ForUpdate`/`ForShare` + `LockWaitMode`, `ILockRenderer`/`ILockRenderer.UsesTableHints`/`Render` |
-| Temporal tables (`FOR SYSTEM_TIME`) | yes | **yes** on SQL Server + MariaDB (`CONTAINED IN` — SQL Server only) | `ForSystemTime`, `SupportsTemporalTable`/`SupportsTemporalKind`/`MakeTemporalTable` |
-| CTEs (including recursive) | yes | **yes** (PostgreSQL data-modifying CTEs) | `Builders/CteQuery.cs`, `Builders/MutationCteQuery.cs`, `DataContext.DataContextExtensions.With/WithRecursive`, `ISqlDialect.SupportsDataModifyingCtes` |
-| Window functions (`OVER`, ranking, framed aggregates, `lag`/`lead`) | partial — no named windows or frame `GROUPS`/`EXCLUDE` | **yes** | `Visitors/WindowFunctionTranslator.cs`, `WindowDefinition`, `SupportsNamedWindows`/`SupportsWindowFrameGroups`/`SupportsWindowFrameExclusion` |
+| `DISTINCT ON` / `WITH TIES` / `TABLESAMPLE` | **yes** per provider (`DISTINCT ON` PostgreSQL; `WITH TIES` PostgreSQL + SQL Server; `TABLESAMPLE` PostgreSQL + SQL Server) | no | `DistinctOn`/`WithTies`/`FromOptions.TableSample`, `ISqlDialect.SupportsWithTies` |
+| Row locking (`FOR UPDATE`/`FOR SHARE`, `NOWAIT`/`SKIP LOCKED`) | yes — `FOR UPDATE`/`FOR SHARE` per provider (PostgreSQL/MySQL/MariaDB trailing `FOR UPDATE`/`LOCK IN SHARE MODE`; SQL Server via table hints) **plus the `NOWAIT`/`SKIP LOCKED` wait modes** (`LockWaitMode`; MySQL switches a shared lock to `FOR SHARE`, SQL Server uses `READPAST` as the `SKIP LOCKED` approximation) | yes (provider-specific `SubQueryTableHint`: PostgreSQL `FOR UPDATE`/`FOR NO KEY UPDATE`/`FOR SHARE`/`FOR KEY SHARE`, MySQL `FOR UPDATE`/`FOR SHARE`/`LOCK IN SHARE MODE`, SQL Server via `UPDLOCK`/`XLOCK` table hints; plus `NOWAIT`/`SKIP LOCKED`) | `ForUpdate`/`ForShare` + `LockWaitMode`, `ILockRenderer`/`ILockRenderer.UsesTableHints`/`Render` |
+| Temporal tables (`FOR SYSTEM_TIME`) | yes on SQL Server + MariaDB (`CONTAINED IN` — SQL Server only) | yes | `ForSystemTime`, `SupportsTemporalTable`/`SupportsTemporalKind`/`MakeTemporalTable` |
+| CTEs (including recursive and typed `AsCte`/`AsRecursiveCte`) | **yes** — the typed surfaces carry the anchor projection, auto-`UNION ALL`/hoisting; PostgreSQL data-modifying CTEs | yes (no data-modifying CTEs) | `Cte<T>`/`QueryCommand<T>.AsCte`/`AsRecursiveCte`, `Builders/MutationCteQuery.cs`, `ISqlDialect.SupportsDataModifyingCtes` |
+| Window functions (`OVER`, ranking, framed aggregates, `lag`/`lead`, percentiles) | **yes** (named windows, `GROUPS`/`EXCLUDE`, window percentiles) | partial — no named windows or frame `GROUPS`/`EXCLUDE` | `Visitors/WindowFunctionTranslator.cs`, `WindowDefinition`, `SupportsNamedWindows`/`SupportsWindowFrameGroups`/`SupportsWindowFrameExclusion`/`SupportsPercentileWindow` |
 | `CASE WHEN` / ternary / `switch`, `COALESCE`, numeric `CAST` | yes | yes | `BaseExpressionVisitor.cs` |
-| String / math / date scalar functions, `LIKE` | yes | **yes** — portable CLR `string` methods on every provider, plus the native string/`regexp_*` library on PostgreSQL (`SqlFunctions.Postgres`) | `Visitors/ScalarFunctionTranslator.cs`, dialect `Make*` hooks, `SqlFunctions.Postgres` |
-| CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | partial — open `linq2db#698` (no `Regex.IsMatch` translation) | **yes** — PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; 2019/2022 reject) | `Visitors/RegexSqlTranslator.cs`, `ISqlDialect.SupportsRegex`/`MakeRegexMatch`/`MakeRegexReplace` |
-| Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | **yes** | `CommonFunctions`, `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField` |
-| Full-text search | yes (provider) | **yes** on SQL Server, PostgreSQL and MySQL/MariaDB | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText` |
-| Native JSON documents | yes | **yes on PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
-| JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | **yes on SQL Server and MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
-| String JSON + dictionary functions (ClickHouse) | no | **yes on ClickHouse** | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
-| Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | no | **yes** on PostgreSQL and ClickHouse | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
-| Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes (`Sql.Row`; emulated where the provider has no native row) | **yes** on PostgreSQL and ClickHouse | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs` |
-| Native range types + range-over-scalar-pairs (`Range<T>`, `Overlaps`, `range_contains`, bound inspection) | partial — `Sql.Row.Overlaps` only (no first-class `Range<T>` mapping) | **yes** — native range/multirange types on PostgreSQL; a mapped **pair of scalar columns** (`[RangeColumns]`) on SQL Server/MySQL/MariaDB/SQLite/ClickHouse | `Query/Range.cs`, `RangeColumnsAttribute`, `ISqlDialect.SupportsRanges`/`SupportsRangeColumns`, `SqlFunctions.Postgres` |
-| Conditional functions (`iif`/`choose`/`multi_if`) | no | **yes** | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
-| `FOR JSON` / `FOR XML` | yes (provider) | **yes on SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
-| XML data-type methods (`.value`/`.query`/`.exist`/`.nodes`) | yes (provider) | **partial** — SQL Server only | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
-| `GREATEST` / `LEAST` | partial | **yes** (NULL handling is provider-specific) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
-| `STRING_AGG` / `ARRAY_AGG` | yes | **yes** (`array_agg` on PostgreSQL) | `SupportsStringAgg`/`SupportsArrayAgg` |
-| User-defined scalar functions | yes (`DbFunction` / `Sql.Ext`) | yes (`[SqlFunction]`) | `SqlFunctionAttribute.cs` |
-| Table-valued functions | yes (`TableFunction`; DB TVFs can be scaffolded) | **yes** (`[SqlTableFunction]`) | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
-| Native `PIVOT` / `UNPIVOT` source | no (raw SQL) | **yes on SQL Server** | `EntityBuilder.Pivot`/`Unpivot` |
+| String / math / date scalar functions, `LIKE`, string concatenation, `NULLIF`, PostgreSQL settings/sequences | yes — portable CLR `string` methods and `+` concatenation on every provider, `SqlFunctions.Sql.nullif`, plus the native string/`regexp_*`/settings/sequence library on PostgreSQL (`SqlFunctions.Postgres`) | yes | `Visitors/ScalarFunctionTranslator.cs`, dialect `Make*` hooks, `SqlFunctions.Sql.nullif`, `SqlFunctions.Postgres` |
+| CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | **yes** — PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; 2019/2022 reject) | partial — open `linq2db#698` (no `Regex.IsMatch` translation) | `Visitors/RegexSqlTranslator.cs`, `ISqlDialect.SupportsRegex`/`MakeRegexMatch`/`MakeRegexReplace` |
+| Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | yes | `CommonFunctions`, `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField` |
+| Full-text search | yes on SQL Server, PostgreSQL and MySQL/MariaDB | yes (provider) | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText` |
+| Native JSON documents | **yes on PostgreSQL** | partial — the `json`/`jsonb` type plus `JsonContains` (`@>`), `JsonExtractPathText` (`#>>`) and `Json.Value`; not the full `jsonb_*` library | `SupportsJson`, `JsonSqlTranslator` |
+| JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes on SQL Server and MySQL/MariaDB | yes | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
+| String JSON + native-JSON + dictionary functions (ClickHouse) | **yes on ClickHouse** (`JSONExtract*`/`JSONAllPaths`/`toJSONString`/`visitParam*`, plus dictionaries) | no dedicated API | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
+| Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | **yes** on PostgreSQL and ClickHouse | partial — PostgreSQL array operators (`PostgreSQLExtensions`); no ClickHouse `Array(T)`/higher-order/`ARRAY JOIN` API | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
+| Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes on PostgreSQL and ClickHouse | yes (`Sql.Row`; emulated where the provider has no native row) | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs` |
+| Native range types + range-over-scalar-pairs (`Range<T>`, `Overlaps`, `range_contains`, bound inspection) | **yes** — native range/multirange types on PostgreSQL; a mapped **pair of scalar columns** (`[RangeColumns]`) on SQL Server/MySQL/MariaDB/SQLite/ClickHouse | partial — provider-native `NpgsqlRange<T>`/multirange mapping on PostgreSQL; no portable `Range<T>`/scalar-pair mapping | `Query/Range.cs`, `RangeColumnsAttribute`, `ISqlDialect.SupportsRanges`/`SupportsRangeColumns`, `SqlFunctions.Postgres` |
+| Conditional functions (`iif`/`choose`/`multi_if`) | **yes** | no | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
+| `FOR JSON` / `FOR XML` | yes on SQL Server | yes (provider) | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
+| XML data-type methods (`.value`/`.query`/`.exist`/`.nodes`) | partial — SQL Server only | yes (provider) | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
+| `GREATEST` / `LEAST` | **yes** (NULL handling is provider-specific) | partial | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
+| `STRING_AGG` / `ARRAY_AGG` | yes (`array_agg` on PostgreSQL) | yes | `SupportsStringAgg`/`SupportsArrayAgg` |
+| User-defined scalar functions | yes (`[SqlFunction]`) | yes (`DbFunction` / `Sql.Ext`) | `SqlFunctionAttribute.cs` |
+| Table-valued functions | yes (`[SqlTableFunction]`) | yes (`TableFunction`; DB TVFs can be scaffolded) | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
+| Native `PIVOT` / `UNPIVOT` source | **yes on SQL Server** | no (raw SQL) | `EntityBuilder.Pivot`/`Unpivot` |
 | Raw SQL (whole query) | yes | yes | `WithSql` / `PrepareFromSql` |
-| Raw SQL as a composable source/subquery | yes | **yes** | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
-| Statement-level query hints | partial (provider-specific `QueryHint`: SQL Server `OPTION (...)`, MySQL/Oracle `/*+ ... */`, ClickHouse `SETTINGS`; no PostgreSQL hint API) | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse reject | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
-| Locking table hints (e.g. `WITH (NOLOCK)`) | yes — SQL Server only (`SqlServerHints.TableHint`; the MySQL `TableHint` is optimizer-only, PostgreSQL/ClickHouse have no table-hint syntax) | **yes** — SQL Server only | `FromOptions.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
-| Index hints (`USE`/`FORCE`/`IGNORE INDEX`, `INDEXED BY`, `WITH (INDEX(...))`) | yes (`IndexHint`/`TableHint`, provider-specific) | **yes** — MySQL/MariaDB, SQLite and SQL Server; PostgreSQL (without `pg_hint_plan`), ClickHouse and in-memory reject | `FromOptions.WithIndex`/`WithoutIndex`, `ISqlDialect.IndexHints`/`IIndexHintRenderer` |
-| Identifier quoting | yes (per provider) | **yes** (opt-in) | `ISqlDialect.QuoteIdentifier` |
-| Naming conventions (e.g. snake_case) | partial — no built-in convention | **yes** (opt-in, built-in `SnakeCaseNamingConvention`) | `INamingConvention` / `SnakeCaseNamingConvention` |
-| SQL keyword casing (upper/lower) | no (keywords are emitted in the provider's canonical case) | **yes** — opt-in `KeywordCase.Upper`; the default `KeywordCase.Lower` is byte-for-byte the historical output | `KeywordCase`, `DataContextBuilder.UseKeywordCase`/`EntityBuilder.WithKeywordCase` |
-| **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **yes** | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `MergeMatchedBuilder<TEntity>`, `MergeNotMatchedBuilder<TEntity>`, `MergeNotMatchedBySourceBuilder<TEntity>`, `MergeReturningBuilder<TEntity,TResult>`, `DeleteBuilder<TEntity>`, `UpdateBuilder<TEntity>`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge`/`SupportsDelete`; the in-memory provider only applies the key upsert |
-| Bulk copy / merge / temporary tables | yes | **partial** — key upsert (`CreateMergeBuilder`/`MergeBuilder<T>`), full `MERGE` with branches (`WhenMatched`/`WhenNotMatched`/`WhenNotMatchedBySource`, arbitrary conditions, `RETURNING`/`OUTPUT`; SQL Server, PostgreSQL 15+), bulk insert (`CreateBulkInsertBuilder<T>`: native `COPY`/`SqlBulkCopy` + chunked `INSERT ... VALUES`, configured through the `BulkInsertOptions` record or the fluent `BulkInsertOptionsBuilder` — `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, `NotifyAfter` progress with a `ProgressCancellationTokenSource`; `ReturningKey`/`Returning`) and materializing a query into a (temporary) table (`ToTable` on PostgreSQL/SQLite/MySQL/MariaDB/SQL Server/ClickHouse, the `ToTempTable` temporary form on PostgreSQL/SQLite/MySQL/MariaDB) are implemented | `MergeBuilder<TEntity>`, `BulkInsertBuilder<TEntity>`, `BulkInsertOptions`, `TempTableExtensions` |
-| Transactions (own + enlisted) | yes | **yes** (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse and in-memory reject) | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `ISqlDialect.SupportsTransactions` |
-| Navigation properties / associations / eager loading | yes (`[Association]`, `LoadWith`) | **partial** — navigation metadata (O2M/M2O/O2O/M2M) + `JoinInto` (one-to-many collections, one-to-one references, many-to-many through an explicit junction) and level-1 `LoadWith` (split / single-query); implicit joins are open, and a composite junction selector or a many-to-many `JoinInto` under `AsSingleQuery` is rejected | `Builders/EntityBuilder.cs`, `JoinIntoSpec.cs`/`JoinIntoStitcher.cs`, `Builders/EntityBuilderEagerLoading.cs` |
-| Change tracking / identity map | partial | **no** (by design) | — |
-| Extensibility (interceptors, custom SQL, query filters) | extensive | **yes** — dialect + `[SqlFunction]`/`[SqlTableFunction]`, command/connection interceptors, global query filters and raw SQL | `SqlDialectBase`, `IQueryInterceptor`/`IConnectionInterceptor`, `QueryFilterAttribute`/`HasQueryFilter` |
-| Providers | SQL Server, PostgreSQL, MySQL/MariaDB, Oracle, SQLite, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | `src/nextorm.*` |
-| EF Core integration | yes (`linq2db.EntityFrameworkCore`) | **yes** — `nextorm.entityframeworkcore`, shares the EF connection/transaction ([EF Core integration](../../advanced/integration-efcore.md)); the opt-in DML/`SaveChanges` bridge is out of scope | `src/nextorm.entityframeworkcore` |
-| Performance posture | high | benchmarked at/above Dapper, EF Core and linq2db on the shipped scenarios | `docs/specs/performance/benchmark-report.md` |
+| Raw SQL as a composable source/subquery | yes | yes | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
+| Per-query source overrides (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) | **yes** — provider-gated per level, part of the plan key; SQL Server 4-part, MySQL/MariaDB/ClickHouse `db.table`, PostgreSQL/SQLite `schema.table` | partial (`Table(Name=...)`, `Sql.TableExpression`) | `EntityBuilder.WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`, `ISqlDialect.SupportsCrossDatabase`/`SupportsLinkedServer` |
+| Statement-level query hints | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse reject | partial (provider-specific `QueryHint`: SQL Server `OPTION (...)`, MySQL/Oracle `/*+ ... */`, ClickHouse `SETTINGS`; no PostgreSQL hint API) | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Locking table hints (e.g. `WITH (NOLOCK)`) | yes — SQL Server only | yes — SQL Server only (`SqlServerHints.TableHint`; the MySQL `TableHint` is optimizer-only, PostgreSQL/ClickHouse have no table-hint syntax) | `FromOptions.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
+| Index hints (`USE`/`FORCE`/`IGNORE INDEX`, `INDEXED BY`, `WITH (INDEX(...))`) | yes — MySQL/MariaDB, SQLite and SQL Server; PostgreSQL (without `pg_hint_plan`), ClickHouse and in-memory reject | yes (`IndexHint`/`TableHint`, provider-specific) | `FromOptions.WithIndex`/`WithoutIndex`, `ISqlDialect.IndexHints`/`IIndexHintRenderer` |
+| Identifier quoting | yes (opt-in) | yes (per provider) | `ISqlDialect.QuoteIdentifier` |
+| Naming conventions (e.g. snake_case) | **yes** (opt-in, built-in `SnakeCaseNamingConvention`) | partial — no built-in convention | `INamingConvention` / `SnakeCaseNamingConvention` |
+| SQL keyword casing (upper/lower) | **yes** — opt-in `KeywordCase.Upper`; the default `KeywordCase.Lower` is byte-for-byte the historical output | no (keywords are emitted in the provider's canonical case) | `KeywordCase`, `DataContextBuilder.UseKeywordCase`/`EntityBuilder.WithKeywordCase` |
+| **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | yes | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `MergeMatchedBuilder<TEntity>`, `MergeNotMatchedBuilder<TEntity>`, `MergeNotMatchedBySourceBuilder<TEntity>`, `MergeReturningBuilder<TEntity,TResult>`, `DeleteBuilder<TEntity>`, `UpdateBuilder<TEntity>`, `CreateDeleteJoinBuilder`/`DeleteJoinBuilder<TProjection>`, `CreateUpdateJoinBuilder`/`UpdateJoinBuilder<TProjection>`, `DataContextExtensions.Update`/`Delete`, `CreateTruncateBuilder`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge`/`SupportsDelete`; the in-memory provider only applies the key upsert |
+| Bulk copy / merge / temporary tables | partial — key upsert (`CreateMergeBuilder`/`MergeBuilder<T>`), full `MERGE` with branches (`WhenMatched`/`WhenNotMatched`/`WhenNotMatchedBySource`, arbitrary conditions, `RETURNING`/`OUTPUT`; SQL Server, PostgreSQL 15+), bulk insert (`CreateBulkInsertBuilder<T>`: native `COPY`/`SqlBulkCopy` + chunked `INSERT ... VALUES`, configured through the `BulkInsertOptions` record or the fluent `BulkInsertOptionsBuilder` — `MaxBatchSize`/`MaxParameters`/`MaxSqlLength`, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, `NotifyAfter` progress with a `ProgressCancellationTokenSource`; `ReturningKey`/`Returning`) and materializing a query into a (temporary) table (`ToTable` on PostgreSQL/SQLite/MySQL/MariaDB/SQL Server/ClickHouse, the `ToTempTable` temporary form on PostgreSQL/SQLite/MySQL/MariaDB) are implemented | yes | `MergeBuilder<TEntity>`, `BulkInsertBuilder<TEntity>`, `BulkInsertOptions`, `TempTableExtensions` |
+| Transactions (own + enlisted) | yes (SQLite, PostgreSQL, SQL Server, MySQL/MariaDB; ClickHouse and in-memory reject) | yes | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `ISqlDialect.SupportsTransactions` |
+| Navigation properties / associations / eager loading | partial — navigation metadata (O2M/M2O/O2O/M2M) + `JoinInto` (one-to-many collections, one-to-one references, many-to-many through an explicit junction), level-1 `LoadWith` (split / single-query), and declared-relationship implicit navigation (reference scalar chains/presence/whole-reference as `LEFT JOIN`; collection `Any`/`Count`/`LongCount`/`Count`); what remains is convention-over-FK inference (absent in linq2db too), composite keys, a composite junction selector and a many-to-many `JoinInto` under `AsSingleQuery` | yes (`[Association]`, `LoadWith`) | `Builders/EntityBuilder.cs`, `JoinIntoSpec.cs`/`JoinIntoStitcher.cs`, `Builders/EntityBuilderEagerLoading.cs`, `AsEntityBuilder<T>` |
+| Change tracking / identity map | no (by design) | partial | — |
+| Extensibility (interceptors, custom SQL, query filters) | yes — dialect + `[SqlFunction]`/`[SqlTableFunction]`, command/connection interceptors, global query filters and raw SQL | extensive | `SqlDialectBase`, `IQueryInterceptor`/`IConnectionInterceptor`, `QueryFilterAttribute`/`HasQueryFilter` |
+| Providers | SQL Server, PostgreSQL, MySQL, MariaDB, SQLite, ClickHouse, in-memory | SQL Server, PostgreSQL, MySQL/MariaDB, SQLite, Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, ClickHouse, DuckDB, Ydb | `src/nextorm.*` |
+| EF Core integration | yes — `nextorm.entityframeworkcore`, shares the EF connection/transaction ([EF Core integration](../../advanced/integration-efcore.md)); the opt-in DML/`SaveChanges` bridge is out of scope | yes (`linq2db.EntityFrameworkCore`) | `src/nextorm.entityframeworkcore` |
+| Raw command execution and stored procedures (`ExecuteRaw`/`ExecuteProcedure`, output/return parameters, forward-only cursors) | yes — stored procedures on SQL Server/PostgreSQL/MySQL/MariaDB | yes | `IRawCommandExecutor`, `ProcedureResult`/`ProcedureParameter`, `ISqlDialect.SupportsStoredProcedures` |
+| Table-valued parameters | yes — native SQL Server, array/JSON/`Array(T)`+`arrayJoin` emulation elsewhere | yes (`TableParameterValue`) | `ProcedureParameter.Table<T>`, `ISqlDialect.SupportsTableValuedParameters` |
+| SQL batch (`CreateBatchBuilder`/`BatchQuery<TResult>`/`BatchResult`, typed result sets in one round trip) | **yes** (PostgreSQL/SQL Server/MySQL/MariaDB/SQLite) | partial — batch only for a remote context (`BeginBatch`/`CommitBatch`); no local multi-statement builder | `BatchExtensions`/`BatchBuilder`/`BatchResult`, `ISqlDialect.SupportsBatch` |
+| Result-set streaming consumption (`ToStream`/`ToTextReader`/`ToDataReader`) | **yes** | partial — raw `DbDataReader` (`ExecuteReader`/`DataReaderWrapper`) and materialising `IAsyncEnumerable`; no LOB streaming terminal | `QueryCommandExtensions.ToStream`/`ToTextReader`/`ToDataReader`, `ISqlDialect.LobLocatorColumn`/`SupportsSequentialAccess` |
+| Result-set export to a stream (`WriteJson`/`WriteCsv`) | **yes** | partial (client serialization) | `QueryCommand.WriteJson`/`WriteCsv`, `JsonStreamOptions`/`CsvStreamOptions` |
+| `TRUNCATE` | yes (SQLite/in-memory reject) | yes | `DataContextExtensions.CreateTruncateBuilder` |
+| Query plan cache and `Prepare()` | yes — implicit structural plan cache plus explicit `Prepare()` | yes | `EntityBuilderExtensions.Prepare`, `IPreparedQueryCommand<TResult>`, `DataContextCache` |
+| `SelectMany` / `GroupJoin` | partial — in-memory only; SQL providers reject | yes (SQL translation) | `EntityBuilder.SelectMany`/`GroupJoin`, `InMemoryLinqSource` |
+| Context configuration, logging and DI (`DataContextBuilder`, `AddNextOrmContext`) | yes | yes | `DataContextBuilder`, `ServiceCollectionExtensions.AddNextOrmContext` |
+| In-memory provider (query-only, registered CLR datasets) | **yes** | partial | `InMemoryDataContext`, `WithData`/`WithAsyncData` |
+| Optimistic concurrency (token-guarded pattern; no concurrency-token metadata) | partial | yes | `Returning`, `DataContextExtensions.Update` |
+| Connection lifecycle (`IConnectionManager`: supplied vs owned, reuse, disposal) | yes | yes | `IConnectionManager.GetConnection`/`EnsureConnectionOpen`, `DbConnectionManager` |
+| Performance posture | **highest** | high | `docs/specs/performance/benchmark-report.md` |
 
 ## Where nextorm leads
 
@@ -115,6 +135,17 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   frame `EXCLUDE`, `nth_value`, `percent_rank`/`cume_dist`), `ROLLUP`/`CUBE`/`GROUPING SETS`/`WITH TOTALS`,
   `CASE`/`COALESCE`/`CAST`, string/math/date functions, `IN`-lists, UDF/TVF mapping, native `PIVOT`/`UNPIVOT`,
   temporal tables, row locking and raw SQL for a whole query.
+* Unmapped columns, named join aliases and per-query source overrides: read a column with no mapped property
+  (`SqlFunctions.Column`), address each join slot through generated `Alias.<Name>` types (`JoinSlotAttribute`),
+  and override the table/schema/database/server or supply a raw table expression per query
+  (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) — each folded into the plan key.
+* Extreme-row selection as a dedicated operator: `SelectWhereMax`/`SelectWhereMin` with
+  `ExtremeRowTies.One`/`All`, lowered portably but using the native strategy on PostgreSQL (`DISTINCT ON` /
+  `ORDER BY ... LIMIT 1`) and ClickHouse (`argMin`/`argMax`). linq2db has no such operator (it composes
+  window functions plus `OrderBy`/`Take`), and EF Core only reaches the single-row case (`OrderBy`+`First`,
+  `MaxBy`/`MinBy`).
+* A first-class JSON column (`[JsonColumn]` with Auto/Native/Text storage) — the mapping surface linq2db
+  still lacks (open `linq2db#1661`).
 * A complete, explicit write surface: `INSERT ... VALUES`/`INSERT ... SELECT` (single row, entity, batch), the
   generated key (`ReturningIdentity`/`ReturningKey`) and inserted rows (`Returning`, PostgreSQL/SQLite/SQL Server),
   **key upsert** (`CreateMergeBuilder`), **`DELETE`** (`CreateDeleteBuilder`/`Delete<T>`/`CreateTruncateBuilder<T>`), **`UPDATE`**
@@ -187,16 +218,24 @@ surface, which nextorm matches or exceeds. linq2db covers them:
   explicit command — there is no `SaveChanges` and no automatic change tracking. linq2db flushes a tracked
   unit of work.
 * **Relationships**: nextorm models O2M/M2O/O2O/M2M relationships declaratively (`[Relationship]`/`HasMany`/
-  `HasOne`/`HasOneToOne`/`HasManyThrough` + `JoinInto`) with level-1 `LoadWith` eager loading
-  ([relationships](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)); what
-  linq2db still adds is implicit join inference.
+  `HasOne`/`HasOneToOne`/`HasManyThrough` + `JoinInto`) with level-1 `LoadWith` eager loading and
+  declared-relationship implicit navigation ([relationships](../../advanced/relationships.md),
+  [eager loading](../../advanced/eager-loading.md), [implicit navigation](../../guide/29-implicit-navigation.md));
+  what linq2db still adds is eager-load ordering/strategy — convention-over-FK inference is absent in both,
+  since associations are declared in each library.
 * **Database-first tooling**: linq2db ships a CLI/T4 code-generation toolchain that scaffolds entity and
   table-function mappings from a live database; nextorm declares mappings in code. The dynamic-schema
   sources nextorm supports through a caller-declared `TRow` schema (ClickHouse `values()`, PostgreSQL
   `jsonb_to_record(set)`, [dynamic result schema](../../guide/11-table-valued-functions.md#dynamic-result-schema))
   are unsupported by linq2db as well.
-* **Provider breadth**: linq2db adds Oracle, Firebird, DB2, SAP HANA, Informix, Sybase and SQL CE; nextorm
-  focuses on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse.
+* **Provider breadth**: the two overlap on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse;
+  linq2db additionally ships Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB and
+  Ydb, while nextorm adds an in-memory object context and separate MySQL/MariaDB providers (linq2db models
+  MariaDB as a MySQL version).
+* **DDL / schema management**: linq2db ships `CreateTable`/`DropTable` and a schema API; nextorm mutates the
+  schema only through `CREATE TABLE AS SELECT` — ad-hoc DDL goes through `ExecuteRaw` (out of scope).
+* **External / linked-server sources**: `WithServer`/`WithDatabase` only rename the `FROM` qualifier;
+  `OPENROWSET`/`OPENQUERY` are out of scope (linq2db has no first-class surface either).
 Correlation is uniform on the SQL providers (arbitrary nesting depth for scalar subqueries, aggregate
 terminals, `EXISTS`/`IN`/`ANY`/`ALL` and correlated `APPLY`/`LATERAL` sources). The in-memory provider
 now evaluates depth-one correlated scalar/aggregate/`EXISTS`/`IN` once per outer row, and only rejects
@@ -206,15 +245,16 @@ the deeper forms — correlation depth greater than one, an outer reference insi
 
 ## Architecture differences
 
-| Aspect | linq2db | nextorm |
+| Aspect | nextorm | linq2db |
 |---|---|---|
-| Model | Explicit CRUD ORM with associations; no automatic change tracking | Query builder and mapper without change tracking, with a full explicit write surface (`INSERT`/`UPDATE`/`DELETE`/`MERGE`), bulk insert and transactions |
-| Entity requirement | A mapped class required (attributes, fluent or convention) | Entity class optional — mapped via attributes/fluent/conventions, or none at all with `From("table")` + `TableAlias` |
-| Reuse | Compiled queries, query cache | Implicit plan cache and `Prepare()` |
-| Identifier quoting | on by default (per provider) | off by default; enabled with `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()` |
-| Name mapping | fluent/attributes (`MappingSchema`) | attributes/fluent/auto-derived, plus opt-in naming conventions (`UseNamingConvention()`/`WithNamingConvention()`) |
-| SQL keyword case | fixed (provider-canonical, upper-case) | configurable, lower-case by default (`KeywordCase`) |
-| Extensibility | Interceptors, custom SQL, provider extensions | Dialect contract and function attributes |
+| Model | Query builder and mapper without change tracking, with a full explicit write surface (`INSERT`/`UPDATE`/`DELETE`/`MERGE`), bulk insert and transactions | Explicit CRUD ORM with associations; no automatic change tracking |
+| Entity requirement | Entity class optional — mapped via attributes/fluent/conventions, or none at all with `From("table")` + `TableAlias` | A mapped class required (attributes, fluent or convention) |
+| Reuse | Implicit plan cache and `Prepare()` | Compiled queries, query cache |
+| Result consumption | First-class non-materialising terminals on the query: single-column LOB streaming (`ToStream`/`ToTextReader`), a caller-owned `DbDataReader` (`ToDataReader`) and JSON/CSV export (`WriteJson`/`WriteCsv`) that stream rows without constructing `TResult` | Always materialises the mapped type per row; raw access only through `DataConnection.ExecuteReader`/`DataReaderWrapper` (`DbDataReader`), with no LOB or JSON/CSV terminals |
+| Identifier quoting | off by default; enabled with `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()` | on by default (per provider) |
+| Name mapping | attributes/fluent/auto-derived, plus opt-in naming conventions (`UseNamingConvention()`/`WithNamingConvention()`) | fluent/attributes (`MappingSchema`) |
+| SQL keyword case | configurable, lower-case by default (`KeywordCase`) | fixed (provider-canonical, upper-case) |
+| Extensibility | Dialect contract (`ISqlDialect`), `[SqlFunction]`/`[SqlTableFunction]` attributes, interceptors (`IQueryInterceptor`), global query filters and raw SQL | Interceptors, custom SQL, runtime `MappingSchema` and provider extension packages |
 
 ## Summary
 
@@ -224,9 +264,10 @@ families, the ClickHouse-specific constructs, cross-provider row values, TVFs an
 allocation footprint, benchmark results at or above Dapper, EF Core and linq2db on the shipped scenarios,
 and more configurable SQL output (identifier quoting, naming conventions and keyword casing are opt-in and
 overridable per command, whereas linq2db quotes by default and fixes names through its mapping schema).
-linq2db remains the better fit only when the same layer must also provide implicit join inference, track
-changes, or generate the data layer from a live schema — surface nextorm deliberately leaves out
-(O2M/M2O/O2O relationships, many-to-many through a junction and level-1 eager loading are already covered).
+linq2db remains the better fit only when the same layer must also track changes, generate the data layer from
+a live schema, or expose eager-load ordering/strategy — surface nextorm deliberately leaves out (O2M/M2O/O2O
+relationships, many-to-many through a junction, declared-relationship implicit navigation and level-1 eager
+loading are already covered).
 
 ## See also
 

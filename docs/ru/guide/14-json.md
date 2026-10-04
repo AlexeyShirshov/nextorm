@@ -30,8 +30,11 @@
   `JSON` (`CAST(col AS JSON)` для колонки `String`); `JSONAllPaths` проецируется как `string[]`, а
   `JSONAllPathsWithTypes` — как `Map(String, String)` → `Dictionary<string, string>`. Нативная *колонка*
   `JSON` пока не отображена (драйвер отдаёт её как `System.Text.Json.Nodes.JsonObject`).
-* **SQLite** не предоставляет ни одной JSON-конструкции. В СУБД есть JSON1, но nextorm его пока не
-  отображает, поэтому построение SQL бросает `NotSupportedException`.
+* **SQLite** предоставляет поверхность JSON1 через провайдерную `SqlFunctions.Sqlite` (`json`/`jsonb`/
+  `json_extract`, операторы `->`/`->>`, `json_set`/`json_patch` и табличные функции `json_each`/`json_tree`).
+  Кросс-провайдерный JSON-API на неё не отображён: нативный тип `json`/`jsonb` и текстовые имена
+  (`json_value`/`json_query`/`json_modify`/`isjson`) бросают `NotSupportedException`, поэтому используйте
+  члены JSON1 напрямую (см. [Провайдер SQLite](../providers/sqlite.md#функции-специфичные-для-sqlite)).
 * **Каждый SQL-провайдер** использует один общий JSON-*терминал*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
   [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) записывают проекцию запроса в принадлежащий вызывающему `Stream` как JSON-массив или
   NDJSON, сериализуя на клиенте через `System.Text.Json` (см. [Потоковое сохранение данных](28-streaming-data.md#json)).
@@ -47,7 +50,7 @@
 |---|---|---|---|---|
 | SQL Server | Поддерживается ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | Нет — JSON хранится в `nvarchar` | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Поддерживается |
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
-| SQLite | Нет | Нет | Нет | Нет |
+| SQLite | Нет | Нет | Нет (JSON1 через `SqlFunctions.Sqlite`) | Нет |
 | MySQL / MariaDB | Нет | Не отображаются | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
 | ClickHouse | Нет | Не отображаются | Строковый JSON + JSONPath-скаляры + функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
 | In-memory | Не применимо (нет SQL) | Не применимо | Не применимо | Не применимо |
@@ -350,8 +353,9 @@ from complex_entity
   коллекцию). Нативная *колонка* `JSON` пока не отображена: драйвер отдаёт её как
   `System.Text.Json.Nodes.JsonObject`, поэтому проецируйте JSON через колонку `String` или приведите её
   в SQL.
-* В SQLite есть JSON-возможности в СУБД, но nextorm их пока не отображает; расширение JSON1 в SQLite
-  тоже не отображено.
+* Расширение JSON1 в SQLite отображается только через провайдерную поверхность `SqlFunctions.Sqlite`
+  (`json_extract`, `->`/`->>`, `json_each`/`json_tree`, ...); кросс-провайдерный native/`json_*` API на неё
+  не отображён, поэтому эти имена бросают `NotSupportedException`.
 * Провайдер in-memory не генерирует SQL, поэтому `ForJson`/`ForXml` бросают `NotSupportedException`, а
   JSON-поверхности к нему не применимы.
 * PostgreSQL — единственный провайдер, чьи параметры отображаются на нативный JSON-тип; JSON в

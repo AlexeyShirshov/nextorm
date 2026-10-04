@@ -259,8 +259,10 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 ## Пока не поддерживается
 
-Нативный тип колонки `JSON` (его reader/type-mapping) и
-распределённые табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
+Нативный тип колонки `JSON` (его reader/type-mapping) пока не отображён. Серверные/кластерные табличные
+функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`, `cluster_all_replicas`) **предобъявлены**
+в `SqlFunctions.ClickHouse` и рендерят свой SQL, но их сквозной прогон на реальном кластере не покрыт и
+остаётся вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

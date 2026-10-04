@@ -51,7 +51,7 @@ range-типа) и динамическая схема табличных ист
 |---|---|---|---|---|
 | `epic: DDL` | 18 | `CREATE`/`ALTER`/`DROP TABLE`, constraints, индексы, sequences, enums, `Create/Drop Database` | CTAS есть (`ToTempTable`/`ToTable`), управления схемой нет | **Gap (решение нужно)**: либо осознанно <span style="color:orange">out-of-scope</span>, либо новый workstream «DDL» |
 | `epic: code-generator` | 21 | CLI/T4-скаффолдинг маппингов из живой БД | none (маппинги только в коде) | **<span style="color:orange">Out-of-scope</span>** (заявленная граница) |
-| `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | O2M/M2O-метаданные (`[Relationship]`/`HasMany`/`HasOne`) + `JoinInto` (O2M, O2O, M:N через junction) + уровень-1 `LoadWith` ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)) | **Частичный паритет**: O2O и M:N-исполнение отгружены (остатки: составные junction-селекторы, M:N под `AsSingleQuery`, неявный вывод соединений — issue #105); ordering/strategy — <span style="color:orange">out-of-scope</span> |
+| `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | O2M/M2O-метаданные (`[Relationship]`/`HasMany`/`HasOne`) + `JoinInto` (O2M, O2O, M:N через junction) + уровень-1 `LoadWith` + неявная навигация по **объявленным** связям ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md), [неявная навигация](../../guide/29-implicit-navigation.md)) | **Частичный паритет**: O2O, M:N-исполнение и неявная навигация по объявленным связям отгружены (остатки: составные junction-селекторы, составные ключи, M:N под `AsSingleQuery`); вывод по конвенции FK отсутствует и у linq2db; ordering/strategy — <span style="color:orange">out-of-scope</span> |
 | `epic: insert` | 16 | полнота INSERT/UPSERT, bulk, output | `INSERT VALUES/SELECT`, key-upsert, full MERGE, bulk — <span style="color:green">Done</span> | смешанно: см. §4 |
 | `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON (фаза 1: `[JsonColumn]`) — <span style="color:green">Done</span>; SQLite TVF (`json_each`/`json_tree`) — <span style="color:green">Done</span> | **<span style="color:green">Done</span>** (~~G14~~) |
 | `epic: merge` | 5 | MERGE: immutable-модели, частичные setters, TPH/EF | full MERGE (SQL Server, PG15+) — <span style="color:green">Done</span>; inheritance/EF — <span style="color:orange">out-of-scope</span> | частично **Gap** (G-merge) |
@@ -336,9 +336,9 @@ integration-тест. Подробности — [Duration columns](../../guide/
   enums, `Create/Drop Database`. nextorm мутирует схему только через CTAS. Это **единственный крупный
   непокрытый эпик**, где нужно явное решение: осознанно оставить или завести workstream «DDL» (в
   `sql-capabilities-gap-analysis.md` DDL сейчас в «Future workstreams (not scheduled)»).
-- **Inheritance/TPH** (и остатки `epic: eager-load`: неявный вывод соединений, составные junction-селекторы,
-  M:N под `AsSingleQuery`) — O2M/M2O/O2O/M:N-связи и eager loading уровня 1 в nextorm уже отгружены
-  (см. подсекцию «Инфраструктура» ниже).
+- **Inheritance/TPH** (и остатки `epic: eager-load`: составные junction-селекторы, составные ключи,
+  M:N под `AsSingleQuery`) — O2M/M2O/O2O/M:N-связи, eager loading уровня 1 и неявная навигация по
+  объявленным связям в nextorm уже отгружены (см. подсекцию «Инфраструктура» ниже).
 - **Скаффолдинг/кодогенерация** (`epic: code-generator`).
 - **Новые провайдеры** (`epic: new-provider`): Oracle, Firebird, DB2, SAP HANA, Informix, Sybase,
   Redshift, DuckDB, YDB, Access, SQL CE.
@@ -395,7 +395,7 @@ statement/table/index).
 | Оптимизатор дерева (`OptimizeJoins`, `GenerateExpressionTest`) | нет AST-оптимизатора (билдер не `IQueryable`) | **N/A** (архитектурно) |
 | DDL/схема (`ITable<T>.Create/Drop`, `CreateLocalTable`) | CTAS; DDL — out-of-scope-решение | **<span style="color:orange">Out-of-scope</span>** (см. §4) |
 | Хранимые процедуры / сырой `Execute*` / несколько result-set | `ExecuteRaw`/`ExecuteProcedure` + `ProcedureResult`; несколько result-set'ов — `BatchBuilder.AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult.Read<TResult>()` | **<span style="color:green">Done</span>** (2026-09-26, #70 включая #25) |
-| Association/eager-load, inheritance/TPH | метаданные O2M/M2O/O2O/M2M (`[Relationship]`/`HasMany`/`HasOne`/`HasOneToOne`/`HasManyThrough`) + `JoinInto` (O2O и M:N отгружены) и уровень-1 `LoadWith` ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md)); остатки: неявный вывод соединений, составные junction-селекторы, M:N под `AsSingleQuery`; inheritance/TPH — <span style="color:orange">out-of-scope</span> | **Частичный паритет + <span style="color:orange">Out-of-scope</span>** |
+| Association/eager-load, inheritance/TPH | метаданные O2M/M2O/O2O/M2M (`[Relationship]`/`HasMany`/`HasOne`/`HasOneToOne`/`HasManyThrough`) + `JoinInto` (O2O и M:N отгружены), уровень-1 `LoadWith` и неявная навигация по объявленным связям ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md), [неявная навигация](../../guide/29-implicit-navigation.md)); остатки: вывод по конвенции FK (нет и у linq2db), составные junction-селекторы, составные ключи, M:N под `AsSingleQuery`; inheritance/TPH — <span style="color:orange">out-of-scope</span> | **Частичный паритет + <span style="color:orange">Out-of-scope</span>** |
 | Testing framework, NuGet-упаковка, multi-targeting | собственные тесты/сборка | **N/A** |
 
 ## 5. Общие пробелы (нет и у nextorm, и у linq2db)
@@ -428,7 +428,7 @@ statement/table/index).
 | P2 | Инфраструктурные Gap (§4): command timeout, bulk copy options, query cache controls — **<span style="color:green">реализовано</span>**; dynamic columns — read+write **<span style="color:green">реализовано</span>** (issue [#104](https://github.com/AlexeyShirshov/nextorm/issues/104), [Dynamic columns](../../guide/27-dynamic-columns.md)) |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
 
-## 7. Статус сравнения (обновлено `2026-09-29`)
+## 7. Статус сравнения (обновлено `2026-10-04`)
 
 Устранено: [`linq2db-comparison.md`](linq2db-comparison.md),
 [`capability-matrix.md`](capability-matrix.md) и RU-зеркало больше не помечают `UPDATE`, полный `MERGE`,
@@ -490,6 +490,21 @@ linq2db (Data Connection System / Mapping / Query Processing). Паритет п
 query filters закрыты (PR1–PR4); EF Core integration отражена как shipped. Инлайновые упоминания
 `todo_output_into.md`/`todo_stored_procedures.md`/`todo_dynamic_columns.md` в тексте — исторические:
 планы удалены после выпуска.
+
+**Обновлено (04.10.2026, синхронизация с `capability-matrix.md`).** Приведены в соответствие
+[`capability-matrix.md`](capability-matrix.md), [`linq2db-comparison.md`](linq2db-comparison.md) (EN+RU) и RU-зеркало.
+Снята устаревшая строка «неявный вывод соединений открыт» (issue #105): неявная навигация по **объявленным**
+связям поставлена ([неявная навигация](../../guide/29-implicit-navigation.md)); вывод по конвенции FK отсутствует
+и у linq2db, поэтому в остатке этой оси — лишь составные junction-селекторы, составные ключи и M:N под
+`AsSingleQuery`. В матрицу и сравнение добавлены уже поставленные, но ранее не отражённые поверхности:
+немаппированные колонки (`SqlFunctions.Column`), именованные алиасы соединений (`Alias.<Name>`/`JoinSlotAttribute`),
+per-query переопределения источника (`WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`),
+типизированные CTE (`AsCte`/`AsRecursiveCte`), оконные percentile, конкатенация строк, `NULLIF`,
+настройки/последовательности PostgreSQL, нативный JSON ClickHouse, выбор экстремальной строки
+(`SelectWhereMax`/`SelectWhereMin`), сырые команды и хранимые процедуры, table-valued parameters, SQL-батч,
+стриминг result-set и экспорт в поток (JSON/CSV), `TRUNCATE`, кэш планов/`Prepare()`, in-memory `SelectMany`/`GroupJoin`,
+конфигурация/логирование/DI, интеграция с EF Core, оптимистичная конкурентность, а также out-of-scope-сравнения
+(unit of work, DDL, внешние источники) и жизненный цикл соединения.
 
 ## See also
 
