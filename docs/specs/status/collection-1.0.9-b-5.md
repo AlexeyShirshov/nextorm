@@ -33,8 +33,8 @@
 - parent verification: **not run** — both groups `done`; collection CHECK pending; `git merge --no-ff` pending
 - verification state: unverified
 - defect id/history: **(none)** — no product defect established; B1 `incomplete` is an acceptance/environment blocker, not a product defect
-- last C: (pending collection CHECK)
-- next allowed step: merge done groups into 1.0.9-b, then collection CHECK
+- last C: collection CHECK running on integrated tree 6556c86
+- next allowed step: collection CHECK verdict → ACT
 - history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
 - group-1 done: #183 DONE (with limitation) — B1/B2 rejected/reverted (attributable time speedup not provable on shared host); patches preserved; #166 not triggered.
 
