@@ -1,0 +1,25 @@
+# Task result trace — planner role, task #164 (collection 1.0.9-b-5, group-2)
+# Task id: ses_ef81912e9ffez8Z0xiwWjVCaU6
+# Role: planner (PLAN beat, bounded CHECK re-gather)
+# Dispatched by primary session: ses_efa0237e9ffe6w6pOI50N73e5H
+# Date: 2026-10-04
+# Status: completed; output below
+---8<---
+1. **PLAN r=1; P:164-trace** — complete the bounded CHECK re-gather; retain existing acceptance criteria and attempt counter. No implementation iteration.
+2. **Goal/acceptance:** **(a)** prove post-restart loading of both skill sections; **(b)** prove a real planner->CHECK exchange records `rv=1` in #164's status file. Missing sections, revision, or authenticated invocation evidence fails the respective criterion.
+3. **Minimal solution:** preserve proven (a), persist this contract, obtain the traceable CHECK verdict. Constraints: docs-only, no fabricated IDs/evidence, no build/test; no alternative implementation is needed.
+4. **Planned deliverables:** `S=docs/specs/status/pdca-evidence-164-1.md` (status/report); `P=.../164-planner.trace.txt`; `C=.../164-check.trace.txt`.
+5. **D:164-1, fix now:** coder records r=1, this entire rv=1 contract, and known (a) evidence in S; exports actual orchestration trace into P. **D:164-2, fix now:** invoke CHECK against rv=1; export its invocation/result into C and persist its verdict/revision in S. No deferred scope.
+6. **Mode/design:** single sequential unit, same tree; status and traces share a contract. Design checklist: no production code, API, dependency, schema, or test changes.
+7. **Test strategy/variants:** documentation/evidence inspection only. Correct headers and trace-linked rv=1 -> accept; missing/wrong header, absent/mismatched rv, fabricated/self-authored invocation assertion, or untraceable CHECK -> reject/unverified. No build, unit/integration tests, or coverage collection applies.
+8. **Priorities/docs:** both contract rows are **P1 acceptance invariants**, not downgradeable. Only the internal deliverables above change; public docs and generated docs remain untouched.
+9. **Performance/reconnaissance:** performance measurement N/A - one-time documentation verification, evidenced at tool-output lines 884/1083. Spike N/A.
+10. **Gaps/risks:** this role cannot see its Task ID or the CHECK invocation ID; orchestrator must supply authenticated metadata, timestamps/session linkage and outputs.
+11. **Authoritative contract rv=1:** initial revision, no supersession. Stable requirements `R164-A`, `R164-B`; stable rows below.
+12. **G2-LIVE | requirement R164-A | rv=1 | applicability:** unconditional for #164. **Required scenario:** post-restart session loaded both new global skill sections. **Kinds/sources:** existing loaded-skill output plus authenticated primary-session metadata for `ses_efa0237e9ffe6w6pOI50N73e5H`, created 2026-10-04.
+13. **G2-LIVE command/result/artifacts/owner:** `f=/home/alex/.local/share/opencode/tool-output/tool_10746e894001aaPVuuBcdcnZt4; test -s "$f" && sha256sum "$f" && sed -n '884p;1083p' "$f"`; require exit 0 and the two exact headings. Owner: CHECK.
+14. **G2-LIVE-B | requirement R164-B | rv=1 | applicability:** unconditional for #164. **Required scenario:** this actual PLAN invocation produces rv=1; a real CHECK invocation evaluates that revision; S records both. **Kinds/sources:** planned authentic orchestration exports P/C, plus S - not merely coder-authored claims.
+15. **G2-LIVE-B exact command:** `S=docs/specs/status/pdca-evidence-164-1.md; P=docs/specs/status/pdca-evidence-164-planner-trace.txt; test -s "$S" && test -s "$P" && sha256sum "$S" "$P" && cat "$P" && rg -n 'rv=1|G2-LIVE|G2-LIVE-B' "$S"`
+16. **G2-LIVE-B result/artifacts/owner:** require exit 0 **and semantic inspection** matching actual invocation IDs, roles, session linkage, planner output, CHECK's reviewed `rv=1` and verdict to S. A grep hit alone cannot pass. Owner: CHECK.
+17. **Traceable evidence for (b):** this real planner Task invocation produced the contract above; its ID must come from orchestration metadata. The required companion is the actual CHECK role's verdict run for #164 reviewing rv=1.
+18. **CHECK re-gather budget:** one bounded completion round - this PLAN return, trace export and one CHECK return; owner CHECK.
