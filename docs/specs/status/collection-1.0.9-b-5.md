@@ -35,7 +35,7 @@
 - defect id/history: C-scope-1 (fixed); C-evidence-1 (rv=5 applicability N/A)
 - last C: contract rv=5 recorded; delivered-tree gates re-run
 - reason: 4 out-of-scope files merged; removed from index (preserved on disk)
-- next allowed step: parent collection CHECK on 52c4b3a
+- next allowed step: parent CHECK (rv=5 appendices attached)
 - history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
 - group-1 done: #183 DONE (with limitation) — B1/B2 rejected/reverted (attributable time speedup not provable on shared host); patches preserved; #166 not triggered.
 

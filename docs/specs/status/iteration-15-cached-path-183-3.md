@@ -152,3 +152,53 @@ Delivered-tree gates re-run fresh on `13d94a0` (code-identical to `52c4b3a`) →
 - core `dotnet test tests/nextorm.core.tests -c Debug` → exit 0; Total 1482 / Passed 1482 / Failed 0 / Skipped 0; log `/tmp/opencode/coll-c/rv5/test-core.log`.
 - sqlite `dotnet test tests/nextorm.sqlite.tests -c Debug` → exit 0; Total 1003 / Passed 1002 / Failed 0 / Skipped 1 (env-gated `SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded`, `NEXTORM_LOB_SQLITE_PROBE=1`; skip is not a pass); log `/tmp/opencode/coll-c/rv5/test-sqlite.log`.
 - docs lens retained; no `src/**` change. NO performance improvement is claimed. Disposition remains DONE (with limitation).
+
+---
+### rv=5 evidence appendices
+Consolidated per-row evidence for the rv=5 closeout (append-only; the rv=5 dispositions at lines 141-154 are not revised). Paths: `$E=benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining`; collection worktree `/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1`.
+
+#### Variant matrix + priority floor — `iteration-15-cached-path-183-3.md:29-34` (verbatim)
+- [29] Variant matrix — **test**: same/different fresh reference closures; value captures; null/default; parameter-free/nonempty transitions; stable/runtime split; duplicate captures; pN order/count; `PreparedCommandOptions` combinations; repeated/context-isolated hits (assert values AND evaluation counts).
+- [30] Variant matrix — **guard+test**: incompatible name/order/count/shape; converters/provider-bound types; raw SQL; nested queries; IN empty/nonempty/changed; lookup changes; filters/prewhere changes — all verify original-path fallback BEFORE evaluation and no double evaluation.
+- [31] Variant matrix — **providers**: DB-free full solution covers available dialects; SQLite + PostgreSQL/SQL Server/MySQL/ClickHouse integration mandatory. MariaDB real-server execution deferred until a dedicated server; never claim it ran.
+- [32] Branch delta: inventory hit-refresh/fallback/options branches vs `QueryPlanner.cs:644–658,696–699,717–739`; report before/after branch hits; coverage line ≥85 / branch ≥75.
+- [33] Mutation: Stryker 5.0.0 absent / MTP-incompatible → manual-justification route; seed reversible faults in compatibility, first-capture binding, dedup/order, fallback-before-evaluation; targeted tests kill each; restore and rerun gates; justify any unseeded invariant.
+- [34] Priority (P1 by construction, CHECK must not downgrade): acceptance invariants; current-capture isolation; runtime mismatch guard; fallback/evaluation ordering; shape-before-selection; sticky-cache prohibition; provider conversion; performance regression gates.
+- [88] No plan revision: r=2, rv=3, attempt counters unchanged; U2 acceptance/variant matrix/test scope binding.
+
+#### G1-PERF/U1 — fallback-(c) support
+`183-3.md:107` (verbatim):
+- **G1-PERF/U1 — satisfied via authorized fallback (c).** 3 interleaved rounds (A1→B1→A2→B2→A3→B3), all 6 runs exit 0; deterministic −43,202 B/op on the 4 cached-hit arms; attributable target-stage speedup unproven; no statistically reliable regression. Artifacts `$E/U1/perf/`.
+Allocation (verbatim, `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/summary.json`):
+- `:271` `"alloc_delta_median_bytes": -43202.6` (`Where_CachedHit_PlanOnly`)
+- `:577` `"alloc_delta_median_bytes": -43202.6` (`Join_CachedHit_PlanOnly`)
+- `:628` `"alloc_delta_median_bytes": -43202.6` (`Join_CachedHit_ToList`)
+- `:322` `"alloc_delta_median_bytes": -43192.3` (`Where_CachedHit_ToList`)
+File path: `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/summary.json`.
+
+#### G1-CACHE/U2 — revert trace
+`183-3.md:110` (verbatim):
+- **G1-CACHE/U2 — moot for retained implementation by verified revert**, with candidate correctness evidence preserved (build 0/0; core 1482/0; sqlite 993 pass/0 fail/1 env skip; coverage 87.1/78.7; 4 providers isolated 0-fail). Not erased, not relabelled N/A.
+Delivered tree == base; NO `src/**` change in the #183 collection/closeout range:
+- `git diff --stat 5d9b8d8..HEAD -- src/ 2>/dev/null | tail -1` → `206 files changed, 33691 insertions(+), 1361 deletions(-)` — `5d9b8d8` is the unrelated PR #91 merge, NOT the collection base; not applicable.
+- `git diff --stat 82e344f..HEAD -- src/` → `5 files changed, 243 insertions(+), 40 deletions(-)` — attributable solely to pre-existing `158233f #186 Unify result-set traversal` (not #183/#164); not a collection change.
+- Collection-base evidence: `git diff --stat 752943d..3b1fcaf -- src/` = empty (group-1 delivered tip `3b1fcaf` == base `752943d`); closeout `git diff --stat 52c4b3a..HEAD -- src/` = empty and `git diff --stat 13d94a0..HEAD -- src/` = empty. → NO `src/**` change in the #183 collection/closeout range.
+- `git status --short --branch` → `## 1.0.9-b...origin/1.0.9-b [ahead 14]`; only pre-existing untracked/modified docs, no staged code.
+
+#### G2-LIVE / G2-LIVE-B — applicability to this snapshot
+`pdca-evidence-164-1.md:260-269` (verbatim):
+- [260] `## CHECK verdict`
+- [262] `PASS (rv=1): (a) met — loaded-skill spill tool_10746e894001aaPVuuBcdcnZt4:884/1083 in post-restart session ses_efa0237e9ffe6w6pOI50N73e5H; (b) met — real planner run ses_ef81912e9ffez8Z0xiwWjVCaU6 recorded rv=1 (G2-LIVE/G2-LIVE-B) with trace artifact sha256 eb6525b462dd07305f9cc0366c02a728b5c1d045a5764ee63bc41218a48215e2.`
+- [264] `## ACT`
+- [266] `## Done / Verified / Incomplete`
+- [268] `Done: #164 G2-LIVE + G2-LIVE-B`
+- [269] `Verified: CHECK PASS rv=1`
+The files referenced by that verdict are outside the repo and unchanged by collection `1.0.9-b-5`: `/home/alex/.config/opencode/skills/pdca-dotnet/SKILL.md`, `/home/alex/.local/share/opencode/tool-output/tool_10746e894001aaPVuuBcdcnZt4`, `/home/alex/.config/opencode/agents/pdca-check.md`. No repo diff touches them; G2-LIVE/G2-LIVE-B is agent-runtime applicability, not SQL-provider applicability.
+
+#### Coverage totals
+Reused; no `src/**` change since recorded:
+- `183-3.md:123`: Line 87.1% (44396/50968), Branch 78.7% (22968/29164); source `$E/U2/coverage/report/Summary.txt:7,12` (group-1 worktree), logs `$E/U2/coverage/{collect.log,reportgen.log}`; per-assembly line core 87.3 / postgres 79.2 / sqlite 89.3 / sqlserver 78.2.
+- rv=5 fresh delivered-tree gates (`/tmp/opencode/coll-c/rv5/`) did not collect coverage; the absolute gates remain met by the reused numbers because `src/**` is unchanged since that run. Record: `coverage: reused from iteration-15-cached-path-183-3.md:123, no src change since`.
+
+#### Container-provider integration applicability
+Recorded isolated per-provider result (`183-3.md:124`, same U2 binaries): PostgreSQL total 776 / failed 0 / skipped 25; SQL Server 698/0/43; MySQL 656/0/80; ClickHouse 173/0/0. Applicability predicate: the #183 collection diff has NO `src/**` change, so provider SQL generation is byte-identical and the recorded provider results remain valid for the delivered tree. A provider-skipped run is NOT claimed as pass — the combined run (`integration.log:15068`) reported Total 3136, Errors 0, Failed 663, Skipped 191, 633.8 s, with all 663 failures environmental (653 SQL Server pre-login handshake `SqlException`/`Win32Exception: Unknown error 258` + 1 MySQL + 9 ClickHouse); the isolated 4-provider 0-fail runs are the applicable evidence.
