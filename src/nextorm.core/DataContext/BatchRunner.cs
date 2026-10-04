@@ -301,11 +301,13 @@ internal sealed class BatchRunner
 
         var sets = new List<IList>(materializers.Count);
         var resultTypes = new List<Type>(materializers.Count);
+        var columnNames = new List<string[]>(materializers.Count);
         for (var i = 0; i < materializers.Count; i++)
         {
             if (reader.FieldCount == 0)
                 throw MissingResultSet(plan, i);
 
+            columnNames.Add(SnapshotColumns(reader));
             sets.Add(materializers[i].Read(reader));
             resultTypes.Add(materializers[i].ResultType);
 
@@ -313,7 +315,7 @@ internal sealed class BatchRunner
                 throw MissingResultSet(plan, i + 1);
         }
 
-        return new BatchResult(sets, resultTypes);
+        return new BatchResult(sets, resultTypes, columnNames);
     }
 
     private static async Task<BatchResult> ReadMultipleAsync(DbDataReader reader, BatchPlan plan, IReadOnlyList<IBatchResultMaterializer> materializers, CancellationToken cancellationToken)
@@ -324,11 +326,13 @@ internal sealed class BatchRunner
 
         var sets = new List<IList>(materializers.Count);
         var resultTypes = new List<Type>(materializers.Count);
+        var columnNames = new List<string[]>(materializers.Count);
         for (var i = 0; i < materializers.Count; i++)
         {
             if (reader.FieldCount == 0)
                 throw MissingResultSet(plan, i);
 
+            columnNames.Add(SnapshotColumns(reader));
             sets.Add(await materializers[i].ReadAsync(reader, cancellationToken).ConfigureAwait(false));
             resultTypes.Add(materializers[i].ResultType);
 
@@ -339,7 +343,16 @@ internal sealed class BatchRunner
             }
         }
 
-        return new BatchResult(sets, resultTypes);
+        return new BatchResult(sets, resultTypes, columnNames);
+    }
+
+    private static string[] SnapshotColumns(DbDataReader reader)
+    {
+        var names = new string[reader.FieldCount];
+        for (var i = 0; i < names.Length; i++)
+            names[i] = reader.GetName(i);
+
+        return names;
     }
 
     /// <summary>

@@ -316,6 +316,43 @@ var rows = await dataContext.From<ISimpleEntity>()
 коррелированный apply через `NotSupportedException`, как и in-memory-провайдер. Коррелированный apply
 не может ссылаться на проекцию соединения — применяйте его к источнику из одной сущности.
 
+### APPLY по табличной функции
+
+Применяемый источник может быть табличной функцией (см. [Табличные функции](11-table-valued-functions.md)):
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) возвращает `EntityBuilder<T>`, поэтому передаётся точно так же, как сущность. Некоррелированная функция применяется напрямую:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .CrossApply(dataContext.FromTableFunction(() => Tvf.AllRows()))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t2.value from simple_entity as t1 cross join lateral all_rows() as t2
+```
+
+Корреляция функции со строкой левой стороны передаёт столбец этой строки аргументом функции; вызов тогда оборачивается в lateral-производную таблицу:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .CrossApply(s => dataContext.FromTableFunction(() => Tvf.ById(s.Id)))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t3.value from simple_entity as t1 cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as t2) as t3
+```
+
+Как и любой коррелированный apply, коррелированная форма функции требует lateral-источника и отклоняется с `NotSupportedException` в SQLite/ClickHouse и в in-memory-провайдере; некоррелированная форма подчиняется правилам источника конкретного провайдера (`CROSS APPLY` в SQL Server, `CROSS JOIN LATERAL` в PostgreSQL/MySQL/MariaDB).
+
 ## Соединение с подзапросом
 
 `QueryCommand<T>` можно присоединить напрямую. Он заключается в скобки и получает псевдоним как

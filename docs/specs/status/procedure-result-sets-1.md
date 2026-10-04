@@ -4,6 +4,7 @@
 - branch: `1.0.9-b` (single-group collection; work in place, no worktree/branch/commit/push)
 - round: 1 of N. This file is the frozen contract + D0–D6 plan + evidence ledger.
 - scope of this round: **D0–D6 complete** (status/plan, core API, full edge tests, docs EN+RU, coverage/perf, audits, final record) on `1.0.9-b`.
+- **Superseded by #186 (2026-10-04):** the traversal methods `ReadSets()`/`ReadSetsAsync(ct)` were replaced by direct enumeration — `ProcedureResult` now implements `IEnumerable<ResultSet>`/`IAsyncEnumerable<ResultSet>`, and `ResultSet` is a backend-agnostic cursor also yielded by `BatchResult`. Sections 1.1/1.3 below record the original #118 contract; the current contract is in `docs/specs/design/issue-186-resultset-direct-iteration.md`.
 
 ## 1. Frozen contract (implement exactly)
 

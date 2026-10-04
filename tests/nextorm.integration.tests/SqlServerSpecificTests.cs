@@ -775,7 +775,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             var indices = new List<int>();
             var ints = new List<int>();
             var strings = new List<string>();
-            foreach (var set in result.ReadSets())
+            foreach (var set in result)
             {
                 indices.Add(set.Index);
                 if (set.Index == 0)
@@ -814,7 +814,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
             result.OutputParameters.Single().Value.Should().Be(5);
 
-            Action act = () => result.ReadSets().ToList();
+            Action act = () => result.ToList();
 
             act.Should().Throw<InvalidOperationException>();
         }

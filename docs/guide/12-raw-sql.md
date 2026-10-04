@@ -242,8 +242,14 @@ public static EntityBuilder<TEntity> BindEntity<TEntity>(
 var rows = dataContext
     .FromSql("select id, tenant_id from complex_entity where id > @min", new { min = 5 })
     .BindEntity<ComplexEntity>(["id", "tenant_id"])
-    .Where(t => t["id"].AsInt > 10)
+    .Where(t => t.Id > 10)
     .ToList();
+```
+
+```sql
+-- SQLite; other providers qualify the derived table as "t1" and the columns with their own quoting
+select id, tenant_id as 'TenantId' from (select id, tenant_id from complex_entity where id > @min)
+ where (id > 10)
 ```
 
 - Column names are the **output/SQL names** of the raw select list (a configured column mapping wins over
@@ -355,7 +361,7 @@ Anything that is neither a scalar nor a parameterless-constructor mapped entity 
 
 ### Multiple result sets
 
-Each `Read<T>()` call advances to the next result set and materialises all of its rows. Already-read sets are not revisited. When the command has no further result set, `Read<T>()` throws `InvalidOperationException`.
+Each `Read<T>()` call advances to the next result set and materialises all of its rows. Already-read sets are not revisited. When the command has no further result set, `Read<T>()` throws `InvalidOperationException`. To read sets whose element types differ, enumerate the result object instead (see [Result-set cursors](#result-set-cursors)).
 
 ```csharp
 using var result = dataContext.ExecuteRaw("select 1 as a; select 2 as b");
@@ -365,14 +371,14 @@ IReadOnlyList<int> second = result.Read<int>();  // [2]
 // result.Read<int>(); now throws InvalidOperationException
 ```
 
-#### Result-set cursors (`ReadSets`)
+#### Result-set cursors
 
-Positional `Read<T>()` always reads the *next* set as the same `T`, so it cannot handle a command whose sets need different element types. `ReadSets()` instead enumerates the column-bearing result sets as [`ResultSet`](xref:NextORM.Core.ResultSet) cursors; every cursor reads **its own** set with a per-set `T`, either eagerly with `Read<T>()` or lazily with `ReadAsync<T>(ct)`. The async twin is `ReadSetsAsync(ct)`.
+Positional `Read<T>()` always reads the *next* set as the same `T`, so it cannot handle a command whose sets need different element types. Enumerating the result object instead yields the column-bearing result sets as [`ResultSet`](xref:NextORM.Core.ResultSet) cursors; every cursor reads **its own** set with a per-set `T`, either eagerly with `Read<T>()` or lazily with `ReadAsync<T>(ct)`. The async twin is `await foreach (var set in result)`. The same cursor model, and the same traversal rules below, apply to [`BatchResult`](23-sql-batch.md#multiple-result-sets).
 
 ```csharp
 using var result = dataContext.ExecuteRaw("select 1 as id; select 'two' as label");
 
-foreach (var set in result.ReadSets())
+foreach (var set in result)
 {
     if (set.Index == 0)
     {
@@ -397,13 +403,15 @@ A cursor exposes:
 
 Traversal rules:
 
-- **One-shot and forward-only.** The sequence can be enumerated once; re-enumerating it, or mixing it with positional `Read<T>()`/`ReadAsync<T>()`, throws `InvalidOperationException`. Each set can be read once; a second read, or a cursor used after the outer traversal advanced or ended, throws `InvalidOperationException`. A cursor whose owning result was disposed throws `ObjectDisposedException`.
+- **One-shot and forward-only.** Enumerating the result a second time, or mixing enumeration with positional `Read<T>()`/`ReadAsync<T>()`, throws `InvalidOperationException`. Each set can be read once; a second read, or a cursor used after the outer traversal advanced or ended, throws `InvalidOperationException`. A cursor whose owning result was disposed throws `ObjectDisposedException`.
 - **Column-less sets are skipped.** Leading, intermediate and trailing sets without columns (DDL/DML) are skipped and do not count toward `Index`; a set with columns but no rows is still yielded. Rows of the current set that were not read are dropped automatically when the traversal advances, so the next set is read intact.
-- **Cancellation.** `ReadSetsAsync(ct)` cancels the outer traversal; `set.ReadAsync<T>(ct)` honors its own token. Cancellation throws `OperationCanceledException` and ends the traversal for good.
-- **Outputs.** `OutputParameters`/`ReturnValue` remain available once the sets are exhausted, but reading them first closes the reader, so a later `ReadSets()` throws `InvalidOperationException`; accessing outputs while a traversal is active is rejected.
+- **Cancellation.** `await foreach (var set in result.WithCancellation(ct))` cancels the outer traversal; `set.ReadAsync<T>(ct)` honors its own token. Cancellation throws `OperationCanceledException` and ends the traversal for good.
+- **Outputs.** `OutputParameters`/`ReturnValue` remain available once the sets are exhausted, but reading them first closes the reader, so a later enumeration throws `InvalidOperationException`; accessing outputs while a traversal is active is rejected.
 - **Ownership.** Disposing the outer enumerator (for example `break` in a `foreach`) invalidates its cursors but does not dispose the `ProcedureResult`; `using`/`await using` still releases the reader and command.
 
 A buffering `ReadAllAsync` that materialises every set at once is intentionally not provided: the traversal is forward-only and consumes one set at a time.
+
+Unlike the streaming `ProcedureResult`, [`BatchResult`](23-sql-batch.md#multiple-result-sets) enumerates an eager in-memory buffer through the identical cursor surface and traversal rules; it owns no reader and is not disposable.
 
 ### Async
 

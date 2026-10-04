@@ -8,7 +8,7 @@
 
 nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit joins inferred from a navigation (`e.Parent.Name`) are **not** implemented.
 
-`JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, `LoadWith` is a split query with one extra child statement per key chunk.
+`JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder opts into `AsSingleQuery()`).
 
 ## Declaring a relationship
 
@@ -124,6 +124,14 @@ var orders = ctx.From<Order>()
     .ToList();
 ```
 
+The reference renders the same flat join as the collection form; the joined child is materialized from the paired row:
+
+```sql
+select t1.id, t1.name, t2.id, t2.order_id, t2.total
+from order as t1
+left join invoice as t2 on t1.id = t2.order_id
+```
+
 `JoinOptions.OneToOne<TParent, TChild, TKey>(parentKey, childForeignKey)` configures the relationship locally through a `JoinInto` options lambda (the same two selectors) when it is not declared, fully replacing the declared metadata for that call:
 
 ```csharp
@@ -162,6 +170,19 @@ var posts = ctx.From<Post>()
         j => j.ManyToMany<Post, Tag, TagLink, int, int>(
             p => p.Id, l => l.PostId, t => t.Id, l => l.TagId))
     .ToList();
+```
+
+The junction is projected as a derived `row_number()` link subquery, joined flat to the parent and then to the child; the user predicate is appended to the child `ON`:
+
+```sql
+select t1.id, t1.title, t2.parent_key, t2.child_key, t2.occurrence, t3.id, t3.name
+from post as t1
+left join (
+    select j.post_id as parent_key, j.tag_id as child_key,
+           row_number() over (partition by j.post_id, j.tag_id order by j.tag_id) as occurrence
+    from tag_link as j
+) as t2 on t1.id = t2.parent_key
+left join tag as t3 on t3.id = t2.child_key and t3.active
 ```
 
 The `(parent, child) => ...` predicate is an extra filter over the joined rows; the join keys come from the junction configuration, not from the predicate. Use `(p, t) => true` when no filter is needed.
@@ -225,9 +246,15 @@ A `Where` written **before** `JoinInto` filters the parent source. The predicate
 
 `Limit`/`Offset` (`Take`/`Page`) constrain **parents**, not denormalized rows. On a SQL provider the parent source is selected in a subquery with the limit and the join wraps around it, so paging a parent does not truncate its children. On the in-memory provider the limit is applied to the deduplicated parent list.
 
+```sql
+select t1.id, t1.name, t2.id, t2.order_id, t2.name
+from (select id, name from order limit 10 offset 20) as t1
+left join order_item as t2 on t1.id = t2.order_id
+```
+
 ## Multiple collections
 
-Each `JoinInto` adds its own join. Two child collections on the same parent produce a **cartesian product** of rows in the denormalized stream; parent deduplication and independent per-collection grouping keep the result correct, but the intermediate row count multiplies. When two or more collection navigations are present, preparation emits the `JoinInto.MultipleCollections` warning once per plan; pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda to silence it. Declare several collections only when the parent sets are small, or load the second collection with a separate query ([`LoadWith`](eager-loading.md) is the split-query alternative).
+Each `JoinInto` adds its own join. Two child collections on the same parent produce a **cartesian product** of rows in the denormalized stream; parent deduplication and independent per-collection grouping keep the result correct, but the intermediate row count multiplies. When two or more collection navigations are present, preparation emits the `JoinInto.MultipleCollections` warning once per plan; pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda to silence it. Declare several collections only when the parent sets are small, or load the second collection with a separate query (the [`LoadWith`](eager-loading.md) loader is the alternative — split-query by default, single-query with `AsSingleQuery()`).
 
 `JoinInto` **cannot be combined with any other join on the same builder**: once the builder carries a `JoinInto`, adding `Join`, `LeftJoin`, `CrossJoin`, `SemiJoin`, `AntiJoin` (or any other explicit join) throws `NotSupportedException`, and vice versa. Declare the `JoinInto` collections on a plain entity source, so the non-list terminals know exactly which joins to drop. Mixing the two would leave the parent-only command unable to tell an explicit join from a `JoinInto`.
 
@@ -271,7 +298,7 @@ The metadata model is exposed through [`IEntityMetadata.Relationships`](xref:Nex
 
 ## See also
 
-- [Eager loading child collections (`LoadWith`)](eager-loading.md) — the split-query alternative.
+- [Eager loading child collections (`LoadWith`)](eager-loading.md) — the alternative loader (split-query by default, single-query with `AsSingleQuery()`).
 - [Joins](../guide/02-joins.md) — the explicit join surface.
 - [Entities and metadata](../getting-started/03-entities-and-metadata.md) — key and column mapping.
 

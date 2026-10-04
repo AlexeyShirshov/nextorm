@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Runtime.CompilerServices;
@@ -7,8 +8,10 @@ namespace NextORM.Core;
 /// <summary>
 /// The result of a raw command (<see cref="IRawCommandExecutor.ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/>)
 /// or a stored procedure (<see cref="IRawCommandExecutor.ExecuteProcedure(string, IReadOnlyList{ProcedureParameter})"/>).
-/// Owns the command and its data reader until disposed; result sets are read sequentially with
-/// <see cref="Read{T}"/> / <see cref="ReadAsync{T}"/>, each call advancing to the next set.
+/// Owns the command and its data reader until disposed. The result object itself enumerates its
+/// column-bearing result sets: <c>foreach (var set in result)</c> or <c>await foreach (var set in result)</c>
+/// yields a <see cref="ResultSet"/> cursor per set. The legacy <see cref="Read{T}"/> / <see cref="ReadAsync{T}"/>
+/// path reads sets positionally, each call advancing to the next set.
 /// </summary>
 /// <remarks>
 /// The first <c>Read</c> skips leading result sets without columns (DDL/DML statements executed before
@@ -17,7 +20,7 @@ namespace NextORM.Core;
 /// remaining result sets) so providers can populate ADO.NET output parameters. The connection stays
 /// owned by the context and is never closed by this object.
 /// </remarks>
-public sealed class ProcedureResult : IAsyncDisposable, IDisposable
+public sealed class ProcedureResult : IAsyncDisposable, IDisposable, IEnumerable<ResultSet>, IAsyncEnumerable<ResultSet>, IResultSetCursorSource
 {
     private readonly DataContext _context;
     private readonly CommandReaderOwner _owner;
@@ -69,11 +72,11 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
     }
 
     /// <summary>
-    /// Enumerates the column-bearing result sets of the command in order, yielding a <see cref="ResultSet"/>
-    /// cursor for each. Leading, intermediate and trailing result sets without columns (DDL/DML) are
-    /// skipped and do not count toward <see cref="ResultSet.Index"/>; a set with columns but no rows is
-    /// still yielded. Each set can be consumed once, eagerly with <see cref="ResultSet.Read{T}"/> or lazily
-    /// with <see cref="ResultSet.ReadAsync{T}"/>.
+    /// Returns an enumerator over the column-bearing result sets of the command in order, yielding a
+    /// <see cref="ResultSet"/> cursor for each. Leading, intermediate and trailing result sets without
+    /// columns (DDL/DML) are skipped and do not count toward <see cref="ResultSet.Index"/>; a set with
+    /// columns but no rows is still yielded. Each set can be consumed once, eagerly with
+    /// <see cref="ResultSet.Read{T}"/> or lazily with <see cref="ResultSet.ReadAsync{T}"/>.
     /// </summary>
     /// <returns>A one-shot, forward-only sequence of result-set cursors; empty when there is none.</returns>
     /// <remarks>
@@ -84,28 +87,30 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
     /// </remarks>
     /// <exception cref="InvalidOperationException">Result sets were already traversed or read another way.</exception>
     /// <exception cref="ObjectDisposedException">The result has been disposed.</exception>
-    public IEnumerable<ResultSet> ReadSets()
+    public IEnumerator<ResultSet> GetEnumerator()
     {
         ThrowIfDisposed();
         ThrowIfReaderClosed();
         BeginSetTraversal();
-        return ReadSetsCore();
+        return ReadSetsCore().GetEnumerator();
     }
 
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
     /// <summary>
-    /// Asynchronously enumerates the column-bearing result sets of the command in order, yielding a
-    /// <see cref="ResultSet"/> cursor for each. See <see cref="ReadSets"/> for the traversal semantics.
+    /// Returns an async enumerator over the column-bearing result sets of the command in order, yielding a
+    /// <see cref="ResultSet"/> cursor for each. See <see cref="GetEnumerator"/> for the traversal semantics.
     /// </summary>
     /// <param name="cancellationToken">Cancels the traversal (including a slow provider move).</param>
     /// <returns>A one-shot, forward-only async sequence of result-set cursors; empty when there is none.</returns>
     /// <exception cref="InvalidOperationException">Result sets were already traversed or read another way.</exception>
     /// <exception cref="ObjectDisposedException">The result has been disposed.</exception>
-    public IAsyncEnumerable<ResultSet> ReadSetsAsync(CancellationToken cancellationToken = default)
+    public IAsyncEnumerator<ResultSet> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         ThrowIfReaderClosed();
         BeginSetTraversal();
-        return ReadSetsAsyncCore(cancellationToken);
+        return ReadSetsAsyncCore(cancellationToken).GetAsyncEnumerator(cancellationToken);
     }
 
     /// <summary>
@@ -275,10 +280,10 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
             throw AlreadyEnumerated();
 
         _setsEnumerated = true;
-        // Outputs may have drained the reader between ReadSets() and the first MoveNext; the already
+        // Outputs may have drained the reader between GetEnumerator() and the first MoveNext; the already
         // returned sequence must not resurrect it.
         ThrowIfReaderClosed();
-        // Activation happens on the first MoveNext, not when ReadSets() was called, so an
+        // Activation happens on the first MoveNext, not when GetEnumerator() was called, so an
         // un-enumerated sequence does not block OutputParameters/ReturnValue.
         _traversalActive = true;
 
@@ -377,13 +382,18 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
             yield return mapper(reader);
     }
 
+    IReadOnlyList<T> IResultSetCursorSource.ReadCurrentSet<T>(ResultSet cursor) => ReadCurrentSet<T>(cursor);
+
+    IAsyncEnumerable<T> IResultSetCursorSource.ReadCurrentSetAsync<T>(ResultSet cursor, CancellationToken cancellationToken)
+        => ReadCurrentSetAsync<T>(cursor, cancellationToken);
+
     private DbDataReader BeginCursorRead(ResultSet cursor)
     {
         ThrowIfDisposed();
         ThrowIfReaderClosed();
 
         if (!cursor.IsInitialized
-            || !ReferenceEquals(cursor.Owner, this)
+            || !ReferenceEquals(cursor.Source, this)
             || !_traversalActive
             || cursor.Index != _resultSetIndex)
         {
@@ -428,7 +438,7 @@ public sealed class ProcedureResult : IAsyncDisposable, IDisposable
     private void ThrowIfSetTraversalStarted()
     {
         if (_setsStarted)
-            throw new InvalidOperationException("Result sets are being read with ReadSets/ReadSetsAsync; Read<T>/ReadAsync<T> cannot be mixed with that traversal.");
+            throw new InvalidOperationException("Result sets are being enumerated; Read<T>/ReadAsync<T> cannot be mixed with that traversal.");
     }
 
     private static InvalidOperationException AlreadyEnumerated()

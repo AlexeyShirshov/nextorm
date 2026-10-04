@@ -1,6 +1,6 @@
 # Eager loading child collections (`LoadWith`)
 
-> `LoadWith` fills a parent-side collection with one extra child query per key chunk — two round trips for at most 1000 parents, never N+1 — and stitches the children onto the already materialized parents in memory. Split is the default; call `AsSingleQuery()` to fetch the parents and every declared collection in one denormalized round trip instead.
+> `LoadWith` fills a parent-side collection and stitches the children onto the already materialized parents in memory. Split-query is the default — one extra child query per key chunk, two round trips for at most 1000 parents, never N+1 — and `AsSingleQuery()` fetches the parents and every declared collection in one denormalized round trip instead.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Joins](../guide/02-joins.md) · [Correlated queries](../guide/05-subqueries.md)
 
@@ -48,6 +48,14 @@ The declaration is **not** part of the parent SQL. After the parent query is mat
 
 A query with at most 1000 distinct parent keys therefore issues exactly **two round trips**: one parent statement and one child statement. Larger key sets add one child statement per additional chunk; the parent statement still runs once. There is no N+1: the number of child statements depends on the size of the key set, not on the number of parents.
 
+```sql
+-- parent statement
+select id, name from order
+
+-- child statement (one per chunk of at most 1000 distinct parent keys)
+select id, order_id, name from order_item where order_id in (@k0, @k1, @k2)
+```
+
 The chunk predicate is an ordinary `IN` list, so it participates in the plan cache and provider parameter binding exactly like a captured-collection `Contains`.
 
 When `ToListAsync`/`ToArrayAsync` is cancelled, the token is checked between key chunks and between multiple `LoadWith` declarations, so a cancelled call stops issuing further child statements.
@@ -62,6 +70,22 @@ var orders = ctx.From<Order>()
     .LoadWith(o => o.Items, c => c.From<OrderItem>(), o => o.Id, i => i.OrderId)
     .AsSingleQuery()
     .ToList();
+```
+
+The builder then emits one denormalized command instead of the two statements above:
+
+```sql
+select t1.id, t1.name, t2.id, t2.order_id, t2.name
+from order as t1
+left join order_item as t2 on t1.id = t2.order_id
+```
+
+A child `Where` is folded into the join `ON`, so it filters the children without dropping childless parents:
+
+```sql
+select t1.id, t1.name, t2.id, t2.order_id, t2.name
+from order as t1
+left join order_item as t2 on t1.id = t2.order_id and t2.active
 ```
 
 - **One round trip, no key chunking.** The parent source and each declared child are joined in a single `LEFT JOIN` command. There is no `IN` list and no chunk size, so any number of parents — including more than 1000 distinct keys — is fetched by the same command, and there is no silent fallback to split.

@@ -148,7 +148,7 @@ public abstract partial class CommonTestSuite
         var indices = new List<int>();
         var ints = new List<int>();
         var strings = new List<string>();
-        foreach (var set in result.ReadSets())
+        foreach (var set in result)
         {
             indices.Add(set.Index);
             if (set.Index == 0)
@@ -174,7 +174,7 @@ public abstract partial class CommonTestSuite
 
         var ints = new List<int>();
         var strings = new List<string>();
-        await foreach (var set in result.ReadSetsAsync(ct))
+        await foreach (var set in result.WithCancellation(ct))
         {
             if (set.Index == 0)
             {
@@ -210,7 +210,7 @@ public abstract partial class CommonTestSuite
 
         var indices = new List<int>();
         var values = new List<int>();
-        foreach (var set in result.ReadSets())
+        foreach (var set in result)
         {
             indices.Add(set.Index);
             values.Add(set.Read<int>().Single());
@@ -229,7 +229,7 @@ public abstract partial class CommonTestSuite
 
         using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
-        using var sets = result.ReadSets().GetEnumerator();
+        using var sets = result.GetEnumerator();
         sets.MoveNext().Should().BeTrue();
         var first = sets.Current;
         sets.MoveNext().Should().BeTrue();
@@ -248,7 +248,7 @@ public abstract partial class CommonTestSuite
 
         using var result = ctx.ExecuteRaw("select 1 as a, 2 as b; select 3 as c");
 
-        using var sets = result.ReadSets().GetEnumerator();
+        using var sets = result.GetEnumerator();
         sets.MoveNext().Should().BeTrue();
         var first = sets.Current;
         sets.MoveNext().Should().BeTrue();
@@ -268,7 +268,7 @@ public abstract partial class CommonTestSuite
 
         using var result = ctx.ExecuteRaw("select 1 as a union all select 10; select 2 as b");
 
-        using var sets = result.ReadSets().GetEnumerator();
+        using var sets = result.GetEnumerator();
         sets.MoveNext().Should().BeTrue();
         // Deliberately leave set 0's rows unread: advancing must auto-skip them.
         sets.MoveNext().Should().BeTrue();
@@ -285,7 +285,7 @@ public abstract partial class CommonTestSuite
         using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
         var indices = new List<int>();
-        foreach (var set in result.ReadSets())
+        foreach (var set in result)
         {
             indices.Add(set.Index);
             set.Read<int>().Should().NotBeEmpty();
@@ -309,7 +309,7 @@ public abstract partial class CommonTestSuite
         // Reading outputs first closes the reader; the result sets are gone.
         result.OutputParameters.Should().BeEmpty();
 
-        Action act = () => result.ReadSets().ToList();
+        Action act = () => result.ToList();
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -323,7 +323,7 @@ public abstract partial class CommonTestSuite
 
         using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
-        foreach (var set in result.ReadSets())
+        foreach (var set in result)
         {
             set.Read<int>().Should().Equal(1);
             break;

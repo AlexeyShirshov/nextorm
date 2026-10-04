@@ -120,6 +120,14 @@ var pairs = dataContext.From(recent)
     .ToList();
 ```
 
+```sql
+-- SQLite: heterogeneous descriptors
+with recent as (select id as 'Id', somestring as 'String' from complex_entity), other as (select id as 'Id' from simple_entity) select t1.Id, t1.String, t2.Id from recent as 't1' join other as 't2' on t1.Id = cast(t2.Id as bigint)
+
+-- SQLite: self-join of one descriptor -> one declaration, two aliases
+with recent as (select id as 'Id', somestring as 'String' from complex_entity) select t1.Id, t2.Id from recent as 't1' join recent as 't2' on t1.Id = t2.Id
+```
+
 Dependencies are hoisted automatically: `From(Cte<T>)` attaches the descriptor's declaration together with
 every declaration its body transitively references (nested CTE bodies, joins, derived subqueries,
 set-operation branches), ordered dependency-before-consumer, and omits declarations the body carries but never

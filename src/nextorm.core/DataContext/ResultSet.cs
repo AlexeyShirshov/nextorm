@@ -1,12 +1,11 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// A single column-bearing result set of a raw command or stored procedure, produced by
-/// <see cref="ProcedureResult.ReadSets"/> / <see cref="ProcedureResult.ReadSetsAsync"/>.
-/// The cursor is valid only while its set is the current one: reading after the outer traversal has
-/// advanced or ended, after a previous read of the same set, or through an uninitialized default value
-/// throws <see cref="InvalidOperationException"/>; reading after the owning result was disposed throws
-/// <see cref="ObjectDisposedException"/>.
+/// A single column-bearing result set of a multi-result command, produced by enumerating
+/// <see cref="ProcedureResult"/> or <see cref="BatchResult"/>. The cursor is valid only while its set is
+/// the current one: reading after the outer traversal has advanced or ended, after a previous read of
+/// the same set, or through an uninitialized default value throws <see cref="InvalidOperationException"/>;
+/// reading after the owning result was disposed throws <see cref="ObjectDisposedException"/>.
 /// </summary>
 /// <remarks>
 /// <see cref="ColumnNames"/> is snapshotted when the cursor is produced and stays readable after the
@@ -15,13 +14,13 @@ namespace NextORM.Core;
 /// </remarks>
 public readonly struct ResultSet
 {
-    private readonly ProcedureResult? _owner;
+    private readonly IResultSetCursorSource? _source;
     private readonly int _index;
     private readonly string[]? _columnNames;
 
-    internal ResultSet(ProcedureResult owner, int index, string[] columnNames)
+    internal ResultSet(IResultSetCursorSource source, int index, string[] columnNames)
     {
-        _owner = owner;
+        _source = source;
         _index = index;
         _columnNames = columnNames;
     }
@@ -41,9 +40,9 @@ public readonly struct ResultSet
     /// <exception cref="InvalidOperationException">The cursor is uninitialized, stale, already read, or the traversal has ended.</exception>
     /// <exception cref="ObjectDisposedException">The owning result has been disposed.</exception>
     public IReadOnlyList<T> Read<T>()
-        => _owner is null
+        => _source is null
             ? throw new InvalidOperationException("The result-set cursor is not initialized.")
-            : _owner.ReadCurrentSet<T>(this);
+            : _source.ReadCurrentSet<T>(this);
 
     /// <summary>Lazily reads the rows of this result set into <typeparamref name="T"/>.</summary>
     /// <typeparam name="T">A mapped entity type or a scalar type (see <see cref="IRawCommandExecutor"/>).</typeparam>
@@ -52,11 +51,11 @@ public readonly struct ResultSet
     /// <exception cref="InvalidOperationException">The cursor is uninitialized, stale, already read, or the traversal has ended.</exception>
     /// <exception cref="ObjectDisposedException">The owning result has been disposed.</exception>
     public IAsyncEnumerable<T> ReadAsync<T>(CancellationToken ct = default)
-        => _owner is null
+        => _source is null
             ? throw new InvalidOperationException("The result-set cursor is not initialized.")
-            : _owner.ReadCurrentSetAsync<T>(this, ct);
+            : _source.ReadCurrentSetAsync<T>(this, ct);
 
-    internal ProcedureResult? Owner => _owner;
+    internal IResultSetCursorSource? Source => _source;
 
-    internal bool IsInitialized => _owner is not null;
+    internal bool IsInitialized => _source is not null;
 }

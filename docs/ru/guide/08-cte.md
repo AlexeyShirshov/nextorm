@@ -121,6 +121,14 @@ var pairs = dataContext.From(recent)
     .ToList();
 ```
 
+```sql
+-- SQLite: разнородные дескрипторы
+with recent as (select id as 'Id', somestring as 'String' from complex_entity), other as (select id as 'Id' from simple_entity) select t1.Id, t1.String, t2.Id from recent as 't1' join other as 't2' on t1.Id = cast(t2.Id as bigint)
+
+-- SQLite: self-join одного дескриптора -> одно объявление, два алиаса
+with recent as (select id as 'Id', somestring as 'String' from complex_entity) select t1.Id, t2.Id from recent as 't1' join recent as 't2' on t1.Id = t2.Id
+```
+
 Зависимости поднимаются автоматически: `From(Cte<T>)` присоединяет объявление дескриптора вместе с каждым
 объявлением, на которое его тело транзитивно ссылается (вложенные тела CTE, join, derived-подзапросы, ветви
 set-операций), в порядке «зависимость раньше потребителя», и опускает объявления, которые тело несёт, но

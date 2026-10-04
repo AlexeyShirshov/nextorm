@@ -107,7 +107,7 @@ public class ProcedureResultSetsBenchmark
     {
         using var result = _db.ExecuteRaw(SelectSetsSql);
         var checksum = 0L;
-        foreach (var set in result.ReadSets())
+        foreach (var set in result)
             checksum = FoldRows(set.Read<int>(), checksum);
 
         return checksum;
@@ -129,7 +129,7 @@ public class ProcedureResultSetsBenchmark
     {
         await using var result = await _db.ExecuteRawAsync(SelectSetsSql);
         var checksum = 0L;
-        await foreach (var set in result.ReadSetsAsync())
+        await foreach (var set in result)
         {
             await foreach (var row in set.ReadAsync<int>())
                 checksum = Mix(checksum, row);

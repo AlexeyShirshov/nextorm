@@ -187,8 +187,17 @@ var result = ctx.CreateBatchBuilder()
         .Select(x => new OrderLine(x.Id, x.Status)))
     .Execute();
 
-var open = result.Read<OrderTotal>();       // first added query
-var shipped = result.Read<OrderLine>();     // second added query
+foreach (var set in result)
+{
+    if (set.Index == 0)
+    {
+        IReadOnlyList<OrderTotal> open = set.Read<OrderTotal>();
+    }
+    else
+    {
+        IReadOnlyList<OrderLine> shipped = set.Read<OrderLine>();
+    }
+}
 ```
 
 The two queries go to the database as **one** batch — one round trip, one server session:
@@ -203,14 +212,14 @@ select id, status from orders
 
 `AddQuery` returns the builder, so several calls chain. Every result query must follow the side-effecting statements: a materialisation or DML step added after the first `AddQuery` throws `InvalidOperationException`. `AddQuery` and `Query` are mutually exclusive — `Query` ends the batch, so a later `AddQuery` throws, and `Query` after `AddQuery` throws too. `Execute()`/`ExecuteAsync()` with no result query added throws `InvalidOperationException`.
 
-They return a [`BatchResult`](xref:NextORM.Core.BatchResult):
+`Execute()` returns a [`BatchResult`](xref:NextORM.Core.BatchResult). As with a raw [`ProcedureResult`](12-raw-sql.md#multiple-result-sets), the result object itself is enumerable: `foreach (var set in result)` or `await foreach (var set in result)` yields a [`ResultSet`](xref:NextORM.Core.ResultSet) cursor per set, in the order the queries were added. Each cursor exposes `Index`, `FieldCount` and `ColumnNames`, and reads **its own** set with a per-set `T` through `Read<T>()` or `ReadAsync<T>(ct)`. `BatchResult` also keeps the positional path:
 
 | Member | Effect |
 |---|---|
 | `ResultSetCount` | The number of result sets the batch produced. |
-| `Read<TResult>()` | Returns the next set, in the order the queries were added; each set is read once. |
+| `Read<TResult>()` | Returns the next set positionally, in the order the queries were added; each set is read once. |
 
-`Read<TResult>()` is typed: the requested type must match the projected type of the next query, otherwise it throws `InvalidOperationException`; reading past the last set throws `InvalidOperationException` as well. `BatchResult` is **eager** and owns no reader or connection — every set is buffered before `Execute()` returns, so it is not disposable and does not stream.
+`Read<TResult>()` is typed: the requested type must match the projected type of the next query, otherwise it throws `InvalidOperationException` **without consuming the set**; reading past the last set throws `InvalidOperationException` as well. Enumerating the result and the positional `Read<TResult>()` cannot be mixed — either usage throws `InvalidOperationException`. `BatchResult` is **eager** and owns no reader or connection — every set is buffered before `Execute()` returns, so it is not disposable and does not stream. That buffering is the only difference from the streaming `ProcedureResult`; the cursor surface and the one-shot traversal rules are identical — see [Multiple result sets](12-raw-sql.md#multiple-result-sets) for the full cursor contract.
 
 For a batch with a single result the `Query<TResult>` terminal still renders without executing through `BatchQuery<TResult>.ToSql()`, and the multi-result `AddQuery`/`Execute` form renders the whole batch without executing through `BatchBuilder.ToSql()` — both render the same text that execution runs, and `BatchBuilder.ToSql()` requires at least one result step (it throws `InvalidOperationException` otherwise).
 
@@ -230,7 +239,7 @@ The capability is [`ISqlDialect.SupportsBatch`](xref:NextORM.Core.ISqlDialect.Su
 ## Limitations
 
 * A batch ends with one or more result-bearing queries — one added with the `Query<TResult>` terminal, several with `AddQuery<TResult>` and `Execute`/`ExecuteAsync` — and they are the last statements. The statements before them are side-effecting — materialisations, DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`) and raw SQL steps — which return no columns.
-* Multi-result execution is **sequential and eager**: `BatchResult.Read<TResult>()` returns the sets in the order the queries were added, each set may be read once, and every set is fully buffered in memory before `Execute()`/`ExecuteAsync()` returns — there is no streaming and no random access. Only the single-result `BatchQuery<TResult>` terminal streams, through `ToAsyncEnumerable`.
+* Multi-result execution is **sequential and eager**: `BatchResult` yields its sets in the order the queries were added (through enumeration or `Read<TResult>()`), each set may be read once, and every set is fully buffered in memory before `Execute()`/`ExecuteAsync()` returns — there is no streaming and no random access. Only the single-result `BatchQuery<TResult>` terminal streams, through `ToAsyncEnumerable`.
 * A mutation added to a batch may not request returned rows: `Returning()`/`ReturningIdentity()` terminals produce a different builder type and are not accepted. Multi-table `CreateUpdateJoinBuilder`/`DeleteJoin` and `Merge` are not batch steps. Raw SQL/DDL is expressible as a verbatim step through `Raw(sql)` — see [Raw steps](#raw-steps).
 * `ToSql()` shows the `;`-joined text without executing: on the single-result `BatchQuery<TResult>` terminal and on `BatchBuilder` for the multi-result `AddQuery`/`Execute` form (`BatchBuilder.ToSql()` renders the whole batch and requires at least one result step). On a `DbBatch` provider the statements are still sent as separate commands of one batch when the batch executes.
 * Batch execution is **not** routed through the query interceptors: their events carry a `DbCommand`, while a `DbBatch` command is a `DbBatchCommand`.

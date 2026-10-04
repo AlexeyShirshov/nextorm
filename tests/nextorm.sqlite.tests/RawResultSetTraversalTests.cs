@@ -35,7 +35,7 @@ public class RawResultSetTraversalTests
             var fields = new List<int>();
             var names = new List<IReadOnlyList<string>>();
             var values = new List<int>();
-            foreach (var set in result.ReadSets())
+            foreach (var set in result)
             {
                 indices.Add(set.Index);
                 fields.Add(set.FieldCount);
@@ -68,7 +68,7 @@ public class RawResultSetTraversalTests
 
             var indices = new List<int>();
             var counts = new List<int>();
-            foreach (var set in result.ReadSets())
+            foreach (var set in result)
             {
                 indices.Add(set.Index);
                 counts.Add(set.Read<int>().Count);
@@ -95,7 +95,7 @@ public class RawResultSetTraversalTests
             var fields = new List<int>();
             var counts = new List<int>();
             var values = new List<int>();
-            foreach (var set in result.ReadSets())
+            foreach (var set in result)
             {
                 fields.Add(set.FieldCount);
                 counts.Add(set.Read<int>().Count);
@@ -121,7 +121,7 @@ public class RawResultSetTraversalTests
         {
             using var result = ctx.ExecuteRaw("create table rs_empty (id integer)");
 
-            result.ReadSets().Should().BeEmpty();
+            result.Should().BeEmpty();
         }
         finally
         {
@@ -138,7 +138,7 @@ public class RawResultSetTraversalTests
         {
             using var result = ctx.ExecuteRaw("select 1 as a union all select 10; select 2 as b");
 
-            using var enumerator = result.ReadSets().GetEnumerator();
+            using var enumerator = result.GetEnumerator();
             enumerator.MoveNext().Should().BeTrue();
             // Deliberately do not consume set 0's rows.
             enumerator.MoveNext().Should().BeTrue();
@@ -159,7 +159,7 @@ public class RawResultSetTraversalTests
         {
             using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
-            using var enumerator = result.ReadSets().GetEnumerator();
+            using var enumerator = result.GetEnumerator();
             enumerator.MoveNext().Should().BeTrue();
             var first = enumerator.Current;
             enumerator.MoveNext().Should().BeTrue();
@@ -183,7 +183,7 @@ public class RawResultSetTraversalTests
         {
             using var result = ctx.ExecuteRaw("select 1 as a");
 
-            using var enumerator = result.ReadSets().GetEnumerator();
+            using var enumerator = result.GetEnumerator();
             enumerator.MoveNext().Should().BeTrue();
             var cursor = enumerator.Current;
             cursor.Read<int>().Should().Equal(1);
@@ -208,7 +208,7 @@ public class RawResultSetTraversalTests
             using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
             result.Read<int>().Should().Equal(1);
 
-            Action act = () => result.ReadSets();
+            Action act = () => result.GetEnumerator();
 
             act.Should().Throw<InvalidOperationException>();
         }
@@ -227,7 +227,7 @@ public class RawResultSetTraversalTests
         {
             using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
-            using var enumerator = result.ReadSets().GetEnumerator();
+            using var enumerator = result.GetEnumerator();
             enumerator.MoveNext().Should().BeTrue();
 
             Action act = () => result.Read<int>();
@@ -248,7 +248,7 @@ public class RawResultSetTraversalTests
         try
         {
             using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
-            var sets = result.ReadSets();
+            IEnumerable<ResultSet> sets = result;
             sets.ToList();
 
             Action act = () => sets.ToList();
@@ -271,7 +271,7 @@ public class RawResultSetTraversalTests
             using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
             ResultSet cursor;
-            using (var enumerator = result.ReadSets().GetEnumerator())
+            using (var enumerator = result.GetEnumerator())
             {
                 enumerator.MoveNext().Should().BeTrue();
                 cursor = enumerator.Current;
@@ -300,7 +300,7 @@ public class RawResultSetTraversalTests
 
             Action act = () =>
             {
-                foreach (var set in result.ReadSets())
+                foreach (var set in result)
                 {
                     set.Index.Should().Be(0);
                     _ = result.OutputParameters;
@@ -336,7 +336,7 @@ public class RawResultSetTraversalTests
             var indices = new List<int>();
             var names = new List<IReadOnlyList<string>>();
             var values = new List<int>();
-            await foreach (var set in result.ReadSetsAsync(ct))
+            await foreach (var set in result.WithCancellation(ct))
             {
                 indices.Add(set.Index);
                 names.Add(set.ColumnNames);
@@ -366,7 +366,7 @@ public class RawResultSetTraversalTests
         {
             using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
-            _ = result.ReadSets(); // one-shot sequence is never enumerated
+            _ = result.GetEnumerator(); // one-shot sequence is never enumerated
 
             result.OutputParameters.Should().BeEmpty();
             result.ReturnValue.Should().BeNull();
@@ -387,7 +387,7 @@ public class RawResultSetTraversalTests
             var ct = TestContext.Current.CancellationToken;
             await using var result = await ctx.ExecuteRawAsync("select 1 as a; select 2 as b", [], ct);
 
-            _ = result.ReadSetsAsync(ct); // one-shot sequence is never enumerated
+            _ = result.WithCancellation(ct); // one-shot sequence is never enumerated
 
             result.OutputParameters.Should().BeEmpty();
             result.ReturnValue.Should().BeNull();
@@ -407,7 +407,7 @@ public class RawResultSetTraversalTests
         {
             using var result = ctx.ExecuteRaw("select 1 as a; select 2 as b");
 
-            var sets = result.ReadSets();
+            IEnumerable<ResultSet> sets = result;
             // Draining outputs after the sequence was obtained closes the reader; enumerating the
             // already-returned sequence afterwards must fail instead of reviving the closed reader.
             result.OutputParameters.Should().BeEmpty();
@@ -434,7 +434,7 @@ public class RawResultSetTraversalTests
             var ct = TestContext.Current.CancellationToken;
             await using var result = await ctx.ExecuteRawAsync("select 1 as a; select 2 as b", [], ct);
 
-            var outer = result.ReadSetsAsync(ct).GetAsyncEnumerator(ct);
+            var outer = result.GetAsyncEnumerator(ct);
             try
             {
                 (await outer.MoveNextAsync()).Should().BeTrue();
@@ -478,7 +478,7 @@ public class RawResultSetTraversalTests
             var ct = TestContext.Current.CancellationToken;
             await using var result = await ctx.ExecuteRawAsync("select 1 as a; select 2 as b", [], ct);
 
-            var outer = result.ReadSetsAsync(ct).GetAsyncEnumerator(ct);
+            var outer = result.GetAsyncEnumerator(ct);
             try
             {
                 (await outer.MoveNextAsync()).Should().BeTrue();
@@ -516,7 +516,7 @@ public class RawResultSetTraversalTests
             var ct = TestContext.Current.CancellationToken;
             await using var result = await ctx.ExecuteRawAsync("select 1 as a", [], ct);
 
-            var outer = result.ReadSetsAsync(ct).GetAsyncEnumerator(ct);
+            var outer = result.GetAsyncEnumerator(ct);
             try
             {
                 (await outer.MoveNextAsync()).Should().BeTrue();
@@ -557,7 +557,7 @@ public class RawResultSetTraversalTests
             var ct = TestContext.Current.CancellationToken;
             await using var result = await ctx.ExecuteRawAsync("select 1 as a; select 2 as b", [], ct);
 
-            var sets = result.ReadSetsAsync(ct);
+            IAsyncEnumerable<ResultSet> sets = result;
             await foreach (var set in sets)
             {
                 await foreach (var _ in set.ReadAsync<int>(ct))
@@ -588,7 +588,7 @@ public class RawResultSetTraversalTests
         try
         {
             var result = ctx.ExecuteRaw("select 1 as a");
-            using var enumerator = result.ReadSets().GetEnumerator();
+            using var enumerator = result.GetEnumerator();
             enumerator.MoveNext().Should().BeTrue();
             var cursor = enumerator.Current;
 
@@ -614,7 +614,7 @@ public class RawResultSetTraversalTests
             var ct = TestContext.Current.CancellationToken;
             await using var result = await ctx.ExecuteRawAsync("select 1 as a", [], ct);
 
-            var outer = result.ReadSetsAsync(ct).GetAsyncEnumerator(ct);
+            var outer = result.GetAsyncEnumerator(ct);
             (await outer.MoveNextAsync()).Should().BeTrue();
             var cursor = outer.Current;
 
@@ -651,7 +651,7 @@ public class RawResultSetTraversalTests
 
             Func<Task> act = async () =>
             {
-                await foreach (var _ in result.ReadSetsAsync(cts.Token))
+                await foreach (var _ in result.WithCancellation(cts.Token))
                 {
                 }
             };
@@ -659,7 +659,7 @@ public class RawResultSetTraversalTests
             await act.Should().ThrowAsync<OperationCanceledException>();
 
             // The cancelled traversal consumed the single allowed traversal; restart is rejected.
-            Action restart = () => result.ReadSets();
+            Action restart = () => result.GetEnumerator();
             restart.Should().Throw<InvalidOperationException>();
         }
         finally

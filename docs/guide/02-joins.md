@@ -312,6 +312,45 @@ Correlation needs a lateral source: dialects with `SupportsApply == false` (SQLi
 correlated apply with `NotSupportedException`, as does the in-memory provider. A correlated apply cannot
 reference a join projection; apply it to a single-entity source instead.
 
+### APPLY over a table-valued function
+
+The applied source can be a table-valued function (see [Table-valued functions](11-table-valued-functions.md)):
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) returns an `EntityBuilder<T>`, so it is passed exactly like an entity. An uncorrelated function is applied directly:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .CrossApply(dataContext.FromTableFunction(() => Tvf.AllRows()))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t2.value from simple_entity as [t1] cross apply all_rows() as [t2]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t2.value from simple_entity as t1 cross join lateral all_rows() as t2
+```
+
+Correlating the function with the left-hand row passes that row's column as a function argument; the call is then wrapped in a lateral derived table:
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .CrossApply(s => dataContext.FromTableFunction(() => Tvf.ById(s.Id)))
+    .Select(p => new { p.Item1.Id, p.Item2.Value })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+select t1.id, t3.value from simple_entity as [t1] cross apply (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as [t2]) as [t3]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t3.value from simple_entity as t1 cross join lateral (select t2.id, t2.value from rows_by_id(cast(t1.id as bigint)) as t2) as t3
+```
+
+Like every correlated apply, the correlated function form needs a lateral source and is rejected with
+`NotSupportedException` on SQLite/ClickHouse and in the in-memory provider; the uncorrelated form follows
+the provider's source rules (`CROSS APPLY` on SQL Server, `CROSS JOIN LATERAL` on PostgreSQL/MySQL/MariaDB).
+
 ## Joining a subquery
 
 A `QueryCommand<T>` can be joined directly. It is wrapped in parentheses and aliased as a derived
