@@ -31,11 +31,11 @@
 ## Общая верификация и восстановление (Common verification and recovery)
 
 - parent verification: **not run** — both groups `done`; collection CHECK pending; `git merge --no-ff` pending
-- verification state: corrective
-- defect id/history: C-scope-1 — removed out-of-scope specs (6556c86 fix)
-- last C: FAIL (P2 scope contamination in 6556c86) — corrective applied
+- verification state: re-check pending
+- defect id/history: C-scope-1 (fixed); C-evidence-1 (rv=5 applicability N/A)
+- last C: contract rv=5 recorded; delivered-tree gates re-run
 - reason: 4 out-of-scope files merged; removed from index (preserved on disk)
-- next allowed step: full collection CHECK re-run on frozen HEAD 52c4b3ad7e3a97e4ac765d8ab1c962dcaa8ad1e6
+- next allowed step: parent collection CHECK on 52c4b3a
 - history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
 - group-1 done: #183 DONE (with limitation) — B1/B2 rejected/reverted (attributable time speedup not provable on shared host); patches preserved; #166 not triggered.
 

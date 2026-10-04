@@ -137,3 +137,18 @@ Resolve B1 honestly by re-measuring with the approved methodology; implement and
 - CHECK re-gather: one targeted batch owned by `check`. ACT allowlist: `iteration-15-cached-path-results.md` + this status file only; B1/B2 patches remain uncommitted. Issue action: comment/close #183 as DONE (with limitation) after a passing CHECK.
 ---
 - ACT: CHECK PASS (r=3/rv=4 reconciled) → #183 DONE (with limitation); committing results.md + this status file.
+
+## Contract revision rv=5 (r+1, collection C closeout)
+P: Close the U1 applicability gap without weakening delivered-tree acceptance; plan r+1, evidence contract rv=5.
+Supersession: rv=5 supersedes rv=4 ONLY for the G1-CACHE/U1 applicability predicate. Every other stable requirement/row ID, obligation, verification scenario, evidence kind/source, exact command, exit/result/log requirement, artifact requirement, owner, predicate and CHECK re-gather budget is preserved verbatim.
+- G1-CACHE/U1 — N/A; predicate: "unit not in the delivered tree; B1 patch sha256 0be74f92… preserved on disk, not delivered"; owner CHECK; rv=5.
+- G1-PERF/U1 — satisfied via authorized fallback (c); unchanged.
+- G1-PERF/U2 — superseded (AC2-REJECT-01); unchanged.
+- G1-CACHE/U2 — moot (verified revert); unchanged.
+- G1-PERF/U3 — N/A; G1-CACHE/U3 — N/A; unchanged.
+- G1-CTE/U1–U3 — N/A, CTE-touch predicate false; unchanged.
+Delivered-tree gates re-run fresh on `13d94a0` (code-identical to `52c4b3a`) → `/tmp/opencode/coll-c/rv5/`:
+- build `dotnet build nextorm.slnx -c Debug` → exit 0; `Build succeeded. 0 Warning(s) 0 Error(s)`; log `/tmp/opencode/coll-c/rv5/build.log`.
+- core `dotnet test tests/nextorm.core.tests -c Debug` → exit 0; Total 1482 / Passed 1482 / Failed 0 / Skipped 0; log `/tmp/opencode/coll-c/rv5/test-core.log`.
+- sqlite `dotnet test tests/nextorm.sqlite.tests -c Debug` → exit 0; Total 1003 / Passed 1002 / Failed 0 / Skipped 1 (env-gated `SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded`, `NEXTORM_LOB_SQLITE_PROBE=1`; skip is not a pass); log `/tmp/opencode/coll-c/rv5/test-sqlite.log`.
+- docs lens retained; no `src/**` change. NO performance improvement is claimed. Disposition remains DONE (with limitation).
