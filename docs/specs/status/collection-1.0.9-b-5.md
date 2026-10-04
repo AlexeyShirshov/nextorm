@@ -30,18 +30,26 @@
 
 ## Общая верификация и восстановление (Common verification and recovery)
 
-- parent verification: **not run** — both groups `done`; collection CHECK pending; `git merge --no-ff` pending
-- verification state: re-check pending
-- defect id/history: C-scope-1 (fixed); C-evidence-1 (rv=5 applicability N/A)
-- last C: contract rv=5 recorded; delivered-tree gates re-run
-- reason: 4 out-of-scope files merged; removed from index (preserved on disk)
-- next allowed step: parent CHECK (rv=5 appendices attached)
+- last C: FAIL — parent CHECK not certifiable (evidence-completeness gate)
+- reason: (i) mandatory-evidence gate not closable within CHECK budget; (ii) EXTERNAL commit 158233f #186 (5 src/** + tests/docs) interleaved into 1.0.9-b during the collection by a concurrent session — out of this collection's scope/ownership; the integrated tree is therefore not a clean collection snapshot
+- verification state: unverified (STOP)
+- defect id/history: C-scope-1 (fixed); C-evidence-1 (rv=5 N/A recorded); C-external-186 (open, external)
+- next allowed step: user decision — either re-run collection C excluding the external #186 work, or re-run once the concurrent session settles
 - history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
 - group-1 done: #183 DONE (with limitation) — B1/B2 rejected/reverted (attributable time speedup not provable on shared host); patches preserved; #166 not triggered.
 
+## External interference
+
+- `158233f #186 "Unify result-set traversal…"` (5 src files: `BatchBuilder.cs`, `BatchRunner.cs`, `IResultSetCursorSource.cs`, `ProcedureResult.cs`, `ResultSet.cs`; + tests/docs), committed 2026-10-04 20:11 +0500, parent `5137ec8`, child `7eb5899`.
+- It is an ancestor of the frozen snapshot `52c4b3a`.
+- `01b89fd..HEAD` itself is `src/**`-clean (the collection's own merges changed no product source).
+
 ## Done / Verified / Incomplete
 
+- Done: group-1 #183 (Stage A; B1/B2 fallback; docs/benchmarks only), group-2 #164 (CHECK PASS rv=1) — merges `81e61c0`/`2914966`
 - Done: #183 (with limitation), #164
 - Verified: (none)
+- Incomplete/Unverified: parent collection C (STOP)
 - Incomplete: group-1 B1/B2 sub-stages (patches preserved)
 - Deferred: #166 — trigger not fired (`CteHoister.Hoist` / nested read-CTE `PrepareCtes` untouched)
+- Preserved: group worktrees + branches (no cleanup)
