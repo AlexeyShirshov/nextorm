@@ -202,3 +202,27 @@ Reused; no `src/**` change since recorded:
 
 #### Container-provider integration applicability
 Recorded isolated per-provider result (`183-3.md:124`, same U2 binaries): PostgreSQL total 776 / failed 0 / skipped 25; SQL Server 698/0/43; MySQL 656/0/80; ClickHouse 173/0/0. Applicability predicate: the #183 collection diff has NO `src/**` change, so provider SQL generation is byte-identical and the recorded provider results remain valid for the delivered tree. A provider-skipped run is NOT claimed as pass — the combined run (`integration.log:15068`) reported Total 3136, Errors 0, Failed 663, Skipped 191, 633.8 s, with all 663 failures environmental (653 SQL Server pre-login handshake `SqlException`/`Win32Exception: Unknown error 258` + 1 MySQL + 9 ClickHouse); the isolated 4-provider 0-fail runs are the applicable evidence.
+
+#### G1-CACHE/U2 provider-evidence trace (rv=5 appendices)
+Closes the rv=5 gap in the preserved evidence: exact per-provider command, exit code and log path were not recorded at rv=4. Isolation mechanism reconstructed and verified against the preserved logs — `--filter "FullyQualifiedName~<Provider>"` discovers exactly the recorded class sets (Postgres 776, SqlServer 698, MySql 656, ClickHouse 173 via `dotnet test tests/nextorm.integration.tests -c Debug --no-build --list-tests --filter ...`). All reruns ran from the group-1 worktree on the delivered/base binaries (no `src/**` change), `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`. Host `loadavg(1m)` during the reruns was 32–118 (shared host, concurrent sessions); only PostgreSQL stayed green, the three container-backed providers could not execute and are recorded as SKIPPED — **not** as passes. Their totals are reused from the preserved rv=4 logs (valid because `src/**` is unchanged).
+
+- PostgreSQL — `source: rerun`.
+  - `command:` `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter "FullyQualifiedName~Postgres"`
+  - `exit:` `0`
+  - `totals:` total 776 / failed 0 / succeeded 751 / skipped 25 — `$E/U2/integration-postgres-rv5.log:79-85`
+  - `log:` `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/integration-postgres-rv5.log` (group-1 worktree). Preserved `$E/U2/integration-postgres.log:79-84` matches 776/0/25.
+- SQL Server — `source: reused preserved totals; rerun could not execute (SKIPPED)`.
+  - `command:` `timeout 360 dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter "FullyQualifiedName~SqlServer"` (plus a first unbounded attempt)
+  - `exit:` `SKIPPED(environmental: host loadavg 32–118; execution timeout, 360 s bound exceeded)` — bound run `$E/U2/integration-sqlserver-rv5.log:2` `exit=124`; first attempt `$E/U2/integration-sqlserver-rv5-attempt1-timeout.log:7` `SqlException: Execution Timeout Expired` (`CommonTestSuite.RawSourceBinding_BoundCompatible_ShouldReturnFilteredRows`), `:33-34` `failed with 1 error(s) (19m 53s)` / `Exit code: 143`; the failure is environmental, not a U2 regression.
+  - `totals:` reused — total 698 / failed 0 / succeeded 655 / skipped 43 — `$E/U2/integration-sqlserver.log:133-138`
+  - `log:` preserved `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/integration-sqlserver.log`; rerun attempts `.../U2/integration-sqlserver-rv5.log`, `.../U2/integration-sqlserver-rv5-attempt1-timeout.log`.
+- MySQL — `source: reused preserved totals; rerun could not execute (SKIPPED)`.
+  - `command:` `timeout 300 dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter "FullyQualifiedName~MySql"`
+  - `exit:` `SKIPPED(environmental: host loadavg 32–118; container start/connection canceled, 300 s bound exceeded)` — `$E/U2/integration-mysql-rv5.log:30` `exit=124` (log shows `MySqlConnector ... TryResetConnectionAsync` connect failure).
+  - `totals:` reused — total 656 / failed 0 / succeeded 576 / skipped 80 — `$E/U2/integration-mysql.log:244-249`
+  - `log:` preserved `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/integration-mysql.log`; rerun `.../U2/integration-mysql-rv5.log`.
+- ClickHouse — `source: reused preserved totals; rerun could not execute (SKIPPED)`.
+  - `command:` `timeout 300 dotnet test tests/nextorm.integration.tests -c Debug --no-build --filter "FullyQualifiedName~ClickHouse"`
+  - `exit:` `SKIPPED(environmental: host loadavg 32–118; container never became ready, zero tests ran, 300 s bound exceeded)` — `$E/U2/integration-clickhouse-rv5.log:2-4` `Zero tests ran (4m 52s 636ms)` / `Exit code: 143` / `exit=124`.
+  - `totals:` reused — total 173 / failed 0 / succeeded 173 / skipped 0 — `$E/U2/integration-clickhouse.log:4-9`
+  - `log:` preserved `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/integration-clickhouse.log`; rerun `.../U2/integration-clickhouse-rv5.log`.

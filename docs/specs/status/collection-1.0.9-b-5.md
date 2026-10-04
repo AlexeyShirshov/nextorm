@@ -34,7 +34,7 @@
 - reason: (i) mandatory-evidence gate not closable within CHECK budget; (ii) EXTERNAL commit 158233f #186 (5 src/** + tests/docs) interleaved into 1.0.9-b during the collection by a concurrent session — out of this collection's scope/ownership; the integrated tree is therefore not a clean collection snapshot
 - verification state: unverified (STOP)
 - defect id/history: C-scope-1 (fixed); C-evidence-1 (rv=5 N/A recorded); C-external-186 (open, external)
-- next allowed step: user decision — either re-run collection C excluding the external #186 work, or re-run once the concurrent session settles
+- next allowed step: parent CHECK (rv=5 provider-evidence trace attached)
 - history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
 - group-1 done: #183 DONE (with limitation) — B1/B2 rejected/reverted (attributable time speedup not provable on shared host); patches preserved; #166 not triggered.
 
