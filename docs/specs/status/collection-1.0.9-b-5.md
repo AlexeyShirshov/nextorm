@@ -9,16 +9,16 @@
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| group-1 | #183, #166 | 183 → (166 only if trigger) | `/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1` | `collection/1.0.9-b-5/group-1` | in-progress |
-| group-2 | #164 | 164 | `/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-2` | `collection/1.0.9-b-5/group-2` | pending |
+| group-1 | #183, #166 | 183 → (166 only if trigger) | `/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1` | `collection/1.0.9-b-5/group-1` | done |
+| group-2 | #164 | 164 | `/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-2` | `collection/1.0.9-b-5/group-2` | done |
 
 ## Tasks
 
 | task | group | branch | status | reason + patch | task status file |
 |---|---|---|---|---|---|
-| #183 | group-1 | `collection/1.0.9-b-5/group-1` | in-progress | resumed 2026-10-04: retry B1 controlled measurement + continue B2/C (Stage A done @752943d) | `docs/specs/status/iteration-15-cached-path-183-2.md`; `docs/specs/status/iteration-15-cached-path-b1.md` |
-| #166 | group-1 | `collection/1.0.9-b-5/group-1` | pending | deferred, trigger not fired (Hoist/nested read-CTE not touched; `CteHoister.Hoist` / nested read-CTE `PrepareCtes` unchanged) | — |
-| #164 | group-2 | `collection/1.0.9-b-5/group-2` | pending | — | — |
+| #183 | group-1 | `collection/1.0.9-b-5/group-1` | done | Stage A done; B1/B2 incomplete-with-fallback (patches preserved); C done; #166 not-executed | `iteration-15-cached-path-183-3.md`; `iteration-15-cached-path-results.md` |
+| #166 | group-1 | `collection/1.0.9-b-5/group-1` | not-executed | deferred trigger | — |
+| #164 | group-2 | `collection/1.0.9-b-5/group-2` | done | — | `pdca-evidence-164-1.md` |
 
 ## Decisions
 
@@ -30,17 +30,17 @@
 
 ## Общая верификация и восстановление (Common verification and recovery)
 
-- parent verification: **not run** — no `done` group to integrate (group-1 `incomplete`, group-2 `pending`); `git merge --no-ff` not applicable
+- parent verification: **not run** — both groups `done`; collection CHECK pending; `git merge --no-ff` pending
 - verification state: unverified
 - defect id/history: **(none)** — no product defect established; B1 `incomplete` is an acceptance/environment blocker, not a product defect
-- next allowed step: run #183 B1 measurement retry, then B2/C (group-1)
+- last C: (pending collection CHECK)
+- next allowed step: merge done groups into 1.0.9-b, then collection CHECK
 - history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
+- group-1 done: #183 DONE (with limitation) — B1/B2 rejected/reverted (attributable time speedup not provable on shared host); patches preserved; #166 not triggered.
 
 ## Done / Verified / Incomplete
 
-- Done: (none)
+- Done: #183 (with limitation), #164
 - Verified: (none)
-- Incomplete: group-1 — lane halted after B1 `incomplete`; not merged
-- Incomplete: #183 — B1 incomplete (time-speedup not proved under controlled conditions); B2/C remaining
+- Incomplete: group-1 B1/B2 sub-stages (patches preserved)
 - Deferred: #166 — trigger not fired (`CteHoister.Hoist` / nested read-CTE `PrepareCtes` untouched)
-- Pending: #164 — group-2, not started
