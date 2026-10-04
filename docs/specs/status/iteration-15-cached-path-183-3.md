@@ -226,3 +226,20 @@ Closes the rv=5 gap in the preserved evidence: exact per-provider command, exit 
   - `exit:` `SKIPPED(environmental: host loadavg 32–118; container never became ready, zero tests ran, 300 s bound exceeded)` — `$E/U2/integration-clickhouse-rv5.log:2-4` `Zero tests ran (4m 52s 636ms)` / `Exit code: 143` / `exit=124`.
   - `totals:` reused — total 173 / failed 0 / succeeded 173 / skipped 0 — `$E/U2/integration-clickhouse.log:4-9`
   - `log:` preserved `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/integration-clickhouse.log`; rerun `.../U2/integration-clickhouse-rv5.log`.
+
+## Escalation decision (routed) — G1-CACHE/U2 provider-evidence (collection C)
+- Decision: **PASS-with-limitation** for G1-CACHE/U2 via an escalation-authorized zero-`src`-change footprint waiver. The delivered tree is `src/**`-clean, so provider SQL generation is byte-identical to the tree on which the preserved provider evidence was captured; a fresh SQL Server/MySQL/ClickHouse run is therefore a non-blocking follow-up, not a gate.
+- MANDATORY conditions (verbatim intent):
+  1. Record SQL Server / MySQL / ClickHouse as `SKIPPED (host saturation, loadavg 32–118, exit 124/143)` — never PASS/"fresh green"/reconstructed exit codes.
+  2. Mark reused totals as `reused, exit code not captured, non-authentic` (supporting evidence only).
+  3. Record the empty `git diff --stat 01b89fd..HEAD -- src/` and `git diff --stat 52c4b3a..HEAD -- src/` as the waiver basis.
+  4. If the collection tree later changes any `src/**`/product test, the waiver is void and a fresh provider run is required.
+  5. U2 outcome = `PASS-with-limitation` (not PASS).
+  6. Follow-up (non-blocking): run SQL Server/MySQL/ClickHouse when the host is calm or in CI.
+- Risk noted: the integrated tree's external `#186` was not provider-verified for MSSQL/MySQL/CH; that is #186-owner responsibility, out of C scope.
+- Residual limitation: no authentic fresh exit record for those 3 providers.
+- Waiver basis (verified 2026-10-05): `git diff --stat 01b89fd..HEAD -- src/` → empty; `git diff --stat 52c4b3a..HEAD -- src/` → empty.
+- Durable B1/B2 patches (copied out of the group-1 worktree into the repo before any cleanup):
+  - `docs/specs/status/patches/b1-incomplete.patch` — sha256 `0be74f92aa4250c78a566849dc1574d97c1c74aa154e18f56650501e34a7dc50`.
+  - `docs/specs/status/patches/u2-incomplete.patch` — sha256 `dd876ae9ed5b68a4fe3804478194db64741fb39bde3bebae24edb21899d18b7f`.
+  - Provenance: group-1 worktree `/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1` (`benchmarks/BenchmarkDotNet.Artifacts/iteration15-b1/b1-incomplete.patch`, `benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/u2-incomplete.patch`); manifest `docs/specs/status/patches/README.md`.

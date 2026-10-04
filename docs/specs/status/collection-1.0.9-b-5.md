@@ -30,11 +30,12 @@
 
 ## Общая верификация и восстановление (Common verification and recovery)
 
-- last C: FAIL — parent CHECK not certifiable (evidence-completeness gate)
-- reason: (i) mandatory-evidence gate not closable within CHECK budget; (ii) EXTERNAL commit 158233f #186 (5 src/** + tests/docs) interleaved into 1.0.9-b during the collection by a concurrent session — out of this collection's scope/ownership; the integrated tree is therefore not a clean collection snapshot
-- verification state: unverified (STOP)
-- defect id/history: C-scope-1 (fixed); C-evidence-1 (rv=5 N/A recorded); C-external-186 (open, external)
-- next allowed step: parent CHECK (rv=5 provider-evidence trace attached)
+- last C: PASS-with-limitation (escalation-authorized G1-CACHE/U2 footprint waiver)
+- reason: parent CHECK limited by host saturation — the G1-CACHE/U2 provider re-run could not execute for SQL Server/MySQL/ClickHouse; escalated and waived on the zero-`src`-change footprint (empty `git diff --stat 01b89fd..HEAD -- src/` and `52c4b3a..HEAD -- src/`); EXTERNAL commit 158233f #186 remains out of this collection's scope/ownership
+- verification state: PASS-with-limitation
+- provider re-run for SQL Server/MySQL/ClickHouse not authentically executed (SKIPPED, host saturation); follow-up when host is calm or in CI
+- defect id/history: C-scope-1 (fixed); C-evidence-1 (resolved — waived per escalation, zero-src footprint); C-external-186 (open, external)
+- next allowed step: collection ACT
 - history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
 - group-1 done: #183 DONE (with limitation) — B1/B2 rejected/reverted (attributable time speedup not provable on shared host); patches preserved; #166 not triggered.
 
@@ -48,8 +49,8 @@
 
 - Done: group-1 #183 (Stage A; B1/B2 fallback; docs/benchmarks only), group-2 #164 (CHECK PASS rv=1) — merges `81e61c0`/`2914966`
 - Done: #183 (with limitation), #164
-- Verified: (none)
-- Incomplete/Unverified: parent collection C (STOP)
-- Incomplete: group-1 B1/B2 sub-stages (patches preserved)
+- Verified: collection C = PASS-with-limitation (escalation-authorized G1-CACHE/U2 footprint waiver)
+- Incomplete/Unverified: provider re-run for SQL Server/MySQL/ClickHouse (SKIPPED, host saturation; non-authentic reused evidence only)
+- Incomplete: group-1 B1/B2 sub-stages (patches preserved in `docs/specs/status/patches/`)
 - Deferred: #166 — trigger not fired (`CteHoister.Hoist` / nested read-CTE `PrepareCtes` untouched)
 - Preserved: group worktrees + branches (no cleanup)
