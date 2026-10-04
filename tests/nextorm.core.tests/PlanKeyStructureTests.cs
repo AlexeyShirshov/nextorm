@@ -251,6 +251,72 @@ public class PlanKeyStructureTests
         plan.GetHashCode().Should().Be(hash, "plan identity must survive the cache-version swap");
     }
 
+    /// <summary>
+    /// Nested lambdas whose inner parameter shadows the outer one by name must compare structurally:
+    /// the comparer maps parameters by scope (instance), so the shared name is irrelevant and the
+    /// matching pair is equal with equal hashes. This is the shape the B1 parameter-scope allocation
+    /// change must not alter.
+    /// </summary>
+    [Fact]
+    public void Lambda_NestedShadowedParameter_ShouldCompareStructurally()
+    {
+        static Expression Nested(int constant)
+        {
+            var outer = Parameter(typeof(int), "x");
+            var inner = Parameter(typeof(int), "x"); // same name, distinct instance: shadowing
+            var innerLambda = Lambda<Func<int, int>>(Add(inner, Constant(constant)), inner);
+            return Lambda<Func<int, int>>(Invoke(innerLambda, outer), outer);
+        }
+
+        var comparer = Comparer();
+        var left = Nested(1);
+        var right = Nested(1);
+
+        left.Should().NotBeSameAs(right);
+        comparer.Equals(left, right).Should().BeTrue("a shadowed parameter is compared by scope, not by name");
+        comparer.GetHashCode(left).Should().Be(comparer.GetHashCode(right));
+    }
+
+    /// <summary>
+    /// A nested parameter scope entered by a mismatching comparison must be fully unwound before the
+    /// next comparison on the same comparer instance, otherwise a later matching nested tree would be
+    /// reported unequal (B1 reentrancy/cleanup invariant).
+    /// </summary>
+    [Fact]
+    public void Lambda_NestedScope_ShouldBeUnwoundAfterMismatch()
+    {
+        static Expression Nested(int constant)
+        {
+            var outer = Parameter(typeof(int), "x");
+            var inner = Parameter(typeof(int), "x");
+            var innerLambda = Lambda<Func<int, int>>(Add(inner, Constant(constant)), inner);
+            return Lambda<Func<int, int>>(Invoke(innerLambda, outer), outer);
+        }
+
+        var comparer = Comparer();
+
+        comparer.Equals(Nested(1), Nested(2)).Should().BeFalse();
+        comparer.Equals(Nested(3), Nested(3)).Should()
+            .BeTrue("the nested scope entered by the failed comparison must be unwound");
+    }
+
+    /// <summary>
+    /// The plan lookup is a dictionary keyed by the structural hash, so a hash collision must still be
+    /// rejected by the full structural <c>Equals</c>. There is no public seam to force a collision at
+    /// the real lookup (the Stage A forced-collision row is a DO-&gt;PLAN item), so the comparer-level
+    /// invariant "equal hashes never imply equal keys" is pinned here instead.
+    /// </summary>
+    [Fact]
+    public void EqualHashes_ShouldNotImplyEquality_ForQueryableConstant()
+    {
+        var comparer = Comparer();
+        var left = Constant(new List<int> { 1 }.AsQueryable(), typeof(IQueryable<int>));
+        var right = Constant(new List<int> { 1, 2, 3 }.AsQueryable(), typeof(IQueryable<int>));
+
+        comparer.GetHashCode(left).Should().Be(comparer.GetHashCode(right));
+        comparer.Equals(left, right).Should().BeFalse("equal hashes must never collapse two different keys");
+    }
+
     [Fact]
     public void LinqSourceFrom_ShouldCompareByReference()
     {

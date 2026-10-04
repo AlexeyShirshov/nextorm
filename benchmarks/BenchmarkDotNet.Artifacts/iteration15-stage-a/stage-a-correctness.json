@@ -1,0 +1,23 @@
+{
+  "mode": "correctness",
+  "runtimeVersion": "10.0.12",
+  "frameworkDescription": ".NET 10.0.12",
+  "osDescription": "Ubuntu 22.04.5 LTS",
+  "processArchitecture": "X64",
+  "processorCount": 8,
+  "databaseFile": "/tmp/nextorm-bench/test.db",
+  "correctness": {
+    "where_sql_match": true,
+    "join_sql_match": true,
+    "where_rows_match": true,
+    "join_rows_match": true,
+    "any": true,
+    "first": true,
+    "single": true,
+    "where_rows": true,
+    "sticky_cache_false_absent": true,
+    "all_pass": true
+  },
+  "durationSeconds": 0.2670338,
+  "exitCode": 0
+}

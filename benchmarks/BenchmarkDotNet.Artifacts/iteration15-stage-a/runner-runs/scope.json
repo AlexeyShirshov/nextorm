@@ -1,0 +1,66 @@
+{
+  "subcommand": "scope",
+  "executed": true,
+  "base": "01f3e92",
+  "commands": [
+    {
+      "command": [
+        "git",
+        "diff",
+        "--exit-code",
+        "01f3e92",
+        "--",
+        "src/nextorm.core/Builders/CteHoister.cs"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.004358653008239344,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--exit-code",
+        "01f3e92",
+        "--",
+        "src/nextorm.core"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.004242483002599329,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "status",
+        "--porcelain=v1",
+        "--",
+        "src/nextorm.core"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.005865579005330801,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "--",
+        "src/nextorm.core"
+      ],
+      "exit_code": 0,
+      "duration_seconds": 0.0032643690065015107,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "g1_cte_changed": false,
+  "core_diff_present": false,
+  "core_untracked_present": false,
+  "validated": true
+}

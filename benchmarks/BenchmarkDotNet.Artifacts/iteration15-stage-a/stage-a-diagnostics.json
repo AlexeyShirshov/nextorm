@@ -1,0 +1,99 @@
+{
+  "mode": "diagnostics",
+  "runtimeVersion": "10.0.12",
+  "frameworkDescription": ".NET 10.0.12",
+  "osDescription": "Ubuntu 22.04.5 LTS",
+  "processArchitecture": "X64",
+  "processorCount": 8,
+  "databaseFile": "/tmp/nextorm-bench/test.db",
+  "where": {
+    "iterations": 100,
+    "misses": 1,
+    "hits": 99,
+    "hitProofOk": true,
+    "distinctSql": 1,
+    "sqlStmt": "select id from simple_entity\n where id = $value",
+    "paramCounts": [
+      1
+    ],
+    "paramValuesSeen": 100,
+    "paramValueMismatches": 0,
+    "needsParamRefresh": true,
+    "noParams": false,
+    "paramRefreshProved": true
+  },
+  "join": {
+    "iterations": 100,
+    "misses": 1,
+    "hits": 99,
+    "hitProofOk": true,
+    "distinctSql": 1,
+    "sqlStmt": "select t1.Id, t1.Dt, t1.someString as \u0027Str\u0027 from large_table as \u0027t1\u0027 join simple_entity as \u0027t2\u0027 on t1.Id = cast(t2.id as bigint)\n where t2.id = $value",
+    "paramCounts": [
+      1
+    ],
+    "paramValuesSeen": 100,
+    "paramValueMismatches": 0,
+    "needsParamRefresh": true,
+    "noParams": false,
+    "paramRefreshProved": true
+  },
+  "where_runtime_placeholder": {
+    "iterations": 100,
+    "misses": 1,
+    "hits": 99,
+    "hitProofOk": true,
+    "distinctSql": 1,
+    "sqlStmt": "select id from simple_entity\n where id = $norm_p0",
+    "paramCounts": [
+      1
+    ],
+    "paramValuesSeen": 1,
+    "paramValueMismatches": 100,
+    "needsParamRefresh": false,
+    "noParams": false,
+    "paramRefreshProved": null
+  },
+  "where_constant": {
+    "iterations": 100,
+    "misses": 1,
+    "hits": 99,
+    "hitProofOk": true,
+    "distinctSql": 1,
+    "sqlStmt": "select id from simple_entity\n where id = 5",
+    "paramCounts": [
+      0
+    ],
+    "paramValuesSeen": 0,
+    "paramValueMismatches": 0,
+    "needsParamRefresh": false,
+    "noParams": true,
+    "paramRefreshProved": null
+  },
+  "paramRefreshAttribution": {
+    "iterations": 2000,
+    "refreshNeeded": {
+      "iterations": 2000,
+      "hits": 1999,
+      "misses": 1,
+      "needsParamRefresh": true,
+      "meanNsPerOp": 48257.9,
+      "allocatedBytesPerOp": 6528.104,
+      "allocatedBytes": 13056208
+    },
+    "refreshSkipped": {
+      "iterations": 2000,
+      "hits": 1999,
+      "misses": 1,
+      "needsParamRefresh": false,
+      "meanNsPerOp": 32887.95,
+      "allocatedBytesPerOp": 5184.188,
+      "allocatedBytes": 10368376
+    },
+    "refreshDeltaNsPerOp": 15369.950000000004,
+    "refreshDeltaBytesPerOp": 1343.9160000000002,
+    "note": "Both arms are warm cache hits on the same SQL shape/parameter count/rows. The refresh arm re-runs ExtractParams on every hit; the control (runtime SqlFunctions.Parameter placeholder) skips it. The control predicate differs in one leaf (captured member access vs runtime method call), so the delta is the refresh cost plus that leaf\u0027s lookup/equality residual, not a pure ExtractParams isolation."
+  },
+  "durationSeconds": 0.441084,
+  "exitCode": 0
+}
