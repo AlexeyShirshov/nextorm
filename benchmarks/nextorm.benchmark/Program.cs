@@ -16,7 +16,14 @@ using NextORM.Benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 // BenchmarkRunner.Run<SqliteBenchmarkJoin>();
+
+// Iteration 15 / #183 Stage A: run the non-timed diagnostic/correctness/profile batches instead of
+// BenchmarkDotNet. This is a benchmark-project-only entry point; it never touches nextorm.core.
+if (args.Length > 0 && args[0] == "--stage-a")
+    return StageADiagnostics.Run(args.Length > 1 ? args[1] : "all");
+
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+return 0;
 
 // runner.QueryCommandPlanEqualityComparer();
 // var runner = new SqliteBenchmarkSimulateWork();

@@ -1,0 +1,670 @@
+{
+  "schemaVersion": 1,
+  "task": "#183",
+  "iteration": 15,
+  "stage": "A",
+  "cycle": 2,
+  "title": "Fresh-fluent cached-path decomposition, frozen baseline and budgets (no core edits)",
+  "provenance": {
+    "baseCommit": "01f3e9202ed710f6a459012e80fd2bcfa4c19708",
+    "headCommit": "01f3e9202ed710f6a459012e80fd2bcfa4c19708",
+    "branch": "collection/1.0.9-b-5/group-1",
+    "worktree": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1",
+    "design": "docs/specs/performance/iteration-15-cached-path-design.md",
+    "designApprovalCommit": "5137ec8",
+    "statusFile": "docs/specs/status/iteration-15-cached-path-183-2.md",
+    "date": "2026-10-04",
+    "worktreeFingerprint": {
+      "headCommit": "01f3e9202ed710f6a459012e80fd2bcfa4c19708",
+      "statusPorcelainSha256": "eb5aa3ad855a43fd1f540d9cab2abe90fce52f93af6d029f260d5ca4915487d7",
+      "statusPorcelainCommand": "git status --porcelain=v1 | sha256sum",
+      "note": "base+uncommitted: Stage A has no commits; all changes are working-tree only on top of baseCommit. headCommit == baseCommit. The fingerprint pins the exact worktree state at the corrected Stage A evidence-gap close (cycle 2, attempt 2)."
+    }
+  },
+  "evidenceFiles": {
+    "diagnostics": {
+      "path": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/stage-a-diagnostics.json",
+      "sha256": "57454051589d12caa7ed9504da23d3c6e4d49efd843148336c71f3f877ba8b05"
+    },
+    "correctness": {
+      "path": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/stage-a-correctness.json",
+      "sha256": "cc53697207cfaec60403edf784a6ed54c91732c6bde0dd5ee9c70578c7f0e116"
+    }
+  },
+  "scope": {
+    "coreDiff": false,
+    "coreDiffCommand": [
+      "git",
+      "diff",
+      "--exit-code",
+      "01f3e92",
+      "--",
+      "src/nextorm.core"
+    ],
+    "coreDiffExitCode": 0,
+    "g1CteChanged": false,
+    "g1CtePredicateCommand": [
+      "git",
+      "diff",
+      "--exit-code",
+      "01f3e92",
+      "--",
+      "src/nextorm.core/Builders/CteHoister.cs"
+    ],
+    "g1CtePredicateExitCode": 0,
+    "stickyCacheFalseAbsent": true,
+    "validateInnerLoopPy": "ABSENT (ls scripts/validate_inner_loop.py -> No such file or directory); manual inner-loop discipline used"
+  },
+  "host": {
+    "os": "Ubuntu 22.04.5 LTS",
+    "cpu": "AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical / 4 physical cores",
+    "dotnetSdk": "10.0.401",
+    "runtime": ".NET 10.0.12 (10.0.1226.42308), X64 RyuJIT x86-64-v3",
+    "benchmarkDotNet": "0.15.8",
+    "dotnetTrace": "10.0.745401+cef304c50763bf24f99566cb31d55540842e7ae9",
+    "dotnetCounters": "ABSENT",
+    "dotnetGcdump": "ABSENT"
+  },
+  "fixture": {
+    "databaseFile": "/tmp/nextorm-bench/test.db",
+    "sha256": "32bf10a08291f25afff934f42c378215b6e8f76b8568d6afd519a53a92d72295",
+    "note": "byte-identical md5 c5a968bfc40a7630edf4253f1da1f802 to benchmarks/nextorm.benchmark/data/test.db"
+  },
+  "benchmarkConfiguration": {
+    "job": "Job.ShortRun",
+    "toolchain": "InProcessEmitToolchain",
+    "iterationCount": 3,
+    "warmupCount": 3,
+    "launchCount": 1,
+    "memoryDiagnoser": true,
+    "categories": "acceptance",
+    "fullMode": "NEXTORM_BENCH_FULL unset (in-process ShortRun)"
+  },
+  "workloadIdentity": {
+    "logicalOpsPerInvocation": 100,
+    "whereSql": "select id from simple_entity\n where id = $value",
+    "joinSql": "select t1.Id, t1.Dt, t1.someString as 'Str' from large_table as 't1' join simple_entity as 't2' on t1.Id = cast(t2.id as bigint)\n where t2.id = $value",
+    "types": {
+      "whereProjection": "int",
+      "joinProjection": "LargeEntity",
+      "whereSource": "simple_entity",
+      "joinSources": "large_table join simple_entity"
+    },
+    "rows": "limit 1 (large_table.id join simple_entity.id for id=0..99)",
+    "capturedValueRange": "0..99",
+    "warmCold": "caches primed in the benchmark constructor; diagnostic/main arms are warm (hit) paths; the first value is the single cold miss",
+    "normalization": "BDN Memory.BytesAllocatedPerOperation / 100 logical ops = bytes per logical operation"
+  },
+  "profiles": {
+    "cpu": {
+      "nettrace": "/tmp/nextorm-bench/stage-a/cpu.nettrace",
+      "nettraceSha256": "b0d69e38c86ef5db2ef1f3e8c86e2b5849857f18634c0d19a605f722d38d0ad8",
+      "speedscope": "/tmp/nextorm-bench/stage-a/cpu.speedscope.json",
+      "speedscopeSha256": "d5ab54563e33afc26e95a302f64ea06a5f6a535760b044519869c5c6822b8c98",
+      "provider": "Microsoft-DotNETCore-SampleProfiler",
+      "durationSeconds": 15,
+      "profileWorkloadSeconds": 8
+    },
+    "allocGc": {
+      "nettrace": "/tmp/nextorm-bench/stage-a/gc.nettrace",
+      "nettraceSha256": "9b6a587d46be42740f0ed2a2d737c2a5f5885cbfcca34fe0af706b0da47154b5",
+      "speedscope": "/tmp/nextorm-bench/stage-a/gc.speedscope.json",
+      "speedscopeSha256": "fb00c1cef836a505458234975eaa0e04e6f7a8b6987b0796d9f7dee2b782b2e9",
+      "provider": "Microsoft-Windows-DotNETRuntime:0x8003:5 (gc-verbose)",
+      "durationSeconds": 10,
+      "profileWorkloadSeconds": 5
+    },
+    "allocTick": {
+      "nettrace": "/tmp/nextorm-bench/stage-a/alloc.nettrace",
+      "nettraceSha256": "502c27cec98c48df9ee2710439c0a91c7831bd51c42d41a58788234cba61e39c",
+      "speedscope": "/tmp/nextorm-bench/stage-a/alloc.speedscope.json",
+      "speedscopeSha256": "7862f60a38b11168c0d3321d95c65e1063de52b8ddc1cb82e8c84800cf11b428",
+      "provider": "Microsoft-Windows-DotNETRuntime:0x1:5",
+      "durationSeconds": 15,
+      "profileWorkloadSeconds": 8
+    },
+    "reports": {
+      "cpuInclusive": "/tmp/nextorm-bench/stage-a/cpu-topN-inclusive.txt",
+      "cpuExclusive": "/tmp/nextorm-bench/stage-a/cpu-topN-exclusive.txt"
+    },
+    "allocationAttribution": "dotnet-trace speedscope conversion (v10.0.745401) renders sampled CPU-style stacks and does not surface GCAllocationTick type payloads; allocation attribution is therefore taken from BenchmarkDotNet MemoryDiagnoser exact BytesAllocatedPerOperation (see stageDecomposition/frozenBudgets), and the trace type-payload gap is recorded as unattributed residue",
+    "note": "traces live under /tmp (not committed); paths+sha256 recorded here",
+    "sha256Reverification": "present+match (2026-10-04, CHECK loop-back 1/3): /tmp/nextorm-bench/stage-a/{cpu,gc,alloc}.nettrace were present and their recomputed sha256 matched the pinned nettraceSha256 values"
+  },
+  "hitCountProofs": {
+    "where": {
+      "iterations": 100,
+      "misses": 1,
+      "hits": 99,
+      "hitProofOk": true,
+      "distinctSql": 1,
+      "sqlStmt": "select id from simple_entity\n where id = $value",
+      "paramCounts": [
+        1
+      ],
+      "paramValuesSeen": 100,
+      "paramValueMismatches": 0,
+      "needsParamRefresh": true,
+      "noParams": false,
+      "paramRefreshProved": true
+    },
+    "join": {
+      "iterations": 100,
+      "misses": 1,
+      "hits": 99,
+      "hitProofOk": true,
+      "distinctSql": 1,
+      "sqlStmt": "select t1.Id, t1.Dt, t1.someString as 'Str' from large_table as 't1' join simple_entity as 't2' on t1.Id = cast(t2.id as bigint)\n where t2.id = $value",
+      "paramCounts": [
+        1
+      ],
+      "paramValuesSeen": 100,
+      "paramValueMismatches": 0,
+      "needsParamRefresh": true,
+      "noParams": false,
+      "paramRefreshProved": true
+    },
+    "where_runtime_placeholder": {
+      "iterations": 100,
+      "misses": 1,
+      "hits": 99,
+      "hitProofOk": true,
+      "distinctSql": 1,
+      "sqlStmt": "select id from simple_entity\n where id = $norm_p0",
+      "paramCounts": [
+        1
+      ],
+      "paramValuesSeen": 1,
+      "paramValueMismatches": 100,
+      "needsParamRefresh": false,
+      "noParams": false,
+      "paramRefreshProved": null
+    },
+    "where_constant": {
+      "iterations": 100,
+      "misses": 1,
+      "hits": 99,
+      "hitProofOk": true,
+      "distinctSql": 1,
+      "sqlStmt": "select id from simple_entity\n where id = 5",
+      "paramCounts": [
+        0
+      ],
+      "paramValuesSeen": 0,
+      "paramValueMismatches": 0,
+      "needsParamRefresh": false,
+      "noParams": true,
+      "paramRefreshProved": null
+    }
+  },
+  "paramRefreshAttribution": {
+    "source": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/stage-a-diagnostics.json#paramRefreshAttribution",
+    "method": "public GetPreparedQueryCommand hit loop, 2000 iterations, warm; GC.GetAllocatedBytesForCurrentThread + Stopwatch",
+    "refreshNeeded": {
+      "iterations": 2000,
+      "hits": 1999,
+      "misses": 1,
+      "needsParamRefresh": true,
+      "meanNsPerOp": 48257.9,
+      "allocatedBytesPerOp": 6528.104
+    },
+    "refreshSkipped": {
+      "iterations": 2000,
+      "hits": 1999,
+      "misses": 1,
+      "needsParamRefresh": false,
+      "meanNsPerOp": 32887.95,
+      "allocatedBytesPerOp": 5184.188
+    },
+    "refreshDeltaNsPerOp": 15369.95,
+    "refreshDeltaBytesPerOp": 1343.916,
+    "allocStability": "exact and reproducible: three runs gave allocatedBytesPerOp 6528.104 vs 5184.188 and delta 1343.916 for every run; time (ns/op) is indicative only and varied 48.3-57.6 us/op",
+    "shapeCaveat": "the two arms differ in one predicate leaf (captured member access vs SqlFunctions.Parameter<int>(0) method call), so the delta is the parameter-refresh cost plus that leaf's lookup/equality residual, not a pure ExtractParams isolation; the refresh arm's allocation exactly matches the BDN Where_CachedHit_PlanOnly arm (6528.104 B/op) and the control matches the acceptance Cached_PlanOnly_Param arm (5184.188 B/op)",
+    "whereRefreshSplitBytesPerLogicalOp": {
+      "combinedLookupEqualityExtractParams": 2176.06,
+      "parameterRefresh": 1343.916,
+      "residualLookupEqualityRuntimePlaceholderScale": 832.144,
+      "note": "combined row is the BDN Where_CachedHit_PlanOnly - Where_Prepare_Hash allocation delta (217606 B / 100); the residual is an approximation because no no-refresh cached arm exists in the BDN decomposition"
+    },
+    "deferredWithTrigger": "exact lookup/equality vs parameter-refresh isolation (immutable refresh recipe instrumentation) is deferred to Stage B2; trigger: the guarded immutable parameter-refresh recipe exists and can instrument binding without a public-only control-shape confound"
+  },
+  "correctnessBoundary": {
+    "where_sql_match": true,
+    "join_sql_match": true,
+    "where_rows_match": true,
+    "join_rows_match": true,
+    "any": true,
+    "first": true,
+    "single": true,
+    "where_rows": true,
+    "sticky_cache_false_absent": true,
+    "all_pass": true
+  },
+  "acceptanceCanonical": {
+    "command": [
+      "dotnet",
+      "run",
+      "--project",
+      "benchmarks/nextorm.benchmark",
+      "-c",
+      "Release",
+      "--",
+      "--anyCategories=acceptance"
+    ],
+    "exitCode": 0,
+    "wallSeconds": 45.788,
+    "globalTotalTime": "00:00:41 (41.87 sec)",
+    "executedBenchmarks": 7,
+    "casesSelected": 7,
+    "failures": 0,
+    "log": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/acceptance.log",
+    "logSha256": "928f5537dc3e6e7023befe6d31344c6893415481f8ad45fc09772c7ef7d30b1d",
+    "under4MinBudget": true,
+    "cases": [
+      {
+        "method": "Nextorm_Count",
+        "run_mean": "2.618 ms",
+        "run_allocated": "354.69 KB",
+        "exact_mean_ns": 2359723.0,
+        "exact_bytes_per_invocation": 363200,
+        "bytes_per_logical_op": 3632.0
+      },
+      {
+        "method": "Nextorm_GroupByCount",
+        "run_mean": "64.52 ms",
+        "run_allocated": "50.06 MB",
+        "exact_mean_ns": 63041684.6,
+        "exact_bytes_per_invocation": 52490644,
+        "bytes_per_logical_op": 524906.44
+      },
+      {
+        "method": "Nextorm_Cached",
+        "run_mean": "1.681 ms",
+        "run_allocated": "568.04 KB",
+        "exact_mean_ns": 1855745.4,
+        "exact_bytes_per_invocation": 581677,
+        "bytes_per_logical_op": 5816.77
+      },
+      {
+        "method": "Cached_PlanOnly_Param",
+        "run_mean": "532.9 us",
+        "run_allocated": "506.27 KB",
+        "exact_mean_ns": 695916.4,
+        "exact_bytes_per_invocation": 518416,
+        "bytes_per_logical_op": 5184.16
+      },
+      {
+        "method": "Prepared_ToList",
+        "run_mean": "889.3 us",
+        "run_allocated": "76.14 KB",
+        "exact_mean_ns": 917546.4,
+        "exact_bytes_per_invocation": 77965,
+        "bytes_per_logical_op": 779.65
+      },
+      {
+        "method": "Cached_ToList",
+        "run_mean": "1,866.9 us",
+        "run_allocated": "582.42 KB",
+        "exact_mean_ns": 1939976.8,
+        "exact_bytes_per_invocation": 596393,
+        "bytes_per_logical_op": 5963.93
+      },
+      {
+        "method": "Nextorm_Cached_ToListAsync",
+        "run_mean": "2.461 ms",
+        "run_allocated": "734.25 KB",
+        "exact_mean_ns": 2410410.5,
+        "exact_bytes_per_invocation": 751877,
+        "bytes_per_logical_op": 7518.77
+      }
+    ]
+  },
+  "acceptanceExactBytesRun": {
+    "command": [
+      "dotnet",
+      "run",
+      "--project",
+      "benchmarks/nextorm.benchmark",
+      "-c",
+      "Release",
+      "--no-build",
+      "--",
+      "--anyCategories=acceptance",
+      "--exporters",
+      "json"
+    ],
+    "exitCode": 0,
+    "log": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/acceptance-json.log",
+    "cases": [
+      {
+        "method": "Nextorm_Count",
+        "exact_mean_ns": 2359723.0,
+        "exact_bytes_per_invocation": 363200,
+        "bytes_per_logical_op": 3632.0
+      },
+      {
+        "method": "Nextorm_GroupByCount",
+        "exact_mean_ns": 63041684.6,
+        "exact_bytes_per_invocation": 52490644,
+        "bytes_per_logical_op": 524906.44
+      },
+      {
+        "method": "Nextorm_Cached",
+        "exact_mean_ns": 1855745.4,
+        "exact_bytes_per_invocation": 581677,
+        "bytes_per_logical_op": 5816.77
+      },
+      {
+        "method": "Cached_PlanOnly_Param",
+        "exact_mean_ns": 695916.4,
+        "exact_bytes_per_invocation": 518416,
+        "bytes_per_logical_op": 5184.16
+      },
+      {
+        "method": "Prepared_ToList",
+        "exact_mean_ns": 917546.4,
+        "exact_bytes_per_invocation": 77965,
+        "bytes_per_logical_op": 779.65
+      },
+      {
+        "method": "Cached_ToList",
+        "exact_mean_ns": 1939976.8,
+        "exact_bytes_per_invocation": 596393,
+        "bytes_per_logical_op": 5963.93
+      },
+      {
+        "method": "Nextorm_Cached_ToListAsync",
+        "exact_mean_ns": 2410410.5,
+        "exact_bytes_per_invocation": 751877,
+        "bytes_per_logical_op": 7518.77
+      }
+    ]
+  },
+  "baseline": {
+    "source": "docs/specs/performance/acceptance-benchmarks.md:61-69",
+    "cachedToListOverPreparedToListTimeRatio": 1.87,
+    "allocatedRatio": 7.42,
+    "cases": {
+      "Nextorm_Count": "2.915 ms / 335.17 KB",
+      "Nextorm_GroupByCount": "60.95 ms / 50 MB",
+      "Nextorm_Cached": "1.772 ms / 534.42 KB",
+      "Prepared_ToList": "923.8 us / 76.14 KB",
+      "Cached_ToList": "1727.4 us / 565.22 KB",
+      "Cached_PlanOnly_Param": "518.3 us / 489.08 KB",
+      "Nextorm_Cached_ToListAsync": "2.137 ms / 692.07 KB"
+    }
+  },
+  "ratios": {
+    "canonicalRun": {
+      "cachedToListOverPreparedToList": 2.0993,
+      "growthVsBaselinePercent": 12.27,
+      "allocatedRatio": 7.6493,
+      "allocatedGrowthPercent": 3.04,
+      "threshold": 2.24388,
+      "exceeds20Percent": false
+    },
+    "exactBytesRun": {
+      "cachedToListOverPreparedToList": 2.1143,
+      "growthVsBaselinePercent": 13.07,
+      "exceeds20Percent": false
+    },
+    "repeatRequired": false,
+    "verdict": "No comparable ratio growth above 20%; no repeat required. Absolute means are noise-dominated under ShortRun on a host with load average ~4-6; allocations are the stable comparison axis."
+  },
+  "noiseAssessment": {
+    "loadAverageAtStart": "5.68/4.78/4.02 on 8 logical cores",
+    "shortRun": "IterationCount=3",
+    "errorExceedsMean": [
+      "Nextorm_Count",
+      "Nextorm_GroupByCount",
+      "Cached_ToList"
+    ],
+    "note": "time ratios are indicative; allocation bytes are stable (BDN exact) and are the frozen budgets"
+  },
+  "stageDecomposition": {
+    "source": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/stage-a-benchmark-full-compressed.json",
+    "log": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/stage-a-benchmark-json.log",
+    "arms": {
+      "Where_Construct": {
+        "method": "Where_Construct",
+        "mean_ns": 118722.7,
+        "allocated_bytes_per_invocation": 254405,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 2544.05,
+        "b_allocated": 2544,
+        "budget_bytes_per_logical_op": 3053
+      },
+      "Where_Prepare_NoHash": {
+        "method": "Where_Prepare_NoHash",
+        "mean_ns": 234199.2,
+        "allocated_bytes_per_invocation": 388009,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 3880.09,
+        "b_allocated": 3880,
+        "budget_bytes_per_logical_op": 4657
+      },
+      "Where_Prepare_Hash": {
+        "method": "Where_Prepare_Hash",
+        "mean_ns": 315306.0,
+        "allocated_bytes_per_invocation": 435211,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 4352.11,
+        "b_allocated": 4352,
+        "budget_bytes_per_logical_op": 5223
+      },
+      "Join_Construct": {
+        "method": "Join_Construct",
+        "mean_ns": 523006.8,
+        "allocated_bytes_per_invocation": 600038,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 6000.38,
+        "b_allocated": 6000,
+        "budget_bytes_per_logical_op": 7201
+      },
+      "Where_CachedHit_PlanOnly": {
+        "method": "Where_CachedHit_PlanOnly",
+        "mean_ns": 570100.3,
+        "allocated_bytes_per_invocation": 652817,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 6528.17,
+        "b_allocated": 6528,
+        "budget_bytes_per_logical_op": 7834
+      },
+      "Join_Prepare_NoHash": {
+        "method": "Join_Prepare_NoHash",
+        "mean_ns": 917827.0,
+        "allocated_bytes_per_invocation": 851256,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 8512.56,
+        "b_allocated": 8512,
+        "budget_bytes_per_logical_op": 10216
+      },
+      "Where_Prepared_ToList": {
+        "method": "Where_Prepared_ToList",
+        "mean_ns": 944874.4,
+        "allocated_bytes_per_invocation": 77965,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 779.65,
+        "b_allocated": 779,
+        "budget_bytes_per_logical_op": 936
+      },
+      "Join_Prepared_ToList": {
+        "method": "Join_Prepared_ToList",
+        "mean_ns": 963412.0,
+        "allocated_bytes_per_invocation": 80225,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 802.25,
+        "b_allocated": 802,
+        "budget_bytes_per_logical_op": 963
+      },
+      "Join_Prepare_Hash": {
+        "method": "Join_Prepare_Hash",
+        "mean_ns": 1194013.9,
+        "allocated_bytes_per_invocation": 895263,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 8952.63,
+        "b_allocated": 8952,
+        "budget_bytes_per_logical_op": 10744
+      },
+      "Join_CachedHit_PlanOnly": {
+        "method": "Join_CachedHit_PlanOnly",
+        "mean_ns": 1827496.4,
+        "allocated_bytes_per_invocation": 1218482,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 12184.82,
+        "b_allocated": 12184,
+        "budget_bytes_per_logical_op": 14622
+      },
+      "Where_CachedHit_ToList": {
+        "method": "Where_CachedHit_ToList",
+        "mean_ns": 1920850.7,
+        "allocated_bytes_per_invocation": 725984,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 7259.84,
+        "b_allocated": 7259,
+        "budget_bytes_per_logical_op": 8712
+      },
+      "Join_CachedHit_ToList": {
+        "method": "Join_CachedHit_ToList",
+        "mean_ns": 4370245.0,
+        "allocated_bytes_per_invocation": 1293931,
+        "logical_ops_per_invocation": 100,
+        "bytes_per_logical_op": 12939.31,
+        "b_allocated": 12939,
+        "budget_bytes_per_logical_op": 15528
+      }
+    },
+    "deltas": {
+      "Where": {
+        "construction": {
+          "mean_ns": 118722.7,
+          "bytes": 254405
+        },
+        "prepare_visitors": {
+          "mean_ns": 115476.50000000001,
+          "bytes": 133604
+        },
+        "hashing": {
+          "mean_ns": 81106.79999999999,
+          "bytes": 47202
+        },
+        "lookup_equality_extractparams": {
+          "mean_ns": 254794.30000000005,
+          "bytes": 217606
+        },
+        "execution": {
+          "mean_ns": 1350750.4,
+          "bytes": 73167
+        }
+      },
+      "Join": {
+        "construction": {
+          "mean_ns": 523006.8,
+          "bytes": 600038
+        },
+        "prepare_visitors": {
+          "mean_ns": 394820.2,
+          "bytes": 251218
+        },
+        "hashing": {
+          "mean_ns": 276186.8999999999,
+          "bytes": 44007
+        },
+        "lookup_equality_extractparams": {
+          "mean_ns": 633482.5,
+          "bytes": 323219
+        },
+        "execution": {
+          "mean_ns": 2542748.6,
+          "bytes": 75449
+        }
+      }
+    },
+    "refreshSplit": {
+      "note": "The BDN per-stage delta combines lookup+equality+ExtractParams. The simple-Where parameter refresh is separated by the public-surface diagnostic control (paramRefreshAttribution); the Join row stays combined because the diagnostic control covers only the single-table Where shape.",
+      "where": {
+        "lookupEqualityExtractParams_bytes": 217606,
+        "parameterRefresh_bytes": 134392,
+        "residualLookupEquality_bytes": 83214,
+        "residualBasis": "runtime-placeholder control arm (no refresh), not a dedicated BDN arm"
+      }
+    }
+  },
+  "frozenBudgets": {
+    "normalization": "budget_bytes_per_logical_op = ceil(observed BytesAllocatedPerOperation * 1.20 / 100); enforced in Stage B paired runs; Prepared_ToList stays at the existing no-growth 780 B/op",
+    "preparedNoGrowth": {
+      "Prepared_ToList": 780
+    },
+    "arms": {
+      "Where_Construct": {
+        "observed_bytes_per_logical_op": 2544.05,
+        "budget_bytes_per_logical_op": 3053,
+        "method": "Where_Construct"
+      },
+      "Where_Prepare_NoHash": {
+        "observed_bytes_per_logical_op": 3880.09,
+        "budget_bytes_per_logical_op": 4657,
+        "method": "Where_Prepare_NoHash"
+      },
+      "Where_Prepare_Hash": {
+        "observed_bytes_per_logical_op": 4352.11,
+        "budget_bytes_per_logical_op": 5223,
+        "method": "Where_Prepare_Hash"
+      },
+      "Join_Construct": {
+        "observed_bytes_per_logical_op": 6000.38,
+        "budget_bytes_per_logical_op": 7201,
+        "method": "Join_Construct"
+      },
+      "Where_CachedHit_PlanOnly": {
+        "observed_bytes_per_logical_op": 6528.17,
+        "budget_bytes_per_logical_op": 7834,
+        "method": "Where_CachedHit_PlanOnly"
+      },
+      "Join_Prepare_NoHash": {
+        "observed_bytes_per_logical_op": 8512.56,
+        "budget_bytes_per_logical_op": 10216,
+        "method": "Join_Prepare_NoHash"
+      },
+      "Where_Prepared_ToList": {
+        "observed_bytes_per_logical_op": 779.65,
+        "budget_bytes_per_logical_op": 936,
+        "method": "Where_Prepared_ToList"
+      },
+      "Join_Prepared_ToList": {
+        "observed_bytes_per_logical_op": 802.25,
+        "budget_bytes_per_logical_op": 963,
+        "method": "Join_Prepared_ToList"
+      },
+      "Join_Prepare_Hash": {
+        "observed_bytes_per_logical_op": 8952.63,
+        "budget_bytes_per_logical_op": 10744,
+        "method": "Join_Prepare_Hash"
+      },
+      "Join_CachedHit_PlanOnly": {
+        "observed_bytes_per_logical_op": 12184.82,
+        "budget_bytes_per_logical_op": 14622,
+        "method": "Join_CachedHit_PlanOnly"
+      },
+      "Where_CachedHit_ToList": {
+        "observed_bytes_per_logical_op": 7259.84,
+        "budget_bytes_per_logical_op": 8712,
+        "method": "Where_CachedHit_ToList"
+      },
+      "Join_CachedHit_ToList": {
+        "observed_bytes_per_logical_op": 12939.31,
+        "budget_bytes_per_logical_op": 15528,
+        "method": "Join_CachedHit_ToList"
+      }
+    },
+    "note": "budgets are frozen before any src/nextorm.core edit; Stage A does not change core"
+  },
+  "limitations": [
+    "dotnet-trace 10.0.745401 speedscope conversion does not expose GCAllocationTick type payloads on Linux; allocation stacks are taken from BenchmarkDotNet MemoryDiagnoser per-arm.",
+    "Inclusive CPU percentages include the dotnet-trace host TimerQueue thread (~50%) and must not be summed as independent stages.",
+    "Join vs Where use different pipelines; pooled/unattributed residue remains (JIT, SQLitePCL, allocator).",
+    "Arm comparison is normalized equivalence, not byte-identical SQL: the cached arms render the captured argument as $value while the prepared controls render the runtime placeholder $norm_p0 (SqlFunctions.Parameter<int>(0)); predicate shape, parameter count and rows match.",
+    "lookup/equality and parameter-refresh are separated only approximately with public-only instrumentation: the no-refresh control (runtime placeholder) differs from the captured arm in one predicate leaf, so the refresh delta carries that leaf's lookup/equality residual. Exact isolation (immutable refresh-recipe instrumentation) is deferred to Stage B2; trigger: the guarded immutable parameter-refresh recipe exists.",
+    "Raw SQL (WithSql/PrepareFromSql, RawSqlOverride) is a supported public query surface but not a supported refresh fastpath: the raw-SQL plan identity is the injected SQL text, the prepared command's SqlStmt is null, and a raw-SQL cache hit skips ExtractParams. Characterization test added at tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs (RawSqlOverride_FormAndValueChange_ShouldKeyThePlanBySqlTextOnly); converter/rawSQL/nested/IN fallback preservation remains a mandatory B2 obligation."
+  ]
+}
