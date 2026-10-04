@@ -16,8 +16,8 @@
 
 | task | group | branch | status | reason + patch | task status file |
 |---|---|---|---|---|---|
-| #183 | group-1 | `collection/1.0.9-b-5/group-1` | in-progress | written spec approved 2026-10-04 by owner; implementation authorized | `docs/specs/status/iteration-15-cached-path-183-1.md` |
-| #166 | group-1 | `collection/1.0.9-b-5/group-1` | pending | deferred, trigger not fired (#183 made no CteHoister.Hoist change) | — |
+| #183 | group-1 | `collection/1.0.9-b-5/group-1` | in-progress | resumed 2026-10-04: retry B1 controlled measurement + continue B2/C (Stage A done @752943d) | `docs/specs/status/iteration-15-cached-path-183-2.md`; `docs/specs/status/iteration-15-cached-path-b1.md` |
+| #166 | group-1 | `collection/1.0.9-b-5/group-1` | pending | deferred, trigger not fired (Hoist/nested read-CTE not touched; `CteHoister.Hoist` / nested read-CTE `PrepareCtes` unchanged) | — |
 | #164 | group-2 | `collection/1.0.9-b-5/group-2` | pending | — | — |
 
 ## Decisions
@@ -28,19 +28,19 @@
 - Escalate (trigger 5) for #183: collection mandate is not code authorization; #183 = `incomplete` (awaiting written spec review); no `src/**`, `benchmarks/**`, `tests/**`, `eng/**` edits. Stage A also gated; reduced Stage A with profile unavailable would fail Gate A. Profiler availability unconfirmed (no `dotnet-trace` in `.config/dotnet-tools.json`) — open question to reviewer. #166 deferred, trigger not fired (`CteHoister.Hoist` untouched). Group-1 terminal as `incomplete`; issue #183 NOT closed.
 - Recovery 2026-10-04 (current dialog): пользователь одобрил письменную спецификацию `docs/specs/performance/iteration-15-cached-path-design.md` — **written-spec review passed**. Это не approval детального плана, не выбор execution method и не разрешение реализации. #183 остаётся `incomplete`: awaiting detailed implementation plan review and execution-method selection; no implementation authorization. Group-1 всё ещё `incomplete`; #166 deferred, trigger not fired; issue #183 NOT closed.
 
-## Common verification and recovery
+## Общая верификация и восстановление (Common verification and recovery)
 
-- last C: escalate — #183 authorization question
-- recovery (2026-10-04): written-spec review passed (spec approved by user); implementation remains gated — detailed plan not reviewed, execution method not selected, no implementation authorization
-- reason: written spec approved 2026-10-04; awaiting detailed implementation plan review and execution-method selection; no implementation authorization
+- parent verification: **not run** — no `done` group to integrate (group-1 `incomplete`, group-2 `pending`); `git merge --no-ff` not applicable
 - verification state: unverified
-- defect id/history: (none)
-- corrective task status file: (none)
-- next allowed step: run #183 implementation stages A/B/C (group-1)
+- defect id/history: **(none)** — no product defect established; B1 `incomplete` is an acceptance/environment blocker, not a product defect
+- next allowed step: run #183 B1 measurement retry, then B2/C (group-1)
+- history: #183 written-spec review passed 2026-10-04; B1 stopped by escalation fallback (c) (loadavg(1m) 3.11–4.60, precondition <1.0 unmeetable); B2/C remain explicit remaining units in milestone `1.0.9-b`; #166 deferred, trigger not fired
 
 ## Done / Verified / Incomplete
 
 - Done: (none)
 - Verified: (none)
-- Incomplete: #183 — written spec approved 2026-10-04; awaiting detailed implementation plan review + execution-method selection; no implementation authorization
-- Deferred: #166 — trigger not fired
+- Incomplete: group-1 — lane halted after B1 `incomplete`; not merged
+- Incomplete: #183 — B1 incomplete (time-speedup not proved under controlled conditions); B2/C remaining
+- Deferred: #166 — trigger not fired (`CteHoister.Hoist` / nested read-CTE `PrepareCtes` untouched)
+- Pending: #164 — group-2, not started
