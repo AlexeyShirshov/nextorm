@@ -79,7 +79,7 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | String / math / date scalar functions, `LIKE`, string concatenation, `NULLIF`, PostgreSQL settings/sequences | yes — portable CLR `string` methods and `+` concatenation on every provider, `SqlFunctions.Sql.nullif`, plus the native string/`regexp_*`/settings/sequence library on PostgreSQL (`SqlFunctions.Postgres`) | yes | `Visitors/ScalarFunctionTranslator.cs`, dialect `Make*` hooks, `SqlFunctions.Sql.nullif`, `SqlFunctions.Postgres` |
 | CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | **yes** — PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; 2019/2022 reject) | partial — open `linq2db#698` (no `Regex.IsMatch` translation) | `Visitors/RegexSqlTranslator.cs`, `ISqlDialect.SupportsRegex`/`MakeRegexMatch`/`MakeRegexReplace` |
 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | yes | `CommonFunctions`, `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField` |
-| Full-text search | yes on SQL Server, PostgreSQL and MySQL/MariaDB | yes (provider) | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText` |
+| Full-text search | yes on SQL Server, PostgreSQL and MySQL/MariaDB (`contains`/`freetext`); plus a SQLite-specific FTS3/FTS4/FTS5 query + FROM surface (`SqlFunctions.Sqlite`; FTS5 maintenance/control deferred to #195/#196) | yes (provider) | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText`; `SqlFunctions.Sqlite` FTS members, `SqliteFunctionRenderer.cs` |
 | Native JSON documents | **yes on PostgreSQL** | partial — the `json`/`jsonb` type plus `JsonContains` (`@>`), `JsonExtractPathText` (`#>>`) and `Json.Value`; not the full `jsonb_*` library | `SupportsJson`, `JsonSqlTranslator` |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes on SQL Server and MySQL/MariaDB | yes | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
 | String JSON + native-JSON + dictionary functions (ClickHouse) | **yes on ClickHouse** (`JSONExtract*`/`JSONAllPaths`/`toJSONString`/`visitParam*`, plus dictionaries) | no dedicated API | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
@@ -189,7 +189,10 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   and `string_split`/`openjson`;
   ClickHouse `Array(T)`/`ARRAY JOIN`, `JSONExtract*`, dictionaries, the quantile/`uniq`/`argMin`-`argMax`
   families, `LIMIT BY`, `PREWHERE`/`FINAL`/`SETTINGS` and multi-branch `multiIf`.
-* Full-text search (`contains`/`freetext`) on SQL Server, PostgreSQL and MySQL/MariaDB.
+* Full-text search (`contains`/`freetext`) on SQL Server, PostgreSQL and MySQL/MariaDB, plus the
+  SQLite-specific FTS3/FTS4/FTS5 query/`FROM` surface (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/
+  `Rank`, FTS3/4 helpers and the FTS5 table-valued `MatchTable`; FTS5 maintenance/control still open in
+  #195/#196).
 * CLR `Regex` translation (`Regex.IsMatch`/`Regex.Replace`) with a constant pattern on PostgreSQL,
   MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`) — an open
   feature request in linq2db (`linq2db#698`).

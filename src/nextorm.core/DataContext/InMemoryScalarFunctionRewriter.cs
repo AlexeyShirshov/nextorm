@@ -117,6 +117,23 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         ["upper_inf:m"] = Helper(nameof(InMemoryScalarFunctions.RangeMultiUpperInf))
     };
 
+    // The SQLite FTS3/FTS4/FTS5 members are SQL-only. Their marker bodies throw, but the in-memory
+    // provider compiles the call against the null SqlFunctions.Sqlite surface, so the callvirt
+    // faults with NullReferenceException before the body runs; reject them explicitly instead.
+    private static readonly HashSet<string> SqliteFtsFunctionNames = new(StringComparer.Ordinal)
+    {
+        nameof(SqliteFunctions.Match),
+        nameof(SqliteFunctions.MatchTable),
+        nameof(SqliteFunctions.FTS5bm25),
+        nameof(SqliteFunctions.Highlight),
+        nameof(SqliteFunctions.Snippet),
+        nameof(SqliteFunctions.Rank),
+        nameof(SqliteFunctions.RowId),
+        nameof(SqliteFunctions.FTS3Offsets),
+        nameof(SqliteFunctions.FTS3MatchInfo),
+        nameof(SqliteFunctions.FTS3Snippet)
+    };
+
     private static readonly HashSet<string> RangeConstructors = new(StringComparer.Ordinal)
     {
         nameof(PostgresFunctions.int4range), nameof(PostgresFunctions.int8range),
@@ -148,6 +165,11 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         }
         else if (node.Method.DeclaringType == typeof(SqliteFunctions))
         {
+            // The FTS members are SQL-only; fail with a clear message instead of faulting on the null
+            // SqlFunctions.Sqlite surface.
+            if (SqliteFtsFunctionNames.Contains(node.Method.Name))
+                throw new NotSupportedException($"The {node.Method.Name} function is not supported by the in-memory provider.");
+
             if (node.Method.Name == "ifnull" && node.Arguments.Count == 2)
                 return Expression.Coalesce(Visit(node.Arguments[0])!, Visit(node.Arguments[1])!);
 

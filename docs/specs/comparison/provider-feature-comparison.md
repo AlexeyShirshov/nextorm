@@ -51,8 +51,9 @@ This is a statement about **per-engine feature depth, not the number of engines*
 more database products (it adds Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE,
 DuckDB and Ydb), while nextorm adds an in-memory object context and splits MySQL/MariaDB into separate
 providers. linq2db is ahead on SQL Server scalar-function breadth/hints (residual gap
-[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)) and on SQLite full-text
-([#181](https://github.com/AlexeyShirshov/nextorm/issues/181)).
+[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)); the SQLite full-text **query + FROM**
+surface shipped in [#181](https://github.com/AlexeyShirshov/nextorm/issues/181), leaving only FTS5
+maintenance/control to [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196).
 
 ## How linq2db models provider specifics
 
@@ -169,13 +170,15 @@ on hint variety.
 | Named windows / `GROUPS` / `EXCLUDE`, `percent_rank`/`cume_dist`/`nth_value` | yes | partial | `SqliteDialect.cs:131,134,137,143,146` | `Sql.Window`; RANGE/GROUPS/EXCLUDE per matrix; no statistical |
 | Table-valued parameters (`json_each`) | yes | no | `SqliteDialect.cs:27` | no TVP support |
 | CTAS / temporary table | yes | yes | `SqliteDialect.cs:332,335` | `DataExtensions.CreateTable`, `TempTable.cs` |
-| Full-text FTS3 / FTS4 / FTS5 | no | yes (extensive) | not overridden (default) | `SQLiteExtensions.cs` (900 lines: `FTS3Offsets/MatchInfo/Snippet/Optimize/...`, `FTS5bm25/Highlight/Snippet/CrisisMerge/...`, `Match`/`MatchTable`/`Rank`) |
-| Provider scalar-function library | yes | no (FTS-only) | `SqlFunctions.Sqlite.cs` (274 lines) | `SQLiteExtensions.cs` contains no JSON/regex; FTS only |
+| Full-text FTS3 / FTS4 / FTS5 | yes (query + FROM, #181; FTS5 maintenance/control open in #195/#196) | yes (extensive) | `SqlFunctions.Sqlite.cs` FTS members; `SqliteFunctionRenderer.cs:26-27,44-53`; `SqliteDialect.cs` `SupportsTableFunction`/`WrapTableFunction` | `SQLiteExtensions.cs` (900 lines: `FTS3Offsets/MatchInfo/Snippet/Optimize/...`, `FTS5bm25/Highlight/Snippet/CrisisMerge/...`, `Match`/`MatchTable`/`Rank`) |
+| Provider scalar-function library | yes | no (FTS-only) | `SqlFunctions.Sqlite.cs` (355 lines; core scalars/JSON1/date/math + FTS3/4/5 query) | `SQLiteExtensions.cs` contains no JSON/regex; FTS only |
 
 Net: **mixed, net nextorm broader** — nextorm adds JSON1, regex, custom aggregates, window frame
-`GROUPS`/`EXCLUDE`, TVP and LOB streaming; **linq2db leads on full-text** (FTS3/4/5 management and
-ranking), where nextorm has no surface. Tracked as nextorm
-[#181](https://github.com/AlexeyShirshov/nextorm/issues/181).
+`GROUPS`/`EXCLUDE`, TVP and LOB streaming; **SQLite full-text query/FROM shipped in
+[#181](https://github.com/AlexeyShirshov/nextorm/issues/181)**, so linq2db now leads only on FTS5
+**maintenance/control** (`AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`),
+deferred to nextorm
+[#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196).
 
 ---
 
@@ -230,7 +233,10 @@ surfaces. The strongest nextorm-only areas, with no linq2db equivalent found:
 Where linq2db leads or matches:
 
 - SQL Server scalar-function breadth (`SqlFn.cs`, 156 `[Sql.Function]` declarations) and hint variety.
-- SQLite full-text (FTS3/4/5), where nextorm has no surface.
+- SQLite full-text (FTS3/4/5) maintenance/control (`AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/
+  `Rebuild`/`IntegrityCheck`); nextorm shipped the **query + FROM** surface in
+  [#181](https://github.com/AlexeyShirshov/nextorm/issues/181) and defers maintenance/control to
+  [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196).
 - A broader engine list (Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, Access, SQL CE, DuckDB, Ydb).
 
 Parity (both, engine permitting): core DML `RETURNING`/`OUTPUT`/`MERGE`/upsert, bulk copy, stored

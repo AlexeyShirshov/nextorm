@@ -628,8 +628,10 @@ public interface ITupleRenderer
 /// <c>random</c>/<c>randomblob</c>, <c>quote</c>, <c>typeof</c>, <c>glob</c>, <c>unicode</c>/<c>char</c>,
 /// <c>soundex</c>, <c>octet_length</c>, <c>if</c>/<c>ifnull</c>), the JSON1 functions/operators/aggregates
 /// (<c>json_extract</c>, <c>-&gt;</c>/<c>-&gt;&gt;</c>, <c>json_set</c>, <c>json_group_array</c>, ...), the
-/// date functions (<c>timediff</c>, <c>unixepoch</c>, <c>julianday</c>) and the math-extension functions
-/// (<c>acos</c>, <c>degrees</c>, <c>log2</c>, <c>mod</c>, <c>pi</c>, ...). The predicate and the renderer
+/// date functions (<c>timediff</c>, <c>unixepoch</c>, <c>julianday</c>), the math-extension functions
+/// (<c>acos</c>, <c>degrees</c>, <c>log2</c>, <c>mod</c>, <c>pi</c>, ...) and the full-text (FTS3/FTS4/FTS5)
+/// query surface (<c>Match</c>, <c>Rank</c>, <c>FTS5bm25</c>, <c>Highlight</c>, <c>FTS3Offsets</c>, ...).
+/// The predicate and the renderer
 /// live on one object, so a name the dialect reports as supported always has a rendering, and a provider
 /// that cannot express the surface returns <see langword="null"/> from
 /// <see cref="ISqlDialect.SqliteFunctions"/>.

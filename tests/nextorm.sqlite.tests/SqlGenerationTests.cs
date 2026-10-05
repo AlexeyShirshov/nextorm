@@ -2712,8 +2712,13 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void FullTextPredicates_ShouldThrowBecauseSqliteLacksThem()
+    [Trait("Issue", "181")]
+    public void CrossProviderFullTextPredicates_ContainsFreetext_ShouldThrowBecauseSqliteLacksThem()
     {
+        // This is the portable cross-provider `contains`/`freetext` predicate surface, which SQLite
+        // does not translate. It is unrelated to the SQLite-native FTS3/FTS4/FTS5 surface
+        // (SqlFunctions.Sqlite.Match and friends), which SQLite does support (#181). The named
+        // method keeps the rejection behaviour while distinguishing the two.
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 

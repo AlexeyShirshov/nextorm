@@ -1277,6 +1277,15 @@ public interface ISqlDialect
     /// unsigned <c>numbers</c> column to a type the row reader supports.
     /// </summary>
     string WrapTableFunction(string name, string call);
+
+    /// <summary>
+    /// Wraps the rendered table-function call with the structured, already-rendered arguments, or
+    /// returns it unchanged. A dialect that needs an individual argument intact (SQLite rewrites the
+    /// FTS5 <c>fts5(table, query)</c> placeholder to the native <c>table(query)</c> form) uses this
+    /// overload so it never has to reparse the serialized call text. The default forwards to
+    /// <see cref="WrapTableFunction(string, string)"/> so existing implementations keep compiling.
+    /// </summary>
+    string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => WrapTableFunction(name, call);
     /// <summary>
     /// Whether the dialect supports the <c>FINAL</c> table modifier (ClickHouse). When <c>false</c>, a
     /// command that carries it is rejected when its SQL is built.

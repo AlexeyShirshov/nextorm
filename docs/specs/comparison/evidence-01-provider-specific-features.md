@@ -90,7 +90,8 @@ $ wc -l src/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}/*Dialec
 | JSON1 (`json()`, `jsonb()`, `json_extract`, `->`/`->>`, `json_each`/`json_tree`) | yes | `SqlFunctions.Sqlite.*` | SqlFunctions.Sqlite.cs:187,190,197,200,203,247-273 |
 | Custom aggregate family (`stdev`/`stdevp`/`var`/`varp`) | yes | registered `CreateAggregate` | SQLiteFunctions.cs:23-37 |
 | `string_agg` -> `group_concat` | yes | `SupportsStringAgg=true`; `MakeStringAgg` | SqliteDialect.cs:106-110 |
-| Full-text / arrays / range types / temporal / data-modifying CTE / OUTPUT / MERGE / query hints / bulk copy | no | not overridden (defaults) | ISqlDialect defaults; docs/providers/sqlite.md:155-171 |
+| Full-text FTS3/FTS4/FTS5 query + FROM (FTS5 maintenance/control deferred to [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)) | yes | `SqlFunctions.Sqlite` FTS members; `ISqlDialect.SqliteFunctions`; FTS5 table-valued `[SqlTableFunction]` | SqlFunctions.Sqlite.cs:276-354; SqliteFunctionRenderer.cs:26-27,44-53; SqliteDialect.cs (SupportsTableFunction/WrapTableFunction); SqliteSpecificTests.cs FTS tests |
+| Arrays / range types / temporal / data-modifying CTE / OUTPUT / MERGE / query hints / bulk copy | no | not overridden (defaults) | ISqlDialect defaults; docs/providers/sqlite.md:155-171 |
 
 ### F2. SQL Server (`src/nextorm.sqlserver/`)
 

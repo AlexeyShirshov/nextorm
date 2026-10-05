@@ -112,9 +112,10 @@ SQLite has no `OFFSET` without `LIMIT`, so an offset-only query emits the sentin
 
 ## SQLite-only functions
 
-`SqlFunctions.Sqlite` exposes the SQLite-only surface: the core scalars, JSON1, the date helpers and the
-math-extension functions. `json_each`/`json_tree` are available as table functions. Other providers
-reject every member of the surface with a `NotSupportedException`.
+`SqlFunctions.Sqlite` exposes the SQLite-only surface: the core scalars, JSON1, the date helpers, the
+math-extension functions and the FTS3/FTS4/FTS5 full-text query surface. `json_each`/`json_tree` and
+the FTS5 table-valued search are available as table functions. Other providers reject every member of
+the surface with a `NotSupportedException`.
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -125,6 +126,109 @@ ctx.From<IComplexEntity>()
         Pi = SqlFunctions.Sql.pi()
     });
 ```
+
+### Full-text search (FTS3/FTS4/FTS5)
+
+The FTS members query an FTS virtual table; nextorm does not create or maintain it. Query support
+exists only when the SQLite build includes the module (the bundled provider ships `fts3`, `fts4` and
+`fts5`). This is separate from the cross-provider `SqlFunctions.Sql.contains`/`freetext` predicates:
+those stay gated by [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), which is
+`false` on SQLite, so they throw `NotSupportedException`. Every FTS member is SQL-only — the in-memory
+provider throws `NotSupportedException`.
+
+| C# | SQLite | Module |
+|---|---|---|
+| `Match(tableOrColumn, query)` | `tableOrColumn MATCH query` | FTS3/4/5 |
+| `MatchTable<TEntity>(table, query)` | `table(query)` as a `FROM` source | FTS5 |
+| `FTS5bm25(table)` / `FTS5bm25(table, weights…)` | `bm25(table[, weights…])` | FTS5 |
+| `Highlight(table, columnIndex, startMatch, endMatch)` | `highlight(...)` | FTS5 |
+| `Snippet(table, columnIndex, startMatch, endMatch, ellipses, tokens)` | `snippet(...)` | FTS5 |
+| `Rank(table)` | `table.rank` (hidden column) | FTS5 |
+| `Rank(matchInfo)` | `rank(matchInfo)` (needs the `rank` UDF) | FTS3/4 |
+| `RowId(table)` | `table.rowid` (hidden column) | FTS3/4 |
+| `FTS3Offsets(table)` | `offsets(table)` | FTS3/4 |
+| `FTS3MatchInfo(table[, format])` | `matchinfo(table[, format])` | FTS3/4 |
+| `FTS3Snippet(table, …)` | `snippet(table, …)` | FTS3/4 |
+
+The first argument of the auxiliary functions (and the table token of `Match`) is a **trusted constant**
+table name; it is emitted as a quoted identifier, so never build it from user input. The FTS `query` is
+bound as a parameter when it is a run-time value and inlined as a literal when it is constant.
+
+```csharp
+var query = "hello";
+
+var rows = ctx.From<Article>()
+    .Where(x => SqlFunctions.Sqlite.Match("article_fts", query))
+    .OrderBy(x => x.RowId)
+    .Select(x => new
+    {
+        x.RowId,
+        x.Title,
+        Score = SqlFunctions.Sqlite.FTS5bm25("article_fts"),
+        Preview = SqlFunctions.Sqlite.Snippet("article_fts", 1, "[", "]", "...", 8)
+    })
+    .ToList();
+```
+
+```sql
+select rowid, title, bm25("article_fts") as 'Score',
+       snippet("article_fts", 1, '[', ']', '...', 8) as 'Preview'
+from article_fts
+where "article_fts" match $query
+order by rowid
+```
+
+FTS5 also has a table-valued `FROM` form, `MatchTable`, which composes like any other source
+(`FromTableFunction`):
+
+```csharp
+var rows = ctx
+    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .OrderBy(x => x.RowId)
+    .Select(x => new { x.RowId, x.Title })
+    .ToList();
+```
+
+```sql
+select rowid, title from "article_fts"($query) order by rowid
+```
+
+FTS3/4 has no built-in `rank`: SQLite resolves `rank(matchinfo(...))` through a **connection-registered
+SQL UDF** named `rank`, which the provider does not register. Register it on every connection or the
+query fails at execution with `SQLite Error 1: no such function: rank`:
+
+```csharp
+using Microsoft.Data.Sqlite;
+
+using var connection = new SqliteConnection("Data Source=app.db");
+connection.CreateFunction<byte[]?, long>("rank", static matchInfo =>
+{
+    // Score the matchinfo() blob (see SQLite's matchinfo documentation); this sample just sums bytes.
+    long score = 0;
+    if (matchInfo is not null)
+        foreach (var b in matchInfo)
+            score += b;
+    return score;
+});
+```
+
+```csharp
+var scores = ctx.From<Article>()
+    .Where(x => SqlFunctions.Sqlite.Match("article_fts", "hello"))
+    .Select(x => new
+    {
+        x.RowId,
+        Score = SqlFunctions.Sqlite.Rank(SqlFunctions.Sqlite.FTS3MatchInfo("article_fts"))
+    })
+    .ToList();
+```
+
+Creating, populating and tuning the index stays outside the query surface: the FTS5
+maintenance/control functions (`AutoMerge`, `CrisisMerge`, `Merge`, `Optimize`, `Rebuild`,
+`IntegrityCheck`) are deferred to follow-ups
+[#195](https://github.com/AlexeyShirshov/nextorm/issues/195) and
+[#196](https://github.com/AlexeyShirshov/nextorm/issues/196); create the virtual table with raw SQL
+in the meantime.
 
 See [SQLite-specific SQL](../guide/provider-specific/sqlite.md) for the full list, the native SQLite
 spelling and the version/build-option requirements.
@@ -150,6 +254,8 @@ The LOB streaming terminals (`ToStream`/`ToTextReader`) are supported for a sing
 
 The multi-column `ToDataReader`/`ToDataReaderAsync` terminal is **not** supported on SQLite: its streaming projection always carries the trailing `rowid` locator, so the terminal would expose a column the caller never projected. It fails closed with `NotSupportedException` before execution; use `ToStream`/`ToTextReader` for a single LOB column.
 
+SQLite's own FTS3/FTS4/FTS5 query surface is available (see [Full-text search](#full-text-search-fts3fts4fts5)); only the cross-provider `SqlFunctions.Sql.contains`/`freetext` predicates (gated by [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), `false` on SQLite) and FTS index maintenance (deferred to [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)) stay outside it.
+
 ## Provider differences
 
 | Aspect | SQLite |
@@ -166,6 +272,7 @@ The multi-column `ToDataReader`/`ToDataReaderAsync` terminal is **not** supporte
 | TVF alias | not required |
 | `*ALL` | not supported |
 | `ANY`/`ALL` subqueries | rejected by the database at execution |
+| Full-text search | FTS3/FTS4/FTS5 query surface via `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, FTS3/4 helpers, FTS5 table-valued `MatchTable`; FTS3/4 `Rank` needs a connection-registered `rank` UDF); cross-provider `contains`/`freetext` throw |
 | LOB streaming (`ToStream`/`ToTextReader`) | supported (`blob` / `text`; the source must expose `rowid` — a `view`/`WITHOUT ROWID` source fails with `SqliteException: no such column: rowid`); `ToDataReader` throws `NotSupportedException` (rowid locator) |
 | Session/info functions | `version()` → `sqlite_version()` (no user/schema/database information) |
 

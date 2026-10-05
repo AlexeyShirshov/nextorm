@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
+using NextORM.Sqlite;
 
 namespace NextORM.Integration.Tests;
 
@@ -769,6 +770,818 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         count.Should().Contain("$.a");
         count.Should().Contain("$.a.b");
     }
+
+    // =============================================================================================
+    // SQLite full-text search FTS3/FTS4/FTS5 (#181): real virtual tables on the bundled SQLite,
+    // compared against the same parameterised native statement on the same connection.
+    // =============================================================================================
+
+    [SqlTable("fts5_docs")]
+    private sealed class Fts5Doc
+    {
+        [Key]
+        [Column("rowid")]
+        public long RowId { get; set; }
+        [Column("title")]
+        public string? Title { get; set; }
+        [Column("body")]
+        public string? Body { get; set; }
+    }
+
+    [SqlTable("fts4_docs")]
+    private sealed class Fts4Doc
+    {
+        [Key]
+        [Column("rowid")]
+        public long RowId { get; set; }
+        [Column("title")]
+        public string? Title { get; set; }
+        [Column("body")]
+        public string? Body { get; set; }
+    }
+
+    [SqlTable("fts3_docs")]
+    private sealed class Fts3Doc
+    {
+        [Key]
+        [Column("rowid")]
+        public long RowId { get; set; }
+        [Column("title")]
+        public string? Title { get; set; }
+        [Column("body")]
+        public string? Body { get; set; }
+    }
+
+    private sealed class FtsRankRow
+    {
+        [Column("rowid")]
+        public long RowId { get; set; }
+        [Column("score")]
+        public double? Score { get; set; }
+    }
+
+    private static void ResetFtsTables(IDataContext ctx)
+    {
+        foreach (var table in new[] { "fts5_docs", "fts4_docs", "fts3_docs" })
+            Execute(ctx, $"drop table if exists {table}");
+
+        foreach (var (table, module) in new[] { ("fts5_docs", "fts5"), ("fts4_docs", "fts4"), ("fts3_docs", "fts3") })
+        {
+            Execute(ctx, $"create virtual table {table} using {module}(title, body)");
+            Execute(ctx, $"insert into {table}(title, body) values " +
+                         "('hello world', 'the quick brown fox'), " +
+                         "('goodbye moon', 'fox jumps over the lazy dog'), " +
+                         "('hello again', 'hello hello world'), " +
+                         "('naïve café', 'Ünïcode wörld')");
+        }
+    }
+
+    private static void RegisterRankUdf(IDataContext ctx)
+    {
+        var db = (DataContext)ctx;
+        db.EnsureConnectionOpen();
+        var connection = (SqliteConnection)db.GetConnection();
+        connection.CreateFunction<byte[]?, long>("rank", static info =>
+        {
+            if (info is null)
+                return 0;
+
+            long sum = 0;
+            foreach (var b in info)
+                sum += b;
+
+            return sum;
+        });
+    }
+
+    private static List<long> NativeRowIds(IDataContext ctx, string table, string matchExpression, string query)
+    {
+        using var result = ctx.ExecuteRaw(
+            $"select rowid from {table} where {matchExpression} match @q order by rowid",
+            [new ProcedureParameter("q", query)]);
+        return result.Read<long>().ToList();
+    }
+
+    // ---- FTS5 -----------------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_TableMatch_ShouldFilterParameterisedAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var ids = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .OrderBy(x => x.RowId)
+            .Select(x => x.RowId)
+            .ToList();
+
+        ids.Should().Equal(1L, 3L);
+        ids.Should().Equal(NativeRowIds(ctx, "fts5_docs", "fts5_docs", query));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_ColumnMatch_ShouldFilterAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var ids = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match(x.Title, query))
+            .OrderBy(x => x.RowId)
+            .Select(x => x.RowId)
+            .ToList();
+
+        ids.Should().Equal(1L, 3L);
+        ids.Should().Equal(NativeRowIds(ctx, "fts5_docs", "title", query));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_Bm25_ShouldRankWithAndWithoutWeightsAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var rows = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .Select(x => new { x.RowId, Score = SqlFunctions.Sqlite.FTS5bm25("fts5_docs") })
+            .ToList()
+            .OrderBy(x => x.Score)
+            .ThenBy(x => x.RowId)
+            .ToList();
+
+        var weighted = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .Select(x => new { x.RowId, Score = SqlFunctions.Sqlite.FTS5bm25("fts5_docs", 1.0, 2.0) })
+            .ToList()
+            .OrderBy(x => x.Score)
+            .ThenBy(x => x.RowId)
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select rowid, bm25(fts5_docs) as score from fts5_docs where fts5_docs match @q order by bm25(fts5_docs), rowid",
+            [new ProcedureParameter("q", query)]);
+        var nativeRows = native.Read<FtsRankRow>();
+
+        using var nativeWeighted = ctx.ExecuteRaw(
+            "select rowid, bm25(fts5_docs, 1.0, 2.0) as score from fts5_docs where fts5_docs match @q order by bm25(fts5_docs, 1.0, 2.0), rowid",
+            [new ProcedureParameter("q", query)]);
+        var nativeWeightedRows = nativeWeighted.Read<FtsRankRow>();
+
+        rows.Select(r => r.RowId).Should().Equal(nativeRows.Select(r => r.RowId));
+        rows.Select(r => r.Score).Should().Equal(nativeRows.Select(r => r.Score));
+        weighted.Select(r => r.RowId).Should().Equal(nativeWeightedRows.Select(r => r.RowId));
+        weighted.Select(r => r.Score).Should().Equal(nativeWeightedRows.Select(r => r.Score));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_Highlight_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var highlights = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .OrderBy(x => x.RowId)
+            .Select(x => SqlFunctions.Sqlite.Highlight("fts5_docs", 0, "[", "]"))
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select highlight(fts5_docs, 0, '[', ']') from fts5_docs where fts5_docs match @q order by rowid",
+            [new ProcedureParameter("q", query)]);
+        var nativeValues = native.Read<string>().ToList();
+
+        highlights.Should().Equal(nativeValues);
+        highlights.Should().OnlyContain(x => x.Contains("[hello]"));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_Snippet_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "fox";
+
+        var snippets = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .OrderBy(x => x.RowId)
+            .Select(x => SqlFunctions.Sqlite.Snippet("fts5_docs", 1, "[", "]", "...", 8))
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select snippet(fts5_docs, 1, '[', ']', '...', 8) from fts5_docs where fts5_docs match @q order by rowid",
+            [new ProcedureParameter("q", query)]);
+        var nativeValues = native.Read<string>().ToList();
+
+        snippets.Should().Equal(nativeValues);
+        snippets.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_RankHiddenColumn_ShouldMatchBm25()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var ranks = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .Select(x => new { x.RowId, Rank = SqlFunctions.Sqlite.Rank("fts5_docs") })
+            .OrderBy(x => x.RowId)
+            .ToList();
+
+        var bm25 = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .Select(x => new { x.RowId, Score = SqlFunctions.Sqlite.FTS5bm25("fts5_docs") })
+            .OrderBy(x => x.RowId)
+            .ToList();
+
+        ranks.Select(r => r.RowId).Should().Equal(bm25.Select(r => r.RowId));
+        ranks.Select(r => r.Rank!.Value).Should().Equal(bm25.Select(r => r.Score!.Value));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_AdvancedQuerySyntax_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+
+        foreach (var query in new[] { "hel*", "\"hello world\"", "hello OR goodbye", "café", "wörld" })
+        {
+            var ids = ctx.From<Fts5Doc>()
+                .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+                .OrderBy(x => x.RowId)
+                .Select(x => x.RowId)
+                .ToList();
+
+            ids.Should().Equal(NativeRowIds(ctx, "fts5_docs", "fts5_docs", query), "the query '{0}' must match native FTS5", query);
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_MalformedQuery_ShouldThrowTheSameNativeError()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "nosuchcolumn:value";
+
+        var act = () => ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .Select(x => x.RowId)
+            .ToList();
+
+        var thrown = act.Should().Throw<SqliteException>().Which;
+
+        var native = () =>
+        {
+            using var result = ctx.ExecuteRaw("select rowid from fts5_docs where fts5_docs match @q", [new ProcedureParameter("q", query)]);
+            result.Read<long>();
+        };
+        native.Should().Throw<SqliteException>().Which.SqliteErrorCode.Should().Be(thrown.SqliteErrorCode);
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_MatchTableFromSource_ShouldProjectAndCompose()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var rows = ctx
+            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs", query))
+            .Where(x => x.RowId > 0)
+            .OrderBy(x => x.RowId)
+            .Select(x => new { x.RowId, x.Title })
+            .ToList();
+
+        rows.Select(r => r.RowId).Should().Equal(1L, 3L);
+        rows.Should().OnlyContain(r => r.Title != null && r.Title.Contains("hello"));
+
+        using var native = ctx.ExecuteRaw(
+            "select rowid from fts5_docs('hello') order by rowid");
+        native.Read<long>().Should().Equal(rows.Select(r => r.RowId));
+    }
+
+    // ---- FTS4 -----------------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts4_Match_ShouldFilterAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "fox";
+
+        var tableIds = ctx.From<Fts4Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts4_docs", query))
+            .OrderBy(x => x.RowId)
+            .Select(x => x.RowId)
+            .ToList();
+
+        var columnIds = ctx.From<Fts4Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match(x.Body, query))
+            .OrderBy(x => x.RowId)
+            .Select(x => x.RowId)
+            .ToList();
+
+        tableIds.Should().Equal(1L, 2L);
+        tableIds.Should().Equal(NativeRowIds(ctx, "fts4_docs", "fts4_docs", query));
+        columnIds.Should().Equal(NativeRowIds(ctx, "fts4_docs", "body", query));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts4_Helpers_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var row = ctx.From<Fts4Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts4_docs", query))
+            .Select(x => new
+            {
+                RowId = SqlFunctions.Sqlite.RowId("fts4_docs"),
+                Offsets = SqlFunctions.Sqlite.FTS3Offsets("fts4_docs"),
+                MatchInfo = SqlFunctions.Sqlite.FTS3MatchInfo("fts4_docs"),
+                MatchInfoPcx = SqlFunctions.Sqlite.FTS3MatchInfo("fts4_docs", "pcx"),
+                Snippet = SqlFunctions.Sqlite.FTS3Snippet("fts4_docs"),
+                SnippetArgs = SqlFunctions.Sqlite.FTS3Snippet("fts4_docs", "[", "]")
+            })
+            .OrderBy(x => x.RowId)
+            .First();
+
+        using var native = ctx.ExecuteRaw(
+            "select rowid, offsets(fts4_docs) as offsets, matchinfo(fts4_docs) as matchinfo, " +
+            "matchinfo(fts4_docs, 'pcx') as matchinfopcx, snippet(fts4_docs) as snippet, snippet(fts4_docs, '[', ']') as snippetargs " +
+            "from fts4_docs where fts4_docs match @q order by rowid limit 1",
+            [new ProcedureParameter("q", query)]);
+        var nativeRow = native.Read<Fts4HelperRow>().Single();
+
+        row.RowId.Should().Be(nativeRow.RowId);
+        row.Offsets.Should().Be(nativeRow.Offsets);
+        row.MatchInfo.Should().Equal(nativeRow.MatchInfo);
+        row.MatchInfoPcx.Should().Equal(nativeRow.MatchInfoPcx);
+        row.Snippet.Should().Be(nativeRow.Snippet);
+        row.SnippetArgs.Should().Be(nativeRow.SnippetArgs);
+    }
+
+    private sealed class Fts4HelperRow
+    {
+        [Column("rowid")]
+        public long RowId { get; set; }
+        [Column("offsets")]
+        public string? Offsets { get; set; }
+        [Column("matchinfo")]
+        public byte[]? MatchInfo { get; set; }
+        [Column("matchinfopcx")]
+        public byte[]? MatchInfoPcx { get; set; }
+        [Column("snippet")]
+        public string? Snippet { get; set; }
+        [Column("snippetargs")]
+        public string? SnippetArgs { get; set; }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts4_RankOverMatchInfo_ShouldMatchNativeWithUdf()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        RegisterRankUdf(ctx);
+        var query = "hello";
+
+        var scores = ctx.From<Fts4Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts4_docs", query))
+            .Select(x => new { x.RowId, Score = SqlFunctions.Sqlite.Rank(SqlFunctions.Sqlite.FTS3MatchInfo("fts4_docs")) })
+            .OrderBy(x => x.RowId)
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select rowid, rank(matchinfo(fts4_docs)) as score from fts4_docs where fts4_docs match @q order by rowid",
+            [new ProcedureParameter("q", query)]);
+        var nativeRows = native.Read<FtsRankRow>();
+
+        scores.Select(s => s.RowId).Should().Equal(nativeRows.Select(r => r.RowId));
+        scores.Select(s => s.Score).Should().Equal(nativeRows.Select(r => r.Score));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts4_RankOverMatchInfo_ShouldFailWithoutUdf()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm.fts.norank.{Guid.NewGuid():N}.db");
+        try
+        {
+            using var ctx = new SqliteDataContext($"Data Source='{path}'", new DataContextBuilder());
+            Execute(ctx, "create virtual table fts4_docs using fts4(title, body)");
+            Execute(ctx, "insert into fts4_docs(title, body) values ('hello world', 'x')");
+
+            var act = () => ctx.From<Fts4Doc>()
+                .Where(x => SqlFunctions.Sqlite.Match("fts4_docs", "hello"))
+                .Select(x => SqlFunctions.Sqlite.Rank(SqlFunctions.Sqlite.FTS3MatchInfo("fts4_docs")))
+                .First();
+
+            act.Should().Throw<SqliteException>().Which.SqliteErrorCode.Should().Be(1);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    // ---- FTS3 -----------------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts3_Match_ShouldFilterAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "fox";
+
+        var tableIds = ctx.From<Fts3Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts3_docs", query))
+            .OrderBy(x => x.RowId)
+            .Select(x => x.RowId)
+            .ToList();
+
+        var columnIds = ctx.From<Fts3Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match(x.Body, query))
+            .OrderBy(x => x.RowId)
+            .Select(x => x.RowId)
+            .ToList();
+
+        tableIds.Should().Equal(1L, 2L);
+        tableIds.Should().Equal(NativeRowIds(ctx, "fts3_docs", "fts3_docs", query));
+        columnIds.Should().Equal(NativeRowIds(ctx, "fts3_docs", "body", query));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts3_Helpers_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        var row = ctx.From<Fts3Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts3_docs", query))
+            .Select(x => new
+            {
+                RowId = SqlFunctions.Sqlite.RowId("fts3_docs"),
+                Offsets = SqlFunctions.Sqlite.FTS3Offsets("fts3_docs"),
+                MatchInfo = SqlFunctions.Sqlite.FTS3MatchInfo("fts3_docs"),
+                Snippet = SqlFunctions.Sqlite.FTS3Snippet("fts3_docs", "[", "]", "...", 0, 8)
+            })
+            .OrderBy(x => x.RowId)
+            .First();
+
+        using var native = ctx.ExecuteRaw(
+            "select rowid, offsets(fts3_docs) as offsets, matchinfo(fts3_docs) as matchinfo, snippet(fts3_docs, '[', ']', '...', 0, 8) as snippet " +
+            "from fts3_docs where fts3_docs match @q order by rowid limit 1",
+            [new ProcedureParameter("q", query)]);
+        var nativeRow = native.Read<Fts3HelperRow>().Single();
+
+        row.RowId.Should().Be(nativeRow.RowId);
+        row.Offsets.Should().Be(nativeRow.Offsets);
+        row.MatchInfo.Should().Equal(nativeRow.MatchInfo);
+        row.Snippet.Should().Be(nativeRow.Snippet);
+    }
+
+    private sealed class Fts3HelperRow
+    {
+        [Column("rowid")]
+        public long RowId { get; set; }
+        [Column("offsets")]
+        public string? Offsets { get; set; }
+        [Column("matchinfo")]
+        public byte[]? MatchInfo { get; set; }
+        [Column("snippet")]
+        public string? Snippet { get; set; }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts3_RankOverMatchInfo_ShouldMatchNativeWithUdf()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        RegisterRankUdf(ctx);
+        var query = "hello";
+
+        var scores = ctx.From<Fts3Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts3_docs", query))
+            .Select(x => new { x.RowId, Score = SqlFunctions.Sqlite.Rank(SqlFunctions.Sqlite.FTS3MatchInfo("fts3_docs")) })
+            .OrderBy(x => x.RowId)
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select rowid, rank(matchinfo(fts3_docs)) as score from fts3_docs where fts3_docs match @q order by rowid",
+            [new ProcedureParameter("q", query)]);
+        var nativeRows = native.Read<FtsRankRow>();
+
+        scores.Select(s => s.RowId).Should().Equal(nativeRows.Select(r => r.RowId));
+        scores.Select(s => s.Score).Should().Equal(nativeRows.Select(r => r.Score));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts3_RankOverMatchInfo_ShouldFailWithoutUdf()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm.fts3.norank.{Guid.NewGuid():N}.db");
+        try
+        {
+            using var ctx = new SqliteDataContext($"Data Source='{path}'", new DataContextBuilder());
+            Execute(ctx, "create virtual table fts3_docs using fts3(title, body)");
+            Execute(ctx, "insert into fts3_docs(title, body) values ('hello world', 'x')");
+
+            var act = () => ctx.From<Fts3Doc>()
+                .Where(x => SqlFunctions.Sqlite.Match("fts3_docs", "hello"))
+                .Select(x => SqlFunctions.Sqlite.Rank(SqlFunctions.Sqlite.FTS3MatchInfo("fts3_docs")))
+                .First();
+
+            act.Should().Throw<SqliteException>().Which.SqliteErrorCode.Should().Be(1);
+        }
+        finally
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts3_AdvancedQuerySyntax_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+
+        foreach (var query in new[] { "hel*", "\"hello world\"", "hello AND world", "hello OR goodbye", "hello NOT goodbye", "café", "wörld" })
+        {
+            var ids = ctx.From<Fts3Doc>()
+                .Where(x => SqlFunctions.Sqlite.Match("fts3_docs", query))
+                .OrderBy(x => x.RowId)
+                .Select(x => x.RowId)
+                .ToList();
+
+            ids.Should().Equal(NativeRowIds(ctx, "fts3_docs", "fts3_docs", query), "the query '{0}' must match native FTS3", query);
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts4_AdvancedQuerySyntax_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+
+        foreach (var query in new[] { "hel*", "\"hello world\"", "hello AND world", "hello OR goodbye", "hello NOT goodbye", "café", "wörld" })
+        {
+            var ids = ctx.From<Fts4Doc>()
+                .Where(x => SqlFunctions.Sqlite.Match("fts4_docs", query))
+                .OrderBy(x => x.RowId)
+                .Select(x => x.RowId)
+                .ToList();
+
+            ids.Should().Equal(NativeRowIds(ctx, "fts4_docs", "fts4_docs", query), "the query '{0}' must match native FTS4", query);
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts3_MalformedQuery_ShouldThrowTheSameNativeError()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "\"hello";
+
+        var act = () => ctx.From<Fts3Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts3_docs", query))
+            .Select(x => x.RowId)
+            .ToList();
+
+        var thrown = act.Should().Throw<SqliteException>().Which;
+
+        var native = () =>
+        {
+            using var result = ctx.ExecuteRaw("select rowid from fts3_docs where fts3_docs match @q", [new ProcedureParameter("q", query)]);
+            result.Read<long>();
+        };
+        native.Should().Throw<SqliteException>().Which.SqliteErrorCode.Should().Be(thrown.SqliteErrorCode);
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts4_MalformedQuery_ShouldThrowTheSameNativeError()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "\"hello";
+
+        var act = () => ctx.From<Fts4Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts4_docs", query))
+            .Select(x => x.RowId)
+            .ToList();
+
+        var thrown = act.Should().Throw<SqliteException>().Which;
+
+        var native = () =>
+        {
+            using var result = ctx.ExecuteRaw("select rowid from fts4_docs where fts4_docs match @q", [new ProcedureParameter("q", query)]);
+            result.Read<long>();
+        };
+        native.Should().Throw<SqliteException>().Which.SqliteErrorCode.Should().Be(thrown.SqliteErrorCode);
+    }
+
+    // ---- FTS5 FROM alias / native rank oracle / token safety (R181-03, E181-14/15/17) --------------
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_MatchTableFromSourceAliased_ShouldProjectAliasQualifiedAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var query = "hello";
+
+        // The join forces the table-valued source to carry an alias; the projection must then qualify
+        // rowid/title through that alias (distinct from the ordinary `FROM fts5_docs WHERE fts5_docs MATCH`).
+        var rows = ctx
+            .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs", query))
+            .Join(ctx.From<Fts5Doc>(), (a, b) => a.RowId == b.RowId)
+            .Select(x => new { x.Item1.RowId, x.Item1.Title })
+            .ToList()
+            .OrderBy(r => r.RowId)
+            .ToList();
+
+        rows.Select(r => r.RowId).Should().Equal(1L, 3L);
+
+        using var native = ctx.ExecuteRaw(
+            "select a.rowid as rowid, a.title as title from fts5_docs('hello') as a " +
+            "join fts5_docs as b on a.rowid = b.rowid order by a.rowid");
+        var nativeRows = native.Read<Fts5Doc>();
+        rows.Select(r => r.RowId).Should().Equal(nativeRows.Select(r => r.RowId));
+        rows.Select(r => r.Title).Should().Equal(nativeRows.Select(r => r.Title));
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_RankHiddenColumn_ShouldMatchNativeConfiguredRankAndDifferFromBm25()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        // Reconfigure the FTS5 hidden `rank` column to a weighted bm25, so the native `rank` is no
+        // longer equal to the unconfigured bm25() and the oracle is non-degenerate.
+        ConfigureFts5Rank(ctx, "bm25(10.0, 1.0)");
+        var query = "hello";
+
+        var rows = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .Select(x => new { x.RowId, Rank = SqlFunctions.Sqlite.Rank("fts5_docs") })
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select rowid, rank as score from fts5_docs where fts5_docs match @q order by rank, rowid",
+            [new ProcedureParameter("q", query)]);
+        var nativeRows = native.Read<FtsRankRow>();
+
+        // Deterministic ordering by the hidden rank equals the native ordering.
+        rows.OrderBy(r => r.Rank).ThenBy(r => r.RowId).Select(r => r.RowId)
+            .Should().Equal(nativeRows.Select(r => r.RowId));
+        rows.OrderBy(r => r.RowId).Select(r => r.Rank!.Value)
+            .Should().Equal(nativeRows.OrderBy(r => r.RowId).Select(r => r.Score!.Value));
+
+        using var bm25 = ctx.ExecuteRaw(
+            "select rowid, bm25(fts5_docs) as score from fts5_docs where fts5_docs match @q",
+            [new ProcedureParameter("q", query)]);
+        var bm25Rows = bm25.Read<FtsRankRow>();
+
+        rows.OrderBy(r => r.RowId).Select(r => r.Rank!.Value)
+            .Should().NotEqual(bm25Rows.OrderBy(r => r.RowId).Select(r => r.Score!.Value),
+                "the configured hidden rank must demonstrably differ from the unconfigured bm25()");
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts_TokenAdversarial_ShouldStayEscapedAndNotDropSentinel()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        Execute(ctx, "create table if not exists sentinel(value text)");
+        Execute(ctx, "insert into sentinel(value) values ('kept')");
+
+        try
+        {
+            // The token is an inline literal so it is a constant in the expression tree; a captured
+            // local would be rejected at translation as a computed value before it reaches SQLite.
+            var act = () => ctx.From<Fts5Doc>()
+                .Where(x => SqlFunctions.Sqlite.Match("fts5_docs\"; drop table sentinel; --", "hello"))
+                .Select(x => x.RowId)
+                .ToList();
+
+            // The token stays one escaped identifier, so the query fails instead of executing the drop.
+            act.Should().Throw<SqliteException>();
+
+            using var check = ctx.ExecuteRaw("select count(*) from sentinel");
+            check.Read<long>().Single().Should().Be(1, "the adversarial token must not be raw-injected");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists sentinel");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_MatchTableFromSourceAdversarialToken_ShouldStayEscapedAndNotDropSentinel()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        Execute(ctx, "create table if not exists sentinel(value text)");
+        Execute(ctx, "insert into sentinel(value) values ('kept')");
+
+        try
+        {
+            // The FROM table token is a verbatim argument echoed as one quoted identifier, so the
+            // injected statement stays inside the identifier and SQLite rejects the missing table.
+            var act = () => ctx
+                .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Fts5Doc>("fts5_docs\"; drop table sentinel; --", "hello"))
+                .Select(x => x.RowId)
+                .ToList();
+
+            act.Should().Throw<SqliteException>();
+
+            using var check = ctx.ExecuteRaw("select count(*) from sentinel");
+            check.Read<long>().Single().Should().Be(1, "the adversarial FROM token must not raw-inject");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists sentinel");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "181")]
+    public void Fts5_ApostropheScalarConstants_ShouldBindAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        Execute(ctx, "insert into fts5_docs(title, body) values ('O''Brien', 'l''hopital')");
+        var query = "hello";
+
+        // Markers carrying apostrophes must be bound; before the fix an inline "O'[" broke the literal.
+        var highlights = ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", query))
+            .OrderBy(x => x.RowId)
+            .Select(x => SqlFunctions.Sqlite.Highlight("fts5_docs", 0, "O'[", "]'"))
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select highlight(fts5_docs, 0, @s, @e) from fts5_docs where fts5_docs match @q order by rowid",
+            [new ProcedureParameter("s", "O'["), new ProcedureParameter("e", "]'"), new ProcedureParameter("q", query)]);
+        var nativeValues = native.Read<string>().ToList();
+
+        highlights.Should().Equal(nativeValues);
+        highlights.Should().OnlyContain(x => x.Contains("O'[hello]'"));
+
+        // An apostrophe-bearing search query is bound and reaches FTS5 as data: the statement still
+        // fails with the native FTS5 syntax error (the exact same as a bound @q), never with the SQL
+        // parse error an unescaped inline 'O'Brien' literal would produce.
+        var ours = () => ctx.From<Fts5Doc>()
+            .Where(x => SqlFunctions.Sqlite.Match("fts5_docs", "O'Brien"))
+            .Select(x => x.RowId)
+            .ToList();
+        var nativeApostrophe = () =>
+        {
+            using var r = ctx.ExecuteRaw(
+                "select rowid from fts5_docs where fts5_docs match @q",
+                [new ProcedureParameter("q", "O'Brien")]);
+            r.Read<long>();
+        };
+
+        var ourError = ours.Should().Throw<SqliteException>().Which;
+        var nativeError = nativeApostrophe.Should().Throw<SqliteException>().Which;
+        ourError.SqliteErrorCode.Should().Be(nativeError.SqliteErrorCode);
+        ourError.Message.Should().Contain("fts5",
+            "the apostrophe must reach FTS5 as bound data, not break the SQL text");
+    }
+
+    private static void ConfigureFts5Rank(IDataContext ctx, string rankExpression)
+        => Execute(ctx, $"insert into fts5_docs(fts5_docs, rank) values('rank', '{rankExpression}')");
 
     private static void Execute(IDataContext ctx, string sql)
     {

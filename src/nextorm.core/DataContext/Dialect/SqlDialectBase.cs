@@ -244,6 +244,14 @@ public abstract class SqlDialectBase : ISqlDialect
     /// </summary>
     public virtual string WrapTableFunction(string name, string call) => call;
 
+    /// <summary>
+    /// Wraps the rendered table-function call with its structured, already-rendered arguments, or
+    /// returns it unchanged. The default forwards to <see cref="WrapTableFunction(string, string)"/>;
+    /// SQLite overrides it so the FTS5 table token is quoted as one identifier without reparsing the
+    /// serialized call text.
+    /// </summary>
+    public virtual string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => WrapTableFunction(name, call);
+
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>FINAL</c> modifier.</summary>
     public virtual bool SupportsFinal => false;
 

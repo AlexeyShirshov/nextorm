@@ -575,6 +575,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             _builder!.Append(_dialect.MakeParam(paramName));
     }
 
+    /// <summary>
+    /// Registers a constant string as a stable query parameter and returns its placeholder, or
+    /// <see langword="null"/> in parameter-only mode (where no SQL is appended). The placeholder is
+    /// registered in both modes so the parameter list stays identical between parameter collection
+    /// and rendering. The SQLite FTS translator uses it so a constant value argument (a search query,
+    /// a matchinfo format or a snippet/highlight marker) never becomes a raw SQL literal.
+    /// </summary>
+    internal string? EmitStableStringParameter(string value)
+    {
+        var paramName = _parameterProvider.GetParamName();
+        _params.Add(new Parameter(paramName, NormalizeParameterValue(value)) { Stable = true });
+        return _paramMode ? null : _dialect.MakeParam(paramName);
+    }
+
     internal static bool TryEvaluateCachedExpression(Delegate? cached, Expression node, out object? value)
     {
         switch (cached)
