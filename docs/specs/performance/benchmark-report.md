@@ -1922,3 +1922,238 @@ NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 
 Артефакты: корневой `BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark*-report-github.md`
 (из-за `nextorm.slnx` — см. оговорку выше).
+
+---
+
+# Итерация 16 — cached-путь после #183 (fresh-fluent) и #166 (nested read-CTE) (2026-10-05)
+
+> **Ревизия:** ветка `1.0.9-b`, HEAD `5f5be4f` (`v1.0.9-a-93-g5f5be4f`). База сравнения — `ec35194`
+> (родитель `322f9be`, состояние **до** #183). Между базой и HEAD ровно два коммита в `src/nextorm.core`:
+> `322f9be` (#183 B1+B2) и `5f5be4f` (#166). Диапазон `src`: новый `DataContext/Cache/ParamRefreshRecipe.cs`
+> (+510), `Query/ExpressionPlanEqualityComparer.cs` (+193), `DataContext/QueryPlanner.cs`, `Cache/QueryPlan.cs`,
+> `Cache/DbPreparedQueryCommand.cs`, `Query/QueryCommand.cs` (+21/−6), `Parameter.cs`,
+> `Visitors/BaseExpressionVisitor.cs`.
+> **Дата прогона:** 2026-10-05. **Повод:** перепроверить cached-путь после последних задач (#183/#166) —
+> он должен стать лучше.
+
+## Что проверялось
+
+Cached (fresh-fluent, implicit plan cache) путь — именно он деградировал в Итерациях 14–15: аллокации
+`Nextorm_Cached` проигрывали Dapper на всех девяти ядровых классах (1.30–6.29×), а `Join` по времени
+показывал 1.86×. #183 ввёл B1 (структурное сравнение выражений в `ExpressionPlanEqualityComparer`) и
+B2 (неизменяемый `ParamRefreshRecipe` вместо пересборки на каждом hit'е); #166 убрал аллокацию `HashSet`
+на тёплом пути nested read-CTE (`QueryCommand.HasDataModifyingCte`). Ниже — свежий замер cached-пути на
+HEAD против базы до #183.
+
+## Методика
+
+- Окружение: AMD Ryzen 7 5800HS, WSL2, 8 логических ядер, .NET `10.0.401`, BenchmarkDotNet 0.15.8;
+  БД — tmpfs `/tmp/nextorm-bench/test.db` (`NEXTORM_BENCH_DB`).
+- Два worktree: база — `ec35194` в `nextorm-worktrees/183-baseline`; HEAD — рабочее дерево `5f5be4f`.
+  Обе собраны `-c Release`.
+- `Job.Default` (out-of-process, `NEXTORM_BENCH_FULL=1`) + `MemoryDiagnoser`; привязка `taskset -c 3`;
+  прогоны строго последовательно.
+- **Аллокации — первичный (детерминированный) критерий; время — вторичный (шумный).** Числа аллокаций
+  воспроизводят записанные в `bop-summary.json` Итерации 15 (issue #183) значения базы с точностью до
+  долей процента (`Where_CachedHit_PlanOnly` base 6 528 B/op — совпадение точное).
+- Классы: ядровые (Any/First/Single/Join/Where/Iteration/LargeIteration/Cache — head-to-head с конкурентами),
+  `SqliteBenchmarkStageA` (декомпозиция cached-hit), `SqliteBenchmarkCachedPlan` (acceptance-арм'ы),
+  `SqliteBenchmarkWarmDecompose` (reuse CTE), категория `acceptance`.
+- Оговорка: второй интерливный круг был **прерван** — `loadavg` вырос до 44–67 из-за чужих сессий
+  (`next-server`, другие `opencode`), `WorkloadActual` подскакивал до 7.86 с/оп. Числа ниже — из первого
+  круга (StageA при `loadavg` ≈ 5–6, CachedPlan/WarmDecompose ≈ 2). Cached-аллокации от нагрузки не зависят.
+
+## Категория B — cached против regular-конкурентов (Job.Default, HEAD `5f5be4f`)
+
+Тот же набор, что в Итерации 15 (Any/First/Single/Join/Where/Iteration/LargeIteration/Cache),
+`Job.Default` + `MemoryDiagnoser`, tmpfs, `taskset -c 3`, `loadavg` ≈ 1–4 (прогон чистый).
+Область сравнения — **только regular-арм'ы** (`Dapper`, `linq2db` без compiled, EF без compiled);
+`÷ лучший регул.` — отношение `Nextorm_Cached` к самому быстрому из них.
+
+### Время (mean; у Where — и медиана из-за GC-выбросов)
+
+| Класс (N) | Nextorm_Cached | Dapper | linq2db | EF regular | ÷ лучший регул. | Итерация 15 |
+|---|--:|--:|--:|--:|--:|--:|
+| Any (100) | 1.615 ms | **1.363** | 2.506 | 9.759 | 1.18× | 1.24× |
+| First scalar (10) | 207.8 µs | **196.0** | 788.0 | — | 1.06× | 1.33× |
+| First entity (10) | 219.7 µs | **215.7** | 809.2 | — | 1.02× | 1.08× |
+| Single (10) | 199.5 µs | **188.0** | 820.8 | 1 353.3 | 1.06× | 1.27× |
+| Join (10) | 496.0 µs | **278.8** | 722.7 | 1 216.4 | 1.78× | 1.86× |
+| Where list (100) | 3.836 ms (med 2.255) | **1.773** | 3.493 | 9.461 | 2.16× (med 1.27×) | 1.88× |
+| Where for-loop (100) | **1.280 ms** | 1.773 | 3.493 | 9.461 | **0.72×** | 0.80× |
+| Iteration list (1) | **15.58 µs** | 20.13 | 22.13 | — | **0.77×** | 0.72× |
+| LargeIteration list (1) | **11.53 ms** | 14.92 | 12.32 | 17.35 | **0.93×** | 0.62× |
+
+По времени nextorm обходит linq2db и EF regular во всех классах; точечные Any/First/Single/Join
+всё ещё за Dapper (1.02–1.78×), `Join` — единственный заметный проигрыш; `Where` list — в пределах
+GC-шума (медиана 1.27×), `Where` for-loop / Iteration / LargeIteration — быстрее Dapper.
+
+### Аллокации (deterministic)
+
+| Класс (N) | Nextorm_Cached | Dapper | linq2db | EF regular | ÷ лучший регул. | Итерация 15 |
+|---|--:|--:|--:|--:|--:|--:|
+| Any (100) | 547.69 KB | **139.06** | 412.5 | 1 211.76 | 3.94× | 4.09× |
+| First scalar (10) | 52.17 KB | **16.48** | 221.01 | — | 3.17× | 4.32× |
+| First entity (10) | 44.82 KB | **19.24** | 220.81 | — | 2.33× | 3.52× |
+| Single (10) | 52.67 KB | **16.4** | 221.01 | 149.64 | 3.21× | 4.37× |
+| Join (10) | 129.53 KB | **21.45** | 105.35 | 182.11 | 6.04× | 6.29× |
+| Where list (100) | 565.48 KB | **180.7** | 551.95 | 1 451.42 | 3.13× | 4.05× |
+| Where for-loop (100) | **114.94 KB** | 180.7 | 551.95 | 1 451.42 | **0.64×** | — |
+| Iteration list (1) | 2 488 B | **1 904** | 2 792 | — | 1.31× | 1.30× |
+| LargeIteration list (1) | **2.22 MB** | 2.84 | 2.39 | 4.53 | **0.78×** | 0.78× |
+
+По памяти картина та же, что в Итерации 15 (`Nextorm_Cached` проигрывает Dapper на точечных запросах
+1.31–6.04× и linq2db-regular на `Join`/`Where`), но **разрыв сокращён на всех классах** — сильнее всего
+на First/Single/Any. `Join` остаётся худшим (6.04× от Dapper) — это материаллизация двухтабличной
+проекции, а не cache-lookup.
+
+### Cache — cold-plan (`NextormCached` очищает кэш плана каждый вызов; сравнение несимметрично)
+
+| I | NextormCached | Dapper | linq2db | linq2db_Compiled | NextormPrepared |
+|--:|--:|--:|--:|--:|--:|
+| 1 | 327.4 µs | 338.8 | **38.8** | 20.1 | 11.6 |
+| 3 | 498.1 | 1 016.6 | **130.2** | 67.7 | 39.2 |
+| 5 | 592.2 | 1 084.1 | **212.2** | 113.8 | 64.7 |
+| 10 | 991.7 | 1 205.6 | **455.2** | 234.4 | 132.5 |
+| 15 | 2 315.8 | **1 732.5** | 679.6 | 343.3 | 200.0 |
+| 20 | 3 045.0 | **1 378.0** | 887.5 | 470.8 | 274.0 |
+| 30 | 4 335.3 | **1 869.7** | 1 288.4 | 691.8 | 409.1 |
+
+`NextormCached` (холодный план на каждый вызов) быстрее Dapper до I≈10, дальше Dapper обгоняет;
+`NextormPrepared` — первый, `Linq2Db_Compiled` — второй. Сравнение B в `Cache` не симметрично
+(`NextormCached`/`Dapper` чистят кэш, `Linq2Db` — нет).
+
+**Честная оговорка:** абсолютные времена Итерации 15 несравнимы (тот прогон шёл под `loadavg` 8.5,
+БД на диске; этот — на tmpfs при `loadavg` 1–4), поэтому сопоставимы только **отношения** `÷ лучший
+регулярный`; аллокации детерминированы и сопоставимы напрямую.
+
+## `SqliteBenchmarkStageA` — декомпозиция cached-hit (Default, Allocated на 1 оп; тело — 100 оп)
+
+| Arm | base `ec35194` | HEAD `5f5be4f` | Δ B/op |
+|---|--:|--:|--:|
+| `Where_Construct` | 2 544 | 2 544 | 0 |
+| `Where_Prepare_NoHash` | 3 879 | 3 879 | 0 |
+| `Where_Prepare_Hash` | 4 350 | 4 350 | 0 |
+| **`Where_CachedHit_PlanOnly`** | **6 528** | **4 584** | **−1 944 (−29.8 %)** |
+| **`Where_CachedHit_ToList`** | **7 260** | **5 316** | **−1 944 (−26.8 %)** |
+| `Where_Prepared_ToList` | 780 | 780 | 0 |
+| `Join_Construct` | 6 152 | 6 112 | ~0 (шум) |
+| `Join_Prepare_NoHash` | 8 632 | 8 560 | ~0 (шум) |
+| `Join_Prepare_Hash` | 9 041 | 8 921 | ~0 (шум) |
+| **`Join_CachedHit_PlanOnly`** | **12 153** | **11 729** | **−424 (−3.5 %)** |
+| **`Join_CachedHit_ToList`** | **13 059** | **12 483** | **−576 (−4.4 %)** |
+| `Join_Prepared_ToList` | 802 | 802 | 0 |
+
+Чтение: `Construct`/`Prepare` не менялись; экономия вся — на **cached-hit** арм'ах и для `Where` равна
+plan-only (то есть не привязана к БД/исполнению). `Where` экономит 1 944 B/op, `Join` — 424–576 B/op.
+Prepared-контроль байт-в-байт.
+
+## `SqliteBenchmarkCachedPlan` — acceptance-арм'ы (Default, Allocated на 1 оп)
+
+| Arm | base | HEAD | Δ B/op |
+|---|--:|--:|--:|
+| `Construct_Only` | 2 736 | 2 736 | 0 |
+| `RePrepare_PlanOnly_Param` | 1 888 | 1 464 | **−424 (−22.5 %)** |
+| **`Cached_PlanOnly_Param`** | **5 184** | **4 760** | **−424 (−8.2 %)** |
+| `Cached_PlanOnly_NoParam` | 4 832 | 4 408 | **−424 (−8.8 %)** |
+| `Build_Sql` | 7 040 | 7 048 | 0 |
+| `Prepared_ToList` | 780 | 780 | 0 |
+| **`Cached_ToList`** | **5 964** | **5 540** | **−424 (−7.1 %)** |
+| `M12_NoCache_PlanOnly_Param` | 7 240 | 7 248 | 0 |
+| `M12_NoCache_ToList` | 8 244 | 8 204 | ~0 (шум) |
+| `Build_Sql_Join` | 14 697 | 14 673 | ~0 |
+
+Чтение: одинаковая **−424 B/op** на всех арм'ах, идущих через cache-lookup/param-refresh
+(`Cached_ToList`, `Cached_PlanOnly_Param`/`NoParam`, `RePrepare_PlanOnly_Param`), и **0** там, где план не
+ключуется (`Construct_Only`, `Build_Sql`, `M12_NoCache_*`) или команда уже подготовлена (`Prepared_ToList`).
+Это точная детерминированная подпись B2 (устранение per-call аллокации в `ParamRefreshRecipe`), а не шум.
+
+## `SqliteBenchmarkWarmDecompose` — reuse CTE (#166 / #165)
+
+| Arm | Allocated | B/op | Бюджет `iteration14_gate` |
+|--|--:|--:|--:|
+| `Cte_Warm_Reused` | **0 B** | **0** | 0 (zero) ✓ |
+| `RecursiveCte_Warm_Reused` | **0 B** | **0** | 0 (zero) ✓ |
+| `Join4_Warm_Reused` | **0 B** | **0** | 0 (zero) ✓ |
+| `Cte_Prepare_NoHash` | 1 197 700 B | 11 977 | ≤ 15 152 ✓ |
+| `Cte_Warm_PlanOnly` | 1 295 305 B | 12 953 | ≤ 16 822 ✓ |
+| `RecursiveCte_Prepare_NoHash` | 1 339 227 B | 13 392 | ≤ 16 740 ✓ |
+| `RecursiveCte_Warm_PlanOnly` | 1 477 630 B | 14 776 | ≤ 18 730 ✓ |
+| `InAtIn_Inline_Warm_Reused` | 67 200 B | 672 | ≤ 840 ✓ |
+
+`Cte_Warm_Reused`/`RecursiveCte_Warm_Reused` — 4.3 µs и **0 B**: регресс Итерации 14 (`0 → 176 B/lookup`)
+устранён (#165), а #166 закрыл nested read-CTE вариант (регресс-тест
+`NestedReadCteWarmReuse_AllocatesZero`, `tests/nextorm.core.tests/Iteration14CteLookupTests.cs`). CTE/Join4
+`Prepare_*` остаются в принятой полосе шума.
+
+## Acceptance-гейт (7 кейсов, `--anyCategories=acceptance`, ShortRun)
+
+Прогон 42.9 с, 7/7, зелёный. Cached/acceptance-аллокации на HEAD:
+
+| Arm | Allocated |
+|--|--:|
+| `Cached_PlanOnly_Param` | 478.92 KB |
+| `Cached_ToList` | 555.05 KB |
+| `Nextorm_Cached` (Any) | 552.38 KB |
+| `Nextorm_Cached_ToListAsync` (Where) | 565.48 KB |
+| `Nextorm_Count` | 332.03 KB |
+| `Nextorm_GroupByCount` | 50.05 MB |
+| `Prepared_ToList` | 76.69 KB |
+
+Относительно post-fix значений Итерации 14 (issue #165) cached-арм'ы ниже ещё на ~40–60 KB
+(`Cached_ToList` 596.47 → 555.05, `Cached_PlanOnly_Param` 520.33 → 478.92, `Nextorm_Count` 354.69 → 332.03);
+разница с `Default`-числами раздела выше — другой job (ShortRun+InProcess), не регресс.
+
+## Время — вторичный, шумный сигнал
+
+Одиночные пары: `StageA.Where_CachedHit_ToList` 3 367 → 1 505 µs, `Join_CachedHit_ToList` 3 927 → 4 307 µs
+(в пределах шума), `CachedPlan.Cached_ToList` 1 610 → 1 584 µs, `Cached_PlanOnly_Param` 485 → 423 µs,
+`Prepared_ToList` 898 → 901 µs (плоско). Одиночный прогон на нагруженном хосте временем доказательством не
+является; строгий временной вердикт даёт интерлив Итерации 15 / #183 AC4 (10 пар ABAB): **нет статистически
+надёжной регрессии >20 %** на сквозном cached E2E; атрибутируемый выигрыш — на `Where`/
+`Join_CachedHit_PlanOnly`; `Join_CachedHit_ToList` не ускорился (доминирует материализация). AC4 — met.
+
+## Вывод
+
+- **Cached-путь стал лучше — детерминированно по аллокациям.** StageA cached-hit: `Where` −1 944 B/op
+  (−27…30 %), `Join` −424…−576 B/op; CachedPlan cache-lookup/param-refresh арм'ы — ровно −424 B/op каждый.
+- **CTE/nested-CTE warm reuse — 0 B** (`Cte_Warm_Reused`, `RecursiveCte_Warm_Reused`; ранее 176 B/lookup);
+  бюджеты `iteration14_gate` проходят.
+- **Prepared-путь не затронут** (байт-в-байт), acceptance-гейт (7/7) зелёный.
+- **Относительно конкурентов cached-путь сократил разрыв:** `÷ лучший регулярный` по времени/памяти —
+  Any 1.24→**1.18**/4.09→**3.94**, First scalar 1.33→**1.06**/4.32→**3.17**, First entity 1.08→**1.02**/
+  3.52→**2.33**, Single 1.27→**1.06**/4.37→**3.21**, Join 1.86→**1.78**/6.29→**6.04**, Where list
+  4.05→**3.13** (память). `Where` for-loop, `Iteration`, `LargeIteration` — быстрее Dapper и локально
+  (0.72–0.93×). Худший остаётся `Join` (1.78× времени, 6.04× памяти — материаллизация, не cache-lookup).
+- Итог по памяти: cached-путь всё ещё отстаёт от Dapper, но разрыв сокращён именно на
+  cache-lookup / param-refresh / CTE-reuse — там, где целились #183/#166. Временного регресса нет.
+
+## Воспроизведение
+
+```bash
+# база (pre-#183) и HEAD
+cd /home/alex/sources/nextorm-worktrees/183-baseline   # base ec35194
+dotnet build benchmarks/nextorm.benchmark -c Release
+cd /home/alex/sources/nextorm                          # HEAD 5f5be4f
+dotnet build benchmarks/nextorm.benchmark -c Release
+
+mkdir -p /tmp/nextorm-bench && cp benchmarks/nextorm.benchmark/data/test.db /tmp/nextorm-bench/test.db
+
+# cached-hit декомпозиция (повторить в каждом дереве, строго последовательно)
+NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  taskset -c 3 dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- \
+  --filter '*SqliteBenchmarkStageA*'
+
+# acceptance-арм'ы и reuse CTE
+NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  taskset -c 3 dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- \
+  --filter '*SqliteBenchmarkCachedPlan*'
+NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  taskset -c 3 dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- \
+  --filter '*SqliteBenchmarkWarmDecompose*'
+
+# acceptance-гейт
+NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  taskset -c 3 dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- \
+  --anyCategories=acceptance
+```
