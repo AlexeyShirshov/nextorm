@@ -19,7 +19,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | task | group | branch | status | reason + patch | task status file |
 |---|---|---|---|---|---|
 | D141 | G01 | 1.0.9-rc1 | done | issue #141 — version gates MariaDB 13 + PostgreSQL FILTER aggregates | docs/specs/status/rc1-141-version-gates-1.md |
-| D126 | G01 | 1.0.9-rc1 | pending | issue #126 — tuple constructor on MySQL/MariaDB/SQLite | docs/specs/status/rc1-126-tuple-ctor-1.md |
+| D126 | G01 | 1.0.9-rc1 | done | issue #126 — tuple constructor on MySQL/MariaDB/SQLite | docs/specs/status/rc1-126-tuple-ctor-1.md |
 | D181 | G01 | 1.0.9-rc1 | pending | issue #181 — SQLite FTS3/4/5 surface | docs/specs/status/rc1-181-sqlite-fts-1.md |
 | D182 | G01 | 1.0.9-rc1 | pending | issue #182 — SQL Server scalar-function parity | docs/specs/status/rc1-182-mssql-scalars-1.md |
 | D168 | G01 | 1.0.9-rc1 | pending | issue #168 — SQL Server MapColumnExpression numeric boxing | docs/specs/status/rc1-168-mssql-boxing-1.md |
@@ -54,17 +54,18 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 ## Общая верификация и восстановление
 
-- Last common C: D141 task-level CHECK PASS (see rc1-141-version-gates-1.md)
+- Last common C: D126 task-level CHECK PASS (see rc1-126-tuple-ctor-1.md)
 - Blocking reason: —
 - Verification state: pending.
 - Defect id and history: —
 - Related corrective-task status file: —
-- Next allowed step: D126 in-progress (PLAN gather)
+- Next allowed step: D181 pending — start its pdca-dotnet cycle (PLAN gather)
 - Notice: host has no todowrite tool; task status files carry the progress log instead.
 - Notice: gh CLI was available; issue #141 was closed remotely (glab/gh exit 0, state CLOSED) — documented in the D141 status ACT. The commit is unpushed (push never authorized).
+- Notice: D126 is done — issue #126 closed; commit 4c10548a (unpushed); CHECK PASS r=4/rv=5 recorded in rc1-126-tuple-ctor-1.md; the earlier run-1 "remains pending" note is superseded.
 
 ## Done / Verified / Incomplete
 
-- Done: D141 (#141) — commit 45107d9c
-- Verified: D141 CHECK PASS, rv=D141.ContractA.strong.1
+- Done: D141 (#141) — commit 45107d9c; D126 (#126) — commit 4c10548a
+- Verified: D141 CHECK PASS, rv=D141.ContractA.strong.1; D126 CHECK PASS, rv=5
 - Incomplete: —
