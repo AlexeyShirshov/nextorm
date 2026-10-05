@@ -71,7 +71,7 @@ public class ImplicitNavigationR22Tests
     private static (SqliteDataContext Ctx, string Path) CreateDual()
     {
         var (ctx, path) = CreateDb(DualSchema);
-        ctx.From<R22Node>();
+        ctx.From<R22Node>(b => b.HasOne(n => n.Parent, n => n.ParentId));
         ctx.From<R22Pair>(b =>
         {
             b.HasOne(p => p.Left, p => p.LeftId);

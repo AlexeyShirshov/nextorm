@@ -40,6 +40,7 @@
 - [Потоковое чтение больших объектов (BLOB/CLOB)](guide/26-large-objects.md)
 - [Динамические колонки](guide/27-dynamic-columns.md)
 - [Потоковое сохранение данных](guide/28-streaming-data.md)
+- [Неявные навигационные запросы](guide/29-implicit-navigation.md)
 
 ### Инфраструктура
 
@@ -77,6 +78,7 @@
 
 - [Глобальные фильтры запросов](advanced/query-filters.md)
 - [Интеграция с Entity Framework Core](advanced/integration-efcore.md)
+- [Мост фильтров EF Core](advanced/ef-core-query-filters.md)
 - [Жадная загрузка дочерних коллекций](advanced/eager-loading.md)
 - [Связи и однозапросная загрузка](advanced/relationships.md)
 - [Ограничения и что вне области](advanced/limitations.md)

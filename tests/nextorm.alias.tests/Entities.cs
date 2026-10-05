@@ -1,6 +1,9 @@
+using NextORM.Core;
+
 namespace NextORM.AliasTests;
 
 /// <summary>Entity whose <see cref="BuyerId"/> and <see cref="ApproverId"/> both point at <see cref="Person"/>.</summary>
+[SqlTable("orders")]
 public sealed class Order
 {
     public int Id { get; set; }
@@ -11,6 +14,7 @@ public sealed class Order
 }
 
 /// <summary>Entity joined twice (as buyer and as approver); the CLR type repeats in one projection.</summary>
+[SqlTable("person")]
 public sealed class Person
 {
     public int Id { get; set; }
