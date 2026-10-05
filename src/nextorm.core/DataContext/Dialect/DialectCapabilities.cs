@@ -578,8 +578,12 @@ public interface IMySqlFunctions
 /// A dialect's surface for the SQL Server-only T-SQL scalar functions that have no cross-provider
 /// analog (the string functions <c>PATINDEX</c>/<c>QUOTENAME</c>/<c>SOUNDEX</c>/<c>DIFFERENCE</c>/
 /// <c>STRING_ESCAPE</c>/<c>UNICODE</c>/<c>NCHAR</c>/<c>FORMAT</c>, the trigonometric functions, the
-/// date functions <c>DATENAME</c>/<c>DATE_BUCKET</c>, the binary/system functions
-/// <c>HASHBYTES</c>/<c>NEWSEQUENTIALID</c> and the SQL/JSON constructors/aggregates/predicates). The
+/// date functions <c>DATENAME</c>/<c>DATE_BUCKET</c> and the clock/offset/<c>*FROMPARTS</c> family,
+/// the binary/system functions <c>HASHBYTES</c>/<c>NEWSEQUENTIALID</c>, the
+/// <c>CHECKSUM</c>/<c>COMPRESS</c>/<c>RAND</c>/<c>STUFF</c> scalars, the metadata functions
+/// (<c>COL_LENGTH</c>/<c>OBJECT_ID</c>/<c>DB_ID</c>/<c>SCHEMA_NAME</c>/<c>FILE_ID</c>/
+/// <c>ISDATE</c>/<c>STR</c>/<c>FORMATMESSAGE</c> and the rest of the A–D metadata families) and the
+/// SQL/JSON constructors/aggregates/predicates). The
 /// predicate and the renderer live on one object, so a name the dialect reports as supported always
 /// has a rendering; <see langword="null"/> is the capability being absent, which makes every other
 /// provider reject the members with a clear message.

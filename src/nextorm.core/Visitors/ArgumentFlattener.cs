@@ -27,4 +27,18 @@ internal static class ArgumentFlattener
 
         return args;
     }
+
+    /// <summary>
+    /// True when the variadic tail is a runtime array value (a variable/column of array type) rather
+    /// than the compiler-generated <see cref="NewArrayExpression"/> of a <c>params</c> call. Such a
+    /// value cannot be flattened into individual SQL arguments, so the caller has to reject it.
+    /// </summary>
+    internal static bool IsRuntimeArray(IReadOnlyList<Expression> args, int leading)
+    {
+        if (leading >= args.Count)
+            return false;
+
+        var tail = TypeFacts.UnwrapConvert(args[leading]);
+        return tail is not NewArrayExpression && tail.Type.IsArray;
+    }
 }

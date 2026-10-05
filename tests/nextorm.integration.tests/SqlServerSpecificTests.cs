@@ -1640,6 +1640,273 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Issue #182: SQL Server scalar-function native-semantics integration coverage. Every case runs
+    // the ORM translation and the equivalent hand-written T-SQL over the same provider connection and
+    // compares the values, so the renderer's spelling is proven against the real server rather than a
+    // portable substitute. The negative cases compare the server error code raised by both paths.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void SysUtcDateTime_ShouldRoundTripNativeUtcClock()
+    {
+        var ctx = _sut.DataProvider;
+        var native = NativeScalar<DateTime>(ctx, "select sysutcdatetime()");
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.sysutcdatetime())
+            .First();
+
+        orm.Should().NotBeNull();
+        var ormUtc = DateTime.SpecifyKind(orm!.Value, DateTimeKind.Utc);
+        var nativeUtc = DateTime.SpecifyKind(native, DateTimeKind.Utc);
+
+        // datetime2 travels with Kind Unspecified, so pin both to UTC and check the clock semantics.
+        ormUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(5));
+        ormUtc.Should().BeCloseTo(nativeUtc, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void OffsetBuilders_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nativeOffset = NativeScalar<DateTimeOffset>(
+            ctx, "select todatetimeoffset(cast('2023-01-01T10:00:00' as datetime2), '+02:00')");
+        var ormOffset = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.todatetimeoffset(x.Datetime, "+02:00"))
+            .First();
+
+        ormOffset.Should().Be(nativeOffset);
+        ormOffset!.Value.Offset.Should().Be(TimeSpan.FromHours(2));
+        ormOffset.Value.UtcDateTime.Should().Be(new DateTime(2023, 1, 1, 8, 0, 0, DateTimeKind.Utc));
+
+        var nativeSwitch = NativeScalar<DateTimeOffset>(
+            ctx, "select switchoffset(todatetimeoffset(cast('2023-01-01T10:00:00' as datetime2), '+02:00'), '-08:00')");
+        var ormSwitch = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.switchoffset(
+                SqlFunctions.SqlServer.todatetimeoffset(x.Datetime, "+02:00"), "-08:00"))
+            .First();
+
+        // SWITCHOFFSET keeps the instant and only changes the offset: 10:00+02:00 is 00:00-08:00.
+        ormSwitch.Should().Be(nativeSwitch);
+        ormSwitch!.Value.Offset.Should().Be(TimeSpan.FromHours(-8));
+        ormSwitch.Value.UtcDateTime.Should().Be(new DateTime(2023, 1, 1, 8, 0, 0, DateTimeKind.Utc));
+
+        var ormMinutes = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.todatetimeoffset(x.Datetime, -120))
+            .First();
+        var nativeMinutes = NativeScalar<DateTimeOffset>(
+            ctx, "select todatetimeoffset(cast('2023-01-01T10:00:00' as datetime2), -120)");
+        ormMinutes.Should().Be(nativeMinutes);
+        ormMinutes!.Value.Offset.Should().Be(TimeSpan.FromHours(-2));
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void DateTime2FromParts_ShouldRoundTripParts()
+    {
+        var ctx = _sut.DataProvider;
+        var native = NativeScalar<DateTime>(ctx, "select datetime2fromparts(2023, 5, 17, 12, 30, 45, 1234567, 7)");
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.datetime2fromparts(2023, 5, 17, 12, 30, 45, 1234567, 7))
+            .First();
+
+        // Fractions are units of 10^-precision seconds; precision 7 means 100 ns ticks.
+        var expected = new DateTime(2023, 5, 17, 12, 30, 45).AddTicks(1234567);
+        orm.Should().Be(expected);
+        native.Should().Be(expected);
+    }
+
+    private sealed class ChecksumRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+        [Column("c")]
+        public int? Checksum { get; set; }
+        [Column("b")]
+        public int? BinaryChecksum { get; set; }
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void ChecksumAndBinaryChecksum_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+
+        var orm = _sut.ComplexEntity.OrderBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                C = SqlFunctions.SqlServer.checksum(x.Id, x.String),
+                B = SqlFunctions.SqlServer.binary_checksum(x.Id, x.String)
+            })
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select id, checksum(id, somestring) as c, binary_checksum(id, somestring) as b " +
+            "from complex_entity order by id");
+        var nativeRows = native.Read<ChecksumRow>();
+
+        orm.Select(r => (r.Id, r.C, r.B)).Should().Equal(nativeRows.Select(r => (r.Id, r.Checksum, r.BinaryChecksum)));
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void CompressDecompress_ShouldRoundTripBytesAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        var data = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.decompress(SqlFunctions.SqlServer.compress(data)))
+            .First();
+
+        orm.Should().Equal(data);
+
+        using var native = ctx.ExecuteRaw("select decompress(compress(@p))", [new ProcedureParameter("p", data)]);
+        native.Read<byte[]>().Single().Should().Equal(data);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Stuff_ShouldMatchNativeForString()
+    {
+        var ctx = _sut.DataProvider;
+
+        var ormString = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.stuff("abcdef", 2, 3, "XY"))
+            .First();
+        var nativeString = NativeScalar<string>(ctx, "select stuff('abcdef', 2, 3, 'XY')");
+        ormString.Should().Be("aXYef");
+        ormString.Should().Be(nativeString);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Rand_ShouldBeInRangeAndMatchNativeForSeed()
+    {
+        var ctx = _sut.DataProvider;
+
+        var unseeded = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.rand())
+            .First();
+        unseeded.Should().BeGreaterThanOrEqualTo(0.0).And.BeLessThan(1.0);
+
+        // An integer seed makes RAND deterministic (the value, not the range, is pinned here).
+        var ormA = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.rand(5))
+            .First();
+        var ormB = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.rand(5))
+            .First();
+        var native = NativeScalar<double>(ctx, "select rand(5)");
+
+        ormA.Should().Be(ormB);
+        ormA.Should().Be(native);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void MetadataScalars_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                ObjectId = SqlFunctions.SqlServer.object_id("complex_entity"),
+                ObjectIdU = SqlFunctions.SqlServer.object_id("complex_entity", "U"),
+                DbName = SqlFunctions.SqlServer.db_name(),
+                IsNumericTrue = SqlFunctions.SqlServer.isnumeric("123"),
+                IsNumericFalse = SqlFunctions.SqlServer.isnumeric("abc"),
+                Str = SqlFunctions.SqlServer.str(123.456, 10, 2)
+            })
+            .First();
+
+        var nativeObjectId = NativeScalar<int>(ctx, "select object_id('complex_entity')");
+        var nativeObjectIdU = NativeScalar<int>(ctx, "select object_id('complex_entity', 'U')");
+        var nativeDbName = NativeScalar<string>(ctx, "select db_name()");
+        var nativeNumericTrue = NativeScalar<int>(ctx, "select isnumeric('123')");
+        var nativeNumericFalse = NativeScalar<int>(ctx, "select isnumeric('abc')");
+        var nativeStr = NativeScalar<string>(ctx, "select str(123.456, 10, 2)");
+
+        orm.ObjectId.Should().Be(nativeObjectId);
+        orm.ObjectIdU.Should().Be(nativeObjectIdU);
+        orm.DbName.Should().Be(nativeDbName);
+        orm.IsNumericTrue.Should().Be(1);
+        orm.IsNumericTrue.Should().Be(nativeNumericTrue);
+        orm.IsNumericFalse.Should().Be(0);
+        orm.IsNumericFalse.Should().Be(nativeNumericFalse);
+        orm.Str.Should().Be("    123.46");
+        orm.Str.Should().Be(nativeStr);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Decompress_InvalidBytes_ShouldRaiseSameNativeErrorCode()
+    {
+        var ctx = _sut.DataProvider;
+        var corrupted = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+
+        var nativeNumber = CatchSqlServerError(() =>
+        {
+            using var result = ctx.ExecuteRaw("select decompress(0x01020304)");
+            result.Read<byte[]>();
+        });
+
+        var ormNumber = CatchSqlServerError(() =>
+            _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.SqlServer.decompress(corrupted))
+                .First());
+
+        nativeNumber.Should().NotBeNull();
+        ormNumber.Should().Be(nativeNumber);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Checksum_NonComparableXmlArgument_ShouldRaiseSameNativeErrorCode()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nativeNumber = CatchSqlServerError(() =>
+        {
+            using var result = ctx.ExecuteRaw("select checksum(payload) from xml_entity where id = 1");
+            result.Read<int>();
+        });
+
+        var ormNumber = CatchSqlServerError(() =>
+            _sut.DataProvider.From<IXmlEntity>().Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.SqlServer.checksum(x.Payload))
+                .First());
+
+        nativeNumber.Should().NotBeNull();
+        ormNumber.Should().Be(nativeNumber);
+    }
+
+    private static T NativeScalar<T>(IDataContext ctx, string sql)
+    {
+        using var result = ctx.ExecuteRaw(sql);
+        return result.Read<T>().Single();
+    }
+
+    private static int? CatchSqlServerError(Action action)
+    {
+        try
+        {
+            action();
+            return null;
+        }
+        catch (SqlException exception)
+        {
+            return exception.Number;
+        }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

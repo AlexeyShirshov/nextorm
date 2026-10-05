@@ -150,6 +150,32 @@ XQuery — строковым литералом).
 необязательными именем элемента строки, `ROOT('...')` и `ELEMENTS`). `QueryCommand.WithForJson(...)`/
 `WithForXml(...)` присоединяют предложение без выполнения.
 
+Помимо этого SQL Server даёт широкую библиотеку скаляров, специфичных для T-SQL, на
+`SqlFunctions.SqlServer`, с гейтом по имени через
+[`ISqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions); все остальные провайдеры её
+отвергают:
+
+- **Дата/время:** семейство часов/смещения `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`,
+  `switchoffset`/`todatetimeoffset` (строковое смещение или минуты со знаком) и семейство
+  конструкторов `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/
+  `datetimeoffsetfromparts` (точность `*FROMPARTS` должна быть константой `0..7`);
+- **Бинарные/checksum:** `checksum`/`binary_checksum` (минимум один аргумент; форма с подстановочным
+  знаком `checksum(*)` не открыта), `compress`/`decompress` (GZIP над `varbinary(max)`) и
+  псевдослучайная `rand`/`rand(seed)`;
+- **Метаданные:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`,
+  `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`,
+  `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`,
+  `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/
+  `current_timezone_id`, `getansinull`, `parsename` и `publishingservername`;
+- **Строки/преобразование:** `stuff` и `str`; `isdate`/`isnumeric` возвращают нативный T-SQL `int`
+  (1/0), а не `bit`; `formatmessage` принимает строку формата или id из `sys.messages` и не более 20
+  аргументов.
+
+Десять имён области соединения/сессии/инструкции намеренно не открыты: `CURRENT_REQUEST_ID`,
+`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`. См.
+[гайд по скалярам T-SQL](../guide/provider-specific/sqlserver.md#скаляры-t-sql).
+
 ## Рекурсивные CTE и `maxRecursion`
 
 ```csharp
@@ -281,6 +307,9 @@ SQL Server также поддерживает многоколоночный т
 | `string_agg` / `array_agg` | `string_agg` поддерживается (SQL Server 2017+); `array_agg` — нет (бросает исключение) |
 | Текстовый JSON | `json_value` / `json_query` / `json_modify` (SQL Server 2016+) |
 | Session/info-функции | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
+| Часы/смещение/`*FROMPARTS` T-SQL | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (гейт по имени) |
+| Бинарные/checksum/прочие T-SQL | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (гейт по имени) |
+| Метаданные T-SQL | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` и остальные семейства A-D (гейт по имени) |
 | Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Агрегат произвольного значения | не поддерживается (`ANY_VALUE` только в SQL Server 2025 / Fabric) |
 | Условные функции | `iif(...)` (переносимая, [`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |

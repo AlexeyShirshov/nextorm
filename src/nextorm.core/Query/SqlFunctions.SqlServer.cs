@@ -325,4 +325,441 @@ namespace NextORM.Core;
         /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server 2022+).
         /// </summary>
         public bool json_path_exists(string? json, string? path) => default!;
+
+        // --- Date/time clock, offset and FROMPARTS family (SQL Server 2008+; gated per name) ---
+
+        /// <summary>
+        /// <c>sysdatetime()</c>: the current system date/time as <c>datetime2</c> (server-local).
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server).
+        /// </summary>
+        public DateTime? sysdatetime() => default!;
+
+        /// <summary>
+        /// <c>sysdatetimeoffset()</c>: the current system date/time with the server's UTC offset as
+        /// <c>datetimeoffset</c>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTimeOffset? sysdatetimeoffset() => default!;
+
+        /// <summary>
+        /// <c>sysutcdatetime()</c>: the current UTC date/time as <c>datetime2</c>. Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTime? sysutcdatetime() => default!;
+
+        /// <summary>
+        /// <c>switchoffset(value, time_zone)</c>: changes the time-zone offset of a
+        /// <c>datetimeoffset</c> to <paramref name="timeZone"/>, expressed as a string (for example
+        /// <c>"-08:00"</c>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTimeOffset? switchoffset(DateTimeOffset? value, string? timeZone) => default!;
+
+        /// <summary>
+        /// <c>switchoffset(value, time_zone_minutes)</c>: the signed-integer-minutes form of
+        /// <see cref="switchoffset(DateTimeOffset?, string?)"/>. Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTimeOffset? switchoffset(DateTimeOffset? value, int timeZoneMinutes) => default!;
+
+        /// <summary>
+        /// <c>todatetimeoffset(value, time_zone)</c>: attaches <paramref name="timeZone"/> (a string
+        /// such as <c>"+02:00"</c>) to a <c>datetime</c>, yielding a <c>datetimeoffset</c>. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTimeOffset? todatetimeoffset(DateTime? value, string? timeZone) => default!;
+
+        /// <summary>
+        /// <c>todatetimeoffset(value, time_zone_minutes)</c>: the signed-integer-minutes form of
+        /// <see cref="todatetimeoffset(DateTime?, string?)"/>. Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTimeOffset? todatetimeoffset(DateTime? value, int timeZoneMinutes) => default!;
+
+        /// <summary>
+        /// <c>timefromparts(hour, minute, seconds, fractions, precision)</c>: builds a <c>time</c> from
+        /// its parts. <paramref name="precision"/> must be a constant between 0 and 7. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public TimeSpan? timefromparts(int? hour, int? minute, int? seconds, int? fractions, int? precision) => default!;
+
+        /// <summary>
+        /// <c>smalldatetimefromparts(year, month, day, hour, minute)</c>: builds a <c>smalldatetime</c>.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server).
+        /// </summary>
+        public DateTime? smalldatetimefromparts(int? year, int? month, int? day, int? hour, int? minute) => default!;
+
+        /// <summary>
+        /// <c>datetimefromparts(year, month, day, hour, minute, seconds, milliseconds)</c>: builds a
+        /// <c>datetime</c>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTime? datetimefromparts(int? year, int? month, int? day, int? hour, int? minute, int? seconds, int? milliseconds) => default!;
+
+        /// <summary>
+        /// <c>datetime2fromparts(year, month, day, hour, minute, seconds, fractions, precision)</c>:
+        /// builds a <c>datetime2</c>. <paramref name="precision"/> must be a constant between 0 and 7.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server).
+        /// </summary>
+        public DateTime? datetime2fromparts(int? year, int? month, int? day, int? hour, int? minute, int? seconds, int? fractions, int? precision) => default!;
+
+        /// <summary>
+        /// <c>datetimeoffsetfromparts(year, month, day, hour, minute, seconds, fractions,
+        /// hour_offset, minute_offset, precision)</c>: builds a <c>datetimeoffset</c>.
+        /// <paramref name="precision"/> must be a constant between 0 and 7. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTimeOffset? datetimeoffsetfromparts(int? year, int? month, int? day, int? hour, int? minute, int? seconds, int? fractions, int? hourOffset, int? minuteOffset, int? precision) => default!;
+
+        // --- Binary / checksum family ---
+
+        /// <summary>
+        /// <c>checksum(value, ...)</c>: a checksum computed over the listed values. At least one value
+        /// is required; the wildcard <c>checksum(*)</c> form is not exposed. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? checksum(params object?[] values) => default!;
+
+        /// <summary>
+        /// <c>binary_checksum(value, ...)</c>: a checksum computed over the binary representations of
+        /// the listed values. At least one value is required. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? binary_checksum(params object?[] values) => default!;
+
+        /// <summary>
+        /// <c>compress(value)</c>: GZIP-compresses a string into <c>varbinary(max)</c>. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public byte[]? compress(string? value) => default!;
+
+        /// <summary>
+        /// <c>compress(value)</c>: GZIP-compresses a binary value. Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public byte[]? compress(byte[]? value) => default!;
+
+        /// <summary>
+        /// <c>decompress(value)</c>: decompresses a value produced by <c>compress</c> (SQL Server
+        /// returns <c>null</c> for an invalid or truncated input). Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public byte[]? decompress(byte[]? value) => default!;
+
+        // --- Other T-SQL scalars ---
+
+        /// <summary>
+        /// <c>rand()</c>: a pseudo-random <c>float</c> in [0, 1). Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public double? rand() => default!;
+
+        /// <summary>
+        /// <c>rand(seed)</c>: a pseudo-random <c>float</c> in [0, 1) from the given integer seed.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server).
+        /// </summary>
+        public double? rand(int seed) => default!;
+
+        /// <summary>
+        /// <c>stuff(value, start, length, new_value)</c>: replaces <paramref name="length"/>
+        /// characters of <paramref name="value"/> from 1-based <paramref name="start"/> with
+        /// <paramref name="newValue"/>. <b>Character data only:</b> SQL Server's T-SQL <c>STUFF</c>
+        /// implicitly converts binary arguments to <c>varchar</c>, so there is deliberately no
+        /// <c>byte[]</c> overload (it could never return binary). Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? stuff(string? value, int start, int length, string? newValue) => default!;
+
+        // --- Metadata A: object/column/index metadata (missing objects yield NULL; gated per name) ---
+
+        /// <summary>
+        /// <c>col_length(table, column)</c>: the defined length, in bytes, of <paramref name="column"/>
+        /// (NULL when the object or column does not exist). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? col_length(string? table, string? column) => default!;
+
+        /// <summary>
+        /// <c>col_name(table_id, column_id)</c>: the name of the column with the given ids (NULL when
+        /// they do not identify a column). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? col_name(int? tableId, int? columnId) => default!;
+
+        /// <summary>
+        /// <c>ident_incr(table_or_view)</c>: the increment of the identity column of the table or view
+        /// (NULL on error). T-SQL returns <c>numeric(38,0)</c>, whose ADO.NET mapping is
+        /// <see cref="decimal"/> (not <see cref="int"/>), so an increment above the 32-bit range does
+        /// not overflow on materialisation. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public decimal? ident_incr(string? table) => default!;
+
+        /// <summary>
+        /// <c>ident_seed(table_or_view)</c>: the seed of the identity column of the table or view (NULL
+        /// on error). T-SQL returns <c>numeric(38,0)</c>, whose ADO.NET mapping is
+        /// <see cref="decimal"/> (not <see cref="int"/>), so a seed above the 32-bit range does not
+        /// overflow on materialisation. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public decimal? ident_seed(string? table) => default!;
+
+        /// <summary>
+        /// <c>index_col(table, index_id, key_id)</c>: the name of the indexed column (NULL when the
+        /// index or key does not exist). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? index_col(string? table, int? indexId, int? keyId) => default!;
+
+        /// <summary>
+        /// <c>object_definition(object_id)</c>: the T-SQL source text of the object (NULL when it does
+        /// not exist or the caller lacks permission). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? object_definition(int? objectId) => default!;
+
+        /// <summary>
+        /// <c>object_id(object_name)</c>: the id of the schema-scoped object (NULL when it does not
+        /// exist). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? object_id(string? objectName) => default!;
+
+        /// <summary>
+        /// <c>object_id(object_name, object_type)</c>: as <see cref="object_id(string?)"/> restricted to
+        /// <paramref name="objectType"/> (for example <c>"U"</c> for a user table). Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? object_id(string? objectName, string? objectType) => default!;
+
+        /// <summary>
+        /// <c>object_name(object_id)</c>: the name of the schema-scoped object with the given id (NULL
+        /// when it does not exist). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? object_name(int? objectId) => default!;
+
+        /// <summary>
+        /// <c>object_name(object_id, database_id)</c>: as <see cref="object_name(int?)"/> resolved in
+        /// <paramref name="databaseId"/> rather than the current database. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? object_name(int? objectId, int? databaseId) => default!;
+
+        /// <summary>
+        /// <c>object_schema_name(object_id)</c>: the name of the schema that owns the object with the
+        /// given id (NULL when it does not exist). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? object_schema_name(int? objectId) => default!;
+
+        /// <summary>
+        /// <c>object_schema_name(object_id, database_id)</c>: as <see cref="object_schema_name(int?)"/>
+        /// resolved in <paramref name="databaseId"/>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? object_schema_name(int? objectId, int? databaseId) => default!;
+
+        /// <summary>
+        /// <c>stats_date(table_id, stats_id)</c>: the last-updated date of the statistics (NULL when the
+        /// statistics do not exist). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public DateTime? stats_date(int? tableId, int? statsId) => default!;
+
+        // --- Metadata B: database/schema/type metadata (gated per name) ---
+
+        /// <summary>
+        /// <c>db_id()</c>: the id of the current database. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? db_id() => default!;
+
+        /// <summary>
+        /// <c>db_id(database_name)</c>: the id of the named database. Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? db_id(string? database) => default!;
+
+        /// <summary>
+        /// <c>db_name()</c>: the name of the current database. Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? db_name() => default!;
+
+        /// <summary>
+        /// <c>db_name(database_id)</c>: the name of the database with the given id. Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? db_name(int? databaseId) => default!;
+
+        /// <summary>
+        /// <c>original_db_name()</c>: the database name the client connected to (the original name in a
+        /// contained-database redirect). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? original_db_name() => default!;
+
+        /// <summary>
+        /// <c>schema_id()</c>: the id of the caller's default schema. Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? schema_id() => default!;
+
+        /// <summary>
+        /// <c>schema_id(schema_name)</c>: the id of the named schema. Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? schema_id(string? schema) => default!;
+
+        /// <summary>
+        /// <c>schema_name()</c>: the name of the caller's default schema. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? schema_name() => default!;
+
+        /// <summary>
+        /// <c>schema_name(schema_id)</c>: the name of the schema with the given id. Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? schema_name(int? schemaId) => default!;
+
+        /// <summary>
+        /// <c>type_id(type_name)</c>: the id of the named data type. Requires a provider that supports
+        /// it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? type_id(string? typeName) => default!;
+
+        /// <summary>
+        /// <c>type_name(type_id)</c>: the name of the data type with the given id. Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? type_name(int? typeId) => default!;
+
+        // --- Metadata C: file/filegroup metadata (gated per name) ---
+
+        /// <summary>
+        /// <c>filegroup_id(filegroup_name)</c>: the id of the named filegroup. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? filegroup_id(string? filegroupName) => default!;
+
+        /// <summary>
+        /// <c>filegroup_name(filegroup_id)</c>: the name of the filegroup with the given id. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? filegroup_name(int? filegroupId) => default!;
+
+        /// <summary>
+        /// <c>file_id(file_name)</c>: the id of the database file with the given logical name. Requires
+        /// a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? file_id(string? fileName) => default!;
+
+        /// <summary>
+        /// <c>file_idex(file_name)</c>: as <see cref="file_id(string?)"/>, but without the bounds of the
+        /// current database. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? file_idex(string? fileName) => default!;
+
+        /// <summary>
+        /// <c>file_name(file_id)</c>: the logical name of the database file with the given id. Requires
+        /// a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? file_name(int? fileId) => default!;
+
+        // --- Metadata D: server/system metadata scalars (gated per name) ---
+
+        /// <summary>
+        /// <c>current_timezone()</c>: the name of the current time zone as configured on the server.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>;
+        /// SQL Server 2016+).
+        /// </summary>
+        public string? current_timezone() => default!;
+
+        /// <summary>
+        /// <c>current_timezone_id()</c>: the id of the current time zone. Requires a provider that
+        /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server 2016+).
+        /// </summary>
+        public int? current_timezone_id() => default!;
+
+        /// <summary>
+        /// <c>formatmessage(msg_string, param, ...)</c>: builds a message from a format string and up to
+        /// 20 arguments. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? formatmessage(string? message, params object?[] values) => default!;
+
+        /// <summary>
+        /// <c>formatmessage(msg_number, param, ...)</c>: builds the message stored under
+        /// <paramref name="messageId"/> in <c>sys.messages</c> with up to 20 arguments. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? formatmessage(int? messageId, params object?[] values) => default!;
+
+        /// <summary>
+        /// <c>getansinull()</c>: whether the current database allows nulls by default. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? getansinull() => default!;
+
+        /// <summary>
+        /// <c>getansinull(database)</c>: whether the named database allows nulls by default. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? getansinull(string? database) => default!;
+
+        /// <summary>
+        /// <c>isdate(value)</c>: 1 when <paramref name="value"/> is a valid <c>datetime</c>, otherwise 0
+        /// (the T-SQL form returns <c>int</c>, not <c>bit</c>). Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? isdate(object? value) => default!;
+
+        /// <summary>
+        /// <c>isnumeric(value)</c>: 1 when <paramref name="value"/> is a valid numeric type, otherwise 0
+        /// (the T-SQL form returns <c>int</c>, not <c>bit</c>). Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public int? isnumeric(object? value) => default!;
+
+        /// <summary>
+        /// <c>parsename(object_name, piece)</c>: the requested 1-based part of a four-part object name
+        /// (NULL when the part is not a valid identifier). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? parsename(string? objectName, int? piece) => default!;
+
+        /// <summary>
+        /// <c>publishingservername()</c>: the name of the publishing server (the server name when a
+        /// replicated database is published). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? publishingservername() => default!;
+
+        /// <summary>
+        /// <c>str(float_expression)</c>: the string form of a floating-point number (length 10,
+        /// 0 decimals). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? str(double? value) => default!;
+
+        /// <summary>
+        /// <c>str(float_expression, length)</c>: the string form of a floating-point number with the
+        /// given total <paramref name="length"/>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? str(double? value, int? length) => default!;
+
+        /// <summary>
+        /// <c>str(float_expression, length, decimal)</c>: as <see cref="str(double?, int?)"/> with an
+        /// explicit number of <paramref name="decimalPlaces"/>. Requires a provider that supports it
+        /// (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
+        /// </summary>
+        public string? str(double? value, int? length, int? decimalPlaces) => default!;
     }

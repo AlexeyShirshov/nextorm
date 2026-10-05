@@ -547,12 +547,23 @@ to the ledger on 2026-09-29.
     now on `SqlFunctions.Postgres`, gated by the existing PostgreSQL-only capability flags.
     Shipped: [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql)
     and [JSON and JSONB](../../guide/14-json.md) (+RU).
-38. **SQL Server built-in function gaps — <span style="color:green">shipped</span>.** `PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`,
-    `STRING_ESCAPE`, `FORMAT`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`,
-    `SQUARE`, the trigonometric functions and the SQL Server JSON constructors/aggregates
-    (`JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/`JSON_PATH_EXISTS`) are
-    exposed through `SqlServerFunctions` / `ISqlServerFunctions`; `ASCII`/`CHAR`/`TRANSLATE` inherit from
-    `CommonFunctions` (item 36), and `LOG10` stays on `Math.Log10`. Shipped:
+38. **SQL Server built-in function gaps — <span style="color:green">shipped</span>.** The original batch (`PATINDEX`, `QUOTENAME`,
+    `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `FORMAT`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`,
+    `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`, `SQUARE`, the trigonometric functions and the SQL Server JSON
+    constructors/aggregates `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/
+    `JSON_PATH_EXISTS`) is joined by the linq2db-v6.5.0 reconciliation ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)):
+    61 pinned T-SQL scalars = **51 covered + 10 excluded** (connection/session/statement scope). The 47
+    additions are the clock/offset/`*FROMPARTS` date family (`SYSDATETIME`/`SYSDATETIMEOFFSET`/
+    `SYSUTCDATETIME`/`SWITCHOFFSET`/`TODATETIMEOFFSET`/`TIMEFROMPARTS`/`SMALLDATETIMEFROMPARTS`/
+    `DATETIMEFROMPARTS`/`DATETIME2FROMPARTS`/`DATETIMEOFFSETFROMPARTS`; FROMPARTS 6 total/5 new, date 13
+    total/10 new), the binary/checksum set (`CHECKSUM`/`BINARY_CHECKSUM`/`COMPRESS`/`DECOMPRESS`), the
+    `RAND`/`STUFF` scalars and the A-D metadata families (`COL_LENGTH`/`COL_NAME`/`IDENT_INCR`/`IDENT_SEED`/
+    `INDEX_COL`/`OBJECT_*`/`STATS_DATE`, `DB_ID`/`DB_NAME`/`ORIGINAL_DB_NAME`/`SCHEMA_ID`/`SCHEMA_NAME`/
+    `TYPE_ID`/`TYPE_NAME`, `FILEGROUP_*`/`FILE_ID`/`FILE_IDEX`/`FILE_NAME`,
+    `CURRENT_TIMEZONE(_ID)`/`FORMATMESSAGE`/`GETANSINULL`/`ISDATE`/`ISNUMERIC`/`PARSENAME`/
+    `PUBLISHINGSERVERNAME`/`STR`). All are exposed through `SqlServerFunctions` /
+    `ISqlServerFunctions`, gated per name; `ASCII`/`CHAR`/`TRANSLATE` inherit from `CommonFunctions`
+    (item 36), and `LOG10` stays on `Math.Log10`. Shipped:
     [`guide/provider-specific/sqlserver.md`](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (+RU).
 39. **MySQL built-in function gaps — <span style="color:green">done</span>.** `SqlFunctions.MySql` (`MySqlFunctions`) is new;
     `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`,

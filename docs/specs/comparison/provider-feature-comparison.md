@@ -118,13 +118,15 @@ sequences/settings, TVP and the aggregate families have dedicated nextorm APIs b
 | Bulk copy + `SqlBulkCopyOptions` | yes | yes | `SqlServerDialect.cs:55` | `SqlServerBulkCopy` |
 | Stored procedures | yes | yes | `SqlServerDialect.cs:61` | `QueryProc`/`ExecuteProc` |
 | Window percentiles (`WITHIN GROUP ... OVER`) | yes | partial | `SqlServerDialect.cs:363` | 2012+ windows; no `GROUPS`/`EXCLUDE`; `NTH_VALUE` absent |
-| Provider scalar-function breadth | yes | yes (largest) | `SqlFunctions.SqlServer.cs` (328 lines) | `SqlFn.cs` 295 KB, 156 `[Sql.Function]` declarations |
+| Provider scalar-function breadth | yes | yes | `SqlFunctions.SqlServer.cs` (766 lines); 61 pinned T-SQL scalars audited = 51 covered + 10 excluded ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)) | `SqlFn.cs` 295 KB, 156 `[Sql.Function]` declarations |
 
-Net: **parity, with linq2db ahead on scalar-function breadth and hint variety** — the residual scalar
-gap is concentrated in T-SQL system/metadata functions, the date-part/`*FROMPARTS`/`SWITCHOFFSET` family
-and `CHECKSUM`/`COMPRESS` (tracked as nextorm
-[#182](https://github.com/AlexeyShirshov/nextorm/issues/182)); nextorm leads on first-class builders for
-`PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML`, XML methods, `OPENJSON`/`STRING_SPLIT`, and 2025 regex.
+Net: **parity on the audited T-SQL scalar catalogue, with linq2db still wider overall** — issue
+[#182](https://github.com/AlexeyShirshov/nextorm/issues/182) reconciled 61 pinned linq2db v6.5.0
+`SqlFn.cs` entries against nextorm: **51 covered + 10 excluded**, where the 10 excluded are
+connection/session/statement-scope names not modelled as per-row query scalars. Within the reconciled
+set the FROMPARTS family is 6 total / 5 newly added and the date family is 13 total / 10 newly added.
+nextorm leads on first-class builders for `PIVOT`/`UNPIVOT`, `FOR JSON`/`FOR XML`, XML methods,
+`OPENJSON`/`STRING_SPLIT`, and 2025 regex.
 
 ---
 

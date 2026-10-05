@@ -266,6 +266,59 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
 
+## Часы, смещение и `*FROMPARTS` SQL Server
+
+Функции часов, смещения и `*FROMPARTS` живут на `SqlFunctions.SqlServer` и гейтятся по имени
+[`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions); SQL Server — единственный провайдер,
+реализующий флаг, поэтому все остальные (включая in-memory) бросают `NotSupportedException`.
+`sysdatetime`/`sysutcdatetime` — недетерминированные серверные часы (локальные и UTC), поэтому их
+нельзя считать фиксированным значением; `switchoffset`/`todatetimeoffset` принимают смещение либо
+как константную строку (`"-08:00"`), либо как число минут со знаком.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Now = SqlFunctions.SqlServer.sysdatetime(),
+        NowOffset = SqlFunctions.SqlServer.sysdatetimeoffset(),
+        UtcNow = SqlFunctions.SqlServer.sysutcdatetime(),
+        Switched = SqlFunctions.SqlServer.switchoffset(SqlFunctions.SqlServer.sysdatetimeoffset(), "-08:00"),
+        Offset = SqlFunctions.SqlServer.todatetimeoffset(e.Datetime, 120),
+        Time = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 7),
+        Stamp = SqlFunctions.SqlServer.datetime2fromparts(2020, 1, 2, 3, 4, 5, 6, 3)
+    })
+    .ToList();
+```
+
+```sql
+select sysdatetime() as [Now], sysdatetimeoffset() as [NowOffset], sysutcdatetime() as [UtcNow],
+       switchoffset(sysdatetimeoffset(), '-08:00') as [Switched], todatetimeoffset(dt, 120) as [Offset],
+       timefromparts(1, 2, 3, 4, 7) as [Time], datetime2fromparts(2020, 1, 2, 3, 4, 5, 6, 3) as [Stamp]
+from complex_entity
+```
+
+| C# | SQL |
+|---|---|
+| `sysdatetime()` | `sysdatetime()` |
+| `sysdatetimeoffset()` | `sysdatetimeoffset()` |
+| `sysutcdatetime()` | `sysutcdatetime()` |
+| `switchoffset(value, timeZone)` / `switchoffset(value, minutes)` | `switchoffset(value, <offset>)` |
+| `todatetimeoffset(value, timeZone)` / `todatetimeoffset(value, minutes)` | `todatetimeoffset(value, <offset>)` |
+| `timefromparts(h, mi, s, fractions, precision)` | `timefromparts(...)` |
+| `smalldatetimefromparts(y, mo, d, h, mi)` | `smalldatetimefromparts(...)` |
+| `datetimefromparts(y, mo, d, h, mi, s, ms)` | `datetimefromparts(...)` |
+| `datetime2fromparts(y, mo, d, h, mi, s, fractions, precision)` | `datetime2fromparts(...)` |
+| `datetimeoffsetfromparts(y, mo, d, h, mi, s, fractions, hourOffset, minuteOffset, precision)` | `datetimeoffsetfromparts(...)` |
+
+`timefromparts`, `datetime2fromparts` и `datetimeoffsetfromparts` требуют, чтобы завершающая точность
+была **константным целым в `0..7`**: неконстантное, `null` или выходящее за диапазон значение бросает
+`NotSupportedException` до генерации SQL. `null` в любой другой части даёт `null`-результат, как у
+нативной функции. `timefromparts` материализуется как `TimeSpan`, конструкторы
+`smalldatetime`/`datetime`/`datetime2` — как `DateTime`, а функции часов и смещения — как
+`DateTime` / `DateTimeOffset`, соответствующие типу результата T-SQL. Это датовая половина
+поверхности, специфичной для SQL Server; остальное описано в
+[Условные функции](04-conditionals-and-conversion.md#метаданные-checksum-и-прочие-скаляры-sql-server).
+
 ## Приведение и части даты (ClickHouse)
 
 ClickHouse предоставляет свои `to*`-функции даты/времени через `SqlFunctions.ClickHouse`

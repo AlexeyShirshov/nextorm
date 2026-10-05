@@ -2,10 +2,11 @@
 
 > SQL Server contributes the `CHOOSE` conditional function, the T-SQL-only scalar library
 > (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `UNICODE`, `NCHAR`, `FORMAT`, the
-> trigonometric functions, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID` and the SQL/JSON
-> constructors/aggregates), statement/table hints and the `FOR JSON`/`FOR XML` result shape, the XML
-> data-type methods (`value`/`query`/`exist` and the `nodes` rowset), the native `PIVOT`/`UNPIVOT`
-> source constructs, plus `string_split`/`openjson` table functions.
+> trigonometric functions, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, the
+> clock/offset/`*FROMPARTS` date family, the `CHECKSUM`/`COMPRESS`/`RAND`/`STUFF` scalars, the metadata
+> functions and the SQL/JSON constructors/aggregates), statement/table hints and the `FOR JSON`/`FOR
+> XML` result shape, the XML data-type methods (`value`/`query`/`exist` and the `nodes` rowset), the
+> native `PIVOT`/`UNPIVOT` source constructs, plus `string_split`/`openjson` table functions.
 
 **Prerequisites:** [Querying and projections](../../querying/index.md) · [SQL Server provider](../../providers/sqlserver.md)
 
@@ -290,17 +291,24 @@ from complex_entity
 
 * **String:** `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`,
   `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
-  `nchar(code)`, `format(value, format)` / `format(value, format, culture)`. `format` is the native
-  T-SQL `FORMAT`, distinct from the CLR `string.Format` translation.
-* **Numeric:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` are portable — see [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)).
-* **Date/time:** `datename(datepart, date)` (the part is a constant) and
-  `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+).
-* **Binary/system:** `hashbytes(algorithm, data)` (the algorithm is a constant such as `SHA2_256`) and
-  `newsequentialid()`; the latter is valid only as a column `DEFAULT`, not in an ordinary `SELECT`.
+  `nchar(code)`, `format(value, format)` / `format(value, format, culture)` and
+  `stuff(value, start, length, newValue)` (string only — SQL Server's `STUFF` implicitly converts binary arguments to character data, so no `byte[]` overload is exposed). `format` is the native T-SQL
+  `FORMAT`, distinct from the CLR `string.Format` translation; `str(value[, length[, decimals]])`
+  is the fixed-width floating-point conversion.
+* **Numeric:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` are portable — see [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)) and `rand()` / `rand(seed)` (non-deterministic without a seed).
+* **Date/time:** `datename(datepart, date)` (the part is a constant), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), the server clocks `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, the offset functions `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (a string such as `"+02:00"` or signed minutes) and the construction family `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. The trailing `*FROMPARTS` precision must be a constant `0..7` (a non-constant, `null` or out-of-range value throws before any SQL is emitted).
+* **Binary/system:** `hashbytes(algorithm, data)` (the algorithm is a constant such as `SHA2_256`), `newsequentialid()` (valid only as a column `DEFAULT`, not in an ordinary `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (at least one value; the `checksum(*)` wildcard is not exposed) and `compress(value)`/`decompress(value)` (GZIP over `varbinary(max)`).
+* **Metadata:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`, `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`, `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` and `publishingservername`. A missing object/column/index/statistic yields `null`, like the native function.
+* **Conversion/logical:** `isdate(value)`/`isnumeric(value)` return the native T-SQL `int` (1/0), not a `bit`, so they stay integer values rather than materialised predicates, and `formatmessage(messageOrId, args...)` accepts at most 20 formatting arguments.
 * **JSON:** `json_array(value, ...)` and `json_object(key, value, ...)` (SQL Server 2022+),
   `json_objectagg(key, value)` and `json_arrayagg(value)` (SQL Server 2025+),
   `json_path_exists(json, path)` (SQL Server 2022+) and `json_contains(json, searchValue, path)`
   (SQL Server 2025+). The two predicates are materialised as `bit` values, mirroring `isjson`.
+
+Ten connection/session/statement-scope names are intentionally **not** exposed: `CURRENT_REQUEST_ID`,
+`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`; use raw SQL or a `[SqlFunction]`
+wrapper when a concrete per-row use appears.
 
 ## Not yet supported
 

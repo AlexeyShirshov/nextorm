@@ -144,6 +144,30 @@ source: it renders `<xml>.nodes('xpath') as [alias]([value])` and the unfolded `
 projected with the scalar methods above (the operand must be an outer row column, the XQuery a string
 literal).
 
+Beyond those, SQL Server contributes a broad T-SQL-only scalar library on `SqlFunctions.SqlServer`,
+gated per name by [`ISqlServerFunctions`](xref:NextORM.Core.ISqlDialect.SqlServerFunctions) and rejected
+by every other provider:
+
+- **Date/time:** the clock/offset family `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`,
+  `switchoffset`/`todatetimeoffset` (string offset or signed minutes) and the construction family
+  `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/
+  `datetimeoffsetfromparts` (the `*FROMPARTS` precision must be a constant `0..7`);
+- **Binary/checksum:** `checksum`/`binary_checksum` (at least one argument; the `checksum(*)` wildcard
+  is not exposed), `compress`/`decompress` (GZIP over `varbinary(max)`) and the pseudo-random
+  `rand`/`rand(seed)`;
+- **Metadata:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`,
+  `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`,
+  `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`,
+  `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/
+  `current_timezone_id`, `getansinull`, `parsename` and `publishingservername`;
+- **String/conversion:** `stuff` and `str`; `isdate`/`isnumeric` return the native T-SQL `int` (1/0),
+  not `bit`; `formatmessage` accepts a format string or a `sys.messages` id and at most 20 arguments.
+
+Ten connection/session/statement-scope names are intentionally not exposed: `CURRENT_REQUEST_ID`,
+`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY`. See the
+[T-SQL scalar functions guide](../guide/provider-specific/sqlserver.md#t-sql-scalar-functions).
+
 ## Recursive CTEs and `maxRecursion`
 
 ```csharp
@@ -282,6 +306,9 @@ SQL Server also supports the multi-column `ToDataReader`/`ToDataReaderAsync` ter
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
 | Native bulk copy | `SqlBulkCopy`; [`BulkInsertOptions`](xref:NextORM.Core.BulkInsertOptions) `CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` (see [Bulk insert](../guide/20-bulk-insert.md#sql-server-bulk-copy-options)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
+| T-SQL clock/offset/`*FROMPARTS` | `sysdatetime` / `sysdatetimeoffset` / `sysutcdatetime` / `switchoffset` / `todatetimeoffset` / `timefromparts` / `smalldatetimefromparts` / `datetimefromparts` / `datetime2fromparts` / `datetimeoffsetfromparts` (per-name gated) |
+| T-SQL binary/checksum/other | `checksum` / `binary_checksum` / `compress` / `decompress` / `rand` / `stuff` / `str` / `isdate` / `isnumeric` / `formatmessage` (per-name gated) |
+| T-SQL metadata | `col_length` / `col_name` / `object_id` / `object_name` / `db_id` / `db_name` / `schema_id` / `schema_name` / `type_id` / `type_name` / `file_id` / `file_name` / `current_timezone` / `parsename` / `stats_date` and the rest of the A-D families (per-name gated) |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
 | JSON output | whole result set as one JSON document, terminal `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
