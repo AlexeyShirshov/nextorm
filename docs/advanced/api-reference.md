@@ -193,8 +193,8 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 
 | Type | Description |
 |---|---|
-| [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `Npgsql`. |
-| [`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) | PostgreSQL [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.Postgres.PostgresDialect.Instance)). |
+| [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `Npgsql`; a constructor overload takes a server `Version` that gates the aggregate `FILTER` (9.4+). |
+| [`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) | PostgreSQL [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.Postgres.PostgresDialect.Instance)); the aggregate `FILTER` requires the configured server `Version` to be unset or 9.4+. |
 | [`PostgresDataContextOptionsBuilderExtensions`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `UsePostgres(string connectionString)` and `UsePostgres(DbConnection)`. |
 
 ## Namespace [`NextORM.SqlServer`](xref:NextORM.SqlServer)
@@ -217,8 +217,8 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 
 | Type | Description |
 |---|---|
-| [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `MySqlConnector`, deriving from [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext). |
-| [`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) | MariaDB [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance)); MySQL rendering plus `INTERSECT ALL`/`EXCEPT ALL` and the MariaDB-only [`SqlFunctions.MySql`](xref:NextORM.Core.SqlFunctions.MySql) names. |
+| [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `MySqlConnector`, deriving from [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext); a constructor overload takes a server `Version` that enables `UPDATE ... RETURNING` at 13.0+. |
+| [`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) | MariaDB [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance)); MySQL rendering plus `INTERSECT ALL`/`EXCEPT ALL`, the MariaDB-only [`SqlFunctions.MySql`](xref:NextORM.Core.SqlFunctions.MySql) names, and [`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning) enabled only at an explicit server version 13.0+. |
 | [`MariaDbDataContextOptionsBuilderExtensions`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions) | `UseMariaDb(string connectionString)` and `UseMariaDb(DbConnection)`. |
 
 ## Namespace [`NextORM.ClickHouse`](xref:NextORM.ClickHouse)

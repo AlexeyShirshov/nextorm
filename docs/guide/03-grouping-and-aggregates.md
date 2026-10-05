@@ -459,7 +459,7 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Most frequent (top-K) | `SqlFunctions.ClickHouse.top_k(3, x)`, `top_k_weighted(2, x, w)` | `topK(3)(x)`, `topKWeighted(2)(x, w)` | [`TopKAggregates`](xref:NextORM.Core.ISqlDialect.TopKAggregates) | ClickHouse |
 | Arbitrary value | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
-| Filtered aggregate | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL, SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
+| Filtered aggregate | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
@@ -539,7 +539,10 @@ An aggregate can carry a row filter by passing a predicate as an extra argument.
 across providers; the dialect picks the spelling through
 [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle). PostgreSQL and SQLite
 render the ANSI `filter (where ...)` clause, ClickHouse renders its `-If` combinator; MySQL/MariaDB
-and SQL Server reject the call with `NotSupportedException` because they have neither.
+and SQL Server reject the call with `NotSupportedException` because they have neither. On PostgreSQL the
+ANSI form requires server version 9.4 or later: a dialect configured with an older `Version` rejects the
+call with `NotSupportedException`, while an unset version assumes 9.4+ (see
+[PostgreSQL provider](../providers/postgres.md#server-version)).
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

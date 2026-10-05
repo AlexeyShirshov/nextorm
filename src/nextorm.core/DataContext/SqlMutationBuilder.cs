@@ -406,7 +406,7 @@ internal static class SqlMutationBuilder
                 writer.Append(SqlKeywords.Of(keywordCase, " where 1"));
             }
 
-            if (returningColumns is not null && dialect.SupportsReturning)
+            if (returningColumns is not null && dialect.SupportsUpdateReturning)
                 writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
 
             if (dialect.MakeUpdateSuffix(keywordCase) is { } suffix)

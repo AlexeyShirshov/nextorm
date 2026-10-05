@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
@@ -21,26 +22,68 @@ public class PostgresDataContext : DataContext
     private static readonly MethodInfo ToRangeMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRange), BindingFlags.Static | BindingFlags.Public)!;
     private static readonly MethodInfo ToRangesMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRanges), BindingFlags.Static | BindingFlags.Public)!;
 
+    // One immutable server version per concrete context type, so two instances of the same type can
+    // never render different SQL and silently reuse each other's cached plans (the plan-cache key is
+    // the context type). Unset is a sentinel distinct from every Version.
+    private static readonly object UnsetServerVersion = new();
+    private static readonly ConcurrentDictionary<Type, object> ServerVersionsByContextType = new();
+
+    private readonly ISqlDialect _dialect;
+
     /// <summary>
     /// Creates a PostgreSQL context that owns a connection built lazily from
-    /// <paramref name="connectionString"/>.
+    /// <paramref name="connectionString"/>. The context is unversioned: every supported form is
+    /// emitted.
     /// </summary>
     /// <param name="connectionString">The connection string used to create the <c>NpgsqlConnection</c>.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public PostgresDataContext(string connectionString, DataContextBuilder optionsBuilder)
-        : base(connectionString, null, optionsBuilder)
+        : this(connectionString, null, optionsBuilder, null)
     {
     }
 
     /// <summary>
     /// Creates a PostgreSQL context over a caller-supplied connection, which the context does not
-    /// dispose.
+    /// dispose. The context is unversioned: every supported form is emitted.
     /// </summary>
     /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
     /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
     public PostgresDataContext(DbConnection connection, DataContextBuilder optionsBuilder)
-        : base(null, connection, optionsBuilder)
+        : this(null, connection, optionsBuilder, null)
     {
+    }
+
+    /// <summary>
+    /// Creates a version-aware PostgreSQL context that owns a connection built lazily from
+    /// <paramref name="connectionString"/>.
+    /// </summary>
+    /// <param name="connectionString">The connection string used to create the <c>NpgsqlConnection</c>.</param>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset. Immutable per context type.</param>
+    /// <exception cref="InvalidOperationException">A different version was already registered for this context type.</exception>
+    public PostgresDataContext(string connectionString, DataContextBuilder optionsBuilder, Version? serverVersion)
+        : this(connectionString, null, optionsBuilder, serverVersion)
+    {
+    }
+
+    /// <summary>
+    /// Creates a version-aware PostgreSQL context over a caller-supplied connection, which the context
+    /// does not dispose.
+    /// </summary>
+    /// <param name="connection">An already-created <c>DbConnection</c> owned by the caller.</param>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset. Immutable per context type.</param>
+    /// <exception cref="InvalidOperationException">A different version was already registered for this context type.</exception>
+    public PostgresDataContext(DbConnection connection, DataContextBuilder optionsBuilder, Version? serverVersion)
+        : this(null, connection, optionsBuilder, serverVersion)
+    {
+    }
+
+    private PostgresDataContext(string? connectionString, DbConnection? connection, DataContextBuilder optionsBuilder, Version? serverVersion)
+        : base(connectionString, connection, optionsBuilder, serverVersion)
+    {
+        RegisterServerVersion(GetType(), ServerVersion);
+        _dialect = ServerVersion is null ? PostgresDialect.Instance : new PostgresDialect(ServerVersion);
     }
 
     /// <summary>Creates a new <c>NpgsqlConnection</c> for <paramref name="connectionString"/>.</summary>
@@ -50,7 +93,28 @@ public class PostgresDataContext : DataContext
         => new NpgsqlConnection(connectionString);
 
     /// <inheritdoc/>
-    public override ISqlDialect Dialect => PostgresDialect.Instance;
+    public override ISqlDialect Dialect => _dialect;
+
+    // A context type owns one immutable server version. A second, conflicting version is a
+    // configuration error that names the remedy: derive a distinct context subclass.
+    private static void RegisterServerVersion(Type contextType, Version? serverVersion)
+    {
+        var candidate = (object?)serverVersion ?? UnsetServerVersion;
+        var registered = ServerVersionsByContextType.GetOrAdd(contextType, candidate);
+
+        if (ReferenceEquals(registered, candidate))
+            return;
+        if (registered is Version registeredVersion && candidate is Version candidateVersion && registeredVersion.Equals(candidateVersion))
+            return;
+
+        throw new InvalidOperationException(
+            $"The PostgreSQL context type '{contextType.Name}' is already bound to server version {Describe(registered)}, " +
+            $"so it cannot also be used with {Describe(candidate)}. A context type has one immutable server version because the " +
+            "plan cache is keyed by the context type; derive a distinct DataContext subclass for each version.");
+    }
+
+    private static string Describe(object discriminator)
+        => discriminator is Version version ? version.ToString() : "unset (null)";
 
     /// <summary>
     /// Creates an <c>NpgsqlParameter</c>, mapping a <see langword="null"/> value to

@@ -16,6 +16,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
+    private readonly Version? _serverVersion;
     private readonly QueryCache _queryCache;
     private readonly DbConnectionManager _connectionManager;
     private readonly QueryExecutor _executor;
@@ -110,6 +111,19 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             _interceptors);
     }
 
+    /// <summary>
+    /// Creates a context as <see cref="DataContext(string?, DbConnection?, DataContextBuilder)"/> and
+    /// snapshots the provider server <paramref name="serverVersion"/> once. A version-aware provider
+    /// passes it here and builds its dialect from <see cref="ServerVersion"/>.
+    /// </summary>
+    /// <param name="connectionString">Connection string used to create a context-owned connection, or <see langword="null"/>.</param>
+    /// <param name="providedConnection">An already-created connection owned by the caller, or <see langword="null"/>.</param>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <param name="serverVersion">The provider server version to snapshot, or <see langword="null"/> for unset.</param>
+    protected DataContext(string? connectionString, DbConnection? providedConnection, DataContextBuilder optionsBuilder, Version? serverVersion)
+        : this(connectionString, providedConnection, optionsBuilder)
+        => _serverVersion = serverVersion;
+
     private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
     private readonly Func<string, object?, DbParameter> _createParamSimple;
     private readonly Func<DbCommand, ProcedureParameter, DbParameter> _createProcedureParam;
@@ -132,6 +146,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// interface rather than on the context itself.
     /// </summary>
     public abstract ISqlDialect Dialect { get; }
+
+    /// <summary>
+    /// The provider server version this context was configured for, or <see langword="null"/> when the
+    /// provider is version-agnostic (the default). Snapshotted once at construction and immutable for
+    /// the context's lifetime; a version-aware provider builds its dialect from it.
+    /// </summary>
+    protected Version? ServerVersion => _serverVersion;
 
     /// <summary>Logger for the context's own diagnostic messages, or <see langword="null"/> when no logger factory was configured.</summary>
     public ILogger? Logger => _environment.Logger;
@@ -739,7 +760,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     IReadOnlyList<TResult> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn)
     {
-        EnsureReturningSupported();
+        EnsureReturningSupported(command);
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
@@ -748,7 +769,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
     {
-        EnsureReturningSupported();
+        EnsureReturningSupported(command);
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
@@ -1355,9 +1376,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return _planner.RenderUpdateJoin(command);
     }
 
-    private void EnsureReturningSupported()
+    private void EnsureReturningSupported(MutationCommand command)
     {
-        if (!Dialect.SupportsReturning && !Dialect.SupportsOutput)
+        // A single-table UPDATE may have its own RETURNING gate (MariaDB 13.0+) distinct from the
+        // INSERT/DELETE form, so the command shape participates in the capability check.
+        var supported = Dialect.SupportsReturning || Dialect.SupportsOutput
+            || (command is UpdateCommand && Dialect.SupportsUpdateReturning);
+        if (!supported)
             throw new NotSupportedException(
                 $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form.");
     }
@@ -1379,7 +1404,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (command.OutputInto is not null)
             EnsureOutputIntoSupported();
         if (command.ReturningColumns is { Count: > 0 })
-            EnsureReturningSupported();
+            EnsureReturningSupported(command);
     }
 
     private void EnsureOutputIntoSupported()

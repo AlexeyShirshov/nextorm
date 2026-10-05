@@ -26,7 +26,8 @@
   построения/доступа и операторы `->`/`->>`/`@>`/`?`, а параметры `JsonDocument`/`JsonElement`/`JsonNode`
   привязываются как `jsonb`;
 - `greatest`/`least` и предложение `FILTER (WHERE ...)` у агрегатов включены ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) равно `true`, а
-  [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) — `AnsiFilter`);
+  [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) — `AnsiFilter`, когда настроенная версия сервера не задана или 9.4+, а на версии
+  ниже 9.4 диалект отклоняет фильтрующие агрегаты через `NotSupportedException`);
 - `date_trunc` включён ([`SupportsDateTrunc`](xref:NextORM.Core.ISqlDialect.SupportsDateTrunc) равно `true`);
 - арифметика дат включена ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) равно `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   и методы `DateTime.Add*` отрисовывают интервальную арифметику PostgreSQL
@@ -89,6 +90,35 @@ using NextORM.Core;
 using NextORM.Postgres;
 
 using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
+```
+
+## Версия сервера
+
+Диалект можно привязать к версии сервера, которая гейтит зависящий от версии синтаксис. Настройка
+**явная** — nextorm никогда не опрашивает живой сервер. Передайте версию через параметр `Version`
+конструктора контекста; если его не задать, сохраняется историческое поведение и предполагается
+PostgreSQL 9.4 или новее, поэтому предложение ANSI `FILTER (WHERE ...)` у агрегатов остаётся
+включённым. Версия ниже 9.4 его отключает: фильтрующий агрегат бросает `NotSupportedException`.
+
+```csharp
+// Версия не задана: фильтрующие агрегаты включены (предполагается 9.4+).
+using var current = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
+
+// Привязка к 9.3: предложение FILTER (WHERE ...) у агрегатов отклоняется.
+using var legacy = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(9, 3));
+```
+
+Версия неизменяема и фиксируется на **конкретный тип контекста** на всё время жизни процесса. Два
+контекста одного конкретного типа, запрашивающие разные версии, бросают `InvalidOperationException`;
+чтобы работать с несколькими версиями в одном процессе, объявите для каждой отдельный подкласс
+контекста:
+
+```csharp
+public sealed class Postgres93DataContext : PostgresDataContext
+{
+    public Postgres93DataContext(string connectionString, DataContextBuilder builder)
+        : base(connectionString, builder, new Version(9, 3)) { }
+}
 ```
 
 ## Разбиение на страницы
@@ -305,7 +335,8 @@ join complex_entity as "t2" on t1.id = t2.id
 | Условная функция | `iif(cond, a, b)` → `case when cond then a else b end` |
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются |
 | `date_add` / `end_of_month` / `DateTime.Add*` | интервальная арифметика (`x + (n * interval '1 day')`) |
-| `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются |
+| `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются (`filter` у агрегатов требует 9.4+; незаданная версия — ≥9.4) |
+| Версия сервера | настраивается явно через `Version` у контекста |
 | Session/info-функции | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Табличные функции | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat`, `jsonb_to_record`/`jsonb_to_recordset` (схема из `TRow`) |
 | Рекурсивный CTE | `with recursive` (без опции max-recursion) |

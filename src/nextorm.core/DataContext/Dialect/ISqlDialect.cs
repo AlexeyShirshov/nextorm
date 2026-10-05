@@ -1387,6 +1387,15 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsReturning => false;
     /// <summary>
+    /// Whether the dialect can append <c>RETURNING &lt;columns&gt;</c> to a single-table <c>UPDATE</c>.
+    /// Defaults to <see cref="SupportsReturning"/> so a dialect whose <c>RETURNING</c> support covers
+    /// every statement keeps working unchanged. Overridden separately where the server's
+    /// <c>UPDATE ... RETURNING</c> appears at a different version than <c>INSERT</c>/<c>DELETE</c>
+    /// (MariaDB 13.0+). Declared as a default interface method so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    bool SupportsUpdateReturning => SupportsReturning;
+    /// <summary>
     /// Whether the dialect can place an <c>OUTPUT inserted.&lt;column&gt;</c> clause on an
     /// <c>INSERT</c> so the statement returns the generated column (SQL Server). Declared as a default
     /// interface method returning <c>false</c> so existing external implementations keep compiling; a

@@ -30,4 +30,25 @@ internal static class PostgresTestContext
 
     public static PostgresDataContext CreatePostgres() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
+
+    /// <summary>
+    /// Creates a version-aware PostgreSQL context. <typeparamref name="TMarker"/> selects the concrete
+    /// context type: the server version is immutable per concrete context type (the plan cache is keyed
+    /// by the context type), so every distinct version needs a distinct marker type. Reusing one marker
+    /// with two different versions throws <see cref="InvalidOperationException"/>, which is the
+    /// production guard under test.
+    /// </summary>
+    /// <typeparam name="TMarker">A distinct marker type per versioned context.</typeparam>
+    /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
+    /// <returns>A version-aware PostgreSQL context.</returns>
+    public static IDataContext CreateVersioned<TMarker>(Version? serverVersion) =>
+        new VersionedPostgresContext<TMarker>(PlaceholderConnectionString, new DataContextBuilder(), serverVersion);
+
+    private sealed class VersionedPostgresContext<TMarker> : PostgresDataContext
+    {
+        public VersionedPostgresContext(string connectionString, DataContextBuilder optionsBuilder, Version? serverVersion)
+            : base(connectionString, optionsBuilder, serverVersion)
+        {
+        }
+    }
 }

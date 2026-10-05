@@ -26,7 +26,8 @@
   construction/access functions and the `->`/`->>`/`@>`/`?` operators, with `JsonDocument`/`JsonElement`/
   `JsonNode` parameters bound as `jsonb`;
 - `greatest`/`least` and the aggregate `FILTER (WHERE ...)` clause are enabled ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) is `true` and
-  [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) is `AnsiFilter`);
+  [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) is `AnsiFilter` when the configured server version is unset or 9.4+; on a version
+  below 9.4 the dialect rejects filtered aggregates with `NotSupportedException`);
 - `date_trunc` is enabled ([`SupportsDateTrunc`](xref:NextORM.Core.ISqlDialect.SupportsDateTrunc) is `true`);
 - date arithmetic is enabled ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) is `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   and the `DateTime.Add*` methods render PostgreSQL interval arithmetic
@@ -89,6 +90,34 @@ using NextORM.Core;
 using NextORM.Postgres;
 
 using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
+```
+
+## Server version
+
+The dialect can be pinned to the server version, which gates version-dependent syntax. Configuration is
+**explicit** — nextorm never probes the live server. Pass the version with the context constructor's
+`Version` parameter; leaving it unset keeps the historical behaviour and assumes PostgreSQL 9.4 or later,
+so the ANSI aggregate `FILTER (WHERE ...)` clause stays enabled. A version below 9.4 disables it: a
+filtered aggregate rejects with `NotSupportedException`.
+
+```csharp
+// Unset: filtered aggregates are enabled (assumed 9.4+).
+using var current = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
+
+// Pin 9.3: the aggregate `FILTER (WHERE ...)` clause is rejected.
+using var legacy = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(9, 3));
+```
+
+The version is immutable and fixed per **concrete context type** for the process lifetime. Two contexts
+of the same concrete type that request different versions throw `InvalidOperationException`; to run
+against several versions in one process, declare a distinct context subclass per version:
+
+```csharp
+public sealed class Postgres93DataContext : PostgresDataContext
+{
+    public Postgres93DataContext(string connectionString, DataContextBuilder builder)
+        : base(connectionString, builder, new Version(9, 3)) { }
+}
 ```
 
 ## Paging
@@ -304,7 +333,8 @@ join complex_entity as "t2" on t1.id = t2.id
 | Conditional function | `iif(cond, a, b)` → `case when cond then a else b end` |
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported |
 | `date_add` / `end_of_month` / `DateTime.Add*` | interval arithmetic (`x + (n * interval '1 day')`) |
-| `string_agg` / `array_agg` / aggregate `filter` | supported |
+| `string_agg` / `array_agg` / aggregate `filter` | supported (aggregate `filter` requires 9.4+; unset assumes ≥9.4) |
+| Server version | configured explicitly via the context `Version` |
 | Session/info functions | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Table functions | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` |
 | Recursive CTE | `with recursive` (no max-recursion option) |

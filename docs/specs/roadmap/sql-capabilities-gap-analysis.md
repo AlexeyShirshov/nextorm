@@ -661,6 +661,19 @@ to the ledger on 2026-09-29.
     [Limitations](../../advanced/limitations.md). Docs:
     [Connections](../../infrastructure/02-connections.md#command-timeout) (EN+RU).
 
+55. **Server-version gates (G13, linq2db `#5933`/`#5948`/`#5952`) — <span style="color:green">shipped</span> (issue #141).** The provider carries an
+    explicitly configured server `Version` (a `Version` parameter on the provider context constructor);
+    nextorm never probes the live server. PostgreSQL enables the ANSI aggregate `FILTER (WHERE ...)` at
+    9.4+ and rejects it with `NotSupportedException` below that, while an unset version keeps today's
+    ≥9.4 assumption; MariaDB enables `UPDATE ... RETURNING` only at an explicit 13.0+
+    (`SupportsUpdateReturning`), with unset/older rejecting it, and insert/delete `RETURNING` and the
+    `ANY_VALUE` (13.2) gate unchanged. PostgreSQL enforces one immutable version per **concrete context
+    type** for the process lifetime — a different version for the same type throws `InvalidOperationException`,
+    so several PostgreSQL versions in one process need distinct context subclasses; MariaDB imposes no such
+    guard, because its gated `UPDATE ... RETURNING` is a mutation whose SQL is not plan-cached.
+    Shipped: [PostgreSQL provider](../../providers/postgres.md), [MariaDB provider](../../providers/mariadb.md),
+    [Limitations](../../advanced/limitations.md).
+
 ## 6. Implementation plan
 
 This is the original per-workstream plan, kept as a status ledger. Workstreams that touch the same files

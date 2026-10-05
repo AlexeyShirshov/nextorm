@@ -10,11 +10,12 @@
 the same `MySqlConnector` driver and the same connection and parameter handling. It returns
 [`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance) from its `Dialect` property.
 
-[`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) (`src/nextorm.mariadb/MariaDbDialect.cs`) derives from [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) and changes two
-capabilities: `INTERSECT ALL` and `EXCEPT ALL` are supported by MariaDB 10.4 and later, so
-[`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`; and MariaDB 10.3+ renders the window percentiles
+[`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) (`src/nextorm.mariadb/MariaDbDialect.cs`) derives from [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) and changes the
+capability set: `INTERSECT ALL` and `EXCEPT ALL` are supported by MariaDB 10.4 and later, so
+[`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`; MariaDB 10.3+ renders the window percentiles
 `percentile_cont`/`percentile_disc` (`... within group (order by ...) over (...)`), so
-[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) is `true`. It also keeps the arbitrary-value
+[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) is `true`; and `UPDATE ... RETURNING` is enabled only when an explicit
+server version 13.0+ is configured ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)). It also keeps the arbitrary-value
 aggregate `any_agg` gated **off**, because MariaDB has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626`
 feature is still pending, targeted for 13.2). Everything else (parameters, quoting, `concat`,
 coalesce, paging, aggregate names, the `if(...)` spelling of the portable `iif`) is inherited unchanged.
@@ -44,6 +45,34 @@ using IDataContext ctx = new MariaDbDataContext(
     "Server=localhost;Database=app;User ID=app;Password=secret", new DataContextBuilder());
 ```
 
+## Server version
+
+The dialect can be pinned to the server version, which gates `UPDATE ... RETURNING`. Configuration is
+**explicit** — nextorm never probes the live server. Pass the version with the context constructor's
+`Version` parameter. Unlike PostgreSQL, an **unset** version does **not** enable the feature: without an
+explicit 13.0+ the `Returning()` terminal of an `UPDATE` rejects with `NotSupportedException`. Insert and
+delete `RETURNING` are unchanged (MariaDB rejects them as before), and the `ANY_VALUE` gate (`any_agg`,
+targeted for 13.2) is also unchanged.
+
+```csharp
+// Explicit 13.0+: `UPDATE ... RETURNING` is enabled.
+using var ctx = new MariaDbDataContext(
+    "Server=localhost;Database=app;...", new DataContextBuilder(), new Version(13, 0));
+```
+
+Unlike PostgreSQL, MariaDB imposes **no** one-version-per-concrete-context-type guard: its only
+version-gated axis (`UPDATE ... RETURNING`) is a mutation whose SQL is not plan-cached, so the same
+concrete context type may be built with different versions. A strongly typed subclass is still a
+convenient way to pin one version:
+
+```csharp
+public sealed class MariaDb130DataContext : MariaDbDataContext
+{
+    public MariaDb130DataContext(string connectionString, DataContextBuilder builder)
+        : base(connectionString, builder, new Version(13, 0)) { }
+}
+```
+
 ## Set operations
 
 ```csharp
@@ -59,7 +88,7 @@ select id from simple_entity
 
 ## Provider differences
 
-MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the window percentiles and the arbitrary-value aggregate:
+MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the window percentiles, the version-gated `UPDATE ... RETURNING` and the arbitrary-value aggregate:
 
 | Aspect | MariaDB |
 |---|---|
@@ -69,6 +98,8 @@ MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the wind
 | Identifier quoting | backticks (`` as `t1` ``) |
 | Derived table alias | required |
 | `*ALL` | supported (MariaDB 10.4+) |
+| `UPDATE ... RETURNING` | enabled only with an explicit server version 13.0+ (`SupportsUpdateReturning`); otherwise `NotSupportedException` |
+| Server version | configured explicitly via the context `Version` |
 | Text JSON | inherited from MySQL (`JSON_EXTRACT`/`JSON_SET`) |
 | Session/info functions | inherited from MySQL (`current_user()`, `session_user()`, `schema()`, `database()`, `version()`) |
 | Arbitrary-value aggregate | not supported (no `ANY_VALUE` in 10.4–12.x; pending MDEV-10426, targeted for 13.2) |

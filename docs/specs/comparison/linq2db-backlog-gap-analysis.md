@@ -39,8 +39,8 @@ upsert-with-output (~~G4~~), PostgreSQL range/`Overlaps` (~~G11~~, см. §3),
 range поверх пары скалярных колонок (`[RangeColumns]`, `SupportsRangeColumns` — провайдеры без нативного
 range-типа) и динамическая схема табличных источников (ClickHouse `values()`, PostgreSQL
 `jsonb_to_record(set)` — §5).
-Открытым по-прежнему остаётся только version-gates (G13,
-[#141](https://github.com/AlexeyShirshov/nextorm/issues/141)). ~~Хранимые процедуры~~
+Version-gates (G13,
+[#141](https://github.com/AlexeyShirshov/nextorm/issues/141)) — **<span style="color:green">реализовано</span>** (явный `Version` у контекста; см. §6). ~~Хранимые процедуры~~
 (#70), хвост ~~G4~~ «несколько result-set'ов» (фаза 4 #70: `BatchBuilder.AddQuery<TResult>` +
 `Execute`/`ExecuteAsync` → `BatchResult`), логирование параметров/управление кэшем (~~G10~~) и хвост
 ~~G8~~ (TVP decimal precision/scale, issue #73) закрыты.
@@ -78,8 +78,8 @@ range-типа) и динамическая схема табличных ист
 | linq2db | Тема | Статус nextorm |
 |---|---|---|
 | `#5759` | `TimeSpan`-члены и сравнения на native interval-колонках (`[Duration]`) | **<span style="color:green">Реализовано</span> (1.0.6-alpha, ~~G9~~)**: `DurationUnit`/`DurationAttribute`/fluent `Duration(...)`, native `interval`/`TIME` → [Duration-колонки](../../guide/22-duration-columns.md), [Duration columns](../../guide/22-duration-columns.md) |
-| `#5933` | диалект MariaDB 13 | **Gap** (G13) |
-| `#5948`, `#5952` | PG 9.2/9.3: `FILTER`-агрегаты синтаксически недоступны | **Gap** (G13, version-gate) |
+| `#5933` | диалект MariaDB 13 | **<span style="color:green">Реализовано</span>** (G13): явная `Version` ≥13.0 включает `UPDATE ... RETURNING` (`SupportsUpdateReturning`) |
+| `#5948`, `#5952` | PG 9.2/9.3: `FILTER`-агрегаты синтаксически недоступны | **<span style="color:green">Реализовано</span>** (G13): `Version` <9.4 отклоняет `FILTER` через `NotSupportedException`; незаданная версия предполагает ≥9.4 |
 | `#5961`, `#5914` | ClickHouse date/`DateTimeOffset` типы в SQL противоречат декларации | **Проверено, не gap.** `#5961`: у nextorm нет per-node `DbDataType`, а части даты уже приведены к объявленному CLR-типу (`toInt32(toISOWeek(toDateTime64(…)))`, `toInt32(toYear(…))`, `toFloat64(toUnixTimestamp(…))`); `to_unix_timestamp` объявлен `long` и обёрнут `toInt64` — «type lie» не воспроизводится. `#5914`: `DateTimeOffset` получил read-ветку (`GetFieldValue<DateTimeOffset>`; см. [Duration columns](../../guide/22-duration-columns.md)), но расхождение Date/DateTime64 не воспроизводится — **N/A**. Однотипный хвост — ширина `date_diff`, см. G20; общий план — [Duration columns](../../guide/22-duration-columns.md) |
 | `#5921` | `string.Format`/интерполяция: format-спецификаторы молча теряются | **<span style="color:green">Реализовано</span>** (G12) → [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | `#5927` | `string.CompareOrdinal`/ordinal `Compare` маппятся в culture-sensitive | **<span style="color:green">Реализовано</span>** (G12): ordinal `Compare`/`CompareOrdinal`/`Equals`/`Contains` переводятся в бинарную коллацию, неподдержанные формы бросают `NotSupportedException` → [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
@@ -251,11 +251,16 @@ issue `#28` «column collation») на том же примитиве `MakeColla
 См. [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) и
 [Ограничения](../../advanced/limitations.md).
 
-**G13. Версионные диалекты и version-gates.** `linq2db#5933` (MariaDB 13), `#5948`/`#5952`
+**G13. Версионные диалекты и version-gates — <span style="color:green">реализовано</span>.** `linq2db#5933` (MariaDB 13), `#5948`/`#5952`
 (PG 9.2/9.3 не поддерживают `FILTER` в агрегатах). nextorm генерирует `FILTER`-агрегаты на PG и
-имеет единый MariaDB-диалект без версии. Действие: version-flag в `ISqlDialect`/`MariaDbDialect`,
-аналогично существующим `Supports*`. Тикет:
-[#141](https://github.com/AlexeyShirshov/nextorm/issues/141) (милстоун `1.0.9-rc1`).
+имеет единый MariaDB-диалект без версии. Действие выполнено: version-flag выставляется явной серверной
+`Version` у контекста (конструктор), без опроса живого сервера. PG `FILTER` гейтится 9.4+ (незаданная
+версия предполагает ≥9.4), MariaDB `UPDATE ... RETURNING` включается только при явной 13.0+
+(`SupportsUpdateReturning`); insert/delete `RETURNING` и `ANY_VALUE` (13.2) не изменены. На PostgreSQL одна
+версия фиксируется на конкретный тип контекста на время жизни процесса (иначе `InvalidOperationException`),
+потому что гейт `FILTER` влияет на кэшируемый `SELECT`; MariaDB такой защиты не накладывает — её
+гейтируемый `UPDATE ... RETURNING` не кладётся в кэш планов.
+Тикет: [#141](https://github.com/AlexeyShirshov/nextorm/issues/141) (милстоун `1.0.9-rc1`).
 
 ### P2 — watchlist / проверить
 
@@ -421,7 +426,7 @@ statement/table/index).
 | — | ~~G6~~ — **<span style="color:orange">By design</span>**: паттерн оптимистичной конкурентности задокументирован ([гайд](../../guide/24-optimistic-concurrency.md)); `todo_optimistic_concurrency.md` не заводится |
 | P1 | ~~G7 Regex~~ — **<span style="color:green">реализовано</span>**: [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения); ~~G9 Duration~~ — **<span style="color:green">реализовано</span>** (1.0.6-alpha): [Duration-колонки](../../guide/22-duration-columns.md); ~~G11 PostgreSQL range/`Overlaps`~~ — **<span style="color:green">реализовано</span>** (1.0-b.1): [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types); ~~G8 TVP~~ — **<span style="color:green">реализовано</span>** (2026-09-26; decimal precision/scale shipped, issue #73 closed 2026-09-26) |
 | P1 | ~~Хранимые процедуры/функции + `OUT`/несколько result-set~~ (снять `limitations.md`, туда же сырые параметризованные команды) — **<span style="color:green">реализовано</span>** (2026-09-26, `todo_stored_procedures.md` #70 включая #25) |
-| P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../infrastructure/03-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13, [#141](https://github.com/AlexeyShirshov/nextorm/issues/141)); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
+| P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../infrastructure/03-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); ~~version-gates MariaDB13/PG9.2-9.3 (G13, [#141](https://github.com/AlexeyShirshov/nextorm/issues/141))~~ — **<span style="color:green">реализовано</span>**; ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); ~~G17~~ — **<span style="color:green">реализовано</span>** (интерфейсные коллекции + явный отказ от неподдерживаемого индексера → [Filtering](../../guide/01-filtering-where.md#captured-collection-lookup-dictcolumn)); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); ~~G14~~ — <span style="color:green">реализовано</span> |
 | P2 | Слепое пятно shipped-`LinqExtensions` (§4): ~~`TagQuery`~~ — **<span style="color:green">реализовано</span>** ([`WithTag`](../../guide/13-query-hints.md), комментарий `/* tag */` сразу после `SELECT`); ~~`JoinHint`/`SubQueryHint`/`TablesInScopeHint`~~ — **<span style="color:green">реализовано</span>** (issue #96); source override — **<span style="color:green">реализовано</span>** (per-query `WithTableName`/`WithSchema`/`WithDatabase`/`WithServer`/`WithTableExpression`) |

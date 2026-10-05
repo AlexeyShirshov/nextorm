@@ -861,6 +861,8 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into the <c>RETURNING</c> clause.</summary>
     public virtual bool SupportsReturning => false;
+    /// <summary>Defaults to <see cref="SupportsReturning"/>; MariaDB gates <c>UPDATE ... RETURNING</c> on server version 13.0+.</summary>
+    public virtual bool SupportsUpdateReturning => SupportsReturning;
     /// <summary>Defaults to <c>false</c>; SQL Server opts into the <c>OUTPUT</c> clause.</summary>
     public virtual bool SupportsOutput => false;
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB opt into <c>LAST_INSERT_ID()</c>.</summary>

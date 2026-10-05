@@ -188,8 +188,8 @@
 
 | Тип | Описание |
 |---|---|
-| [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) поверх `Npgsql`. |
-| [`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) | Синглтон [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) для PostgreSQL ([`Instance`](xref:NextORM.Postgres.PostgresDialect.Instance)). |
+| [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) поверх `Npgsql`; перегрузка конструктора принимает серверную `Version`, гейтящую агрегатный `FILTER` (9.4+). |
+| [`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) | Синглтон [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) для PostgreSQL ([`Instance`](xref:NextORM.Postgres.PostgresDialect.Instance)); агрегатный `FILTER` требует, чтобы настроенная серверная `Version` была не задана или 9.4+. |
 | [`PostgresDataContextOptionsBuilderExtensions`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `UsePostgres(string connectionString)` и `UsePostgres(DbConnection)`. |
 
 ## Пространство имён `nextorm.sqlserver`
@@ -212,8 +212,8 @@
 
 | Тип | Описание |
 |---|---|
-| [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) поверх `MySqlConnector`, наследуется от [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext). |
-| [`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) | Синглтон [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) для MariaDB ([`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance)); отрисовка MySQL плюс `INTERSECT ALL`/`EXCEPT ALL` и MariaDB-only имена [`SqlFunctions.MySql`](xref:NextORM.Core.SqlFunctions.MySql). |
+| [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) поверх `MySqlConnector`, наследуется от [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext); перегрузка конструктора принимает серверную `Version`, включающую `UPDATE ... RETURNING` при 13.0+. |
+| [`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) | Синглтон [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) для MariaDB ([`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance)); отрисовка MySQL плюс `INTERSECT ALL`/`EXCEPT ALL`, MariaDB-only имена [`SqlFunctions.MySql`](xref:NextORM.Core.SqlFunctions.MySql) и [`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning), включаемый только при явной версии сервера 13.0+. |
 | [`MariaDbDataContextOptionsBuilderExtensions`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions) | `UseMariaDb(string connectionString)` и `UseMariaDb(DbConnection)`. |
 
 ## Пространство имён `nextorm.clickhouse`

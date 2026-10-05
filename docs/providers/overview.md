@@ -53,7 +53,7 @@ change.
 | `MERGE ... RETURNING`/`OUTPUT` (`Returning`) | throws `NotSupportedException` | `OUTPUT inserted.<col>` | `RETURNING target.<col>` (17+) | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `DELETE` (`CreateDeleteBuilder`/`Delete`) | supported | supported | supported | supported | supported | `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1` | throws `NotSupportedException` |
 | `UPDATE` (`CreateUpdateBuilder`/`Update(entity)`) | supported | supported | supported | supported | supported | `ALTER TABLE ... UPDATE ... SETTINGS mutations_sync = 1` | throws `NotSupportedException` |
-| `UPDATE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
+| `UPDATE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | throws `NotSupportedException` | `RETURNING` when version ≥13.0 is configured; otherwise throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `UPDATE ... FROM` (`CreateUpdateJoinBuilder`) | `UPDATE ... FROM` | `UPDATE <alias> ... FROM ... JOIN` | `UPDATE ... FROM` | `UPDATE ... JOIN ... SET` | `UPDATE ... JOIN ... SET` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `DELETE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT deleted.<col>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `TRUNCATE` (`CreateTruncateBuilder`) | throws `NotSupportedException` | supported | supported | supported | supported | supported | throws `NotSupportedException` |
@@ -104,7 +104,7 @@ change.
 | Join strictness (`ANY`/`ALL`/`ASOF`, `SEMI`/`ANTI`/`PASTE`) / `GLOBAL` join | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | `WithStrictness(...)` / `Global()` | throws `NotSupportedException` |
 | Dictionary lookups (`dictGet`) | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | `dict_get`/`dict_get_or_default`/`dict_has`/… (needs a configured dictionary) | throws `NotSupportedException` |
 | Provider table functions (`FROM` source) | `json_each`/`json_tree` | `string_split`/`openjson`/`containstable`/`freetexttable` | `generate_series`/`unnest`/`regexp_matches`/`jsonb_to_recordset` | throws `NotSupportedException` | throws `NotSupportedException` | `numbers`/`zeros`/`generateRandom`/`values` (`url`/`s3`/`file`/`remote`/`cluster` pre-declared, distributed execution out of scope) | TVF source not supported |
-| Filtered aggregates (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | throws `NotSupportedException` | ANSI `filter (where …)` | throws `NotSupportedException` | throws `NotSupportedException` | `-If` combinator (`countIf`/`sumIf`/…) | throws `NotSupportedException` |
+| Filtered aggregates (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | throws `NotSupportedException` | ANSI `filter (where …)` (9.4+; version-gated) | throws `NotSupportedException` | throws `NotSupportedException` | `-If` combinator (`countIf`/`sumIf`/…) | throws `NotSupportedException` |
 | Ordered-set / boolean / regression aggregates | throws `NotSupportedException` | window `percentile_cont(f) within group (order by x) over (…)` (2012+) | `percentile_cont`/`percentile_disc`/`mode`, `bool_and`/`bool_or`/`every`, `regr_*` | throws `NotSupportedException` | window `percentile_cont` (10.3+) | `quantile*`/`median` (own family); no `bool_and`/`regr_*` | throws `NotSupportedException` |
 | PostgreSQL settings & sequences | throws `NotSupportedException` | throws `NotSupportedException` | `current_setting`/`set_config`, `nextval`/`setval`/`currval`/`lastval` | throws `NotSupportedException` | sequences via `SqlFunctions.MySql` (`next_value_for`/`nextval`/`setval`/`lastval`) | throws `NotSupportedException` | throws `NotSupportedException` |
 | Provider scalar-function library (`SqlFunctions.<Provider>`) | `SqlFunctions.Sqlite` (core scalars, JSON1, date, math) | `SqlFunctions.SqlServer` (T-SQL library, XML methods, JSON-as-text, `string_split`/`openjson`) | `SqlFunctions.Postgres` (arrays, JSON/JSONB, ranges, aggregate families, full-text `ts_*`, settings/sequences, `regexp_*`) | `SqlFunctions.MySql` (string/date/hash/inet/JSON) | inherits `SqlFunctions.MySql` + MariaDB additions (`nvl`, `add_months`, `to_char`, `xxh3`, sequences, …) | `SqlFunctions.ClickHouse` (quantile/uniq/topK/sequence aggregates, arrays, maps, hashes, dictionaries, table functions) | none (`SqlFunctions.Sql` evaluates in-process) |
@@ -133,9 +133,25 @@ provider-specific. The decision for every known divergence:
 | Raw SQL as a composable `FROM` source | **Unified** | `FromSql` + `SupportsRawSqlSource` on every SQL provider (see [Raw SQL](../guide/12-raw-sql.md#compositing-raw-sql-as-a-from-source)). |
 | Per-query source override levels | **Gated per level** | `MakeQualifiedTableName` plus `SupportsCrossDatabase`/`SupportsLinkedServer`: a provider that cannot express a level rejects `WithDatabase`/`WithServer` with `NotSupportedException` instead of silently dropping the qualifier. Schema/data-table naming and raw `WithTableExpression` are the universal levels on SQL providers. |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Gated** | PostgreSQL and MariaDB support them; SQL Server/SQLite/MySQL reject via `SupportsIntersectExceptAll`. |
+| Server-version-gated syntax (`FILTER` on PostgreSQL, `UPDATE ... RETURNING` on MariaDB) | **Gated by an explicitly configured version** | The provider carries the server `Version` (`SupportsUpdateReturning` reflects the MariaDB gate). PostgreSQL enables ANSI `FILTER` at 9.4+ and keeps the unset default at ≥9.4 (today's behaviour); MariaDB enables `UPDATE ... RETURNING` only at an explicit 13.0+. There is no live server-version probing. PostgreSQL additionally fixes one version per concrete context type for the process lifetime; MariaDB imposes no such guard (its gated `UPDATE ... RETURNING` is not plan-cached). |
 
 The per-feature rows in the [limitations](../advanced/limitations.md) table spell out the resulting
 runtime behaviour.
+
+### Server-version gates
+
+Two capabilities depend on the server version, and both are gated by an **explicitly configured
+version** — nextorm never probes the live server. Pass the server version when the context is created
+(the provider context has a constructor overload with a `Version` parameter); leaving it unset keeps the
+historical behaviour: PostgreSQL assumes 9.4 or later and emits `FILTER (WHERE ...)`, while MariaDB
+leaves `UPDATE ... RETURNING` disabled. PostgreSQL's filtered aggregates require 9.4+ and throw
+`NotSupportedException` below it; MariaDB's `UPDATE ... RETURNING` requires an explicit 13.0+. PostgreSQL
+enforces one immutable server version per **concrete context type** for the process lifetime, because the
+cached `SELECT` SQL depends on the `FILTER` gate: a second PostgreSQL context of the same concrete type
+that requests a different version throws `InvalidOperationException`, so declare a distinct context
+subclass per PostgreSQL version. MariaDB imposes **no such guard**: because its only version-gated
+operation (`UPDATE ... RETURNING`) is a mutation whose SQL is not plan-cached, different versions may be
+used on the same context type. Insert/delete `RETURNING` and `ANY_VALUE` (`any_agg`, 13.2) are unaffected.
 
 ## How a dialect plugs in
 

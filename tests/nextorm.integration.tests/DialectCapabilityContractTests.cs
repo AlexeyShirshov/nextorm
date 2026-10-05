@@ -249,4 +249,43 @@ public sealed class DialectCapabilityContractTests
         dialects.Should().Contain(d => d.SupportsOrdinalComparison);
         dialects.Should().Contain(d => d.SupportsRegex);
     }
+
+    /// <summary>
+    /// <c>UPDATE ... RETURNING</c> is derived from the general <c>RETURNING</c> capability by default:
+    /// a dialect that cannot return rows at all cannot return updated rows either, so every provider
+    /// except MariaDB reports <see cref="ISqlDialect.SupportsUpdateReturning"/> equal to
+    /// <see cref="ISqlDialect.SupportsReturning"/>. PostgreSQL and SQLite support RETURNING (hence
+    /// UPDATE RETURNING); SQL Server, MySQL and ClickHouse do not. MariaDB deliberately overrides the
+    /// default with its 13.0+ version gate, so the unset dialect reports false.
+    /// </summary>
+    [Fact]
+    public void SupportsUpdateReturning_ShouldDefaultToSupportsReturning()
+    {
+        var dialects = AllDialects().ToList();
+        dialects.Should().NotBeEmpty("the provider dialect assemblies must be loaded");
+
+        foreach (var dialect in dialects.Where(d => d.GetType().Name != "MariaDbDialect"))
+            dialect.SupportsUpdateReturning.Should().Be(dialect.SupportsReturning);
+
+        var byName = dialects.ToDictionary(d => d.GetType().Name);
+
+        byName["PostgresDialect"].SupportsReturning.Should().BeTrue();
+        byName["PostgresDialect"].SupportsUpdateReturning.Should().BeTrue();
+
+        byName["SqliteDialect"].SupportsReturning.Should().BeTrue();
+        byName["SqliteDialect"].SupportsUpdateReturning.Should().BeTrue();
+
+        byName["SqlServerDialect"].SupportsReturning.Should().BeFalse();
+        byName["SqlServerDialect"].SupportsUpdateReturning.Should().BeFalse();
+
+        byName["MySqlDialect"].SupportsReturning.Should().BeFalse();
+        byName["MySqlDialect"].SupportsUpdateReturning.Should().BeFalse();
+
+        byName["ClickHouseDialect"].SupportsReturning.Should().BeFalse();
+        byName["ClickHouseDialect"].SupportsUpdateReturning.Should().BeFalse();
+
+        // MariaDB overrides the default with its 13.0+ gate: unset is false (and it cannot RETURN rows).
+        byName["MariaDbDialect"].SupportsReturning.Should().BeFalse();
+        byName["MariaDbDialect"].SupportsUpdateReturning.Should().BeFalse();
+    }
 }

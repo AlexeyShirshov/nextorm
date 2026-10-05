@@ -32,6 +32,21 @@ public class MySqlDataContext : DataContext
     {
     }
 
+    /// <summary>
+    /// Creates a context with an optional connection string or a caller-supplied connection and
+    /// snapshots the provider server <paramref name="serverVersion"/> once. Derived providers (MariaDB)
+    /// forward their version here so the base <see cref="DataContext.ServerVersion"/> snapshot agrees
+    /// with the dialect they build.
+    /// </summary>
+    /// <param name="connectionString">Connection string used to create a context-owned connection, or <see langword="null"/>.</param>
+    /// <param name="providedConnection">An already-created connection owned by the caller, or <see langword="null"/>.</param>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <param name="serverVersion">The provider server version to snapshot, or <see langword="null"/> for unset.</param>
+    protected MySqlDataContext(string? connectionString, DbConnection? providedConnection, DataContextBuilder optionsBuilder, Version? serverVersion)
+        : base(connectionString, providedConnection, optionsBuilder, serverVersion)
+    {
+    }
+
     /// <summary>Creates a new <c>MySqlConnection</c> for <paramref name="connectionString"/>.</summary>
     /// <param name="connectionString">The MySQL connection string.</param>
     /// <returns>A new, unopened MySQL connection.</returns>

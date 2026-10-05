@@ -10,8 +10,34 @@ namespace NextORM.MariaDb;
 /// </summary>
 public sealed class MariaDbDialect : MySqlDialect
 {
+    // MariaDB 13.0 introduced UPDATE ... RETURNING (INSERT/DELETE RETURNING remain unsupported).
+    private static readonly Version UpdateReturningMinVersion = new(13, 0);
+
     /// <summary>Gets the shared MariaDB dialect instance.</summary>
     public static new readonly MariaDbDialect Instance = new();
+
+    private readonly Version? _version;
+
+    /// <summary>
+    /// Creates an unversioned MariaDB dialect: no version-gated form is emitted, so
+    /// <c>UPDATE ... RETURNING</c> is rejected. Equivalent to the shared <see cref="Instance"/>.
+    /// </summary>
+    public MariaDbDialect()
+    {
+    }
+
+    /// <summary>
+    /// Creates a MariaDB dialect for <paramref name="serverVersion"/>. MariaDB 13.0+ exposes
+    /// <c>UPDATE ... RETURNING</c>; <see langword="null"/> is the unversioned (pre-13) form.
+    /// </summary>
+    /// <param name="serverVersion">The MariaDB server version, or <see langword="null"/> for unset.</param>
+    public MariaDbDialect(Version? serverVersion) => _version = serverVersion;
+
+    /// <summary>
+    /// MariaDB 13.0+ appends <c>RETURNING</c> to a single-table <c>UPDATE</c>. INSERT/DELETE
+    /// <c>RETURNING</c> stays unsupported.
+    /// </summary>
+    public override bool SupportsUpdateReturning => _version is not null && _version >= UpdateReturningMinVersion;
 
     /// <summary>MariaDB has no <c>REGEXP_LIKE</c>; it matches with the <c>REGEXP</c> operator and replaces with <c>REGEXP_REPLACE</c>.</summary>
     public override bool SupportsRegex => true;

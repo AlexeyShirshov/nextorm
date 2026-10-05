@@ -53,7 +53,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | `MERGE ... RETURNING`/`OUTPUT` (`Returning`) | бросает `NotSupportedException` | `OUTPUT inserted.<col>` | `RETURNING target.<col>` (17+) | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `DELETE` (`CreateDeleteBuilder`/`Delete`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1` | бросает `NotSupportedException` |
 | `UPDATE` (`CreateUpdateBuilder`/`Update(entity)`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | `ALTER TABLE ... UPDATE ... SETTINGS mutations_sync = 1` | бросает `NotSupportedException` |
-| `UPDATE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| `UPDATE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | бросает `NotSupportedException` | `RETURNING` при настроенной версии ≥13.0; иначе бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `UPDATE ... FROM` (`CreateUpdateJoinBuilder`) | `UPDATE ... FROM` | `UPDATE <alias> ... FROM ... JOIN` | `UPDATE ... FROM` | `UPDATE ... JOIN ... SET` | `UPDATE ... JOIN ... SET` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `DELETE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT deleted.<col>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | `TRUNCATE` (`CreateTruncateBuilder`) | бросает `NotSupportedException` | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | бросает `NotSupportedException` |
@@ -104,7 +104,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Строгость соединений (`ANY`/`ALL`/`ASOF`, `SEMI`/`ANTI`/`PASTE`) / `GLOBAL` | бросает | бросает | бросает | бросает | бросает | `WithStrictness(...)` / `Global()` | бросает |
 | Словари (`dictGet`) | бросает | бросает | бросает | бросает | бросает | `dict_get`/`dict_get_or_default`/`dict_has`/… (нужен настроенный dictionary) | бросает |
 | Провайдерные табличные функции (`FROM`-источник) | `json_each`/`json_tree` | `string_split`/`openjson`/`containstable`/`freetexttable` | `generate_series`/`unnest`/`regexp_matches`/`jsonb_to_recordset` | бросает | бросает | `numbers`/`zeros`/`generateRandom`/`values` (`url`/`s3`/`file`/`remote`/`cluster` объявлены заранее, распределённое исполнение вне области) | источник TVF не поддерживается |
-| Фильтрующие агрегаты (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | бросает | ANSI `filter (where …)` | бросает | бросает | комбинатор `-If` (`countIf`/`sumIf`/…) | бросает |
+| Фильтрующие агрегаты (`FILTER (WHERE …)` / `-If`) | ANSI `count(*) filter (where …)` | бросает | ANSI `filter (where …)` (9.4+; гейт по версии) | бросает | бросает | комбинатор `-If` (`countIf`/`sumIf`/…) | бросает |
 | Ordered-set / boolean / regression агрегаты | бросает | оконная форма `percentile_cont(f) within group (order by x) over (…)` (2012+) | `percentile_cont`/`percentile_disc`/`mode`, `bool_and`/`bool_or`/`every`, `regr_*` | бросает | оконная `percentile_cont` (10.3+) | `quantile*`/`median` (своё семейство); нет `bool_and`/`regr_*` | бросает |
 | Настройки и последовательности PostgreSQL | бросает | бросает | `current_setting`/`set_config`, `nextval`/`setval`/`currval`/`lastval` | бросает | последовательности через `SqlFunctions.MySql` (`next_value_for`/`nextval`/`setval`/`lastval`) | бросает | бросает |
 | Провайдерная библиотека скалярных функций (`SqlFunctions.<Provider>`) | `SqlFunctions.Sqlite` (core-скаляры, JSON1, дата, математика) | `SqlFunctions.SqlServer` (T-SQL-библиотека, XML-методы, JSON-как-текст, `string_split`/`openjson`) | `SqlFunctions.Postgres` (массивы, JSON/JSONB, ranges, семейства агрегатов, full-text `ts_*`, настройки/последовательности, `regexp_*`) | `SqlFunctions.MySql` (строки/дата/хэши/inet/JSON) | наследует `SqlFunctions.MySql` + добавки MariaDB (`nvl`, `add_months`, `to_char`, `xxh3`, последовательности, …) | `SqlFunctions.ClickHouse` (quantile/uniq/topK/sequence-агрегаты, массивы, map, хэши, словари, табличные функции) | нет (`SqlFunctions.Sql` вычисляет in-process) |
@@ -133,8 +133,25 @@ nextorm состоит из нейтрального к провайдеру я�
 | Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/12-raw-sql.md)). |
 | Уровни переопределения источника на запрос | **Гейтится по уровню** | `MakeQualifiedTableName` плюс `SupportsCrossDatabase`/`SupportsLinkedServer`: провайдер, не умеющий уровень, отклоняет `WithDatabase`/`WithServer` через `NotSupportedException`, а не молча теряет квалификатор. Schema/имя таблицы и сырой `WithTableExpression` — универсальные уровни у SQL-провайдеров. |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
+| Синтаксис, зависящий от версии сервера (`FILTER` в PostgreSQL, `UPDATE ... RETURNING` в MariaDB) | **Гейт по явно настроенной версии** | Провайдер несёт серверную `Version` (`SupportsUpdateReturning` отражает гейт MariaDB). PostgreSQL включает ANSI `FILTER` с 9.4+ и сохраняет прежнее поведение при незаданной версии (предполагается ≥9.4); MariaDB включает `UPDATE ... RETURNING` только при явной версии 13.0+. Живого определения версии сервера нет. PostgreSQL дополнительно фиксирует одну версию на конкретный тип контекста на всё время жизни процесса; MariaDB такой защиты не накладывает (её гейтируемый `UPDATE ... RETURNING` не кладётся в кэш планов). |
 
 Строки таблицы [ограничений](../advanced/limitations.md) описывают итоговое поведение в рантайме.
+
+### Гейты по версии сервера
+
+Две возможности зависят от версии сервера, и обе гейтятся **явно настроенной версией** — nextorm
+никогда не опрашивает живой сервер. Передайте версию сервера при создании контекста (у контекста
+провайдера есть перегрузка конструктора с параметром `Version`); если её не задать, сохраняется
+историческое поведение: PostgreSQL предполагает версию 9.4 или новее и эмитит `FILTER (WHERE ...)`, а
+MariaDB оставляет `UPDATE ... RETURNING` отключённым. Фильтрующие агрегаты PostgreSQL требуют 9.4+ и
+бросают `NotSupportedException` ниже; `UPDATE ... RETURNING` в MariaDB требует явной версии 13.0+.
+PostgreSQL накладывает одну неизменяемую версию сервера на **конкретный тип контекста** на всё время
+жизни процесса, потому что кэшируемый SQL `SELECT` зависит от гейта `FILTER`: второй контекст
+PostgreSQL того же конкретного типа, запрашивающий другую версию, бросает `InvalidOperationException`,
+поэтому для каждой версии PostgreSQL следует объявить отдельный подкласс контекста. MariaDB **не
+накладывает такой защиты**: поскольку её единственная версионно-гейтируемая операция
+(`UPDATE ... RETURNING`) — мутация, чей SQL не кладётся в кэш планов, на одном типе контекста допустимы
+разные версии. `RETURNING` у insert/delete и `ANY_VALUE` (`any_agg`, 13.2) не затрагиваются.
 
 ## Как подключается диалект
 
