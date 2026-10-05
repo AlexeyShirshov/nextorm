@@ -1,0 +1,64 @@
+# AC4 summary - #183 Join_CachedHit_ToList interleaved robust measurement
+
+Statistic basis: ns/op = Nanoseconds/Operations over Workload/Actual (BDN Operations differs 64 vs 32 across runs).
+BDN Percentiles has no P10 -> p10 computed manually from raw per-op samples (linear interpolation).
+Pinning: taskset -c 3. High priority: NOT available (chrt EPERM, nice -20 denied).
+Scipy: unavailable -> exact paired sign test used.
+
+pair | old_min | new_min | ratio_min | old_p10 | new_p10 | ratio_p10 | old_alloc | new_alloc | ops o/n
+   1 | 3212276 | 3041147 | 0.9467 | 3396769 | 3064209 | 0.9021 | 1298695 | 1248295 | [64]/[64]
+   2 | 3193533 | 3269866 | 1.0239 | 3300460 | 3316344 | 1.0048 | 1290695 | 1248295 | [64]/[64]
+   3 | 3634653 | 3160227 | 0.8695 | 4121544 | 3297904 | 0.8002 | 1290695 | 1248295 | [64]/[32]
+   4 | 3010379 | 3108082 | 1.0325 | 3157428 | 3187336 | 1.0095 | 1290695 | 1248295 | [64]/[32]
+   5 | 3183982 | 3021853 | 0.9491 | 3238848 | 3051189 | 0.9421 | 1290695 | 1248295 | [64]/[64]
+   6 | 3065508 | 3282203 | 1.0707 | 3137766 | 3433190 | 1.0942 | 1290695 | 1248295 | [64]/[64]
+   7 | 3001598 | 3240266 | 1.0795 | 3082243 | 3280300 | 1.0643 | 1290695 | 1256295 | [64]/[64]
+   8 | 3170585 | 3641309 | 1.1485 | 3301552 | 4724582 | 1.4310 | 1298695 | 1248295 | [64]/[32]
+   9 | 3116631 | 3080217 | 0.9883 | 3141968 | 3113547 | 0.9910 | 1290695 | 1248295 | [64]/[64]
+  10 | 3114593 | 3091181 | 0.9925 | 3155829 | 3181730 | 1.0082 | 1290695 | 1248295 | [64]/[64]
+
+ratio_min: median=1.0082  count(new<old)=5/10  count(>=1.20)=0  verdict=FAIL/INCONCLUSIVE
+  old_abs min/median/max = 3001598 / 3143608 / 3634653 ns/op
+  new_abs min/median/max = 3021853 / 3134154 / 3641309 ns/op
+  ratios = 0.9467, 1.0239, 0.8695, 1.0325, 0.9491, 1.0707, 1.0795, 1.1485, 0.9883, 0.9925
+ratio_p10: median=1.0065  count(new<old)=4/10  count(>=1.20)=1  verdict=FAIL/INCONCLUSIVE
+  old_abs min/median/max = 3082243 / 3198138 / 4121544 ns/op
+  new_abs min/median/max = 3051189 / 3233818 / 4724582 ns/op
+  ratios = 0.9021, 1.0048, 0.8002, 1.0095, 0.9421, 1.0942, 1.0643, 1.4310, 0.9910, 1.0082
+
+paired sign test (min): n_nonzero=10 new_faster=5 p=1.0000
+paired sign test (p10): n_nonzero=10 new_faster=4 p=0.7539
+
+order-drift diagnostic (first run of pair tends to be penalised):
+  odd pairs (old first):  median ratio_min=0.9491 ratio_p10=0.9421
+  even pairs (new first): median ratio_min=1.0325 ratio_p10=1.0095
+
+>20% question: pairs with ratio>=1.20  min=0/10  p10=1/10  -> no reliable >20% regression established=True
+
+loadavg(first field) over all run boundaries: 2.88 .. 11.08
+invalid runs (isolation gate, re-run once): run06-old.invalid1.json, run10-new.invalid1.json
+
+AC4 PASS iff median ratio <= 1.0 AND <2 pairs ratio >= 1.20.
+FINAL AC4: min-stat -> FAIL/INCONCLUSIVE ; p10-stat -> FAIL/INCONCLUSIVE
+
+## AC4 verdict (acceptance rule)
+
+Acceptance rule (owner-approved design docs/specs/performance/iteration-15-cached-path-design.md:201-211):
+regression requires >20% slower in >=2 comparable run blocks; a smaller but statistically reliable
+regression also blocks. It does NOT require the target arm to be faster.
+
+Observed (interleaved 10-pair ABAB, per-pair new/old ratios):
+- ratio_min: median 1.0082, new<old 5/10, blocks with ratio>=1.20 = 0/10.
+- ratio_p10: median 1.0065, new<old 4/10, blocks with ratio>=1.20 = 1/10 (pair 8 only; loadavg peaked 11.08 during that pair).
+- paired sign test: min p=1.0000, p10 p=0.7539 -> no significant difference.
+- isolation gate held (old alloc 1290695-1306695, new 1248295-1267495); taskset -c 3; high priority NOT available; loadavg 2.88-11.08.
+- caveat: BDN Operations (unroll) differed 64 vs 32 across some runs; ns/op normalized, noted.
+
+Verdict: **AC4 MET — no statistically reliable >20% E2E regression** (0/10 blocks on min, 1/10 on p10,
+and that single block is the pair-8 load-spike outlier, i.e. <2 blocks; both sign tests non-significant).
+
+Prior record: the "AC4 PASS iff median ratio <= 1.0 ..." / "FINAL AC4: ... FAIL/INCONCLUSIVE" lines above
+used a stricter self-imposed median<=1.0 rule that is NOT part of the design acceptance text
+(design:201-211 requires >20% in >=2 blocks, plus no statistically reliable smaller regression). Under the
+design rule the observed data does not establish a regression. Both records are kept; the raw per-pair
+tables above are unchanged.

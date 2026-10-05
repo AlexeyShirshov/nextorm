@@ -1,0 +1,22 @@
+{
+  "tag": "run01-old",
+  "tree": "/home/alex/sources/nextorm-worktrees/183-baseline",
+  "label": "old",
+  "exit": 0,
+  "loadavg_before": "4.91 4.12 3.67",
+  "loadavg_after": "4.51 4.19 3.73",
+  "wall_s": 57.9,
+  "json_present": true,
+  "fullname": "NextORM.Benchmark.SqliteBenchmarkStageA.Join_CachedHit_ToList",
+  "n_actual": 100,
+  "min_ns": 3212276.140625,
+  "p10_ns": 3396768.53125,
+  "p10_raw": 217393186.0,
+  "stats_p10": null,
+  "median_ns": 3687427.453125,
+  "alloc": 1298695,
+  "operations_per_iteration": [
+    64
+  ],
+  "statistic_basis": "ns/op = Nanoseconds/Operations over Workload/Actual"
+}

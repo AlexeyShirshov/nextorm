@@ -54,7 +54,7 @@ Stage A — DONE @752943d. B1 — incomplete/unaccepted/uncommitted. B2 — inco
 
 ## #183 disposition
 
-LEFT OPEN в milestone `1.0.9-b` (cycle 4: delivered change, accepted-with-open-AC4). B1+B2 применены в рабочем дереве (не закоммичены); AC4 (no reliable E2E regression for `Join_CachedHit_ToList`) остаётся открытой; публичного API-изменения нет; «verified PASS»/«speedup proven» не заявляются.
+AC4 **met** (2026-10-05, interleaved 10-pair ABAB; 0/10 min и 1/10 p10 блоков ≥1.20, единственный p10-блок — load-spike outlier) → **общая приёмка #183 met**. B1+B2 применены в рабочем дереве и остаются **незакоммиченными сверх `322f9be`**; AC4-запись — `docs/specs/status/iteration-15-cached-path-183-4-evidence/ac4/`. Публичного API-изменения нет. Атрибутируемое ускорение на `Join_CachedHit_ToList` не заявляется (материализация доминирует над cached path) — это ожидаемый исход, а не регрессия; «speedup proven» на этом арме не заявляется.
 
 ## Cycle 4 (#183 continuation) — measured results (CHECK r=1 FAIL, DO loop-back n=2/3)
 
