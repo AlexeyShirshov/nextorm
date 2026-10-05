@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>NextORM.Benchmark.SqliteBenchmarkStageA-20261004-212436</title>
+<title>NextORM.Benchmark.SqliteBenchmarkStageA-20261005-142558</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -16,28 +16,19 @@
 BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
 .NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
-IterationCount=3  LaunchCount=1  WarmupCount=3  
-Categories=stage-a  
+<pre><code>Job=DefaultJob  Runtime=.NET 10.0  Categories=stage-a  
 </code></pre>
 
 <table>
-<thead><tr><th>Method            </th><th>Mean</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method            </th><th>Mean</th><th>Median</th><th>Gen0</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>Where_Construct</td><td>106.1 &mu;s</td><td>1.00</td><td>30.3955</td><td>-</td><td>248.44 KB</td><td>1.00</td>
-</tr><tr><td>Where_Prepare_NoHash</td><td>232.2 &mu;s</td><td>2.19</td><td>46.3867</td><td>-</td><td>378.92 KB</td><td>1.53</td>
-</tr><tr><td>Where_Prepare_Hash</td><td>328.1 &mu;s</td><td>3.09</td><td>51.7578</td><td>0.4883</td><td>425.01 KB</td><td>1.71</td>
-</tr><tr><td>Join_Construct</td><td>453.4 &mu;s</td><td>4.27</td><td>71.2891</td><td>-</td><td>585.97 KB</td><td>2.36</td>
-</tr><tr><td>Where_CachedHit_PlanOnly</td><td>507.3 &mu;s</td><td>4.78</td><td>64.4531</td><td>0.4883</td><td>527.36 KB</td><td>2.12</td>
-</tr><tr><td>Where_Prepared_ToList</td><td>893.9 &mu;s</td><td>8.42</td><td>7.8125</td><td>-</td><td>76.14 KB</td><td>0.31</td>
-</tr><tr><td>Join_Prepare_NoHash</td><td>895.1 &mu;s</td><td>8.44</td><td>101.5625</td><td>-</td><td>831.3 KB</td><td>3.35</td>
-</tr><tr><td>Join_Prepared_ToList</td><td>1,033.1 &mu;s</td><td>9.74</td><td>7.8125</td><td>-</td><td>78.34 KB</td><td>0.32</td>
-</tr><tr><td>Join_Prepare_Hash</td><td>1,037.5 &mu;s</td><td>9.78</td><td>106.4453</td><td>0.9766</td><td>874.28 KB</td><td>3.52</td>
-</tr><tr><td>Where_CachedHit_ToList</td><td>1,618.6 &mu;s</td><td>15.25</td><td>72.2656</td><td>-</td><td>598.81 KB</td><td>2.41</td>
-</tr><tr><td>Join_CachedHit_PlanOnly</td><td>1,785.1 &mu;s</td><td>16.82</td><td>144.5313</td><td>1.9531</td><td>1189.92 KB</td><td>4.79</td>
-</tr><tr><td>Join_CachedHit_ToList</td><td>4,059.6 &mu;s</td><td>38.26</td><td>152.3438</td><td>-</td><td>1263.59 KB</td><td>5.09</td>
+</thead><tbody><tr><td>Where_CachedHit_PlanOnly</td><td>405.0 &mu;s</td><td>395.1 &mu;s</td><td>54.6875</td><td>447.67 KB</td>
+</tr><tr><td>Where_CachedHit_ToList</td><td>1,502.1 &mu;s</td><td>1,481.8 &mu;s</td><td>62.5000</td><td>519.11 KB</td>
+</tr><tr><td>Join_CachedHit_PlanOnly</td><td>1,908.4 &mu;s</td><td>1,411.4 &mu;s</td><td>125.0000</td><td>1145.38 KB</td>
+</tr><tr><td>Join_CachedHit_ToList</td><td>3,320.5 &mu;s</td><td>3,209.7 &mu;s</td><td>140.6250</td><td>1219.04 KB</td>
 </tr></tbody></table>
 </body>
 </html>

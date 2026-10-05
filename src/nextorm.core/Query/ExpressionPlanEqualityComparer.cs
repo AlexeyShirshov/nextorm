@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace NextORM.Core;
 
@@ -23,6 +24,27 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
     // zero-allocation design while making GetHashCode thread-safe.
     [ThreadStatic] private static Visitor? _tlsVisitor;
     [ThreadStatic] private static ExpressionPlanEqualityComparer? _tlsVisitorOwner;
+
+    // Cached-path diagnostic counters. They are process-wide (static) but updated with Interlocked
+    // and read with Volatile, so the increment path is lock-free and allocation-free. Tests reach
+    // them through the existing InternalsVisibleTo("nextorm.core.tests").
+    private static int _spillCount;
+
+    /// <summary>
+    /// Number of parameter scopes that have spilled their inline bindings
+    /// (four or fewer) into a dictionary because a fifth concurrent binding arrived. Diagnostic only.
+    /// </summary>
+    internal static int SpillCount => Volatile.Read(ref _spillCount);
+
+    /// <summary>
+    /// Resets every cached-path diagnostic counter to zero. Test seam; not part of the public surface.
+    /// </summary>
+    internal static void ResetCounters()
+    {
+        Volatile.Write(ref _spillCount, 0);
+        ParamRefreshRecipe.ResetCounters();
+        QueryPlanner.ResetCounters();
+    }
 
     private readonly ILogger? _logger;
     private readonly IQueryRegistry _queryProvider;
@@ -98,9 +120,166 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
         return new ExpressionComparer().Compare2(left, right);
     }
 
+    /// <summary>
+    /// Parameter bindings for one <c>Equals</c> call: up to four <c>(a, b)</c> pairs stored inline,
+    /// so the common case allocates nothing. A fifth concurrent binding spills every current binding
+    /// into a <see cref="Dictionary{TKey,TValue}"/> and stays in dictionary mode for the rest of the
+    /// call (no reverse migration). Lookup is by reference identity, matching the dictionary's
+    /// default comparer for <see cref="ParameterExpression"/>.
+    /// </summary>
+    private struct ParameterScope
+    {
+        private const int InlineCapacity = 4;
+
+        private ParameterExpression? _a0, _b0;
+        private ParameterExpression? _a1, _b1;
+        private ParameterExpression? _a2, _b2;
+        private ParameterExpression? _a3, _b3;
+        private int _count;
+        private Dictionary<ParameterExpression, ParameterExpression>? _spilled;
+
+        public bool TryAdd(ParameterExpression a, ParameterExpression b)
+        {
+            if (_spilled is not null)
+            {
+                return _spilled.TryAdd(a, b);
+            }
+
+            for (var i = 0; i < _count; i++)
+            {
+                // Identity lookup: ReferenceEquals is exactly EqualityComparer<ParameterExpression>.Default,
+                // so the inline scan agrees with the spilled Dictionary<ParameterExpression, ...> mode.
+                if (ReferenceEquals(GetInlineA(i), a))
+                {
+                    // The same ParameterExpression instance is already in scope, i.e. a nested lambda
+                    // reused an outer parameter, so the two trees cannot line up.
+                    return false;
+                }
+            }
+
+            if (_count < InlineCapacity)
+            {
+                SetInline(_count, a, b);
+                _count++;
+                return true;
+            }
+
+            // Fifth concurrent binding: move every inline binding into a dictionary and stay in
+            // dictionary mode for the rest of the call.
+            Interlocked.Increment(ref _spillCount);
+            var spilled = new Dictionary<ParameterExpression, ParameterExpression>(InlineCapacity * 2);
+            for (var i = 0; i < InlineCapacity; i++)
+            {
+                spilled.Add(GetInlineA(i)!, GetInlineB(i)!);
+            }
+
+            SetInline(0, null, null);
+            SetInline(1, null, null);
+            SetInline(2, null, null);
+            SetInline(3, null, null);
+            _count = 0;
+            _spilled = spilled;
+
+            return _spilled.TryAdd(a, b);
+        }
+
+        public void Remove(ParameterExpression a)
+        {
+            if (_spilled is not null)
+            {
+                _spilled.Remove(a);
+                return;
+            }
+
+            for (var i = 0; i < _count; i++)
+            {
+                if (ReferenceEquals(GetInlineA(i), a))
+                {
+                    _count--;
+                    if (i != _count)
+                    {
+                        SetInline(i, GetInlineA(_count), GetInlineB(_count));
+                    }
+
+                    SetInline(_count, null, null);
+                    return;
+                }
+            }
+        }
+
+        public readonly bool TryGetValue(
+            ParameterExpression a,
+            [NotNullWhen(true)] out ParameterExpression? b)
+        {
+            if (_spilled is not null)
+            {
+                return _spilled.TryGetValue(a, out b);
+            }
+
+            for (var i = 0; i < _count; i++)
+            {
+                // Identity lookup, matching the spilled Dictionary's EqualityComparer<ParameterExpression>.Default.
+                if (ReferenceEquals(GetInlineA(i), a))
+                {
+                    b = GetInlineB(i)!;
+                    return true;
+                }
+            }
+
+            b = null;
+            return false;
+        }
+
+        private readonly ParameterExpression? GetInlineA(int i) => i switch
+        {
+            0 => _a0,
+            1 => _a1,
+            2 => _a2,
+            3 => _a3,
+            // No aliasing default: an out-of-range slot must fail loudly instead of silently reading slot 3.
+            _ => throw new ArgumentOutOfRangeException(nameof(i), i, "Inline parameter slot must be 0..3."),
+        };
+
+        private readonly ParameterExpression? GetInlineB(int i) => i switch
+        {
+            0 => _b0,
+            1 => _b1,
+            2 => _b2,
+            3 => _b3,
+            // No aliasing default: an out-of-range slot must fail loudly instead of silently reading slot 3.
+            _ => throw new ArgumentOutOfRangeException(nameof(i), i, "Inline parameter slot must be 0..3."),
+        };
+
+        private void SetInline(int i, ParameterExpression? a, ParameterExpression? b)
+        {
+            switch (i)
+            {
+                case 0:
+                    _a0 = a;
+                    _b0 = b;
+                    break;
+                case 1:
+                    _a1 = a;
+                    _b1 = b;
+                    break;
+                case 2:
+                    _a2 = a;
+                    _b2 = b;
+                    break;
+                case 3:
+                    _a3 = a;
+                    _b3 = b;
+                    break;
+                default:
+                    // No aliasing default: an out-of-range slot must fail loudly instead of silently writing slot 3.
+                    throw new ArgumentOutOfRangeException(nameof(i), i, "Inline parameter slot must be 0..3.");
+            }
+        }
+    }
+
     private struct ExpressionComparer
     {
-        private Dictionary<ParameterExpression, ParameterExpression> _parameterScope;
+        private ParameterScope _parameterScope;
 
         public bool Compare(Expression? left, Expression? right)
         {
@@ -215,8 +394,6 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 return false;
             }
 
-            _parameterScope ??= new Dictionary<ParameterExpression, ParameterExpression>();
-
             for (var i = 0; i < n; i++)
             {
                 var (p1, p2) = (a.Parameters[i], b.Parameters[i]);
@@ -233,9 +410,6 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 
                 if (!_parameterScope.TryAdd(p1, p2))
                 {
-                    // The same ParameterExpression instance is already in scope, i.e. a nested
-                    // lambda reused an outer parameter, so the two trees cannot line up. Report
-                    // "not equal" (which costs a cache miss) instead of throwing.
                     for (var j = 0; j < i; j++)
                     {
                         _parameterScope.Remove(a.Parameters[j]);
@@ -290,10 +464,9 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 && CompareMemberList(a.Members, b.Members);
 
         private readonly bool CompareParameter(ParameterExpression a, ParameterExpression b)
-            => _parameterScope != null
-                && _parameterScope.TryGetValue(a, out var mapped)
-                    ? mapped.Type == b.Type
-                    : a.Type == b.Type;
+            => _parameterScope.TryGetValue(a, out var mapped)
+                ? mapped.Type == b.Type
+                : a.Type == b.Type;
 
         private bool CompareRuntimeVariables(RuntimeVariablesExpression a, RuntimeVariablesExpression b)
             => CompareExpressionList(a.Variables, b.Variables);

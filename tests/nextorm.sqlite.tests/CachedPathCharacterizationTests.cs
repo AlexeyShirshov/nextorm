@@ -151,6 +151,53 @@ public class CachedPathCharacterizationTests
         second.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("p0", "p1");
     }
 
+    // Same cardinality but a changed value is the same shape: it must hit the cached plan and re-bind the
+    // fresh value (the value-list parameter is a runtime pN placeholder, so the recipe declines and the
+    // original extraction path refreshes it).
+    [Fact]
+    public void InCollection_SameLengthValueChange_ShouldReusePlanAndRebind()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+
+        var values = new long[] { 1 };
+        var first = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), cache: true);
+        first.DbCommandParams[0].Value.Should().Be(1L);
+
+        ExpressionPlanEqualityComparer.ResetCounters();
+        values[0] = 2;
+        var second = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), cache: true);
+
+        ReferenceEquals(first, second).Should().BeTrue("an unchanged IN cardinality is the same shape");
+        second.DbCommandParams[0].Value.Should().Be(2L, "the shared cached command re-binds the current value");
+        ParamRefreshRecipe.FastBindHits.Should().Be(0, "a runtime pN placeholder is outside the recipe subset");
+        QueryPlanner.FallbackRefreshes.Should().Be(1, "the value-list parameter refreshes through the extraction path");
+    }
+
+    // An empty IN is a constant `1 = 0` with no parameters: a rebuilt empty IN must reuse the same
+    // parameter-free plan without inventing a recipe or a fallback refresh.
+    [Fact]
+    public void InCollection_Empty_ShouldReuseParameterFreePlan()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+        var values = Array.Empty<long>();
+
+        var first = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), cache: true);
+        first.DbCommandParams.Cast<DbParameter>().Should().BeEmpty("an empty IN renders a constant and binds no parameter");
+        first.DbCommand.CommandText.Should().Contain("1 = 0");
+
+        ExpressionPlanEqualityComparer.ResetCounters();
+        var second = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => x.Id), cache: true);
+
+        ReferenceEquals(first, second).Should().BeTrue("an empty IN is a stable, parameter-free shape");
+        second.DbCommandParams.Cast<DbParameter>().Should().BeEmpty();
+        ParamRefreshRecipe.FastBindHits.Should().Be(0);
+        QueryPlanner.FallbackRefreshes.Should().Be(0, "a parameter-free plan never enters the refresh path");
+    }
+
     [Fact]
     public void SettingsAndPreWhere_ShouldDistinguishThePlanKey()
     {
@@ -227,13 +274,23 @@ public class CachedPathCharacterizationTests
     private sealed class CountingProbe
     {
         public int Reads;
+        public int Value = 5;
 
         public int Threshold
         {
             get
             {
                 Reads++;
-                return 5;
+                return Value;
+            }
+        }
+
+        public int Other
+        {
+            get
+            {
+                Reads++;
+                return Value;
             }
         }
     }
@@ -254,6 +311,194 @@ public class CachedPathCharacterizationTests
         ReferenceEquals(first, second).Should().BeTrue();
         second.NeedsParamRefresh.Should().BeTrue();
         probe.Reads.Should().Be(1, "a captured parameter refresh must evaluate the captured member exactly once");
+    }
+
+    // Same source site, two different probe instances: the closure type and the member chain are part of
+    // the plan key while the captured value is not, so the second Prepare is a cache hit with a fresh
+    // closure.
+    private static QueryCommand<long> WhereProbe(EntityBuilder<IComplexEntity> e, CountingProbe probe)
+        => e.Where(x => x.Id > probe.Threshold).Select(x => x.Id);
+
+    [Fact]
+    public void SameClosureSite_RepeatedExecution_ShouldNotReuseFirstClosure()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+        var a = new CountingProbe { Value = 1 };
+        var b = new CountingProbe { Value = 2 };
+
+        var first = Prepare(ctx, WhereProbe(e, a), cache: true);
+        first.DbCommandParams[0].Value.Should().Be(1);
+        first.NeedsParamRefresh.Should().BeTrue();
+        first.ParamRecipe.Should().NotBeNull("a simple captured scalar is in the supported recipe subset");
+
+        a.Reads = 0;
+        b.Reads = 0;
+        var second = Prepare(ctx, WhereProbe(e, b), cache: true);
+
+        ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
+        b.Reads.Should().Be(1, "the current closure is evaluated exactly once on the refresh");
+        a.Reads.Should().Be(0, "the reusable recipe must not reuse the first closure");
+        second.DbCommandParams[0].Value.Should().Be(2, "the shared cached command re-binds the second closure's value");
+    }
+
+    // A real cache hit with a supported recipe takes the positional fast path: it reads the CURRENT
+    // closure, binds exactly once and never touches the original extraction path.
+    [Fact]
+    public void CachedHit_FastPath_ShouldBindCurrentValueAndCountOnce()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+        var probe = new CountingProbe { Value = 1 };
+
+        var first = Prepare(ctx, WhereProbe(e, probe), cache: true);
+        first.ParamRecipe.Should().NotBeNull("a simple captured scalar is in the supported recipe subset");
+        first.DbCommandParams[0].Value.Should().Be(1);
+
+        probe.Reads = 0;
+        probe.Value = 2;
+        ExpressionPlanEqualityComparer.ResetCounters();
+        var second = Prepare(ctx, WhereProbe(e, probe), cache: true);
+
+        ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
+        ParamRefreshRecipe.FastBindHits.Should().Be(1);
+        ParamRefreshRecipe.BindRejected.Should().Be(0);
+        QueryPlanner.FallbackRefreshes.Should().Be(0);
+        second.DbCommandParams[0].Value.Should().Be(2, "the fast path binds the CURRENT closure value");
+        probe.Reads.Should().Be(1, "the fast path reads the captured member exactly once");
+    }
+
+    // A null capture is still a reproducible scalar: the fast path rebinds the value once the closure
+    // changes from null to a non-null string.
+    [Fact]
+    public void CachedHit_NullCaptureFastPath_ShouldBindCurrentValue()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+
+        string? captured = null;
+        var first = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), cache: true);
+        first.ParamRecipe.Should().NotBeNull("a null captured scalar still has a reproducible recipe");
+
+        ExpressionPlanEqualityComparer.ResetCounters();
+        captured = "x";
+        var second = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), cache: true);
+
+        ReferenceEquals(first, second).Should().BeTrue();
+        ParamRefreshRecipe.FastBindHits.Should().Be(1);
+        QueryPlanner.FallbackRefreshes.Should().Be(0);
+        second.DbCommandParams[0].Value.Should().Be("x", "the null-to-value change is rebound by the fast path");
+    }
+
+    // The inverse transition exercises the writer's coalesce branch: a value capture that becomes null on
+    // the hit must bind DBNull through the fast path, never the stale miss-time string.
+    [Fact]
+    public void CachedHit_ValueToNullFastPath_ShouldBindDbNull()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+
+        string? captured = "first";
+        var first = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), cache: true);
+        first.ParamRecipe.Should().NotBeNull("a captured string scalar is a supported recipe");
+
+        ExpressionPlanEqualityComparer.ResetCounters();
+        captured = null;
+        var second = Prepare(ctx, e.Where(x => x.String == captured).Select(x => x.Id), cache: true);
+
+        ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
+        ParamRefreshRecipe.FastBindHits.Should().Be(1);
+        ParamRefreshRecipe.BindRejected.Should().Be(0);
+        QueryPlanner.FallbackRefreshes.Should().Be(0);
+        second.DbCommandParams[0].Value.Should()
+            .Be(DBNull.Value, "the writer's null-coalesce branch normalizes a null capture to DBNull");
+    }
+
+    // Converter and raw-SQL shapes are not in the scalar subset, so the plan carries no recipe and no
+    // hit takes the fast path. The converter shape still refreshes through the original extraction
+    // path (a counted fallback); a raw-SQL override instead reuses its miss-time bound parameters and
+    // never enters the generated extraction path, so it is not a fallback refresh.
+    [Fact]
+    public void CachedHit_UnsupportedShapes_ShouldFallBackWithoutFastPath()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+
+        var converter = ctx.From<IConverterEntity>();
+        var captured = SqlGenState.Closed;
+        var converterFirst = Prepare(ctx, converter.Where(x => x.State == captured).Select(x => x.Id), cache: true);
+        converterFirst.ParamRecipe.Should().BeNull("a converter-normalized value is not in the scalar subset");
+        ExpressionPlanEqualityComparer.ResetCounters();
+        var converterSecond = Prepare(ctx, converter.Where(x => x.State == captured).Select(x => x.Id), cache: true);
+        ReferenceEquals(converterFirst, converterSecond).Should().BeTrue();
+        ParamRefreshRecipe.FastBindHits.Should().Be(0);
+        QueryPlanner.FallbackRefreshes.Should().Be(1);
+        converterSecond.DbCommandParams[0].Value.Should().Be("Closed");
+
+        var e = ctx.From<IComplexEntity>();
+        const string sql = "select id from complex_entity where id = @id";
+        var rawFirst = Prepare(ctx, RawSqlCommand(e, sql, new { id = 1 }), cache: true);
+        rawFirst.ParamRecipe.Should().BeNull("a raw-SQL override has no generated captured condition");
+        ExpressionPlanEqualityComparer.ResetCounters();
+        var rawSecond = Prepare(ctx, RawSqlCommand(e, sql, new { id = 2 }), cache: true);
+        ReferenceEquals(rawFirst, rawSecond).Should().BeTrue();
+        ParamRefreshRecipe.FastBindHits.Should().Be(0);
+        QueryPlanner.FallbackRefreshes.Should().Be(0, "a raw-SQL override bypasses the generated extraction path entirely");
+    }
+
+    // The immutable recipe validates parameter count/name/shape before evaluating any closure; an
+    // incompatible recipe must fall back to the original ExtractParams path without corrupting the bind.
+    [Fact]
+    public void CachedPlan_WithIncompatibleRecipe_ShouldFallBackWithoutCorruptingTheBind()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+        var a = new CountingProbe { Value = 1 };
+        var b = new CountingProbe { Value = 2 };
+
+        var target = Prepare(ctx, WhereProbe(e, a), cache: true);
+        target.ParamRecipe.Should().NotBeNull();
+
+        // A recipe whose slot count does not match the cached command's parameter count.
+        var countMismatch = Prepare(ctx, e.Where(x => x.Id > a.Threshold || x.Id > b.Other).Select(x => x.Id), cache: true);
+        countMismatch.ParamRecipe.Should().NotBeNull();
+        target.SetParamRecipe(countMismatch.ParamRecipe);
+
+        a.Reads = 0;
+        b.Reads = 0;
+        ExpressionPlanEqualityComparer.ResetCounters();
+        var countHit = Prepare(ctx, WhereProbe(e, b), cache: true);
+
+        ReferenceEquals(target, countHit).Should().BeTrue("the second WhereProbe hits the cached plan");
+        QueryPlanner.FallbackRefreshes.Should().Be(1);
+        ParamRefreshRecipe.FastBindHits.Should().Be(0);
+        ParamRefreshRecipe.BindRejected.Should().Be(1);
+        countHit.DbCommandParams[0].Value.Should().Be(2, "the fallback extracts the current closure value");
+        b.Reads.Should().Be(1, "the original extraction path evaluates the current closure exactly once");
+        a.Reads.Should().Be(0, "the incompatible recipe never evaluates the stale closure");
+
+        // A same-count recipe whose parameter name differs must also be rejected.
+        var nameMismatch = Prepare(ctx, e.Where(x => x.Id > a.Other).Select(x => x.Id), cache: true);
+        nameMismatch.ParamRecipe.Should().NotBeNull();
+        target.SetParamRecipe(nameMismatch.ParamRecipe);
+
+        a.Reads = 0;
+        b.Reads = 0;
+        ExpressionPlanEqualityComparer.ResetCounters();
+        var nameHit = Prepare(ctx, WhereProbe(e, b), cache: true);
+
+        ReferenceEquals(target, nameHit).Should().BeTrue();
+        QueryPlanner.FallbackRefreshes.Should().Be(1);
+        ParamRefreshRecipe.FastBindHits.Should().Be(0);
+        ParamRefreshRecipe.BindRejected.Should().Be(1);
+        nameHit.DbCommandParams[0].Value.Should().Be(2);
+        b.Reads.Should().Be(1);
+        a.Reads.Should().Be(0);
     }
 
     // ---------------------------------------------------------------------------------------------

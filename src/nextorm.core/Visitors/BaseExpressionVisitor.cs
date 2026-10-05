@@ -246,7 +246,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 return false;
         }
 
-        _params.Add(new Parameter(name, NormalizeParameterValue(value)) { CapturedKey = key });
+        var normalized = NormalizeParameterValue(value);
+        _params.Add(new Parameter(name, normalized)
+        {
+            CapturedKey = key,
+            // The guarded refresh recipe must not re-read the raw captured value when normalizing it
+            // would not reproduce the bound value. A converter always counts (it may be value
+            // dependent), a duration scope only when the value is a TimeSpan, and any remaining
+            // normalization (enum coercion, duration storage) is caught by comparing the results.
+            // The duration scope itself is set for every comparison on a dialect without a native
+            // duration, so the scope alone is not a signal.
+            HasConversion = ConverterContext is not null
+                || (DurationUnitContext is not null && value is TimeSpan)
+                || !Equals(normalized, value),
+        });
         return true;
     }
     /// <summary>

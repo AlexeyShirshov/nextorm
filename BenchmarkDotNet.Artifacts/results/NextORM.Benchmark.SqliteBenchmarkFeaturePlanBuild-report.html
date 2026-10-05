@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>NextORM.Benchmark.SqliteBenchmarkFeaturePlanBuild-20261003-225022</title>
+<title>NextORM.Benchmark.SqliteBenchmarkFeaturePlanBuild-20261005-124310</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -24,48 +24,48 @@ LaunchCount=1  WarmupCount=3
 </code></pre>
 
 <table>
-<thead><tr><th>Method                  </th><th>Toolchain       </th><th>Mean</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method                  </th><th>Toolchain       </th><th>Mean </th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>Build_Distinct</td><td>Default</td><td>432.1 &mu;s</td><td>0.90</td><td>61.0352</td><td>60.5469</td><td>502.34 KB</td><td>0.84</td>
-</tr><tr><td>Build_Case</td><td>Default</td><td>433.1 &mu;s</td><td>0.90</td><td>58.5938</td><td>54.6875</td><td>505.48 KB</td><td>0.84</td>
-</tr><tr><td>Build_Baseline_SimpleSelect</td><td>Default</td><td>483.5 &mu;s</td><td>1.00</td><td>70.3125</td><td>42.9688</td><td>600.01 KB</td><td>1.00</td>
-</tr><tr><td>Build_StringFn_ToUpper</td><td>Default</td><td>523.5 &mu;s</td><td>1.09</td><td>78.1250</td><td>50.7813</td><td>660.95 KB</td><td>1.10</td>
-</tr><tr><td>Build_Udf</td><td>Default</td><td>542.5 &mu;s</td><td>1.12</td><td>78.1250</td><td>50.7813</td><td>661.73 KB</td><td>1.10</td>
-</tr><tr><td>Build_StringFn_Contains</td><td>Default</td><td>582.8 &mu;s</td><td>1.21</td><td>78.1250</td><td>50.7813</td><td>664.06 KB</td><td>1.11</td>
-</tr><tr><td>Build_Except</td><td>Default</td><td>604.1 &mu;s</td><td>1.25</td><td>105.4688</td><td>62.5000</td><td>866.44 KB</td><td>1.44</td>
-</tr><tr><td>Build_Unary_Not</td><td>Default</td><td>634.6 &mu;s</td><td>1.32</td><td>78.1250</td><td>50.7813</td><td>650.01 KB</td><td>1.08</td>
-</tr><tr><td>Build_Tvf</td><td>Default</td><td>635.5 &mu;s</td><td>1.32</td><td>66.4063</td><td>62.5000</td><td>550 KB</td><td>0.92</td>
-</tr><tr><td>Build_In_ListContains_Captured</td><td>Default</td><td>883.4 &mu;s</td><td>1.83</td><td>93.7500</td><td>85.9375</td><td>791.41 KB</td><td>1.32</td>
-</tr><tr><td>Build_Intersect</td><td>Default</td><td>1,026.4 &mu;s</td><td>2.13</td><td>101.5625</td><td>54.6875</td><td>868 KB</td><td>1.45</td>
-</tr><tr><td>Build_In_AtIn_Inline</td><td>Default</td><td>1,040.6 &mu;s</td><td>2.16</td><td>93.7500</td><td>85.9375</td><td>818.75 KB</td><td>1.36</td>
-</tr><tr><td>Build_LeftJoin</td><td>Default</td><td>1,069.8 &mu;s</td><td>2.22</td><td>109.3750</td><td>70.3125</td><td>927.4 KB</td><td>1.55</td>
-</tr><tr><td>Build_In_ListContains_Inline</td><td>Default</td><td>1,071.6 &mu;s</td><td>2.22</td><td>93.7500</td><td>85.9375</td><td>814.84 KB</td><td>1.36</td>
-</tr><tr><td>Build_In_AtIn_Captured</td><td>Default</td><td>1,098.6 &mu;s</td><td>2.28</td><td>93.7500</td><td>85.9375</td><td>784.38 KB</td><td>1.31</td>
-</tr><tr><td>Build_Window_SumOver</td><td>Default</td><td>1,169.9 &mu;s</td><td>2.43</td><td>85.9375</td><td>54.6875</td><td>717.23 KB</td><td>1.20</td>
-</tr><tr><td>Build_Window_RowNumber</td><td>Default</td><td>1,181.7 &mu;s</td><td>2.45</td><td>85.9375</td><td>78.1250</td><td>728.19 KB</td><td>1.21</td>
-</tr><tr><td>Build_Join4</td><td>Default</td><td>1,958.5 &mu;s</td><td>4.06</td><td>220.7031</td><td>39.0625</td><td>1816.59 KB</td><td>3.03</td>
-</tr><tr><td>Build_Cte</td><td>Default</td><td>2,194.3 &mu;s</td><td>4.55</td><td>218.7500</td><td>93.7500</td><td>1903.67 KB</td><td>3.17</td>
-</tr><tr><td>Build_RecursiveCte</td><td>Default</td><td>2,533.7 &mu;s</td><td>5.25</td><td>218.7500</td><td>93.7500</td><td>1874.26 KB</td><td>3.12</td>
-</tr><tr><td>Build_Distinct</td><td>InProcessEmitToolchain</td><td>477.1 &mu;s</td><td>0.92</td><td>61.0352</td><td>60.5469</td><td>502.35 KB</td><td>0.83</td>
-</tr><tr><td>Build_Case</td><td>InProcessEmitToolchain</td><td>508.9 &mu;s</td><td>0.98</td><td>61.5234</td><td>61.0352</td><td>505.48 KB</td><td>0.83</td>
-</tr><tr><td>Build_Baseline_SimpleSelect</td><td>InProcessEmitToolchain</td><td>518.2 &mu;s</td><td>1.00</td><td>74.2188</td><td>49.3164</td><td>608.22 KB</td><td>1.00</td>
-</tr><tr><td>Build_Unary_Not</td><td>InProcessEmitToolchain</td><td>629.4 &mu;s</td><td>1.22</td><td>83.0078</td><td>33.2031</td><td>678.73 KB</td><td>1.12</td>
-</tr><tr><td>Build_Tvf</td><td>InProcessEmitToolchain</td><td>648.3 &mu;s</td><td>1.25</td><td>65.4297</td><td>64.4531</td><td>539.07 KB</td><td>0.89</td>
-</tr><tr><td>Build_Udf</td><td>InProcessEmitToolchain</td><td>678.3 &mu;s</td><td>1.31</td><td>83.9844</td><td>55.6641</td><td>688.17 KB</td><td>1.13</td>
-</tr><tr><td>Build_Intersect</td><td>InProcessEmitToolchain</td><td>696.9 &mu;s</td><td>1.35</td><td>109.3750</td><td>42.9688</td><td>899.07 KB</td><td>1.48</td>
-</tr><tr><td>Build_StringFn_ToUpper</td><td>InProcessEmitToolchain</td><td>697.9 &mu;s</td><td>1.35</td><td>83.9844</td><td>55.6641</td><td>689.67 KB</td><td>1.13</td>
-</tr><tr><td>Build_Except</td><td>InProcessEmitToolchain</td><td>732.5 &mu;s</td><td>1.41</td><td>109.3750</td><td>41.9922</td><td>898.29 KB</td><td>1.48</td>
-</tr><tr><td>Build_StringFn_Contains</td><td>InProcessEmitToolchain</td><td>763.9 &mu;s</td><td>1.48</td><td>83.9844</td><td>55.6641</td><td>692.78 KB</td><td>1.14</td>
-</tr><tr><td>Build_In_AtIn_Captured</td><td>InProcessEmitToolchain</td><td>864.8 &mu;s</td><td>1.67</td><td>98.6328</td><td>97.6563</td><td>813.09 KB</td><td>1.34</td>
-</tr><tr><td>Build_In_ListContains_Captured</td><td>InProcessEmitToolchain</td><td>956.8 &mu;s</td><td>1.85</td><td>99.6094</td><td>98.6328</td><td>820.12 KB</td><td>1.35</td>
-</tr><tr><td>Build_In_AtIn_Inline</td><td>InProcessEmitToolchain</td><td>1,003.1 &mu;s</td><td>1.94</td><td>101.5625</td><td>99.6094</td><td>836.54 KB</td><td>1.38</td>
-</tr><tr><td>Build_Window_RowNumber</td><td>InProcessEmitToolchain</td><td>1,021.1 &mu;s</td><td>1.97</td><td>88.8672</td><td>87.8906</td><td>731.29 KB</td><td>1.20</td>
-</tr><tr><td>Build_In_ListContains_Inline</td><td>InProcessEmitToolchain</td><td>1,030.5 &mu;s</td><td>1.99</td><td>101.5625</td><td>99.6094</td><td>843.55 KB</td><td>1.39</td>
-</tr><tr><td>Build_LeftJoin</td><td>InProcessEmitToolchain</td><td>1,185.8 &mu;s</td><td>2.29</td><td>113.2813</td><td>74.2188</td><td>930.54 KB</td><td>1.53</td>
-</tr><tr><td>Build_Window_SumOver</td><td>InProcessEmitToolchain</td><td>1,220.6 &mu;s</td><td>2.36</td><td>87.8906</td><td>56.6406</td><td>720.35 KB</td><td>1.18</td>
-</tr><tr><td>Build_RecursiveCte</td><td>InProcessEmitToolchain</td><td>1,836.8 &mu;s</td><td>3.55</td><td>234.3750</td><td>23.4375</td><td>1915.68 KB</td><td>3.15</td>
-</tr><tr><td>Build_Join4</td><td>InProcessEmitToolchain</td><td>2,418.3 &mu;s</td><td>4.67</td><td>218.7500</td><td>46.8750</td><td>1808.02 KB</td><td>2.97</td>
-</tr><tr><td>Build_Cte</td><td>InProcessEmitToolchain</td><td>2,704.7 &mu;s</td><td>5.22</td><td>230.4688</td><td>35.1563</td><td>1898.62 KB</td><td>3.12</td>
+</thead><tbody><tr><td>Build_Distinct</td><td>Default</td><td>2,375.8 &mu;s</td><td>0.57</td><td>62.5000</td><td>58.5938</td><td>529.69 KB</td><td>0.84</td>
+</tr><tr><td>Build_Case</td><td>Default</td><td>2,463.0 &mu;s</td><td>0.59</td><td>74.2188</td><td>70.3125</td><td>612.51 KB</td><td>0.98</td>
+</tr><tr><td>Build_Unary_Not</td><td>Default</td><td>3,144.2 &mu;s</td><td>0.76</td><td>85.9375</td><td>19.5313</td><td>725.8 KB</td><td>1.16</td>
+</tr><tr><td>Build_StringFn_ToUpper</td><td>Default</td><td>3,163.2 &mu;s</td><td>0.76</td><td>85.9375</td><td>50.7813</td><td>721.11 KB</td><td>1.15</td>
+</tr><tr><td>Build_StringFn_Contains</td><td>Default</td><td>3,645.2 &mu;s</td><td>0.88</td><td>85.9375</td><td>50.7813</td><td>725 KB</td><td>1.16</td>
+</tr><tr><td>Build_Baseline_SimpleSelect</td><td>Default</td><td>4,171.6 &mu;s</td><td>1.00</td><td>74.2188</td><td>46.8750</td><td>627.36 KB</td><td>1.00</td>
+</tr><tr><td>Build_Intersect</td><td>Default</td><td>4,734.4 &mu;s</td><td>1.14</td><td>109.3750</td><td>31.2500</td><td>947.69 KB</td><td>1.51</td>
+</tr><tr><td>Build_In_AtIn_Captured</td><td>Default</td><td>4,781.7 &mu;s</td><td>1.15</td><td>101.5625</td><td>93.7500</td><td>838.28 KB</td><td>1.34</td>
+</tr><tr><td>Build_Window_SumOver</td><td>Default</td><td>4,993.7 &mu;s</td><td>1.20</td><td>85.9375</td><td>54.6875</td><td>747.7 KB</td><td>1.19</td>
+</tr><tr><td>Build_Window_RowNumber</td><td>Default</td><td>5,055.6 &mu;s</td><td>1.22</td><td>93.7500</td><td>54.6875</td><td>812.57 KB</td><td>1.30</td>
+</tr><tr><td>Build_Udf</td><td>Default</td><td>5,092.3 &mu;s</td><td>1.22</td><td>85.9375</td><td>46.8750</td><td>715.64 KB</td><td>1.14</td>
+</tr><tr><td>Build_Except</td><td>Default</td><td>5,308.2 &mu;s</td><td>1.28</td><td>109.3750</td><td>31.2500</td><td>946.91 KB</td><td>1.51</td>
+</tr><tr><td>Build_In_ListContains_Captured</td><td>Default</td><td>5,327.5 &mu;s</td><td>1.28</td><td>101.5625</td><td>93.7500</td><td>845.31 KB</td><td>1.35</td>
+</tr><tr><td>Build_In_AtIn_Inline</td><td>Default</td><td>5,570.5 &mu;s</td><td>1.34</td><td>101.5625</td><td>93.7500</td><td>861.72 KB</td><td>1.37</td>
+</tr><tr><td>Build_In_ListContains_Inline</td><td>Default</td><td>5,826.6 &mu;s</td><td>1.40</td><td>101.5625</td><td>93.7500</td><td>868.75 KB</td><td>1.38</td>
+</tr><tr><td>Build_Tvf</td><td>Default</td><td>6,056.0 &mu;s</td><td>1.46</td><td>70.3125</td><td>42.9688</td><td>603.91 KB</td><td>0.96</td>
+</tr><tr><td>Build_LeftJoin</td><td>Default</td><td>9,359.6 &mu;s</td><td>2.25</td><td>109.3750</td><td>62.5000</td><td>1002 KB</td><td>1.60</td>
+</tr><tr><td>Build_RecursiveCte</td><td>Default</td><td>12,359.8 &mu;s</td><td>2.97</td><td>265.6250</td><td>109.3750</td><td>2185.58 KB</td><td>3.48</td>
+</tr><tr><td>Build_Cte</td><td>Default</td><td>17,641.0 &mu;s</td><td>4.24</td><td>234.3750</td><td>93.7500</td><td>1995.07 KB</td><td>3.18</td>
+</tr><tr><td>Build_Join4</td><td>Default</td><td>23,287.5 &mu;s</td><td>5.60</td><td>218.7500</td><td>93.7500</td><td>1948.64 KB</td><td>3.11</td>
+</tr><tr><td>Build_Baseline_SimpleSelect</td><td>InProcessEmitToolchain</td><td>540.6 &mu;s</td><td>1.00</td><td>76.1719</td><td>48.8281</td><td>627.36 KB</td><td>1.00</td>
+</tr><tr><td>Build_Distinct</td><td>InProcessEmitToolchain</td><td>626.4 &mu;s</td><td>1.16</td><td>64.4531</td><td>63.4766</td><td>529.69 KB</td><td>0.84</td>
+</tr><tr><td>Build_Tvf</td><td>InProcessEmitToolchain</td><td>729.4 &mu;s</td><td>1.35</td><td>72.2656</td><td>47.8516</td><td>592.97 KB</td><td>0.95</td>
+</tr><tr><td>Build_Unary_Not</td><td>InProcessEmitToolchain</td><td>732.2 &mu;s</td><td>1.36</td><td>85.9375</td><td>15.6250</td><td>703.92 KB</td><td>1.12</td>
+</tr><tr><td>Build_Udf</td><td>InProcessEmitToolchain</td><td>736.4 &mu;s</td><td>1.36</td><td>86.9141</td><td>51.7578</td><td>715.64 KB</td><td>1.14</td>
+</tr><tr><td>Build_Case</td><td>InProcessEmitToolchain</td><td>769.6 &mu;s</td><td>1.42</td><td>74.2188</td><td>73.2422</td><td>612.51 KB</td><td>0.98</td>
+</tr><tr><td>Build_Intersect</td><td>InProcessEmitToolchain</td><td>803.8 &mu;s</td><td>1.49</td><td>115.2344</td><td>25.3906</td><td>947.69 KB</td><td>1.51</td>
+</tr><tr><td>Build_Except</td><td>InProcessEmitToolchain</td><td>898.9 &mu;s</td><td>1.66</td><td>115.2344</td><td>19.5313</td><td>946.91 KB</td><td>1.51</td>
+</tr><tr><td>Build_In_AtIn_Inline</td><td>InProcessEmitToolchain</td><td>1,053.9 &mu;s</td><td>1.95</td><td>105.4688</td><td>103.5156</td><td>861.72 KB</td><td>1.37</td>
+</tr><tr><td>Build_In_ListContains_Captured</td><td>InProcessEmitToolchain</td><td>1,080.0 &mu;s</td><td>2.00</td><td>101.5625</td><td>99.6094</td><td>845.31 KB</td><td>1.35</td>
+</tr><tr><td>Build_StringFn_ToUpper</td><td>InProcessEmitToolchain</td><td>1,124.0 &mu;s</td><td>2.08</td><td>85.9375</td><td>50.7813</td><td>714.86 KB</td><td>1.14</td>
+</tr><tr><td>Build_In_ListContains_Inline</td><td>InProcessEmitToolchain</td><td>1,162.8 &mu;s</td><td>2.15</td><td>105.4688</td><td>103.5156</td><td>868.75 KB</td><td>1.38</td>
+</tr><tr><td>Build_StringFn_Contains</td><td>InProcessEmitToolchain</td><td>1,218.8 &mu;s</td><td>2.26</td><td>87.8906</td><td>50.7813</td><td>717.97 KB</td><td>1.14</td>
+</tr><tr><td>Build_LeftJoin</td><td>InProcessEmitToolchain</td><td>1,391.4 &mu;s</td><td>2.58</td><td>117.1875</td><td>66.4063</td><td>979.75 KB</td><td>1.56</td>
+</tr><tr><td>Build_In_AtIn_Captured</td><td>InProcessEmitToolchain</td><td>1,440.5 &mu;s</td><td>2.67</td><td>101.5625</td><td>99.6094</td><td>838.28 KB</td><td>1.34</td>
+</tr><tr><td>Build_Window_SumOver</td><td>InProcessEmitToolchain</td><td>1,463.7 &mu;s</td><td>2.71</td><td>89.8438</td><td>58.5938</td><td>747.69 KB</td><td>1.19</td>
+</tr><tr><td>Build_Window_RowNumber</td><td>InProcessEmitToolchain</td><td>1,885.5 &mu;s</td><td>3.49</td><td>97.6563</td><td>64.4531</td><td>812.55 KB</td><td>1.30</td>
+</tr><tr><td>Build_RecursiveCte</td><td>InProcessEmitToolchain</td><td>2,414.0 &mu;s</td><td>4.47</td><td>261.7188</td><td>109.3750</td><td>2161.76 KB</td><td>3.45</td>
+</tr><tr><td>Build_Cte</td><td>InProcessEmitToolchain</td><td>2,843.6 &mu;s</td><td>5.26</td><td>242.1875</td><td>31.2500</td><td>1988.47 KB</td><td>3.17</td>
+</tr><tr><td>Build_Join4</td><td>InProcessEmitToolchain</td><td>3,070.7 &mu;s</td><td>5.68</td><td>234.3750</td><td>62.5000</td><td>1934.57 KB</td><td>3.08</td>
 </tr></tbody></table>
 </body>
 </html>

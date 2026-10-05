@@ -1,0 +1,9 @@
+round=4 variant=new inprocess=false workdir=/home/alex/sources/nextorm
+NEXTORM_BENCH_FULL=1
+NEXTORM_BENCH_DB=/home/alex/sources/nextorm/benchmarks/nextorm.benchmark/data/test.db
+loadavg_before=4.94 4.73 3.65 5/496 41239
+start=2026-10-05T07:26:53Z
+exit=0
+loadavg_after=2.52 3.75 3.46 2/519 43735
+end=2026-10-05T07:29:40Z
+artifact_copied=yes

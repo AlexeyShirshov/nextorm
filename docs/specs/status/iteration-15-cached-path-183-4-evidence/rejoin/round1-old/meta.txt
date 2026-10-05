@@ -1,0 +1,11 @@
+exit=0
+build_exit=0
+tree=/home/alex/sources/nextorm-worktrees/183-baseline
+round=1
+wall=132
+cwd=/home/alex/sources/nextorm-worktrees/183-baseline
+json_src=/home/alex/sources/nextorm-worktrees/183-baseline/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStageA-report-full-compressed.json
+job=NEXTORM_BENCH_FULL=1 -> single Job.Default (Medium-equivalent), out-of-process
+filter=NextORM.Benchmark.SqliteBenchmarkStageA*CachedHit_PlanOnly* + *CachedHit_ToList*
+cmd=NEXTORM_BENCH_FULL=1 taskset -c 3 dotnet <tree>/benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark.dll --memory --statisticalTest 99.9% --exporters json --filter ...
+json=present

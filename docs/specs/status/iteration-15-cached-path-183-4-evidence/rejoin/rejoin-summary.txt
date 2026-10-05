@@ -1,0 +1,75 @@
+D5 rejoin — old vs new cached-hit StageA (rounded)
+generated_utc=2026-10-05T09:28:22Z
+old tree=/home/alex/sources/nextorm-worktrees/183-baseline
+new tree=/home/alex/sources/nextorm
+job=NEXTORM_BENCH_FULL=1 -> single Job.Default (Medium-equivalent), out-of-process, --memory --statisticalTest 99.9%
+pinning=taskset -c 3 (high-priority setup failed: Permission denied in all 10 runs)
+loadavg range=2.06..10.21
+valid rounds=5; invalid=[]; signature gate held (old 652813 / new 458410)
+
+### Where_CachedHit_PlanOnly
+arm                         old_mean_us  new_mean_us    delta%  ci_sep
+r1                                 558.1        460.1    -17.57    True
+r2                                 764.7        506.5    -33.76    True
+r3                                 561.1        414.3    -26.16    True
+r4                                 601.4        401.3    -33.27    True
+r5                                 538.9        405.0    -24.85    True
+median=-26.16%  min=-33.76%  max=-17.57%
+rounds>+20%=[] (CI-nonoverlapping=[]); rounds<-20%=[2, 3, 4, 5]
+>20% regression CI-separated on >=2 rounds: False; sign-flip across rounds: False
+
+### Where_CachedHit_ToList
+arm                         old_mean_us  new_mean_us    delta%  ci_sep
+r1                                1745.3       1692.2     -3.04   False
+r2                                2184.0       1711.8    -21.62    True
+r3                                1695.7       1561.5     -7.91    True
+r4                                3617.8       1767.8    -51.13    True
+r5                                1785.9       1502.1    -15.89    True
+median=-15.89%  min=-51.13%  max=-3.04%
+rounds>+20%=[] (CI-nonoverlapping=[]); rounds<-20%=[2, 4]
+>20% regression CI-separated on >=2 rounds: False; sign-flip across rounds: False
+
+### Join_CachedHit_PlanOnly
+arm                         old_mean_us  new_mean_us    delta%  ci_sep
+r1                                3391.4       2003.4    -40.93   False
+r2                                2212.2       1898.4    -14.19   False
+r3                                3377.6       2333.0    -30.93   False
+r4                                2471.1       2818.7     14.06   False
+r5                                4487.8       1908.4    -57.48    True
+median=-30.93%  min=-57.48%  max=14.06%
+rounds>+20%=[] (CI-nonoverlapping=[]); rounds<-20%=[1, 3, 5]
+>20% regression CI-separated on >=2 rounds: False; sign-flip across rounds: True
+
+### Join_CachedHit_ToList
+arm                         old_mean_us  new_mean_us    delta%  ci_sep
+r1                               15461.7       8963.2    -42.03    True
+r2                                4407.5       3584.7    -18.67    True
+r3                                4464.1       9380.1    110.12    True
+r4                                3284.0       9249.3    181.65    True
+r5                                3684.6       3320.5     -9.88    True
+median=-9.88%  min=-42.03%  max=181.65%
+rounds>+20%=[3, 4] (CI-nonoverlapping=[3, 4]); rounds<-20%=[1]
+>20% regression CI-separated on >=2 rounds: True; sign-flip across rounds: True
+
+alloc B/invocation per arm per round (valid rounds):
+round arm                         old_alloc  new_alloc
+    1 Where_CachedHit_PlanOnly       652813     458410
+    1 Where_CachedHit_ToList         725976     531572
+    1 Join_CachedHit_PlanOnly       1226479    1172871
+    1 Join_CachedHit_ToList         1305095    1259495
+    2 Where_CachedHit_PlanOnly       652813     458410
+    2 Where_CachedHit_ToList         725976     531572
+    2 Join_CachedHit_PlanOnly       1223279    1172871
+    2 Join_CachedHit_ToList         1290695    1248295
+    3 Where_CachedHit_PlanOnly       652813     458410
+    3 Where_CachedHit_ToList         725976     531572
+    3 Join_CachedHit_PlanOnly       1226479    1172871
+    3 Join_CachedHit_ToList         1298695    1248295
+    4 Where_CachedHit_PlanOnly       652813     458410
+    4 Where_CachedHit_ToList         725976     531572
+    4 Join_CachedHit_PlanOnly       1223279    1172871
+    4 Join_CachedHit_ToList         1290695    1256295
+    5 Where_CachedHit_PlanOnly       652813     458410
+    5 Where_CachedHit_ToList         725976     531572
+    5 Join_CachedHit_PlanOnly       1223279    1172871
+    5 Join_CachedHit_ToList         1298695    1248295

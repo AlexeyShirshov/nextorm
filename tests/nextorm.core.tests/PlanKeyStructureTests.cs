@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
 using static System.Linq.Expressions.Expression;
@@ -11,7 +12,11 @@ namespace NextORM.Core.Tests;
 /// different shape, switch/catch/element-init counts) must all report "not equal" instead of throwing
 /// or - worse - reporting equal. Also covers <see cref="QueryPlan"/> identity and the
 /// <c>LinqSource</c> FROM branch, which is only produced by the in-memory SelectMany/GroupJoin path.
+/// It also drives the real <see cref="QueryPlanStore"/> through the test-only forced-hash
+/// <see cref="QueryPlan"/> seam, so it joins the "Query cache controls" collection that serializes
+/// every test touching the process-wide plan store.
 /// </summary>
+[Collection("Query cache controls")]
 public class PlanKeyStructureTests
 {
     private static ExpressionPlanEqualityComparer Comparer() => new(new QueryProvider());
@@ -249,6 +254,106 @@ public class PlanKeyStructureTests
         cached.Should().BeSameAs(plan);
         plan.QueryCommand.Should().NotBeSameAs(original, "the live tree is swapped for a detached clone");
         plan.GetHashCode().Should().Be(hash, "plan identity must survive the cache-version swap");
+    }
+
+    /// <summary>
+    /// The forced-hash seam must not break the frozen-hash invariant: <c>GetCacheVersion</c> asserts
+    /// <c>_hashPlan == ComputeHash(...)</c> (Debug), so a forced plan routed through the normal
+    /// <c>GetCacheVersion</c> path must keep its forced hash instead of firing the assert. The hash is
+    /// forced through <c>ComputeHash</c> semantics, not around them.
+    /// </summary>
+    [Fact]
+    public void QueryPlan_ForcedHash_ShouldKeepFrozenHashThroughGetCacheVersion()
+    {
+        using var ctx = new InMemoryDataContext();
+        var cmd = ctx.From<SimpleEntity>().Select(x => x.Id);
+        cmd.PrepareCommand(CancellationToken.None);
+
+        const int forcedHash = 0x0BAD_F00D;
+        var plan = new QueryPlan(cmd, null, forcedHash);
+        plan.GetHashCode().Should().Be(forcedHash);
+
+        var original = plan.QueryCommand;
+        var cached = plan.GetCacheVersion();
+
+        cached.Should().BeSameAs(plan);
+        plan.QueryCommand.Should().NotBeSameAs(original, "the live tree is swapped for a detached clone");
+        plan.GetHashCode().Should().Be(forcedHash, "the forced hash is part of ComputeHash and stays frozen");
+    }
+
+    /// <summary>
+    /// The plan store is a dictionary keyed by the structural hash, so two <em>unequal</em> plans that
+    /// share one effective hash must still be stored and found independently. The forced-hash seam
+    /// pins a real <see cref="QueryPlanStore.TryGet"/>/<c>Set</c> collision instead of only asserting
+    /// the comparer-level invariant: store A, look up B (must miss), store B, then each key resolves
+    /// to its own holder and an equivalent key to A still resolves to A.
+    /// </summary>
+    [Fact]
+    public void QueryPlanStore_ForcedHashCollision_ShouldFallBackToStructuralEquality()
+    {
+        using var ctx = new InMemoryDataContext();
+        var repo = new InMemoryRepository(ctx);
+
+        var cmdA = repo.SimpleEntity.Select(x => x.Id);
+        // A second, independently issued command from the same builder/config shape: a distinct
+        // QueryCommand instance, unlike the production warm-up that reuses the very same command.
+        // Reusing cmdA would make QueryPlan.Equals short-circuit on command reference equality and
+        // never reach the structural fallback this test exists to pin.
+        var cmdA2 = repo.SimpleEntity.Select(x => x.Id);
+        var cmdB = repo.SimpleEntity.Where(x => x.Id > 0).Select(x => x.Id);
+        cmdA.PrepareCommand(CancellationToken.None);
+        cmdA2.PrepareCommand(CancellationToken.None);
+        cmdB.PrepareCommand(CancellationToken.None);
+
+        cmdA.Should().NotBeSameAs(cmdA2);
+        cmdA.GetQueryPlanEqualityComparer().Equals(cmdA, cmdA2)
+            .Should().BeTrue("the second command is the same query shape and must be structurally equal");
+
+        // Drop any plan the prepares above may have memoized on this thread, then drive the store
+        // exclusively through the forced-hash plans. Single-threaded: the store is [ThreadStatic],
+        // and this class is serialized through the "Query cache controls" collection.
+        QueryPlanStore.Clear();
+
+        const int forcedHash = 0x5EED_1234;
+        var contextType = typeof(PlanKeyStructureTests);
+        var holderA = new StubCommandHolder();
+        var holderB = new StubCommandHolder();
+
+        var planA1 = new QueryPlan(cmdA, null, forcedHash);
+        var planA2 = new QueryPlan(cmdA2, null, forcedHash); // equivalent key to planA1, distinct command
+        var planB = new QueryPlan(cmdB, null, forcedHash);  // structurally unequal, same forced hash
+
+        planA1.GetHashCode().Should().Be(forcedHash);
+        planB.GetHashCode().Should().Be(forcedHash);
+        planA1.Equals(planA2).Should().BeTrue("same command shape is the same key");
+        planA1.Equals(planB).Should().BeFalse("different query shape must stay a different key");
+
+        QueryPlanStore.Set(contextType, planA1, holderA);
+        QueryPlanStore.TryGet(contextType, planB, out var collisionHolder, out var collisionPlan)
+            .Should().BeFalse("an equal hash must not collapse two unequal keys");
+        collisionHolder.Should().BeNull();
+        collisionPlan.Should().BeNull();
+
+        QueryPlanStore.Set(contextType, planB, holderB);
+
+        QueryPlanStore.TryGet(contextType, planA1, out var foundA, out var storedA).Should().BeTrue();
+        foundA.Should().BeSameAs(holderA);
+        storedA.Should().BeSameAs(planA1);
+
+        QueryPlanStore.TryGet(contextType, planA2, out var foundAEquiv, out var storedAEquiv).Should().BeTrue();
+        foundAEquiv.Should().BeSameAs(holderA, "an equivalent key must find the first plan");
+        storedAEquiv.Should().BeSameAs(planA1);
+
+        QueryPlanStore.TryGet(contextType, planB, out var foundB, out var storedB).Should().BeTrue();
+        foundB.Should().BeSameAs(holderB);
+        storedB.Should().BeSameAs(planB);
+    }
+
+    private sealed class StubCommandHolder : IDbCommandHolder
+    {
+        public void ResetConnection(DbConnection conn, IDataContext dbContext)
+        {
+        }
     }
 
     /// <summary>

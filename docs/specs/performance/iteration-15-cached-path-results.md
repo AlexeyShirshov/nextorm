@@ -54,4 +54,50 @@ Stage A — DONE @752943d. B1 — incomplete/unaccepted/uncommitted. B2 — inco
 
 ## #183 disposition
 
-`DONE (with limitation)`; B1/B2 не засчитаны как поставленная ценность; формулировки «accepted»/«speedup proven» не использовать.
+LEFT OPEN в milestone `1.0.9-b` (cycle 4: delivered change, accepted-with-open-AC4). B1+B2 применены в рабочем дереве (не закоммичены); AC4 (no reliable E2E regression for `Join_CachedHit_ToList`) остаётся открытой; публичного API-изменения нет; «verified PASS»/«speedup proven» не заявляются.
+
+## Cycle 4 (#183 continuation) — measured results (CHECK r=1 FAIL, DO loop-back n=2/3)
+
+Статус: **measured; CHECK r=1 FAIL (n=1/3), DO loop-back n=2/3 — приёмка не объявлена**. B1+B2 применены в рабочем дереве (не закоммичены).
+
+Аллокации (детерминированно, `[MemoryDiagnoser]`, B/op на попадание в кэш = raw / 100, `bop-summary`):
+- `Where_CachedHit_PlanOnly` / `Where_CachedHit_ToList` — **Δ −1944.03 / −1944.04 B/op** (per-op, N-инвариантно; raw per-100-invocation −194,403 / −194,404).
+- `Join_CachedHit_PlanOnly` / `Join_CachedHit_ToList` — **Δ −359.96 / −424.00 B/op** (per-op; raw per-100-invocation −35,996 / −42,400).
+- Harness `StageAttributionBenchmark.CachedHit_PlanOnly_Param` per-hit (N=256/4096): 6528.13 → 4584.09 B/op (Δ −1944.04).
+
+Гейт аллокаций `eng/perf/iteration14_gate.py` → **exit 0**, 56 row/jobs в бюджете, 0 проваливших.
+
+Acceptance-категория → **7/7, exit 0, 39.46 с BDN** (внешне ~39–43 с); отношение `Cached_ToList`/`Prepared_ToList` — **0.90** (`acceptance-new.log`; `Cached_PlanOnly_Param` 0.30, `Prepared_ToList` baseline 1.00).
+
+Stage-attribution slope (out-of-process, N ∈ {1,16,256,4096}): отношение new/old по раундам
+{0.526, 0.745, 0.565, 0.683, 0.535}, медиана **0.565**, знак стабилен 5/5, R² ≥ 0.9996
+(минимум 0.999684); in-process кросс-проверка 0.898 (тот же знак). loadavg хоста 2.04–5.34
+(параллельные сессии) — зафиксировано.
+
+Evidence (durable, in-repo): `docs/specs/status/iteration-15-cached-path-183-4-evidence/{bop-summary.json,gate-new.log,acceptance-new.log,slope/slope-summary.json}`.
+Авторитетное сырьё (raw JSON/логи) — `docs/specs/status/iteration-15-cached-path-183-4-evidence/`.
+
+Сохранённые патчи `b1-incomplete.patch` / `u2-incomplete.patch` **перекрыты** реализацией цикла 4:
+B2 агрессивнее — пер-хитовые аллокации словаря/коллектора удалены, одиночный boxing,
+иммутабельный recipe, mismatch-safe fallback.
+
+Публичного API-изменения нет; поведение прежнее.
+
+## Cycle 4 — escalation: robust re-analysis of the D5 rejoin data (2026-10-05)
+
+Решение эскалации: **`accept-with-open-AC4`**. Уже собранные данные `docs/specs/status/iteration-15-cached-path-183-4-evidence/rejoin/` (5 раундов old/new; новые бенчмарки НЕ запускались) пересчитаны по load-robust статистике. Источник — per-iteration `Statistics.OriginalValues` из `*-report-full-compressed.json`: `min` и `p10` (нагрузка только добавляет время, поэтому min/p10 оценивают истинную стоимость; среднее в шумных раундах смещено вверх). Per-iteration CSV в `rejoin/` отсутствует.
+
+Отношение **new/old** по раундам (min; ниже — p10):
+
+| arm | r1 | r2 | r3 | r4 | r5 | median min | median p10 | new<old (min) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Where_CachedHit_PlanOnly | 0.768 | 0.718 | 0.753 | 0.728 | 0.753 | 0.753 | 0.749 | 5/5 |
+| Where_CachedHit_ToList | 0.940 | 0.928 | 0.896 | 0.937 | 0.882 | 0.928 | 0.906 | 5/5 |
+| Join_CachedHit_PlanOnly | 0.935 | 1.050 | 1.061 | 1.123 | 0.983 | 1.050 | 1.048 | 2/5 |
+| Join_CachedHit_ToList | 0.215 | 1.000 | 0.887 | 1.009 | 0.977 | 0.977 | 0.959 | 4/5 |
+
+p10-отношения по раундам: Where_PlanOnly 0.772/0.727/0.752/0.720/0.749; Where_ToList 0.955/0.865/0.906/0.965/0.875; Join_PlanOnly 0.930/1.048/1.078/1.179/0.984; Join_ToList 0.217/1.060/0.873/1.010/0.959.
+
+`Join_CachedHit_ToList`: **within noise**. Средние r3 (+110.12%) и r4 (+181.65%) — артефакт нагрузки: распределение new-раундов бимодально (`min`/`p10` ≈ 3.05–3.11 мс, но 43/100 и 61/100 итераций > 5 мс; loadavg 8.86–10.21 и 6.32–6.37). По `min`/`p10` new не медленнее old: отношения r2–r5 ∈ [0.887, 1.009] (отклонение ≤1.3% или быстрее); r1 искажён сам old (23 итерации, все ≈ 15 мс). Новый медленнее old во всех раундах НЕ наблюдается.
+
+AC4 не объявляется выполненной. Открытый пункт: **AC4 (no reliable E2E regression) not established for `Join_CachedHit_ToList`; re-measure in a quiet window or CI (ABAB, taskset, ≥10 pairs, min/p10, paired Wilcoxon)**. Формулировки acceptance не изменялись; «AC4 met»/«speedup proven» не заявляются.

@@ -6,6 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 
 namespace NextORM.Core;
 
@@ -31,6 +32,17 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly bool _logSensitiveData;
     private readonly InterceptorHooks _interceptors;
     private readonly Func<CteMutation, SqlBuildContext, string> _renderMutationBody;
+
+    // Cached-path diagnostic counter for the plans that must fall back to the original extraction path
+    // (no recipe or a rejected one). Process-wide but updated with Interlocked and read with Volatile,
+    // so the increment path is lock-free and allocation-free.
+    private static int _fallbackRefreshes;
+
+    /// <summary>Number of cached-hit parameter refreshes that used the original <c>ExtractParams</c> path.</summary>
+    internal static int FallbackRefreshes => Volatile.Read(ref _fallbackRefreshes);
+
+    /// <summary>Resets the planner's cached-path diagnostic counters to zero. Test seam.</summary>
+    internal static void ResetCounters() => Volatile.Write(ref _fallbackRefreshes, 0);
 
     internal QueryPlanner(
         IDataContext context,
@@ -687,6 +699,11 @@ internal sealed class QueryPlanner : IQueryPlanner
                 SequentialAccess = sequentialAccess,
             });
 
+            // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
+            // null and keep the original ExtractParams refresh on every hit.
+            if (needsParamRefresh)
+                compiledQuery.SetParamRecipe(ParamRefreshRecipe.TryCreate(queryCommand, @params!));
+
             if (createEnumerator)
             {
                 var enumerator = CreateResultSetEnumerator(compiledQuery!, ownsCommand: streamingRows);
@@ -725,17 +742,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             else
             {
                 if (!compiledQuery.NoParams && compiledQuery.NeedsParamRefresh)
-                {
-                    var dbCommandParams = compiledQuery.DbCommandParams;
-
-                    var pp = ExtractParams(queryCommand);
-                    for (int i = 0; i < pp.Count; i++)
-                    {
-                        // Normalize null to DBNull for providers that reject null parameter values.
-                        dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
-                        Debug.Assert(dbCommandParams[i].ParameterName == pp[i].Name, $"ParameterName {dbCommandParams[i].ParameterName} not equals {pp[i].Name}");
-                    }
-                }
+                    RefreshParameters(queryCommand, compiledQuery);
             }
 
             // A plan can be stored by a buffered terminal (createEnumerator: false) and later requested
@@ -751,6 +758,37 @@ internal sealed class QueryPlanner : IQueryPlanner
             var @params = new List<Parameter>();
             var aliasProvider = new DefaultAliasProvider();
             return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess), @params);
+        }
+    }
+
+    // Refreshes the cached command's parameter values for the current command. A supported plan uses the
+    // immutable recipe (validated count/name/order and shape before any accessor runs); any mismatch
+    // falls through to the original ExtractParams path. The cached statement's placeholder set is
+    // authoritative: a same-count name/order difference is bound positionally exactly like the original
+    // Release extractor (whose name check was only a Debug.Assert), so a cache hit never crashes, while a
+    // count mismatch binds nothing (it would leave trailing cached values stale or reach past the
+    // collection) and invalidates the recipe so the next preparation re-plans.
+    private void RefreshParameters<TResult>(QueryCommand queryCommand, DbPreparedQueryCommand<TResult> compiledQuery)
+    {
+        var dbCommandParams = compiledQuery.DbCommandParams;
+
+        if (compiledQuery.ParamRecipe is { } recipe && recipe.TryBind(queryCommand, dbCommandParams))
+            return;
+
+        Interlocked.Increment(ref _fallbackRefreshes);
+
+        var pp = ExtractParams(queryCommand);
+
+        if (pp.Count != dbCommandParams.Count)
+        {
+            compiledQuery.SetParamRecipe(null);
+            return;
+        }
+
+        for (var i = 0; i < dbCommandParams.Count; i++)
+        {
+            // Normalize null to DBNull for providers that reject null parameter values.
+            dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
         }
     }
 

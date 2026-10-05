@@ -1,0 +1,18 @@
+Iteration 15 / #183 cycle 4 - cached-path allocation (B/op) old vs new
+Source: docs/specs/status/iteration-15-cached-path-183-4-evidence/bdn-{old,new}-filterA/NextORM.Benchmark.SqliteBenchmarkStageA-report-full-compressed.json
+Normalization: BytesAllocatedPerOperation / 100 (Iterations)
+
+arm                              old B/op     new B/op   delta B/op   delta %
+------------------------------------------------------------------------------
+Where_CachedHit_PlanOnly          6528.13      4584.10     -1944.03   -29.78%
+Where_CachedHit_ToList            7307.76      5363.72     -1944.04   -26.60%
+Join_CachedHit_PlanOnly          12184.75     11824.79      -359.96    -2.95%
+Join_CachedHit_ToList            12938.95     12514.95      -424.00    -3.28%
+
+StageAttributionBenchmark.CachedHit_PlanOnly_Param (per-hit, N sensitivity cross-check):
+     N    old B/hit    new B/hit  delta B/hit
+----------------------------------------------
+     1      6528.00      4584.00     -1944.00
+    16      6528.12      4584.06     -1944.06
+   256      6528.13      4584.09     -1944.04
+  4096      6528.13      4584.09     -1944.04

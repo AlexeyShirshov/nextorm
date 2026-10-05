@@ -1,0 +1,74 @@
+{
+  "schema": "iteration-15-cached-path-183-4-bop-summary/v1",
+  "generated_utc": "2026-10-05T13:02Z",
+  "normalization": "B/op = Memory.BytesAllocatedPerOperation / 100 (SqliteBenchmarkStageA.Iterations); StageAttribution harness: / N",
+  "raw_report_paths": {
+    "new": "/home/alex/sources/nextorm/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStageA-report-full-compressed.json",
+    "old": "/home/alex/sources/nextorm-worktrees/183-baseline/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStageA-report-full-compressed.json",
+    "new_evidence_copy": "/home/alex/sources/nextorm/docs/specs/status/iteration-15-cached-path-183-4-evidence/bdn-new-filterA/NextORM.Benchmark.SqliteBenchmarkStageA-report-full-compressed.json",
+    "old_evidence_copy": "/home/alex/sources/nextorm/docs/specs/status/iteration-15-cached-path-183-4-evidence/bdn-old-filterA/NextORM.Benchmark.SqliteBenchmarkStageA-report-full-compressed.json"
+  },
+  "raw_attr_paths": {
+    "new": "/home/alex/sources/nextorm/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.StageAttributionBenchmark-report-full-compressed.json",
+    "old": "/home/alex/sources/nextorm-worktrees/183-baseline/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.StageAttributionBenchmark-report-full-compressed.json"
+  },
+  "arm_definitions": {
+    "target": "SqliteBenchmarkStageA cached-hit arms (fresh-fluent implicit plan cache)",
+    "filters_run": [
+      "--filter '*CachedHit_PlanOnly*' '*CachedHit_ToList*'",
+      "--filter '*Join_CachedHit*'"
+    ]
+  },
+  "arms": [
+    {
+      "arm": "Where_CachedHit_PlanOnly",
+      "old_bop": 6528.13,
+      "new_bop": 4584.1,
+      "delta_bop": -1944.03
+    },
+    {
+      "arm": "Where_CachedHit_ToList",
+      "old_bop": 7307.76,
+      "new_bop": 5363.72,
+      "delta_bop": -1944.04
+    },
+    {
+      "arm": "Join_CachedHit_PlanOnly",
+      "old_bop": 12184.75,
+      "new_bop": 11824.79,
+      "delta_bop": -359.96
+    },
+    {
+      "arm": "Join_CachedHit_ToList",
+      "old_bop": 12938.95,
+      "new_bop": 12514.95,
+      "delta_bop": -424.0
+    }
+  ],
+  "stage_attribution_harness": [
+    {
+      "N": 1,
+      "old_bop_per_hit": 6528.0,
+      "new_bop_per_hit": 4584.0,
+      "delta_bop_per_hit": -1944.0
+    },
+    {
+      "N": 16,
+      "old_bop_per_hit": 6528.125,
+      "new_bop_per_hit": 4584.062,
+      "delta_bop_per_hit": -1944.062
+    },
+    {
+      "N": 256,
+      "old_bop_per_hit": 6528.133,
+      "new_bop_per_hit": 4584.094,
+      "delta_bop_per_hit": -1944.039
+    },
+    {
+      "N": 4096,
+      "old_bop_per_hit": 6528.132,
+      "new_bop_per_hit": 4584.092,
+      "delta_bop_per_hit": -1944.04
+    }
+  ]
+}

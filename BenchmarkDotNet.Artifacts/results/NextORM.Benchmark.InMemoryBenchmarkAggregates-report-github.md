@@ -9,6 +9,6 @@ Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3
 LaunchCount=1  WarmupCount=3  Categories=acceptance,InMemoryNew  
 
 ```
-| Method        | Mean     | Error     | StdDev    | Ratio | Gen0    | Allocated | Alloc Ratio |
-|-------------- |---------:|----------:|----------:|------:|--------:|----------:|------------:|
-| Nextorm_Count | 2.236 ms | 0.1674 ms | 0.0092 ms |  1.00 | 42.9688 | 365.63 KB |        1.00 |
+| Method        | Mean     | Error     | StdDev    | Ratio | RatioSD | Gen0    | Allocated | Alloc Ratio |
+|-------------- |---------:|----------:|----------:|------:|--------:|--------:|----------:|------------:|
+| Nextorm_Count | 8.291 ms | 12.732 ms | 0.6979 ms |  1.00 |    0.10 | 31.2500 | 332.03 KB |        1.00 |
