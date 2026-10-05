@@ -88,7 +88,7 @@ public class SqliteBenchmarkEagerLoading
             for (var i = 0; i < count; i++)
                 batch[i] = rows[offset + i];
 
-            _db.InsertInto<T>().Values(batch).Insert();
+            _db.CreateInsertBuilder<T>().Values(batch).Insert();
         }
     }
 

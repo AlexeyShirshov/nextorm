@@ -220,19 +220,75 @@ The fragment is emitted verbatim (only pass trusted SQL). A provider opts in thr
 [`SupportsRawSqlSource`](xref:NextORM.Core.ISqlDialect.SupportsRawSqlSource); every SQL provider does,
 and SQLite omits the derived-table alias when the source is not joined.
 
+### Binding a raw source to entity metadata
+
+By default a raw `FROM` source is passed through as written and no [global query filter](../advanced/query-filters.md)
+is applied — nextorm does not know which columns the fragment exposes. Call
+[`BindEntity<TEntity>`](xref:NextORM.Core.EntityBuilderExtensions.BindEntity``1(NextORM.Core.EntityBuilder{NextORM.Core.TableAlias},System.Collections.Generic.IReadOnlyCollection{System.String}))
+as the **first** operation on the source to declare the entity type and the output columns the fragment
+returns; each active filter whose columns are all declared is then applied best-effort, and a filter whose
+columns are missing is skipped with a `RawSourceFilterSkipped` warning on the `NextORM.QueryFilters` logger
+category (level `Warning`, reason `MissingColumns`, carrying the **physical mapped column names** the filter
+reads). With an empty declared-column list, a filter with a proven zero-column dependency is applied, while
+a column-dependent or undetermined filter is skipped with reason `UndeterminedColumns`. None of this throws:
+
+```csharp
+public static EntityBuilder<TEntity> BindEntity<TEntity>(
+    this EntityBuilder<TableAlias> source,
+    IReadOnlyCollection<string> availableColumns)
+```
+
+```csharp
+var rows = dataContext
+    .FromSql("select id, tenant_id from complex_entity where id > @min", new { min = 5 })
+    .BindEntity<ComplexEntity>(["id", "tenant_id"])
+    .Where(t => t.Id > 10)
+    .ToList();
+```
+
+```sql
+-- SQLite; other providers qualify the derived table as "t1" and the columns with their own quoting
+select id, tenant_id as 'TenantId' from (select id, tenant_id from complex_entity where id > @min)
+ where (id > 10)
+```
+
+- Column names are the **output/SQL names** of the raw select list (a configured column mapping wins over
+  the auto name), compared case-insensitively.
+- `BindEntity` must be the first call after `FromSql`/`From(string)`: a later call (after
+  `Where`/`Select`/`Join`/projection) throws `InvalidOperationException`, and another source shape, or
+  binding to `TableAlias`, throws `NotSupportedException`.
+- The list is a caller declaration, not a schema probe: nextorm does not parse the SQL, does not add or
+  rename columns and does not verify that the columns actually exist.
+- Binding applies best-effort filters only and is **not** a security guarantee: a filter whose columns you
+  omit is silently skipped, so keep enforced row scoping in the SQL itself.
+- The binding does not apply to `WithSql`/`PrepareFromSql`/`ExecuteRaw`, and the in-memory provider still
+  rejects `FromSql` with `NotSupportedException`.
+
+Binding is per source: a joined raw source uses its own `BindEntity<TEntity>` binding and declared columns
+(never the main source's or another occurrence's), and its compatible filters are merged into that join's
+`ON` condition. The main source's filters are always evaluated against its own binding; in a joined command
+they are re-rooted onto the projection's main alias `Item1` and placed in `WHERE`. `SourceOrdinal` names the
+skipped source — `0` for the main source and `j + 1` for join index `j`, counting all joins, bound or not. A
+`CROSS`/`CROSS APPLY` join has no `ON` clause, so a bound source on such a join has its compatible filters
+placed in `WHERE` and nextorm never fabricates an `ON`.
+
 ## Executing raw commands (`ExecuteRaw`)
 
 [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) and [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) keep a typed query and swap part of it. When the statement is not a mapped query at all - a DDL/DML command, a stored procedure, or a command that returns several result sets - use `ExecuteRaw` (arbitrary command text) or `ExecuteProcedure` (a stored procedure by name), which run the command and hand back a [`ProcedureResult`](xref:NextORM.Core.ProcedureResult):
 
 ```csharp
 // DataContext, and the IRawCommandExecutor role on IDataContext
-public ProcedureResult ExecuteRaw(string sql, IReadOnlyList<ProcedureParameter> parameters);
+public ProcedureResult ExecuteRaw(string sql, params IReadOnlyList<ProcedureParameter> parameters);
+
+// async: the expanded form has no token; pass a CancellationToken with the collection form
+public Task<ProcedureResult> ExecuteRawAsync(string sql, params IReadOnlyList<ProcedureParameter> parameters);
 public Task<ProcedureResult> ExecuteRawAsync(string sql, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default);
 
-// parameterless convenience overloads for IDataContext
-public static ProcedureResult ExecuteRaw(this IDataContext dataContext, string sql);
+// parameterless async convenience overload for IDataContext
 public static Task<ProcedureResult> ExecuteRawAsync(this IDataContext dataContext, string sql, CancellationToken cancellationToken = default);
 ```
+
+Because `parameters` is a `params` collection, an inline argument is accepted in two equivalent shapes: the expanded form `ExecuteRaw(sql, new ProcedureParameter("min", 0))` and the collection form `ExecuteRaw(sql, [new ProcedureParameter("min", 0)])`. `ExecuteProcedure(name, new ProcedureParameter("a", 1))` does the same. A `params` parameter must be last (CS0231), so on the async twins the token-less expanded call `ExecuteRawAsync(sql, new ProcedureParameter(...))` works, while passing a `CancellationToken` requires the collection form `ExecuteRawAsync(sql, [p1, p2], cancellationToken)` — the two cannot be combined. `ExecuteProcedureAsync` behaves identically.
 
 The statement text is passed through verbatim and is **not** put through the query planner, so it never reuses the plan cache; the result mapper is cached by **result shape** (the reader's ordered column names and the result type), not by SQL text, so arbitrary statements do not grow the mapper cache.
 
@@ -293,9 +349,10 @@ public sealed class RawOrder
     public string? Name { get; set; }
 }
 
+// expanded params form; the collection form [new ProcedureParameter("min", 0)] is equivalent
 using var result = dataContext.ExecuteRaw(
     "select name, id from raw_orders where id > @min order by id",
-    [new ProcedureParameter("min", 0)]);
+    new ProcedureParameter("min", 0));
 
 IReadOnlyList<RawOrder> orders = result.Read<RawOrder>();
 ```
@@ -304,7 +361,7 @@ Anything that is neither a scalar nor a parameterless-constructor mapped entity 
 
 ### Multiple result sets
 
-Each `Read<T>()` call advances to the next result set and materialises all of its rows. Already-read sets are not revisited. When the command has no further result set, `Read<T>()` throws `InvalidOperationException`.
+Each `Read<T>()` call advances to the next result set and materialises all of its rows. Already-read sets are not revisited. When the command has no further result set, `Read<T>()` throws `InvalidOperationException`. To read sets whose element types differ, enumerate the result object instead (see [Result-set cursors](#result-set-cursors)).
 
 ```csharp
 using var result = dataContext.ExecuteRaw("select 1 as a; select 2 as b");
@@ -314,9 +371,51 @@ IReadOnlyList<int> second = result.Read<int>();  // [2]
 // result.Read<int>(); now throws InvalidOperationException
 ```
 
+#### Result-set cursors
+
+Positional `Read<T>()` always reads the *next* set as the same `T`, so it cannot handle a command whose sets need different element types. Enumerating the result object instead yields the column-bearing result sets as [`ResultSet`](xref:NextORM.Core.ResultSet) cursors; every cursor reads **its own** set with a per-set `T`, either eagerly with `Read<T>()` or lazily with `ReadAsync<T>(ct)`. The async twin is `await foreach (var set in result)`. The same cursor model, and the same traversal rules below, apply to [`BatchResult`](23-sql-batch.md#multiple-result-sets).
+
+```csharp
+using var result = dataContext.ExecuteRaw("select 1 as id; select 'two' as label");
+
+foreach (var set in result)
+{
+    if (set.Index == 0)
+    {
+        IReadOnlyList<int> ids = set.Read<int>();            // [1]
+    }
+    else
+    {
+        IReadOnlyList<string> labels = set.Read<string>();   // ["two"]
+    }
+
+    // ...or, asynchronously:
+    // await foreach (var value in set.ReadAsync<int>(cancellationToken)) { }
+}
+```
+
+A cursor exposes:
+
+- `Index` — its 0-based position among the **column-bearing** sets only.
+- `FieldCount` — the number of columns in the set.
+- `ColumnNames` — a snapshot taken when the cursor was produced; it stays valid after the outer traversal advances.
+- `Read<T>()` / `ReadAsync<T>(ct)` — the one-shot read of this set (eager or lazy).
+
+Traversal rules:
+
+- **One-shot and forward-only.** Enumerating the result a second time, or mixing enumeration with positional `Read<T>()`/`ReadAsync<T>()`, throws `InvalidOperationException`. Each set can be read once; a second read, or a cursor used after the outer traversal advanced or ended, throws `InvalidOperationException`. A cursor whose owning result was disposed throws `ObjectDisposedException`.
+- **Column-less sets are skipped.** Leading, intermediate and trailing sets without columns (DDL/DML) are skipped and do not count toward `Index`; a set with columns but no rows is still yielded. Rows of the current set that were not read are dropped automatically when the traversal advances, so the next set is read intact.
+- **Cancellation.** `await foreach (var set in result.WithCancellation(ct))` cancels the outer traversal; `set.ReadAsync<T>(ct)` honors its own token. Cancellation throws `OperationCanceledException` and ends the traversal for good.
+- **Outputs.** `OutputParameters`/`ReturnValue` remain available once the sets are exhausted, but reading them first closes the reader, so a later enumeration throws `InvalidOperationException`; accessing outputs while a traversal is active is rejected.
+- **Ownership.** Disposing the outer enumerator (for example `break` in a `foreach`) invalidates its cursors but does not dispose the `ProcedureResult`; `using`/`await using` still releases the reader and command.
+
+A buffering `ReadAllAsync` that materialises every set at once is intentionally not provided: the traversal is forward-only and consumes one set at a time.
+
+Unlike the streaming `ProcedureResult`, [`BatchResult`](23-sql-batch.md#multiple-result-sets) enumerates an eager in-memory buffer through the identical cursor surface and traversal rules; it owns no reader and is not disposable.
+
 ### Async
 
-`ExecuteRawAsync` opens the reader asynchronously; `ReadAsync<T>()` returns an `IAsyncEnumerable<T>` over the rows of the current set. `await using` disposes the result asynchronously.
+`ExecuteRawAsync` opens the reader asynchronously; `ReadAsync<T>()` returns an `IAsyncEnumerable<T>` over the rows of the current set. `await using` disposes the result asynchronously. A `params` parameter must be last, so a `CancellationToken` cannot be combined with the expanded form: pass the token with the collection form `ExecuteRawAsync(sql, [p1, p2], cancellationToken)`, or use the token-less expanded form `ExecuteRawAsync(sql, new ProcedureParameter(...))`.
 
 ```csharp
 await using var result = await dataContext.ExecuteRawAsync(
@@ -371,11 +470,13 @@ A stored procedure is invoked by name with the dedicated API, which sends the co
 
 ```csharp
 // DataContext, and the IRawCommandExecutor role on IDataContext
-public ProcedureResult ExecuteProcedure(string name, IReadOnlyList<ProcedureParameter> parameters);
+public ProcedureResult ExecuteProcedure(string name, params IReadOnlyList<ProcedureParameter> parameters);
+
+// async: the expanded form has no token; pass a CancellationToken with the collection form
+public Task<ProcedureResult> ExecuteProcedureAsync(string name, params IReadOnlyList<ProcedureParameter> parameters);
 public Task<ProcedureResult> ExecuteProcedureAsync(string name, IReadOnlyList<ProcedureParameter> parameters, CancellationToken cancellationToken = default);
 
-// parameterless convenience overloads for IDataContext
-public static ProcedureResult ExecuteProcedure(this IDataContext dataContext, string name);
+// parameterless async convenience overload for IDataContext
 public static Task<ProcedureResult> ExecuteProcedureAsync(this IDataContext dataContext, string name, CancellationToken cancellationToken = default);
 ```
 
@@ -565,4 +666,4 @@ ClickHouse has no stored procedures, so a table parameter is consumed by `Execut
 
 Source: `src/nextorm.core/Query/QueryCommandExtensions.cs:7`, `src/nextorm.core/Builders/EntityExtensions.cs:5`, `src/nextorm.core/Query/RawSqlOverride.cs:3`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:634`, `src/nextorm.core/DataContext/DataContextExtensions.cs` (`FromSql`), `src/nextorm.core/DataContext/SqlSourceRenderer.cs` (`MakeRawSqlSource`);
 `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:671`, `:698`, `:713`;
-`src/nextorm.core/DataContext/ProcedureParameter.cs`, `src/nextorm.core/DataContext/ProcedureResult.cs`, `src/nextorm.core/DataContext/Roles/IRawCommandExecutor.cs`, `src/nextorm.core/DataContext/DataContext.cs` (`ExecuteRaw`, `ExecuteProcedure`), `src/nextorm.core/DataContext/DataContextExtensions.cs` (`ExecuteRaw`/`ExecuteProcedure` overloads), `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` (`SupportsStoredProcedures`, `SupportsTableValuedParameters`), `tests/nextorm.sqlite.tests/RawCommandTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Raw.cs`, `tests/nextorm.integration.tests/CommonTestSuite.StoredProcedures.cs`, `src/nextorm.core/DataContext/TableParameterValue.cs`, `src/nextorm.core/DataContext/TableParameterBinder.cs`, `src/nextorm.core/DataContext/ProcedureParameter.cs` (`Table<T>`), `src/nextorm.sqlserver/SqlServerDataContext.cs`, `src/nextorm.postgres/PostgresDataContext.cs`, `src/nextorm.mysql/MySqlDataContext.cs`, `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`, `tests/nextorm.clickhouse.tests/TableValuedParameterTests.cs`, `tests/nextorm.integration.tests/ClickHouseTableValuedParameterTests.cs`.
+`src/nextorm.core/DataContext/ProcedureParameter.cs`, `src/nextorm.core/DataContext/ProcedureResult.cs`, `src/nextorm.core/DataContext/Roles/IRawCommandExecutor.cs` (`ExecuteRaw`/`ExecuteRawAsync`/`ExecuteProcedure`/`ExecuteProcedureAsync`, including the expanded `params` overloads), `src/nextorm.core/DataContext/DataContext.cs` (concrete implementations of the same raw-command overloads), `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` (`SupportsStoredProcedures`, `SupportsTableValuedParameters`), `tests/nextorm.sqlite.tests/RawCommandTests.cs`, `tests/nextorm.integration.tests/CommonTestSuite.Raw.cs`, `tests/nextorm.integration.tests/CommonTestSuite.StoredProcedures.cs`, `src/nextorm.core/DataContext/TableParameterValue.cs`, `src/nextorm.core/DataContext/TableParameterBinder.cs`, `src/nextorm.core/DataContext/ProcedureParameter.cs` (`Table<T>`), `src/nextorm.sqlserver/SqlServerDataContext.cs`, `src/nextorm.postgres/PostgresDataContext.cs`, `src/nextorm.mysql/MySqlDataContext.cs`, `src/nextorm.sqlite/SqliteDataContext.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`, `tests/nextorm.clickhouse.tests/TableValuedParameterTests.cs`, `tests/nextorm.integration.tests/ClickHouseTableValuedParameterTests.cs`.

@@ -39,6 +39,8 @@
 - [Range columns (pair of scalar columns)](guide/25-range-columns.md)
 - [Streaming large objects (BLOB/CLOB)](guide/26-large-objects.md)
 - [Dynamic columns](guide/27-dynamic-columns.md)
+- [Streaming data to a Stream](guide/28-streaming-data.md)
+- [Implicit navigation queries](guide/29-implicit-navigation.md)
 
 ### Infrastructure
 
@@ -76,9 +78,11 @@
 
 - [Global query filters](advanced/query-filters.md)
 - [Entity Framework Core integration](advanced/integration-efcore.md)
+- [EF Core query-filter bridge](advanced/ef-core-query-filters.md)
 - [Eager loading child collections](advanced/eager-loading.md)
 - [Relationships and single-query loading](advanced/relationships.md)
 - [Limitations and out-of-scope features](advanced/limitations.md)
+- [Native extreme-row strategies](advanced/select-where-extrema-native.md)
 - [API reference](advanced/api-reference.md)
 
 ### Русская документация
@@ -101,7 +105,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-a) is a prof of concept.
+The current status (1.0.9-b) is a prof of concept.
 
 ## Installation
 
@@ -130,6 +134,27 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](infrastructure/01-query-reuse-and-caching.md).
 
 ## Releases
+
+### 1.0.9-b
+
+- [Неявные навигационные запросы: одиночные связи, многошаговые цепочки, presence-проверки и `AsEntityBuilder`](https://github.com/AlexeyShirshov/nextorm/issues/148)
+- [Связи: `JoinInto` для many-to-many и one-to-one](https://github.com/AlexeyShirshov/nextorm/issues/135)
+- [Алиасы в join: типизированные alias-проекции через source generator (`Alias.Buyer` и т.п.)](https://github.com/AlexeyShirshov/nextorm/issues/113)
+- [CTE: типизированные источники с сохранением проекции `Select`, включая рекурсивные](https://github.com/AlexeyShirshov/nextorm/issues/146)
+- [CTE: тела UPDATE/DELETE и вынос вложенных CTE в верхний `WITH`](https://github.com/AlexeyShirshov/nextorm/issues/136)
+- [`SelectWhereMax`/`SelectWhereMin` — нативные fast paths PostgreSQL `DISTINCT ON` и ClickHouse `argMax`](https://github.com/AlexeyShirshov/nextorm/issues/144)
+- [Join/`.Returning(...)`: явный терминал удаления и identity-форма для multi-table](https://github.com/AlexeyShirshov/nextorm/issues/145)
+- [API: `Create…Builder` для DML/batch и альтернативные query-фабрики](https://github.com/AlexeyShirshov/nextorm/issues/147)
+- [Хинты: табличные (`WITH`) на присоединённых таблицах, fluent API и параметризация](https://github.com/AlexeyShirshov/nextorm/issues/130)
+- [Потоковая выдача данных в `Stream` — JSON и RFC 4180 CSV без материализации](https://github.com/AlexeyShirshov/nextorm/issues/112)
+- [`ProcedureResult`: стриминг нескольких result set'ов (гетерогенный курсор)](https://github.com/AlexeyShirshov/nextorm/issues/118)
+- [Raw SQL как шаг батча (`BatchBuilder.Raw`) и params-форма `ExecuteRaw`/`ExecuteProcedure`](https://github.com/AlexeyShirshov/nextorm/issues/119)
+- [Глобальные фильтры: мост keyed-фильтров EF Core 10, цель INSERT/MERGE/UPSERT, `FromSql`/сырые источники](https://github.com/AlexeyShirshov/nextorm/issues/125)
+- [In-memory: `PrepareFromSql` для сырого SQL и источники табличных функций](https://github.com/AlexeyShirshov/nextorm/issues/139)
+- [Dynamic columns: write-side в in-memory, per-key конвертеры и JSON](https://github.com/AlexeyShirshov/nextorm/issues/137)
+- [Унификация обхода result-set: `BatchResult`/`ProcedureResult` напрямую перечисляемы, `ReadSets` удалён](https://github.com/AlexeyShirshov/nextorm/issues/186)
+- Новые страницы EN + RU: глава 28 «Потоковая выдача данных», глава 29 «Неявные навигационные запросы», «Нативные стратегии крайней строки», «Мост фильтров EF Core»
+- [Удалены из общего API `Final()`, `PreWhere(predicate)` и `Settings(("key", "value"), ...)`](https://github.com/AlexeyShirshov/nextorm/issues/122)
 
 ### 1.0.9-a
 

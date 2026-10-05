@@ -68,6 +68,10 @@
       href: guide/26-large-objects.md
     - name: Динамические колонки
       href: guide/27-dynamic-columns.md
+    - name: Потоковое сохранение данных
+      href: guide/28-streaming-data.md
+    - name: Неявные навигационные запросы
+      href: guide/29-implicit-navigation.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор
@@ -150,11 +154,15 @@
       href: advanced/query-filters.md
     - name: Интеграция с Entity Framework Core
       href: advanced/integration-efcore.md
+    - name: Мост фильтров запросов EF Core
+      href: advanced/ef-core-query-filters.md
     - name: Жадная загрузка дочерних коллекций
       href: advanced/eager-loading.md
     - name: Связи и однозапросная загрузка
       href: advanced/relationships.md
     - name: Ограничения и что вне области
       href: advanced/limitations.md
+    - name: Нативные стратегии выбора экстремальной строки
+      href: advanced/select-where-extrema-native.md
     - name: Краткий справочник API
       href: advanced/api-reference.md

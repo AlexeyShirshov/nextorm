@@ -1,0 +1,78 @@
+# Collection 1.0.9-b
+
+- collection-id: `1.0.9-b`
+- input: open issues of GitHub milestone `1.0.9-b` (#39, #112, #113, #115, #116, #118, #123, #124, #125, #135, #136)
+- mode: autonomous + auto-commit; **single group → no worktree/branch, commits go into the current branch** `1.0.9-b`; push never
+- cap: 1 (single lane — all 11 tasks share query-path files)
+- execution: **collapsed to the current worktree** (per user decision 2026-09-30): the per-group worktree and `collection/**` branches were removed; the 3 committed tasks were fast-forwarded into `1.0.9-b` and the in-flight #135 work was re-applied as a working-tree patch. `lane` subagent was unusable (nested Task depth limit = 1) → `subagent_depth: 3` added to the config (needs an opencode restart); until then — flat primary.
+
+## Group
+
+| id | tasks (order) | worktree | branch | status |
+|---|---|---|---|---|
+| group-1 | 116,136,115,113,135,39,112,123,124,125,118 | (current worktree) | `1.0.9-b` (current) | done |
+
+## Tasks
+
+| id | issue | group | branch | status | task status file |
+|---|---|---|---|---|---|
+| 1 | #116 | group-1 | 1.0.9-b | done | - |
+| 2 | #136 | group-1 | 1.0.9-b | done | - |
+| 3 | #115 | group-1 | 1.0.9-b | done | - |
+| 4 | #113 | group-1 | 1.0.9-b | incomplete | - |
+| 5 | #135 | group-1 | 1.0.9-b | done | - |
+| 6 | #39  | group-1 | 1.0.9-b | done | - |
+| 7 | #112 | group-1 | 1.0.9-b | done | - |
+| 8 | #123 | group-1 | 1.0.9-b | done | - |
+| 9 | #124 | group-1 | 1.0.9-b | done | - |
+| 10 | #125 | group-1 | 1.0.9-b | done | - |
+| 11 | #118 | group-1 | 1.0.9-b | done | procedure-result-sets-1.md |
+
+## Decisions
+
+- Clustering: one lane. All tasks touch shared query-path files (`QueryCommand*`, `EntityBuilder`, `Dialect/*`), provider test projects and shared docs pages (`query-filters.md`, `08-cte.md`, `12-raw-sql.md`) — parallel groups would conflict on merge.
+- Order: dependency-first (#116→#136, #39→#112); rest by planner chain.
+- Merge: none — single group, so no `merge --no-ff`; commits land directly on `1.0.9-b`.
+- Units inside each task: decided per-task PLAN.
+- Lane attempt (13:03) failed with "Subagent depth limit reached (1)"; root fix: `subagent_depth: 3` in the opencode config (restart required). Until then — flat primary per pdca-collection Fallback.
+- **Collapse to current worktree (2026-09-30, user decision)**: with one group the worktree/branch isolation added nothing. `#116/#136/#115` fast-forwarded into `1.0.9-b`; in-flight `#135` (slice A 1:1 + M:N metadata/API) re-applied as a working-tree patch; worktree `collection-1.0.9-b/group-1` and all `collection/1.0.9-b/*` branches deleted. Skill `pdca-collection` updated: one group ⇒ work in the current worktree/branch.
+- Git worktrees are now used only for multi-group collections.
+
+## Done / Verified / Incomplete
+
+- Done:
+- #116 done on collection/1.0.9-b/task-1-1 (828c4c4); build 0/0; CHECK PASS (live ClickHouse nested-CTE 1/1; cache identity; all-provider sql-gen; coverage 85.1/76.6).
+- #136 done on collection/1.0.9-b/task-1-2 (09d8f555a63c00bc82a0878b3d8b36aa271da447); build 0/0; CHECK PASS (single+join UPDATE/DELETE CTE bodies w/ explicit-projection RETURNING, PostgreSQL-only; live PG 11/11 + arities 3/3; coverage 87.1/77.9). Scope: identity whole-Projection Returning deferred to issue #143 (milestone 1.0.9-b). Accepted P2 debts: join-returning terminal duplication; JoinedMutationSource per-call placeholder re-prepare.
+- #115 done on collection/1.0.9-b/task-1-3 (9dd018a4e241424d51e3fd88c9ea63f903db0dc0); build 0/0; CHECK PASS (SelectWhereMax/Min whole-row+projection, global/per-group, One/All, portable window lowering on all 6 SQL providers + in-memory; live integration 64/64 incl. ClickHouse; coverage 85.1/76.7). Native PG DISTINCT ON / CH argMax fast paths deferred to issue #144. Test-isolation fix: Query plan cache collection (serializes purge vs cache-hit assertions).
+- #135 done on 1.0.9-b (466e870bfa35d4323b50840cbf5e37140f0c38a0); build 0/0; CHECK PASS — M:N execution (derived `row_number()` link + two flat joins with spec JoinType, occurrence dedup `(ParentKey, ChildKey, Occurrence)`, junction-instance token in-memory); R3 metadata-lifecycle fix (configured junction mapping wins; `MemberInfoExtensions` column-name cache invalidated on `DataContextCache.Clear()`); warning `JoinInto.MultipleCollections` + `SuppressCartesianWarning()`; docs EN+RU. Evidence: core 991/991; JoinInto core 79, sqlite 33, postgres 8, mysql 4, sqlserver 4, clickhouse 12; container JoinInto 68/68 all 4 providers; full integration 2622/0 failed/187 capability skips; coverage 85.4/76.9; perf 7-case acceptance pass + new `SqliteBenchmarkManyToManyJoinInto` (14.08 ms / 2.28 MB, per-row). Residual deferrals (rejected by design, not backlog): composite junction selectors and M:N under `AsSingleQuery`.
+- #39 Streaming JSON to a Stream (WriteJson/WriteJsonAsync) done on 1.0.9-b; build 0/0; core 993/993; SQLite JsonStreaming 24/24; WriteJson integration 40/40 across SQLite/PG/SQL Server/MySQL/ClickHouse/MariaDB, 0 skipped; full suite 2662/0 failed/187 capability skips; coverage 87.4/78.1; perf `SqliteBenchmarkWriteJson` (scalar allocation flat sync+async, variable-width transient, no Gen2; bounded 64 KiB buffer, no per-row retention). Accepted P2 debts: 2 zero-hit `DeferFlush` branches; no dedicated JSON `DefaultOnNull` test. Temp-table P1 fix included; commit f29c642.
+- #112 Streaming CSV to a Stream (WriteCsv/WriteCsvAsync) done on 1.0.9-b; build 0/0; core 1107/1107; CSV integration 69/69 across SQLite/PG/SQL Server/MySQL/ClickHouse/MariaDB, 0 skipped; full suite 2731/0 failed/187 capability skips; coverage 85.7/77.1; perf `WriteCsv` 0.77× ToList allocation + acceptance 7/7. Options: `IncludeHeader`/`Delimiter`/`NullMarker` (`\N`)/`ExcelMode`/`ValueTransform`; base implemented by adapting `refs/heads/exp112/upstream` (`c29de9d`). Accepted P2 debts: remaining zero-hit branch partials; whole-field `byte[]` memory bound (documented, deferred with trigger). Commit 04b5bc2.
+- #123 MERGE/UPSERT target-filter isolation done on 1.0.9-b; build Debug+Release 0/0; focused suites (core/sqlite/sqlserver/postgres/mysql/mariadb/clickhouse) 0 failed; full integration 2789 total / 0 failed / 187 capability skips (all 6 providers live); targeted *MergeTargetFilter* 58/58 incl. live ClickHouse refusal 2/2 with zero interceptor events; coverage configured modules 87.7 line / 78.4 branch (>=85/75), bounded delta +0.1/+0.1; perf acceptance 7/7 ratio 1.93 vs baseline 1.89 (noise); security escalate ACCEPT (both fail-closed seams closed); docs EN+RU; registers updated. Accepted P2 debts: duplicated SS key-upsert MERGE skeleton; query-source translation refusal may follow a source pre-check read (documented); pre-existing same-name closure-parameter collision. Commit 249d456 (code) + this status commit.
+- #124 Global filters on bound raw SQL sources (BindEntity) done on 1.0.9-b; build Debug+Release 0/0; focused core 174 + sqlite 62 and all-provider QueryFilter 0 failed; full integration 2814 total / 2627 passed / 0 failed / 187 skips (184 capability + 3 env-conditional, 0 infrastructure) all 6 providers live; targeted RawSourceBinding 25/25 incl. live ClickHouse/MariaDB; coverage configured 88.0 line / 78.9 branch (>=85/75); perf acceptance 7/7 ratio 2.03 (noise) + reuse quantified (independent same-SQL sources isolated, same instance hit; warm/cold 1.45x-3.00x conservative); independent register certification closed; docs EN+RU; DocFX 0/0. Accepted debts: conservative unbound-raw reference-identity (reduced cross-instance reuse); metadata-identity plan key; shared pending-skip field (non-concurrent); stale comment; remaining defensive uncovered arms. Commit 85895bb (code) + this status commit.
+- #125 EF Core 10 named+anonymous query-filter bridge done on 1.0.9-b; build Debug+Release 0/0; EF unit 126/126; core full 1215/1215; full solution 7053 total / 0 failed / 188 capability skips (all providers live, 0 container-unavailable); targeted bridge 20/20 + lifecycle 12/12 across SQLite/PostgreSQL/SQL Server/MySQL; coverage 88.1 line / 78.9 branch (>=85/75); perf acceptance 7/7 wall 48.3 s ratio 1.98 (band 1.89-2.03); security ACCEPT (fail-closed lifecycle guard closes B1 after Clear/eviction and on prepared/plan-store + DML paths); docs EN+RU. Accepted P2 debts: §1.12 bounded publication window; RenderSource/RenderPredicate rely on the MakeSelect guard; SqlMutationBuilder.cs:677 context-less GetFilters theoretical race; core-wins table-name precedence; dead HasExpectation helpers; ExpressionPlanEqualityComparer.cs:24 [ThreadStatic] retention deferred-with-trigger; V17 eviction integration-covered only. Commit 508e042 (code) + this status commit.
+- #118 ProcedureResult multi-set streaming (heterogeneous `ResultSet` cursor) done on 1.0.9-b; build Debug+Release 0/0; full solution 7115 total / 0 failed / 188 capability skips (all providers live); sqlite traversal 24/24 (RED→GREEN 4→0) + integration ~Raw 170/170 and ~ResultSet 42/42 across SQLite/PostgreSQL/SQL Server/MySQL; coverage 88.2 line / 78.9 branch (>=85/75); perf new ProcedureResultSetsBenchmark (async alloc 770.4 vs legacy 770.1 KB — no whole-set buffering) + acceptance 7/7 ratio 1.89; docfx 0/0; docs EN+RU incl api-reference. Deferred-with-trigger: deterministic (non-sleep) eviction for the sliding-expiration lifecycle test. #125 lifecycle flake hardened test-only by serializing shared-global integration classes (assertions unchanged). Commit 6ed13bc (code) + this status commit.
+- Verified:
+- Incomplete:
+- #113 → `incomplete` (reason: skipped by user decision — scope unresolved, runtime WithAlias vs source-generator p.Alias). Patch archived at /tmp/opencode/task-4-113-withalias.patch; not merged.
+
+## Stopped
+
+(2026-09-30) Autonomous run stopped after #112 by the model's own decision, **not** a task failure: #123/#124/#125/#118 were never attempted and are `pending` (lane mislabeled them). `blocked` status is retired: a non-completed task is `incomplete` (patch + reason) and the pipeline continues. The Tasks table above is the source of truth for the queue; resume from the first `pending` (#123). Fix applied: `lane.md` + `pdca-collection` skill now make `lane` re-read this file for the queue instead of holding it in context. #113 remains skipped (user decision) and is not part of the queue.
+
+## Verified (phase C, 2026-10-01, HEAD abfaf28)
+
+- Build Debug+Release: 0 Warning / 0 Error.
+- Full solution (DOCKER_HOST): 7115 total / 6927 passed / 0 failed / 188 skipped (all capability-only; PostgreSQL/SQL Server/MySQL/ClickHouse containers executed).
+- Coverage (configured core+sqlite+postgres+sqlserver): line 88.2% / branch 78.9% (>=85/75).
+- Perf acceptance: 7 cases / 0 failures, wall 45.69 s, `Cached_ToList/Prepared_ToList` 1.95 (within band).
+- DocFX: 0 warnings / 0 errors.
+- No in-progress merge; no worktree on `1.0.9-b`.
+
+## Report
+
+- Group `group-1`: single lane, no worktree/branch, no merge (`merge --no-ff` not needed); all commits on `1.0.9-b`.
+- Done (10): #116, #136, #115, #135, #39, #112, #123, #124, #125, #118.
+- Incomplete (1): #113 (user-skipped; patch `/tmp/opencode/task-4-113-withalias.patch`).
+- `1.0.9-b` ahead of `origin/1.0.9-b` by 9 commits; push never performed.
+- Cleanup: removed clean worktrees `exp-a3-pdca` / `exp112/upstream`; removed branches `exp/a3-pdca`, `exp112/upstream`, `todo-ch2`, `todo-mssql2`, `todo-pg2`. Kept dirty worktrees `exp-a1-bare` / `exp-a2-skill` (and their branches) plus `main`, release branches, `wip/94-dynamic-columns`, `wip/95-eager-loading` and detached experiment worktrees. Removed stale unregistered dir `collection-1.0.9-b`; `worktree prune` ran clean.
+- Status: CLOSED (queue empty; #113 remains incomplete by user decision).

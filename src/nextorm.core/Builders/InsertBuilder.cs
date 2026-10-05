@@ -7,7 +7,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for an <c>INSERT</c> statement over a mapped entity, started with
-/// <see cref="DataContextExtensions.InsertInto{TEntity}"/>. It collects the columns and values, renders
+/// <see cref="DataContextExtensions.CreateInsertBuilder{TEntity}"/>. It collects the columns and values, renders
 /// them as a parameterised statement through the active dialect and executes it on the context.
 /// <para>
 /// There is deliberately no change tracking: every terminal (<see cref="Insert"/>, <see cref="Returning()"/>,

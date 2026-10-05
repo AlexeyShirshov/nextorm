@@ -41,6 +41,7 @@
 - Never run `git push`; the user pushes manually.
 - Do not create commits unless explicitly asked — **this includes work in separate git worktrees**.
 - Never merge branches and never create merge commits unless explicitly asked. `git merge` inherently requires commits; do not use it as the default integration mechanism.
+- **Исключение `pdca-collection`.** Для циклов, запущенных скиллом `pdca-collection` в режиме явно разрешённого автокоммита, разрешаются: (a) коммиты в ветках `collection/**` внутри worktree цикла, (b) `git merge --no-ff` ветки группы в текущий бранч. Вне такого цикла правила «never merge» (выше) и «no commits unless explicitly asked» (выше) сохраняются.
 - Integrate work done in isolated worktrees with **patches, not commits/merges**: in each worktree produce a diff (`git diff <base> > /tmp/<name>.patch`, or `git diff` for uncommitted changes), then apply it into the target tree (`git apply` / `patch`), leaving the result uncommitted for the user to review.
 
 ## Async naming
@@ -74,3 +75,10 @@
 
 ## Benchmarks
 - `benchmarks/nextorm.benchmark` is a BenchmarkDotNet console app using `BenchmarkSwitcher`: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkWhere*`.
+
+## Brainstorming & GitHub tracking
+
+- In this repo, load `.opencode/skills/nextorm-brainstorming/SKILL.md` together with the global `brainstorming` skill before starting the brainstorm.
+- For any agreed feature/refactor/fix, create or update its GitHub issue and milestone, and record `#N` + verified URL in the spec/handoff, before asking for written-spec review or handing off to planning/implementation.
+- The overlay only adds tracking; brainstorming's approval gates stay unchanged, and no git commit/push/merge is granted.
+- PDCA work keeps its existing spine — use `nextorm-pdca`; the overlay does not turn PDCA into brainstorming.

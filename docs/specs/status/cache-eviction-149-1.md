@@ -1,0 +1,25 @@
+# Cache eviction determinism — #149 (task 1)
+
+- status: CLOSED
+- cycle: 1, revision r1, attempt 1/3
+- issue: #149 (milestone 1.0.9-b)
+- collection: 1.0.9-b-3, task 1, group-1, branch 1.0.9-b (current worktree)
+- goal: make the EF-filter eviction arm deterministic without wall-clock sleep, exercising the real TTL expiry path.
+- acceptance criteria: (AC1) Eviction arm sets TTL=1000ms and calls the test hook instead of Thread.Sleep, then asserts "*unfiltered*". (AC2) negative proof — bypassing the real expiry branch fails the eviction assertion; restoring passes. (AC3) no change to public API, production lookup, request results, shared QueryCommand.Cache. (AC4) TTL restored + Clear() in finally incl. exception path. (AC5) target test green across registered providers, no unexpected skips.
+- plan (r1, PASS): add internal `void TimedDictionary<TKey,TValue>.ExpireEntriesForTesting()` (read TTL; return if zero; enumerate raw entries, NOT Snapshot; for `Timed` entries set `Stamp = UtcNowTicks - ttl.Ticks - 1`; do not remove); add internal static `DataContextCache.ExpireTimedEntriesForTesting()` delegating to all five timed stores (`_metadata`, `_tvpMetadata`, `_selectListCache`, `_expCache`, `_inValuesCache`); replace `Thread.Sleep(1500)` at `EfCoreQueryFilterLifecycleTests.cs:96` with the hook. Other sleeps in `QueryCacheControlsTests.cs` unchanged (deferred, same milestone, trigger = TTL-control test scope).
+- variant matrix: positive TTL timed entry→expiry test; zero TTL→no-op test; untimed/empty→no-op test; all-five delegation→test; plain stores + QueryPlanStore→untouched guard; extreme TTL/partial refresh→deferred+trigger.
+- perf: not needed (test-invoked aging only; read/snapshot paths unchanged; QueryPlanStore untouched).
+- docs: no public docs (public contract unchanged).
+- progress log: DO started.
+2026-10-01T17:43:41Z | DO | revision r1 | iteration 1/3 | implemented hook + tests; Debug/Release builds 0W/0E; 4 focused suites green; negative proof failed-then-restored; target integration 12/12 across SQLite+PG+MSSQL+MySQL | /tmp/opencode/149/
+2026-10-01T23:06:00Z | CHECK | revision r1 | iteration 1/3 | CHECK#1 FAIL (evidence-only): 5/20 runs, AC2 mutation mismatch, coverage baseline absent → re-gather (no plan change; n stays 1/3) | /tmp/opencode/149/check/
+2026-10-01T23:06:00Z | CHECK | revision r1 | iteration 1/3 | AC5 re-gathered: 20/20 sequential target runs exit 0, each Total 12/Failed 0/Skipped 0; SQLite+PostgreSQL+SqlServer+MySQL live | /tmp/opencode/149/check2/run-01.log..run-20.log, run-summary.txt
+2026-10-01T23:06:00Z | CHECK | revision r1 | iteration 1/3 | AC2 real red→green on the expiry guard (TimedDictionary.cs:56): mutation red exit 2, 4 failed; reverted green exit 0, 7/7; byte-exact revert | /tmp/opencode/149/check2/ac2-red.log, ac2-green.log, ac2-diff-before.diff==ac2-diff-after.diff
+2026-10-01T23:06:00Z | CHECK | revision r1 | iteration 1/3 | coverage baseline (CI dotnet-coverage→reportgenerator over 4 modules/assemblies): Line 88.2% / Branch 78.9% (thresholds 85/75) | /tmp/opencode/149/check2/coverage-report/Summary.txt
+2026-10-01T23:07:00Z | CHECK | revision r1 | iteration 1/3 | CHECK#2 FAIL (evidence-only) → escalate: not same defect, no product defect; required action = direct untouched-store regression test | /tmp/opencode/149/check3/
+2026-10-01T23:07:30Z | CHECK | revision r1 | iteration 1/3 | action done: ExpireTimedEntriesForTesting_Should_Not_Touch_Plain_Stores_Or_PlanStore green (8/8 class, exit 0); core suite total 1249 / failed 0 / skipped 0 (exit 0); build 0W/0E | /tmp/opencode/149/check3/newtest.log, test.log, build.log
+2026-10-01T23:20:00Z | ACT | revision r1 | iteration 1/3 | CHECK PASS (r1/n1) → ACT; file CLOSED; commit #149 | /tmp/opencode/149/check,check2,check3/
+- accepted deviation (evidence-completeness only): CHECK#2's untouched-plain-store/QueryPlanStore claim previously rested on indirect evidence (kept-command path + delegation body). Accepted as an evidence-completeness deviation, not a product defect; closed by the direct reflection regression test above. No plan revision, attempt stays 1/3.
+- durable state: cycle 1, plan revision r1, attempt 1/3 (unchanged by CHECK#2; direct regression test added, no replan).
+- defect history: CHECK#1-evidence-only (r1/n1, 0 code fixes applied; resolved by CHECK#2 evidence re-gather; evidence /tmp/opencode/149/check/ → /tmp/opencode/149/check2/). CHECK#2-evidence-completeness (r1/n1, 0 code fixes applied, 1 test added; not the same defect, no product defect; resolved by direct untouched-store regression test; evidence /tmp/opencode/149/check3/newtest.log).
+- resolved file:line refs: EfCoreQueryFilterLifecycleTests.cs:105-109 (finally restores TTL + Clear(), runs on exception path since no catch); TimedDictionaryEvictionTests.cs:24 positive-TTL expiry, :45 zero-TTL no-op, :67 empty/untimed no-op, :152 all-five delegation, :188 direct untouched-plain-store/QueryPlanStore regression (reflects DataContextCache.cs:25/:29 and QueryPlanStore.cs:29); delegation body DataContextCache.cs:149-156; internal decls TimedDictionary.cs:16/:92, DataContextCache.cs:149.

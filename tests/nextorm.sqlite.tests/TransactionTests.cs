@@ -101,7 +101,7 @@ public class TransactionTests
         var transactions = (ITransactionManager)ctx;
 
         using var tx = transactions.BeginTransaction();
-        ctx.InsertInto<ISimpleEntity>().Values(new SimpleEntity { Id = 7 }).Insert();
+        ctx.CreateInsertBuilder<ISimpleEntity>().Values(new SimpleEntity { Id = 7 }).Insert();
 
         ctx.From<ISimpleEntity>().Where(x => x.Id == 7).Select(x => x.Id).ToList().Should().Equal(7);
 
@@ -119,7 +119,7 @@ public class TransactionTests
         var transactions = (ITransactionManager)ctx;
 
         using var tx = transactions.BeginTransaction();
-        ctx.InsertInto<ISimpleEntity>().Values(new SimpleEntity { Id = 9 }).Insert();
+        ctx.CreateInsertBuilder<ISimpleEntity>().Values(new SimpleEntity { Id = 9 }).Insert();
 
         var ids = new List<int>();
         await foreach (var id in ctx.From<ISimpleEntity>().Where(x => x.Id == 9).Select(x => x.Id).ToAsyncEnumerable(TestContext.Current.CancellationToken))
@@ -137,7 +137,7 @@ public class TransactionTests
         var transactions = (ITransactionManager)ctx;
 
         using var tx = transactions.BeginTransaction();
-        ctx.InsertInto<ISimpleEntity>().Values(new SimpleEntity { Id = 8 }).Insert();
+        ctx.CreateInsertBuilder<ISimpleEntity>().Values(new SimpleEntity { Id = 8 }).Insert();
         tx.Commit();
 
         transactions.CurrentTransaction.Should().BeNull();
@@ -169,7 +169,7 @@ public class TransactionTests
 
         transactions.CurrentTransaction.Should().BeSameAs(external);
 
-        ctx.InsertInto<ISimpleEntity>().Values(new SimpleEntity { Id = 10 }).Insert();
+        ctx.CreateInsertBuilder<ISimpleEntity>().Values(new SimpleEntity { Id = 10 }).Insert();
         ctx.From<ISimpleEntity>().Where(x => x.Id == 10).Select(x => x.Id).ToList().Should().ContainSingle();
 
         external.Rollback();
@@ -230,7 +230,7 @@ public class TransactionTests
         var transactions = (ITransactionManager)ctx;
 
         transactions.BeginTransaction();
-        ctx.InsertInto<ISimpleEntity>().Values(new SimpleEntity { Id = 11 }).Insert();
+        ctx.CreateInsertBuilder<ISimpleEntity>().Values(new SimpleEntity { Id = 11 }).Insert();
         RawCount(conn).Should().Be(1);
 
         ctx.Dispose();
@@ -248,7 +248,7 @@ public class TransactionTests
 
         using var external = conn.BeginTransaction();
         transactions.UseTransaction(external);
-        ctx.InsertInto<ISimpleEntity>().Values(new SimpleEntity { Id = 12 }).Insert();
+        ctx.CreateInsertBuilder<ISimpleEntity>().Values(new SimpleEntity { Id = 12 }).Insert();
 
         ctx.Dispose();
 

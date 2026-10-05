@@ -54,11 +54,15 @@ internal sealed class UpdateJoinCommand : MutationCommand
     /// <param name="targetType">The CLR type of the target table whose rows are updated (the first join source).</param>
     /// <param name="source">The prepared joined query whose source, joins and condition drive the update.</param>
     /// <param name="assignments">The <c>SET</c> assignments.</param>
-    public UpdateJoinCommand(Type targetType, QueryCommand source, IReadOnlyList<UpdateJoinAssignment> assignments)
+    /// <param name="returningColumns">The mapped columns the statement returns through <c>RETURNING</c>, or <see langword="null"/> for a plain update.</param>
+    /// <param name="returningProjection">The selector that defines the returned columns, used to render a qualified <c>RETURNING</c> list over the joined sources.</param>
+    public UpdateJoinCommand(Type targetType, QueryCommand source, IReadOnlyList<UpdateJoinAssignment> assignments, IReadOnlyList<IPropertyMetadata>? returningColumns = null, LambdaExpression? returningProjection = null)
         : base(SqlStatementType.UpdateJoin, targetType)
     {
         Source = source;
         Assignments = assignments;
+        ReturningColumns = returningColumns;
+        ReturningProjection = returningProjection;
     }
 
     /// <summary>The prepared joined query: its <c>FROM</c> is the target, its joins and condition select the rows to change.</summary>
@@ -66,4 +70,13 @@ internal sealed class UpdateJoinCommand : MutationCommand
 
     /// <summary>The <c>SET</c> assignments.</summary>
     public IReadOnlyList<UpdateJoinAssignment> Assignments { get; }
+
+    /// <summary>
+    /// The mapped columns the statement returns through <c>RETURNING</c>, or <see langword="null"/> for
+    /// a plain multi-table update that only reports the affected-row count.
+    /// </summary>
+    public override IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
+
+    /// <summary>The projection whose selected members are rendered as the <c>RETURNING</c> list, or <see langword="null"/>.</summary>
+    public LambdaExpression? ReturningProjection { get; }
 }

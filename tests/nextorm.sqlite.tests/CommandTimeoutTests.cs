@@ -146,7 +146,7 @@ public class CommandTimeoutTests
                 $"Data Source={path}",
                 new DataContextBuilder().UseCommandTimeout(13).AddInterceptor(interceptor));
 
-            ctx.DeleteFrom<ISimpleEntity>().All().Delete();
+            ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();
 
             interceptor.LastCommand.Should().NotBeNull();
             interceptor.LastCommand!.CommandTimeout.Should().Be(13);

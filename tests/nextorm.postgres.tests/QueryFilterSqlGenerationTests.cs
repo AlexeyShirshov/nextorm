@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data.Common;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -10,6 +12,7 @@ namespace NextORM.Postgres.Tests;
 /// UPDATE/DELETE <c>WHERE</c>, an INSERT target is never filtered and an INSERT ... SELECT filters only
 /// its source. No database connection is opened.
 /// </summary>
+[Collection("Query plan cache")]
 public class QueryFilterSqlGenerationTests
 {
     private const string TenantKey = "qf_tenant_pg_sqlgen";
@@ -111,7 +114,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureSelect(ctx);
 
-        var sql = ctx.Update<QfSelectEntity>()
+        var sql = ctx.CreateUpdateBuilder<QfSelectEntity>()
             .Set(x => x.IsDeleted, true)
             .Where(x => x.Id == 10)
             .ToSql()
@@ -128,7 +131,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ConfigureSelect(ctx);
 
-        var sql = ctx.DeleteFrom<QfSelectEntity>()
+        var sql = ctx.CreateDeleteBuilder<QfSelectEntity>()
             .Where(x => x.Id == 10)
             .ToSql()
             .Replace("\r\n", "\n");
@@ -144,7 +147,7 @@ public class QueryFilterSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         ctx.Properties[TenantKey] = 1;
 
-        var sql = ctx.InsertInto<QfInsertTargetEntity>(b => b
+        var sql = ctx.CreateInsertBuilder<QfInsertTargetEntity>(b => b
                 .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]))
             .Values(new QfInsertTargetEntity { Id = 1, TenantId = 1, IsDeleted = false })
             .ToSql()
@@ -162,7 +165,7 @@ public class QueryFilterSqlGenerationTests
         ctx.From<QfInsertSourceEntity>(b => b
             .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]));
 
-        var sql = ctx.InsertInto<QfInsertTargetEntity>(b => b
+        var sql = ctx.CreateInsertBuilder<QfInsertTargetEntity>(b => b
                 .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[TenantKey]))
             .Values(
                 ctx.From<QfInsertSourceEntity>().Where(x => x.Id > 0),
@@ -289,5 +292,379 @@ public class QueryFilterSqlGenerationTests
         ReferenceEquals(first, second).Should().BeTrue("the second execution must hit the cached plan, so the changed value is observed on it");
         second.DbCommand.Parameters.Count.Should().Be(1);
         second.DbCommand.Parameters[0].Value.Should().Be(2, "the cached plan re-reads the context value and binds the second one");
+    }
+
+    // --- #123: PostgreSQL 15+ renders a general MERGE, so the target filter joins the ON search
+    // --- condition; PostgreSQL has no WHEN NOT MATCHED BY SOURCE, so there is no delete arm. The
+    // --- ON CONFLICT key upsert cannot express the isolation and refuses. No connection is opened.
+
+    private const string MergeTenantKey = "qf_merge_tenant_pg";
+
+    [SqlTable("qf_merge_target")]
+    public sealed class QfMergeTargetEntity
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("tenant_id")]
+        public int TenantId { get; set; }
+
+        [Column("name")]
+        public string? Name { get; set; }
+    }
+
+    [SqlTable("qf_merge_other")]
+    public sealed class QfMergeOtherEntity
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+    }
+
+    private static void ConfigureMergeTarget(IDataContext ctx)
+    {
+        ctx.Properties[MergeTenantKey] = 1;
+        ctx.From<QfMergeTargetEntity>(b => b
+            .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[MergeTenantKey]));
+    }
+
+    private static string OnSegment(string sql)
+    {
+        var start = sql.IndexOf(" on ", StringComparison.Ordinal);
+        var end = sql.IndexOf(" when ", StringComparison.Ordinal);
+        return start >= 0 && end > start ? sql[start..end] : sql;
+    }
+
+    // Returns the branch head/body from the first occurrence of <paramref name="head"/> up to the next
+    // " when " arm or the statement terminator, so a filter injected into an unrelated arm is observed.
+    private static string ArmBody(string sql, string head)
+    {
+        var start = sql.IndexOf(head, StringComparison.Ordinal);
+        if (start < 0)
+            return string.Empty;
+
+        var end = sql.IndexOf(" when ", start + head.Length, StringComparison.Ordinal);
+        if (end < 0)
+            end = sql.IndexOf(';', start + head.Length);
+
+        return end > start ? sql[start..end] : sql[start..];
+    }
+
+    [Fact]
+    public void FullMerge_Filtered_OnKeys_ShouldInjectTargetPredicateIntoOn()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        var on = OnSegment(sql);
+        on.Should().Contain("target.id = source.id");
+        on.Should().Contain("target.tenant_id = @", "the active tenant filter is injected into the MERGE ON");
+        sql.Should().NotContain("tenant_id = 1", "the context value is bound, not inlined");
+    }
+
+    [Fact]
+    public void FullMerge_Filtered_ExplicitOn_ShouldPreserveUserGrouping()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .On((t, s) => t.Id == s.Id && (t.Name == s.Name || s.Name == null))
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        var on = OnSegment(sql);
+        on.Should().Contain("(target.name = source.name or source.name is null)");
+        on.Should().Contain("target.tenant_id = @");
+    }
+
+    [Fact]
+    public void KeyUpsert_Filtered_ShouldThrowNotSupported()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>("ON CONFLICT cannot isolate a filtered-out target row");
+    }
+
+    [Fact]
+    public void KeyUpsert_IgnoreFilters_ShouldRenderNativeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters()
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        sql.Should().Contain("on conflict (id) do update");
+        sql.Should().NotContain("tenant_id = @");
+    }
+
+    [Fact]
+    public void KeyUpsert_SelectiveIgnoreByName_ShouldRefuseUntilAllRemain()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var otherKey = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(["other"])
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+        var targetKey = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(["tenant"])
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        otherKey.Should().Throw<NotSupportedException>("a non-matching key leaves the filter active");
+        targetKey.Should().NotThrow("dropping the only filter restores the native ON CONFLICT form");
+    }
+
+    [Fact]
+    public void FullMerge_IgnoreFilters_ShouldNotInjectPredicate()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters()
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        OnSegment(sql).Should().NotContain("target.tenant_id = @");
+    }
+
+    [Fact]
+    public void FullMerge_SelectiveIgnoreByType_ShouldKeepOrDropTheTargetPredicate()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var kept = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(typeof(QfMergeOtherEntity))
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+        var dropped = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters(typeof(QfMergeTargetEntity))
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        OnSegment(kept).Should().Contain("target.tenant_id = @");
+        OnSegment(dropped).Should().NotContain("target.tenant_id = @");
+    }
+
+    // --- #123 mutant kills: the ON connector between the user condition and the injected filter is a
+    // --- literal AND (not OR), and the filter is confined to the ON search condition because PostgreSQL
+    // --- has no WHEN NOT MATCHED BY SOURCE arm.
+
+    [Fact]
+    public void FullMerge_Filtered_OnKeys_ShouldAndTargetPredicateToTheKeyCondition()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        OnSegment(sql).Should().Contain(
+            "source.id and (target.tenant_id = @",
+            "the key predicate and the filter must be joined by AND, not OR");
+    }
+
+    [Fact]
+    public void FullMerge_Filtered_ExplicitOn_ShouldAndTargetPredicateToTheUserCondition()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .On((t, s) => t.Id == s.Id && (t.Name == s.Name || s.Name == null))
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        OnSegment(sql).Should().Contain(
+            ") and (target.tenant_id = @",
+            "the user condition group and the filter group must be joined by AND, not OR");
+    }
+
+    [Fact]
+    public void FullMerge_Filtered_ShouldInjectPredicateOnlyIntoOnAndHaveNoBySourceArm()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        OnSegment(sql).Should().Contain("target.tenant_id = @", "the ON search condition must be filtered");
+        sql.Should().NotContain("when not matched by source", "PostgreSQL has no WHEN NOT MATCHED BY SOURCE arm");
+        ArmBody(sql, "when matched").Should().NotContain("target.tenant_id = @", "the update arm must not be filtered");
+        ArmBody(sql, "when not matched ").Should().NotContain("target.tenant_id = @", "the insert arm must not be filtered");
+    }
+
+    // --- #123 amendment: the full-MERGE form is detected by actual branches. `.On(...)` alone does not
+    // --- turn the key upsert into a full MERGE, so a branchless `.On(...)` under an active filter is the
+    // --- key-upsert form and must refuse before any query-source read. The dialect reports a static
+    // --- capability; PG15+ is a server prerequisite, not a client guard, so no version is probed.
+
+    [Fact]
+    public void BranchlessOn_ActiveFilter_ShouldRefuseNotSupported()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .On((t, s) => t.Id == s.Id)
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>(
+            "a branchless On(...) is not a full MERGE; ON CONFLICT cannot carry the target filter");
+    }
+
+    [Fact]
+    public void BranchlessOn_IgnoredFilter_ShouldKeepTheMalformedFormError()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .IgnoreFilters()
+            .On((t, s) => t.Id == s.Id)
+            .ToSql();
+
+        act.Should().Throw<InvalidOperationException>(
+                "IgnoreFilters keeps the bypass, so the branchless On(...) keeps its malformed-form error")
+            .Which.Should().NotBeOfType<NotSupportedException>();
+    }
+
+    [Fact]
+    public void BranchlessOn_NoFilterConfigured_ShouldKeepTheMalformedFormError()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // QfMergeOtherEntity is never registered with a filter, so no active filter applies.
+        var act = () => ctx.CreateMergeBuilder<QfMergeOtherEntity>()
+            .Using(new QfMergeOtherEntity { Id = 1 })
+            .On((t, s) => t.Id == s.Id)
+            .ToSql();
+
+        act.Should().Throw<InvalidOperationException>(
+                "without an active filter the branchless On(...) behaves exactly as before")
+            .Which.Should().NotBeOfType<NotSupportedException>();
+    }
+
+    private sealed class CountingConnectionInterceptor : IConnectionInterceptor
+    {
+        public int Opening { get; private set; }
+
+        public void ConnectionOpening(ConnectionEventData eventData) => Opening++;
+    }
+
+    private static (PostgresDataContext Ctx, CountingConnectionInterceptor Connection) CreateCountedContext()
+    {
+        var connection = new CountingConnectionInterceptor();
+        var ctx = new PostgresDataContext(
+            "Host=127.0.0.1;Port=5432;Database=nextorm;Username=nextorm;Password=nextorm;Timeout=1",
+            new DataContextBuilder().AddInterceptor(connection));
+        ctx.Properties[MergeTenantKey] = 1;
+        ctx.From<QfMergeTargetEntity>(b => b
+            .HasQueryFilter("tenant", (e, c) => e.TenantId == (int)c.Properties[MergeTenantKey]));
+        return (ctx, connection);
+    }
+
+    [Fact]
+    public void BranchlessOn_ActiveFilter_Sync_ShouldRefuseBeforeReadingTheQuerySource()
+    {
+        var (ctx, connection) = CreateCountedContext();
+        using var _ = ctx;
+
+        var act = () => ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(ctx.From<QfMergeTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
+            .On((t, s) => t.Id == s.Id)
+            .Merge();
+
+        act.Should().Throw<NotSupportedException>("the refusal precedes the source pre-check");
+        connection.Opening.Should().Be(0, "no connection is opened before the refusal");
+    }
+
+    [Fact]
+    public async Task BranchlessOn_ActiveFilter_Async_ShouldRefuseBeforeReadingTheQuerySource()
+    {
+        var (ctx, connection) = CreateCountedContext();
+        using var _ = ctx;
+        var command = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(ctx.From<QfMergeTargetEntity>().IgnoreFilters().Where(x => x.Id == 1))
+            .On((t, s) => t.Id == s.Id);
+
+        var act = async () => await command.MergeAsync(TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        connection.Opening.Should().Be(0);
+    }
+
+    [Fact]
+    public void FullMerge_Filtered_ShouldNotProbeTheServerVersion()
+    {
+        using var ctx = PostgresTestContext.Create();
+        ConfigureMergeTarget(ctx);
+
+        var sql = ctx.CreateMergeBuilder<QfMergeTargetEntity>()
+            .Using(new QfMergeTargetEntity { Id = 1, TenantId = 1, Name = "a" })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        OnSegment(sql).Should().Contain("target.tenant_id = @", "the filtered full MERGE still renders");
+        sql.Should().NotContain("version(", "the dialect does not read the server version; PG15+ is a documented prerequisite");
+        sql.Should().NotContain("current_setting", "no server-version probe is emitted");
     }
 }

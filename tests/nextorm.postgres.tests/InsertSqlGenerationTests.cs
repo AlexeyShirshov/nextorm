@@ -91,7 +91,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Value(x => x.Age, 5)
             .ToSql()
@@ -103,7 +103,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(new InsertEntity { Id = 99, Name = "a", Age = 5, Total = 7 })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age) values (@p0, @p1)");
@@ -114,7 +114,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values([
                 new InsertEntity { Name = "a", Age = 1 },
                 new InsertEntity { Name = "b", Age = 2 },
@@ -128,7 +128,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.CreateQuoted();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ToSql()
             .Should().Be("insert into \"insert_entity\" (\"name\") values (@p0)");
@@ -139,7 +139,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.CreateSnakeCaseQuoted();
 
-        ctx.InsertInto<BareEntity>()
+        ctx.CreateInsertBuilder<BareEntity>()
             .Value(x => x.Name, "a")
             .ToSql()
             .Should().Be("insert into \"bare_entity\" (\"name\") values (@p0)");
@@ -150,7 +150,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Value(x => x.Age, 5)
             .Returning()
@@ -163,7 +163,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new { x.Id, x.Name })
             .ToSql()
@@ -175,7 +175,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => x.Id)
             .ToSql()
@@ -187,7 +187,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new ReturningDto { Renamed = x.Id })
             .ToSql()
@@ -199,7 +199,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values([
                 new InsertEntity { Name = "a", Age = 1 },
                 new InsertEntity { Name = "b", Age = 2 },
@@ -214,7 +214,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningIdentity(x => x.Id)
             .ToSql()
@@ -226,7 +226,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningKey<long>()
             .ToSql()
@@ -238,7 +238,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningIdentity<long>()
             .ToSql()
@@ -256,7 +256,7 @@ public class InsertSqlGenerationTests
             new InsertSource { Name = "b", Age = 2 },
         };
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { Name = s.Name, Age = s.Age })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
@@ -273,7 +273,7 @@ public class InsertSqlGenerationTests
             new InsertSource { Name = "b", Age = 2 },
         };
 
-        ctx.InsertInto<InsertEntity>()
+        ctx.CreateInsertBuilder<InsertEntity>()
             .Values(sources, s => new InsertEntity { Name = s.Name, Age = s.Age })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
@@ -284,7 +284,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IScalarEntity>()
+        ctx.CreateInsertBuilder<IScalarEntity>()
             .Value("a")
             .ToSql()
             .Should().Be("insert into scalar_entity (name) values (@p0)");
@@ -295,7 +295,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IScalarEntity>()
+        ctx.CreateInsertBuilder<IScalarEntity>()
             .Values(new[] { "a", "b" })
             .ToSql()
             .Should().Be("insert into scalar_entity (name) values (@p0), (@p1)");
@@ -306,7 +306,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(x => x.Name, new[] { "a", "b" })
             .Values(x => x.Age, new[] { 1, 2 })
             .ToSql()
@@ -318,7 +318,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Value(x => x.Total, 1);
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Total, 1);
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -328,7 +328,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IDefaultEntity>()
+        ctx.CreateInsertBuilder<IDefaultEntity>()
             .ToSql()
             .Should().Be("insert into default_entity default values");
     }
@@ -338,7 +338,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, SqlDefault.Value)
             .ToSql()
             .Should().Be("insert into insert_entity (name) values (default)");
@@ -350,7 +350,7 @@ public class InsertSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var sources = new[] { new InsertSource { Name = "a" } };
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { Name = SqlDefault.Value })
             .ToSql()
             .Should().Be("insert into insert_entity (name) values (default)");
@@ -362,7 +362,7 @@ public class InsertSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var sources = new[] { new InsertSource { Name = "a" } };
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { Name = (object)SqlDefault.Value })
             .ToSql()
             .Should().Be("insert into insert_entity (name) values (default)");
@@ -373,7 +373,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IDefaultEntity>()
+        ctx.CreateInsertBuilder<IDefaultEntity>()
             .ReturningIdentity(x => x.Id)
             .ToSql()
             .Should().Be("insert into default_entity default values returning id");
@@ -385,7 +385,7 @@ public class InsertSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var min = 1;
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>().Where(s => s.Age > min), s => new { s.Name, s.Age })
             .ToSql())
             .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source\n where (Age > @min)");
@@ -396,7 +396,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .Returning(x => new { x.Id, x.Name })
             .ToSql())
@@ -408,7 +408,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age, Total = 1 });
 
         act.Should().Throw<NotSupportedException>();
@@ -419,7 +419,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age });
 
@@ -431,7 +431,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>().Where(s => s.Age == SqlFunctions.Parameter<int>(0)), s => new { s.Name, s.Age })
             .ToSql();
 
@@ -443,7 +443,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        SqlOf(ctx, ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
                 .Returning(x => new { x.Id }))
             .From("ins")
@@ -457,7 +457,7 @@ public class InsertSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var scope = ctx.With("src", ctx.From<InsertSource>().Select(s => new { s.Name, s.Age }));
 
-        var insert = ctx.InsertInto<IInsertEntity>()
+        var insert = ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(scope.From("src"), a => new { Name = a.GetString("Name"), Age = a.GetInt32("Age") })
             .Returning(x => new { x.Id });
 
@@ -466,15 +466,29 @@ public class InsertSqlGenerationTests
     }
 
     [Fact]
+    public void DataModifyingCte_NestedReadCteInBodyWithoutPreceding_ShouldHoistBoth()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var source = ctx.With("src", ctx.From<InsertSource>().Select(s => new { s.Name, s.Age })).From("src");
+
+        var insert = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Values(source, a => new { Name = a.GetString("Name"), Age = a.GetInt32("Age") })
+            .Returning(x => new { x.Id });
+
+        SqlOf(ctx, ctx.With("ins", insert).From("ins").Select(r => new { r.Id }))
+            .Should().Be("with src as (select Name, Age from insert_source), ins as (insert into insert_entity (name, age) select Name, Age from src returning id) select id from ins as \"t1\"");
+    }
+
+    [Fact]
     public void InsertFromMutationCte_ShouldHoistWithBeforeInsert()
     {
         using var ctx = PostgresTestContext.Create();
-        var source = ctx.With("ins", ctx.InsertInto<IValueEntity>()
+        var source = ctx.With("ins", ctx.CreateInsertBuilder<IValueEntity>()
                 .Value(x => x.Value, 5L)
                 .Returning(x => new { x.Value }))
             .From("ins");
 
-        Normalize(ctx.InsertInto<IValueEntity>()
+        Normalize(ctx.CreateInsertBuilder<IValueEntity>()
             .Values(source, r => new { r.Value })
             .ToSql())
             .Should().Be("with ins as (insert into value_entity (value) values (@p0) returning value) insert into value_entity (value) select value from ins as \"t1\"");
@@ -487,7 +501,7 @@ public class InsertSqlGenerationTests
         var inner = ctx.From<InsertSource>().Select(s => new { s.Name, s.Age });
         var source = ctx.With("c", inner).From("c");
 
-        var sql = Normalize(ctx.InsertInto<IInsertEntity>()
+        var sql = Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(source, a => new { Name = a.GetString("name"), Age = a.GetInt32("age") })
             .ToSql());
 
@@ -495,11 +509,30 @@ public class InsertSqlGenerationTests
     }
 
     [Fact]
+    public void ValuesQuery_WithNestedReadCte_ShouldHoistOneFlatWithBeforeInsert()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The INSERT ... SELECT source is a CTE whose body itself carries a nested declaration; the
+        // source render hoists the whole tree into one flat WITH before the INSERT.
+        var nested = ctx.With("i", ctx.From<InsertSource>().Select(s => new { s.Name, s.Age }))
+            .From("i")
+            .Select(t => new { Name = t.GetString("Name"), Age = t.GetInt32("Age") });
+        var source = ctx.With("o", nested).From("o");
+
+        var sql = Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
+            .Values(source, a => new { Name = a.GetString("name"), Age = a.GetInt32("age") })
+            .ToSql());
+
+        sql.Should().Be("with i as (select Name, Age from insert_source), o as (select Name, Age from i) insert into insert_entity (name, age) select name, age from o");
+    }
+
+    [Fact]
     public void ValuesQuery_MemberInitMapping_ShouldRenderInsertSelect()
     {
         using var ctx = PostgresTestContext.Create();
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new InsertEntity { Name = s.Name, Age = s.Age })
             .ToSql())
             .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source");
@@ -510,7 +543,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .ReturningIdentity<long>()
             .ToSql())
@@ -522,7 +555,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .ReturningKey<long>()
             .ToSql())
@@ -535,7 +568,7 @@ public class InsertSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var values = new long[] { 1, 2, 3 };
 
-        Normalize(ctx.InsertInto<IValueEntity>()
+        Normalize(ctx.CreateInsertBuilder<IValueEntity>()
             .Values(ctx.FromTableFunction(() => SqlFunctions.Postgres.unnest(values)), r => new { r.Value })
             .ToSql())
             .Should().Be("insert into value_entity (value) select unnest as \"Value\" from (select unnest from unnest(@values)) as \"t1\"");
@@ -546,7 +579,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        SqlOf(ctx, ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, "a")
                 .Returning(x => new { x.Id, x.Name }))
             .From("ins")
@@ -559,7 +592,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        SqlOf(ctx, ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, "a")
                 .Returning(x => new { x.Id, x.Age }))
             .From("ins")
@@ -573,7 +606,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        SqlOf(ctx, ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, "a")
                 .Returning(x => new { x.Id }))
             .With("src", ctx.From<InsertSource>().Select(s => new { s.Name }))
@@ -587,7 +620,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        SqlOf(ctx, ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, "a")
                 .Returning(x => new { x.Id }))
             .With("src", ctx.From<InsertSource>().Select(s => new { s.Age }))
@@ -601,7 +634,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        SqlOf(ctx, ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        SqlOf(ctx, ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Values(new InsertEntity { Name = "a", Age = 1 })
                 .Returning())
             .From("ins")
@@ -614,7 +647,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        ctx.InsertInto<IRangeEntity>()
+        ctx.CreateInsertBuilder<IRangeEntity>()
             .Value(x => x.Id, 1)
             .Value(x => x.During, new Range<int>(1, 10))
             .ToSql()
@@ -626,7 +659,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new { x.Id })
             .OutputInto("audit_log")

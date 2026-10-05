@@ -26,6 +26,12 @@ public sealed record QueryDefinition
     /// <see cref="SrcType"/> remains the parent entity type, or <c>null</c> for an ordinary command.
     /// </summary>
     internal Type? ProjectionType { get; init; }
+    /// <summary>
+    /// True for a prepared identity (whole-projection) CTE shape over an <see cref="IProjection"/>
+    /// source: the flattened item columns are tagged with the deterministic, collision-free per-slot
+    /// aliases the mutation's <c>RETURNING</c> list emits.
+    /// </summary>
+    internal bool IdentitySlotAliases { get; init; }
     /// <summary>Optional predicate applied as a <c>WHERE</c> clause.</summary>
     public LambdaExpression? Condition { get; init; }
     /// <summary>Joins accumulated by the builder.</summary>
@@ -61,12 +67,20 @@ public sealed record QueryDefinition
     internal LimitByClause? LimitBy { get; init; }
     /// <summary>Optional <c>DISTINCT ON (expr, ...)</c> clause (PostgreSQL).</summary>
     internal DistinctOnClause? DistinctOn { get; init; }
+    /// <summary>Optional <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection clause.</summary>
+    internal ExtremeRowClause? ExtremeRow { get; init; }
     /// <summary>Optional <c>TABLESAMPLE</c> table modifier.</summary>
     internal TableSampleClause? TableSample { get; init; }
     /// <summary>Optional <c>FOR SYSTEM_TIME</c> temporal-table clause.</summary>
     internal TemporalClause? Temporal { get; init; }
     /// <summary>Optional trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause.</summary>
     internal LockClause? RowLock { get; init; }
+    /// <summary>
+    /// The joined parameters injected by a reference-navigation expansion and their display paths
+    /// (#148-B D5). Carried across clones so a cloned command re-checks the projection nullability and
+    /// keeps the provider outer-join null settings. Not part of the plan key.
+    /// </summary>
+    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths { get; init; }
     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
     public bool Final { get; init; }
     /// <summary>The ClickHouse <c>SAMPLE</c> ratio, or <c>null</c> when the modifier is absent.</summary>

@@ -1,0 +1,76 @@
+{
+  "rounds": [
+    {
+      "round": 1,
+      "old_slope_ns_per_hit": 58940.8682531633,
+      "new_slope_ns_per_hit": 30979.722892943264,
+      "old_intercept_ns": -511889.352382876,
+      "new_intercept_ns": 511697.7709624395,
+      "old_r2": 0.9999776141649016,
+      "new_r2": 0.9998694689267529,
+      "ratio_new_over_old": 0.5256068295410733
+    },
+    {
+      "round": 2,
+      "old_slope_ns_per_hit": 40448.64502628635,
+      "new_slope_ns_per_hit": 30123.87574978921,
+      "old_intercept_ns": 597765.9708906859,
+      "new_intercept_ns": 575701.779300008,
+      "old_r2": 0.9998821002201168,
+      "new_r2": 0.9998344866569087,
+      "ratio_new_over_old": 0.7447437542150699
+    },
+    {
+      "round": 3,
+      "old_slope_ns_per_hit": 54837.81487981946,
+      "new_slope_ns_per_hit": 31006.03657259437,
+      "old_intercept_ns": -349097.2464983091,
+      "new_intercept_ns": 218648.42139309645,
+      "old_r2": 0.9999608896422476,
+      "new_r2": 0.9999713224233105,
+      "ratio_new_over_old": 0.5654134221165825
+    },
+    {
+      "round": 4,
+      "old_slope_ns_per_hit": 40533.0118351854,
+      "new_slope_ns_per_hit": 27695.19212776701,
+      "old_intercept_ns": 784617.6170759574,
+      "new_intercept_ns": 319257.65365311876,
+      "old_r2": 0.9998595112865759,
+      "new_r2": 0.9999401463315978,
+      "ratio_new_over_old": 0.6832749621562961
+    },
+    {
+      "round": 5,
+      "old_slope_ns_per_hit": 51464.628882794685,
+      "new_slope_ns_per_hit": 27522.226713211538,
+      "old_intercept_ns": 21370.286925829947,
+      "new_intercept_ns": 703240.029750254,
+      "old_r2": 0.9999986292870927,
+      "new_r2": 0.9996835915083707,
+      "ratio_new_over_old": 0.5347794652496287
+    }
+  ],
+  "completed_rounds": 5,
+  "median_ratio": 0.5654134221165825,
+  "mean_ratio": 0.6107636866557301,
+  "geomean_ratio": 0.6047290649710126,
+  "min_ratio": 0.5256068295410733,
+  "max_ratio": 0.7447437542150699,
+  "sign_new_faster": 5,
+  "sign_new_slower": 0,
+  "bootstrap_95ci_median_ratio": [
+    0.5256068295410733,
+    0.7447437542150699
+  ],
+  "note": "n=5 -> nonparametric bracket is min/max; bootstrap percentile 95% CI also given",
+  "in_process_r6": {
+    "old_slope_ns_per_hit": 5319.098590152521,
+    "new_slope_ns_per_hit": 4777.490052186563,
+    "old_intercept_ns": 670593.2657471774,
+    "new_intercept_ns": 4415.322482157499,
+    "old_r2": 0.9975739819230285,
+    "new_r2": 0.9998342916478679,
+    "ratio_new_over_old": 0.898176631098987
+  }
+}

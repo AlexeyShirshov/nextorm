@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkCache-20261005-214131</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code></code></pre>
+
+<table>
+<thead><tr><th>Method    </th><th>Iterations</th><th>Mean </th><th>Error</th><th>StdDev</th><th>Median</th>
+</tr>
+</thead><tbody><tr><td>NextormPrepared</td><td>1</td><td>11.57 &mu;s</td><td>0.218 &mu;s</td><td>0.387 &mu;s</td><td>11.44 &mu;s</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>1</td><td>20.06 &mu;s</td><td>0.391 &mu;s</td><td>0.326 &mu;s</td><td>20.08 &mu;s</td>
+</tr><tr><td>Linq2Db</td><td>1</td><td>38.84 &mu;s</td><td>0.715 &mu;s</td><td>1.215 &mu;s</td><td>38.67 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>3</td><td>39.17 &mu;s</td><td>0.749 &mu;s</td><td>0.700 &mu;s</td><td>39.10 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>5</td><td>64.67 &mu;s</td><td>1.242 &mu;s</td><td>1.479 &mu;s</td><td>64.52 &mu;s</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>3</td><td>67.71 &mu;s</td><td>1.354 &mu;s</td><td>1.663 &mu;s</td><td>67.58 &mu;s</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>5</td><td>113.76 &mu;s</td><td>2.221 &mu;s</td><td>2.181 &mu;s</td><td>113.50 &mu;s</td>
+</tr><tr><td>Linq2Db</td><td>3</td><td>130.16 &mu;s</td><td>2.574 &mu;s</td><td>6.265 &mu;s</td><td>128.86 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>10</td><td>132.54 &mu;s</td><td>2.562 &mu;s</td><td>3.241 &mu;s</td><td>131.80 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>15</td><td>200.02 &mu;s</td><td>3.727 &mu;s</td><td>3.303 &mu;s</td><td>199.26 &mu;s</td>
+</tr><tr><td>Linq2Db</td><td>5</td><td>212.22 &mu;s</td><td>4.098 &mu;s</td><td>10.356 &mu;s</td><td>210.47 &mu;s</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>10</td><td>234.41 &mu;s</td><td>4.239 &mu;s</td><td>8.269 &mu;s</td><td>233.00 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>20</td><td>274.04 &mu;s</td><td>5.098 &mu;s</td><td>6.806 &mu;s</td><td>272.66 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>1</td><td>327.38 &mu;s</td><td>22.919 &mu;s</td><td>66.855 &mu;s</td><td>290.88 &mu;s</td>
+</tr><tr><td>Dapper</td><td>1</td><td>338.80 &mu;s</td><td>13.410 &mu;s</td><td>37.159 &mu;s</td><td>321.77 &mu;s</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>15</td><td>343.25 &mu;s</td><td>6.746 &mu;s</td><td>10.502 &mu;s</td><td>342.88 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>30</td><td>409.06 &mu;s</td><td>6.543 &mu;s</td><td>7.000 &mu;s</td><td>407.96 &mu;s</td>
+</tr><tr><td>Linq2Db</td><td>10</td><td>455.20 &mu;s</td><td>17.113 &mu;s</td><td>44.782 &mu;s</td><td>443.62 &mu;s</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>20</td><td>470.76 &mu;s</td><td>9.373 &mu;s</td><td>14.028 &mu;s</td><td>474.13 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>3</td><td>498.10 &mu;s</td><td>57.173 &mu;s</td><td>168.576 &mu;s</td><td>376.85 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>5</td><td>592.23 &mu;s</td><td>77.996 &mu;s</td><td>229.974 &mu;s</td><td>448.78 &mu;s</td>
+</tr><tr><td>Linq2Db</td><td>15</td><td>679.62 &mu;s</td><td>11.579 &mu;s</td><td>14.221 &mu;s</td><td>681.07 &mu;s</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>30</td><td>691.82 &mu;s</td><td>12.068 &mu;s</td><td>15.692 &mu;s</td><td>690.51 &mu;s</td>
+</tr><tr><td>Linq2Db</td><td>20</td><td>887.46 &mu;s</td><td>18.037 &mu;s</td><td>48.455 &mu;s</td><td>885.86 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>10</td><td>991.74 &mu;s</td><td>152.754 &mu;s</td><td>450.398 &mu;s</td><td>675.29 &mu;s</td>
+</tr><tr><td>Dapper</td><td>3</td><td>1,016.57 &mu;s</td><td>41.933 &mu;s</td><td>123.640 &mu;s</td><td>948.91 &mu;s</td>
+</tr><tr><td>Dapper</td><td>5</td><td>1,084.10 &mu;s</td><td>45.340 &mu;s</td><td>133.686 &mu;s</td><td>1,014.44 &mu;s</td>
+</tr><tr><td>Dapper</td><td>10</td><td>1,205.63 &mu;s</td><td>44.029 &mu;s</td><td>126.328 &mu;s</td><td>1,145.88 &mu;s</td>
+</tr><tr><td>Linq2Db</td><td>30</td><td>1,288.44 &mu;s</td><td>23.308 &mu;s</td><td>42.619 &mu;s</td><td>1,288.73 &mu;s</td>
+</tr><tr><td>Dapper</td><td>20</td><td>1,378.01 &mu;s</td><td>23.572 &mu;s</td><td>54.161 &mu;s</td><td>1,371.52 &mu;s</td>
+</tr><tr><td>Dapper</td><td>15</td><td>1,732.49 &mu;s</td><td>33.294 &mu;s</td><td>32.699 &mu;s</td><td>1,730.50 &mu;s</td>
+</tr><tr><td>Dapper</td><td>30</td><td>1,869.71 &mu;s</td><td>127.799 &mu;s</td><td>376.819 &mu;s</td><td>1,643.76 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>15</td><td>2,315.77 &mu;s</td><td>38.963 &mu;s</td><td>36.446 &mu;s</td><td>2,319.19 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>20</td><td>3,044.97 &mu;s</td><td>35.050 &mu;s</td><td>29.268 &mu;s</td><td>3,040.96 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>30</td><td>4,335.28 &mu;s</td><td>83.586 &mu;s</td><td>74.097 &mu;s</td><td>4,329.83 &mu;s</td>
+</tr></tbody></table>
+</body>
+</html>

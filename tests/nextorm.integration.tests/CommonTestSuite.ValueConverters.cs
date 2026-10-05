@@ -68,10 +68,10 @@ public abstract partial class CommonTestSuite
         try
         {
             var at = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.FromHours(3));
-            ctx.InsertInto<IValueConverterProbe>()
+            ctx.CreateInsertBuilder<IValueConverterProbe>()
                 .Values(new ValueConverterProbe { Id = 1, State = ProbeState.Active, At = at })
                 .Insert();
-            ctx.InsertInto<IValueConverterProbe>()
+            ctx.CreateInsertBuilder<IValueConverterProbe>()
                 .Values(new ValueConverterProbe { Id = 2, State = ProbeState.Closed, At = null })
                 .Insert();
 
@@ -84,7 +84,7 @@ public abstract partial class CommonTestSuite
             second.At.Should().BeNull();
 
             // A constant in a SET list is converted through the mapped property, like an INSERT value.
-            ctx.Update<IValueConverterProbe>()
+            ctx.CreateUpdateBuilder<IValueConverterProbe>()
                 .Set(x => x.State, ProbeState.Active)
                 .Set(x => x.At, DateTimeOffset.UnixEpoch)
                 .Where(x => x.Id == 2)
@@ -118,10 +118,10 @@ public abstract partial class CommonTestSuite
         try
         {
             var at = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.FromHours(3));
-            ctx.InsertInto<IValueConverterProbe>()
+            ctx.CreateInsertBuilder<IValueConverterProbe>()
                 .Values(new ValueConverterProbe { Id = 1, State = ProbeState.Active, At = at })
                 .Insert();
-            ctx.InsertInto<IValueConverterProbe>()
+            ctx.CreateInsertBuilder<IValueConverterProbe>()
                 .Values(new ValueConverterProbe { Id = 2, State = ProbeState.Closed, At = null })
                 .Insert();
 
@@ -186,7 +186,7 @@ public abstract partial class CommonTestSuite
 
         try
         {
-            var row = ctx.InsertInto<ValueConverterProbe>()
+            var row = ctx.CreateInsertBuilder<ValueConverterProbe>()
                 .Values(new ValueConverterProbe { Id = 10, State = ProbeState.Active, At = null })
                 .Returning()
                 .Single();
@@ -212,10 +212,10 @@ public abstract partial class CommonTestSuite
 
         try
         {
-            ctx.InsertInto<IValueConverterProbe>()
+            ctx.CreateInsertBuilder<IValueConverterProbe>()
                 .Values(new ValueConverterProbe { Id = 1, State = ProbeState.Active, At = null })
                 .Insert();
-            ctx.InsertInto<IValueConverterProbe>()
+            ctx.CreateInsertBuilder<IValueConverterProbe>()
                 .Values(new ValueConverterProbe { Id = 2, State = ProbeState.Closed, At = null })
                 .Insert();
 

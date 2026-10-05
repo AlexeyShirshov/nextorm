@@ -94,32 +94,47 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// <param name="condition">The condition to install.</param>
     internal void SetJoinCondition(LambdaExpression condition) => JoinCondition = condition;
     /// <summary>
-    /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set through the fluent
-    /// <c>WithStrictness</c> modifier, which copies the join rather than mutating it; defaults to
+    /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set at construction from the join's
+    /// <see cref="JoinOptions"/> (<c>WithStrictness</c>); defaults to
     /// <see cref="JoinStrictness.Default"/>.
     /// </summary>
     public JoinStrictness Strictness { get; internal init; }
     /// <summary>
     /// Whether the join is the ClickHouse <c>GLOBAL</c> variant (the right-hand side is resolved once
-    /// and broadcast, for distributed queries). Set through the fluent <c>Global</c> modifier, which
-    /// copies the join rather than mutating it. Rendered by
+    /// and broadcast, for distributed queries). Set at construction from the join's
+    /// <see cref="JoinOptions"/> (<c>Global</c>). Rendered by
     /// <see cref="ISqlDialect.MakeJoinKeyword(JoinType, JoinStrictness, bool, KeywordCase)"/> and gated by <see cref="ISqlDialect.SupportsGlobalJoin"/>.
     /// </summary>
     public bool IsGlobal { get; internal init; }
     /// <summary>
     /// Optional provider-specific hint attached to this join, or <c>null</c> when the join has none.
-    /// Set through the fluent <c>WithJoinHint</c> modifier, which copies the join rather than mutating
-    /// it. A dialect that renders join hints places it inside the join clause (SQL Server
+    /// Set at construction from the join's <see cref="JoinOptions"/> (<c>WithJoinHint</c>).
+    /// A dialect that renders join hints places it inside the join clause (SQL Server
     /// <c>inner loop join</c>); a dialect with inline hint comments folds it into the statement-level
     /// <c>/*+ ... */</c>. A dialect that supports neither rejects the command.
     /// </summary>
     public string? JoinHint { get; internal init; }
+    /// <summary>
+    /// Optional table-level hints attached to this join's right-hand physical table, or <c>null</c>
+    /// when the join has none. Set at construction from the join's <see cref="JoinOptions"/>
+    /// (<c>WithJoinTableHint</c>). On a dialect with structural table hints (SQL Server) they
+    /// render as a <c>WITH (...)</c> clause after the joined table name; a dialect that does not
+    /// support table hints rejects the command.
+    /// </summary>
+    internal IReadOnlyList<string>? TableHints { get; init; }
     /// <summary>
     /// Joined source type. Only needed when <see cref="JoinCondition"/> is absent (a cross join has no
     /// condition parameter to read the right-hand type from), so the alias of the joined table can be
     /// resolved during SQL generation and in the in-memory provider.
     /// </summary>
     public Type? EntityType { get; init; }
+    /// <summary>
+    /// The lambda parameter that denotes this join's right-hand source when it was injected by an
+    /// implicit reference-navigation expansion (#148-B R2.2). Registered with the columns provider so
+    /// alias resolution binds by occurrence identity, keeping two same-typed joined sources distinct.
+    /// <c>null</c> for an ordinary user join.
+    /// </summary>
+    internal ParameterExpression? SourceParameter { get; init; }
     private FromExpression _from = null!;
     /// <summary>The right-hand source being joined.</summary>
     public required FromExpression From { get => _from; init => _from = value; }
@@ -137,6 +152,12 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// lets the non-list terminals build a parent-only command that excludes the stitching join.
     /// </summary>
     internal bool IsJoinInto { get; set; }
+    /// <summary>
+    /// Whether the <c>JoinInto</c> declaration that added this join asked to suppress the
+    /// <c>JoinInto.MultipleCollections</c> diagnostic (see <see cref="JoinOptions.SuppressCartesianWarning"/>).
+    /// Diagnostic-only: it never participates in the rendered SQL or the plan key.
+    /// </summary>
+    internal bool SuppressCartesianWarning { get; init; }
     /// <summary>
     /// The identity of the <c>JoinInto</c> declaration that added this join, or <see langword="null"/>
     /// for a regular join. It is folded into the join's plan hash and equality so two distinct
@@ -168,13 +189,16 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
         {
             From = _from,
             EntityType = EntityType,
+            SourceParameter = SourceParameter,
             Strictness = Strictness,
             IsGlobal = IsGlobal,
             JoinHint = JoinHint,
+            TableHints = TableHints,
             ApplySource = ApplySource,
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
+            SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
         };
     internal JoinExpression CloneForCache()
@@ -185,13 +209,16 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
         {
             From = newFrom!,
             EntityType = EntityType,
+            SourceParameter = SourceParameter,
             Strictness = Strictness,
             IsGlobal = IsGlobal,
             JoinHint = JoinHint,
+            TableHints = TableHints,
             ApplySource = ApplySource,
             OriginalJoinCondition = _originalJoinCondition,
             IsJoinInto = IsJoinInto,
             JoinIntoIdentity = JoinIntoIdentity,
+            SuppressCartesianWarning = SuppressCartesianWarning,
             FilterScope = FilterScope,
         };
     }

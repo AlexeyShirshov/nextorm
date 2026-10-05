@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading;
 
 namespace NextORM.Core;
@@ -21,10 +22,27 @@ public static class DataContextCache
 {
     private readonly static TimedDictionary<Type, IEntityMetadata> _metadata = new();
     private readonly static TimedDictionary<Type, IEntityMetadata> _tvpMetadata = new();
+    private readonly static ConcurrentDictionary<Type, byte> _autoPublishedJunctionMetadata = new();
     private readonly static TimedDictionary<Type, SelectExpression[]> _selectListCache = new();
     private readonly static TimedDictionary<ExpressionKey, Delegate> _expCache = new();
     private readonly static TimedDictionary<ExpressionKey, Func<object?, object?>> _inValuesCache = new();
+    private readonly static ConcurrentDictionary<string, Func<IDataContext, object>> _queryFilterContextAccessors = new();
     private static long _cacheSlidingExpirationTicks;
+
+    /// <summary>
+    /// Process-wide gate serializing every mutation of <see cref="Metadata"/>. The EF Core model mapper
+    /// stages its whole import and publishes it under this gate, so it re-reads the current entries and
+    /// revalidates conflicts immediately before writing. The core writers take the same gate and
+    /// revalidate against the current entry before writing, so a concurrent auto/configured registration
+    /// or junction publication can neither clobber a bridged entry nor be clobbered by it.
+    /// </summary>
+    /// <remarks>
+    /// A single process-wide lock is used deliberately: the coordinated writers never acquire another
+    /// lock while holding it, so no lock-ordering deadlock is possible. Metadata building runs outside
+    /// the gate (and user configuration callbacks are never invoked under it), so the gate is held only
+    /// across the read-revalidate-write publication itself.
+    /// </remarks>
+    internal static readonly object MetadataRegistrationGate = new();
 
     /// <summary>
     /// Entity metadata resolved for each CLR type, keyed by that type. Populated lazily on the first
@@ -41,6 +59,15 @@ public static class DataContextCache
     /// </summary>
     internal static IDictionary<Type, IEntityMetadata> TvpMetadata => _tvpMetadata;
     /// <summary>
+    /// Junction entity types whose mapping was auto-published into <see cref="Metadata"/> by the
+    /// many-to-many resolver, without a user configuration, so the derived link source can read its
+    /// columns. Tracked separately so a later <c>From&lt;TJunction&gt;(cfg)</c> can tell an auto-built
+    /// entry from a configured one and rebuild it from the configuration instead of silently reusing
+    /// the auto mapping. The auto path clears the marker when the configuration wins. Internal: not
+    /// part of the public cache surface.
+    /// </summary>
+    internal static IDictionary<Type, byte> AutoPublishedJunctionMetadata => _autoPublishedJunctionMetadata;
+    /// <summary>
     /// Cached select lists (the projected columns) of each CLR type, keyed by that type, so the
     /// projection is not rebuilt per query.
     /// </summary>
@@ -55,6 +82,15 @@ public static class DataContextCache
     /// keyed by the collection expression's shape. See <see cref="InValuesEvaluator"/>.
     /// </summary>
     public static IDictionary<ExpressionKey, Func<object?, object?>> InValuesCache => _inValuesCache;
+    /// <summary>
+    /// Compiled accessors for the owner-getter/member subtree a query filter imported from EF Core
+    /// reads through <see cref="QueryFilterContext.Context"/>. The accessor takes the executing
+    /// <see cref="IDataContext"/> as its only argument, so it is host-free; the key is the canonical
+    /// string text of that accessor lambda, which therefore holds no live context, query command or
+    /// owner instance. Internal: an engine detail of the EF Core bridge, deliberately kept out of the
+    /// public cache surface.
+    /// </summary>
+    internal static IDictionary<string, Func<IDataContext, object>> QueryFilterContextAccessors => _queryFilterContextAccessors;
 
     /// <summary>
     /// Sliding expiration applied to every process-wide cache this class owns. An entry that has not
@@ -90,13 +126,32 @@ public static class DataContextCache
     {
         _metadata.Clear();
         _tvpMetadata.Clear();
+        _autoPublishedJunctionMetadata.Clear();
         _selectListCache.Clear();
         _expCache.Clear();
         _inValuesCache.Clear();
+        _queryFilterContextAccessors.Clear();
         MapperCache.Clear();
         RawMapperFactory.Clear();
         ProjectionAliasCache.Clear();
         QueryPlanner.ClearFromCache();
         QueryPlanStore.Clear();
+        MemberInfoExtensions.ClearColumnNames();
+    }
+
+    /// <summary>
+    /// Test-only helper that ages every timed entry in the process-wide caches this class owns past the
+    /// current <see cref="CacheSlidingExpiration"/> window, so the real lazy-expiration path can be
+    /// exercised deterministically without a wall-clock sleep. It only ages entries; the next read
+    /// evicts them. A non-positive window leaves every store untouched. Internal: not part of the
+    /// public cache surface.
+    /// </summary>
+    internal static void ExpireTimedEntriesForTesting()
+    {
+        _metadata.ExpireEntriesForTesting();
+        _tvpMetadata.ExpireEntriesForTesting();
+        _selectListCache.ExpireEntriesForTesting();
+        _expCache.ExpireEntriesForTesting();
+        _inValuesCache.ExpireEntriesForTesting();
     }
 }

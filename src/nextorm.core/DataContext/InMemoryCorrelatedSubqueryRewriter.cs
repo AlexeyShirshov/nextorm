@@ -238,8 +238,25 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
         ParameterExpression parameter => parameter,
         MemberExpression member => FindParameter(member.Expression!),
         UnaryExpression unary => FindParameter(unary.Operand),
+        // #148-B D-R3-5: a collection reached through a reference prefix registers a compiled
+        // chain-key resolution call as its outer reference; the row parameter is one of its arguments.
+        MethodCallExpression call => FindParameterInCall(call),
         _ => null,
     };
+
+    private static ParameterExpression? FindParameterInCall(MethodCallExpression call)
+    {
+        if (call.Object is not null && FindParameter(call.Object) is { } target)
+            return target;
+
+        foreach (var argument in call.Arguments)
+        {
+            if (FindParameter(argument) is { } parameter)
+                return parameter;
+        }
+
+        return null;
+    }
 
     private static Expression UnwrapObjectConversion(Expression expression)
         => expression is UnaryExpression { NodeType: ExpressionType.Convert } unary && unary.Type == typeof(object)

@@ -63,7 +63,7 @@ public class SqlGenerationTests
 
         // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
         // every dynamic key is backtick-quoted even though the global identifier-quoting flag is off.
-        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+        Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
             .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
@@ -74,7 +74,7 @@ public class SqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        Normalize(ctx.Update<DynamicColumnsEntity>()
+        Normalize(ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
@@ -86,7 +86,7 @@ public class SqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -106,7 +106,7 @@ public class SqlGenerationTests
         using var ctx = MariaDbTestContext.Create();
 
         // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
             .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
@@ -579,5 +579,74 @@ public class SqlGenerationTests
         sql.Should().Contain("group by nullableint");
         sql.Should().Contain("order by count(*) desc");
         sql.Should().Contain("limit 20 offset 1");
+    }
+
+    [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSingleTopLevelWith()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // MariaDB 10.2+ accepts the ANSI `with` form (SqlDialectBase.MakeWith), so the nested declaration
+        // hoists into one flat top-level `with` instead of the nested `with i as (with ...)` shape.
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    // --- SelectWhereMax: window-rank lowering ---
+
+    private static string Dequoted(string sql) => sql
+        .Replace("\r\n", " ")
+        .Replace('\n', ' ')
+        .Replace("\"", string.Empty)
+        .Replace("[", string.Empty)
+        .Replace("]", string.Empty)
+        .Replace("`", string.Empty);
+
+    private static string OuterSelectList(string sql)
+    {
+        const string marker = "select ";
+        var start = sql.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return sql;
+        start += marker.Length;
+        var end = sql.IndexOf(" from ", start, StringComparison.Ordinal);
+        return end < 0 ? sql[start..] : sql[start..end];
+    }
+
+    [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldRenderRowNumberFilteredToTheSingleExtreme()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 }

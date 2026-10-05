@@ -1,6 +1,6 @@
 # Массовая вставка (bulk)
 
-`BulkInsertInto<TEntity>()` записывает весь набор одним явным вызовом, без change tracking. Где у
+`CreateBulkInsertBuilder<TEntity>()` записывает весь набор одним явным вызовом, без change tracking. Где у
 провайдера есть нативный bulk API, он и используется — бинарный `COPY` в PostgreSQL и `SqlBulkCopy` в
 SQL Server; иначе набор пишется параметризованным `INSERT ... VALUES`, при необходимости — чанками.
 
@@ -48,7 +48,7 @@ var orders = new[]
 };
 
 // нативный COPY в PostgreSQL; портируемый INSERT ... VALUES на остальных провайдерах
-var written = ctx.BulkInsertInto<IOrder>().Values(orders).BulkInsert();
+var written = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).BulkInsert();
 // written == 3
 ```
 
@@ -76,7 +76,7 @@ var written = ctx.BulkInsertInto<IOrder>().Values(orders).BulkInsert();
 // любой IAsyncEnumerable<IOrder> — Channel-ридер, асинхронный цикл постраничного чтения, EF AsAsyncEnumerable(), ...
 IAsyncEnumerable<IOrder> ordersStream = ...;
 
-await ctx.BulkInsertInto<IOrder>()
+await ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(ordersStream)
     .BulkInsertAsync(cancellationToken);
 ```
@@ -115,7 +115,7 @@ await ctx.BulkInsertInto<IOrder>()
 `[SqlTable]`-маппинга:
 
 ```csharp
-var written = ctx.BulkInsertInto<IOrder>(o => o.Table("archive", "orders_2024"))
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.Table("archive", "orders_2024"))
     .Values(orders)
     .BulkInsert();
 ```
@@ -134,27 +134,27 @@ Override имеет приоритет над маппингом `[SqlTable]`/`T
 
 ```csharp
 // только ключи — ReturningKey<TKey>() читает ключевую колонку из метаданных
-IReadOnlyList<int> ids = ctx.BulkInsertInto<IOrder>()
+IReadOnlyList<int> ids = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .ReturningKey<int>()
     .ToList();
 // ids = [1, 2, 3]
 
 // проекция на каждую записанную строку
-var rows = ctx.BulkInsertInto<IOrder>()
+var rows = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .Returning(o => new { o.Id, o.CustomerId })
     .ToList();
 // rows = [ { Id = 1, CustomerId = 1 }, { Id = 2, CustomerId = 2 }, ... ]
 
 // проекция одного скаляра
-IReadOnlyList<int> customerIds = ctx.BulkInsertInto<IOrder>()
+IReadOnlyList<int> customerIds = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .Returning(o => o.CustomerId)
     .ToList();
 
 // асинхронно
-IReadOnlyList<int> keys = await ctx.BulkInsertInto<IOrder>()
+IReadOnlyList<int> keys = await ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(ordersStream)
     .ReturningKey<int>()
     .ToListAsync(cancellationToken);
@@ -164,7 +164,7 @@ IReadOnlyList<int> keys = await ctx.BulkInsertInto<IOrder>()
 > его не обещают). Связывайте строки по бизнес-ключу, а не по позиции:
 
 ```csharp
-var idByCustomer = ctx.BulkInsertInto<IOrder>()
+var idByCustomer = ctx.CreateBulkInsertBuilder<IOrder>()
     .Values(orders)
     .Returning(o => new { o.CustomerId, o.Id })
     .ToList()
@@ -175,18 +175,18 @@ var orderIdForCustomer2 = idByCustomer[2];
 
 `Returning*` требует провайдер с `RETURNING`/`OUTPUT`: PostgreSQL и SQLite 3.35+ (через `RETURNING`)
 и SQL Server (через `OUTPUT`). MySQL, MariaDB и ClickHouse отклоняют его явным
-`NotSupportedException` — там ключи читаются обычным `InsertInto`.
+`NotSupportedException` — там ключи читаются обычным `CreateInsertBuilder`.
 
 ## Ограничение батча и прогресс
 
 Портируемый путь по умолчанию отправляет весь набор одним утверждением. Лимиты чанка и прогресс — это
-опции записи, передаваемые в `BulkInsertInto<TEntity>`: либо записью `BulkInsertOptions`, либо через
+опции записи, передаваемые в `CreateBulkInsertBuilder<TEntity>`: либо записью `BulkInsertOptions`, либо через
 fluent-колбэк `BulkInsertOptionsBuilder`:
 
 ```csharp
 var written = 0;
 
-await ctx.BulkInsertInto<IOrder>(o => o
+await ctx.CreateBulkInsertBuilder<IOrder>(o => o
         .MaxBatchSize(1_000)                                 // строк на утверждение
         .MaxParameters(20_000)                               // параметров на утверждение
         .NotifyAfter(10_000, (total, _) => written = total)) // вызывается с накопленным числом
@@ -210,7 +210,7 @@ PostgreSQL). Держите его быстрым и не бросающим: и
 ```csharp
 using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
-await ctx.BulkInsertInto<IOrder>(o => o
+await ctx.CreateBulkInsertBuilder<IOrder>(o => o
         .ProgressCancellationTokenSource(budget)
         .NotifyAfter(10_000, (total, token) => Report(total, token)))
     .Values(ordersStream)
@@ -234,10 +234,10 @@ var pinned = new[]
     new Order { Id = 9001, CustomerId = 1, Total = 5m },
     new Order { Id = 9002, CustomerId = 2, Total = 6m },
 };
-ctx.BulkInsertInto<IOrder>(o => o.KeepIdentity()).Values(pinned).BulkInsert();
+ctx.CreateBulkInsertBuilder<IOrder>(o => o.KeepIdentity()).Values(pinned).BulkInsert();
 
 // батч, повторяющий 9001: дубликат пропускается, остальные строки пишутся
-var written = ctx.BulkInsertInto<IOrder>(o => o.KeepIdentity().IgnoreDuplicates())
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o.KeepIdentity().IgnoreDuplicates())
     .Values([
         new Order { Id = 9001, CustomerId = 1, Total = 5m },   // конфликт -> пропуск
         new Order { Id = 9003, CustomerId = 3, Total = 7m },   // записана
@@ -263,7 +263,7 @@ MySQL/MariaDB (`INSERT IGNORE`); на SQL Server он отклоняется, а
 портируемом `INSERT ... VALUES`. По умолчанию они выключены — как `SqlBulkCopyOptions.Default`:
 
 ```csharp
-var written = ctx.BulkInsertInto<IOrder>(o => o
+var written = ctx.CreateBulkInsertBuilder<IOrder>(o => o
         .TableLock()          // SqlBulkCopyOptions.TableLock
         .CheckConstraints()   // SqlBulkCopyOptions.CheckConstraints
         .KeepNulls()          // SqlBulkCopyOptions.KeepNulls
@@ -291,21 +291,21 @@ var written = ctx.BulkInsertInto<IOrder>(o => o
 открывая соединение:
 
 ```csharp
-var sql = ctx.BulkInsertInto<IOrder>().Values(orders).ToSql();
+var sql = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).ToSql();
 // insert into orders (customer_id, total) values (@p0, @p1), (@p2, @p3), (@p4, @p5)
 
-var returningSql = ctx.BulkInsertInto<IOrder>().Values(orders).ReturningKey<int>().ToSql();
+var returningSql = ctx.CreateBulkInsertBuilder<IOrder>().Values(orders).ReturningKey<int>().ToSql();
 // insert into orders (customer_id, total) values (@p0, @p1), ... returning id
 ```
 
 ## Опции
 
-Опции записи передаются в `BulkInsertInto<TEntity>` — записью `BulkInsertOptions` или, короче, через
+Опции записи передаются в `CreateBulkInsertBuilder<TEntity>` — записью `BulkInsertOptions` или, короче, через
 колбэк `BulkInsertOptionsBuilder`:
 
 ```csharp
-ctx.BulkInsertInto<IOrder>(new BulkInsertOptions { MaxBatchSize = 1_000, IgnoreDuplicates = true });
-ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
+ctx.CreateBulkInsertBuilder<IOrder>(new BulkInsertOptions { MaxBatchSize = 1_000, IgnoreDuplicates = true });
+ctx.CreateBulkInsertBuilder<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 ```
 
 | Опция | Метод builder | Действие |

@@ -5,7 +5,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a <c>DELETE</c> statement, started with
-/// <see cref="DataContextExtensions.DeleteFrom{TEntity}"/>. The rows to remove are selected either by a
+/// <see cref="DataContextExtensions.CreateDeleteBuilder{TEntity}"/>. The rows to remove are selected either by a
 /// predicate (<see cref="Where"/>) or explicitly as the whole table (<see cref="All"/>); both render a
 /// parameterised <c>DELETE FROM &lt;table&gt; [WHERE ...]</c>. There is deliberately no change tracking:
 /// the terminal issues exactly one explicit command.
@@ -151,7 +151,7 @@ public sealed class DeleteBuilder<TEntity>
         var parameter = Expression.Parameter(typeof(TEntity), "x");
         var identity = Expression.Lambda<Func<TEntity, TEntity>>(parameter, parameter);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(identity, _metadata.Properties, FindProperty);
-        return new DeleteReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn);
+        return new DeleteReturningBuilder<TEntity, TEntity>(this, columns, selectList, oneColumn, projection: identity);
     }
 
     /// <summary>
@@ -168,7 +168,7 @@ public sealed class DeleteBuilder<TEntity>
     {
         ArgumentNullException.ThrowIfNull(projection);
         var (columns, selectList, oneColumn) = ReturningProjection.Parse(projection, _metadata.Properties, FindProperty);
-        return new DeleteReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn);
+        return new DeleteReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn, projection: projection);
     }
 
     /// <summary>Executes the delete and returns the number of affected rows.</summary>
@@ -230,7 +230,7 @@ public sealed class DeleteBuilder<TEntity>
 
         if (keys.Count == 0)
             throw new InvalidOperationException(
-                $"Entity {typeof(TEntity)} has no key property. Mark one with [Key]/.Key() before deleting by entity, or use DeleteFrom<T>().Where(...).");
+                $"Entity {typeof(TEntity)} has no key property. Mark one with [Key]/.Key() before deleting by entity, or use CreateDeleteBuilder<T>().Where(...).");
 
         // The key form carries the target entity's global filter through a no-predicate source command:
         // preparing it injects the filter (minus the IgnoreFilters scope) into the condition, which the

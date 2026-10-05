@@ -518,6 +518,65 @@ public class QueryFilterTests
         onlyNamed.Should().BeEquivalentTo([1, 600], "only the anonymous Id filter is disabled");
     }
 
+    // An ignored Count must not poison the plan cache or the context's shared command: the scope is part
+    // of the command's prepared condition, so a later normal terminal sees the full filter set again.
+    [Fact]
+    public void IgnoredCountThenNormalRestoresScope()
+    {
+        using var ctx = new InMemoryDataContext();
+        ConfigureSelectiveKeyed(ctx);
+
+        // Warm the filtered count plan (anonymous Id<100 AND named soft-delete).
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1);
+
+        // Establish the context-shared Any command with the normal scope, so the sticky-flag check below
+        // observes the shared command rather than a fresh one.
+        ctx.From<SelectiveKeyedEntity>().Any().Should().BeTrue();
+        var shared = ctx.AnyCommand!.Value;
+        shared.Cache.Should().BeTrue();
+
+        // Ignore only the named soft filter: the soft-deleted row becomes visible.
+        ctx.From<SelectiveKeyedEntity>().IgnoreFilters(["soft"]).Count().Should().Be(2);
+
+        // A normal call after the ignored one restores the full scope instead of reusing the ignored plan.
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1);
+
+        // The ignored Count must not mutate the context-shared command or flip its sticky Cache flag.
+        ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+        shared.Cache.Should().BeTrue("the ignored Count must not set the sticky Cache=false flag");
+
+        var command = ctx.From<SelectiveKeyedEntity>().ToCommand();
+        command.Cache.Should().BeTrue();
+        command.IgnoreFilters.Should().BeFalse();
+    }
+
+    // The parameterless "all filters" scope (ignored `All`): after `IgnoreFilters()` the next normal call
+    // restores every filter, and neither the plan cache nor the shared command is left in the ignored state.
+    [Fact]
+    public void IgnoredAllThenNormalRestoresScope()
+    {
+        using var ctx = new InMemoryDataContext();
+        ConfigureSelectiveKeyed(ctx);
+
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1);
+
+        ctx.From<SelectiveKeyedEntity>().Any().Should().BeTrue();
+        var shared = ctx.AnyCommand!.Value;
+        shared.Cache.Should().BeTrue();
+
+        // Parameterless IgnoreFilters disables both the anonymous Id filter and the named soft filter.
+        ctx.From<SelectiveKeyedEntity>().IgnoreFilters().Count().Should().Be(3);
+
+        ctx.From<SelectiveKeyedEntity>().Count().Should().Be(1, "a normal call after the ignored one restores every filter");
+
+        ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+        shared.Cache.Should().BeTrue("the ignored Count must not set the sticky Cache=false flag");
+
+        var command = ctx.From<SelectiveKeyedEntity>().ToCommand();
+        command.Cache.Should().BeTrue();
+        command.IgnoreFilters.Should().BeFalse();
+    }
+
     [Fact]
     public void SelectiveIgnore_ByType_ShouldDisableOnlyThatEntityTypesFilters()
     {
@@ -947,7 +1006,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ConfigureSelectiveKeyed(ctx);
 
-        var command = ctx.DeleteFrom<SelectiveKeyedEntity>().BuildKeyCommand(new SelectiveKeyedEntity { Id = 2 });
+        var command = ctx.CreateDeleteBuilder<SelectiveKeyedEntity>().BuildKeyCommand(new SelectiveKeyedEntity { Id = 2 });
 
         command.Condition.Should().NotBeNull();
         command.Condition!.FilterScope.IsEmpty.Should().BeTrue();
@@ -965,7 +1024,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ConfigureSelectiveKeyed(ctx);
 
-        var command = ctx.DeleteFrom<SelectiveKeyedEntity>()
+        var command = ctx.CreateDeleteBuilder<SelectiveKeyedEntity>()
             .IgnoreFilters(["soft"])
             .BuildKeyCommand(new SelectiveKeyedEntity { Id = 2 });
 
@@ -981,7 +1040,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ConfigureSelectiveKeyed(ctx);
 
-        var command = ctx.DeleteFrom<SelectiveKeyedEntity>()
+        var command = ctx.CreateDeleteBuilder<SelectiveKeyedEntity>()
             .IgnoreFilters()
             .BuildKeyCommand(new SelectiveKeyedEntity { Id = 2 });
 
@@ -996,7 +1055,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ConfigureSelectiveKeyed(ctx);
 
-        var command = ctx.Update<SelectiveKeyedEntity>().BuildEntityCommand(new SelectiveKeyedEntity { Id = 2 });
+        var command = ctx.CreateUpdateBuilder<SelectiveKeyedEntity>().BuildEntityCommand(new SelectiveKeyedEntity { Id = 2 });
 
         command.Source.PrepareCommand(false, TestContext.Current.CancellationToken);
         command.Source.PreparedCondition.Should().NotBeNull("the key-form update still carries the target filter");
@@ -1012,7 +1071,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ConfigureSelectiveKeyed(ctx);
 
-        var command = ctx.Update<SelectiveKeyedEntity>()
+        var command = ctx.CreateUpdateBuilder<SelectiveKeyedEntity>()
             .Where(x => x.Id > 1000)
             .BuildEntityCommand(new SelectiveKeyedEntity { Id = 2 });
 
@@ -1030,7 +1089,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ConfigureSelectiveKeyed(ctx);
 
-        var command = ctx.DeleteFrom<SelectiveKeyedEntity>()
+        var command = ctx.CreateDeleteBuilder<SelectiveKeyedEntity>()
             .IgnoreFilters(["soft"])
             .IgnoreFilters([QueryFilters.AnonymousKey])
             .BuildKeyCommand(new SelectiveKeyedEntity { Id = 2 });
@@ -1061,7 +1120,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated).Values(new InsertValidatedEntity { Id = 1, TenantId = 1 }).Insert();
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated).Values(new InsertValidatedEntity { Id = 1, TenantId = 1 }).Insert();
 
         act.Should().Throw<NotSupportedException>("the row passes validation, so the read-only context is reached");
     }
@@ -1072,7 +1131,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated).Values(new InsertValidatedEntity { Id = 1, TenantId = 2 }).Insert();
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated).Values(new InsertValidatedEntity { Id = 1, TenantId = 2 }).Insert();
 
         act.Should().Throw<QueryFilterException>().WithMessage("*tenant*");
     }
@@ -1083,7 +1142,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .IgnoreFilters()
             .Values(new InsertValidatedEntity { Id = 1, TenantId = 2 })
             .Insert();
@@ -1099,7 +1158,7 @@ public class QueryFilterTests
 
         // Two active filters: the keyed tenant filter and the anonymous soft-delete filter. Ignoring only
         // "tenant" must leave the anonymous filter active, so the soft-deleted row is still rejected.
-        var act = () => ctx.InsertInto<InsertMultiFilterEntity>(ConfigureInsertMultiFilter)
+        var act = () => ctx.CreateInsertBuilder<InsertMultiFilterEntity>(ConfigureInsertMultiFilter)
             .IgnoreFilters(["tenant"])
             .Values(new InsertMultiFilterEntity { Id = 1, TenantId = 2, IsDeleted = true })
             .Insert();
@@ -1114,7 +1173,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertMultiFilterEntity>(ConfigureInsertMultiFilter)
+        var act = () => ctx.CreateInsertBuilder<InsertMultiFilterEntity>(ConfigureInsertMultiFilter)
             .IgnoreFilters(["tenant"])
             .Values(new InsertMultiFilterEntity { Id = 1, TenantId = 2, IsDeleted = false })
             .Insert();
@@ -1129,7 +1188,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated).Value(x => x.TenantId, 2).Insert();
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated).Value(x => x.TenantId, 2).Insert();
 
         act.Should().Throw<QueryFilterException>();
     }
@@ -1140,7 +1199,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated).Value(x => x.Id, 5).Insert();
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated).Value(x => x.Id, 5).Insert();
 
         act.Should().Throw<QueryFilterException>()
             .WithMessage("*tenant*")
@@ -1154,7 +1213,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<InsertSoftDeleteEntity>(b => b.HasQueryFilter(e => !e.IsDeleted))
+        var act = () => ctx.CreateInsertBuilder<InsertSoftDeleteEntity>(b => b.HasQueryFilter(e => !e.IsDeleted))
             .Value(x => x.Id, 1)
             .Insert();
 
@@ -1170,7 +1229,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .Value(x => (int?)x.TenantId, (int?)null)
             .Insert();
 
@@ -1185,7 +1244,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<InsertFieldFilterEntity>(b => b.HasQueryFilter(e => !e.Deleted))
+        var act = () => ctx.CreateInsertBuilder<InsertFieldFilterEntity>(b => b.HasQueryFilter(e => !e.Deleted))
             .Value(x => x.Id, 1)
             .Insert();
 
@@ -1199,7 +1258,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<InsertMethodFilterEntity>(b => b.HasQueryFilter(e => e.IsActive()))
+        var act = () => ctx.CreateInsertBuilder<InsertMethodFilterEntity>(b => b.HasQueryFilter(e => e.IsActive()))
             .Value(x => x.Id, 1)
             .Insert();
 
@@ -1214,7 +1273,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .Value(x => x.Id, 5)
             .Value(x => x.TenantId, 1)
             .Insert();
@@ -1230,7 +1289,7 @@ public class QueryFilterTests
         // The filter lambda reads TenantId through the interface while the written column is the
         // concrete property. A value that satisfies the filter must not be rejected fail-closed just
         // because the written-property index was keyed by the interface PropertyInfo instance.
-        var act = () => ctx.InsertInto<InterfaceFilteredEntity>()
+        var act = () => ctx.CreateInsertBuilder<InterfaceFilteredEntity>()
             .Value(x => x.TenantId, 1)
             .Insert();
 
@@ -1246,7 +1305,7 @@ public class QueryFilterTests
         // Id/TenantId are declared on the base type but the mapped metadata holds them reflected on the
         // derived type; a selector typed as the derived entity yields the base declaration, so a
         // reference-equality lookup misses the mapped column.
-        var act = () => ctx.InsertInto<DerivedBaseDeclaredIdentityEntity>()
+        var act = () => ctx.CreateInsertBuilder<DerivedBaseDeclaredIdentityEntity>()
             .Value(x => x.Id, 1)
             .Value(x => x.TenantId, 1)
             .Insert();
@@ -1259,7 +1318,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<HiddenIdentityDerivedEntity>()
+        var act = () => ctx.CreateInsertBuilder<HiddenIdentityDerivedEntity>()
             .Value(x => x.TenantId, 1)
             .Insert();
 
@@ -1272,7 +1331,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
+        var act = () => ctx.CreateInsertBuilder<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
             .Value(x => x.TenantId, 1)
             .Insert();
 
@@ -1285,7 +1344,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
+        var act = () => ctx.CreateInsertBuilder<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
             .Value(x => x.TenantId, 2)
             .Insert();
 
@@ -1298,7 +1357,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
+        var act = () => ctx.CreateInsertBuilder<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
             .Values(new DerivedBaseDeclaredFilteredEntity { Id = 1, TenantId = 1 })
             .Insert();
 
@@ -1310,7 +1369,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<HiddenFilteredDerivedEntity>()
+        var act = () => ctx.CreateInsertBuilder<HiddenFilteredDerivedEntity>()
             .Value(x => x.TenantId, 1)
             .Insert();
 
@@ -1322,7 +1381,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<HiddenFilteredDerivedEntity>()
+        var act = () => ctx.CreateInsertBuilder<HiddenFilteredDerivedEntity>()
             .Value(x => x.TenantId, 2)
             .Insert();
 
@@ -1337,7 +1396,7 @@ public class QueryFilterTests
         // The inherited filter reads the base declaration while the object initializer writes the
         // hiding derived property; the entity-row path must resolve the read to the mapped column
         // rather than the base backing field, or a satisfying row is falsely rejected.
-        var act = () => ctx.InsertInto<HiddenFilteredDerivedEntity>()
+        var act = () => ctx.CreateInsertBuilder<HiddenFilteredDerivedEntity>()
             .Values(new HiddenFilteredDerivedEntity { Id = 1, TenantId = 1 })
             .Insert();
 
@@ -1349,7 +1408,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<HiddenFilteredDerivedEntity>()
+        var act = () => ctx.CreateInsertBuilder<HiddenFilteredDerivedEntity>()
             .Values(new HiddenFilteredDerivedEntity { Id = 1, TenantId = 2 })
             .Insert();
 
@@ -1361,7 +1420,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<InterfaceFilteredEntity>()
+        var act = () => ctx.CreateInsertBuilder<InterfaceFilteredEntity>()
             .Values(new InterfaceFilteredEntity { Id = 1, TenantId = 1 })
             .Insert();
 
@@ -1373,7 +1432,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<ExplicitInterfaceFilteredEntity>()
+        var act = () => ctx.CreateInsertBuilder<ExplicitInterfaceFilteredEntity>()
             .Value(x => x.TenantId, 1)
             .Insert();
 
@@ -1385,7 +1444,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<ExplicitInterfaceFilteredEntity>()
+        var act = () => ctx.CreateInsertBuilder<ExplicitInterfaceFilteredEntity>()
             .Value(x => x.TenantId, 2)
             .Insert();
 
@@ -1398,7 +1457,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .IgnoreFilters()
             .Value(x => x.Id, 5)
             .Insert();
@@ -1412,7 +1471,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated).Values(
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated).Values(
         [
             new InsertValidatedEntity { Id = 1, TenantId = 1 },
             new InsertValidatedEntity { Id = 2, TenantId = 2 },
@@ -1426,7 +1485,7 @@ public class QueryFilterTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.InsertInto<InsertSoftDeleteEntity>(b => b.HasQueryFilter(e => !e.IsDeleted))
+        var act = () => ctx.CreateInsertBuilder<InsertSoftDeleteEntity>(b => b.HasQueryFilter(e => !e.IsDeleted))
             .Values(new InsertSoftDeleteEntity { Id = 1, IsDeleted = true })
             .Insert();
 
@@ -1440,7 +1499,7 @@ public class QueryFilterTests
             new InsertSelectSourceEntity { Id = 1, TenantId = 1 },
             new InsertSelectSourceEntity { Id = 2, TenantId = 2 });
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .Values(
                 ctx.From<InsertSelectSourceEntity>(),
                 s => new { s.Id, s.TenantId })
@@ -1458,7 +1517,7 @@ public class QueryFilterTests
         // The target filter reads a member declared on the target's base type; the source projection
         // must match it to the mapped column by canonical identity rather than by name, or the
         // pre-check would fail closed with an omitted-column error instead of naming the filter.
-        var act = () => ctx.InsertInto<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
+        var act = () => ctx.CreateInsertBuilder<DerivedBaseDeclaredFilteredEntity>(ConfigureBaseDeclaredFiltered)
             .Values(
                 ctx.From<InsertSelectSourceEntity>(),
                 s => new { s.Id, s.TenantId })
@@ -1473,7 +1532,7 @@ public class QueryFilterTests
     {
         using var ctx = InsertSelectContext(new InsertSelectSourceEntity { Id = 1, TenantId = 2, IsDeleted = false });
 
-        var act = () => ctx.InsertInto<InsertMultiFilterEntity>(ConfigureInsertMultiFilter)
+        var act = () => ctx.CreateInsertBuilder<InsertMultiFilterEntity>(ConfigureInsertMultiFilter)
             .Values(
                 ctx.From<InsertSelectSourceEntity>(),
                 s => new { s.Id, s.TenantId, s.IsDeleted })
@@ -1489,7 +1548,7 @@ public class QueryFilterTests
     {
         using var ctx = InsertSelectContext(new InsertSelectSourceEntity { Id = 1, TenantId = 1 });
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .Values(
                 ctx.From<InsertSelectSourceEntity>(),
                 s => new { s.Id, s.TenantId })
@@ -1503,7 +1562,7 @@ public class QueryFilterTests
     {
         using var ctx = InsertSelectContext(new InsertSelectSourceEntity { Id = 1, TenantId = 1 });
 
-        var act = () => ctx.InsertInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .Values(
                 ctx.From<InsertSelectSourceEntity>(),
                 s => new InsertValidatedEntity { Id = s.Id })
@@ -1518,7 +1577,7 @@ public class QueryFilterTests
     {
         using var ctx = InsertSelectContext(new InsertSelectSourceEntity { Id = 1, TenantId = 1 });
 
-        var act = () => ctx.InsertInto<InsertFieldFilterEntity>(b => b.HasQueryFilter(e => !e.Deleted))
+        var act = () => ctx.CreateInsertBuilder<InsertFieldFilterEntity>(b => b.HasQueryFilter(e => !e.Deleted))
             .Values(
                 ctx.From<InsertSelectSourceEntity>(),
                 s => new { s.Id })
@@ -1536,7 +1595,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.BulkInsertInto<InsertValidatedEntity>(ConfigureInsertValidated).Values(
+        var act = () => ctx.CreateBulkInsertBuilder<InsertValidatedEntity>(ConfigureInsertValidated).Values(
         [
             new InsertValidatedEntity { Id = 1, TenantId = 1 },
             new InsertValidatedEntity { Id = 2, TenantId = 2 },
@@ -1546,19 +1605,24 @@ public class QueryFilterTests
     }
 
     [Fact]
-    public void Merge_ViolatesFilter_ShouldThrowBeforeExecution()
+    public void Merge_ActiveFilter_ShouldRefuseBeforeReadingOrWriting()
     {
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
+        var rows = new List<InsertValidatedEntity>();
+        ctx.Data[typeof(InsertValidatedEntity)] = rows;
 
-        var act = () => ctx.MergeInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var act = () => ctx.CreateMergeBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .Using(new InsertValidatedEntity { Id = 1, TenantId = 2 })
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .Merge();
 
-        act.Should().Throw<QueryFilterException>("the merge's insert branch is validated");
+        // #123: the in-memory key upsert cannot isolate a filtered-out target row atomically, so an
+        // active filter now refuses before any read/write instead of pre-validating the source rows.
+        act.Should().Throw<NotSupportedException>();
+        rows.Should().BeEmpty();
     }
 
     [Fact]
@@ -1569,7 +1633,7 @@ public class QueryFilterTests
         var rows = new List<InsertValidatedEntity>();
         ctx.Data[typeof(InsertValidatedEntity)] = rows;
 
-        var affected = ctx.MergeInto<InsertValidatedEntity>(ConfigureInsertValidated)
+        var affected = ctx.CreateMergeBuilder<InsertValidatedEntity>(ConfigureInsertValidated)
             .IgnoreFilters()
             .Using(new InsertValidatedEntity { Id = 1, TenantId = 2 })
             .OnKeys()
@@ -1808,7 +1872,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
+        var act = () => ctx.CreateInsertBuilder<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
             .Values(new FuncWriteTargetEntity { Id = 1, TenantId = 1 })
             .Insert();
 
@@ -1822,7 +1886,7 @@ public class QueryFilterTests
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.InsertInto<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
+        var act = () => ctx.CreateInsertBuilder<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
             .IgnoreFilters()
             .Values(new FuncWriteTargetEntity { Id = 1, TenantId = 1 })
             .Insert();
@@ -1832,19 +1896,22 @@ public class QueryFilterTests
     }
 
     [Fact]
-    public void Merge_TargetFuncFilter_ShouldThrowQueryFilterFailClosed()
+    public void Merge_TargetFuncFilter_ShouldRefuseNotSupported()
     {
         using var ctx = new InMemoryDataContext();
         ctx.Properties[TenantKey] = 1;
 
-        var act = () => ctx.MergeInto<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
+        var act = () => ctx.CreateMergeBuilder<FuncWriteTargetEntity>(ConfigureFuncWriteTarget)
             .Using(new FuncWriteTargetEntity { Id = 1, TenantId = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
             .Merge();
 
-        act.Should().Throw<QueryFilterException>().WithMessage("*FilterFunc*");
+        // #123 precedence: an active target filter on the in-memory key upsert is refused as a
+        // capability before any source-value validation, so the FilterFunc fail-closed path is not
+        // reached.
+        act.Should().Throw<NotSupportedException>();
     }
 
     [Fact]
@@ -1854,7 +1921,7 @@ public class QueryFilterTests
         ctx.Properties[TenantKey] = 1;
         ctx.From<FuncWriteTargetEntity>(ConfigureFuncWriteTarget);
 
-        var command = ctx.Update<FuncWriteTargetEntity>().BuildEntityCommand(new FuncWriteTargetEntity { Id = 2 });
+        var command = ctx.CreateUpdateBuilder<FuncWriteTargetEntity>().BuildEntityCommand(new FuncWriteTargetEntity { Id = 2 });
 
         command.Source.PrepareCommand(false, TestContext.Current.CancellationToken);
         command.Source.PreparedCondition.Should().NotBeNull("the key-form update carries the builder-function filter");
@@ -1868,7 +1935,7 @@ public class QueryFilterTests
         ctx.Properties[TenantKey] = 1;
         ctx.From<FuncWriteTargetEntity>(ConfigureFuncWriteTarget);
 
-        var command = ctx.DeleteFrom<FuncWriteTargetEntity>().BuildKeyCommand(new FuncWriteTargetEntity { Id = 2 });
+        var command = ctx.CreateDeleteBuilder<FuncWriteTargetEntity>().BuildKeyCommand(new FuncWriteTargetEntity { Id = 2 });
 
         command.Condition.Should().NotBeNull();
         command.Condition!.PrepareCommand(false, TestContext.Current.CancellationToken);

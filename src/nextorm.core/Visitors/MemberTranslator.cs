@@ -292,8 +292,7 @@ internal static class MemberTranslator
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-                    var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+                    var col = MakeInnerColumn(visitor, innerQuery, innerCol);
                     if (!visitor.IsParamMode)
                     {
                         if (!visitor.DontNeedAlias)
@@ -403,6 +402,14 @@ internal static class MemberTranslator
         }
         else
         {
+            // A query filter imported from EF Core reads its live owner as
+            // (TContext)<owner-getter>(QueryFilterContext.Context). Parameterize the whole
+            // owner-getter/member subtree with a host-free accessor invoked with the executing context,
+            // so the owner instance and the value it produces never enter a process-wide key. A native
+            // context filter (IDataContext.Properties reads) has no owner-getter and keeps its path.
+            if (QueryFilterContextAccessor.TryTranslate(visitor, node))
+                return node;
+
             // The common member access is <param>.Member (join condition) or <param>.tN.Member
             // (projection), so the lambda parameter can be read structurally. Only the remaining
             // shapes (closure constants, deeper chains) need the allocating twoTypeVisitor.
@@ -468,19 +475,23 @@ internal static class MemberTranslator
                     if (lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)))
                     {
                         // When a type repeats inside the projection, the columns provider has to be
-                        // told which occurrence is meant. The member name ("Item1".."Item8") carries
-                        // the 1-based position among all projection items; the occurrence for every
+                        // told which occurrence is meant. The member carries its 1-based slot: the
+                        // digits of "Item1".."Item8" for engine projections, or JoinSlotAttribute for
+                        // a generated alias member ("Buyer"/"Approver"). The occurrence for every
                         // position of a given projection shape is cached (it is a pure function of
                         // the generic arguments).
                         var propExp = (MemberExpression)node.Expression!;
-                        var name = propExp.Member.Name;
-                        var digitsStart = name.Length;
-                        while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
-                        var position = 0;
-                        for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
-                        position--;
+                        var position = ProjectionAliasCache.GetMemberPosition(propExp.Member);
                         var paramIdx = ProjectionAliasCache.GetOccurrence(lambdaParameter.Type, position);
-                        tableAliasForColumn = AliasResolver.GetAliasFromParam(visitor, node.Expression!.Type, paramIdx, false);
+
+                        var sourceIdx = ResolveProjectionItemAliasIndex(
+                            visitor.ColumnsProvider,
+                            node.Expression.Type,
+                            paramIdx,
+                            lambdaParameter,
+                            visitor.IncludeNestedSources);
+
+                        tableAliasForColumn = visitor.AliasProvider!.FindAlias(sourceIdx);
                     }
                     else if (visitor.Dim >= 2)
                     {
@@ -494,13 +505,24 @@ internal static class MemberTranslator
                     else
                         tableAliasForColumn = AliasResolver.GetAliasFromParam(visitor, lambdaParameter, false);
 
-                    visitor.Builder!.Append(tableAliasForColumn).Append('.');
-
-                    hasTableAliasForColumn = true;
+                    if (tableAliasForColumn is not null)
+                    {
+                        visitor.Builder!.Append(tableAliasForColumn).Append('.');
+                        hasTableAliasForColumn = true;
+                    }
                 }
 
                 if (!visitor.IsParamMode)
                 {
+                    // A projection-item access (p.ItemN.Member) over a derived/read-CTE source resolves
+                    // through the source's slot-tagged shape. A metadata-less shape item has no mapped
+                    // column name, so the mapped-name branch below would skip the shape lookup and fail;
+                    // try the derived shape first for a projection-item access.
+                    if (lambdaParameter.Type!.IsAssignableTo(typeof(IProjection))
+                        && node.Expression is MemberExpression
+                        && TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))
+                        return node;
+
                     var colName = ResolveRangeColumnsMember(visitor, node.Member)
                         ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
@@ -531,8 +553,7 @@ internal static class MemberTranslator
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-                    var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+                    var col = MakeInnerColumn(visitor, innerQuery, innerCol);
 
                     if (!visitor.IsParamMode)
                     {
@@ -571,23 +592,95 @@ internal static class MemberTranslator
         MemberExpression node,
         bool hasTableAliasForColumn)
     {
-        var found = node.Expression is ParameterExpression parameter
-            ? visitor.ColumnsProvider.FindInScopeQueryCommand(parameter, fromProjection: false)
-            : visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+        (int Index, QueryCommand? Command)? found;
+        var slot = -1;
+        var isProjectionItem = false;
+
+        // An identity join/CTE item member (p.ItemN.Property) resolves its source
+        // command through the projection parameter and its column by slot + property name, so a
+        // self-join of one type does not collapse the two items onto the first matching column.
+        if (node.Expression is MemberExpression itemAccess
+            && itemAccess.Expression is ParameterExpression projectionParameter
+            && projectionParameter.Type.IsAssignableTo(typeof(IProjection)))
+        {
+            isProjectionItem = true;
+            slot = ProjectionAliasCache.GetMemberPosition(itemAccess.Member);
+            found = visitor.ColumnsProvider.FindInScopeQueryCommand(projectionParameter, fromProjection: false);
+
+            // The projection-parameter lookup only matches an identity CTE shape, which exposes
+            // slot-tagged columns. A plain derived query is registered by its item type instead, so
+            // fall back to the type-based lookup (and drop the slot) when the parameter lookup misses
+            // or its columns are not slot-tagged. Without this, an ordinary p.ItemN.Member reference
+            // over a derived source loses its projected-name translation and emits the physical column.
+            if (found is not { Command.SelectList: { } projectionColumns }
+                || !projectionColumns.Any(col => col.ProjectionItem?.Slot == slot && col.PropertyName == node.Member.Name))
+            {
+                found = visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+                slot = -1;
+            }
+        }
+        else
+        {
+            found = node.Expression is ParameterExpression parameter
+                ? visitor.ColumnsProvider.FindInScopeQueryCommand(parameter, fromProjection: false)
+                : visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+        }
+
         if (found is not { Command: { } innerQuery } || innerQuery.SelectList is null)
             return false;
 
-        var innerCol = innerQuery.SelectList.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+        SelectExpression? innerCol = null;
+        if (slot >= 0)
+        {
+            foreach (var candidate in innerQuery.SelectList)
+            {
+                if (candidate.ProjectionItem?.Slot == slot && candidate.PropertyName == node.Member.Name)
+                {
+                    innerCol = candidate;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            innerCol = innerQuery.SelectList.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+        }
+
         if (innerCol is null)
+        {
+            // A projection-item access (p.ItemN.Member) over a derived/read shape that does not expose
+            // the member is unresolvable. Fail closed instead of letting the caller fall back to a
+            // physical column the derived source lacks; the identity mutation RETURNING converts this
+            // exception into a slot/member diagnostic before any database execution.
+            if (isProjectionItem)
+                throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+
             return false;
+        }
+
+        // An identity shape column carries its stored per-slot alias; reference it
+        // directly instead of re-deriving a name from the item's expression tree.
+        if (slot >= 0
+            && innerCol.PhysicalColumnName is { Length: > 0 } storedAlias
+            && storedAlias.StartsWith("__s", StringComparison.Ordinal))
+        {
+            if (!visitor.IsParamMode)
+            {
+                if (!hasTableAliasForColumn && !visitor.DontNeedAlias)
+                    visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(found.Value.Index)).Append('.');
+
+                visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(storedAlias));
+            }
+
+            return true;
+        }
 
         visitor.ColumnsProvider.PushSourceScope();
         string column;
         bool needAliasForColumn;
         try
         {
-            var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-            var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+            var col = MakeInnerColumn(visitor, innerQuery, innerCol);
             column = col.Column;
             needAliasForColumn = col.NeedAliasForColumn;
         }
@@ -608,6 +701,130 @@ internal static class MemberTranslator
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Resolves the SQL text of a column exposed by an inner command. A typed-CTE read registers its
+    /// defining command as the column shape; that command's <see cref="QueryCommand.EntityType"/> is
+    /// its projection shape (not a mapped entity) and its select-list expressions still reference the
+    /// CTE's own input, so rendering them against the consumer re-enters this translator on the same
+    /// projection type. A typed CTE declaration body aliases every projected column to its property
+    /// name, so the consumer must reference that exact output identifier and let the caller qualify it
+    /// with the source alias.
+    /// </summary>
+    private static (bool NeedAliasForColumn, string Column) MakeInnerColumn(
+        BaseExpressionVisitor visitor,
+        QueryCommand innerQuery,
+        SelectExpression innerCol)
+    {
+        if (innerQuery.From?.ColumnShape is not null || IsTypedCteProducer(visitor, innerQuery))
+            return (true, innerCol.PropertyName!);
+
+        var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
+        return sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+    }
+
+    /// <summary>
+    /// Renders a bare lambda parameter that is itself the value of a single-column projection source,
+    /// for example a scalar typed CTE read (<c>From(scalarCte).Select(n =&gt; n + 1)</c>) or the scalar
+    /// step of a recursive typed CTE (<c>Where(n =&gt; n &lt; 5)</c>). Such a source exposes no member
+    /// to resolve, so the whole parameter denotes the source's one readable output column; without this
+    /// the parameter would emit no SQL and produce a malformed expression (<c>( + 1)</c>). A multi-column
+    /// or non-projection source is left to the default parameter handling.
+    /// </summary>
+    /// <returns><see langword="true"/> when the parameter was rendered as the scalar source's column.</returns>
+    internal static bool TryVisitScalarSourceParameter(BaseExpressionVisitor visitor, ParameterExpression node)
+    {
+        if (node.Type != visitor.EntityType)
+            return false;
+
+        var (index, shape) = visitor.ColumnsProvider.FindQueryCommand(visitor.EntityType, visitor.IncludeNestedSources);
+
+        // Only a projection source (a command registered as a column shape) with exactly one readable
+        // column whose type is the row type itself can stand for the bare parameter.
+        if (shape?.SelectList is not { Length: 1 } || shape.SelectList[0].PropertyType != node.Type)
+            return false;
+
+        var name = shape.SelectList[0].PropertyName ?? shape.SelectList[0].OutputName;
+        if (string.IsNullOrEmpty(name))
+            return false;
+
+        // Parameter mode only walks the tree without emitting text.
+        if (visitor.IsParamMode)
+            return true;
+
+        if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases && visitor.AliasProvider is { } aliases)
+            visitor.Builder!.Append(aliases.FindAlias(index)).Append('.');
+
+        visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(name));
+        visitor.ColumnName = name;
+        return true;
+    }
+
+    /// <summary>
+    /// True when <paramref name="innerQuery"/> is the defining body of a typed CTE (<c>AsCte</c>)
+    /// declared on the command currently being rendered. Such a body exposes its columns under the
+    /// projection's property names (see <see cref="SqlBuildContext.ExactProjectionAliases"/>), so a
+    /// member read over it must reference the property name rather than the physical mapped column.
+    /// The check is by reference against the command's own declaration set, so a body-to-body read
+    /// (outer typed CTE over an inner one) resolves the inner producer the same way the final consumer
+    /// does, while an ordinary derived subquery or a legacy <c>With</c> declaration is untouched.
+    /// </summary>
+    private static bool IsTypedCteProducer(BaseExpressionVisitor visitor, QueryCommand innerQuery)
+    {
+        // The anchor of a typed recursive CTE is not reachable through the owner's declaration set while
+        // the body itself is being rendered (the renderer wraps the body, not the consumer, so its
+        // QueryProvider carries no Ctes). The marker set by Cte<TResult>.CreateRecursive identifies it.
+        if (innerQuery.TypedRecursiveAnchor is not null)
+            return true;
+
+        if (visitor.QueryProvider is not QueryCommand owner || owner.Ctes is not { Count: > 0 } definitions)
+            return false;
+
+        for (var i = 0; i < definitions.Count; i++)
+        {
+            var definition = definitions[i];
+            if (!definition.TypedProjection)
+                continue;
+
+            // A recursive definition's body is anchor UNION ALL step, so a member read of the self-reference
+            // resolves against the anchor command, not the body stored in Query. Binding the anchor shape
+            // here makes the step reference the CTE's declared output alias (the anchor's property name)
+            // instead of re-rendering the anchor body — which for a constant/non-column anchor would inline
+            // a literal (`1`) and produce an unqualified, unaddressable column such as `t1.1`.
+            if (ReferenceEquals(definition.Query, innerQuery)
+                || ReferenceEquals(definition.RecursiveReference?.AnchorShape, innerQuery))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves the alias index of a projection-item member access (<c>p.ItemN.Member</c>). The item
+    /// type is the primary lookup. Over a derived/CTE source the item type may not be a registered
+    /// source while the projection shape is; only the identity (whole-projection) joined-returning shape
+    /// registers that way, so the projection-parameter fallback is gated on the source command carrying
+    /// <see cref="QueryCommand.IdentitySlotAliases"/>. Every other miss fails closed with the same
+    /// <see cref="InvalidOperationException"/> the previous <c>AliasResolver.GetAliasFromParam</c> call
+    /// produced, rather than silently emitting an unqualified column.
+    /// </summary>
+    internal static int ResolveProjectionItemAliasIndex(
+        IColumnsProvider columnsProvider,
+        Type itemType,
+        int? itemOccurrence,
+        ParameterExpression projectionParameter,
+        bool includeNestedSources)
+    {
+        var sourceIdx = columnsProvider.FindAlias(itemType, itemOccurrence, false, includeNestedSources);
+        if (sourceIdx is null)
+        {
+            var projectionSource = columnsProvider.FindQueryCommand(projectionParameter.Type, includeNestedSources);
+            if (projectionSource.Item2?.IdentitySlotAliases == true)
+                sourceIdx = columnsProvider.FindAlias(projectionParameter, false, includeOuterScopes: false, includeNestedSources: includeNestedSources);
+        }
+
+        return sourceIdx ?? throw new InvalidOperationException();
     }
 
     /// <summary>
@@ -682,6 +899,13 @@ internal static class MemberTranslator
 
             var sqlBuilder = new SqlBuilder(visitor.Options);
             var sql = sqlBuilder.MakeSelect(innerQuery);
+
+            // #148-B r3: ClickHouse decorrelates a correlated scalar subquery by a join, so an empty
+            // match yields SQL NULL instead of the aggregate's identity (an empty count would be 0).
+            // Coalesce a navigation count back to 0 before materialization; a dialect that does not
+            // report WrapsCountResult (every other provider) always returns a non-null count.
+            if (innerQuery.IsWideNavigationCount && visitor.Dialect.WrapsCountResult)
+                sql = visitor.Dialect.MakeCoalesce($"({sql})", "0");
 
                 if (!visitor.IsParamMode)
                 {

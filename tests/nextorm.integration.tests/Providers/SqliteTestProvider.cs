@@ -46,8 +46,15 @@ internal sealed class SqliteTestProvider : ITestProvider
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 
-    public IDataContext CreateContext() =>
-        new SqliteDataContext($"Data Source='{DatabasePath}'", new DataContextBuilder());
+    public IDataContext CreateContext() => CreateContext(null);
+
+    public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
+    {
+        var builder = new DataContextBuilder();
+        if (loggerFactory is not null)
+            builder = builder.UseLoggerFactory(loggerFactory);
+        return new SqliteDataContext($"Data Source='{DatabasePath}'", builder);
+    }
 
     public void EnsureSeeded()
     {
@@ -120,9 +127,38 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table eager_child (id integer primary key, parent_id int not null, name text);
         create table eager_note (id integer primary key, parent_id int not null, text text);
 
+        -- Many-to-many JoinInto fixtures (#135): the tag child plus the junction linking it to a parent.
+        create table eager_tag (id integer primary key, name text);
+        create table eager_link (id integer primary key, parent_id int not null, child_id int not null);
+
         -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
         -- target table. Both carry the tenant/soft-delete columns the shared suite filters on.
         create table query_filter_entity (id integer primary key, tenant_id int not null, is_deleted integer not null, name text);
         create table query_filter_target (id integer primary key autoincrement, tenant_id int null, is_deleted integer not null, name text);
+
+        -- SelectWhereMax/SelectWhereMin fixtures (#115): a nullable comparison value (score) and a
+        -- nullable group key (category), with ties, a null group, an all-null group and a category
+        -- absent from the data (for the empty-result case).
+        create table extrema_entity (id integer primary key, score int null, category varchar(50) null, label varchar(50) not null);
+        insert into extrema_entity (id, score, category, label) values
+            (1, null, 'a', 'one'),
+            (2, 5, 'a', 'two'),
+            (3, 9, 'a', 'three'),
+            (4, 9, 'a', 'four'),
+            (5, 3, 'b', 'five'),
+            (6, 1, 'b', 'six'),
+            (7, null, null, 'seven'),
+            (8, 7, null, 'eight'),
+            (9, 4, 'c', 'nine'),
+            (10, 1, 'b', 'ten'),
+            (11, null, 'd', 'eleven');
+
+        -- Join-alias fixtures (#113): one order whose buyer and approver are two different people,
+        -- plus an unlinked person so RIGHT/FULL alias joins have an unmatched row to return.
+        create table person (id integer primary key, name text);
+        insert into person (id, name) values (10, 'Buyer'), (20, 'Approver'), (30, 'Unlinked');
+
+        create table orders (id integer primary key, buyer_id integer not null, approver_id integer not null);
+        insert into orders (id, buyer_id, approver_id) values (1, 10, 20), (2, 20, 10);
         """;
 }

@@ -8,6 +8,12 @@
 
 **Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Провайдер ClickHouse](../../providers/clickhouse.md)
 
+> **Методы-расширения.** Каждый эксклюзивный для ClickHouse член на этой странице (`ArrayJoin`/
+> `LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement`, `LimitBy`, `WithTotals`, `Final`,
+> `PreWhere`, `Settings`, `Sample`, `SemiJoin`/`AntiJoin`/`PasteJoin` и `j => j.Global()`) — это
+> метод-расширение из пакета `nextorm.clickhouse`, а не часть общего API `nextorm`. Добавьте
+> `using NextORM.ClickHouse;`, и примеры компилируются без изменений.
+
 ## Массивы и `ARRAY JOIN`
 
 У ClickHouse есть нативный тип `Array(T)`. Функции массивов работают с колонками-массивами или
@@ -32,7 +38,7 @@ select id from array_entity left array join tags where id > 0
 
 ## `LIMIT n BY expr`
 
-[`LimitBy`](xref:NextORM.Core.EntityBuilder`1.LimitBy``1(System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращает первые `n` строк **на каждое значение
+[`LimitBy`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.LimitBy``2(NextORM.Core.EntityBuilder{``0},System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{``0,``1}})) возвращает первые `n` строк **на каждое значение
 ключа**, клауза рендерится после `ORDER BY` и до финального `LIMIT`:
 
 ```csharp
@@ -52,7 +58,7 @@ select id, nullableint from complex_entity order by id limit 2 by nullableint
 
 ## `GROUP BY ... WITH TOTALS`
 
-[`WithTotals`](xref:NextORM.Core.EntityBuilder`1.WithTotals) добавляет к группировке модификатор ClickHouse
+[`WithTotals`](xref:NextORM.ClickHouse.ClickHouseEntityBuilderExtensions.WithTotals``1(NextORM.Core.EntityBuilder{``0})) добавляет к группировке модификатор ClickHouse
 `with totals` — строку итогов по всему набору. Он ортогонален `ROLLUP`/`CUBE` и не сочетается с
 `GROUPING SETS`:
 
@@ -97,14 +103,13 @@ select id from complex_entity final prewhere (nullableint > 0) settings max_thre
 
 ## Строгость соединения и `GLOBAL JOIN`
 
-Модификаторы соединения ClickHouse применяются к только что добавленному соединению:
-`WithStrictness(JoinStrictness.Any | All | Asof)` и `Global()`:
+Модификаторы соединения ClickHouse передаются соединению через его завершающую лямбду:
+`j => j.WithStrictness(JoinStrictness.Any | All | Asof)` и `j => j.Global()`:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-    .Global()
-    .WithStrictness(JoinStrictness.Any)
+    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id,
+        j => j.Global().WithStrictness(JoinStrictness.Any))
     .Select(p => new { p.Item1.Id, p.Item2.String })
     .ToList();
 ```
@@ -254,8 +259,10 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 ## Пока не поддерживается
 
-Нативный тип колонки `JSON` (его reader/type-mapping) и
-распределённые табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
+Нативный тип колонки `JSON` (его reader/type-mapping) пока не отображён. Серверные/кластерные табличные
+функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`, `cluster_all_replicas`) **предобъявлены**
+в `SqlFunctions.ClickHouse` и рендерят свой SQL, но их сквозной прогон на реальном кластере не покрыт и
+остаётся вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

@@ -14,7 +14,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>().BulkInsert();
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>().BulkInsert();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*Values*");
     }
@@ -24,7 +24,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>().Values([new BulkEntity()]).Values([new BulkEntity()]);
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>().Values([new BulkEntity()]).Values([new BulkEntity()]);
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -34,7 +34,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).BulkInsert();
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).BulkInsert();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -44,7 +44,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).BulkInsertAsync();
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).BulkInsertAsync();
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
@@ -54,7 +54,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).ToSql();
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).ToSql();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -64,7 +64,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>().Values(EmptyAsync()).BulkInsert();
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>().Values(EmptyAsync()).BulkInsert();
 
         act.Should().Throw<InvalidOperationException>().WithMessage("*async*");
     }
@@ -74,7 +74,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>(o => o.MaxBatchSize(0));
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.MaxBatchSize(0));
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -84,7 +84,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>(new BulkInsertOptions { MaxBatchSize = 0 });
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { MaxBatchSize = 0 });
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -94,7 +94,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>(o => o.Table(string.Empty));
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Table(string.Empty));
 
         act.Should().Throw<ArgumentException>();
     }
@@ -104,7 +104,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>(new BulkInsertOptions { TableSchema = "staging" });
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(new BulkInsertOptions { TableSchema = "staging" });
 
         act.Should().Throw<ArgumentException>();
     }
@@ -114,7 +114,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>(o => o.Table(string.Empty, "bulk_target"));
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>(o => o.Table(string.Empty, "bulk_target"));
 
         act.Should().Throw<ArgumentException>();
     }
@@ -124,7 +124,7 @@ public class BulkInsertBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.BulkInsertInto<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).ReturningKey<int>().ToList();
+        var act = () => ctx.CreateBulkInsertBuilder<BulkEntity>().Values([new BulkEntity { Id = 1, Name = "a" }]).ReturningKey<int>().ToList();
 
         act.Should().Throw<NotSupportedException>();
     }

@@ -19,7 +19,7 @@ public abstract partial class CommonTestSuite
 
         using (var tx = transactions.BeginTransaction())
         {
-            ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 1).Insert();
+            ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 1).Insert();
             tx.Commit();
         }
 
@@ -37,7 +37,7 @@ public abstract partial class CommonTestSuite
 
         using (var tx = transactions.BeginTransaction())
         {
-            ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 2).Insert();
+            ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 2).Insert();
             ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().Equal(2);
             tx.Rollback();
         }

@@ -6,7 +6,7 @@ namespace NextORM.Core;
 /// <summary>
 /// A table-valued function call used as a FROM source. The SQL name/schema are resolved once from
 /// <see cref="SqlTableFunctionAttribute"/> (on the method or its declaring type); the arguments are
-/// kept as expressions and rendered/parameterised by <see cref="SqlBuilder"/>.
+/// kept as expressions and rendered/parameterised by <c>SqlBuilder</c>.
 /// </summary>
 public sealed class TableFunctionExpression
 {

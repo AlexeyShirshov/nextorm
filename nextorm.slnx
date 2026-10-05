@@ -15,6 +15,7 @@
     <Project Path="src/nextorm.mysql/nextorm.mysql.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/nextorm.clickhouse.extensions.tests/nextorm.clickhouse.extensions.tests.csproj" />
     <Project Path="tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj" />
     <Project Path="tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj" />
     <Project Path="tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj" />
@@ -27,6 +28,7 @@
   <Project Path="src/nextorm.postgres/nextorm.postgres.csproj" />
   <Project Path="src/nextorm.sqlite/nextorm.sqlite.csproj" />
   <Project Path="src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
+  <Project Path="tests/nextorm.alias.tests/nextorm.alias.tests.csproj" />
   <Project Path="tests/nextorm.core.tests/nextorm.core.tests.csproj" />
   <Project Path="tests/nextorm.entityframeworkcore.tests/nextorm.entityframeworkcore.tests.csproj" />
   <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />

@@ -72,7 +72,7 @@ public class SqlGenerationTests
 
         // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
         // every dynamic key is backtick-quoted even though the global identifier-quoting flag is off.
-        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+        Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
             .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
@@ -83,7 +83,7 @@ public class SqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        Normalize(ctx.Update<DynamicColumnsEntity>()
+        Normalize(ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
@@ -97,7 +97,7 @@ public class SqlGenerationTests
 
         // ClickHouse has no engine-level upsert. The unsupported path must reject the whole statement
         // rather than silently render one without the store's dynamic columns.
-        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+        var act = () => ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -112,7 +112,7 @@ public class SqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+        var act = () => ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -128,7 +128,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .ToSql()
             .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
@@ -151,9 +151,9 @@ public class SqlGenerationTests
     public void IndexHint_ShouldThrowBecauseNotSupported()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        var act = () => SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Index hints*");
     }
@@ -164,8 +164,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Join hints*");
@@ -177,7 +176,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var act = () => SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
     }
@@ -190,6 +189,18 @@ public class SqlGenerationTests
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>().WithTablesInScopeHint("nolock").Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Tables-in-scope hints*");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldThrowBecauseClickHouseHasNoTableHints()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
     }
 
     [Fact]
@@ -1928,20 +1939,17 @@ public class SqlGenerationTests
         var complex = ctx.From<IComplexEntity>();
 
         SqlOf(ctx,
-            simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-                .WithStrictness(JoinStrictness.Any)
+            simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
                 .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left any join ").And.Contain(" on ");
 
         SqlOf(ctx,
-            simple.Join(complex, (s, c) => s.Id == c.Id)
-                .WithStrictness(JoinStrictness.All)
+            simple.Join(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.All))
                 .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" all join ");
 
         SqlOf(ctx,
-            simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-                .WithStrictness(JoinStrictness.Asof)
+            simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Asof))
                 .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left asof join ");
     }
@@ -1953,22 +1961,10 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.CrossJoin(complex)
-            .WithStrictness(JoinStrictness.Any)
+        var act = () => SqlOf(ctx, simple.CrossJoin(complex, j => j.WithStrictness(JoinStrictness.Any))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be applied to a Cross join*");
-    }
-
-    [Fact]
-    public void WithStrictness_WithoutJoin_ShouldThrow()
-    {
-        using var ctx = ClickHouseTestContext.Create();
-        var simple = ctx.From<ISimpleEntity>();
-
-        var act = () => simple.WithStrictness(JoinStrictness.Any);
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*preceding join*");
     }
 
     [Fact]
@@ -1978,10 +1974,10 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var joined = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
-        var any = joined.WithStrictness(JoinStrictness.Any);
+        var plain = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
+        var any = simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any));
 
-        SqlOf(ctx, joined.Select(p => new { p.Item1.Id, p.Item2.String }))
+        SqlOf(ctx, plain.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left join ").And.NotContain(" left any join ");
         SqlOf(ctx, any.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left any join ");
@@ -1994,8 +1990,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
             .Join(simple, (p, s) => p.Item2.Id == s.Id)
             .Select(p => new { p.Item1.Id }));
 
@@ -2009,14 +2004,11 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .Global()
+        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global())
             .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global left join ");
 
-        SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id)
-            .Global()
-            .WithStrictness(JoinStrictness.Any)
+        SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id, j => j.Global().WithStrictness(JoinStrictness.Any))
             .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global any join ");
     }
@@ -2028,10 +2020,10 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var joined = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
-        var global = joined.Global();
+        var plain = simple.LeftJoin(complex, (s, c) => s.Id == c.Id);
+        var global = simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global());
 
-        SqlOf(ctx, joined.Select(p => new { p.Item1.Id, p.Item2.String }))
+        SqlOf(ctx, plain.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" left join ").And.NotContain(" global ");
         SqlOf(ctx, global.Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global left join ");
@@ -2044,22 +2036,9 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
-            .Global()
+        SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any).Global())
             .Select(p => new { p.Item1.Id, p.Item2.String }))
             .Should().Contain(" global left any join ");
-    }
-
-    [Fact]
-    public void Global_WithoutJoin_ShouldThrow()
-    {
-        using var ctx = ClickHouseTestContext.Create();
-        var simple = ctx.From<ISimpleEntity>();
-
-        var act = () => simple.Global();
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*preceding join*");
     }
 
     [Fact]
@@ -2150,8 +2129,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
+        var act = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
             .Select(s => new { s.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be applied to a Semi join*");
@@ -2249,8 +2227,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .Global()
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global())
             .Join(simple, (p, s) => p.Item2.Id == s.Id)
             .Select(p => new { p.Item1.Id }));
 
@@ -2998,6 +2975,123 @@ public class SqlGenerationTests
         act.Should().Throw<BuildSqlCommandException>();
     }
 
+    [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSingleTopLevelWith()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // ClickHouse declares every CTE with `with` (ClickHouseDialect.MakeWith drops the RECURSIVE
+        // modifier it does not support); a nested non-recursive declaration hoists into one flat top-level
+        // `with` instead of the nested `with i as (with ...)` shape.
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+        sql.Should().NotContain("with recursive");
+    }
+
+    // --- SelectWhereMax: window-rank lowering ---
+
+    private static string Dequoted(string sql) => sql
+        .Replace("\r\n", " ")
+        .Replace('\n', ' ')
+        .Replace("\"", string.Empty)
+        .Replace("[", string.Empty)
+        .Replace("]", string.Empty)
+        .Replace("`", string.Empty);
+
+    private static string OuterSelectList(string sql)
+    {
+        const string marker = "select ";
+        var start = sql.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return sql;
+        start += marker.Length;
+        var end = sql.IndexOf(" from ", start, StringComparison.Ordinal);
+        return end < 0 ? sql[start..] : sql[start..end];
+    }
+
+    [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldRenderRowNumberFilteredToTheSingleExtreme()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_WithLimitBy_ShouldThrowClearError()
+    {
+        // The window-rank lowering cannot express LIMIT BY; silently dropping it would change the
+        // result set, so the combination is rejected before any SQL is emitted.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .LimitBy(2, x => x.Int)
+            .SelectWhereMax(x => x.Int)
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*SelectWhereMax/SelectWhereMin cannot be combined with LIMIT BY*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_WithArrayJoin_ShouldThrowClearError()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var a = ctx.From<IArrayEntity>();
+
+        var act = () => SqlOf(ctx, a
+            .ArrayJoin(x => x.Tags)
+            .SelectWhereMax(x => x.Id)
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*SelectWhereMax/SelectWhereMin cannot be combined with ARRAY JOIN*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_WithPreWhere_ShouldThrowClearError()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .PreWhere(x => x.Id > 1L)
+            .SelectWhereMax(x => x.Int)
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("*SelectWhereMax/SelectWhereMin cannot be combined with PREWHERE*");
+    }
 }
 
 [SqlTable("unsigned_cast")]

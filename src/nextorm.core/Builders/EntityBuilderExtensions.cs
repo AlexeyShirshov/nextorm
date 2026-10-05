@@ -12,6 +12,111 @@ namespace NextORM.Core;
 public static class EntityBuilderExtensions
 {
     /// <summary>
+    /// Binds a direct raw source (<see cref="DataContextExtensions.FromSql"/> or
+    /// <see cref="DataContextExtensions.From(IDataContext, string)"/>) to an entity type so its global
+    /// query filters may be applied to the source. <typeparamref name="TEntity"/> selects the effective
+    /// metadata (a configured mapping wins over the auto mapping).
+    /// <para>
+    /// The caller also declares the output columns the raw SQL exposes; each filter is applied
+    /// best-effort against that list, and a filter whose columns are missing is skipped rather than
+    /// failing the query. Binding neither adds nor renames output columns and is <b>not</b> a security
+    /// guarantee: a skipped filter means its predicate does not run.
+    /// </para>
+    /// <para>
+    /// Only direct named/raw sources qualify, and the call must be the first operation after the source
+    /// is created (before predicates, projection or joins). The receiver is not mutated; a new typed
+    /// builder is returned.
+    /// </para>
+    /// <para>
+    /// A filter whose declared columns are all present is injected; a filter with missing columns is
+    /// skipped rather than failing the query. With an empty declared-column list, a filter with a proven
+    /// zero-column dependency is applied, while a column-dependent or undetermined filter is skipped.
+    /// One <c>RawSourceFilterSkipped</c> warning is logged per skipped filter on the
+    /// <c>NextORM.QueryFilters</c> category (level <c>Warning</c>, reasons <c>MissingColumns</c> /
+    /// <c>UndeterminedColumns</c>; the missing names are the physical mapped column names) while a plan is
+    /// prepared on a cache miss; a cache hit does not re-emit it. The message carries no SQL text, table
+    /// names, parameter or captured values.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose metadata and filters are used.</typeparam>
+    /// <param name="source">
+    /// The direct raw/named source builder created by <c>FromSql</c> or <c>From(string)</c>. The receiver
+    /// must not be composed: a predicate, projection, join or other query operator rejects the call. A CTE
+    /// declaration (<c>Ctes</c>) or a derived-table sub-query hint (<c>SubQueryHint</c>) is source metadata,
+    /// not composition, and does not disqualify the binding.
+    /// </param>
+    /// <param name="availableColumns">The output columns the raw source exposes; names are compared case-insensitively.</param>
+    /// <returns>A new typed builder over the same raw source, carrying the binding.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="availableColumns"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="availableColumns"/> contains a <see langword="null"/> or blank entry.</exception>
+    /// <exception cref="NotSupportedException">The receiver is not a direct raw/named source, or <typeparamref name="TEntity"/> is exactly <see cref="TableAlias"/> (a mapped subclass of <see cref="TableAlias"/> is accepted).</exception>
+    /// <exception cref="InvalidOperationException">The source has already been composed (predicate, projection, join or another query operator).</exception>
+    public static EntityBuilder<TEntity> BindEntity<TEntity>(this EntityBuilder<TableAlias> source, IReadOnlyCollection<string> availableColumns)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(availableColumns);
+
+        var binding = new FromExpression.EntityBinding(typeof(TEntity), NormalizeColumns(availableColumns));
+
+        // Resolve the mapping eagerly so binding is never a silent no-op: a configured mapping wins over
+        // the auto mapping, an unmapped type is auto-resolved, and a broken mapping fails here instead of
+        // producing a query whose filters were silently dropped. The metadata is not frozen into the
+        // binding; the filter resolver re-resolves it per preparation, so DataContextCache.Clear() is
+        // honored. TableAlias is rejected later with NotSupportedException and has no mapping to resolve.
+        if (typeof(TEntity) != typeof(TableAlias))
+            _ = DataContextExtensions.ResolveMetadata(source.DataProvider, typeof(TEntity));
+
+        return source.BindEntitySource<TEntity>(binding);
+    }
+
+    /// <summary>Copies, deduplicates and case-insensitively sorts the declared output columns.</summary>
+    /// <param name="availableColumns">The caller-declared columns.</param>
+    /// <returns>An owned, normalized column list.</returns>
+    /// <exception cref="ArgumentException">An entry is <see langword="null"/> or blank.</exception>
+    private static string[] NormalizeColumns(IReadOnlyCollection<string> availableColumns)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var column in availableColumns)
+        {
+            if (string.IsNullOrWhiteSpace(column))
+                throw new ArgumentException("Available columns must be non-null and non-blank.", nameof(availableColumns));
+            set.Add(column);
+        }
+
+        var result = new string[set.Count];
+        set.CopyTo(result);
+        Array.Sort(result, StringComparer.OrdinalIgnoreCase);
+        return result;
+    }
+
+    /// <summary>Writes the builder's <c>Select</c> result as CSV to <paramref name="destination"/>.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The stream that receives the UTF-8 CSV; it stays open.</param>
+    /// <param name="options">The CSV dialect options, or <c>null</c> for the defaults.</param>
+    /// <param name="cancellationToken">A token that cancels the write.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    public static void WriteCsv<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, CsvStreamOptions? options = null, CancellationToken cancellationToken = default, params ReadOnlySpan<object?> @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.ToParentCommand().WriteCsv(destination, options, cancellationToken, @params);
+    }
+
+    /// <summary>Asynchronously writes the builder's <c>Select</c> result as CSV to <paramref name="destination"/>.</summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The stream that receives the UTF-8 CSV; it stays open.</param>
+    /// <param name="options">The CSV dialect options, or <c>null</c> for the defaults.</param>
+    /// <param name="cancellationToken">A token that cancels the write.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task that completes when the CSV has been written.</returns>
+    public static Task WriteCsvAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, CsvStreamOptions? options = null, CancellationToken cancellationToken = default, params object?[] @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.ToParentCommand().WriteCsvAsync(destination, options, cancellationToken, @params);
+    }
+
+    /// <summary>
     /// Streams the matching entities as an asynchronous sequence without buffering the whole result set.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
@@ -39,6 +144,64 @@ public static class EntityBuilderExtensions
     /// <returns>A sequence over the matching entities.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static IEnumerable<TEntity> ToEnumerable<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => builder.ToParentCommand().ToEnumerable(@params);
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as a JSON array,
+    /// without materializing a <typeparamref name="TEntity"/> per row. The destination is owned by the
+    /// caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream destination)
+        => builder.ToParentCommand().WriteJson(destination);
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as JSON using
+    /// <paramref name="options"/>, without materializing a <typeparamref name="TEntity"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, JsonStreamOptions options)
+        => builder.ToParentCommand().WriteJson(destination, options);
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as a
+    /// JSON array, without materializing a <typeparamref name="TEntity"/> per row. The destination is
+    /// owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task WriteJsonAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, CancellationToken cancellationToken = default)
+        => builder.ToParentCommand().WriteJsonAsync(destination, cancellationToken);
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as
+    /// JSON using <paramref name="options"/>, without materializing a <typeparamref name="TEntity"/> per
+    /// row. The destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task WriteJsonAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default)
+        => builder.ToParentCommand().WriteJsonAsync(destination, options, cancellationToken);
 
     /// <summary>
     /// Determines whether the query matches at least one row.
@@ -683,6 +846,48 @@ public static class EntityBuilderExtensions
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
 
+    /// <summary>
+    /// Counts the matching rows as a 64-bit value by emitting a SQL <c>COUNT_BIG(*)</c> (<c>COUNT(*)</c>
+    /// surfaced as <see cref="long"/> on providers without a separate 64-bit count function).
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <returns>The number of matching rows as a 64-bit integer.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long LongCount<TEntity>(this EntityBuilder<TEntity> builder) => LongCountCore(builder, ReadOnlySpan<object?>.Empty);
+    /// <summary>
+    /// Counts the matching rows as a 64-bit value by emitting a SQL <c>COUNT_BIG(*)</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>The number of matching rows as a 64-bit integer.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long LongCount<TEntity>(this EntityBuilder<TEntity> builder, params ReadOnlySpan<object?> @params) => LongCountCore(builder, @params);
+    /// <summary>
+    /// Counts the matching rows as a 64-bit value asynchronously by emitting a SQL <c>COUNT_BIG(*)</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the number of matching rows as a 64-bit integer.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task<long> LongCountAsync<TEntity>(this EntityBuilder<TEntity> builder, params object[] @params) => LongCountAsync(builder, CancellationToken.None, @params);
+    /// <summary>
+    /// Counts the matching rows as a 64-bit value asynchronously by emitting a SQL <c>COUNT_BIG(*)</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    /// <param name="params">The query parameters, in the order their placeholders appear.</param>
+    /// <returns>A task whose result is the number of matching rows as a 64-bit integer.</returns>
+    public static Task<long> LongCountAsync<TEntity>(this EntityBuilder<TEntity> builder, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = builder.SelectParent(e => SqlFunctions.Sql.count_big());
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+
     // The eight aggregate families differ only in the CommonFunctions method they wrap, so every public
     // member is a one-line forwarder and the body lives once in AggregateCore/AggregateAsyncCore.
     /// <summary>
@@ -1030,6 +1235,46 @@ public static class EntityBuilderExtensions
     /// <returns>A task whose result is the population variance of the projected values, or <see langword="null"/> when the query has no non-null values.</returns>
     public static Task<TResult?> VarpAsync<TEntity, TResult>(this EntityBuilder<TEntity> builder, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(builder, CommonFunctions.VarpMI, exp, cancellationToken, @params);
 
+    /// <summary>
+    /// Adapts a declared collection navigation to a full <see cref="EntityBuilder{T}"/> so it can be
+    /// composed like any other query, for example
+    /// <c>e.Children.AsEntityBuilder().Where(c =&gt; c.IsActive).Any()</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is an expression-only marker: it must appear inside a query expression tree, where the
+    /// translator resolves the receiver to the declared navigation path rooted in the surrounding
+    /// query. Calling it as an ordinary method (outside an expression tree) always throws
+    /// <see cref="NotSupportedException"/>; it never returns a default or a null marker. Captured
+    /// receivers and undeclared navigations are not supported.
+    /// </remarks>
+    /// <typeparam name="T">The related entity type; must be a reference type.</typeparam>
+    /// <param name="source">The declared collection navigation to adapt.</param>
+    /// <returns>Never returns; the call is only valid inside a query expression.</returns>
+    /// <exception cref="NotSupportedException">Always, when called outside a query expression tree.</exception>
+    public static EntityBuilder<T> AsEntityBuilder<T>(this IEnumerable<T> source) where T : class
+        => throw new NotSupportedException(
+            "AsEntityBuilder can only be used inside a query expression; a navigation collection or reference cannot be read outside the query.");
+
+    /// <summary>
+    /// Adapts a declared reference navigation to a full <see cref="EntityBuilder{T}"/> so it can be
+    /// composed like any other query, for example
+    /// <c>e.Parent!.AsEntityBuilder&lt;Parent&gt;().Where(p =&gt; p.IsActive).Any()</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is the reference-navigation counterpart of the collection overload. The generic argument
+    /// must be supplied explicitly because the receiver is typed as <see cref="object"/>; the
+    /// collection overload wins when the receiver is a collection, so this form never steals
+    /// collection calls. Like the collection form it is an expression-only marker and always throws
+    /// <see cref="NotSupportedException"/> outside a query expression tree.
+    /// </remarks>
+    /// <typeparam name="T">The related entity type; must be a reference type.</typeparam>
+    /// <param name="navigation">The declared reference navigation to adapt.</param>
+    /// <returns>Never returns; the call is only valid inside a query expression.</returns>
+    /// <exception cref="NotSupportedException">Always, when called outside a query expression tree.</exception>
+    public static EntityBuilder<T> AsEntityBuilder<T>(this object? navigation) where T : class
+        => throw new NotSupportedException(
+            "AsEntityBuilder can only be used inside a query expression; a navigation collection or reference cannot be read outside the query.");
+
     internal static QueryCommand<bool> GetAnyCommand(IDataContext dataProvider, QueryCommand cmd)
     {
         var created = false;
@@ -1058,6 +1303,13 @@ public static class EntityBuilderExtensions
         }
 
         return queryCommand;
+    }
+
+    private static long LongCountCore<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)
+    {
+        var cmd = builder.SelectParent(e => SqlFunctions.Sql.count_big());
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
     }
 
     private static int CountCore<TEntity>(EntityBuilder<TEntity> builder, ReadOnlySpan<object?> @params)

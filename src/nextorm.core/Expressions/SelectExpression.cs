@@ -91,6 +91,17 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     internal bool IsLobStreaming { get; set; }
 
     /// <summary>
+    /// #148-B r3 A3′: true when this <see cref="int"/> column is the checked narrowing of a wide
+    /// (64-bit) navigation collection count. The reader must read the underlying <c>bigint</c> and
+    /// apply a checked <c>long-&gt;int</c> conversion instead of a provider <c>GetInt32</c>, so an
+    /// out-of-range count throws <see cref="OverflowException"/> uniformly on every provider. Set by
+    /// the query preparer from the wide-count provenance (the referenced count command); carried into
+    /// the plan hash and the mapper signature so a nav-count column never shares a cached mapper with
+    /// an ordinary int column.
+    /// </summary>
+    internal bool IsWideCountNarrowed { get; set; }
+
+    /// <summary>
     /// The physical column name the mapped property reads, used by the dynamic-columns store to skip
     /// the columns already read into declared members. <see langword="null"/> for a computed column.
     /// </summary>
@@ -103,6 +114,22 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     /// reads as SQL <c>NULL</c>, i.e. the row is on the missing side of an outer join).
     /// </summary>
     internal ProjectionEntityItem? ProjectionItem { get; set; }
+
+    /// <summary>
+    /// The stable output identifier of a projection-source column that has no CLR property name (an
+    /// unaliased computed scalar such as <c>Select(x =&gt; x.Total * 2)</c>). A typed CTE declaration
+    /// aliases such a column to this name so a consumer can reference it, because the defining
+    /// expression references the CTE's own input columns and cannot be re-rendered against the CTE.
+    /// <see langword="null"/> for an ordinary named column.
+    /// </summary>
+    internal string? OutputName { get; set; }
+
+    /// <summary>
+    /// True when this column is a consumer-side reference to a projection source's output identifier
+    /// (see <see cref="OutputName"/>) rather than a re-rendered defining expression. Such a column
+    /// renders as the source's output column name.
+    /// </summary>
+    internal bool IsProjectionOutputReference { get; set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     // private readonly IQueryRegistry _queryProvider;
@@ -225,12 +252,17 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         {
             return GetFieldValueMI.MakeGenericMethod(typeof(JsonElement));
         }
+        else if (readType == typeof(byte[]))
+        {
+            // A binary column is read through the generic typed accessor so the value is not boxed
+            // through GetValue; the caller receives the array directly.
+            return GetFieldValueMI.MakeGenericMethod(typeof(byte[]));
+        }
         else if (readType.IsArray)
         {
-            // Array columns and array-returning expressions (binary bytea/varbinary/blob,
-            // PostgreSQL text[]/int[], ClickHouse Array(T) including nested arrays) have no typed
-            // reader getter; read the value through GetValue and let the caller cast it to the
-            // declared array type.
+            // Other array columns and array-returning expressions (PostgreSQL text[]/int[],
+            // ClickHouse Array(T) including nested arrays) have no typed reader getter; read the
+            // value through GetValue and let the caller cast it to the declared array type.
             return GetValueMI;
         }
         else if (TypeFacts.IsTupleType(readType))

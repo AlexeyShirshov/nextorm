@@ -78,7 +78,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IReservationEntity>()
+        ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new ReservationEntity { Id = 1, During = new Range<int>(1, 10) })
             .Insert();
 
@@ -92,7 +92,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IReservationEntity>()
+        ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new ReservationEntity { Id = 1, During = new Range<int>(1, 10, lowerInclusive: true, upperInclusive: true) })
             .Insert();
 
@@ -118,7 +118,7 @@ public class RangeColumnsTests
             setup.ExecuteNonQuery();
         }
 
-        ctx.InsertInto<IClosedReservationEntity>()
+        ctx.CreateInsertBuilder<IClosedReservationEntity>()
             .Values(new ClosedReservationEntity { Id = 1, During = new Range<int>(1, 10) })
             .Insert();
 
@@ -134,7 +134,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IReservationEntity>()
+        ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new ReservationEntity { Id = 1, During = new Range<int>(0, 5, lowerInclusive: true, upperInclusive: false, lowerInfinite: true, upperInfinite: false) })
             .Insert();
 
@@ -191,7 +191,7 @@ public class RangeColumnsTests
 
     private static void Seed(SqliteDataContext ctx)
     {
-        ctx.InsertInto<IReservationEntity>()
+        ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new[]
             {
                 new ReservationEntity { Id = 1, During = new Range<int>(1, 10) },
@@ -333,7 +333,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        var act = () => ctx.InsertInto<IReservationEntity>()
+        var act = () => ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new ReservationEntity { Id = 1, During = Range<int>.Empty })
             .Insert();
 
@@ -346,7 +346,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        ctx.InsertInto<IReservationEntity>()
+        ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new ReservationEntity
             {
                 Id = 1,
@@ -412,7 +412,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        Action act = () => ctx.InsertInto<IReservationEntity>().Value(x => x.During, new Range<int>(1, 10));
+        Action act = () => ctx.CreateInsertBuilder<IReservationEntity>().Value(x => x.During, new Range<int>(1, 10));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*During*Values(entity)*");
     }
@@ -423,7 +423,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        Action act = () => ctx.InsertInto<IReservationEntity>()
+        Action act = () => ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new[] { new { During = new Range<int>(1, 10) } }, s => new { s.During });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*During*");
@@ -435,7 +435,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        Action act = () => ctx.Update<IReservationEntity>().Set(x => x.During, new Range<int>(1, 10));
+        Action act = () => ctx.CreateUpdateBuilder<IReservationEntity>().Set(x => x.During, new Range<int>(1, 10));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*During*Set(entity)*");
     }
@@ -446,7 +446,7 @@ public class RangeColumnsTests
         using var conn = OpenConnection();
         using var ctx = ContextFor(conn);
 
-        Action act = () => ctx.InsertInto<IReservationEntity>()
+        Action act = () => ctx.CreateInsertBuilder<IReservationEntity>()
             .Values(new ReservationEntity { Id = 1, During = new Range<int>(1, 10) })
             .Returning(x => x.During);
 
@@ -583,7 +583,7 @@ public class RangeColumnsTests
             setup.ExecuteNonQuery();
         }
 
-        ctx.InsertInto<IClosedReservationEntity>()
+        ctx.CreateInsertBuilder<IClosedReservationEntity>()
             .Values(new ClosedReservationEntity { Id = 1, During = new Range<int>(1, 10) })
             .Insert();
 

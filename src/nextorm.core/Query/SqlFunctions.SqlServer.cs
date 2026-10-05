@@ -70,7 +70,7 @@ namespace NextORM.Core;
         /// <c>xml.nodes(xquery)</c> as a composable rowset source (SQL Server): unfolds the XML value
         /// into one row per node selected by <paramref name="xpath"/> (the XQuery must be a string
         /// literal). Use only as the source of
-        /// <see cref="EntityBuilder{TEntity}.CrossApply{TJoinEntity}(System.Linq.Expressions.Expression{System.Func{TEntity, QueryCommand{TJoinEntity}}})"/>
+        ///         <see cref="EntityBuilder{TEntity}.CrossApply{TJoinEntity}(System.Linq.Expressions.Expression{System.Func{TEntity, QueryCommand{TJoinEntity}}}, System.Action{NextORM.Core.JoinOptions})"/>
         /// (or <c>OuterApply</c>); rendered as <c>&lt;xml&gt;.nodes('xpath') as \[alias\](\[value\])</c>,
         /// and the unfolded <see cref="SqlFunctions.IXmlNodesRow.Value"/> is projected further with
         /// <see cref="xml_value{T}(string?, string?, string?)"/>/<see cref="xml_query(string?, string?)"/>/

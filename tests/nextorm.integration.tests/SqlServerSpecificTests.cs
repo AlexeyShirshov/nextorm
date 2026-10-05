@@ -350,11 +350,11 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var deleteId = MergeTestKey();
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = deleteId, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = deleteId, Name = "ignored", Age = 0 })
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -371,10 +371,10 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var orphanId = MergeTestKey();
         var matchedId = orphanId + 1;
 
-        ctx.InsertInto<IMergeEntity>().Values(new MergeEntity { Id = orphanId, Name = "orphan", Age = 1 }).Insert();
-        ctx.InsertInto<IMergeEntity>().Values(new MergeEntity { Id = matchedId, Name = "keep", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = orphanId, Name = "orphan", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = matchedId, Name = "keep", Age = 1 }).Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = matchedId, Name = "updated", Age = 9 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -393,7 +393,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         using (var transaction = ((ITransactionManager)ctx).BeginTransaction())
         {
-            ctx.BulkInsertInto<IInsertEntity>().Values([new InsertEntity { Name = marker, Age = 1 }]).BulkInsert();
+            ctx.CreateBulkInsertBuilder<IInsertEntity>().Values([new InsertEntity { Name = marker, Age = 1 }]).BulkInsert();
             transaction.Rollback();
         }
 
@@ -438,13 +438,69 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var name = "#batch_" + Guid.NewGuid().ToString("N");
         var ctx = _sut.DataProvider;
 
-        var rows = ctx.Batch()
+        var rows = ctx.CreateBatchBuilder()
             .CreateTable(name, _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { x.Id }))
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
             .ToList();
 
         rows.Should().ContainSingle();
         rows[0].Id.Should().Be(1);
+    }
+
+    [Fact]
+    public void Batch_RawCreateTableAndInsert_ShouldReadTempTableInTheSameBatch()
+    {
+        // Issue #119: a raw side-effecting step (DDL/DML with no command model) followed by a result
+        // query in one batch, with no explicit transaction, must stay on the same session so the
+        // #temp table created by the first step is visible to the last one.
+        var name = "#raw_" + Guid.NewGuid().ToString("N");
+        var ctx = _sut.DataProvider;
+
+        var rows = ctx.CreateBatchBuilder()
+            .Raw($"create table {name} (id int not null)")
+            .Raw($"insert into {name} (id) select id from simple_entity where id <= 3")
+            .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows.Select(r => r.Id).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void Batch_RawInsertExecStoredProcedure_ShouldReadTempTableInTheSameBatch()
+    {
+        // Issue #119, exact scenario: a stored procedure's result is spooled through a session-scoped
+        // #temp table by a verbatim INSERT ... EXEC step and read by the batch's result query — all in
+        // one batch, with no explicit transaction. The proc is created and dropped outside the batch.
+        var ctx = _sut.DataProvider;
+
+        using (ctx.ExecuteRaw(
+            "if object_id('dbo.nextorm_batch_raw_proc','P') is not null drop procedure dbo.nextorm_batch_raw_proc;"))
+        {
+        }
+
+        try
+        {
+            using (ctx.ExecuteRaw(
+                "create procedure dbo.nextorm_batch_raw_proc as select id from simple_entity where id <= 2"))
+            {
+            }
+
+            var rows = ctx.CreateBatchBuilder()
+                .Raw("create table #r (id int not null)")
+                .Raw("insert into #r (id) exec dbo.nextorm_batch_raw_proc")
+                .Query(ctx.From("#r").Select(t => new { Id = t.GetInt32("id") }))
+                .ToList();
+
+            rows.Should().HaveCount(2);
+            rows.Select(r => r.Id).Should().Equal(1, 2);
+        }
+        finally
+        {
+            using (ctx.ExecuteRaw("drop procedure if exists dbo.nextorm_batch_raw_proc"))
+            {
+            }
+        }
     }
 
     [Fact]
@@ -566,7 +622,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IMergeEntity>()
+            ctx.CreateInsertBuilder<IMergeEntity>()
                 .Values(new MergeEntity { Id = id, Name = marker, Age = 1 })
                 .Returning(x => new { x.Id, x.Name })
                 .OutputInto("output_audit")
@@ -599,7 +655,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         try
         {
-            var returned = ctx.InsertInto<IMergeEntity>()
+            var returned = ctx.CreateInsertBuilder<IMergeEntity>()
                 .Values(new MergeEntity { Id = id, Name = marker, Age = 1 })
                 .Returning(x => new { x.Id, x.Name })
                 .OutputIntoThenOutput("output_audit")
@@ -692,6 +748,75 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
             result.Read<int>().Should().Equal(1);
             result.Read<int>().Should().Equal(2);
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc};");
+        }
+    }
+
+    [Fact]
+    public void Procedure_ReadSets_Heterogeneous_OutputsAfterExhaustion()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "#raw_sets_" + Guid.NewGuid().ToString("N");
+
+        Execute(ctx, $"create procedure {proc} @o int output as begin set @o = 5; select 1 as a; select 'two' as b; return 9; end;");
+
+        try
+        {
+            using var result = ctx.ExecuteProcedure(
+                proc,
+                [
+                    new ProcedureParameter("o", null, Direction: ParameterDirection.Output, DbType: DbType.Int32),
+                    new ProcedureParameter("rv", null, Direction: ParameterDirection.ReturnValue, DbType: DbType.Int32),
+                ]);
+
+            var indices = new List<int>();
+            var ints = new List<int>();
+            var strings = new List<string>();
+            foreach (var set in result)
+            {
+                indices.Add(set.Index);
+                if (set.Index == 0)
+                    ints.AddRange(set.Read<int>());
+                else
+                    strings.AddRange(set.Read<string>());
+            }
+
+            indices.Should().Equal(0, 1);
+            ints.Should().Equal(1);
+            strings.Should().Equal("two");
+
+            // Outputs are still available once every set has been read to exhaustion.
+            result.OutputParameters.Single().Value.Should().Be(5);
+            result.ReturnValue.Should().Be(9);
+        }
+        finally
+        {
+            Execute(ctx, $"drop procedure if exists {proc};");
+        }
+    }
+
+    [Fact]
+    public void Procedure_OutputsFirst_ReadSetsThrows()
+    {
+        var ctx = _sut.DataProvider;
+        var proc = "#raw_setsout_" + Guid.NewGuid().ToString("N");
+
+        Execute(ctx, $"create procedure {proc} @o int output as begin set @o = 5; select 1 as a; end;");
+
+        try
+        {
+            using var result = ctx.ExecuteProcedure(
+                proc,
+                [new ProcedureParameter("o", null, Direction: ParameterDirection.Output, DbType: DbType.Int32)]);
+
+            result.OutputParameters.Single().Value.Should().Be(5);
+
+            Action act = () => result.ToList();
+
+            act.Should().Throw<InvalidOperationException>();
         }
         finally
         {
@@ -1405,6 +1530,114 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         {
             Execute(ctx, "drop table if exists ulong_bigint_probe");
         }
+    }
+
+    [SqlTable("csv_widening_probe")]
+    private interface ICsvWideningProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+
+        // The physical column is bigint while the projection is int, so the reader's storage type
+        // (long) differs from the projected CLR type.
+        [Column("big_value")]
+        int BigValue { get; set; }
+
+        // Likewise decimal(12,4) storage projected as int, so the typed CSV hook converts decimal -> int.
+        [Column("dec_value")]
+        int DecValue { get; set; }
+    }
+
+    // End-to-end cover for the CSV typed-column hook on a real server: the projected CLR type is int
+    // while the storage types are bigint and decimal(12,4), so the exact bytes prove the storage-typed
+    // getter + static Convert overload path runs without an exception or an object-based fallback.
+    [Fact]
+    public void Csv_NumericColumnWithWiderStorage_ShouldWriteConvertedBytes()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists csv_widening_probe");
+        Execute(ctx, "create table csv_widening_probe (id bigint not null primary key, big_value bigint not null, dec_value decimal(12,4) not null)");
+
+        try
+        {
+            Execute(ctx, "insert into csv_widening_probe (id, big_value, dec_value) values (1, 42, 123.0000)");
+            Execute(ctx, "insert into csv_widening_probe (id, big_value, dec_value) values (2, -7, -8.0000)");
+
+            using var destination = new MemoryStream();
+            ctx.From<ICsvWideningProbe>()
+                .OrderBy(x => x.Id)
+                .Select(x => new { x.BigValue, x.DecValue })
+                .WriteCsv(destination, null, TestContext.Current.CancellationToken);
+
+            Encoding.UTF8.GetString(destination.ToArray()).Should().Be(
+                "BigValue,DecValue\r\n" +
+                "42,123\r\n" +
+                "-7,-8\r\n");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists csv_widening_probe");
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #146 slice B: T-SQL-specific recursion depth. The 2-arg overload omits `option (maxrecursion)`
+    // and relies on the 100-level engine default; the 3-arg overload emits the explicit limit and both
+    // must still materialize the bounded series.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Cte_TypedRecursive_DefaultMaxRecursion_ShouldMaterializeSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CommonTestSuite.CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_default", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CommonTestSuite.CteNumberRow { n = r.n + 1 }));
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public void Cte_TypedRecursive_BoundedMaxRecursion_ShouldMaterializeSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CommonTestSuite.CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_bounded", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CommonTestSuite.CteNumberRow { n = r.n + 1 }), 10);
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public void Cte_TypedRecursive_UnlimitedMaxRecursion_ShouldMaterializeSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        // T-SQL `maxrecursion 0` means "no limit" (the option must be emitted, not folded away). The
+        // explicit unlimited run must materialize the same bounded series as the default/finite runs.
+        var nums = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new CommonTestSuite.CteNumberRow { n = s.Id })
+            .AsRecursiveCte("typed_nums_unlimited", self => ctx.From(self)
+                .Where(r => r.n < 5)
+                .Select(r => new CommonTestSuite.CteNumberRow { n = r.n + 1 }), 0);
+
+        var rows = ctx.From(nums).Limit(20).Select(r => r.n).ToList();
+
+        rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
     }
 
     private static void Execute(IDataContext ctx, string sql)

@@ -11,7 +11,9 @@
   },
   "permission": {
     "external_directory": {
-      "/home/alex/sources/nextorm-worktrees/**": "allow"
+      "/home/alex/sources/nextorm*/**": "allow",
+      "/home/alex/sources/linq2db-*-nextorm/**": "allow",
+      "/home/alex/.config/opencode/**": "allow"
     }
   }
 }

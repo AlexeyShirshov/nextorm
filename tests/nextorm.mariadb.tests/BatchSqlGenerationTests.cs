@@ -18,8 +18,8 @@ public class BatchSqlGenerationTests
         var min = 5;
         var max = 6;
 
-        var sql = ctx.Batch()
-            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+        var sql = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id < max).Select(x => new { x.Id }))
             .ToSql();

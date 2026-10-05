@@ -24,6 +24,18 @@ public interface IColumnsProvider
     /// <param name="queryCommand">The source command.</param>
     /// <param name="fromProjection">Whether the source comes from a projection rather than a table.</param>
     void Add(QueryCommand queryCommand, bool fromProjection);
+
+    /// <summary>
+    /// Registers an entity type as a source bound to <paramref name="sourceParameter"/> (#148-B R2.2).
+    /// The parameter lets <see cref="FindAlias(ParameterExpression, bool)"/> resolve this source by
+    /// occurrence identity, so two same-CLR-type joined sources stay distinct. The default
+    /// implementation ignores the parameter and falls back to the type-keyed registration.
+    /// </summary>
+    /// <param name="entityType">The CLR type of the source entity.</param>
+    /// <param name="fromProjection">Whether the source comes from a projection rather than a table.</param>
+    /// <param name="sourceParameter">The lambda parameter that denotes the source, or <c>null</c>.</param>
+    void Add(Type entityType, bool fromProjection, ParameterExpression? sourceParameter)
+        => Add(entityType, fromProjection);
     /// <summary>
     /// Resolves the alias index of <paramref name="param"/> among the sources in the current scope.
     /// Returns <c>null</c> when the parameter does not map to a registered source.

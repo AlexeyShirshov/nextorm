@@ -184,17 +184,21 @@ public class PlanKeyUniquenessTests
         yield return ("forxml-mode", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).WithForXml(ForXmlMode.Raw));
         yield return ("hints", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).Hint("recompile"));
         yield return ("hints-two", ctx => E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }).Hint("recompile", "maxdop 1"));
-        yield return ("table-hint", ctx => Row(E(ctx).WithTableHint("INDEX(ix)")));
-        yield return ("index-hint", ctx => Row(E(ctx).WithIndex(IndexHintKind.Force, "ix")));
-        yield return ("index-hint-kind", ctx => Row(E(ctx).WithIndex(IndexHintKind.Ignore, "ix")));
-        yield return ("join-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("hash")
+        yield return ("table-hint", ctx => Row(ctx.From<IComplexEntity>(o => o.WithTableHint("INDEX(ix)"))));
+        yield return ("index-hint", ctx => Row(ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Force, "ix"))));
+        yield return ("index-hint-kind", ctx => Row(ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Ignore, "ix"))));
+        yield return ("join-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinHint("hash"))
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
-        yield return ("join-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id).WithJoinHint("loop")
+        yield return ("join-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinHint("loop"))
             .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
-        yield return ("subquery-hint", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }))
-            .WithSubQueryHint("NestLoop(t1)").Select(t => new PKRow { Id = t.Id, Int = t.Int }));
-        yield return ("subquery-hint-other", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }))
-            .WithSubQueryHint("SeqScan(t1)").Select(t => new PKRow { Id = t.Id, Int = t.Int }));
+        yield return ("join-table-hint", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
+        yield return ("join-table-hint-other", ctx => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("updlock"))
+            .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int }));
+        yield return ("subquery-hint", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }), o => o.WithSubQueryHint("NestLoop(t1)"))
+            .Select(t => new PKRow { Id = t.Id, Int = t.Int }));
+        yield return ("subquery-hint-other", ctx => ctx.From(E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int }), o => o.WithSubQueryHint("SeqScan(t1)"))
+            .Select(t => new PKRow { Id = t.Id, Int = t.Int }));
         yield return ("scope-hint", ctx => Row(E(ctx).WithTablesInScopeHint("nolock")));
         yield return ("scope-hint-other", ctx => Row(E(ctx).WithTablesInScopeHint("index(ix)")));
 
@@ -280,6 +284,81 @@ public class PlanKeyUniquenessTests
             comparer.Equals(first, second).Should().BeTrue("a structurally identical rebuild must reuse the cached plan");
             comparer.GetHashCode(first).Should().Be(comparer.GetHashCode(second), "Equal plans must have equal hashes");
         }
+    }
+
+    [Fact]
+    public void JoinTableHint_BlankNormalization_ShouldReuseThePlanKey()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        QueryCommand Build(string hint, bool blankAfter)
+        {
+            var joined = E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j =>
+            {
+                j.WithJoinTableHint(hint);
+                if (blankAfter)
+                    j.WithJoinTableHint(" ");
+            });
+
+            return joined.Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int });
+        }
+
+        var first = Build("nolock", blankAfter: false);
+        var normalized = Build("nolock", blankAfter: true);
+        var other = Build("updlock", blankAfter: false);
+
+        first.PrepareCommand(false, CancellationToken.None);
+        normalized.PrepareCommand(false, CancellationToken.None);
+        other.PrepareCommand(false, CancellationToken.None);
+
+        var comparer = first.GetQueryPlanEqualityComparer();
+        comparer.Equals(first, normalized).Should().BeTrue("a blank-only call keeps the previous hint, so the plan key is unchanged");
+        comparer.GetHashCode(first).Should().Be(comparer.GetHashCode(normalized));
+        comparer.Equals(first, other).Should().BeFalse("different join table hints must not share a plan key");
+    }
+
+    [Fact]
+    public void JoinTableHint_Order_ShouldAffectThePlanKey()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        QueryCommand Build(params string[] hints)
+            => E(ctx).Join(ctx.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint(hints))
+                .Select(p => new PKRow { Id = p.Item1.Id, Int = p.Item1.Int });
+
+        var ab = Build("a", "b");
+        var abAgain = Build("a", "b");
+        var ba = Build("b", "a");
+
+        ab.PrepareCommand(false, CancellationToken.None);
+        abAgain.PrepareCommand(false, CancellationToken.None);
+        ba.PrepareCommand(false, CancellationToken.None);
+
+        var comparer = ab.GetQueryPlanEqualityComparer();
+        comparer.Equals(ab, abAgain).Should().BeTrue("the same hint order must reuse the plan key");
+        comparer.GetHashCode(ab).Should().Be(comparer.GetHashCode(abAgain));
+        comparer.Equals(ab, ba).Should().BeFalse("hint order is significant and must not share a plan key");
+    }
+
+    [Fact]
+    public void JoinTableHint_NullAndEmpty_ShouldCompareEqual()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        // A command supplies the nested comparers; its own plan is irrelevant here.
+        var registry = E(ctx).Select(x => new PKRow { Id = x.Id, Int = x.Int });
+        var comparer = registry.GetJoinExpressionPlanEqualityComparer();
+
+        var source = ctx.From<ISimpleEntity>().SourceFrom!;
+
+        var withNull = new JoinExpression(null) { From = source };
+        var withEmpty = new JoinExpression(null) { From = source, TableHints = [] };
+
+        withNull.TableHints.Should().BeNull();
+        withEmpty.TableHints.Should().BeEmpty();
+
+        comparer.Equals(withNull, withEmpty).Should().BeTrue("null and an empty table-hint list both mean no hints");
+        comparer.GetHashCode(withNull).Should().Be(comparer.GetHashCode(withEmpty));
     }
 
     [Fact]

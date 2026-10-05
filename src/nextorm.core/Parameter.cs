@@ -34,4 +34,13 @@ public class Parameter(string name, object? value)
     /// Internal: an engine bookkeeping detail, not part of the public contract.
     /// </summary>
     internal ExpressionKey? CapturedKey { get; set; }
+
+    /// <summary>
+    /// True when <see cref="Value"/> went through a column converter or a duration-storage
+    /// normalization while the parameter was built, so re-reading the raw captured value would not
+    /// reproduce <see cref="Value"/>. The immutable guarded parameter-refresh recipe refuses such
+    /// parameters and routes them to the original extraction path. Internal: an engine bookkeeping
+    /// detail, not part of the public contract.
+    /// </summary>
+    internal bool HasConversion { get; set; }
 }

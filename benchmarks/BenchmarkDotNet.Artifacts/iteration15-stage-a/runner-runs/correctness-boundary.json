@@ -1,0 +1,23 @@
+{
+  "subcommand": "correctness",
+  "scope": "boundary",
+  "executed": false,
+  "correctness_json": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/stage-a-correctness.json",
+  "correctness_sha256": "cc53697207cfaec60403edf784a6ed54c91732c6bde0dd5ee9c70578c7f0e116",
+  "diagnostics_json": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/stage-a-diagnostics.json",
+  "diagnostics_sha256": "57454051589d12caa7ed9504da23d3c6e4d49efd843148336c71f3f877ba8b05",
+  "boundary_checks": {
+    "where_sql_match": true,
+    "join_sql_match": true,
+    "where_rows_match": true,
+    "join_rows_match": true,
+    "any": true,
+    "first": true,
+    "single": true,
+    "where_rows": true,
+    "sticky_cache_false_absent": true,
+    "all_pass": true
+  },
+  "sticky_cache_false_absent": true,
+  "validated": true
+}

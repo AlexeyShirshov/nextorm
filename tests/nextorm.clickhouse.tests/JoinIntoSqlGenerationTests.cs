@@ -94,13 +94,11 @@ public class JoinIntoSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var parentOnly = SqlOf(ctx, Parents(ctx)
-            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .Global()
+            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, j => j.Global())
             .ToParentCommand());
 
         string pairSql = SqlOf(ctx, (dynamic)Parents(ctx)
-            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .Global()
+            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, j => j.Global())
             .CreateJoinIntoPairCommand());
 
         // The parent-only terminal must still drop the JoinInto; the modifier must not degrade it to a
@@ -114,8 +112,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
             .CreateJoinIntoPairCommand();
         var global = Parents(ctx)
-            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .Global()
+            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, j => j.Global())
             .CreateJoinIntoPairCommand();
 
         var comparer = plain.GetQueryPlanEqualityComparer();
@@ -128,13 +125,11 @@ public class JoinIntoSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         var parentOnly = SqlOf(ctx, Parents(ctx)
-            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .WithStrictness(JoinStrictness.Any)
+            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, j => j.WithStrictness(JoinStrictness.Any))
             .ToParentCommand());
 
         string pairSql = SqlOf(ctx, (dynamic)Parents(ctx)
-            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .WithStrictness(JoinStrictness.Any)
+            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, j => j.WithStrictness(JoinStrictness.Any))
             .CreateJoinIntoPairCommand());
 
         parentOnly.Trim().Should().Be("select id, name from join_into_parent");
@@ -144,8 +139,7 @@ public class JoinIntoSqlGenerationTests
             .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
             .CreateJoinIntoPairCommand();
         var strict = Parents(ctx)
-            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children)
-            .WithStrictness(JoinStrictness.Any)
+            .JoinInto(ctx.From<ChJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Children, j => j.WithStrictness(JoinStrictness.Any))
             .CreateJoinIntoPairCommand();
 
         var comparer = plain.GetQueryPlanEqualityComparer();

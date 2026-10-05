@@ -5,7 +5,7 @@ namespace NextORM.Core;
 /// </summary>
 internal enum SqlStatementType
 {
-    /// <summary>A <c>SELECT</c> query (rendered by <see cref="SqlBuilder"/>, not a mutation).</summary>
+    /// <summary>A <c>SELECT</c> query (rendered by <c>SqlBuilder</c>, not a mutation).</summary>
     Select,
     /// <summary>An <c>INSERT</c> statement.</summary>
     Insert,

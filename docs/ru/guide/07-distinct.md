@@ -181,6 +181,95 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 Ключом может быть анонимный тип для составного ключа. `DISTINCT ON` реализован только в PostgreSQL;
 остальные провайдеры отклоняют его на этапе построения SQL.
 
+## Выбор экстремальной строки (`SelectWhereMax` / `SelectWhereMin`)
+
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) и
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``1(System.Linq.Expressions.Expression{System.Func{`0,``0}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) оставляют строку (или строки),
+значение которой по селектору максимально или минимально в источнике. Это фильтр строк, а не
+агрегат: выжившая строка сохраняет все колонки.
+
+**Глобально и по группам.** Без ключа группировки экстремум берётся по всему источнику; с ключом
+группировки экстремальные строки выбираются внутри каждой отдельной группы. Ключ `null` — это
+отдельная группа.
+
+```csharp
+// Глобально: единственная строка с максимальным score.
+var top = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score)
+    .ToList();
+
+// По группам: одна экстремальная строка на категорию.
+var perGroup = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, ExtremeRowTies.One, e => e.Category)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+-- глобально: целочисленный ключ проходит нативно — ORDER BY ... LIMIT 1
+select t1.id, t1.score, t1.category, t1.label
+from (select * from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+
+-- по группам: строковый ключ группировки не проходит нативно, остаётся переносимое оконное понижение
+select t1.id, t1.score, t1.category, t1.label
+from (select *, row_number() over (partition by category order by score desc) as "__nextorm_rn" from extrema_entity
+ where score is not null) as "t1"
+ where t1."__nextorm_rn" = 1
+```
+
+[`ExtremeRowTies`](xref:NextORM.Core.ExtremeRowTies) управляет обработкой совпадающих значений. [`One`](xref:NextORM.Core.ExtremeRowTies.One) (по умолчанию)
+оставляет одну строку — при равенстве значений провайдер выбирает одну из них, — а [`All`](xref:NextORM.Core.ExtremeRowTies.All)
+оставляет все строки, совпадающие по экстремальному значению. Совпадение определяется только
+селектором, поэтому результат `All` содержит все такие строки, а `One` — ровно одну произвольную.
+
+**Форма с проекцией.** Перегрузки
+[`SelectWhereMax`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMax``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) /
+[`SelectWhereMin`](xref:NextORM.Core.EntityBuilder`1.SelectWhereMin``2(System.Linq.Expressions.Expression{System.Func{`0,``0}},System.Linq.Expressions.Expression{System.Func{`0,``1}},NextORM.Core.ExtremeRowTies,System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) принимают проекцию и применяют
+её к каждой выжившей строке, возвращая типизированную команду запроса:
+
+```csharp
+var projected = dataContext.From<ExtremaEntity>()
+    .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, t1.label
+from (select * from extrema_entity
+ where score is not null order by "score" desc limit 1) as "t1"
+```
+
+**Семантика NULL.** Сравниваемые значения `null` игнорируются, поэтому они никогда не выигрывают
+экстремум и не попадают в результат. Группа, у которой сравниваемое значение всегда `null`, не даёт
+ни одной строки, а глобальная форма возвращает пустой результат, когда все значения `null`.
+
+**Переносимая реализация.** Диалект понижает запрос до производной таблицы с оконной функцией —
+`row_number()` для [`One`](xref:NextORM.Core.ExtremeRowTies.One), `rank()` для [`All`](xref:NextORM.Core.ExtremeRowTies.All), `over (partition by <группа> order by <значение> [desc])` —
+с фильтром по рангу `1`, а условие источника объединяется через `AND` с фильтром `is not null` по
+значению:
+
+```sql
+-- переносимая форма: ранжируем строки источника, затем оставляем ранг 1
+select <проекция> from (
+    select *, row_number() over (partition by <группа> order by <значение> desc) as rn
+    from <источник>
+    where <значение> is not null and <условие>
+) t where t.rn = 1
+```
+
+Это реализация на каждом SQL-провайдере (SQLite, SQL Server, PostgreSQL, MySQL, MariaDB и
+ClickHouse) и на провайдере in-memory. На PostgreSQL и ClickHouse нативно подходящий запрос с `One`
+вместо этого рендерится нативно, автоматически, по провайдеру и форме запроса — см.
+[Нативные стратегии выбора экстремальной строки](../advanced/select-where-extrema-native.md). Любая
+другая форма сохраняет переносимое понижение выше.
+
+Запрос отклоняется на этапе построения SQL при сочетании с другим модификатором формы строк, который
+не выражается через производную таблицу: [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), соединение, `Having`,
+именованные окна, `LimitBy`, `ArrayJoin`, `PreWhere`, постраничный вывод, операция над множествами
+или нефизический источник.
+
 ## Различия между провайдерами
 
 | Провайдер | `DISTINCT` + limit | `DISTINCT` поверх соединения |
@@ -204,4 +293,6 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 Source: `tests/nextorm.integration.tests/CommonTestSuite.Distinct.cs:9`,
 `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:26`,
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:26,35`,
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:25`.
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:25`,
+`tests/nextorm.integration.tests/CommonTestSuite.SelectWhereExtrema.cs:41`,
+`tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1353`.

@@ -246,7 +246,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 return false;
         }
 
-        _params.Add(new Parameter(name, NormalizeParameterValue(value)) { CapturedKey = key });
+        var normalized = NormalizeParameterValue(value);
+        _params.Add(new Parameter(name, normalized)
+        {
+            CapturedKey = key,
+            // The guarded refresh recipe must not re-read the raw captured value when normalizing it
+            // would not reproduce the bound value. A converter always counts (it may be value
+            // dependent), a duration scope only when the value is a TimeSpan, and any remaining
+            // normalization (enum coercion, duration storage) is caught by comparing the results.
+            // The duration scope itself is set for every comparison on a dialect without a native
+            // duration, so the scope alone is not a signal.
+            HasConversion = ConverterContext is not null
+                || (DurationUnitContext is not null && value is TimeSpan)
+                || !Equals(normalized, value),
+        });
         return true;
     }
     /// <summary>
@@ -432,8 +445,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     /// <summary>
     /// Appends the table alias of the source that carries a by-name column. A projection member
-    /// (<c>p.Item1</c>) is resolved by its 1-based occurrence, so a type repeated in the projection
-    /// picks the right table instead of the first one.
+    /// (<c>p.Item1</c> or a generated alias such as <c>p.Buyer</c>) is resolved by its 1-based
+    /// occurrence, so a type repeated in the projection picks the right table instead of the first one.
     /// </summary>
     private void AppendColumnAlias(Expression source)
     {
@@ -450,12 +463,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
         if (target.Type.IsAssignableTo(typeof(IProjection)) && source is MemberExpression member)
         {
-            var name = member.Member.Name;
-            var digitsStart = name.Length;
-            while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
-            var position = 0;
-            for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
-            position--;
+            var position = ProjectionAliasCache.GetMemberPosition(member.Member);
             var paramIdx = ProjectionAliasCache.GetOccurrence(target.Type, position);
             tableAliasForColumn = AliasResolver.GetAliasFromParam(this, member.Type, paramIdx, false);
         }
@@ -747,6 +755,25 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <inheritdoc/>
     protected override Expression VisitMember(MemberExpression node)
         => MemberTranslator.VisitMember(this, node) ?? base.VisitMember(node);
+
+    /// <inheritdoc/>
+    protected override Expression VisitParameter(ParameterExpression node)
+        => MemberTranslator.TryVisitScalarSourceParameter(this, node) ? node : base.VisitParameter(node);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Only the body is visited. A projection lambda stored as a <see cref="SelectExpression.Expression"/>
+    /// (the single-column scalar form, for example <c>From(scalarCte).Select(n =&gt; n + 1)</c>) denotes its
+    /// body's value; the parameter list is not a separate SQL operand, so the default
+    /// <see cref="ExpressionVisitor"/> walk would visit the parameter after the body and emit the source
+    /// column a second time (<c>(n + 1)n</c>). Higher-order array/JSON lambdas are extracted and walked by
+    /// their own translators, so they do not rely on this method visiting a parameter list.
+    /// </remarks>
+    protected override Expression VisitLambda<T>(Expression<T> node)
+    {
+        Visit(node.Body);
+        return node;
+    }
 
     /// <inheritdoc/>
     protected override Expression VisitUnary(UnaryExpression node)

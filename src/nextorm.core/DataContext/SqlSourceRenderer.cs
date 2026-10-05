@@ -8,7 +8,7 @@ namespace NextORM.Core;
 /// <summary>
 /// Renders the source/condition parts of a statement — CTEs, FROM (tables, derived tables and
 /// table-valued functions), JOIN/APPLY, WHERE/HAVING, ORDER BY and columns. Split out of
-/// <see cref="SqlBuilder"/> (which keeps the statement assembly) so both stay cohesive and under the
+/// <c>SqlBuilder</c> (which keeps the statement assembly) so both stay cohesive and under the
 /// god-class threshold; the emitted SQL and the walk order are unchanged.
 /// </summary>
 internal static class SqlSourceRenderer
@@ -29,6 +29,13 @@ internal static class SqlSourceRenderer
         for (var (i, cnt) = (0, ctes.Count); i < cnt; i++)
         {
             var cte = ctes[i];
+
+            // Only the new typed recursive API is gated by the dialect capability; a legacy
+            // WithRecursive declaration keeps its existing (ungated) rendering.
+            if (cte.RecursiveReference is not null && !ctx.Dialect.SupportsRecursiveCte)
+                throw new NotSupportedException(
+                    $"Recursive common table expressions are not supported by this SQL dialect (common table expression '{cte.Name}').");
+
             if (cte.Recursive) anyRecursive = true;
             if (maxRecursion is null && cte.MaxRecursion is int value) maxRecursion = value;
         }
@@ -42,13 +49,14 @@ internal static class SqlSourceRenderer
             {
                 var cte = ctes[i];
 
-                // A command whose WITH carries a data-modifying CTE disables plan caching
-                // (QueryPreparer.PrepareCtes), so this parameter pass never runs for one; only read CTEs
-                // are walked here.
+                // A command whose WITH carries a data-modifying CTE is side-effecting and never shares a
+                // plan: QueryPlanner.GetPreparedQueryCommand detects QueryCommand.HasDataModifyingCte and
+                // clears the call-local storeInCache (not the sticky command.Cache), so this parameter
+                // pass never runs for one; only read CTEs are walked here.
                 if (cte.Mutation is not null)
                     continue;
 
-                var walker = new SqlBuilder(ctx with { ParamMode = true, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = null });
+                var walker = new SqlBuilder(ctx with { ParamMode = true, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = null, SuppressCtes = true });
                 walker.MakeSelect(cte.Query);
             }
 
@@ -71,18 +79,18 @@ internal static class SqlSourceRenderer
 
                 if (cte.Mutation is not null)
                 {
-                    // A data-modifying CTE body is the INSERT itself; its parameters share the enclosing
+                    // A data-modifying CTE body is the mutation itself; its parameters share the enclosing
                     // command's provider so the SQL pass and the (rarer) parameter pass number them alike.
-                    var (insertSql, insertParams) = RenderMutation(in ctx, cte);
-                    ctx.Params.AddRange(insertParams);
-                    withBuilder.Append(insertSql);
+                    withBuilder.Append(RenderMutation(in ctx, cte));
                 }
                 else
                 {
                     // Each CTE is rendered in isolation: a fresh columns provider keeps the outer source
                     // list untouched, and a fresh alias provider makes alias numbering self-contained
-                    // (mirroring how UNION branches are rendered).
-                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider() });
+                    // (mirroring how UNION branches are rendered). Any declarations the body itself
+                    // carries have already been hoisted into this top-level WITH, so the body must not
+                    // emit a nested WITH of its own (invalid on SQL Server).
+                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider(), SuppressCtes = true, ExactProjectionAliases = cte.TypedProjection });
                     withBuilder.Append(builder.MakeSelect(cte.Query));
                 }
 
@@ -99,22 +107,35 @@ internal static class SqlSourceRenderer
     }
 
     /// <summary>
-    /// Renders the <c>INSERT ... RETURNING</c> body of a data-modifying CTE. Only PostgreSQL accepts a
-    /// data-modifying CTE body. The body may be a <c>VALUES</c> insert or an <c>INSERT ... SELECT</c>
-    /// whose source is rendered here; any CTEs the source carries are dropped because they are already
-    /// declared by the enclosing <c>WITH</c> (a data-modifying CTE sees only the outer CTEs).
+    /// Renders a data-modifying CTE body as the SQL fragment placed inside its declaration, appending
+    /// its parameters to the shared accumulator. Only PostgreSQL accepts a data-modifying CTE body. An
+    /// INSERT body (VALUES or INSERT ... SELECT) is rendered here; a single-table UPDATE/DELETE body is
+    /// delegated to the planner-supplied mutation-body hook so the body reuses the statement's
+    /// assignment/predicate pipeline. A body that is neither is rejected before any SQL is emitted.
     /// </summary>
-    private static (string Sql, List<Parameter> Parameters) RenderMutation(in SqlBuildContext ctx, CteDefinition cte)
+    private static string RenderMutation(in SqlBuildContext ctx, CteDefinition cte)
     {
         if (!ctx.Dialect.SupportsDataModifyingCtes)
             throw new NotSupportedException("Data-modifying common table expressions are only supported by PostgreSQL.");
 
         var mutation = cte.Mutation!;
+
+        // An INSERT body is rendered here. The UPDATE/DELETE bodies are rendered by the planner hook,
+        // which owns the assignment/predicate helpers; a provider that wires none rejects the body (for
+        // example an UPDATE/DELETE body that carries no RETURNING projection, or a multi-table mutation).
+        if (mutation.Command is not InsertCommand insert)
+        {
+            if (ctx.RenderMutationBody is not { } renderMutationBody)
+                throw new NotSupportedException("Only an INSERT data-modifying common table expression can be rendered; UPDATE/DELETE CTE bodies are not supported by this provider.");
+
+            return renderMutationBody(mutation, ctx);
+        }
+
         string? sourceSql = null;
 
-        if (mutation.Source is not null)
+        if (insert.Source is not null)
         {
-            var source = mutation.Source;
+            var source = insert.Source;
             if (source.Ctes is { Count: > 0 })
             {
                 // The outer WITH already declares these CTEs; re-declaring them inside the body would
@@ -140,15 +161,18 @@ internal static class SqlSourceRenderer
             }
         }
 
-        return SqlMutationBuilder.MakeInsert(
+        var (sql, parameters) = SqlMutationBuilder.MakeInsert(
             ctx.Dialect,
             ctx.QuoteIdentifiers,
             ctx.NamingConvention,
-            mutation,
+            insert,
             ctx.KeywordCase,
             sourceSql,
             sourceSql is null ? null : [],
             parameterProvider: ctx.ParameterProvider);
+
+        ctx.Params.AddRange(parameters);
+        return sql;
     }
 
     internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null)
@@ -186,6 +210,7 @@ internal static class SqlSourceRenderer
         }
 
         ValidateJoinModifiers(in ctx, join);
+        ValidateJoinTableHintSource(join);
 
         if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply)
             return MakeApplyJoin(in ctx, join);
@@ -204,7 +229,7 @@ internal static class SqlSourceRenderer
 
             if (joinCondition is null)
             {
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TablesInScopeHints: tablesInScopeHints));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -213,9 +238,13 @@ internal static class SqlSourceRenderer
                 return ctx.ParamMode ? null : sqlBuilder!.ToString();
             }
 
-            // A scope is pushed only when the condition's parameters contain a repeated type. Doing
-            // this with a double loop avoids the Select/Distinct LINQ allocations on every build.
-            var scopedAdded = JoinNeedsScope(joinCondition.Parameters);
+            // A scope is pushed when the condition's parameters contain a repeated type (a double loop
+            // avoids the Select/Distinct LINQ allocations on every build), or when the joined type
+            // already has a sibling source in the current scope. Without the latter, an empty scope makes
+            // FindAlias resolve the condition's right-hand parameter to the first same-typed source (the
+            // earlier sibling) instead of the just-added join source, binding the ON to the wrong alias.
+            var scopedAdded = JoinNeedsScope(joinCondition.Parameters)
+                || ctx.ColumnsProvider.FindAlias(joinCondition.Parameters[1].Type, null, fromProjection: false) is not null;
             if (scopedAdded)
                 ctx.ColumnsProvider.PushScope(joinCondition.Parameters);
 
@@ -223,7 +252,7 @@ internal static class SqlSourceRenderer
             {
                 var dim = JoinDimension(joinCondition);
 
-                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TablesInScopeHints: tablesInScopeHints));
+                var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints, SourceParameter: join.SourceParameter));
                 if (!ctx.ParamMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -256,6 +285,7 @@ internal static class SqlSourceRenderer
     internal static (string From, string Condition) MakeJoinParts(in SqlBuildContext ctx, JoinExpression join, Type entityType)
     {
         ValidateJoinModifiers(in ctx, join);
+        ValidateJoinTableHintSource(join);
 
         var condition = join.JoinCondition
             ?? throw new BuildSqlCommandException("A multi-table DELETE only supports INNER joins, which carry a condition.");
@@ -266,7 +296,7 @@ internal static class SqlSourceRenderer
 
         try
         {
-            var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, condition.Parameters[1].Type, false));
+            var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, condition.Parameters[1].Type, false, TableHints: join.TableHints));
 
             var conditionBuilder = StringBuilderPool.Shared.Get();
             try
@@ -302,6 +332,31 @@ internal static class SqlSourceRenderer
         if (join.JoinType is not (JoinType.Inner or JoinType.Left or JoinType.Right or JoinType.Full))
             throw new NotSupportedException($"The join modifier cannot be applied to a {join.JoinType} join");
     }
+
+    // A per-join table hint renders as a WITH (...) clause after the joined table name, so it requires a
+    // plain physical-table source. An APPLY join, a derived subquery, a table-valued function, an
+    // XML/pivot, raw-SQL or table-expression join source cannot carry it; reject deterministically rather
+    // than silently dropping the hint. Dialect support for a physical-table join is checked by MakeFrom
+    // (see the SupportsTableHints guard), which lets SQLite/ClickHouse reject with NotSupportedException.
+    private static void ValidateJoinTableHintSource(JoinExpression join)
+    {
+        if (join.TableHints is not { Count: > 0 })
+            return;
+
+        if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply || !IsPhysicalTableSource(join.From))
+            throw new InvalidOperationException("Join table hints are only supported on a physical table source.");
+    }
+
+    // Mirrors the physical-table branch of MakeFrom: the only source shape that can render a table hint
+    // is a named table that is not one of the special source kinds dispatched before it.
+    private static bool IsPhysicalTableSource(FromExpression from)
+        => !string.IsNullOrEmpty(from.Table)
+            && from.SubQuery is null
+            && from.TableFunction is null
+            && from.Pivot is null
+            && from.XmlNodes is null
+            && from.RawSqlSource is null
+            && from.TableExpressionOverride is null;
 
     // A join condition needs a pushed column scope when two of its parameter types are the same (for
     // example a self-join), so each alias resolves within its own scope.
@@ -368,7 +423,7 @@ internal static class SqlSourceRenderer
     /// </summary>
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, out string? alias)
     {
-        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints) = options;
+        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind, tablesInScopeHints, sourceParameter) = options;
         alias = null;
 
         if (from.LinqSource is not null)
@@ -387,7 +442,7 @@ internal static class SqlSourceRenderer
             return MakeXmlNodes(in ctx, from, entityType);
 
         if (from.RawSqlSource is not null)
-            return MakeRawSqlSource(in ctx, from, needAlias, entityType);
+            return MakeRawSqlSource(in ctx, from, needAlias, entityType, hasJoins);
 
         if (from.TableExpressionOverride is not null)
             return MakeTableExpression(in ctx, from, options, entityType);
@@ -453,9 +508,9 @@ internal static class SqlSourceRenderer
                     if (from.ColumnShape is not null)
                         ctx.ColumnsProvider.Add(from.ColumnShape, false);
                     else if (hasJoins && typeof(IProjection).IsAssignableFrom(entityType))
-                        ctx.ColumnsProvider.Add(entityType!.GetGenericArguments()[0], false);
+                        ctx.ColumnsProvider.Add(entityType!.GetGenericArguments()[0], false, sourceParameter);
                     else
-                        ctx.ColumnsProvider.Add(entityType!, false);
+                        ctx.ColumnsProvider.Add(entityType!, false, sourceParameter);
 
                     alias = ctx.AliasProvider!.GetNextAlias(from);
                     sqlBuilder.Append(ctx.Dialect.MakeTableAlias(alias, ctx.KeywordCase));
@@ -480,7 +535,11 @@ internal static class SqlSourceRenderer
 #if DEBUG
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
 #endif
-                var sql = new SqlBuilder(in ctx).MakeSelect(cmd);
+                // A nested derived table is an ordinary subquery: the typed-CTE declaration flag scopes
+                // to the declaration's own select list and must not leak here, where a case-only alias
+                // would rename the derived column while the enclosing body still references the physical
+                // name. Clear it so the nested source keeps the default case-insensitive aliasing.
+                var sql = new SqlBuilder(ctx with { ExactProjectionAliases = false }).MakeSelect(cmd);
 
                 if (ctx.ParamMode) return string.Empty;
 
@@ -544,7 +603,7 @@ internal static class SqlSourceRenderer
     /// bound into the enclosing command in both the parameter and the SQL pass, so the order matches.
     /// Columns are read through <see cref="TableAlias"/> accessors.
     /// </summary>
-    private static string MakeRawSqlSource(in SqlBuildContext ctx, FromExpression from, bool needAlias, Type? entityType)
+    private static string MakeRawSqlSource(in SqlBuildContext ctx, FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
     {
         if (!ctx.Dialect.SupportsRawSqlSource)
             throw new NotSupportedException("Raw SQL as a FROM source is not supported by this SQL dialect");
@@ -571,8 +630,15 @@ internal static class SqlSourceRenderer
 
             if (needAlias || ctx.Dialect.RequireSubqueryAlias)
             {
+                // A joined command exposes the Projection<T1, …> type as the command's entity type while
+                // the physical main source is its first item. Register that first item (mirroring the
+                // physical-table branch) so a main-source predicate re-rooted onto Item1 resolves here.
                 if (entityType is not null)
-                    ctx.ColumnsProvider.Add(entityType, false);
+                    ctx.ColumnsProvider.Add(
+                        hasJoins && typeof(IProjection).IsAssignableFrom(entityType)
+                            ? entityType.GetGenericArguments()[0]
+                            : entityType,
+                        false);
 
                 sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
             }
@@ -995,6 +1061,12 @@ internal static class SqlSourceRenderer
 
     internal static (bool NeedAliasForColumn, string Column) MakeColumn(in SqlBuildContext ctx, SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
     {
+        // A consumer-side reference to a projection source's output identifier (an unaliased computed
+        // scalar has no member name to re-resolve): render the source's output column directly instead
+        // of re-rendering the defining expression, which references the source's own input columns.
+        if (selExp.IsProjectionOutputReference && selExp.OutputName is { Length: > 0 } outputReference)
+            return (false, ctx.Dialect.MakeColumnReference(outputReference));
+
         using var visitor = ctx.CreateColumnVisitor(entityType, 0, dontNeedAlias);
         visitor.RangeColumnRole = selExp.RangeColumnRole;
         visitor.Visit(selExp.Expression);
@@ -1005,12 +1077,32 @@ internal static class SqlSourceRenderer
         // read from (MyId = t.Id, or two sources exposing the same physical name). Without it an
         // outer query that references the projection by property name emits the wrong identifier,
         // which PostgreSQL rejects as missing or ambiguous. renameAware is only set by callers that
-        // emit a select list - GROUP BY must keep the physical column name.
+        // emit a select list - GROUP BY must keep the physical column name. A typed CTE declaration
+        // body compares case-sensitively: its property-name aliases are the identifiers typed reads
+        // resolve, and PostgreSQL quoted identifiers do not fold case.
+        var comparison = ctx.ExactProjectionAliases ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         var needAliasForColumn = visitor.NeedAliasForColumn
             || (renameAware
                 && visitor.ColumnName is not null
                 && selExp.PropertyName is not null
-                && !string.Equals(visitor.ColumnName, selExp.PropertyName, StringComparison.OrdinalIgnoreCase));
+                && !string.Equals(visitor.ColumnName, selExp.PropertyName, comparison))
+            // A typed CTE declaration must expose a bare literal under its declared identifier: a
+            // constant projects no column, so a recursive step or consumer cannot address the CTE's
+            // output by name unless the declaration aliases it (otherwise the step inlines the literal
+            // and renders an unaddressable `t1.1`). A column-valued projection already carries its name
+            // in ColumnName / NeedAliasForColumn; only a literal has none.
+            || (ctx.ExactProjectionAliases
+                && renameAware
+                && selExp.PropertyName is not null
+                && selExp.Expression is not null
+                && TypeFacts.UnwrapConvert(selExp.Expression) is ConstantExpression)
+            // An unaliased computed scalar in a typed CTE declaration has no property name to compare
+            // against, so the declaration must still alias it to its generated output identifier; the
+            // consumer then references that identifier (see IsProjectionOutputReference).
+            || (ctx.ExactProjectionAliases
+                && renameAware
+                && selExp.PropertyName is null
+                && selExp.OutputName is not null);
 
         return (needAliasForColumn, visitor.ToString());
     }

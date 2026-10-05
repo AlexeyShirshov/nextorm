@@ -1,6 +1,6 @@
 ---
 name: two-tier-workflow
-description: "Two-tier workflow for nextorm — facts on a cheap model, decisions on an expensive one: all fact-gathering goes through the read-only subagent `nextorm-scout` (deepseek-flash), every decision/judgement/ranking goes through `nextorm-brains` (gpt-6-sol), which is blind to the code by design. Use when comparing several implementations of the same feature, running a multi-arm experiment, judging a diff against acceptance criteria, or whenever fact-gathering must be separated from decision-making by model tier. Triggers on \"сравни реализации\", \"сравнение реализаций\", \"две модели\", \"scout и brains\", \"дешёвая и дорогая модель\", \"вынеси вердикт\", \"судить по рубрике\", \"compare implementations\", \"two-tier\"."
+description: "Two-tier workflow for nextorm — facts on a cheap model, decisions on an expensive one: all fact-gathering goes through the read-only subagent `nextorm-scout` (deepseek-flash), every decision/judgement/ranking goes through `nextorm-brains` (gpt-6.1-sol), which is blind to the code by design. Use when comparing several implementations of the same feature, running a multi-arm experiment, judging a diff against acceptance criteria, or whenever fact-gathering must be separated from decision-making by model tier. Triggers on \"сравни реализации\", \"сравнение реализаций\", \"две модели\", \"scout и brains\", \"дешёвая и дорогая модель\", \"вынеси вердикт\", \"судить по рубрике\", \"compare implementations\", \"two-tier\"."
 ---
 
 # two-tier-workflow: факты дешёво, решения дорого
@@ -13,7 +13,7 @@ description: "Two-tier workflow for nextorm — facts on a cheap model, decision
 | Роль | Агент | Модель | Права | Выдаёт |
 |---|---|---|---|---|
 | Факты | `nextorm-scout` | `deepseek/deepseek-flash` | read + bash, `edit` только в `*evidence-*.md` | сырые улики с `file:line` и выводом команд |
-| Решения | `nextorm-brains` | `opencode/gpt-6-sol` | read только `*evidence-*.md` и `docs/specs/**`, без bash/grep/glob | вердикты, ранжирование, оценки по рубрике |
+| Решения | `nextorm-brains` | `opencode/gpt-6.1-sol` | read только `*evidence-*.md` и `docs/specs/**`, без bash/grep/glob | вердикты, ранжирование, оценки по рубрике |
 
 Права — это и есть механизм: `nextorm-brains` физически не может пойти почитать код, поэтому не
 подменяет факты своими представлениями и не тратит дорогие токены на повторный обход репо.

@@ -6,7 +6,7 @@ namespace NextORM.Core;
 /// Rendering contract of a SQL dialect: everything that differs between providers when SQL text is
 /// produced. Kept separate from <see cref="DataContext"/> so that SQL generation does not depend on the
 /// whole execution pipeline (connection lifecycle, plan cache, materialization) — see
-/// <see cref="SqlBuilder"/> and the expression visitors, which depend on this interface only.
+/// <c>SqlBuilder</c> and the expression visitors, which depend on this interface only.
 /// <para>
 /// Connection/parameter creation (<c>CreateConnection</c>/<c>CreateParam</c>) and column mapping
 /// (<c>MapColumnExpression</c>) are deliberately not part of this contract: they are separate axes.
@@ -776,7 +776,7 @@ public interface ISqlDialect
     /// Renders the opening keyword of a common table expression list (<c>with</c>). Dialects that
     /// support and require the <c>recursive</c> modifier for recursive CTEs (SQLite, PostgreSQL)
     /// emit <c>with recursive</c>; SQL Server declares a recursive CTE with <c>with</c> alone, so the
-    /// flag is ignored there. Keeping this on the dialect avoids provider names in <see cref="SqlBuilder"/>.
+    /// flag is ignored there. Keeping this on the dialect avoids provider names in <c>SqlBuilder</c>.
     /// </summary>
     string MakeWith(bool recursive, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
@@ -1226,6 +1226,15 @@ public interface ISqlDialect
     /// </summary>
     string MakeSubqueryPredicate(string keyword, string query, bool asPredicate);
     /// <summary>
+    /// True when the provider can evaluate a collection reached through a declared reference navigation
+    /// (for example <c>child.Parent.Children</c>) as a correlated subquery keyed off the reference-join
+    /// alias. ClickHouse cannot correlate a subquery on a joined source, so it opts out and navigation
+    /// expansion rejects the shape with a precise diagnostic instead of emitting an engine-level error.
+    /// Defaults to <c>true</c> (declared as a default interface method so external implementations keep
+    /// compiling).
+    /// </summary>
+    bool SupportsReferenceToCollectionNavigation => true;
+    /// <summary>
     /// True when the provider supports the distributed <c>GLOBAL IN</c> predicate
     /// (<c>SqlFunctions.ClickHouse.global_in</c>). Defaults to <c>false</c>; ClickHouse opts in today.
     /// </summary>
@@ -1246,6 +1255,22 @@ public interface ISqlDialect
     /// compiling.
     /// </summary>
     IDistinctOnRenderer? DistinctOn => null;
+
+    /// <summary>
+    /// The provider's optional native renderer for <c>SelectWhereMax</c>/<c>SelectWhereMin</c>;
+    /// <c>null</c> means the provider has no native strategy and the portable window-function lowering
+    /// is used. Declared as a default interface method returning <c>null</c> so existing external
+    /// implementations keep compiling; the generic builder never branches on the provider name.
+    /// </summary>
+    IExtremeRowRenderer? ExtremeRowRenderer => null;
+
+    /// <summary>
+    /// Whether the dialect can express the <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection
+    /// request from <see cref="NextORM.Core.ExtremeRowClause"/>. When <c>false</c>, a command that
+    /// carries one is rejected when its SQL is built. Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling; every built-in dialect opts in.
+    /// </summary>
+    bool SupportsSelectWhereMinMax => false;
 
     /// <summary>
     /// Wraps the rendered table-function call, or returns it unchanged. ClickHouse uses it to cast the
@@ -1318,6 +1343,13 @@ public interface ISqlDialect
     /// <summary>Renders the trailing <c>SETTINGS</c> clause. Only reached through a dialect that set <see cref="SupportsSettings"/>.</summary>
     string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
+    /// Provider settings that must be present query-locally so an <c>OUTER JOIN</c> yields SQL <c>NULL</c>
+    /// for the unmatched side instead of the provider's column default, or <see langword="null"/> when the
+    /// dialect produces SQL nulls natively. Declared as a default interface method so external
+    /// implementations keep compiling; ClickHouse returns <c>join_use_nulls=1</c>.
+    /// </summary>
+    IReadOnlyList<KeyValuePair<string, string>>? OuterJoinNullSettings => null;
+    /// <summary>
     /// Renders a <c>TOP(n)</c>-style limit clause. Returns false when the dialect cannot express the
     /// limit inline and paging must be rendered by <see cref="MakePage"/> instead.
     /// </summary>
@@ -1385,6 +1417,29 @@ public interface ISqlDialect
     /// compiling: every other provider requires a CTE body to be a <c>SELECT</c>.
     /// </summary>
     bool SupportsDataModifyingCtes => false;
+
+    /// <summary>
+    /// Whether the dialect can render a recursive common table expression produced through the new
+    /// typed API (<c>AsRecursiveCte</c>). Declared as a default interface method returning <c>false</c>
+    /// so an external implementation fails closed. The relational dialects opt in; ClickHouse, whose
+    /// dialect has no recursive <c>WITH</c>, overrides it to <c>false</c>. This flag gates only the new
+    /// typed recursive API: a legacy <c>WithRecursive</c> declaration is never checked against it.
+    /// </summary>
+    bool SupportsRecursiveCte => false;
+
+    /// <summary>
+    /// Whether the dialect can return the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>
+    /// through a <c>RETURNING</c> clause (PostgreSQL). Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsUpdateJoinReturning => false;
+
+    /// <summary>
+    /// Whether the dialect can return the affected rows of a multi-table <c>DELETE ... USING ... JOIN</c>
+    /// through a <c>RETURNING</c> clause (PostgreSQL). Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsDeleteJoinReturning => false;
 
     /// <summary>
     /// Whether the dialect can insert a row that writes only column defaults

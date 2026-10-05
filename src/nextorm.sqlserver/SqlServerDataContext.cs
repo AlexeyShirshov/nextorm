@@ -19,6 +19,13 @@ public class SqlServerDataContext : DataContext
     private static readonly MethodInfo GetValueMethod = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private static readonly MethodInfo ChangeTypeMethod = typeof(Convert).GetMethod(nameof(Convert.ChangeType), [typeof(object), typeof(Type)])!;
+    private static readonly MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
+    private static readonly MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
+    private static readonly MethodInfo GetInt32MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt32))!;
+    private static readonly MethodInfo GetInt64MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt64))!;
+    private static readonly MethodInfo GetFloatMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetFloat))!;
+    private static readonly MethodInfo GetDoubleMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDouble))!;
+    private static readonly MethodInfo GetDecimalMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDecimal))!;
 
     /// <summary>
     /// Creates a SQL Server context that owns a connection built lazily from
@@ -404,6 +411,117 @@ public class SqlServerDataContext : DataContext
 
         return value;
     }
+
+    /// <summary>
+    /// CSV-terminal variant of <see cref="MapColumnExpression"/>: for an unconverted numeric column it
+    /// reads the value with the typed getter of the reader's actual storage type (<paramref name="storageType"/>)
+    /// and converts it with the matching static <c>Convert.To&lt;Target&gt;(storage)</c> overload. That
+    /// keeps the per-row path free of <see cref="IDataRecord.GetValue"/> boxing while the shared buffered
+    /// mapper (<see cref="MapColumnExpression"/>) stays on its object-based widening.
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="record">The data-reader expression the accessor is built from.</param>
+    /// <param name="storageType">The reader's CLR field type for the column's ordinal.</param>
+    /// <returns>An expression that reads and converts the column value without boxing.</returns>
+    protected override Expression MapTypedColumnExpression(SelectExpression column, Expression record, Type storageType)
+    {
+        // A converted column owns its reader type; the numeric widening below must not bypass the converter.
+        if (column.Converter is not null)
+            return base.MapTypedColumnExpression(column, record, storageType);
+
+        var target = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+
+        if (!IsNumeric(target))
+            return base.MapTypedColumnExpression(column, record, storageType);
+
+        var storage = Nullable.GetUnderlyingType(storageType) ?? storageType;
+        var index = Expression.Constant(column.Index);
+
+        var storageGetter = GetNumericGetter(storage);
+        if (storageGetter is null || !IsNumeric(storage))
+            throw new NotSupportedException(
+                $"The CSV terminal cannot read the column '{column.PropertyName}' without boxing: SQL Server reported the storage type '{storageType.Name}' for a numeric projection of '{target.Name}', and there is no typed getter for it. Project a column whose storage type is one of byte, short, int, long, float, double or decimal, or materialise the query and format the value yourself.");
+
+        Expression value;
+        if (storage == target)
+        {
+            value = Expression.Call(record, storageGetter, index);
+        }
+        else
+        {
+            var conversion = GetTypedConversion(target, storage);
+            if (conversion is null)
+                throw new NotSupportedException(
+                    $"The CSV terminal cannot read the column '{column.PropertyName}' without boxing: there is no typed Convert.To{target.Name}({storage.Name}) overload to convert the storage type '{storageType.Name}' to the projected type '{target.Name}'. Project a supported numeric type, or materialise the query and format the value yourself.");
+
+            value = Expression.Call(conversion, Expression.Call(record, storageGetter, index));
+        }
+
+        if (value.Type != column.PropertyType)
+            value = Expression.Convert(value, column.PropertyType);
+
+        if (column.Nullable)
+        {
+            return Expression.Condition(
+                Expression.Call(record, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                value);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            // A non-nullable *OrDefault scalar: SQL NULL means no row, so return default(T).
+            return Expression.Condition(
+                Expression.Call(record, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                value);
+        }
+
+        return value;
+    }
+
+    /// <summary>
+    /// The typed CSV hook reads an unconverted numeric column with the storage-typed getter of the
+    /// reader's actual field type, so a numeric column that <see cref="MapColumnExpression"/> would
+    /// widen through <c>GetValue</c> must not be rejected before the reader reports its storage type.
+    /// A converted column keeps its converter and a non-numeric column is not handled by the typed
+    /// hook, so both keep the default rejection.
+    /// </summary>
+    protected override bool SupportsTypedColumnMapping(SelectExpression column)
+    {
+        if (column.Converter is not null)
+            return false;
+
+        var type = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        return IsNumeric(type);
+    }
+
+    private static MethodInfo? GetNumericGetter(Type type) => type switch
+    {
+        _ when type == typeof(byte) => GetByteMI,
+        _ when type == typeof(short) => GetInt16MI,
+        _ when type == typeof(int) => GetInt32MI,
+        _ when type == typeof(long) => GetInt64MI,
+        _ when type == typeof(float) => GetFloatMI,
+        _ when type == typeof(double) => GetDoubleMI,
+        _ when type == typeof(decimal) => GetDecimalMI,
+        _ => null,
+    };
+
+    private static MethodInfo? GetTypedConversion(Type target, Type storage)
+    {
+        var name = target == typeof(byte) ? nameof(Convert.ToByte)
+            : target == typeof(short) ? nameof(Convert.ToInt16)
+            : target == typeof(int) ? nameof(Convert.ToInt32)
+            : target == typeof(long) ? nameof(Convert.ToInt64)
+            : target == typeof(float) ? nameof(Convert.ToSingle)
+            : target == typeof(double) ? nameof(Convert.ToDouble)
+            : target == typeof(decimal) ? nameof(Convert.ToDecimal)
+            : null;
+
+        return name is null ? null : typeof(Convert).GetMethod(name, [storage]);
+    }
+
     private static bool IsNumeric(Type type) => type == typeof(byte) || type == typeof(short)
         || type == typeof(int) || type == typeof(long) || type == typeof(float)
         || type == typeof(double) || type == typeof(decimal);

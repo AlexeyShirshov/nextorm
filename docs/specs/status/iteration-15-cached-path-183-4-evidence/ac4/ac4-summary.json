@@ -1,0 +1,344 @@
+{
+  "task": "#183 AC4 Join_CachedHit_ToList interleaved robust measurement",
+  "ac4_verdict": "MET - no statistically reliable >20% E2E regression (0/10 blocks on min, 1/10 on p10; the single p10 block is the pair-8 load-spike outlier where loadavg peaked 11.08)",
+  "regression_blocks_min": 0,
+  "regression_blocks_p10": 1,
+  "rule": "owner-approved design docs/specs/performance/iteration-15-cached-path-design.md:201-211: regression requires >20% slower in >=2 comparable run blocks; a smaller but statistically reliable regression also blocks; the target arm is not required to be faster. The prior FAIL/INCONCLUSIVE used a stricter self-imposed median<=1.0 rule not present in the acceptance text.",
+  "protocol": {
+    "pairs": 10,
+    "order": "odd: old then new; even: new then old",
+    "pinning": "taskset -c 3",
+    "command": "NEXTORM_BENCH_FULL=1 taskset -c 3 dotnet <tree>/.../nextorm.benchmark.dll --memory --statisticalTest 99.9% --exporters json --filter '*Join_CachedHit_ToList*'",
+    "statistic_basis": "nanoseconds per operation = Measurement.Nanoseconds / Measurement.Operations over Workload/Actual (BDN Operations varies 64/32 between runs, so ns/op is the comparable unit)",
+    "p10_note": "BDN Statistics.Percentiles lacks P10; p10 computed manually (linear interpolation) from Workload/Actual per-op samples",
+    "high_priority_available": false,
+    "high_priority_note": "chrt -f 1 failed Operation not permitted; nice -n -20 Permission denied; only taskset pinning used"
+  },
+  "pairs": [
+    {
+      "pair": 1,
+      "old_min": 3212276.140625,
+      "new_min": 3041146.546875,
+      "ratio_min": 0.9467263752372472,
+      "old_p10": 3396768.53125,
+      "new_p10": 3064209.409375,
+      "ratio_p10": 0.9020954419426926,
+      "old_alloc": 1298695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        64
+      ],
+      "loadavg_before": "4.91 4.12 3.67",
+      "loadavg_after": "4.19 4.28 3.82",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 2,
+      "old_min": 3193533.09375,
+      "new_min": 3269866.125,
+      "ratio_min": 1.0239023767749236,
+      "old_p10": 3300460.4625,
+      "new_p10": 3316343.821875,
+      "ratio_p10": 1.0048124677012398,
+      "old_alloc": 1290695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        64
+      ],
+      "loadavg_before": "3.62 4.09 3.79",
+      "loadavg_after": "3.62 4.09 3.79",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 3,
+      "old_min": 3634652.671875,
+      "new_min": 3160226.75,
+      "ratio_min": 0.8694714558158155,
+      "old_p10": 4121544.0609375,
+      "new_p10": 3297903.978125,
+      "ratio_p10": 0.8001622521475235,
+      "old_alloc": 1290695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        32
+      ],
+      "loadavg_before": "3.02 3.89 3.74",
+      "loadavg_after": "7.68 5.46 4.33",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 4,
+      "old_min": 3010378.90625,
+      "new_min": 3108081.65625,
+      "ratio_min": 1.0324552998285879,
+      "old_p10": 3157427.5578125,
+      "new_p10": 3187335.915625,
+      "ratio_p10": 1.0094723813182973,
+      "old_alloc": 1290695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        32
+      ],
+      "loadavg_before": "6.02 5.48 4.42",
+      "loadavg_after": "6.02 5.48 4.42",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 5,
+      "old_min": 3183981.953125,
+      "new_min": 3021853.296875,
+      "ratio_min": 0.9490799072868882,
+      "old_p10": 3238848.453125,
+      "new_p10": 3051188.859375,
+      "ratio_p10": 0.9420597794352074,
+      "old_alloc": 1290695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        64
+      ],
+      "loadavg_before": "4.51 5.15 4.37",
+      "loadavg_after": "3.65 4.82 4.35",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 6,
+      "old_min": 3065508.140625,
+      "new_min": 3282202.953125,
+      "ratio_min": 1.070688056452468,
+      "old_p10": 3137765.6296875,
+      "new_p10": 3433189.878125,
+      "ratio_p10": 1.0941511519032483,
+      "old_alloc": 1290695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        64
+      ],
+      "loadavg_before": "3.89 4.67 4.36",
+      "loadavg_after": "4.49 4.89 4.40",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 7,
+      "old_min": 3001597.734375,
+      "new_min": 3240266.4375,
+      "ratio_min": 1.0795138870181404,
+      "old_p10": 3082243.09375,
+      "new_p10": 3280299.6890625,
+      "ratio_p10": 1.064257292266826,
+      "old_alloc": 1290695,
+      "new_alloc": 1256295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        64
+      ],
+      "loadavg_before": "2.88 4.27 4.24",
+      "loadavg_after": "4.95 4.59 4.36",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 8,
+      "old_min": 3170585.078125,
+      "new_min": 3641308.8125,
+      "ratio_min": 1.1484658896626656,
+      "old_p10": 3301551.525,
+      "new_p10": 4724582.24375,
+      "ratio_p10": 1.4310187825252858,
+      "old_alloc": 1298695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        32
+      ],
+      "loadavg_before": "11.08 6.20 4.92",
+      "loadavg_after": "11.08 6.20 4.92",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 9,
+      "old_min": 3116630.9375,
+      "new_min": 3080217.09375,
+      "ratio_min": 0.98831627982901,
+      "old_p10": 3141967.871875,
+      "new_p10": 3113547.1515625,
+      "ratio_p10": 0.9909544841094954,
+      "old_alloc": 1290695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        64
+      ],
+      "loadavg_before": "6.84 5.87 4.88",
+      "loadavg_after": "4.26 5.18 4.74",
+      "exits": [
+        0,
+        0
+      ]
+    },
+    {
+      "pair": 10,
+      "old_min": 3114592.640625,
+      "new_min": 3091181.03125,
+      "ratio_min": 0.9924832515592465,
+      "old_p10": 3155829.0484375,
+      "new_p10": 3181730.2140625,
+      "ratio_p10": 1.008207404529033,
+      "old_alloc": 1290695,
+      "new_alloc": 1248295,
+      "old_ops": [
+        64
+      ],
+      "new_ops": [
+        64
+      ],
+      "loadavg_before": "4.85 5.28 4.79",
+      "loadavg_after": "2.91 4.47 4.55",
+      "exits": [
+        0,
+        0
+      ]
+    }
+  ],
+  "aggregate": {
+    "ratio_min": {
+      "median": 1.008192814167085,
+      "count_new_faster": 5,
+      "count_ge_1.20": 0,
+      "values": [
+        0.9467263752372472,
+        1.0239023767749236,
+        0.8694714558158155,
+        1.0324552998285879,
+        0.9490799072868882,
+        1.070688056452468,
+        1.0795138870181404,
+        1.1484658896626656,
+        0.98831627982901,
+        0.9924832515592465
+      ],
+      "old_abs": {
+        "min": 3001597.734375,
+        "median": 3143608.0078125,
+        "max": 3634652.671875
+      },
+      "new_abs": {
+        "min": 3021853.296875,
+        "median": 3134154.203125,
+        "max": 3641308.8125
+      },
+      "verdict": "FAIL/INCONCLUSIVE"
+    },
+    "ratio_p10": {
+      "median": 1.0065099361151364,
+      "count_new_faster": 4,
+      "count_ge_1.20": 1,
+      "values": [
+        0.9020954419426926,
+        1.0048124677012398,
+        0.8001622521475235,
+        1.0094723813182973,
+        0.9420597794352074,
+        1.0941511519032483,
+        1.064257292266826,
+        1.4310187825252858,
+        0.9909544841094954,
+        1.008207404529033
+      ],
+      "old_abs": {
+        "min": 3082243.09375,
+        "median": 3198138.00546875,
+        "max": 4121544.0609375
+      },
+      "new_abs": {
+        "min": 3051188.859375,
+        "median": 3233817.80234375,
+        "max": 4724582.24375
+      },
+      "verdict": "FAIL/INCONCLUSIVE"
+    }
+  },
+  "paired_tests": {
+    "min": {
+      "method": "exact paired sign test (scipy unavailable)",
+      "n_nonzero": 10,
+      "n_new_faster": 5,
+      "p_value": 1.0
+    },
+    "p10": {
+      "method": "exact paired sign test (scipy unavailable)",
+      "n_nonzero": 10,
+      "n_new_faster": 4,
+      "p_value": 0.75390625
+    }
+  },
+  "order_effect": {
+    "odd_pairs_old_first": {
+      "median_ratio_min": 0.9490799072868882,
+      "median_ratio_p10": 0.9420597794352074
+    },
+    "even_pairs_new_first": {
+      "median_ratio_min": 1.0324552998285879,
+      "median_ratio_p10": 1.0094723813182973
+    }
+  },
+  "p20_regression": {
+    "pairs_min_ge_1.20": 0,
+    "pairs_p10_ge_1.20": 1,
+    "established_no_reliable_20pct_regression": true
+  },
+  "invalid_run_events": [
+    "run06-old.invalid1.json",
+    "run10-new.invalid1.json"
+  ],
+  "loadavg_all": {
+    "min": 2.88,
+    "max": 11.08
+  }
+}

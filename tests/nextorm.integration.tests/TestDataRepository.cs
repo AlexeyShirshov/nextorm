@@ -12,6 +12,8 @@ public class TestDataRepository(IDataContext dataProvider)
     public EntityBuilder<LobEntity> LobEntity { get; } = dataProvider.From<LobEntity>();
     public EntityBuilder<IArrayEntity> ArrayEntity { get; } = dataProvider.From<IArrayEntity>();
     public EntityBuilder<SimpleEntity> SimpleEntityAsClass { get; } = dataProvider.From<SimpleEntity>();
+    public EntityBuilder<AliasOrder> AliasOrder { get; } = dataProvider.From<AliasOrder>();
+    public EntityBuilder<AliasPerson> AliasPerson { get; } = dataProvider.From<AliasPerson>();
 
     public IDataContext DataProvider => _dataProvider;
 

@@ -31,14 +31,14 @@ public sealed class CteDefinition
     }
 
     /// <summary>
-    /// Creates a data-modifying CTE definition whose body is an <c>INSERT</c> and whose readable
-    /// columns are described by <paramref name="shape"/> (a prepared projection over the inserted
-    /// entity). Only PostgreSQL accepts a data-modifying CTE body.
+    /// Creates a data-modifying CTE definition whose body is a data-modifying statement and whose
+    /// readable columns are described by <paramref name="shape"/> (a prepared projection over the
+    /// mutated entity). Only PostgreSQL accepts a data-modifying CTE body.
     /// </summary>
     /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
     /// <param name="shape">A prepared command describing the columns returned by the mutation.</param>
-    /// <param name="mutation">The <c>INSERT</c> that forms the CTE body.</param>
-    internal CteDefinition(string name, QueryCommand shape, InsertCommand mutation)
+    /// <param name="mutation">The data-modifying statement that forms the CTE body.</param>
+    internal CteDefinition(string name, QueryCommand shape, CteMutation mutation)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(shape);
@@ -54,10 +54,10 @@ public sealed class CteDefinition
     /// <summary>Query that defines the CTE, or the column shape of a data-modifying CTE.</summary>
     public QueryCommand Query { get; }
     /// <summary>
-    /// The data-modifying statement (<c>INSERT ... RETURNING</c>) that forms the CTE body, or
-    /// <c>null</c> when the CTE is an ordinary read CTE.
+    /// The data-modifying statement (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE ... RETURNING</c>) that forms
+    /// the CTE body, or <c>null</c> when the CTE is an ordinary read CTE.
     /// </summary>
-    internal InsertCommand? Mutation { get; }
+    internal CteMutation? Mutation { get; }
     /// <summary>True when the CTE body is a data-modifying statement rather than a <c>SELECT</c>.</summary>
     public bool IsDataModifying => Mutation is not null;
     /// <summary>True when the CTE body may reference <see cref="Name"/> (a recursive CTE).</summary>
@@ -67,6 +67,23 @@ public sealed class CteDefinition
     /// need one (SQL Server); ignored by dialects that rely on their own default.
     /// </summary>
     public int? MaxRecursion { get; }
+
+    /// <summary>
+    /// True when this declaration was created through the typed descriptor <c>AsCte</c>. A typed CTE
+    /// body must expose its columns under the projection's property names (not the physical mapped
+    /// names), because a typed read resolves member access to those property names — PostgreSQL quoted
+    /// identifiers are case-sensitive, so a case-only name difference must be aliased explicitly. Legacy
+    /// <c>With</c>/<c>WithRecursive</c> declarations keep the physical/mapped output names.
+    /// </summary>
+    internal bool TypedProjection { get; init; }
+
+    /// <summary>
+    /// The typed self-reference of a recursive typed CTE, or <c>null</c> for an ordinary / legacy
+    /// declaration. Presence marks the declaration as the new typed recursive API: only such a
+    /// declaration is gated by <c>ISqlDialect.SupportsRecursiveCte</c> and shape-validated against its
+    /// anchor. Legacy <c>WithRecursive</c> declarations leave it <c>null</c> and keep their behavior.
+    /// </summary>
+    internal CteReference? RecursiveReference { get; init; }
 }
 
 /// <summary>

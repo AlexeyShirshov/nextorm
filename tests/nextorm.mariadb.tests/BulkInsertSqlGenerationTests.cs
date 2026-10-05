@@ -14,7 +14,7 @@ public class BulkInsertSqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        var sql = ctx.BulkInsertInto<ISimpleEntity>().Values([new SimpleEntity { Id = 7 }]).ToSql();
+        var sql = ctx.CreateBulkInsertBuilder<ISimpleEntity>().Values([new SimpleEntity { Id = 7 }]).ToSql();
 
         sql.Should().Be("insert into simple_entity (id) values (@p0)");
     }
@@ -24,7 +24,7 @@ public class BulkInsertSqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        var sql = ctx.BulkInsertInto<ISimpleEntity>(o => o.Table("staging", "bulk_target")).Values([new SimpleEntity { Id = 7 }]).ToSql();
+        var sql = ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.Table("staging", "bulk_target")).Values([new SimpleEntity { Id = 7 }]).ToSql();
 
         sql.Should().Be("insert into staging.bulk_target (id) values (@p0)");
     }
@@ -34,7 +34,7 @@ public class BulkInsertSqlGenerationTests
     {
         using var ctx = MariaDbTestContext.Create();
 
-        var sql = ctx.BulkInsertInto<ISimpleEntity>(o => o.KeepIdentity()).Values([new SimpleEntity { Id = 7 }]).ToSql();
+        var sql = ctx.CreateBulkInsertBuilder<ISimpleEntity>(o => o.KeepIdentity()).Values([new SimpleEntity { Id = 7 }]).ToSql();
 
         sql.Should().NotContain("identity_insert");
     }

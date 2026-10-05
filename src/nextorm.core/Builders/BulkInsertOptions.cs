@@ -1,7 +1,7 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// Options for a bulk insert started with <c>BulkInsertInto</c>.
+/// Options for a bulk insert started with <c>CreateBulkInsertBuilder</c>.
 /// Immutable and safe to reuse; build one with <see cref="BulkInsertOptionsBuilder"/> or set the properties
 /// directly. Providers that cannot express a requested option reject it with
 /// <see cref="NotSupportedException"/> when the write runs.

@@ -1,0 +1,139 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using FluentAssertions;
+using NextORM.Core;
+using NextORM.Generated.nextorm_alias_tests;
+
+namespace NextORM.AliasTests;
+
+/// <summary>
+/// Freeze/baseline for the generated join-alias public surface. The source generator is part of the
+/// shipped contract, so its output shape must not drift silently: the namespace marker type, the
+/// public <c>AliasProjection_*</c>/<c>AliasJoin_*</c> pairs, the <c>JoinSlot</c> positions and the
+/// seven generated operator extensions are asserted here. This is the equivalent of a
+/// <c>PublicAPI</c> baseline for a surface that is generated rather than hand-written.
+/// </summary>
+public class AliasGeneratedSurfaceTests
+{
+    private const string GeneratedNamespace = "NextORM.Generated.nextorm_alias_tests";
+
+    private static readonly string[] JoinOperators =
+        ["Join", "LeftJoin", "RightJoin", "FullJoin", "CrossJoin", "CrossApply", "OuterApply"];
+
+    [Fact]
+    public void Generated_public_type_set_is_frozen()
+    {
+        // The alias test assembly only ever writes Alias.Buyer / Alias.Approver, so the generator's
+        // whole public surface (one marker class, one builder/projection pair per discovered alias
+        // sequence, one extension class) is fully deterministic.
+        var names = typeof(Alias).Assembly.GetTypes()
+            .Where(type => type.Namespace == GeneratedNamespace && !type.IsNested)
+            .Where(type => type.Name == "Alias"
+                || type.Name == "JoinAliasExtensions"
+                || type.Name.StartsWith("AliasProjection_", StringComparison.Ordinal)
+                || type.Name.StartsWith("AliasJoin_", StringComparison.Ordinal))
+            .Select(type => type.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        names.Should().Equal(
+            "Alias",
+            "AliasJoin_Buyer_Approver`3",
+            "AliasJoin_Buyer`2",
+            "AliasProjection_Buyer_Approver`3",
+            "AliasProjection_Buyer`2",
+            "JoinAliasExtensions");
+    }
+
+    [Fact]
+    public void Generated_marker_type_exposes_one_public_marker_per_alias()
+    {
+        var marker = typeof(Alias);
+        marker.Namespace.Should().Be(GeneratedNamespace);
+        marker.IsAbstract.Should().BeTrue("the marker type is static");
+        marker.IsSealed.Should().BeTrue("the marker type is static");
+
+        AssertMarker(marker, "Buyer");
+        AssertMarker(marker, "Approver");
+    }
+
+    [Fact]
+    public void Generated_projection_builder_pairs_are_public_and_slot_bound()
+    {
+        AssertPair(
+            typeof(AliasProjection_Buyer<Order, Person>),
+            typeof(AliasJoin_Buyer<Order, Person>),
+            typeof(Projection<,>),
+            ("Buyer", 2, typeof(Person)));
+
+        AssertPair(
+            typeof(AliasProjection_Buyer_Approver<Order, Person, Person>),
+            typeof(AliasJoin_Buyer_Approver<Order, Person, Person>),
+            typeof(Projection<,,>),
+            ("Buyer", 2, typeof(Person)),
+            ("Approver", 3, typeof(Person)));
+    }
+
+    [Fact]
+    public void Generated_extension_class_exposes_the_seven_alias_operators()
+    {
+        var extensions = typeof(Alias).Assembly.GetType(GeneratedNamespace + ".JoinAliasExtensions");
+        extensions.Should().NotBeNull();
+        extensions!.IsAbstract.Should().BeTrue("the extension class is static");
+        extensions.IsSealed.Should().BeTrue("the extension class is static");
+
+        var methods = extensions.GetMethods(BindingFlags.Public | BindingFlags.Static);
+        foreach (var joinOperator in JoinOperators)
+        {
+            var overloads = methods.Where(method => method.Name == joinOperator).ToArray();
+            overloads.Should().NotBeEmpty($"the generator must emit an alias extension for {joinOperator}");
+            overloads.Should().OnlyContain(method =>
+                method.IsDefined(typeof(ExtensionAttribute), inherit: false));
+            overloads.Should().OnlyContain(method =>
+                method.ReturnType.Name.StartsWith("AliasJoin_", StringComparison.Ordinal));
+            overloads.Should().OnlyContain(method =>
+                method.GetParameters().Length >= 2
+                && method.GetParameters().Last().ParameterType.Name.EndsWith("Marker", StringComparison.Ordinal));
+        }
+    }
+
+    private static void AssertMarker(Type marker, string alias)
+    {
+        var markerType = marker.GetNestedType(alias + "Marker", BindingFlags.Public);
+        markerType.Should().NotBeNull();
+        markerType!.IsNestedPublic.Should().BeTrue();
+        markerType.IsSealed.Should().BeTrue();
+
+        var property = marker.GetProperty(alias, BindingFlags.Public | BindingFlags.Static);
+        property.Should().NotBeNull();
+        property!.PropertyType.Should().Be(markerType);
+        property.GetMethod!.IsStatic.Should().BeTrue();
+    }
+
+    private static void AssertPair(
+        Type projection,
+        Type builder,
+        Type projectionBase,
+        params (string Name, int Slot, Type Entity)[] aliases)
+    {
+        projection.IsPublic.Should().BeTrue();
+        projection.IsAbstract.Should().BeFalse();
+        projection.BaseType!.GetGenericTypeDefinition().Should().Be(projectionBase);
+
+        builder.IsPublic.Should().BeTrue();
+        builder.BaseType!.GetGenericTypeDefinition().Should().Be(typeof(EntityBuilder<>));
+        builder.BaseType.GetGenericArguments().Single().Should().Be(projection);
+
+        foreach (var (name, slot, entity) in aliases)
+        {
+            var property = projection.GetProperty(name);
+            property.Should().NotBeNull();
+            property!.GetMethod!.IsStatic.Should().BeFalse();
+            property.PropertyType.Should().Be(entity);
+
+            var joinSlot = property.GetCustomAttribute<JoinSlotAttribute>();
+            joinSlot.Should().NotBeNull();
+            joinSlot!.Position.Should().Be(slot);
+        }
+    }
+}

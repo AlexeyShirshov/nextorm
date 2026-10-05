@@ -26,6 +26,27 @@ internal sealed class JoinIntoIdentity : IEquatable<JoinIntoIdentity>
     /// <summary>The foreign-key and principal-key member names that tie the two sides together.</summary>
     public required string[] KeyMembers { get; init; }
 
+    /// <summary>
+    /// The junction type of a many-to-many declaration, or <see langword="null"/> for a direct
+    /// (one-to-many) declaration. Two many-to-many declarations that target the same child and
+    /// collection but use different junctions render different SQL and must not share a plan.
+    /// </summary>
+    public Type? JunctionType { get; init; }
+
+    /// <summary>
+    /// The junction mapping folded into the plan identity: the junction type followed by its four key
+    /// list member names (parent key, child key, junction parent foreign key, junction child foreign
+    /// key), in that order. Empty for a non-many-to-many declaration.
+    /// </summary>
+    public string[] JunctionKeyMembers { get; init; } = [];
+
+    /// <summary>
+    /// The occurrence scope of a many-to-many declaration: the junction foreign-key member names the
+    /// <c>row_number()</c> partitions by, or <see langword="null"/> for a non-many-to-many declaration.
+    /// It distinguishes the multiplicity token's scope in the plan key.
+    /// </summary>
+    public string? OccurrenceScope { get; init; }
+
     /// <inheritdoc/>
     public bool Equals(JoinIntoIdentity? other)
     {
@@ -33,11 +54,27 @@ internal sealed class JoinIntoIdentity : IEquatable<JoinIntoIdentity>
         if (ReferenceEquals(this, other)) return true;
         if (ParentType != other.ParentType || ChildType != other.ChildType || JoinType != other.JoinType) return false;
         if (!string.Equals(CollectionMember, other.CollectionMember, StringComparison.Ordinal)) return false;
+        if (JunctionType != other.JunctionType) return false;
+        if (!string.Equals(OccurrenceScope, other.OccurrenceScope, StringComparison.Ordinal)) return false;
+        if (!StringSequenceEquals(JunctionKeyMembers, other.JunctionKeyMembers)) return false;
         if (KeyMembers.Length != other.KeyMembers.Length) return false;
 
         for (var i = 0; i < KeyMembers.Length; i++)
         {
             if (!string.Equals(KeyMembers[i], other.KeyMembers[i], StringComparison.Ordinal))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool StringSequenceEquals(string[] x, string[] y)
+    {
+        if (x.Length != y.Length) return false;
+
+        for (var i = 0; i < x.Length; i++)
+        {
+            if (!string.Equals(x[i], y[i], StringComparison.Ordinal))
                 return false;
         }
 
@@ -58,6 +95,15 @@ internal sealed class JoinIntoIdentity : IEquatable<JoinIntoIdentity>
             hash.Add((int)JoinType);
             if (CollectionMember is not null)
                 hash.Add(CollectionMember);
+
+            if (JunctionType is not null)
+                hash.Add(JunctionType);
+
+            if (OccurrenceScope is not null)
+                hash.Add(OccurrenceScope, StringComparer.Ordinal);
+
+            foreach (var key in JunctionKeyMembers)
+                hash.Add(key, StringComparer.Ordinal);
 
             foreach (var key in KeyMembers)
                 hash.Add(key);
@@ -86,6 +132,28 @@ internal interface IJoinIntoSpec<TEntity>
 
     /// <summary>The joined child entity type.</summary>
     Type ChildEntityType { get; }
+
+    /// <summary>
+    /// The projection item types this declaration contributes, in order. A one-to-many or one-to-one
+    /// declaration contributes the single child type; a many-to-many declaration contributes the link
+    /// item followed by the child item. The last entry is the child the stitcher assigns.
+    /// </summary>
+    IReadOnlyList<Type> ItemTypes => [ChildEntityType];
+
+    /// <summary>
+    /// Whether this declaration contributes a child <b>collection</b> (one-to-many or many-to-many) as
+    /// opposed to a single reference (one-to-one). Used to count the collection navigations whose joins
+    /// multiply the parent rows for the <c>JoinInto.MultipleCollections</c> diagnostic. Defaults to
+    /// <see langword="true"/>; the one-to-one reference spec overrides it to <see langword="false"/>.
+    /// </summary>
+    bool IsCollection => true;
+
+    /// <summary>
+    /// Whether this declaration is a many-to-many declaration contributing a link item before the child.
+    /// Single-query (<c>AsSingleQuery</c>) loading does not support it because it maps one join per
+    /// declaration. Defaults to <see langword="false"/>.
+    /// </summary>
+    bool IsManyToMany => false;
 
     /// <summary>The declaration identity used by the plan cache.</summary>
     JoinIntoIdentity Identity { get; }
@@ -169,6 +237,22 @@ internal sealed class JoinIntoSpec<TEntity, TChild> : IJoinIntoSpec<TEntity>
                 .. relationship.ForeignKey.Select(p => p.PropertyInfo.Name),
                 .. relationship.PrincipalKey.Select(p => p.PropertyInfo.Name),
             ],
+            // A declared many-to-many relationship carries its junction mapping; folding it (and the
+            // occurrence partition scope) into the identity keeps two otherwise identical declarations
+            // over different junctions from sharing a cached plan.
+            JunctionType = relationship.Junction?.JunctionType,
+            JunctionKeyMembers = relationship.Junction is { } junction
+                ? [
+                    junction.JunctionType.FullName ?? junction.JunctionType.Name,
+                    .. junction.ParentKey.Select(static p => p.PropertyInfo.Name),
+                    .. junction.ChildKey.Select(static p => p.PropertyInfo.Name),
+                    .. junction.JunctionParentForeignKey.Select(static p => p.PropertyInfo.Name),
+                    .. junction.JunctionChildForeignKey.Select(static p => p.PropertyInfo.Name),
+                ]
+                : [],
+            OccurrenceScope = relationship.Junction is { JunctionParentForeignKey.Count: > 0, JunctionChildForeignKey.Count: > 0 } occurrence
+                ? $"{occurrence.JunctionParentForeignKey[0].PropertyInfo.Name},{occurrence.JunctionChildForeignKey[0].PropertyInfo.Name}"
+                : null,
         };
     }
 
@@ -342,6 +426,126 @@ internal sealed class JoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSpec<TEntit
 }
 
 /// <summary>
+/// <see cref="IJoinIntoSpec{TEntity}"/> for a one-to-one navigation: the parent holds a single reference
+/// (<c>TEntity.Profile</c>) and the join is an <c>INNER</c>/<c>LEFT</c> join whose child side carries the
+/// foreign key. Stitching assigns at most one child per parent and rejects a parent that matches more
+/// than one distinct child.
+/// </summary>
+/// <typeparam name="TEntity">The parent entity type the builder projects.</typeparam>
+/// <typeparam name="TChild">The child entity type.</typeparam>
+internal sealed class JoinIntoReferenceSpec<TEntity, TChild> : IJoinIntoSpec<TEntity>
+    where TChild : class
+{
+    private readonly Expression<Func<TEntity, TChild, bool>> _predicate;
+    private readonly Func<TEntity, object?> _parentKey;
+    private readonly Func<TChild, object?>? _childIdentity;
+
+    /// <summary>Initializes the specification from a declared one-to-one relationship.</summary>
+    /// <param name="child">The child source.</param>
+    /// <param name="predicate">The join predicate.</param>
+    /// <param name="navigation">The parent-side reference navigation the joined child fills.</param>
+    /// <param name="relationship">The declared one-to-one relationship that supplies the parent/child keys.</param>
+    /// <param name="joinType">The join kind.</param>
+    public JoinIntoReferenceSpec(
+        EntityBuilder<TChild> child,
+        Expression<Func<TEntity, TChild, bool>> predicate,
+        Expression<Func<TEntity, TChild?>> navigation,
+        IRelationshipMetadata relationship,
+        JoinType joinType)
+    {
+        Child = child;
+        _predicate = predicate;
+        NavigationProperty = JoinIntoSpecHelpers.TryResolveNavigationProperty(navigation)
+            ?? throw new NotSupportedException(
+                "JoinInto requires the navigation selector to be a property access so the declared relationship can be resolved.");
+        Relationship = relationship;
+        JoinType = joinType;
+
+        var principalKey = relationship.PrincipalKey[0].PropertyInfo;
+        var foreignKey = relationship.ForeignKey[0].PropertyInfo;
+
+        _parentKey = JoinIntoSpecHelpers.BuildKeySelector<TEntity>(principalKey).Compile();
+        _childIdentity = JoinIntoSpecHelpers.BuildIdentitySelector<TChild>();
+
+        Identity = new JoinIntoIdentity
+        {
+            ParentType = typeof(TEntity),
+            ChildType = typeof(TChild),
+            JoinType = joinType,
+            CollectionMember = $"{NavigationProperty.DeclaringType?.FullName}.{NavigationProperty.Name}",
+            KeyMembers =
+            [
+                .. relationship.ForeignKey.Select(p => p.PropertyInfo.Name),
+                .. relationship.PrincipalKey.Select(p => p.PropertyInfo.Name),
+            ],
+        };
+    }
+
+    /// <summary>The child source, typed for the list terminal that builds the pair command.</summary>
+    public EntityBuilder<TChild> Child { get; }
+
+    /// <summary>The relationship supplying the parent/child key properties.</summary>
+    public IRelationshipMetadata Relationship { get; }
+
+    /// <summary>The parent-side reference navigation the child is assigned to.</summary>
+    public PropertyInfo NavigationProperty { get; }
+
+    /// <inheritdoc/>
+    public PropertyInfo? CollectionProperty => NavigationProperty;
+
+    /// <inheritdoc/>
+    public JoinType JoinType { get; }
+
+    /// <inheritdoc/>
+    public LambdaExpression Predicate => _predicate;
+
+    /// <inheritdoc/>
+    public Type ChildEntityType => typeof(TChild);
+
+    /// <summary>A one-to-one reference navigation is not a collection, so it never raises the multi-collection diagnostic.</summary>
+    public bool IsCollection => false;
+
+    /// <inheritdoc/>
+    public JoinIntoIdentity Identity { get; }
+
+    /// <inheritdoc/>
+    public QueryFilterScope ChildFilterScope => Child.FilterScope;
+
+    /// <inheritdoc/>
+    public object? GetParentKey(TEntity parent) => _parentKey(parent);
+
+    /// <inheritdoc/>
+    public void AssignChildren(IReadOnlyList<TEntity> parents, IReadOnlyList<(TEntity Parent, object? Child)> rows)
+    {
+        // The denormalized rows may repeat one child because a neighbouring join multiplies the rows
+        // (a cartesian product). A keyed child lets the stitcher tell a repeat from a genuinely
+        // different child; a keyless child has no stable identity, so a repeat is tolerated rather than
+        // reported as a false "more than one child" error.
+        var identities = new Dictionary<object, object?>(ReferenceEqualityComparer.Instance);
+
+        foreach (var (parent, childValue) in rows)
+        {
+            if (childValue is not TChild child)
+                continue;
+
+            var identity = _childIdentity?.Invoke(child);
+            if (identities.TryGetValue(parent!, out var existing))
+            {
+                if (identity is not null && !Equals(existing, identity))
+                    throw new InvalidOperationException(
+                        $"The one-to-one navigation '{typeof(TEntity).Name}.{NavigationProperty.Name}' matched more than one distinct " +
+                        $"'{typeof(TChild).Name}' for a single parent; a one-to-one navigation requires at most one child per parent.");
+
+                continue;
+            }
+
+            identities[parent!] = identity;
+            NavigationProperty.SetValue(parent, child);
+        }
+    }
+}
+
+/// <summary>
 /// Expression and reflection helpers shared by the <c>JoinInto</c> specs and the builder validation.
 /// </summary>
 internal static class JoinIntoSpecHelpers
@@ -353,6 +557,15 @@ internal static class JoinIntoSpecHelpers
     internal static PropertyInfo? TryResolveCollectionProperty<TEntity, TChild>(
         Expression<Func<TEntity, ICollection<TChild>>> collection)
         => StripConvert(collection.Body) is MemberExpression { Member: PropertyInfo property } ? property : null;
+
+    /// <summary>
+    /// Resolves the reference navigation selected by a one-to-one selector, unwrapping a conversion
+    /// node; a field or computed expression yields <c>null</c>.
+    /// </summary>
+    internal static PropertyInfo? TryResolveNavigationProperty<TEntity, TChild>(
+        Expression<Func<TEntity, TChild?>> navigation)
+        where TChild : class
+        => StripConvert(navigation.Body) is MemberExpression { Member: PropertyInfo property } ? property : null;
 
     /// <summary>
     /// Builds the key-equality predicate <c>parentKey == childKey</c> for the single-query join. The

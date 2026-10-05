@@ -6,6 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Threading;
 
 namespace NextORM.Core;
 
@@ -27,8 +28,21 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
     private readonly Func<string, DbCommand> _createCommand;
     private readonly ILogger? _resultSetEnumeratorLogger;
+    private readonly ILogger? _queryFilterLogger;
     private readonly bool _logSensitiveData;
     private readonly InterceptorHooks _interceptors;
+    private readonly Func<CteMutation, SqlBuildContext, string> _renderMutationBody;
+
+    // Cached-path diagnostic counter for the plans that must fall back to the original extraction path
+    // (no recipe or a rejected one). Process-wide but updated with Interlocked and read with Volatile,
+    // so the increment path is lock-free and allocation-free.
+    private static int _fallbackRefreshes;
+
+    /// <summary>Number of cached-hit parameter refreshes that used the original <c>ExtractParams</c> path.</summary>
+    internal static int FallbackRefreshes => Volatile.Read(ref _fallbackRefreshes);
+
+    /// <summary>Resets the planner's cached-path diagnostic counters to zero. Test seam.</summary>
+    internal static void ResetCounters() => Volatile.Write(ref _fallbackRefreshes, 0);
 
     internal QueryPlanner(
         IDataContext context,
@@ -46,8 +60,10 @@ internal sealed class QueryPlanner : IQueryPlanner
         _createParam = hooks.CreateParam;
         _createCommand = hooks.CreateCommand;
         _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
+        _queryFilterLogger = logging.QueryFilterLogger;
         _logSensitiveData = logging.LogSensitiveData;
         _interceptors = interceptors;
+        _renderMutationBody = RenderMutationBody;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -100,6 +116,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = source.ResolvedNamingConvention,
             KeywordCase = source.ResolvedKeywordCase,
             ParameterNamePrefix = parameterNamePrefix,
+            RenderMutationBody = _renderMutationBody,
         };
 
         string? withSql = null;
@@ -165,6 +182,70 @@ internal sealed class QueryPlanner : IQueryPlanner
         return (builder.ToString(), @params);
     }
 
+    // Renders the body of a data-modifying CTE whose command is a single-table UPDATE/DELETE carrying a
+    // RETURNING projection. The SET list and the WHERE reuse the same helpers as a standalone mutation,
+    // and their parameters are written into the enclosing statement's accumulator/provider (carried on
+    // ctx) so the body's placeholders continue the outer statement's numbering. A body without a
+    // RETURNING projection, or a multi-table mutation, is rejected until its rendering is implemented.
+    private string RenderMutationBody(CteMutation mutation, SqlBuildContext ctx)
+    {
+        switch (mutation.Command)
+        {
+            case UpdateCommand update:
+            {
+                if (update.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE UPDATE body requires a RETURNING projection; call Returning(...) on the update builder.");
+
+                var (setSql, _) = RenderAssignments(update, ctx.ParameterProvider, ctx.Params, ctx.ParameterNamePrefix);
+                var (whereSql, _) = RenderPredicate(update.Source, ctx.ParameterProvider, ctx.Params, ctx.ParameterNamePrefix);
+                var (sql, _) = SqlMutationBuilder.MakeUpdate(ctx.Dialect, ctx.QuoteIdentifiers, ctx.NamingConvention, update, setSql, ctx.Params, whereSql, ctx.ParameterProvider, ctx.KeywordCase);
+                return sql;
+            }
+
+            case DeleteCommand delete:
+            {
+                if (delete.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE DELETE body requires a RETURNING projection; call Returning(...) on the delete builder.");
+
+                string? whereSql = null;
+                if (delete.Condition is not null)
+                {
+                    var (rendered, _) = RenderPredicate(delete.Condition, ctx.ParameterProvider, ctx.Params, ctx.ParameterNamePrefix);
+                    if (rendered.Length > 0)
+                        whereSql = rendered;
+                }
+
+                var (sql, _) = SqlMutationBuilder.MakeDelete(ctx.Dialect, ctx.QuoteIdentifiers, ctx.NamingConvention, delete, whereSql, ctx.Params, ctx.KeywordCase, ctx.ParameterProvider);
+                return sql;
+            }
+
+            case UpdateJoinCommand updateJoin:
+            {
+                if (updateJoin.ReturningProjection is null || updateJoin.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE multi-table UPDATE body requires a RETURNING projection; call Returning(...) on the update builder.");
+
+                if (!ctx.Dialect.SupportsUpdateJoinReturning)
+                    throw new NotSupportedException("A multi-table UPDATE data-modifying common table expression body is only supported by PostgreSQL.");
+
+                return RenderUpdateJoinCore(updateJoin, ctx.ParameterProvider, ctx.Params, suppressCtes: true).Sql;
+            }
+
+            case DeleteJoinCommand deleteJoin:
+            {
+                if (deleteJoin.ReturningProjection is null || deleteJoin.ReturningColumns is not { Count: > 0 })
+                    throw new NotSupportedException("A data-modifying CTE multi-table DELETE body requires a RETURNING projection; call Returning(...) on the delete builder.");
+
+                if (!ctx.Dialect.SupportsDeleteJoinReturning)
+                    throw new NotSupportedException("A multi-table DELETE data-modifying common table expression body is only supported by PostgreSQL.");
+
+                return RenderDeleteJoinCore(deleteJoin, ctx.ParameterProvider, ctx.Params, suppressCtes: true).Sql;
+            }
+
+            default:
+                throw new NotSupportedException($"A data-modifying common table expression body of type '{mutation.Command.GetType().Name}' is not supported yet; only a single-table UPDATE/DELETE ... RETURNING body is supported.");
+        }
+    }
+
     // Renders an ON/AND search condition of a full MERGE over the (target, source) row. The two lambda
     // parameters map to the literal aliases "target"/"source" (via MergeAliasProvider); the condition's
     // parameters join the same accumulator as the MERGE's VALUES rows and branch conditions.
@@ -207,6 +288,49 @@ internal sealed class QueryPlanner : IQueryPlanner
         {
             ctx.ColumnsProvider.PopScope();
         }
+    }
+
+    // Renders the target entity's active global filter (after the effective IgnoreFilters scope) as a
+    // "target"-alias-qualified MERGE search condition, appending its bound parameters to `parameters`.
+    // The filters are reduced through the same entity/context substitution the SELECT pipeline uses
+    // (QueryPreparer.TryBuildFilterBody) and rendered by RenderMergeCondition, so target/source
+    // qualification, quoting and parameter binding are identical to the user's On(...)/branch condition.
+    // Returns null only when the scope leaves no filter active (IgnoreFilters / no filter configured).
+    // Fail-closed: an active, non-ignored filter that cannot be reduced to a predicate throws
+    // NotSupportedException here (before any mutation) instead of being dropped. This render seam is the
+    // single injection point for the target predicate: a caller under a scope that leaves a filter active
+    // gets the AND-combined predicate or the refusal, never a silently omitted filter.
+    internal string? RenderMergeTargetFilter(
+        Type entityType,
+        QueryFilterScope scope,
+        QueryCommand registry,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        KeywordCase keywordCase)
+    {
+        var filters = QueryFilterResolver.GetFilters(entityType, scope, _context);
+        if (filters.Count == 0)
+            return null;
+
+        var target = Expression.Parameter(entityType, "target");
+        var source = Expression.Parameter(entityType, "source");
+        Expression? body = null;
+        for (var (i, cnt) = (0, filters.Count); i < cnt; i++)
+        {
+            if (!QueryCommand.QueryPreparer.TryBuildFilterBody(filters[i], _context, target, out var filterBody))
+                throw new NotSupportedException(
+                    $"An active global query filter on entity type '{entityType.Name}' cannot be translated into an atomic predicate on the merge write target, so the filter would be silently bypassed. Call IgnoreFilters() to disable the filter, or use a filter declared as a predicate or builder function.");
+
+            body = body is null ? filterBody : Expression.AndAlso(body, filterBody);
+        }
+
+        if (body is null)
+            return null;
+
+        var condition = Expression.Lambda(body, target, source);
+        return RenderMergeCondition(condition, entityType, registry, parameterProvider, parameters, quoteIdentifiers, namingConvention, keywordCase);
     }
 
     // Renders the SET list of an UPDATE command (without the SET keyword) together with its parameters.
@@ -297,80 +421,108 @@ internal sealed class QueryPlanner : IQueryPlanner
     // joins and condition are rendered through the same source/condition pipeline as a SELECT, so aliases
     // and parameters match the equivalent read query.
     internal (string Sql, List<Parameter> Parameters) RenderDeleteJoin(DeleteJoinCommand command)
+        => RenderDeleteJoinCore(command, new DefaultParameterProvider(), new List<Parameter>(), suppressCtes: false);
+
+    // Core multi-table DELETE renderer shared by the standalone statement and the body of a data-modifying
+    // CTE. The provider and parameter accumulator come from the caller so a CTE body continues the enclosing
+    // statement's numbering. When the command is hoisted as a CTE body (suppressCtes) its own WITH clause
+    // must not be re-emitted: the hoisted CTEs already sit at the top level of the statement.
+    private (string Sql, List<Parameter> Parameters) RenderDeleteJoinCore(
+        DeleteJoinCommand command,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters,
+        bool suppressCtes)
     {
         var source = command.Source;
         if (!source.IsPrepared)
             source.PrepareCommand(false, CancellationToken.None);
 
-        var @params = new List<Parameter>();
         var ctx = new SqlBuildContext
         {
             Dialect = _dialect(),
             ParamMode = false,
-            Params = @params,
+            Params = parameters,
             ColumnsProvider = new DefaultColumnsProvider(),
             QueryProvider = source,
-            ParameterProvider = new DefaultParameterProvider(),
+            ParameterProvider = parameterProvider,
             AliasProvider = new DefaultAliasProvider(),
             Logger = _logger!,
             QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
             NamingConvention = source.ResolvedNamingConvention,
             KeywordCase = source.ResolvedKeywordCase,
+            RenderMutationBody = _renderMutationBody,
         };
 
         string? withSql = null;
         string? maxRecursionStmt = null;
-        if (source.Ctes is { Count: > 0 } ctes)
+        if (!suppressCtes && source.Ctes is { Count: > 0 } ctes)
             withSql = SqlSourceRenderer.MakeWithClause(in ctx, ctes, out maxRecursionStmt);
 
-        var (sql, parameters) = new SqlBuilder(in ctx).MakeDeleteJoin(command);
+        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeDeleteJoin(command);
         if (withSql is not null)
             sql = withSql + sql;
         if (maxRecursionStmt is not null)
             sql += " " + maxRecursionStmt;
-        return (sql, parameters);
+        return (sql, renderedParams);
     }
 
     // Renders a multi-table UPDATE: the target is the first table of the prepared joined command, whose
     // joins and condition are rendered through the same source/condition pipeline as a SELECT, so aliases
     // and parameters match the equivalent read query. The SET list shares the same parameter provider.
     internal (string Sql, List<Parameter> Parameters) RenderUpdateJoin(UpdateJoinCommand command)
+        => RenderUpdateJoinCore(command, new DefaultParameterProvider(), new List<Parameter>(), suppressCtes: false);
+
+    // Core multi-table UPDATE renderer shared by the standalone statement and the body of a data-modifying
+    // CTE. The provider and parameter accumulator come from the caller so a CTE body continues the enclosing
+    // statement's numbering. When the command is hoisted as a CTE body (suppressCtes) its own WITH clause
+    // must not be re-emitted: the hoisted CTEs already sit at the top level of the statement.
+    private (string Sql, List<Parameter> Parameters) RenderUpdateJoinCore(
+        UpdateJoinCommand command,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters,
+        bool suppressCtes)
     {
         var source = command.Source;
         if (!source.IsPrepared)
             source.PrepareCommand(false, CancellationToken.None);
 
-        var @params = new List<Parameter>();
         var ctx = new SqlBuildContext
         {
             Dialect = _dialect(),
             ParamMode = false,
-            Params = @params,
+            Params = parameters,
             ColumnsProvider = new DefaultColumnsProvider(),
             QueryProvider = source,
-            ParameterProvider = new DefaultParameterProvider(),
+            ParameterProvider = parameterProvider,
             AliasProvider = new DefaultAliasProvider(),
             Logger = _logger!,
             QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
             NamingConvention = source.ResolvedNamingConvention,
             KeywordCase = source.ResolvedKeywordCase,
+            RenderMutationBody = _renderMutationBody,
         };
 
         string? withSql = null;
         string? maxRecursionStmt = null;
-        if (source.Ctes is { Count: > 0 } ctes)
+        if (!suppressCtes && source.Ctes is { Count: > 0 } ctes)
             withSql = SqlSourceRenderer.MakeWithClause(in ctx, ctes, out maxRecursionStmt);
 
-        var (sql, parameters) = new SqlBuilder(in ctx).MakeUpdateJoin(command);
+        var (sql, renderedParams) = new SqlBuilder(in ctx).MakeUpdateJoin(command);
         if (withSql is not null)
             sql = withSql + sql;
         if (maxRecursionStmt is not null)
             sql += " " + maxRecursionStmt;
-        return (sql, parameters);
+        return (sql, renderedParams);
     }
 
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider, bool sequentialAccess)
     {
+        // The single render funnel for cold, warm-miss and prepared-miss renders (including the cached-hit
+        // parameter refresh through ExtractParams). A previously prepared command skips re-preparation, so
+        // the per-resolution guard cannot see that the bridge metadata was dropped; refuse to render the
+        // unfiltered statement instead. A context with no imported-filter expectations is untouched.
+        QueryFilterExpectations.EnsureExpectedFiltersPresent(_context);
+
         var ctx = new SqlBuildContext
         {
             Dialect = _dialect(),
@@ -385,6 +537,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = queryCommand.ResolvedNamingConvention,
             KeywordCase = queryCommand.ResolvedKeywordCase,
             SequentialAccess = sequentialAccess,
+            RenderMutationBody = _renderMutationBody,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
@@ -398,6 +551,14 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, CancellationToken cancellationToken)
     {
+        // A data-modifying CTE makes the whole statement side-effecting, so its plan must never be
+        // shared: the mutation's shape (row count, target columns) is not captured by the CTE query.
+        // Clear the call-local storeInCache rather than queryCommand.Cache, which is sticky and would
+        // disable plan caching for a shared command (the context-wide Any/Count command) on every later
+        // query. Both the lookup and store gates below test storeInCache, so they skip.
+        if (queryCommand.HasDataModifyingCte)
+            storeInCache = false;
+
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 
@@ -444,6 +605,41 @@ internal sealed class QueryPlanner : IQueryPlanner
         {
             if ((_logger?.IsEnabled(LogLevel.Debug) ?? false) && storeInCache && queryCommand.Cache)
                 _logger.LogDebug("Query plan cache miss with hash: {hash}", queryPlan!.GetHashCode());
+
+            // One diagnostic per prepared pair command: a query with two or more collection JoinInto
+            // declarations renders a cartesian product of parent rows. The flag is command state, never
+            // part of the plan key, and is cleared here so a command warns at most once even when its
+            // plan is not cached.
+            if (queryCommand.PendingJoinIntoCartesianWarning)
+            {
+                queryCommand.PendingJoinIntoCartesianWarning = false;
+                _logger?.LogWarning(
+                    "JoinInto.MultipleCollections: {Message}",
+                    "The query declares two or more collection JoinInto navigations; their joins multiply the parent rows. " +
+                    "Pass JoinOptions.SuppressCartesianWarning() to silence this warning.");
+            }
+
+            // Raw-source global-filter skips are collected during preparation and emitted here, on the
+            // cache miss only: the list is cleared before logging so a cache hit never re-emits, and a
+            // re-preparation replaces (never appends to) the previous list. The warning carries only the
+            // entity name, filter key, reason and declared column names — never SQL text, table names,
+            // parameters or captured values.
+            if (queryCommand.PendingRawSourceFilterSkips is { Count: > 0 } rawSourceFilterSkips)
+            {
+                queryCommand.PendingRawSourceFilterSkips = null;
+
+                for (var i = 0; i < rawSourceFilterSkips.Count; i++)
+                {
+                    var skip = rawSourceFilterSkips[i];
+                    _queryFilterLogger?.LogWarning(
+                        "RawSourceFilterSkipped: EntityType={EntityType}; SourceOrdinal={SourceOrdinal}; FilterKey={FilterKey}; Reason={Reason}; MissingColumns={MissingColumns}",
+                        skip.EntityType,
+                        skip.SourceOrdinal,
+                        skip.FilterKey,
+                        skip.Reason,
+                        skip.MissingColumns);
+                }
+            }
 
             var (sql, @params) = ext is null
                 ? MakeSelectInternal()
@@ -503,6 +699,11 @@ internal sealed class QueryPlanner : IQueryPlanner
                 SequentialAccess = sequentialAccess,
             });
 
+            // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
+            // null and keep the original ExtractParams refresh on every hit.
+            if (needsParamRefresh)
+                compiledQuery.SetParamRecipe(ParamRefreshRecipe.TryCreate(queryCommand, @params!));
+
             if (createEnumerator)
             {
                 var enumerator = CreateResultSetEnumerator(compiledQuery!, ownsCommand: streamingRows);
@@ -522,6 +723,12 @@ internal sealed class QueryPlanner : IQueryPlanner
             if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Query plan cache hit");
 #endif
 
+            // A diagnostic collected while preparing a command that then hit the plan cache belongs to a
+            // preparation whose SQL was already built (and warned about) by the earlier miss. Discarding
+            // it here keeps the list from surviving on the command, where a later uncached call on the
+            // same command would replay it outside its owning preparation.
+            queryCommand.PendingRawSourceFilterSkips = null;
+
             var compiledQuery = (DbPreparedQueryCommand<TResult>)planCache;
 
             if (queryCommand.CustomData is RawSqlOverride)
@@ -535,17 +742,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             else
             {
                 if (!compiledQuery.NoParams && compiledQuery.NeedsParamRefresh)
-                {
-                    var dbCommandParams = compiledQuery.DbCommandParams;
-
-                    var pp = ExtractParams(queryCommand);
-                    for (int i = 0; i < pp.Count; i++)
-                    {
-                        // Normalize null to DBNull for providers that reject null parameter values.
-                        dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
-                        Debug.Assert(dbCommandParams[i].ParameterName == pp[i].Name, $"ParameterName {dbCommandParams[i].ParameterName} not equals {pp[i].Name}");
-                    }
-                }
+                    RefreshParameters(queryCommand, compiledQuery);
             }
 
             // A plan can be stored by a buffered terminal (createEnumerator: false) and later requested
@@ -561,6 +758,37 @@ internal sealed class QueryPlanner : IQueryPlanner
             var @params = new List<Parameter>();
             var aliasProvider = new DefaultAliasProvider();
             return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider, sequentialAccess), @params);
+        }
+    }
+
+    // Refreshes the cached command's parameter values for the current command. A supported plan uses the
+    // immutable recipe (validated count/name/order and shape before any accessor runs); any mismatch
+    // falls through to the original ExtractParams path. The cached statement's placeholder set is
+    // authoritative: a same-count name/order difference is bound positionally exactly like the original
+    // Release extractor (whose name check was only a Debug.Assert), so a cache hit never crashes, while a
+    // count mismatch binds nothing (it would leave trailing cached values stale or reach past the
+    // collection) and invalidates the recipe so the next preparation re-plans.
+    private void RefreshParameters<TResult>(QueryCommand queryCommand, DbPreparedQueryCommand<TResult> compiledQuery)
+    {
+        var dbCommandParams = compiledQuery.DbCommandParams;
+
+        if (compiledQuery.ParamRecipe is { } recipe && recipe.TryBind(queryCommand, dbCommandParams))
+            return;
+
+        Interlocked.Increment(ref _fallbackRefreshes);
+
+        var pp = ExtractParams(queryCommand);
+
+        if (pp.Count != dbCommandParams.Count)
+        {
+            compiledQuery.SetParamRecipe(null);
+            return;
+        }
+
+        for (var i = 0; i < dbCommandParams.Count; i++)
+        {
+            // Normalize null to DBNull for providers that reject null parameter values.
+            dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
         }
     }
 

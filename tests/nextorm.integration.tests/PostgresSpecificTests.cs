@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using FluentAssertions;
@@ -358,7 +358,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_" + Guid.NewGuid().ToString("N");
 
-        var returned = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var returned = ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, marker)
                 .Value(x => x.Age, 11)
                 .Returning(x => new { x.Id, x.Name }))
@@ -383,9 +383,9 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_src_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 31).Insert();
+        ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 31).Insert();
 
-        var returned = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var returned = ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Values(ctx.From<IInsertEntity>().Where(x => x.Name == marker), s => new { s.Name, s.Age })
                 .Returning(x => new { x.Name, x.Age }))
             .From("ins")
@@ -406,10 +406,10 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_ref_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 41).Insert();
+        ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 41).Insert();
 
         var scope = ctx.With("src", ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Name, x.Age }));
-        var insert = ctx.InsertInto<IInsertEntity>()
+        var insert = ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(scope.From("src"), a => new { Name = a.GetString("Name"), Age = a.GetInt32("Age") })
             .Returning(x => new { x.Name, x.Age });
 
@@ -428,19 +428,862 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "dmcte_main_" + Guid.NewGuid().ToString("N");
 
-        var source = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var source = ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
                 .Value(x => x.Name, marker)
                 .Value(x => x.Age, 51)
                 .Returning(x => new { x.Name, x.Age }))
             .From("ins");
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(source, r => new { r.Name, r.Age })
             .Insert()
             .Should().Be(1);
 
         ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList()
             .Should().HaveCount(2);
+    }
+
+    [SqlTable("dmcte_entity")]
+    internal interface IDmCteEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("name")]
+        string? Name { get; set; }
+        [Column("age")]
+        int Age { get; set; }
+    }
+
+    [SqlTable("dmcte_target")]
+    internal interface IDmCteTarget
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("name")]
+        string? Name { get; set; }
+        [Column("age")]
+        int Age { get; set; }
+    }
+
+    [SqlTable("dmcte_source")]
+    internal interface IDmCteSource
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("name")]
+        string? Name { get; set; }
+        [Column("age")]
+        int Age { get; set; }
+    }
+
+    // Concrete entity classes (not the interfaces above): the standalone join terminals must materialise
+    // real rows through the positional projection, which the interface metadata could not shape.
+    [SqlTable("dmcte_target")]
+    internal sealed class DmCteTargetRow
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+        [Column("name")]
+        public string? Name { get; set; }
+        [Column("age")]
+        public int Age { get; set; }
+    }
+
+    [SqlTable("dmcte_source")]
+    internal sealed class DmCteSourceRow
+    {
+        [Key]
+        [Column("id")]
+        public int Id { get; set; }
+        [Column("name")]
+        public string? Name { get; set; }
+        [Column("age")]
+        public int Age { get; set; }
+    }
+
+    // A plain projection target (not an entity): covers the DTO positional-constructor and the
+    // member-init RETURNING shapes for the join-returning terminals.
+    internal sealed class JoinReturningDto
+    {
+        public JoinReturningDto()
+        {
+        }
+
+        public JoinReturningDto(int targetId, string? sourceName)
+        {
+            TargetId = targetId;
+            SourceName = sourceName;
+        }
+
+        public int TargetId { get; set; }
+
+        public string? SourceName { get; set; }
+    }
+
+    private static void CreateDmCteTable(IDataContext ctx, string table)
+    {
+        Execute(ctx, $"drop table if exists {table}");
+        Execute(ctx, $"create table {table} (id integer primary key, name varchar(100), age integer)");
+    }
+
+    private static void DropDmCteTable(IDataContext ctx, string table)
+        => Execute(ctx, $"drop table if exists {table}");
+
+    [Fact]
+    public void DataModifyingCte_UpdateReturning_ShouldReturnAndPersistUpdatedRows()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_entity");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IDmCteEntity>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Name, "before")
+                .Value(x => x.Age, 5)
+                .Insert();
+
+            // The updated value is NULL, so the RETURNING read also exercises a nullable result bound.
+            var returned = ctx.With("upd", ctx.CreateUpdateBuilder<IDmCteEntity>()
+                    .Set(x => x.Name, (string?)null)
+                    .Set(x => x.Age, 9)
+                    .Where(x => x.Id == 1)
+                    .Returning(x => new { x.Id, x.Name, x.Age }))
+                .From("upd")
+                .Select(r => new { r.Id, r.Name, r.Age })
+                .ToList();
+
+            returned.Should().ContainSingle();
+            returned[0].Id.Should().Be(1);
+            returned[0].Name.Should().BeNull();
+            returned[0].Age.Should().Be(9);
+
+            var persisted = ctx.From<IDmCteEntity>()
+                .Where(x => x.Id == 1)
+                .Select(x => new { x.Name, x.Age })
+                .Single();
+
+            persisted.Name.Should().BeNull();
+            persisted.Age.Should().Be(9);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_entity");
+        }
+    }
+
+    [Fact]
+    public void DataModifyingCte_UpdateReturning_NoMatch_ShouldReturnEmptyAndLeaveRowUnchanged()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_entity");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IDmCteEntity>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Name, "keep")
+                .Value(x => x.Age, 5)
+                .Insert();
+
+            var returned = ctx.With("upd", ctx.CreateUpdateBuilder<IDmCteEntity>()
+                    .Set(x => x.Name, "changed")
+                    .Set(x => x.Age, 9)
+                    .Where(x => x.Id == 999)
+                    .Returning(x => new { x.Id, x.Name }))
+                .From("upd")
+                .Select(r => new { r.Id, r.Name })
+                .ToList();
+
+            returned.Should().BeEmpty();
+
+            var persisted = ctx.From<IDmCteEntity>()
+                .Where(x => x.Id == 1)
+                .Select(x => new { x.Name, x.Age })
+                .Single();
+
+            persisted.Name.Should().Be("keep");
+            persisted.Age.Should().Be(5);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_entity");
+        }
+    }
+
+    [Fact]
+    public void DataModifyingCte_DeleteReturning_ShouldReturnDeletedRowsAndRemoveThem()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_entity");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IDmCteEntity>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Name, "doomed")
+                .Value(x => x.Age, 3)
+                .Insert();
+
+            var returned = ctx.With("del", ctx.CreateDeleteBuilder<IDmCteEntity>()
+                    .Where(x => x.Id == 1)
+                    .Returning(x => new { x.Id, x.Name, x.Age }))
+                .From("del")
+                .Select(r => new { r.Id, r.Name, r.Age })
+                .ToList();
+
+            returned.Should().ContainSingle();
+            returned[0].Id.Should().Be(1);
+            returned[0].Name.Should().Be("doomed");
+            returned[0].Age.Should().Be(3);
+
+            ctx.From<IDmCteEntity>().Where(x => x.Id == 1).Select(x => x.Id).ToList()
+                .Should().BeEmpty();
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_entity");
+        }
+    }
+
+    [Fact]
+    public void DataModifyingCte_DeleteReturning_NoMatch_ShouldReturnEmptyAndKeepRow()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_entity");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IDmCteEntity>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Name, "keep")
+                .Value(x => x.Age, 3)
+                .Insert();
+
+            var returned = ctx.With("del", ctx.CreateDeleteBuilder<IDmCteEntity>()
+                    .Where(x => x.Id == 999)
+                    .Returning(x => new { x.Id, x.Name }))
+                .From("del")
+                .Select(r => new { r.Id, r.Name })
+                .ToList();
+
+            returned.Should().BeEmpty();
+
+            ctx.From<IDmCteEntity>().Where(x => x.Id == 1).Select(x => x.Name).ToList()
+                .Should().Equal("keep");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_entity");
+        }
+    }
+
+    [Fact]
+    public void DataModifyingCte_UpdateJoinReturning_ShouldReturnJoinedSourceAndMutateTarget()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IDmCteTarget>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Name, "target-before")
+                .Value(x => x.Age, 42)
+                .Insert();
+            ctx.CreateInsertBuilder<IDmCteSource>()
+                .Value(x => x.Id, 2)
+                .Value(x => x.Name, "source-name")
+                .Value(x => x.Age, 42)
+                .Insert();
+
+            var update = ctx.From<IDmCteTarget>()
+                .Join(ctx.From<IDmCteSource>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name });
+
+            var returned = ctx.With("upd", update)
+                .From("upd")
+                .Select(r => new { r.TargetId, r.SourceName })
+                .ToList();
+
+            returned.Should().ContainSingle();
+            returned[0].TargetId.Should().Be(1);
+            returned[0].SourceName.Should().Be("source-name");
+
+            ctx.From<IDmCteTarget>().Where(x => x.Id == 1).Select(x => x.Name).Single()
+                .Should().Be("source-name");
+            ctx.From<IDmCteSource>().Where(x => x.Id == 2).Select(x => x.Name).Single()
+                .Should().Be("source-name");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void DataModifyingCte_DeleteJoinReturning_ShouldReturnJoinedSourceAndDeleteTarget()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            ctx.CreateInsertBuilder<IDmCteTarget>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.Name, "doomed")
+                .Value(x => x.Age, 42)
+                .Insert();
+            ctx.CreateInsertBuilder<IDmCteSource>()
+                .Value(x => x.Id, 2)
+                .Value(x => x.Name, "keeper")
+                .Value(x => x.Age, 42)
+                .Insert();
+
+            var delete = ctx.From<IDmCteTarget>()
+                .Join(ctx.From<IDmCteSource>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name });
+
+            var returned = ctx.With("del", delete)
+                .From("del")
+                .Select(r => new { r.TargetId, r.SourceName })
+                .ToList();
+
+            returned.Should().ContainSingle();
+            returned[0].TargetId.Should().Be(1);
+            returned[0].SourceName.Should().Be("keeper");
+
+            ctx.From<IDmCteTarget>().Where(x => x.Id == 1).Select(x => x.Id).ToList()
+                .Should().BeEmpty();
+            ctx.From<IDmCteSource>().Where(x => x.Id == 2).Select(x => x.Id).ToList()
+                .Should().Equal(2);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinUpdate_ReturningProjection_ShouldReturnUpdatedRows()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "target-before").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteSourceRow>().Value(x => x.Id, 2).Value(x => x.Name, "source-name").Value(x => x.Age, 42).Insert();
+
+            var returned = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .ToList();
+
+            returned.Should().ContainSingle();
+            returned[0].TargetId.Should().Be(1);
+            returned[0].SourceName.Should().Be("source-name");
+
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Name).Single()
+                .Should().Be("source-name");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinDelete_ReturningProjection_ShouldReturnDeletedRows()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+            ctx.CreateInsertBuilder<DmCteSourceRow>().Value(x => x.Id, 2).Value(x => x.Name, "keeper").Value(x => x.Age, 42).Insert();
+
+            var returned = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .ToList();
+
+            returned.Should().ContainSingle();
+            returned[0].TargetId.Should().Be(1);
+            returned[0].SourceName.Should().Be("keeper");
+
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList()
+                .Should().BeEmpty();
+            ctx.From<DmCteSourceRow>().Where(x => x.Id == 2).Select(x => x.Id).ToList()
+                .Should().Equal(2);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    private static void SeedJoinPair(IDataContext ctx, int targetId, string targetName, int age, int sourceId, string sourceName)
+    {
+        ctx.CreateInsertBuilder<DmCteTargetRow>()
+            .Value(x => x.Id, targetId)
+            .Value(x => x.Name, targetName)
+            .Value(x => x.Age, age)
+            .Insert();
+        ctx.CreateInsertBuilder<DmCteSourceRow>()
+            .Value(x => x.Id, sourceId)
+            .Value(x => x.Name, sourceName)
+            .Value(x => x.Age, age)
+            .Insert();
+    }
+
+    [Fact]
+    public void JoinUpdate_ReturningProjection_SingleAndToList_ShouldReturnUpdatedRows()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "target-before", 42, 2, "source-name");
+
+            var single = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .Single();
+
+            single.TargetId.Should().Be(1);
+            single.SourceName.Should().Be("source-name");
+
+            var all = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .ToList();
+
+            all.Should().ContainSingle();
+            all[0].TargetId.Should().Be(1);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public async Task JoinUpdate_ReturningProjection_SingleAsyncAndToListAsync_ShouldReturnUpdatedRows()
+    {
+        var ctx = _sut.DataProvider;
+        var ct = TestContext.Current.CancellationToken;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "target-before", 42, 2, "source-name");
+
+            var single = await ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .SingleAsync(ct);
+
+            single.TargetId.Should().Be(1);
+            single.SourceName.Should().Be("source-name");
+
+            var all = await ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .ToListAsync(ct);
+
+            all.Should().ContainSingle();
+            all[0].SourceName.Should().Be("source-name");
+
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Name).Single()
+                .Should().Be("source-name");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinUpdate_ReturningProjection_ScalarCtorAndMemberInit_ShouldReturnShapes()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "target-before", 42, 2, "source-name");
+
+            var scalar = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => p.Item1.Id)
+                .Single();
+            scalar.Should().Be(1);
+
+            var viaCtor = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new JoinReturningDto(p.Item1.Id, p.Item2.Name))
+                .Single();
+            viaCtor.TargetId.Should().Be(1);
+            viaCtor.SourceName.Should().Be("source-name");
+
+            var viaMemberInit = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new JoinReturningDto { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .Single();
+            viaMemberInit.TargetId.Should().Be(1);
+            viaMemberInit.SourceName.Should().Be("source-name");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinUpdate_ReturningProjection_SameNamedColumns_ShouldReturnBothExplicitly()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "target-before", 42, 2, "source-name");
+
+            // Both entities expose a column named "id"; the RETURNING list must qualify each by its own
+            // table alias so the two projected members stay distinct.
+            var row = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { TargetId = p.Item1.Id, SourceId = p.Item2.Id })
+                .Single();
+
+            row.TargetId.Should().Be(1);
+            row.SourceId.Should().Be(2);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinUpdate_ReturningProjection_NoMatch_ShouldReturnEmptyAndRejectSingle()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "target-before", 42, 2, "source-name");
+
+            var empty = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Where(p => p.Item1.Id < 0)
+                .Returning(p => new { p.Item1.Id })
+                .ToList();
+            empty.Should().BeEmpty();
+
+            var act = () => ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Where(p => p.Item1.Id < 0)
+                .Returning(p => new { p.Item1.Id })
+                .Single();
+
+            act.Should().Throw<InvalidOperationException>().WithMessage("*touched no row*");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinUpdate_ReturningProjection_MultipleMatches_SingleShouldThrow()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "target-a", 42, 9, "source-name");
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 2).Value(x => x.Name, "target-b").Value(x => x.Age, 42).Insert();
+
+            var act = () => ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateUpdateJoinBuilder()
+                .Set(p => p.Item1.Name, p => p.Item2.Name)
+                .Returning(p => new { p.Item1.Id })
+                .Single();
+
+            act.Should().Throw<InvalidOperationException>().WithMessage("*more than one row*");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinDelete_ReturningProjection_Single_ShouldReturnDeletedRow()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "doomed", 42, 2, "keeper");
+
+            var returned = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .Single();
+
+            returned.TargetId.Should().Be(1);
+            returned.SourceName.Should().Be("keeper");
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().BeEmpty();
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public async Task JoinDelete_ReturningProjection_SingleAsyncAndToListAsync_ShouldReturnDeletedRows()
+    {
+        var ctx = _sut.DataProvider;
+        var ct = TestContext.Current.CancellationToken;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "doomed", 42, 2, "keeper");
+
+            var single = await ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .SingleAsync(ct);
+
+            single.TargetId.Should().Be(1);
+            single.SourceName.Should().Be("keeper");
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().BeEmpty();
+
+            // Re-seed and use the list terminal so both async terminals are exercised.
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+
+            var all = await ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { TargetId = p.Item1.Id, SourceName = p.Item2.Name })
+                .ToListAsync(ct);
+
+            all.Should().ContainSingle();
+            all[0].TargetId.Should().Be(1);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinDelete_ReturningProjection_ScalarAndSameNamedColumns_ShouldReturnShapes()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "doomed", 42, 2, "keeper");
+
+            var scalar = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => p.Item1.Id)
+                .Single();
+            scalar.Should().Be(1);
+
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+
+            var sameNames = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { TargetId = p.Item1.Id, SourceId = p.Item2.Id })
+                .Single();
+
+            sameNames.TargetId.Should().Be(1);
+            sameNames.SourceId.Should().Be(2);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void JoinDelete_ReturningProjection_NoMatch_ShouldReturnEmptyAndRejectSingle()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "safe", 42, 2, "keeper");
+
+            var empty = ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .Where(p => p.Item1.Id < 0)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { p.Item1.Id })
+                .ToList();
+            empty.Should().BeEmpty();
+
+            var act = () => ctx.From<DmCteTargetRow>()
+                .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                .Where(p => p.Item1.Id < 0)
+                .CreateDeleteJoinBuilder()
+                .Returning(p => new { p.Item1.Id })
+                .Single();
+
+            act.Should().Throw<InvalidOperationException>().WithMessage("*removed no row*");
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().Equal(1);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void DataModifyingCte_JoinUpdateScope_RepeatedExecution_ShouldMutateFreshly()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "t0", 42, 2, "s1");
+
+            var scope = ctx.With("upd", ctx.From<DmCteTargetRow>()
+                    .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                    .CreateUpdateJoinBuilder()
+                    .Set(p => p.Item1.Name, p => p.Item2.Name)
+                    .Returning(p => new { p.Item1.Id }))
+                .From("upd")
+                .Select(r => new { r.Id });
+
+            scope.ToList().Should().ContainSingle();
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Name).Single().Should().Be("s1");
+
+            // Change the source and re-run the very same scope: the mutation must execute afresh, not
+            // return a stale cached result.
+            ctx.CreateUpdateBuilder<DmCteSourceRow>().Set(x => x.Name, "s2").Where(x => x.Id == 2).Update();
+
+            scope.ToList().Should().ContainSingle();
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Name).Single().Should().Be("s2");
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
+    }
+
+    [Fact]
+    public void DataModifyingCte_JoinDeleteScope_RepeatedExecution_ShouldDeleteFreshly()
+    {
+        var ctx = _sut.DataProvider;
+        CreateDmCteTable(ctx, "dmcte_target");
+        CreateDmCteTable(ctx, "dmcte_source");
+
+        try
+        {
+            SeedJoinPair(ctx, 1, "doomed", 42, 2, "keeper");
+
+            var scope = ctx.With("del", ctx.From<DmCteTargetRow>()
+                    .Join(ctx.From<DmCteSourceRow>(), (a, b) => a.Age == b.Age)
+                    .CreateDeleteJoinBuilder()
+                    .Returning(p => new { p.Item1.Id }))
+                .From("del")
+                .Select(r => new { r.Id });
+
+            scope.ToList().Should().ContainSingle();
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().BeEmpty();
+
+            ctx.CreateInsertBuilder<DmCteTargetRow>().Value(x => x.Id, 1).Value(x => x.Name, "doomed").Value(x => x.Age, 42).Insert();
+
+            scope.ToList().Should().ContainSingle();
+            ctx.From<DmCteTargetRow>().Where(x => x.Id == 1).Select(x => x.Id).ToList().Should().BeEmpty();
+            ctx.From<DmCteSourceRow>().Where(x => x.Id == 2).Select(x => x.Id).ToList().Should().Equal(2);
+        }
+        finally
+        {
+            DropDmCteTable(ctx, "dmcte_target");
+            DropDmCteTable(ctx, "dmcte_source");
+        }
     }
 
     [Fact]
@@ -472,7 +1315,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var id = MergeTestKey();
         var marker = "pm_" + Guid.NewGuid().ToString("N");
 
-        var rows = ctx.MergeInto<IMergeEntity>()
+        var rows = ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 3 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -491,11 +1334,11 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var deleteId = MergeTestKey();
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = deleteId, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = deleteId, Name = "ignored", Age = 0 })
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -942,15 +1785,15 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IPgRangeEntity>()
+            ctx.CreateInsertBuilder<IPgRangeEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.During, new Range<int>(10, 20))
                 .Insert();
-            ctx.InsertInto<IPgRangeEntity>()
+            ctx.CreateInsertBuilder<IPgRangeEntity>()
                 .Value(x => x.Id, 2)
                 .Value(x => x.During, Range<int>.Empty)
                 .Insert();
-            ctx.InsertInto<IPgRangeEntity>()
+            ctx.CreateInsertBuilder<IPgRangeEntity>()
                 .Value(x => x.Id, 3)
                 .Value(x => x.During, new Range<int>(0, 15, lowerInclusive: true, upperInclusive: false, lowerInfinite: true, upperInfinite: false))
                 .Insert();
@@ -1034,7 +1877,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IPgRangeTypes>()
+            ctx.CreateInsertBuilder<IPgRangeTypes>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.I4, new Range<int>(10, 20))
                 .Value(x => x.I8, new Range<long>(1_000_000_000_000L, 2_000_000_000_000L))
@@ -1044,7 +1887,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
                 .Value(x => x.Dt, new Range<DateOnly>(new DateOnly(2023, 1, 1), new DateOnly(2023, 2, 1)))
                 .Insert();
 
-            ctx.InsertInto<IPgRangeTypes>()
+            ctx.CreateInsertBuilder<IPgRangeTypes>()
                 .Value(x => x.Id, 2)
                 .Value(x => x.I4, Range<int>.Empty)
                 .Value(x => x.I8, Range<long>.Empty)
@@ -1110,7 +1953,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         try
         {
-            ctx.InsertInto<IPgMultirangeEntity>()
+            ctx.CreateInsertBuilder<IPgMultirangeEntity>()
                 .Value(x => x.Id, 1)
                 .Value(x => x.During, new[] { new Range<int>(1, 5), new Range<int>(10, 20) })
                 .Insert();
@@ -1160,7 +2003,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
                 (3, new Range<int>(10, 20))
             })
             {
-                ctx.InsertInto<IPgRangeAggEntity>()
+                ctx.CreateInsertBuilder<IPgRangeAggEntity>()
                     .Value(x => x.Id, id)
                     .Value(x => x.During, range)
                     .Insert();
@@ -1480,7 +2323,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var id = RawProcedureKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
             .Insert();
 
@@ -1500,7 +2343,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         using (var tx = transactions.BeginTransaction())
         {
             // The current token matches: the guarded update touches exactly the one row and returns its new xmin.
-            var updated = ctx.Update<IPgXminEntity>()
+            var updated = ctx.CreateUpdateBuilder<IPgXminEntity>()
                 .Set(x => x.Name, "after")
                 .Where(x => x.Id == id && x.Revision == token)
                 .Returning(x => x.Revision)
@@ -1515,7 +2358,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         newToken.Should().NotBe(token);
 
         // The old token is stale and affects zero rows.
-        var stale = ctx.Update<IPgXminEntity>()
+        var stale = ctx.CreateUpdateBuilder<IPgXminEntity>()
             .Set(x => x.Name, "stale")
             .Where(x => x.Id == id && x.Revision == token)
             .Returning(x => x.Revision)
@@ -1524,7 +2367,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         stale.Should().BeEmpty();
 
         // The token observed after the first update is current and still affects exactly one row.
-        var current = ctx.Update<IPgXminEntity>()
+        var current = ctx.CreateUpdateBuilder<IPgXminEntity>()
             .Set(x => x.Name, "current")
             .Where(x => x.Id == id && x.Revision == newToken)
             .Returning(x => x.Revision)

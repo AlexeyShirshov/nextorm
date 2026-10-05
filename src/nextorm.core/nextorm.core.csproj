@@ -17,6 +17,37 @@
     <None Include="..\..\readme.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <!-- Pack the join-alias Roslyn generator into analyzers/dotnet/cs of the `nextorm` package so
+         consumers get it automatically. The referenced project is build-only: it is NOT added to
+         core's own compilation as an Analyzer. -->
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_AddSourceGeneratorToPackage</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ReferenceOutputAssembly=false: build-ordering only, no compile reference to the generator.
+         PrivateAssets=all: its Microsoft.CodeAnalysis.* package deps never leak into core's nuspec. -->
+    <ProjectReference Include="..\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Resolve the generator's built output through its own GetTargetPath so the per-host-OS
+       bin/<os>/ redirect is honored (no hardcoded bin path), then place the DLL under
+       analyzers/dotnet/cs. TargetFramework is removed so the net10.0 core TFM does not override
+       the generator's own netstandard2.0. -->
+  <Target Name="_AddSourceGeneratorToPackage">
+    <MSBuild Projects="..\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework">
+      <Output TaskParameter="TargetOutputs" ItemName="_SourceGeneratorAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(_SourceGeneratorAssembly)" PackagePath="analyzers/dotnet/cs" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <!-- The streaming wrappers (LobStream/LobTextReader) and CommandReaderOwner are internal; the
          core tests exercise the wrapper operations and the reader/command lifecycle directly. -->
@@ -27,8 +58,21 @@
     <!-- The ClickHouse SQL-generation tests render the internal JoinInto pair command so the
          parent-paging subquery (not just the denormalized query) is asserted. -->
     <InternalsVisibleTo Include="nextorm.clickhouse.tests" />
+    <!-- The PostgreSQL/MySQL/SQL Server JoinInto SQL-generation tests render the internal pair command
+         to assert the many-to-many derived junction shape without opening a connection. -->
+    <InternalsVisibleTo Include="nextorm.postgres.tests" />
+    <InternalsVisibleTo Include="nextorm.mysql.tests" />
+    <InternalsVisibleTo Include="nextorm.sqlserver.tests" />
     <!-- The integration suite exercises the key form (BuildEntityCommand/UpdateEntity/DeleteEntity) of
          the DML builders, which is internal; the filter scope of the key form is asserted end to end. -->
     <InternalsVisibleTo Include="nextorm.integration.tests" />
+    <!-- The ClickHouse provider re-exposes the ClickHouse-only fluent members (Final/PreWhere/Settings/
+         LimitBy/WithTotals/ArrayJoin*/Semi|Anti|PasteJoin, FromOptions.Sample, JoinOptions.Global)
+         as public extension methods over the now-internal instance members. -->
+    <InternalsVisibleTo Include="nextorm.clickhouse" />
+    <!-- The EF Core bridge stages its whole import and publishes it under the shared metadata
+         registration gate, so a concurrent auto/configured registration or junction publication
+         cannot clobber a bridged entry (and vice versa). -->
+    <InternalsVisibleTo Include="nextorm.entityframeworkcore" />
   </ItemGroup>
 </Project>

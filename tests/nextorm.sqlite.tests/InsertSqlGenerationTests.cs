@@ -105,7 +105,7 @@ public class InsertSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var min = 1;
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>().Where(s => s.Age > min), s => new { s.Name, s.Age })
             .ToSql())
             .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source\n where (Age > $min)");
@@ -116,7 +116,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .Returning(x => new { x.Id, x.Name })
             .ToSql())
@@ -128,7 +128,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new { s.Name, Total = 1 });
 
         act.Should().Throw<NotSupportedException>();
@@ -139,7 +139,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age });
 
@@ -153,7 +153,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new { x.Id }));
 
@@ -165,7 +165,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Value(x => x.Age, 5)
             .ToSql()
@@ -177,7 +177,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(new InsertEntity { Id = 99, Name = "a", Age = 5, Description = "d", Total = 7 })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age, description) values ($p0, $p1, $p2)");
@@ -188,7 +188,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values([
                 new InsertEntity { Name = "a", Age = 1 },
                 new InsertEntity { Name = "b", Age = 2 },
@@ -202,7 +202,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, x => x.Description)
             .ToSql()
             .Should().Be("insert into insert_entity (name) values (description)");
@@ -213,7 +213,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<ITimestampEntity>()
+        ctx.CreateInsertBuilder<ITimestampEntity>()
             .Value(x => x.CreatedOn, x => DateTime.Now)
             .ToSql()
             .Should().Be("insert into timestamp_entity (created_on) values ($p0)");
@@ -225,7 +225,7 @@ public class InsertSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var holder = new TimestampHolder { CreatedOn = new DateTime(2024, 1, 2, 3, 4, 5) };
 
-        ctx.InsertInto<ITimestampEntity>()
+        ctx.CreateInsertBuilder<ITimestampEntity>()
             .Value(x => x.CreatedOn, x => holder.CreatedOn)
             .ToSql()
             .Should().Be("insert into timestamp_entity (created_on) values ($p0)");
@@ -236,7 +236,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<ITimestampEntity>()
+        ctx.CreateInsertBuilder<ITimestampEntity>()
             .Value(x => x.CreatedOn, x => x.CreatedOn)
             .ToSql()
             .Should().Be("insert into timestamp_entity (created_on) values (created_on)");
@@ -247,7 +247,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<ITimestampEntity>()
+        var act = () => ctx.CreateInsertBuilder<ITimestampEntity>()
             .Value(x => x.CreatedOn, x => x.Id > 0 ? DateTime.Now : DateTime.MinValue);
 
         act.Should().Throw<NotSupportedException>();
@@ -258,7 +258,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.CreateQuoted();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Value(x => x.Age, 5)
             .ToSql()
@@ -269,7 +269,7 @@ public class InsertSqlGenerationTests
     public void NoValues_ShouldThrow()
     {
         using var ctx = SqliteTestContext.Create();
-        var builder = ctx.InsertInto<IInsertEntity>();
+        var builder = ctx.CreateInsertBuilder<IInsertEntity>();
 
         var act = () => builder.ToSql();
 
@@ -281,7 +281,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(new InsertEntity { Name = "a" })
             .Value(x => x.Age, 1);
 
@@ -293,7 +293,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Value(x => x.Age, 5)
             .Returning()
@@ -306,7 +306,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new { x.Id, x.Name })
             .ToSql()
@@ -318,7 +318,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => x.Id)
             .ToSql()
@@ -330,7 +330,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.CreateUppercase();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => x.Id)
             .ToSql()
@@ -342,7 +342,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values([
                 new InsertEntity { Name = "a", Age = 1 },
                 new InsertEntity { Name = "b", Age = 2 },
@@ -357,7 +357,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningIdentity(x => x.Id)
             .ToSql()
@@ -369,7 +369,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningKey<long>()
             .ToSql()
@@ -381,7 +381,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningIdentity<long>()
             .ToSql()
@@ -399,7 +399,7 @@ public class InsertSqlGenerationTests
             new InsertSource { Name = "b", Age = 2 },
         };
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { Name = s.Name, Age = s.Age })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age) values ($p0, $p1), ($p2, $p3)");
@@ -416,7 +416,7 @@ public class InsertSqlGenerationTests
             new InsertSource { Name = "b", Age = 2 },
         };
 
-        ctx.InsertInto<InsertEntity>()
+        ctx.CreateInsertBuilder<InsertEntity>()
             .Values(sources, s => new InsertEntity { Name = s.Name, Age = s.Age })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age) values ($p0, $p1), ($p2, $p3)");
@@ -427,7 +427,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IScalarEntity>()
+        ctx.CreateInsertBuilder<IScalarEntity>()
             .Value("a")
             .ToSql()
             .Should().Be("insert into scalar_entity (name) values ($p0)");
@@ -438,7 +438,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IScalarEntity>()
+        ctx.CreateInsertBuilder<IScalarEntity>()
             .Values(new[] { "a", "b" })
             .ToSql()
             .Should().Be("insert into scalar_entity (name) values ($p0), ($p1)");
@@ -449,7 +449,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(x => x.Name, new[] { "a", "b" })
             .Values(x => x.Age, new[] { 1, 2 })
             .ToSql()
@@ -461,7 +461,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Value("a");
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Value("a");
 
         act.Should().Throw<InvalidOperationException>();
     }
@@ -472,7 +472,7 @@ public class InsertSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var sources = new[] { new InsertSource { Name = "a", Age = 1 } };
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Values(sources, s => new { s.Extra });
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Values(sources, s => new { s.Extra });
 
         act.Should().Throw<BuildSqlCommandException>();
     }
@@ -483,7 +483,7 @@ public class InsertSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var sources = new[] { new InsertSource { Name = "a", Age = 1 } };
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Values(sources, s => new { s.Name, Total = s.Age });
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Values(sources, s => new { s.Name, Total = s.Age });
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -493,7 +493,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(x => x.Name, new[] { "a", "b" })
             .Values(x => x.Age, new[] { 1 });
 
@@ -505,7 +505,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(x => x.Name, new[] { "a" })
             .Values(x => x.Name, new[] { "b" });
 
@@ -518,7 +518,7 @@ public class InsertSqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var sources = new[] { new InsertSource { Name = "a", Age = 1 } };
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { s.Name, s.Age })
             .Value(x => x.Name, "b");
 
@@ -530,7 +530,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(Array.Empty<InsertSource>(), s => new { s.Name, s.Age });
 
         act.Should().Throw<ArgumentException>();
@@ -541,7 +541,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Value(x => x.Total, 1);
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Total, 1);
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -551,7 +551,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Value(x => x.Total, x => x.Age);
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Total, x => x.Age);
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -561,7 +561,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Values(x => x.Total, new[] { 1 });
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Values(x => x.Total, new[] { 1 });
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -571,7 +571,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.InsertInto<IDefaultEntity>()
+        ctx.CreateInsertBuilder<IDefaultEntity>()
             .ToSql()
             .Should().Be("insert into default_entity default values");
     }
@@ -581,7 +581,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Value(x => x.Name, SqlDefault.Value).ToSql();
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, SqlDefault.Value).ToSql();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -591,7 +591,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new { x.Id })
             .OutputInto("audit_log")

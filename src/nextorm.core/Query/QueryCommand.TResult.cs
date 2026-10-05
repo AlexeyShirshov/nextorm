@@ -134,6 +134,78 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         await foreach (var row in dataContext.GetAsyncEnumerable<TResult>(preparedCommand, cancellationToken, @params).ConfigureAwait(false))
             yield return row;
     }
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as a JSON array,
+    /// without materializing a <typeparamref name="TResult"/> per row. The destination is owned by the
+    /// caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
+    public void WriteJson(Stream destination) => WriteJson(destination, new JsonStreamOptions());
+
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="destination"/> as JSON using
+    /// <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    public void WriteJson(Stream destination, JsonStreamOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(options);
+
+        RequireJsonContext().WriteJson(this, destination, options, null, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as a
+    /// JSON array, without materializing a <typeparamref name="TResult"/> per row. The destination is
+    /// owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
+    public Task WriteJsonAsync(Stream destination, CancellationToken cancellationToken = default)
+        => WriteJsonAsync(destination, new JsonStreamOptions(), cancellationToken);
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="destination"/> as
+    /// JSON using <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per
+    /// row. The destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(options);
+
+        return RequireJsonContext().WriteJsonAsync(this, destination, options, null, cancellationToken);
+    }
+
+    // JSON streaming has no in-memory fallback: the in-memory provider has no DbDataReader and no
+    // managed JsonSerializer path. Fail before the destination is touched, mirroring the LOB guard.
+    private DataContext RequireJsonContext()
+    {
+        var disposed = _dataContext switch
+        {
+            DataContext db => db.IsDisposed,
+            InMemoryDataContext memory => memory.IsDisposed,
+            _ => false,
+        };
+        ObjectDisposedException.ThrowIf(disposed, nameof(DataContext));
+
+        return _dataContext as DataContext
+            ?? throw new NotSupportedException(
+                "WriteJson requires a database provider; the in-memory provider has no DbDataReader and does not support JSON streaming.");
+    }
     /// <summary>Executes the command and returns the result set as a synchronous sequence.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
     /// <returns>A sequence over the result rows.</returns>
@@ -526,7 +598,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
 
         var cmd = new QueryCommand<TResult>(_dataContext, Definition with { Sorting = reversed });
         CopyTo(cmd, true);
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns the last row of the ordered query and throws when it produces none. Requires an <c>ORDER BY</c>.</summary>
@@ -579,7 +651,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         });
 
         CopyTo(cmd, true);
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command with the 1-based column added to its sort order in ascending direction.</summary>
@@ -612,7 +684,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         });
 
         CopyTo(cmd, true);
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command with <paramref name="orderExp"/> added to its sort order in ascending direction.</summary>
@@ -663,7 +735,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         var cmd = new QueryCommand<TResult>(_dataContext, Definition);
         CopyTo(cmd, true);
         cmd.Paging = paging;
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command that emits <c>DISTINCT</c>, removing duplicate rows from the result.</summary>
@@ -671,7 +743,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Distinct()
     {
         var cmd = (QueryCommand<TResult>)Clone();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         cmd.IsDistinct = true;
         return cmd;
     }
@@ -788,7 +860,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> WithForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false)
     {
         var cmd = (QueryCommand<TResult>)Clone();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         cmd.ForJsonClause = new ForJsonClause(mode, root, includeNullValues);
         return cmd;
     }
@@ -807,7 +879,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> WithForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false)
     {
         var cmd = (QueryCommand<TResult>)Clone();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         cmd.ForXmlClause = new ForXmlClause(mode, elementName, root, elements);
         return cmd;
     }
@@ -880,7 +952,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         cmd.ForJsonClause = configured.ForJsonClause;
         cmd.ForXmlClause = configured.ForXmlClause;
         cmd.DocumentMode = true;
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
     }
     /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>UNION</c> (duplicates removed).</summary>
@@ -890,7 +962,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Union<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.Distinct);
         return cmd;
     }
@@ -901,7 +978,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> UnionAll<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.All);
         return cmd;
     }
@@ -912,7 +994,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Intersect<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.Intersect);
         return cmd;
     }
@@ -923,7 +1010,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> IntersectAll<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.IntersectAll);
         return cmd;
     }
@@ -934,7 +1026,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Except<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.Except);
         return cmd;
     }
@@ -945,7 +1042,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> ExceptAll<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        // ResetPreparation clears _from; a typed-CTE source stores its ColumnShape there, so preserve
+        // it (as Hint/WithTag do) or the set operation's first operand would lose its source and fail
+        // to prepare when that source is not a mapped entity.
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.SetOperation(queryCommand, UnionType.ExceptAll);
         return cmd;
     }
@@ -958,8 +1060,86 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     {
         var cmd = (QueryCommand<TResult>)Clone();
         cmd.ClearUnion();
-        cmd.ResetPreparation();
+        cmd.ResetPreparationPreservingFrom();
         return cmd;
+    }
+
+    /// <summary>
+    /// Wraps this command as an ordinary (non-recursive) common table expression declared under
+    /// <paramref name="name"/>. The returned descriptor is read with
+    /// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>; the CTE keeps this command as
+    /// its body and the projection shape <typeparamref name="TResult"/> as its readable columns, so
+    /// member access on the typed source resolves to this command's output columns. The descriptor is a
+    /// typed projection source, not a mapped entity. Recursion is not part of this API: use the legacy
+    /// <c>WithRecursive</c> string API for recursive CTEs.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <returns>An immutable descriptor of the declared CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    public Cte<TResult> AsCte(string name)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return new Cte<TResult>(this, name);
+    }
+
+    /// <summary>
+    /// Wraps this command as the anchor of a recursive common table expression declared under
+    /// <paramref name="name"/>. <paramref name="step"/> is invoked <b>exactly once</b>, during this
+    /// call, with a typed self-reference bound to the anchor's shape; the returned step query is
+    /// combined with the anchor as <c>anchor UNION ALL step</c>. The descriptor is read with
+    /// <see cref="DataContextExtensions.From{T}(IDataContext, Cte{T})"/>. No recursion-depth hint is
+    /// emitted by this overload. Legacy <c>WithRecursive</c> behavior is unchanged.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="step">Builds the recursive step from the typed self-reference; invoked once.</param>
+    /// <returns>An immutable descriptor of the recursive CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="step"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="step"/> returned <see langword="null"/>.</exception>
+    public Cte<TResult> AsRecursiveCte(string name, Func<CteReference<TResult>, QueryCommand<TResult>> step)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(step);
+
+        return Cte<TResult>.CreateRecursive(this, name, step, null);
+    }
+
+    /// <summary>
+    /// Wraps this command as the anchor of a recursive common table expression with an explicit
+    /// recursion-depth limit. See the two-argument <c>AsRecursiveCte</c> overload for the callback
+    /// contract. <paramref name="maxRecursion"/> is required (no default): it is
+    /// rendered only by dialects that expose a depth option (SQL Server
+    /// <c>option (maxrecursion n)</c>) and ignored by the others, matching legacy <c>WithRecursive</c>
+    /// semantics; omitting the hint is expressed by the two-argument overload.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="step">Builds the recursive step from the typed self-reference; invoked once.</param>
+    /// <param name="maxRecursion">The recursion-depth limit (SQL Server <c>maxrecursion n</c>); required.</param>
+    /// <returns>An immutable descriptor of the recursive CTE.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <c>null</c> or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="step"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="step"/> returned <see langword="null"/>.</exception>
+    public Cte<TResult> AsRecursiveCte(string name, Func<CteReference<TResult>, QueryCommand<TResult>> step, int maxRecursion)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(step);
+
+        return Cte<TResult>.CreateRecursive(this, name, step, maxRecursion);
+    }
+
+    /// <summary>
+    /// Resets the prepared state while preserving the from-expression. <see cref="QueryCommand.ResetPreparation"/>
+    /// clears <c>_from</c>, but a typed-CTE (or equivalent projection-source) read stores its
+    /// <c>ColumnShape</c> marker there; an operator that resets after cloning must restore it, exactly
+    /// like the set-operation methods, or preparation re-derives a mapped source from entity metadata
+    /// and fails for a non-mapped projection type.
+    /// </summary>
+    private void ResetPreparationPreservingFrom()
+    {
+        var source = _from;
+        ResetPreparation();
+        _from = source;
     }
 
 }

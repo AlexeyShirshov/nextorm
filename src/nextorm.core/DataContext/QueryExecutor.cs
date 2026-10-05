@@ -443,6 +443,58 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         }
     }
 
+    /// <summary>
+    /// Opens a plain multi-column reader for a prepared command using the command's own
+    /// <see cref="CommandBehavior"/> (the buffered default for a non-LOB command): no sequential
+    /// access and no locator column are required. Returns an owner of the reader and the per-call
+    /// command; the caller must dispose it.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="compiledQuery">The per-call command to execute.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    /// <returns>An owner of the open reader and its command.</returns>
+    internal CommandReaderOwner OpenResultReader<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+
+        DbCommand? command = GetDbCommand(compiledQuery, @params);
+        try
+        {
+            var reader = RunReader(command!, compiledQuery.Behavior);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
+    }
+
+    /// <summary>Asynchronously opens a plain multi-column reader for a prepared command with the command's own <see cref="CommandBehavior"/>.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="compiledQuery">The per-call command to execute.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    /// <param name="cancellationToken">Cancels opening the reader.</param>
+    /// <returns>A task producing an owner of the open reader and its command.</returns>
+    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+
+        DbCommand? command = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var reader = await RunReaderAsync(command!, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+            var owner = new CommandReaderOwner(command, reader);
+            command = null;
+            return owner;
+        }
+        finally
+        {
+            command?.Dispose();
+        }
+    }
+
     /// <summary>Executes a mutation and returns the number of affected rows.</summary>
     /// <param name="sql">The parameterised statement text.</param>
     /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
@@ -1078,5 +1130,78 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
             return r;
         }
+    }
+
+    /// <summary>
+    /// Streams a prepared command's rows directly to <paramref name="output"/> as JSON, reading each
+    /// row through a typed <see cref="JsonRowWriter"/> instead of materializing the projected result.
+    /// The caller-owned <paramref name="output"/> is never closed; the reader is released in
+    /// <c>finally</c> and the rented buffer is returned by the writer's disposal.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+    /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
+    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
+    /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+    /// <param name="options">The validated container options.</param>
+    /// <param name="params">The positional parameter values bound to the query.</param>
+    internal void WriteJson<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, Stream output, JsonStreamOptions options, ReadOnlySpan<object?> @params)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+        ThrowIfJsonBatch(compiledQuery);
+
+        using var stream = new JsonStreamWriter(output, rowWriter, options);
+        var sqlCommand = GetDbCommand(compiledQuery, @params);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior);
+        try
+        {
+            while (reader.Read())
+                stream.WriteRow(reader);
+        }
+        finally
+        {
+            reader.Dispose();
+        }
+
+        stream.Complete();
+    }
+
+    /// <summary>
+    /// Asynchronously streams a prepared command's rows directly to <paramref name="output"/> as JSON.
+    /// The caller-owned <paramref name="output"/> is never closed; the reader is released in
+    /// <c>finally</c> and the rented buffer is returned by the writer's disposal.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+    /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
+    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
+    /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+    /// <param name="options">The validated container options.</param>
+    /// <param name="params">The positional parameter values bound to the query, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    internal async Task WriteJsonAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+        ThrowIfJsonBatch(compiledQuery);
+
+        using var stream = new JsonStreamWriter(output, rowWriter, options);
+        var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                await stream.WriteRowAsync(reader, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await reader.DisposeAsync().ConfigureAwait(false);
+        }
+
+        await stream.CompleteAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ThrowIfJsonBatch<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+    {
+        if (compiledQuery.PendingBatch is not null)
+            throw new NotSupportedException(
+                "WriteJson does not support a query backed by a lazy temporary table; materialize the temporary table source first.");
     }
 }

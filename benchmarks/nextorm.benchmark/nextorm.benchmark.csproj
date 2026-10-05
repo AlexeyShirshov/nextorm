@@ -18,6 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.entityframeworkcore\nextorm.entityframeworkcore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -79,13 +79,89 @@ public sealed class MutationCteQuery<TResult>
     /// </summary>
     internal static MutationCteQuery<TResult> Create<TEntity>(IDataContext dataContext, string name, InsertReturningBuilder<TEntity, TResult> insert, IReadOnlyList<CteDefinition>? preceding = null)
     {
+        EnsureSupported(dataContext);
+        var cte = new CteDefinition(name, BuildShape(dataContext, insert), new CteMutation(insert.BuildMutationCommand()));
+        return Wrap(dataContext, name, cte, preceding);
+    }
+
+    /// <summary>
+    /// Builds a scope whose data-modifying CTE body is a single-table <c>UPDATE ... RETURNING</c>.
+    /// </summary>
+    internal static MutationCteQuery<TResult> Create<TEntity>(IDataContext dataContext, string name, UpdateReturningBuilder<TEntity, TResult> update, IReadOnlyList<CteDefinition>? preceding = null)
+    {
+        EnsureSupported(dataContext);
+        var projection = update.Projection ?? throw MissingProjection("update");
+        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, projection, typeof(TEntity)), new CteMutation(update.BuildMutationCommand()));
+        return Wrap(dataContext, name, cte, preceding);
+    }
+
+    /// <summary>
+    /// Builds a scope whose data-modifying CTE body is a single-table <c>DELETE ... RETURNING</c>.
+    /// </summary>
+    internal static MutationCteQuery<TResult> Create<TEntity>(IDataContext dataContext, string name, DeleteReturningBuilder<TEntity, TResult> delete, IReadOnlyList<CteDefinition>? preceding = null)
+    {
+        EnsureSupported(dataContext);
+        var projection = delete.Projection ?? throw MissingProjection("delete");
+        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, projection, typeof(TEntity)), new CteMutation(delete.BuildMutationCommand()));
+        return Wrap(dataContext, name, cte, preceding);
+    }
+
+    /// <summary>
+    /// Builds a scope whose data-modifying CTE body is a multi-table <c>UPDATE ... FROM ... RETURNING</c>.
+    /// </summary>
+    internal static MutationCteQuery<TResult> Create<TProjection>(IDataContext dataContext, string name, UpdateJoinReturningBuilder<TProjection, TResult> update, IReadOnlyList<CteDefinition>? preceding = null)
+    {
+        EnsureSupported(dataContext);
+        var command = update.BuildMutationCommand();
+        var source = JoinShapeSource(command);
+        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, update.Projection, typeof(TProjection), source), new CteMutation(command));
+        return Wrap(dataContext, name, cte, preceding);
+    }
+
+    /// <summary>
+    /// Builds a scope whose data-modifying CTE body is a multi-table <c>DELETE ... USING ... RETURNING</c>.
+    /// </summary>
+    internal static MutationCteQuery<TResult> Create<TProjection>(IDataContext dataContext, string name, DeleteJoinReturningBuilder<TProjection, TResult> delete, IReadOnlyList<CteDefinition>? preceding = null)
+    {
+        EnsureSupported(dataContext);
+        var command = delete.BuildMutationCommand();
+        var source = JoinShapeSource(command);
+        var cte = new CteDefinition(name, BuildShape<TResult>(dataContext, delete.Projection, typeof(TProjection), source), new CteMutation(command));
+        return Wrap(dataContext, name, cte, preceding);
+    }
+
+    // The multi-table mutation's source already carries the target FROM and the INNER joins. The CTE
+    // read shape must project over the same joined sources so a member reference like p.Item2.Name
+    // resolves to the joined table's alias; a shape built over the bare Projection<T1, T2> type cannot
+    // resolve a table for Item2. Preparing the source here is idempotent (the CTE preparation skips an
+    // already-prepared body source).
+    private static QueryCommand JoinShapeSource(MutationCommand command)
+    {
+        var source = command switch
+        {
+            UpdateJoinCommand updateJoin => updateJoin.Source,
+            DeleteJoinCommand deleteJoin => deleteJoin.Source,
+            _ => throw new NotSupportedException($"'{command.GetType().Name}' is not a multi-table mutation."),
+        };
+
+        if (!source.IsPrepared)
+            source.PrepareCommand(false, CancellationToken.None);
+
+        return source;
+    }
+
+    private static void EnsureSupported(IDataContext dataContext)
+    {
         if (dataContext is not DataContext context || !context.Dialect.SupportsDataModifyingCtes)
             throw new NotSupportedException(
                 "Data-modifying common table expressions (WITH <name> AS (INSERT ... RETURNING ...)) are only supported by PostgreSQL; this provider requires a CTE body to be a SELECT.");
+    }
 
-        var shape = BuildShape(dataContext, insert);
-        var cte = new CteDefinition(name, shape, insert.BuildMutationCommand());
+    private static NotSupportedException MissingProjection(string operation)
+        => new($"A data-modifying CTE {operation} requires a RETURNING projection; call Returning(...) on the {operation} builder.");
 
+    private static MutationCteQuery<TResult> Wrap(IDataContext dataContext, string name, CteDefinition cte, IReadOnlyList<CteDefinition>? preceding)
+    {
         var ctes = new List<CteDefinition>((preceding?.Count ?? 0) + 1);
         if (preceding is not null)
             ctes.AddRange(preceding);
@@ -96,19 +172,38 @@ public sealed class MutationCteQuery<TResult>
 
     /// <summary>
     /// Builds the prepared column-shape command a data-modifying CTE read uses: a projection over the
-    /// inserted entity that mirrors the <c>RETURNING</c> selector, so member access resolves to the
+    /// mutated entity that mirrors the <c>RETURNING</c> selector, so member access resolves to the
     /// returned columns.
     /// </summary>
     internal static QueryCommand BuildShape<TEntity, TReturn>(IDataContext dataContext, InsertReturningBuilder<TEntity, TReturn> insert)
     {
         var projection = insert.Projection ?? BuildKeyProjection<TEntity, TReturn>(insert);
+        return BuildShape<TReturn>(dataContext, projection, typeof(TEntity));
+    }
 
-        var shape = dataContext.CreateCommand<TReturn>(new QueryDefinition
+    private static QueryCommand BuildShape<TShape>(IDataContext dataContext, LambdaExpression projection, Type sourceType, QueryCommand? joinedSource = null)
+    {
+        // An identity projection has no column-producing body for the normal
+        // projector path, so the shape is built as a bare projection over TShape and expanded by
+        // TryBuildProjectionSelectList into slot-tagged item columns (mirroring the mutation's
+        // RETURNING list). Non-identity shapes keep their selector.
+        var isIdentity = TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression;
+        var shape = dataContext.CreateCommand<TShape>(new QueryDefinition
         {
-            Exp = projection,
-            SrcType = typeof(TEntity),
+            Exp = isIdentity ? null : projection,
+            SrcType = isIdentity ? typeof(TShape) : sourceType,
+            Joins = joinedSource?.Joins,
         });
+        // Mark the identity shape BEFORE preparation so TryBuildProjectionSelectList tags every item
+        // column with its deterministic, collision-free per-slot alias before the column plan hash is
+        // finalized. Assigning it afterwards (after PrepareCommand) would leave PlanHashCode and the
+        // command's ColumnsPlanHash describing a shape without the alias.
+        if (isIdentity)
+            shape.IdentitySlotAliases = true;
+        if (joinedSource?.From is { } from)
+            shape.From = from;
         shape.PrepareCommand(false, CancellationToken.None);
+
         return shape;
     }
 

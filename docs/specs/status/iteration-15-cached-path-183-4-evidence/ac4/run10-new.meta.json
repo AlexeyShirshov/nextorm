@@ -1,0 +1,20 @@
+{
+  "tag": "run10-new",
+  "tree": "/home/alex/sources/nextorm",
+  "label": "new",
+  "exit": 0,
+  "loadavg_before": "3.20 4.75 4.64",
+  "loadavg_after": "2.91 4.47 4.55",
+  "wall_s": 56.0,
+  "json_present": true,
+  "fullname": "NextORM.Benchmark.SqliteBenchmarkStageA.Join_CachedHit_ToList",
+  "n_actual": 100,
+  "operations_per_iteration": [
+    64
+  ],
+  "min_ns": 3091181.03125,
+  "p10_ns": 3181730.2140625,
+  "stats_p10": null,
+  "median_ns": 3338371.4375,
+  "alloc": 1248295
+}

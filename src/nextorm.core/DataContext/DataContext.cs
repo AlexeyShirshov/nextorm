@@ -106,7 +106,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             GetDialect,
             GetType(),
             new ProviderHooks(MapColumn, _createParam, CreateCommand),
-            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData),
+            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData, QueryFilterLogger: _environment.QueryFilterLogger),
             _interceptors);
     }
 
@@ -309,6 +309,67 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache && QueryCacheEnabled, false, streamingRows, cancellationToken);
     }
 
+    /// <summary>
+    /// Streams a query's projected rows as JSON to a caller-owned stream, without a row mapper. The
+    /// command is prepared once with the no-mapper flag (a live <c>DocumentMode</c> clone) and
+    /// the shape plan and row writer are built per call; no writer cache is used.
+    /// </summary>
+    /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+    /// <param name="queryCommand">The command whose projection drives the JSON shape.</param>
+    /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+    /// <param name="options">The requested JSON container and shaping options.</param>
+    /// <param name="params">The positional parameter values bound to the query, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    internal void WriteJson<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
+    {
+        var (prepared, rowWriter) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        _executor.WriteJson(prepared, rowWriter, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params);
+    }
+
+    /// <summary>Asynchronously streams a query's projected rows as JSON to a caller-owned stream; see <see cref="WriteJson{TResult}"/>.</summary>
+    /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+    /// <param name="queryCommand">The command whose projection drives the JSON shape.</param>
+    /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+    /// <param name="options">The requested JSON container and shaping options.</param>
+    /// <param name="params">The positional parameter values bound to the query, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    internal Task WriteJsonAsync<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
+    {
+        var (prepared, rowWriter) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        return _executor.WriteJsonAsync(prepared, rowWriter, output, options, @params, cancellationToken);
+    }
+
+    // A JSON stream needs the SQL rendered and the command attached, but no Func<IDataRecord,TResult>:
+    // DocumentMode is the planner's existing no-mapper flag. It is set on a live clone so the caller's
+    // command is never mutated (DocumentMode is part of the plan key and the sticky-state hazard is the
+    // same as Cache). The clone's populated SelectList/OneColumn feed the shape plan.
+    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter RowWriter) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
+        ArgumentNullException.ThrowIfNull(options);
+
+        // ResetPreparation clears the prepared pieces, including the source. A temporary-table source
+        // cannot be reconstructed from the entity metadata (there is none for TableAlias), so preserve
+        // it explicitly; otherwise the temp marker is lost and the batch guard never fires.
+        var tempSource = queryCommand.From?.TempTable is not null ? queryCommand.From : null;
+
+        var cmd = (QueryCommand<TResult>)queryCommand.Clone();
+        cmd.DocumentMode = true;
+        cmd.ResetPreparation();
+        if (tempSource is not null)
+            cmd.From = tempSource;
+
+        // Route through the context's preparation wrapper (not the planner directly) so a lazy
+        // temporary-table source is still detected; the executor then rejects that shape, since a
+        // batch read cannot be streamed through a single reader.
+        var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
+            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+
+        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options);
+        return (prepared, JsonRowWriterFactory.Build(plan));
+    }
+
     // A query that reads a lazy temporary table is not a single statement: the table must be created on
     // the same session as the read. The command is prepared normally (for its mapper and result shape)
     // and a batch plan is attached, so the execution terminals run DROP + CREATE TEMPORARY TABLE + read
@@ -353,6 +414,48 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
                 $"Streaming LOB terminals (ToStream/ToTextReader) are not supported by the {Dialect.GetType().Name} provider; they require sequential-access support (PostgreSQL, SQL Server or SQLite).");
 
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
+    }
+
+    // The plain (non-LOB) multi-column reader seam: unlike PrepareLobCommand it demands neither
+    // sequential access nor a locator column, so it runs on every relational provider (including
+    // SQLite, whose rowid locator would otherwise be appended). The plan is prepared per call with
+    // storeInCache: false and without touching QueryCommand.Cache, so a shared command (for example
+    // the context-cached AnyCommand) is never mutated and no plan is promoted into the plan cache.
+    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        return _executor.OpenResultReader(prepared, @params);
+    }
+
+    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        return await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
+    }
+
+    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
+
+        // The plain multi-column reader cannot run a lazy temporary-table source: the source is not a
+        // single statement but a batch (DROP + CREATE TEMPORARY TABLE AS + read) that must share one
+        // session, and it is consumed through the batch-aware enumerable/scalar terminals. Preparing the
+        // read here would strip the batch and execute a lone SELECT against a table that was never
+        // created, surfacing the provider's raw "table does not exist" error. Fail closed instead, before
+        // the CSV terminal writes the header.
+        if (queryCommand.HasTemporaryTableSource())
+            throw new NotSupportedException(
+                "The CSV terminal (WriteCsv/WriteCsvAsync) does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be streamed as CSV. Materialise the query first (for example ToList) and write the rows yourself.");
+
+        return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
+            queryCommand,
+            createEnumerator: false,
+            storeInCache: false,
+            sequentialAccess: false,
+            streamingRowsRequested: false,
+            cancellationToken);
     }
 
     internal bool IsDisposed => _disposed;
@@ -495,6 +598,44 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
     public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect);
+
+    /// <summary>
+    /// Maps a projected column when the reader's actual field (storage) type is known. The CSV terminal
+    /// calls this after the reader is open, passing <c>reader.GetFieldType(column.Index)</c>, so a
+    /// provider can pick a typed getter for the storage type and convert to the projected type without
+    /// going through <see cref="IDataRecord.GetValue"/>. It is a provider extension point: <c>protected</c>
+    /// so it does not widen the context's public surface, and overridden by providers (for example
+    /// <c>SqlServerDataContext</c>) whose reader does not widen numerics. The default ignores
+    /// <paramref name="storageType"/> and delegates to <see cref="MapColumnExpression"/> so buffered
+    /// materialization is unchanged.
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="record">The data-reader expression the accessor is built from.</param>
+    /// <param name="storageType">The reader's CLR field type for the column's ordinal.</param>
+    /// <returns>An expression that reads (and, when needed, converts) the column value.</returns>
+    protected virtual Expression MapTypedColumnExpression(SelectExpression column, Expression record, Type storageType)
+        => MapColumnExpression(column, record);
+
+    /// <summary>
+    /// True when <see cref="MapTypedColumnExpression"/> will read <paramref name="column"/> through a
+    /// typed getter even though <see cref="MapColumnExpression"/> (which has no storage type to work
+    /// with) would box through <see cref="IDataRecord.GetValue"/>/<c>Convert.ChangeType(object)</c>. The
+    /// CSV terminal calls this before the query is executed, when only the static projection is known,
+    /// so it can reject a column that will box on every row without falsely rejecting a provider whose
+    /// typed hook is storage-driven (SQL Server numeric widening). The default is <see langword="false"/>.
+    /// </summary>
+    /// <param name="column">The projected column about to be validated.</param>
+    /// <returns><see langword="true"/> when the typed hook can bind the column box-free.</returns>
+    protected virtual bool SupportsTypedColumnMapping(SelectExpression column) => false;
+
+    // The CSV terminal lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal bool SupportsTypedColumn(SelectExpression column) => SupportsTypedColumnMapping(column);
+
+    // The CSV terminal lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal Expression MapTypedColumn(SelectExpression column, Expression record, Type storageType)
+        => MapTypedColumnExpression(column, record, storageType);
 
     /// <summary>Resets the cached execution plan of <paramref name="queryCommand"/> so it is rebuilt on next use.</summary>
     /// <param name="queryCommand">The command whose plan should be discarded.</param>
@@ -653,7 +794,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <c>T</c> (for example <c>int?</c>) to observe a <c>NULL</c>.
     /// </para>
     /// </remarks>
-    public ProcedureResult ExecuteRaw(string sql, IReadOnlyList<ProcedureParameter> parameters)
+    public ProcedureResult ExecuteRaw(string sql, params IReadOnlyList<ProcedureParameter> parameters)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -680,6 +821,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var owner = await _executor.OpenReaderAsync(sql, parameters, CommandType.Text, cancellationToken).ConfigureAwait(false);
         return new ProcedureResult(this, owner);
     }
+
+    /// <summary>
+    /// Asynchronously executes <paramref name="sql"/> with <paramref name="parameters"/>, using
+    /// <see cref="CancellationToken.None"/>. Convenience overload of
+    /// <see cref="ExecuteRawAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/> for
+    /// callers whose static type is the concrete context.
+    /// </summary>
+    /// <param name="sql">The command text to execute.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    public Task<ProcedureResult> ExecuteRawAsync(string sql, params IReadOnlyList<ProcedureParameter> parameters)
+        => ExecuteRawAsync(sql, parameters, CancellationToken.None);
 
     /// <summary>
     /// Executes the stored procedure <paramref name="name"/> with <paramref name="parameters"/> and
@@ -716,7 +869,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/>, empty or whitespace.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="parameters"/> is <see langword="null"/>.</exception>
     /// <exception cref="NotSupportedException">The provider has no stored procedures (<c>ISqlDialect.SupportsStoredProcedures</c> is <c>false</c>).</exception>
-    public ProcedureResult ExecuteProcedure(string name, IReadOnlyList<ProcedureParameter> parameters)
+    public ProcedureResult ExecuteProcedure(string name, params IReadOnlyList<ProcedureParameter> parameters)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(parameters);
@@ -748,6 +901,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var owner = await _executor.OpenReaderAsync(name, parameters, CommandType.StoredProcedure, cancellationToken).ConfigureAwait(false);
         return new ProcedureResult(this, owner);
     }
+
+    /// <summary>
+    /// Asynchronously executes the stored procedure <paramref name="name"/> with
+    /// <paramref name="parameters"/>, using <see cref="CancellationToken.None"/>. Convenience overload
+    /// of <see cref="ExecuteProcedureAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>
+    /// for callers whose static type is the concrete context.
+    /// </summary>
+    /// <param name="name">The procedure name, passed to the provider as-is.</param>
+    /// <param name="parameters">The procedure parameters (input, output, input/output and return value).</param>
+    /// <returns>A task producing the result, which must be disposed to release the reader and command.</returns>
+    public Task<ProcedureResult> ExecuteProcedureAsync(string name, params IReadOnlyList<ProcedureParameter> parameters)
+        => ExecuteProcedureAsync(name, parameters, CancellationToken.None);
 
     private void ThrowIfStoredProceduresUnsupported()
     {
@@ -846,6 +1011,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             InsertCommand insert => BuildInsertSql(insert),
             UpdateCommand update => BuildUpdateSql(update),
             DeleteCommand delete => BuildDeleteSql(delete),
+            UpdateJoinCommand updateJoin => BuildUpdateJoinSql(updateJoin),
+            DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
             MergeCommand merge => BuildMergeSql(merge),
             _ => throw new NotSupportedException($"Unsupported returning mutation command {command.GetType().Name}."),
         };
@@ -908,11 +1075,24 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     {
         if (command.Branches is null)
         {
+            // A filtered SQL Server key upsert (SupportsMerge) is routed through the same filtered MERGE
+            // renderer as the full-MERGE form: the target predicate is rendered into its ON. Every other
+            // dialect has already refused in the builder's capability guard, so there is no filter here.
+            IParameterProvider? keyProvider = null;
+            List<Parameter>? keyAccumulator = null;
+            string? keyFilterSql = null;
+            if (Dialect.SupportsMerge && command.Registry is { } keyRegistry)
+            {
+                keyProvider = new DefaultParameterProvider();
+                keyAccumulator = [];
+                keyFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, keyRegistry, keyProvider, keyAccumulator, QuoteIdentifiers, NamingConvention, KeywordCase);
+            }
+
             if (command.Source is null)
-                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase);
+                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, null, null, keyAccumulator, null, null, keyFilterSql, this);
 
             var (withInsert, sourceInsert, sourceInsertParameters) = _planner.RenderSource(command.Source);
-            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, null, sourceInsert, sourceInsertParameters);
+            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, keyProvider, sourceInsert, sourceInsertParameters, keyAccumulator, null, null, keyFilterSql, this);
             return (withInsert is null ? insertSql : withInsert + insertSql, insertParameters);
         }
 
@@ -929,6 +1109,11 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (command.MatchCondition is not null)
             matchConditionSql = _planner.RenderMergeCondition(command.MatchCondition, command.EntityType, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
 
+        // The active target filter joins the ON predicate and every WHEN NOT MATCHED BY SOURCE arm. The
+        // capability guard already refused forms that cannot carry it, and RenderMergeTargetFilter returns
+        // null when the effective scope leaves no filter active (IgnoreFilters / no filter configured).
+        var targetFilterSql = _planner.RenderMergeTargetFilter(command.EntityType, command.FilterScope, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
+
         string?[]? branchConditions = null;
         for (var i = 0; i < command.Branches.Count; i++)
         {
@@ -941,14 +1126,14 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         if (command.Source is null)
         {
-            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions);
+            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this);
             return (sql, parameters);
         }
 
         var (withSql, sourceSql, _) = _planner.RenderSource(command.Source, provider, accumulator);
         // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
         // passing them again would duplicate every @pN.
-        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions);
+        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions, targetFilterSql, this);
         return (withSql is null ? fullSql : withSql + fullSql, fullParameters);
     }
 
@@ -956,7 +1141,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     {
         if (!Dialect.SupportsTruncate)
             throw new NotSupportedException(
-                $"{GetType().Name} does not support TRUNCATE; remove every row with DeleteFrom<T>().All() instead.");
+                $"{GetType().Name} does not support TRUNCATE; remove every row with CreateDeleteBuilder<T>().All() instead.");
 
         return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase), []);
     }

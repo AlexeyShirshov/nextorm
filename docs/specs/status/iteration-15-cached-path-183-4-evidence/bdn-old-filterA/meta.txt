@@ -1,0 +1,6 @@
+tag=old-filterA
+tree=/home/alex/sources/nextorm-worktrees/183-baseline
+exit=0
+wall=52.571
+loadavg=3.56 4.54 4.97 15/515 83130
+args=--filter *CachedHit_PlanOnly* *CachedHit_ToList*

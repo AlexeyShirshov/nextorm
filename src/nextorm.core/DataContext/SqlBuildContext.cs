@@ -4,7 +4,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// The collaborators a SQL build needs for one command, bundled so that statement assembly
-/// (<see cref="SqlBuilder"/>) and source rendering (<see cref="SqlSourceRenderer"/>) share them
+/// (<c>SqlBuilder</c>) and source rendering (<see cref="SqlSourceRenderer"/>) share them
 /// without either type owning the other's concerns. Immutable: a build only reads these and mutates
 /// the referenced <see cref="Params"/> / <see cref="ColumnsProvider"/> state. Derive a variant with
 /// <c>with</c> (for example a CTE rendered with a fresh columns provider).
@@ -41,6 +41,31 @@ internal readonly record struct SqlBuildContext
     internal bool QuoteIdentifiers { get; init; }
     internal INamingConvention? NamingConvention { get; init; }
     internal bool IncludeNestedSources { get; init; }
+    /// <summary>
+    /// When <see langword="true"/> the command being rendered must not emit its own <c>WITH</c>: its
+    /// declarations have already been hoisted into the enclosing statement's top-level <c>WITH</c>
+    /// (see <see cref="CteHoister"/>). Set only while rendering the body of a hoisted declaration.
+    /// </summary>
+    internal bool SuppressCtes { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/> the rendered select list is a typed CTE declaration body: every
+    /// projected column must carry an explicit alias matching its projection property name, compared
+    /// case-sensitively. A typed read resolves members to those property names, so a mapped column
+    /// differing from the property name only by case (for example <c>id</c> vs <c>Id</c>) still needs
+    /// the alias — PostgreSQL folded unquoted names are otherwise unreachable under the quoted name.
+    /// </summary>
+    internal bool ExactProjectionAliases { get; init; }
+
+    /// <summary>
+    /// Renders the body of a data-modifying CTE whose command is a single-table <c>UPDATE</c> or
+    /// <c>DELETE</c> (an <c>INSERT</c> body is rendered directly by <see cref="SqlSourceRenderer"/>).
+    /// Set on the context that renders a statement which may declare such a CTE, so the body is emitted
+    /// with the enclosing statement's parameter provider and accumulator. When it is <see langword="null"/>
+    /// the renderer rejects an UPDATE/DELETE body rather than emitting invalid SQL.
+    /// </summary>
+    internal Func<CteMutation, SqlBuildContext, string>? RenderMutationBody { get; init; }
+
     internal KeywordCase KeywordCase { get; init; }
     internal string ParameterNamePrefix { get; init; }
 

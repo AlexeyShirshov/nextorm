@@ -8,9 +8,21 @@
 
 [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) returns a new command carrying one or more
 statement-level hints. Hints are provider specific: the command stores plain strings and the active
-[`ISqlDialect`](xref:NextORM.Core.ISqlDialect) decides where and how they are rendered. A repeated call accumulates:
+[`ISqlDialect`](xref:NextORM.Core.ISqlDialect) decides where and how they are rendered. The method takes
+`params string[]`, so one or more hints can be passed in a single call or accumulated across repeated
+calls; the two forms are equivalent:
 
 ```csharp
+// one call with several arguments:
+var rows = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id, c.RequiredString })
+    .Hint("recompile", "fast 10")
+    .ToList();
+```
+
+```csharp
+// equivalent two-call form:
 var rows = dataContext.From<IComplexEntity>()
     .Where(c => c.Id > 1)
     .Select(c => new { c.Id, c.RequiredString })
@@ -74,12 +86,11 @@ var sql = dataContext.WithRecursive("nums", body, 100)
 
 ## Locking table hints
 
-`EntityBuilder<T>.WithTableHint(params string[] hints)` attaches SQL Server locking hints (`nolock`/`updlock`/`holdlock`) to the primary
+`FromOptions.WithTableHint(params string[] hints)` attaches SQL Server locking hints (`nolock`/`updlock`/`holdlock`) to the primary
 physical table. SQL Server renders them as a `WITH (...)` clause between the table name and its alias:
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .WithTableHint("nolock")
+var rows = dataContext.From<IComplexEntity>(o => o.WithTableHint("nolock"))
     .Select(c => new { c.Id })
     .ToList();
 ```
@@ -88,21 +99,58 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity with (nolock)
 ```
 
+[`JoinOptions.WithJoinTableHint(params string[] hints)`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])) attaches the same kind of table hint to a
+join when it is declared, passed through that join's trailing lambda, like `WithJoinHint`. It is
+not the same as [`JoinOptions.WithJoinHint`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)) (an
+optimizer *join* hint such as `loop`/`hash`/`merge`, rendered inside the join clause) and not the same as
+`WithTablesInScopeHint` (which covers every physical table). SQL Server renders it as a `WITH (...)`
+clause on that joined table only:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Join(dataContext.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
+    .Select(p => new { p.Item1.Id })
+    .ToList();
+```
+
+```sql
+select t1.id from complex_entity as [t1] inner join simple_entity with (nolock) as [t2] on t1.id = t2.id
+```
+
+Combining it with `WithTablesInScopeHint` still yields a single `WITH (...)` clause on that table: the
+join-local hint is listed first, then the scope hints (which still cover every other physical table):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .WithTablesInScopeHint("holdlock")
+    .Join(dataContext.From<ISimpleEntity>(), (a, b) => a.Id == b.Id, j => j.WithJoinTableHint("nolock"))
+    .Select(p => new { p.Item1.Id })
+    .ToList();
+```
+
+```sql
+select t1.id from complex_entity with (holdlock) as [t1] inner join simple_entity with (nolock, holdlock) as [t2] on t1.id = t2.id
+```
+
 The hints are rendered verbatim, so only pass trusted values. A provider opts in through
 [`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) and [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String},NextORM.Core.KeywordCase)) (SQL Server); other dialects reject a
-command that carries table hints with `NotSupportedException`. Only the primary table is covered; hints
-on joined tables are not part of the API yet.
+command that carries table hints with `NotSupportedException`. Pass `j => j.WithJoinTableHint(...)` to target a chosen
+join; `WithTableHint` still covers only the primary table. A per-join table hint can only be rendered on a
+**physical-table** join: an APPLY join (or a derived-table, table-valued-function, XML/pivot or raw-SQL join
+source) has no table name to attach a `WITH (...)` clause to and is rejected with
+`InvalidOperationException`. Passing only blank/null hints leaves any previously attached hints unchanged.
+`WithTableHint` and `WithJoinTableHint` both require a dialect with table hints, so SQLite, ClickHouse and
+the in-memory provider reject them with `NotSupportedException`.
 
 ## Index hints
 
-`EntityBuilder<T>.WithIndex(params string[] indexes)` asks the planner to consider a named index on the
+`FromOptions.WithIndex(params string[] indexes)` asks the planner to consider a named index on the
 primary physical table. The overload `WithIndex(IndexHintKind kind, params string[] indexes)` selects the
 intent ([`IndexHintKind`](xref:NextORM.Core.IndexHintKind).`Use`/`Force`/`Ignore`), and `WithoutIndex()`
 suppresses index use. Each dialect renders its native form after the table name and before its alias:
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .WithIndex("ix_complex_id")
+var rows = dataContext.From<IComplexEntity>(o => o.WithIndex("ix_complex_id"))
     .Select(c => new { c.Id })
     .ToList();
 ```
@@ -154,24 +202,27 @@ builder rejects a command that carries hints on a dialect that reports `false`.
 
 ## Join, subquery and tables-in-scope hints
 
-`Hint(...)` is statement-level. Three builder methods attach a hint to a narrower part of the query;
+`Hint(...)` is statement-level. Four builder methods attach a hint to a narrower part of the query;
 each dialect renders the form it has, or rejects the command:
 
 ```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .WithTableHint("nolock")
-    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-    .WithJoinHint("loop")
+var rows = dataContext.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("loop"))
     .Select(p => new { p.Item1.Id })
     .ToList();
 ```
 
-* `WithJoinHint(string hint)` attaches a hint to the most recently added join (call it after the join and
-  before the next one, like `WithStrictness`/`Global`). SQL Server inserts it inside the join clause
+* [`JoinOptions.WithJoinHint(string hint)`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)) attaches a hint to a join (`j => j.WithJoinHint("loop")`) when the join is declared. SQL Server inserts it inside the join clause
   (`inner loop join`, `left hash join`); a hint on a `CROSS`/`APPLY` join is rejected. PostgreSQL, MySQL
   and MariaDB fold it into the statement-level `/*+ ... */` comment.
-* `WithSubQueryHint(string hint)` attaches a hint to the derived-table source of a `From(subQuery)`
-  builder. PostgreSQL/MySQL/MariaDB fold it into `/*+ ... */`; SQL Server rejects it, because T-SQL
+* [`JoinOptions.WithJoinTableHint(params string[] hints)`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])) attaches a locking table hint to the join it is declared on
+  — the per-join counterpart of `WithTableHint`, and distinct from the optimizer `WithJoinHint` above.
+  SQL Server renders a `WITH (hint, ...)` clause on that joined table; other dialects reject it with
+  `NotSupportedException`. Only a physical-table join can carry it: an APPLY, derived-table,
+  table-valued-function or XML/pivot join source is rejected with `InvalidOperationException`. See
+  [Locking table hints](#locking-table-hints).
+* [`FromOptions.WithSubQueryHint(string hint)`](xref:NextORM.Core.FromOptions.WithSubQueryHint(System.String)) attaches a hint to the derived-table source of a
+  `From(subQuery, o => o.WithSubQueryHint(...))` builder. PostgreSQL/MySQL/MariaDB fold it into `/*+ ... */`; SQL Server rejects it, because T-SQL
   cannot append a query hint to a subselect.
 * `WithTablesInScopeHint(params string[] hints)` applies the hints to every physical table in the query's
   scope. SQL Server adds a `WITH (hint, ...)` clause to the primary and every joined table (the
@@ -187,18 +238,18 @@ select /*+ HashJoin(t1 t2) */ id from simple_entity as "t1" join complex_entity 
 select /*+ JOIN_ORDER(t1, t2) */ id from simple_entity as `t1` join complex_entity as `t2` ...
 ```
 
-A blank hint is rejected with `ArgumentException`, and a join hint without a preceding join throws
-`InvalidOperationException`. For the inline-comment dialects the hint text is rendered verbatim, so write
+A blank hint is rejected with `ArgumentException` when the lambda runs. For the inline-comment dialects the hint text is rendered verbatim, so write
 the source aliases yourself (`HashJoin(t1 t2)`): nextorm's aliases are assigned at render time and are not
-exposed. All three hints are part of the plan key. On SQLite, ClickHouse and the in-memory provider they
+exposed. All four hints are part of the plan key. On SQLite, ClickHouse and the in-memory provider they
 are rejected with `NotSupportedException`.
 
 ## ClickHouse query modifiers
 
 ClickHouse exposes four query-level modifiers that are not hints: `Final()`, `PreWhere(predicate)` and
 `Settings(("key", "value"), ...)` are dedicated builder methods, while the `Sample(ratio[, offset])`
-modifier is a per-query source option set in `From`. They are only valid on ClickHouse; every other
-provider and the in-memory context throw `NotSupportedException`.
+modifier is a per-query source option set in `From`. They are ClickHouse-only and ship as extension
+methods in the `nextorm.clickhouse` package, so a file that uses them needs
+`using NextORM.ClickHouse;`. Every other provider and the in-memory context throw `NotSupportedException`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))
@@ -225,21 +276,21 @@ both.
 
 ## Limitations
 
-* Locking table hints are only rendered for the primary table; use `WithTablesInScopeHint` to cover the
-  joined tables ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) applies to the query's `FROM` table).
+* Locking table hints on the query's `FROM` table are rendered by [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])); use [`JoinOptions.WithJoinTableHint`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])) for a chosen join, or `WithTablesInScopeHint` to cover every physical table.
 * Concatenating a hinted command with a set operation ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) is not guarded against;
   the hint travels to the branch it was attached to and should be avoided there.
 
 ## See also
 
-- [Joins](02-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})).
+- [Joins](02-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})).
 - [CTE](08-cte.md) - `maxRecursion` and the SQL Server `option (maxrecursion n)` clause.
 - [Queries and projections](../querying/index.md)
 
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/Builders/EntityBuilder.cs` (`WithTableHint`/`WithJoinHint`/`WithSubQueryHint`/`WithTablesInScopeHint`),
+`src/nextorm.core/DataContext/FromOptions.cs` (`WithTableHint`/`WithIndex`/`WithoutIndex`),
+`src/nextorm.core/Builders/JoinOptions.cs` (`WithJoinTableHint`/`WithJoinHint`), `src/nextorm.core/DataContext/FromOptions.cs` (`WithSubQueryHint`), `src/nextorm.core/Builders/EntityBuilder.cs` (`WithTablesInScopeHint`),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB inherits).

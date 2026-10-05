@@ -62,8 +62,7 @@ public class SqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Join hints*");
@@ -75,7 +74,7 @@ public class SqlGenerationTests
         using var ctx = SqliteTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var act = () => SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
     }
@@ -122,7 +121,7 @@ public class SqlGenerationTests
 
         // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
         // every dynamic key is double-quoted even though the global identifier-quoting flag is off.
-        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+        Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
             .Should().Contain("(id, name, \"alpha\", \"mid\", \"zeta\") values ($p0, $p1, $p2, $p3, $p4)");
@@ -133,7 +132,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        Normalize(ctx.Update<DynamicColumnsEntity>()
+        Normalize(ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
@@ -145,7 +144,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -164,7 +163,7 @@ public class SqlGenerationTests
 
         // SQLite has no full MERGE. The unsupported path must reject the whole statement rather than
         // silently render a MERGE without the store's dynamic columns.
-        var act = () => ctx.MergeInto<DynamicColumnsEntity>()
+        var act = () => ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -180,7 +179,7 @@ public class SqlGenerationTests
         using var ctx = SqliteTestContext.Create();
 
         // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
             .Should().Be("insert into merge_entity (id, name, age) values ($p0, $p1, $p2)");
@@ -241,9 +240,9 @@ public class SqlGenerationTests
     public void IndexHint_WithIndex_ShouldEmitIndexedBy()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity indexed by idx_id");
     }
 
@@ -251,9 +250,9 @@ public class SqlGenerationTests
     public void IndexHint_WithoutIndex_ShouldEmitNotIndexed()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithoutIndex());
 
-        SqlOf(ctx, e.WithoutIndex().Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity not indexed");
     }
 
@@ -261,9 +260,9 @@ public class SqlGenerationTests
     public void IndexHint_ShouldRespectKeywordCase()
     {
         using var ctx = SqliteTestContext.CreateUppercase();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Contain("INDEXED BY idx_id");
     }
 
@@ -2019,6 +2018,112 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoOneTopLevelWith()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedBodyWithMultipleSiblings_ShouldPreserveDeclarationOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var first = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var second = ctx.From("first").Select(t => new { id = t["id"].AsInt });
+
+        var inner = ctx.With("first", first).With("second", second)
+            .From("second")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with first as (select id from complex_entity");
+        sql.Should().Contain("), second as (select id from first)");
+        sql.Should().Contain("), o as (select id from second)");
+        sql.Should().NotContain("with first as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedDepthThree_ShouldHoistEveryLevel()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var level3 = ctx.With("c", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("c").Select(t => new { id = t["id"].AsInt });
+        var level2 = ctx.With("b", level3).From("b").Select(t => new { id = t["id"].AsInt });
+        var level1 = ctx.With("a", level2).From("a").Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", level1).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with c as (");
+        sql.Should().Contain("), b as (select id from c)");
+        sql.Should().Contain("), a as (select id from b)");
+        sql.Should().Contain("), o as (select id from a)");
+    }
+
+    [Fact]
+    public void Cte_NestedBodyReusedByTwoCtes_ShouldDeclareSharedInnerOnce()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i").Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("a", inner).With("b", inner).From("a").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (");
+        sql.Should().Contain("), a as (select id from i)");
+        sql.Should().Contain("), b as (select id from i)");
+        sql.Should().EndWith("select id from a");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedSameNameDifferentDefinition_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("c", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("c").Select(t => new { id = t["id"].AsInt });
+
+        var scope = ctx.With("c", e.Where(x => x.Id > 100).Select(x => new { x.Id })).With("o", inner);
+
+        var act = () => SqlOf(ctx, scope.From("o").Select(t => new { id = t["id"].AsInt }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*'c'*");
+    }
+
+    [Fact]
+    public void Cte_NestedInsideDerivedTableSubquery_ShouldThrowBeforeRendering()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("c", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("c").Select(t => new { id = t["id"].AsInt });
+
+        var act = () => SqlOf(ctx, ctx.From(inner).Select(t => new { t.id }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*cannot be hoisted*");
+    }
+
+    [Fact]
     public void Cte_Source_ShouldSupportGroupByHavingOrderByLimit()
     {
         using var ctx = SqliteTestContext.Create();
@@ -2622,7 +2727,32 @@ public class SqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>().WithTableHint("nolock").Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock")).Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
+    }
+
+    [Fact]
+    public void JoinTableHint_OnDerivedTableJoin_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var derived = ctx.From(ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id }));
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(derived, (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldThrowBecauseSqliteHasNoTableHints()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
     }
@@ -3065,6 +3195,55 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.A, p.Item1.B, Third = p.Item2.Id }));
 
         sql.Should().Be("select t3.A, t3.B, t4.id as 'Third' from (select t1.id as 'A', t2.id as 'B' from simple_entity as 't1' join simple_entity as 't2' on t1.id = t2.id) as 't3' join simple_entity as 't4' on t3.B = t4.id");
+    }
+
+    // --- SelectWhereMax: window-rank lowering ---
+
+    private static string Dequoted(string sql) => sql
+        .Replace("\r\n", " ")
+        .Replace('\n', ' ')
+        .Replace("\"", string.Empty)
+        .Replace("[", string.Empty)
+        .Replace("]", string.Empty)
+        .Replace("`", string.Empty);
+
+    private static string OuterSelectList(string sql)
+    {
+        const string marker = "select ";
+        var start = sql.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return sql;
+        start += marker.Length;
+        var end = sql.IndexOf(" from ", start, StringComparison.Ordinal);
+        return end < 0 ? sql[start..] : sql[start..end];
+    }
+
+    [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldRenderRowNumberFilteredToTheSingleExtreme()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 
 }

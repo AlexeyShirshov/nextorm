@@ -91,7 +91,11 @@ internal sealed class InMemoryCorrelatedPlan
     private static object? DefaultOf(Type type)
         => type.IsValueType && Nullable.GetUnderlyingType(type) is null ? Activator.CreateInstance(type) : null;
 
-    private static bool ValueEquals(object? a, object? b)
+    /// <summary>
+    /// Compares two keys by value, unifying numeric CLR types (#148-B R2.3: shared by the navigation
+    /// chain evaluator, which matches PK/FK columns of possibly different numeric widths).
+    /// </summary>
+    internal static bool ValueEquals(object? a, object? b)
     {
         if (a is null || b is null)
             return a is null && b is null;

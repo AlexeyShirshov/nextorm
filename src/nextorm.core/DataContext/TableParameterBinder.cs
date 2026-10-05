@@ -31,7 +31,7 @@ internal static class TableParameterBinder
         if (IsScalarRowType(value.RowType))
             return [new TableParameterColumn("Value", ReduceForStorage(value.RowType, context.Dialect), row => Normalize(row, null, context.Dialect))];
 
-        var properties = ResolvePropertyColumns(value.RowType);
+        var properties = ResolvePropertyColumns(context, value.RowType);
         var columns = new TableParameterColumn[properties.Count];
 
         for (var i = 0; i < properties.Count; i++)
@@ -56,9 +56,9 @@ internal static class TableParameterBinder
         return columns;
     }
 
-    private static IReadOnlyList<IPropertyMetadata> ResolvePropertyColumns(Type rowType)
+    private static IReadOnlyList<IPropertyMetadata> ResolvePropertyColumns(DataContext context, Type rowType)
     {
-        var metadata = DataContextExtensions.ResolveMetadata(rowType);
+        var metadata = DataContextExtensions.ResolveMetadata(context, rowType);
         var columns = new List<IPropertyMetadata>(metadata.Properties.Count);
 
         foreach (var property in metadata.Properties)

@@ -13,7 +13,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private IReadOnlyList<string>? _hints;
     private List<QueryCommand>? _referencedQueries;
     private List<Expression>? _outerRefs;
-    private readonly JoinExpression[]? _joins;
+    private JoinExpression[]? _joins;
     /// <summary>The prepared projection columns after <c>PrepareCommand</c>, or <c>null</c> before preparation.</summary>
     protected SelectExpression[]? _selectList;
     private object? _customData;
@@ -22,13 +22,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>The context that executes the command, or <c>null</c> for an unbound cached clone.</summary>
     protected IDataContext? _dataContext;
     /// <summary>The original projection lambda, or <c>null</c> for a command without an explicit projection.</summary>
-    protected readonly LambdaExpression? _exp;
+    protected LambdaExpression? _exp;
     /// <summary>The <c>WHERE</c> predicate lambda before preparation, or <c>null</c> when there is none.</summary>
-    protected readonly LambdaExpression? _condition;
+    protected LambdaExpression? _condition;
     /// <summary>The <c>GROUP BY</c> key selector before preparation, or <c>null</c> when there is no grouping.</summary>
-    protected readonly LambdaExpression? _groupExp;
+    protected LambdaExpression? _groupExp;
     /// <summary>The <c>HAVING</c> predicate before preparation, or <c>null</c> when there is none.</summary>
-    protected readonly LambdaExpression? _having;
+    protected LambdaExpression? _having;
     /// <summary>The ClickHouse <c>PREWHERE</c> predicate before preparation, or <c>null</c> when there is none.</summary>
     protected LambdaExpression? _preWhere;
     /// <summary>The ClickHouse <c>ARRAY JOIN</c> expressions before preparation, or <c>null</c> when the clause is absent.</summary>
@@ -44,6 +44,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <see cref="_srcType"/> stays the parent entity type, or <c>null</c> for an ordinary command.
     /// </summary>
     internal Type? ProjectionType { get; init; }
+    /// <summary>
+    /// True for a prepared identity (whole-projection) CTE shape: its flattened item columns are tagged
+    /// with the deterministic, collision-free per-slot aliases the mutation's <c>RETURNING</c> list
+    /// emits. Set before preparation so the alias is folded into the column plan hash.
+    /// </summary>
+    internal bool IdentitySlotAliases { get; set; }
     private bool _dontCache;
     private QueryFilterScope _filterScope = QueryFilterScope.None;
     internal int ColumnsPlanHash;
@@ -134,8 +140,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private SelectExpression[]? _groupingList;
     private SelectExpression[]? _limitByColumns;
     private SelectExpression[]? _distinctOnColumns;
+    private SelectExpression[]? _extremeRowColumns;
+    private SelectExpression[]? _extremeRowGroupByColumns;
     /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
-    protected readonly Sorting[]? _sorting;
+    protected Sorting[]? _sorting;
 
     /// <summary>
     /// Initializes a command from a query shape, copying each collaborator and leaving the command
@@ -149,6 +157,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _exp = definition.Exp;
         _srcType = definition.SrcType;
         ProjectionType = definition.ProjectionType;
+        IdentitySlotAliases = definition.IdentitySlotAliases;
         _condition = definition.Condition;
         _filterScope = definition.FilterScope ?? (definition.IgnoreFilters ? QueryFilterScope.AllFilters : QueryFilterScope.None);
         // Own a private array: the clone boundaries (CreateSelf/CreateSelfForClone, the with-derived
@@ -168,6 +177,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         GroupByWithTotals = definition.GroupByWithTotals;
         LimitBy = definition.LimitBy;
         DistinctOn = definition.DistinctOn;
+        ExtremeRow = definition.ExtremeRow;
         TableSample = definition.TableSample;
         Temporal = definition.Temporal;
         RowLock = definition.RowLock;
@@ -175,6 +185,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         SampleRatio = definition.SampleRatio;
         SampleOffset = definition.SampleOffset;
         Settings = definition.Settings;
+        NavigationPaths = definition.NavigationPaths;
         _preWhere = definition.PreWhere;
         _arrayJoins = definition.ArrayJoins?.ToArray();
         _windows = definition.Windows;
@@ -190,6 +201,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Exp = _exp,
         SrcType = _srcType,
         ProjectionType = ProjectionType,
+        IdentitySlotAliases = IdentitySlotAliases,
         Condition = _condition,
         IgnoreFilters = !_filterScope.IsEmpty,
         FilterScope = _filterScope,
@@ -203,6 +215,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         GroupByWithTotals = GroupByWithTotals,
         LimitBy = LimitBy,
         DistinctOn = DistinctOn,
+        ExtremeRow = ExtremeRow,
         TableSample = TableSample,
         Temporal = Temporal,
         RowLock = RowLock,
@@ -215,7 +228,70 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Windows = _windows,
         ArrayJoinKind = ArrayJoinKind,
         BindArrayJoinElement = BindArrayJoinElement,
+        NavigationPaths = NavigationPaths,
     };
+    /// <summary>
+    /// Applies the reference-navigation expansion performed at the start of preparation (#148-B D3):
+    /// installs the rewritten lambdas and appends the injected navigation <c>LEFT JOIN</c>s after the
+    /// command's declared joins. Preparation-local; the rewrite is idempotent so a re-preparation sees
+    /// no navigation access and does not append duplicates.
+    /// </summary>
+    /// <summary>
+    /// The joined parameters injected by a reference-navigation expansion, each mapped to its
+    /// human-readable navigation path (#148-B D5). Preparation-local: set by
+    /// <see cref="NavigationExpansion"/> and read by the projection-nullability check and the provider
+    /// outer-join null-settings injection. Not part of the plan key.
+    /// </summary>
+    internal IReadOnlyDictionary<ParameterExpression, string>? NavigationPaths { get; set; }
+
+    /// <summary>
+    /// #148-B R2.1: the mapped-child-existence leg of a many-to-many collection correlation. Set only
+    /// for the in-memory provider, which cannot nest a child-key subquery in a correlated
+    /// subcommand's condition and so filters the junction source instead (see
+    /// <see cref="InMemoryQueryBuilder"/>). Not part of the plan key; the condition already fixes the
+    /// relationship shape.
+    /// </summary>
+    internal JunctionChildFilter? JunctionChildFilter { get; set; }
+
+    /// <summary>
+    /// #148-B R2.3: the in-memory descriptor of a multi-hop reference-navigation chain. When set, the
+    /// in-memory correlated evaluator walks the hops directly against the registered datasets instead of
+    /// building a nested correlated subquery (which the evaluator cannot bind). Set only for the
+    /// in-memory provider and only on the correlated command the chain was lowered to.
+    /// </summary>
+    internal InMemoryNavigationChain? NavigationChain { get; set; }
+
+    /// <summary>
+    /// #148-B r3 A3′: marks the correlated <c>count_big</c> subcommand a navigation <c>Count()</c> /
+    /// property <c>Count</c> / <c>LongCount()</c> was lowered to. The SQL renderer uses it as the
+    /// provenance of the outer checked <c>long-&gt;int</c> narrowing (so it suppresses the in-database
+    /// <c>cast(... as int)</c> for exactly this origin, never by node shape alone); the query preparer
+    /// uses it to tag the materialized Int32 column. Preparation-local; carried with clones but not
+    /// part of the plan key (the command's own projection/ResultType already describes the shape).
+    /// </summary>
+    internal bool IsWideNavigationCount { get; set; }
+
+    internal void ApplyNavigationExpansion(
+        LambdaExpression? projection,
+        LambdaExpression? condition,
+        LambdaExpression? having,
+        LambdaExpression? group,
+        LambdaExpression? preWhere,
+        Sorting[]? sorting,
+        JoinExpression[] navigationJoins)
+    {
+        ArgumentNullException.ThrowIfNull(navigationJoins);
+
+        if (projection is not null) _exp = projection;
+        if (condition is not null) _condition = condition;
+        if (having is not null) _having = having;
+        if (group is not null) _groupExp = group;
+        if (preWhere is not null) _preWhere = preWhere;
+        if (sorting is not null) _sorting = sorting;
+
+        _joins = _joins is { Length: > 0 } existing ? [.. existing, .. navigationJoins] : navigationJoins;
+    }
+
     /// <summary>The logger that receives command-preparation diagnostics, or <c>null</c> when logging is disabled.</summary>
     public ILogger? Logger { get; }
     /// <summary>The prepared <c>FROM</c> source, or <c>null</c> before preparation.</summary>
@@ -329,6 +405,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>The prepared key columns of <see cref="DistinctOn"/>, or <c>null</c> when there is none.</summary>
     internal SelectExpression[]? DistinctOnColumns => _distinctOnColumns;
     /// <summary>
+    /// The <c>SelectWhereMax</c>/<c>SelectWhereMin</c> row-selection clause, or <c>null</c> when the query
+    /// has none. A dialect that does not support it rejects the command when its SQL is built.
+    /// </summary>
+    internal ExtremeRowClause? ExtremeRow { get; set; }
+    /// <summary>The prepared value-selector columns of <see cref="ExtremeRow"/>, or <c>null</c> when there is none.</summary>
+    internal SelectExpression[]? ExtremeRowColumns => _extremeRowColumns;
+    /// <summary>The prepared group-by columns of <see cref="ExtremeRow"/>, or <c>null</c> when the clause has no group.</summary>
+    internal SelectExpression[]? ExtremeRowGroupByColumns => _extremeRowGroupByColumns;
+    /// <summary>
     /// The <c>TABLESAMPLE</c> table modifier, or <c>null</c> when the query has none. A dialect that does
     /// not support it rejects the command when its SQL is built.
     /// </summary>
@@ -392,6 +477,161 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// participates in the plan cache key.
     /// </summary>
     public IReadOnlyList<CteDefinition>? Ctes { get => _ctes; internal set => _ctes = value; }
+
+    /// <summary>
+    /// The typed recursive self-reference for which this command is the anchor, or <c>null</c> when the
+    /// command is not the anchor of a typed recursive CTE. A member read over this command must resolve
+    /// to the anchor projection's declared output aliases (the recursive CTE's column names) instead of
+    /// re-rendering the anchor body: a constant or other non-column anchor projection would otherwise
+    /// inline a literal and emit an unaddressable column such as <c>t1.1</c>.
+    /// </summary>
+    internal CteReference? TypedRecursiveAnchor { get; set; }
+
+    /// <summary>
+    /// True when any common table expression carried by this command, at any declaration depth, has a
+    /// data-modifying body (<c>INSERT</c>/<c>UPDATE</c>/<c>DELETE ... RETURNING</c>). Such a statement is
+    /// side-effecting and its plan must not be shared; the planner reads this to bypass the plan cache
+    /// call-locally instead of clearing the sticky <see cref="Cache"/> flag.
+    /// </summary>
+    /// <remarks>
+    /// The getter first scans the command's own flat declaration list for a data-modifying body. When a
+    /// declaration carries further nested <c>Ctes</c>, a prepared command returns immediately: preparation
+    /// has already hoisted the transitive declaration tree into that flat list, so the mutation-first scan
+    /// is complete and no recursive visited set is needed on the warm path. Only an unprepared
+    /// (not-yet-hoisted) command recurses over the declaration tree, with a reference-identity
+    /// <see cref="HashSet{T}"/> so a cyclic declaration graph still terminates.
+    /// <para>
+    /// That recursion follows exactly the tree <see cref="CteHoister.Hoist"/> flattens (a CTE body's own
+    /// <c>Ctes</c>), because that is the only tree the renderer can lift into the statement's top-level
+    /// <c>WITH</c>. A declaration reachable only through a derived table, join, set-operation branch or
+    /// correlated reference is not hoisted and is rejected by
+    /// <see cref="CteHoister.EnsureNoUnhoistedCtes"/> during preparation, before the cache lookup/store
+    /// gates, so it cannot be cached either.
+    /// </para>
+    /// </remarks>
+    internal bool HasDataModifyingCte
+    {
+        get
+        {
+            // Fast path for a prepared/hoisted command: CteHoister flattens the declaration tree into
+            // one list, so a data-modifying body is found by scanning that list directly. No visited
+            // set and no recursion — the per-lookup walk on the warm read path stays allocation-free.
+            if (_ctes is not { Count: > 0 } ctes)
+                return false;
+
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (ctes[i].Mutation is not null)
+                    return true;
+            }
+
+            // No declaration body carries its own CTEs, so there is no deeper body to search: an
+            // all-read flat list must not allocate a traversal set.
+            var nested = false;
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (ctes[i].Query._ctes is { Count: > 0 })
+                {
+                    nested = true;
+                    break;
+                }
+            }
+
+            if (!nested)
+                return false;
+
+            // A prepared command's flat list is already the complete hoisted declaration tree
+            // (PrepareCommand -> PrepareCtes), so every reachable mutation is in `ctes` and the flat
+            // scan above is conclusive: a nested body's own declarations are present at top level. The
+            // recursive probe would find nothing and only allocate its visited set on every warm lookup.
+            if (IsPrepared)
+                return false;
+
+            // A CTE body declares its own CTEs on an unprepared (not-yet-hoisted) graph: recurse with a
+            // reference-identity visited set so a mutation nested deeper is still found and a cyclic
+            // declaration graph terminates. The set is allocated only on this cold path.
+            var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance) { this };
+            for (var i = 0; i < ctes.Count; i++)
+            {
+                if (HasDataModifyingCteIn(ctes[i].Query, visited))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether this command should emit the <c>JoinInto.MultipleCollections</c> diagnostic on its next
+    /// plan preparation — i.e. on the plan-cache miss — because the pair command is built from two or more
+    /// collection navigations and no join suppressed it. The diagnostic is best-effort: a plan served from
+    /// cache does not re-emit it. Diagnostic-only state: it is deliberately <b>not</b> part of the plan key
+    /// and is cleared once the warning has been emitted, so a command warns at most once per preparation,
+    /// with suppression applying to the first plan-cache population.
+    /// </summary>
+    internal bool PendingJoinIntoCartesianWarning { get; set; }
+
+    /// <summary>
+    /// The raw-source global-filter skips collected during the current preparation, or <see langword="null"/>
+    /// when no bound filter was skipped. Emitted by the planner on the next plan-cache miss (and cleared
+    /// there) so a skipped filter warns once per completed preparation and never on a cache hit. Not part
+    /// of the plan key: it carries only diagnostic data (entity name, filter key, reason, missing column
+    /// names), never SQL text, table names, parameters or captured values.
+    /// </summary>
+    internal List<RawSourceFilterSkip>? PendingRawSourceFilterSkips { get; set; }
+
+    /// <summary>
+    /// The bound raw/named join filters collected during the current preparation whose join has no
+    /// <c>ON</c> clause (CROSS/APPLY). They are deferred until the main-source filter pass so they can be
+    /// re-rooted onto the projection's join alias and placed in <c>WHERE</c>; a CROSS/APPLY join must never
+    /// fabricate an <c>ON</c> clause. Preparation-local scratch: reset at the start of every preparation
+    /// and never part of the plan key.
+    /// </summary>
+    internal List<PendingCrossJoinFilter>? PendingCrossJoinFilters { get; set; }
+
+    /// <summary>
+    /// One bound join filter deferred to the main-source filter pass because its CROSS/APPLY join has no
+    /// <c>ON</c> clause. Carries the resolved predicate so a builder-function filter is invoked exactly
+    /// once, plus the join's source ordinal for alias re-rooting.
+    /// </summary>
+    /// <param name="Binding">The binding declared on the joined source.</param>
+    /// <param name="SourceOrdinal">The join's source ordinal (zero-based join index plus one).</param>
+    /// <param name="Filter">The resolved filter metadata.</param>
+    /// <param name="Lambda">The filter predicate, resolved once.</param>
+    internal readonly record struct PendingCrossJoinFilter(FromExpression.EntityBinding Binding, int SourceOrdinal, IQueryFilterMetadata Filter, LambdaExpression Lambda);
+
+    /// <summary>
+    /// One skipped global query filter on an explicitly bound raw/named source. Carries diagnostic data
+    /// only; <see cref="MissingColumns"/> is a comma-joined list of declared column names or <c>null</c>
+    /// for the undetermined case.
+    /// </summary>
+    /// <param name="EntityType">The bound entity type name (no namespace).</param>
+    /// <param name="SourceOrdinal">The source ordinal within the command (0 for the main source).</param>
+    /// <param name="FilterKey">The filter key, or <c>""</c> for an anonymous filter.</param>
+    /// <param name="Reason"><c>MissingColumns</c> or <c>UndeterminedColumns</c>.</param>
+    /// <param name="MissingColumns">The required column names absent from the declared shape, if any.</param>
+    internal readonly record struct RawSourceFilterSkip(string EntityType, int SourceOrdinal, string FilterKey, string Reason, string? MissingColumns);
+
+    private static bool HasDataModifyingCteIn(QueryCommand command, HashSet<QueryCommand> visited)
+    {
+        if (command._ctes is not { Count: > 0 } ctes)
+            return false;
+
+        if (!visited.Add(command))
+            return false;
+
+        for (var i = 0; i < ctes.Count; i++)
+        {
+            var cte = ctes[i];
+            if (cte.Mutation is not null)
+                return true;
+
+            if (HasDataModifyingCteIn(cte.Query, visited))
+                return true;
+        }
+
+        return false;
+    }
     /// <summary>
     /// Statement-level query hints attached to this command (for example SQL Server <c>RECOMPILE</c>),
     /// or <c>null</c> when the command has none. How they are rendered is provider specific; a dialect
@@ -577,6 +817,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _groupingList = null;
         _limitByColumns = null;
         _distinctOnColumns = null;
+        _extremeRowColumns = null;
+        _extremeRowGroupByColumns = null;
         PreparedPreWhere = null;
         _preparedArrayJoin = null;
         PreWhereShapeHash = 0;
@@ -590,6 +832,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         LookupPartitions = null;
         ShapeScanned = false;
         _whereBasePlanHash = 0;
+        // Correlated subqueries and outer references are registered while preparing (#148-B: the
+        // navigation collection terminals add one referenced command per terminal). A re-preparation
+        // rebuilds them from scratch; keeping the previous lists would append duplicates on every
+        // reset/prepare cycle, changing the plan key and growing the registry without bound.
+        _referencedQueries = null;
+        _outerRefs = null;
+        ReferencedQueriesPlanHash = 0;
         InvalidatePlanKey();
 
         _dataContext?.ResetPreparation(this);

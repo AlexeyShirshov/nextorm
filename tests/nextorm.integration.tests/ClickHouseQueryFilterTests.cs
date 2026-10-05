@@ -24,7 +24,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
     }
 
     private void SeedQueryFilterRows(params QueryFilterEntity[] rows)
-        => _sut.DataProvider.InsertInto<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
+        => _sut.DataProvider.CreateInsertBuilder<QueryFilterEntity>().IgnoreFilters().Values(rows).Insert();
 
     private static QueryFilterEntity Active(int id, string name)
         => new() { Id = id, TenantId = 1, IsDeleted = false, Name = name };
@@ -57,7 +57,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
     {
         var ctx = QueryFilterContext(1);
 
-        var act = () => ctx.InsertInto<QueryFilterEntity>()
+        var act = () => ctx.CreateInsertBuilder<QueryFilterEntity>()
             .Values(ForeignTenant(NextQueryFilterBase(), "ch-foreign"))
             .Insert();
 
@@ -70,7 +70,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
         var ctx = QueryFilterContext(1);
         var id = NextQueryFilterBase();
 
-        ctx.InsertInto<QueryFilterEntity>()
+        ctx.CreateInsertBuilder<QueryFilterEntity>()
             .IgnoreFilters()
             .Values(ForeignTenant(id, "ch-foreign-ignored"))
             .Insert();
@@ -85,7 +85,7 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
     {
         var ctx = QueryFilterContext(1);
         var b = NextQueryFilterBase();
-        _sut.DataProvider.InsertInto<QueryFilterFuncEntity>().IgnoreFilters().Values(
+        _sut.DataProvider.CreateInsertBuilder<QueryFilterFuncEntity>().IgnoreFilters().Values(
         [
             new QueryFilterFuncEntity { Id = b, TenantId = 1, IsDeleted = false, Name = "func-active" },
             new QueryFilterFuncEntity { Id = b - 1, TenantId = 1, IsDeleted = true, Name = "func-deleted" },
@@ -98,5 +98,21 @@ public sealed class ClickHouseQueryFilterTests : ProviderTestSuite
         Range().IgnoreFilters().Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 1, b - 2]);
         Range().IgnoreFilters(["tenant"]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 2]);
         Range().IgnoreFilters([QueryFilters.AnonymousKey]).Select(x => x.Id).ToList().Should().BeEquivalentTo([b, b - 1]);
+    }
+
+    [Fact]
+    public void RawSourceBinding_BoundCompatible_ShouldReturnFilteredRows()
+    {
+        var ctx = QueryFilterContext(1);
+        var b = NextQueryFilterBase();
+        SeedQueryFilterRows(Active(b, "raw-active"), SoftDeleted(b - 1, "raw-deleted"), ForeignTenant(b - 2, "raw-foreign"));
+
+        var rows = ctx.FromSql("select id, tenant_id, is_deleted, name from query_filter_entity")
+            .BindEntity<QueryFilterEntity>(["id", "tenant_id", "is_deleted", "name"])
+            .Where(x => x.Id >= b - 2 && x.Id <= b)
+            .Select(x => x.Id)
+            .ToList();
+
+        rows.Should().BeEquivalentTo([b], "the bound raw source carries the ClickHouse-eligible filters");
     }
 }

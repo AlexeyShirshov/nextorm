@@ -35,7 +35,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        var act = () => ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -50,7 +50,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        var act = () => ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenUpdate()

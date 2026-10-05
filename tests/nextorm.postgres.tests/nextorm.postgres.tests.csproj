@@ -18,6 +18,14 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
+    <!-- Reference the ClickHouse provider to call its Final/PreWhere/Settings/... extension methods
+         when asserting that PostgreSQL rejects them at render time (issue #122). -->
+    <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
+    <!-- The join-alias generator runs as an analyzer over this test assembly so Alias.Buyer and the
+         generated projection/builder types bind in JoinAliasSqlGenerationTests. -->
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

@@ -130,7 +130,11 @@ public partial class InMemoryDataContext : IDataContext
     {
         if (!_correlatedPlans.TryGetValue(cmd, out var plan))
         {
-            plan = InMemoryCorrelatedEvaluator.Build(this, cmd);
+            // #148-B R2.3: a multi-hop reference chain carries its own metadata walk; the normal
+            // evaluator would reject the nested correlation such a chain would otherwise need.
+            plan = cmd.NavigationChain is { } chain
+                ? InMemoryNavigationChainEvaluator.Build(this, cmd, chain)
+                : InMemoryCorrelatedEvaluator.Build(this, cmd);
             _correlatedPlans[cmd] = plan;
         }
 

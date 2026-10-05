@@ -22,6 +22,8 @@ internal static class RowMapperFactory
     private static readonly MethodInfo GetStreamMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetStream))!;
     private static readonly MethodInfo GetTextReaderMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetTextReader))!;
     private static readonly MethodInfo ToInt64MI = typeof(Convert).GetMethod(nameof(Convert.ToInt64), [typeof(object)])!;
+    private static readonly MethodInfo Int64ToInt32MI = typeof(Convert).GetMethod(nameof(Convert.ToInt32), [typeof(long)])!;
+    private static readonly MethodInfo GetInt64MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt64))!;
     private static readonly MethodInfo FromStorageMI = typeof(DurationStorage).GetMethod(nameof(DurationStorage.FromStorage), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ConvertFromProviderMI = typeof(IPropertyValueConverter).GetMethod(nameof(IPropertyValueConverter.ConvertFromProvider))!;
     private static readonly MethodInfo DynamicColumnsReadMI = typeof(DynamicColumns).GetMethod(nameof(DynamicColumns.Read))!;
@@ -56,7 +58,17 @@ internal static class RowMapperFactory
             return MapConvertedColumn(column, param, converter);
 
         Expression getter;
-        if (realType == typeof(TimeSpan) && !supportsNativeDuration)
+        if (column.IsWideCountNarrowed && realType == typeof(int))
+        {
+            // #148-B r3 A3′: a navigation Count()/property Count materialized as an int reads the wide
+            // (bigint) scalar with GetInt64 and narrows it with a checked conversion. This is uniform
+            // across providers and independent of the driver's GetInt32 widening policy (SQLite's
+            // GetInt32 silently converts in range and throws out of range; some drivers may not), so an
+            // out-of-range count always surfaces a top-level OverflowException.
+            var raw = Expression.Call(param, GetInt64MI, Expression.Constant(column.Index));
+            getter = Expression.Call(Int64ToInt32MI, raw);
+        }
+        else if (realType == typeof(TimeSpan) && !supportsNativeDuration)
         {
             // The provider keeps the duration in an integer column: read the boxed value, widen it to
             // long and reinterpret it in the declared unit.
@@ -413,6 +425,7 @@ internal static class RowMapperFactory
                     signature = signature * 31 + (column.PropertyType?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.Nullable ? 1 : 0);
                     signature = signature * 31 + (column.DefaultOnNull ? 1 : 0);
+                    signature = signature * 31 + (column.IsWideCountNarrowed ? 1 : 0);
                     signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.DurationUnit?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.ProviderType?.GetHashCode() ?? 0);

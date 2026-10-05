@@ -18,6 +18,7 @@ internal sealed class ContextEnvironment : IContextEnvironment
         {
             Logger = loggerFactory.CreateLogger(contextType);
             CommandLogger = loggerFactory.CreateLogger(typeof(QueryCommand));
+            QueryFilterLogger = loggerFactory.CreateLogger("NextORM.QueryFilters");
             ResultSetEnumeratorLogger = loggerFactory.CreateLogger("NextORM.Core.ResultSetEnumerator");
         }
 
@@ -34,6 +35,9 @@ internal sealed class ContextEnvironment : IContextEnvironment
     public ILogger? Logger { get; }
 
     public ILogger? CommandLogger { get; }
+
+    /// <summary>Logger category used for global query-filter diagnostics (<c>NextORM.QueryFilters</c>).</summary>
+    public ILogger? QueryFilterLogger { get; }
 
     /// <summary>Logger category used by the row-reader path (the result-set enumerator).</summary>
     internal ILogger? ResultSetEnumeratorLogger { get; }

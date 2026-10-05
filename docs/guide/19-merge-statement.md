@@ -1,24 +1,24 @@
 # Data merging (`MERGE` / upsert)
 
-> nextorm builds a `MERGE` (upsert) through [`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): one entry point covers both the portable **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and the general, multi-branch **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> nextorm builds a `MERGE` (upsert) through [`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})): one entry point covers both the portable **key upsert** (`INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and the general, multi-branch **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
 
 **Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Provider overview](../providers/overview.md)
 
 ## Overview
 
-`MergeInto<TEntity>()` writes a source row set into the target table and lets the database decide, row by row, what to do. The source is a mapped entity, a batch, or a server-side query; the match is either the declared key (`OnKeys()`) or an arbitrary condition (`On(...)`); and the actions are attached as branches. `Merge()`/`MergeAsync()` execute and return the affected-row count, while `ToSql()` renders the statement without a connection.
+`CreateMergeBuilder<TEntity>()` writes a source row set into the target table and lets the database decide, row by row, what to do. The source is a mapped entity, a batch, or a server-side query; the match is either the declared key (`OnKeys()`) or an arbitrary condition (`On(...)`); and the actions are attached as branches. `Merge()`/`MergeAsync()` execute and return the affected-row count, while `ToSql()` renders the statement without a connection.
 
 Two forms share the same builder:
 
 * **key upsert** — `OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`. Every SQL provider expresses it in its native form, and it is the only form the in-memory provider applies (to the registered sequence).
-* **full `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, each finished with `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Native on SQL Server and PostgreSQL 15+; the other providers reject it.
+* **full `MERGE`** — `WhenMatched()`/`WhenNotMatched()`/`WhenNotMatchedBySource()`, each finished with `ThenUpdate`/`ThenInsert`/`ThenDelete`/`ThenDoNothing`. Native on SQL Server and PostgreSQL (an execution-time server prerequisite: the server must be 15+); the other providers reject it.
 
 ## Upsert (key merge)
 
-[`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) writes a source row set into the table and lets the database decide, per declared key, whether to update the existing row or insert a new one. The source is a single mapped entity or a batch, the match key is resolved from the entity mapping with `OnKeys()`, and both branches — `WhenMatchedUpdate()` (set every non-key writable column from the source) and `WhenNotMatchedInsert()` — are required:
+[`CreateMergeBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateMergeBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) writes a source row set into the table and lets the database decide, per declared key, whether to update the existing row or insert a new one. The source is a single mapped entity or a batch, the match key is resolved from the entity mapping with `OnKeys()`, and both branches — `WhenMatchedUpdate()` (set every non-key writable column from the source) and `WhenNotMatchedInsert()` — are required:
 
 ```csharp
-ctx.MergeInto<ISimpleEntity>()
+ctx.CreateMergeBuilder<ISimpleEntity>()
     .Using(new SimpleEntity { Id = 1, Name = "a" })   // or Using(new[] { e1, e2 })
     .OnKeys()
     .WhenMatchedUpdate()
@@ -54,10 +54,10 @@ merge into simple_entity as target using (values (@p0, @p1)) as source (id, name
 
 ## Full MERGE
 
-[`WhenMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenMatched) / [`WhenNotMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatched) / [`WhenNotMatchedBySource()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatchedBySource) extend the same builder into a general, multi-branch `MERGE` on the providers that render it natively (SQL Server, PostgreSQL 15+). Each branch is finished with an action, and the branches run in the order they are declared:
+[`WhenMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenMatched) / [`WhenNotMatched()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatched) / [`WhenNotMatchedBySource()`](xref:NextORM.Core.MergeBuilder`1.WhenNotMatchedBySource) extend the same builder into a general, multi-branch `MERGE` on the providers that render it natively (SQL Server, PostgreSQL; server 15+). Each branch is finished with an action, and the branches run in the order they are declared:
 
 ```csharp
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(source)                            // entity, batch, or a query: Using(ctx.From<IDest>().Where(...))
     .OnKeys()                                 // or .On((t, s) => t.Id == s.Id && s.Age > 0)
     .WhenMatched().ThenUpdate()               // or .WhenMatched((t, s) => t.Name != s.Name).ThenUpdate()
@@ -79,7 +79,7 @@ merge into dest as target using (values (@p0, @p1)) as source (id, name) on targ
 
 ```csharp
 // unsupported: Total is computed, so the VALUES source declares no Total column
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(new Dest { Name = "a" })
     .On((t, s) => t.Name == s.Name && s.Total > 0)
     .WhenMatched().ThenUpdate()
@@ -87,7 +87,7 @@ ctx.MergeInto<IDest>()
     .ToSql();   // NotSupportedException
 
 // supported: a query source projects the whole row, including Total
-ctx.MergeInto<IDest>()
+ctx.CreateMergeBuilder<IDest>()
     .Using(ctx.From<IDest>())
     .On((t, s) => t.Name == s.Name && s.Total > 0)
     .WhenMatched().ThenUpdate()
@@ -100,19 +100,21 @@ Otherwise reference only columns the `VALUES` source already carries.
 | Provider | Full `MERGE` | `THEN DELETE` | `THEN DO NOTHING` | `ON` / `WHEN ... AND` | `WHEN NOT MATCHED BY SOURCE` |
 |---|---|---|---|---|---|
 | SQL Server | yes | yes | — | yes | yes |
-| PostgreSQL | yes (15+) | yes | yes | yes | — |
+| PostgreSQL | yes (server 15+) | yes | yes | yes | — |
 | SQLite, MySQL, MariaDB | — (key upsert only) | — | — | — | — |
 | In-memory | — (key upsert only) | — | — | — | — |
 | ClickHouse | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` |
 
 `Using(ctx.From<T>().Where(...))` or `Using(QueryCommand<T>)` supplies the rows from a server-side query (`USING (<select>) AS source`) instead of a `VALUES` batch; a query source is accepted by the full-`MERGE` form only.
 
+Under an active [global query filter](../advanced/query-filters.md), the full `MERGE` injects the target predicate into the `MERGE ... ON` condition and into every `WHEN NOT MATCHED BY SOURCE` arm (SQL Server), so a target row hidden by the filter is never matched, updated or deleted. The form must be a real multi-branch `MERGE` (actual `WhenMatched()`/`WhenNotMatched()` branches); `.On(...)` does not turn the key-upsert shortcut into that form. A key upsert on a provider that cannot express the predicate (`ON CONFLICT` / `ON DUPLICATE KEY` / in-memory) **refuses** with `NotSupportedException` before any mutation, and the predicate is never silently dropped; `IgnoreFilters()` restores the native upsert. A capability/form refusal happens before any read, while a query-sourced merge may first run its source pre-check read before a translation/render refusal. On the supported full-`MERGE` form every branch — including update-only and delete-only — validates its incoming source rows against the target filters and throws `QueryFilterException` before the mutation (see [Write-target isolation](../advanced/query-filters.md#write-target-isolation) and [INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation)).
+
 ### Returning the merged rows
 
 [`Returning()`](xref:NextORM.Core.MergeBuilder`1.Returning) and [`Returning(x => new { ... })`](xref:NextORM.Core.MergeBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) materialise the merged rows through the provider's output clause. Read them with `Single()`/`SingleAsync()`/`ToList()`/`ToListAsync()`:
 
 ```csharp
-var rows = ctx.MergeInto<IDest>()
+var rows = ctx.CreateMergeBuilder<IDest>()
     .Using(source)
     .OnKeys()
     .WhenMatched().ThenUpdate()
@@ -134,14 +136,14 @@ Returning is available on **both** forms. SQL Server renders the portable key up
 `ON CONFLICT ... DO UPDATE` form; the full `MERGE` returns through SQL Server `OUTPUT inserted.<col>`
 and PostgreSQL 17+ `RETURNING target.<col>`. MySQL/MariaDB have no row-returning key-upsert form, so
 `.Returning()` there throws `NotSupportedException`; SQLite and ClickHouse still reject the full
-`MERGE` (and PostgreSQL 15+ only gained the statement itself).
+`MERGE` (and the server must be PostgreSQL 15+ for the general `MERGE` statement itself).
 
 ## Inspecting the SQL
 
 [`ToSql()`](xref:NextORM.Core.MergeBuilder`1.ToSql) renders the parameterised SQL a `Merge()` would execute, without opening a connection:
 
 ```csharp
-var sql = ctx.MergeInto<ISimpleEntity>()
+var sql = ctx.CreateMergeBuilder<ISimpleEntity>()
     .Using(new SimpleEntity { Id = 1, Name = "a" })
     .OnKeys()
     .WhenMatchedUpdate()
@@ -159,7 +161,7 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 | Provider | Key upsert | Full `MERGE` | `RETURNING`/`OUTPUT` | Notes |
 |---|---|---|---|---|
 | SQL Server | `MERGE ... USING (VALUES ...)` | yes | `OUTPUT inserted.<col>` (key upsert and full) | every branch, including `WHEN NOT MATCHED BY SOURCE` |
-| PostgreSQL | `ON CONFLICT ... DO UPDATE` | yes (15+) | `RETURNING` (key upsert 9.5+, full 17+) | `DO NOTHING`; no `BY SOURCE` |
+| PostgreSQL | `ON CONFLICT ... DO UPDATE` | yes (server 15+) | `RETURNING` (key upsert 9.5+, full 17+) | `DO NOTHING`; no `BY SOURCE` |
 | SQLite | `ON CONFLICT ... DO UPDATE` | — | `RETURNING` (key upsert, 3.35+) | key upsert only |
 | MySQL | `ON DUPLICATE KEY UPDATE` | — | — | key upsert only; no `RETURNING` |
 | MariaDB | `ON DUPLICATE KEY UPDATE` | — | — | key upsert only; `RETURNING` is not used for `ON DUPLICATE KEY` |
@@ -172,12 +174,17 @@ insert into simple_entity (id, name) values (@p0, @p1) on conflict (id) do updat
 * **Branches run in declaration order.** SQL Server and PostgreSQL evaluate the `WHEN` clauses top to bottom; the first matching clause for a row applies.
 * **A `WHEN NOT MATCHED BY SOURCE` condition is target-only on SQL Server.** SQL Server's `MERGE` does not expose a source alias in that clause, so the condition may only reference the target row.
 * **Server-side query source.** `Using(ctx.From<T>().Where(...))` / `Using(QueryCommand<T>)` is accepted by the full-`MERGE` form only; the key-upsert providers fall back to a `VALUES` batch.
+* **PostgreSQL 15+ is a server prerequisite.** nextorm does not discover or configure the server version and performs no version read; it renders the general `MERGE` from the dialect's capability flags alone, and an older server rejects the statement itself. There is no client-side "PostgreSQL < 15 refuses" guard.
 * **Mutations are not prepared or plan-cached.** Optimisation in nextorm targets read-only queries only (`Prepare`, the implicit plan cache, benchmarks); a merge always renders and executes one command per call.
 * **Affected-row count.** `Merge()`/`MergeAsync()` return the number of rows the provider reports.
-* **Global query filters are not injected into the target.** A filter declared for the entity type is
-  never added to the `MERGE`; instead the rows written by the insert branch are validated against the
-  target's active filters before execution and a violation raises `QueryFilterException`. `IgnoreFilters`
-  on the builder disables them from validation too. See
+* **Global query filters and the merge target.** A filter declared for the entity type is not injected
+  through a source `FROM`; the incoming source rows of every branch of the supported full `MERGE`
+  (insert, update-only and delete-only) are validated against the target's active filters before
+  execution, and a violation raises `QueryFilterException`. Under an active filter
+  the full `MERGE` additionally isolates the target in the statement (see
+  [Write-target isolation](../advanced/query-filters.md#write-target-isolation)), while an unfilterable
+  key upsert (`ON CONFLICT` / `ON DUPLICATE KEY` / in-memory) **refuses** with `NotSupportedException`;
+  `IgnoreFilters` disables the filter from validation and restores the native upsert. See
   [INSERT and MERGE (validation)](../advanced/query-filters.md#insert-and-merge-validation).
 * The in-memory provider is query-only: the full `MERGE` throws `NotSupportedException`; only the key-upsert merge is applied to the registered sequence in the context.
 

@@ -81,7 +81,7 @@ var product = new Product
     },
 };
 
-ctx.InsertInto<Product>().Values(product).Insert();
+ctx.CreateInsertBuilder<Product>().Values(product).Insert();
 ```
 
 Генерируемая инструкция (показано квотирование PostgreSQL/SQLite; каждый диалект использует своё):

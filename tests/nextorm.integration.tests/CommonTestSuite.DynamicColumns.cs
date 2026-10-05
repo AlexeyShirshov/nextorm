@@ -41,7 +41,7 @@ public abstract partial class CommonTestSuite
             ("beta", "B"),
             ("alpha", "A"));
 
-        ctx.InsertInto<DynamicColumnsEntity>().Values(row).Insert().Should().Be(1);
+        ctx.CreateInsertBuilder<DynamicColumnsEntity>().Values(row).Insert().Should().Be(1);
 
         var read = ctx.From<DynamicColumnsEntity>().ToList().Single(x => x.Id == id);
         read.Name.Should().Be("first");
@@ -62,7 +62,7 @@ public abstract partial class CommonTestSuite
 
         // "seeded" is omitted from the store, so the table default ("defaulted") must apply. This is the
         // difference between a missing key and a key explicitly bound to a value.
-        ctx.InsertInto<DynamicColumnsEntity>()
+        ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicRow(id, "default", ("alpha", "A")))
             .Insert()
             .Should().Be(1);
@@ -82,8 +82,8 @@ public abstract partial class CommonTestSuite
         var forward = DynamicRow(1, "row", ("alpha", "A"), ("beta", "B"), ("seeded", "S"));
         var reverse = DynamicRow(2, "row", ("seeded", "S"), ("beta", "B"), ("alpha", "A"));
 
-        var forwardSql = ctx.InsertInto<DynamicColumnsEntity>().Values(forward).ToSql();
-        var reverseSql = ctx.InsertInto<DynamicColumnsEntity>().Values(reverse).ToSql();
+        var forwardSql = ctx.CreateInsertBuilder<DynamicColumnsEntity>().Values(forward).ToSql();
+        var reverseSql = ctx.CreateInsertBuilder<DynamicColumnsEntity>().Values(reverse).ToSql();
 
         // Identical text proves the physical column order comes from the ordinal-sorted key set, not
         // from the dictionary's insertion order.
@@ -104,14 +104,14 @@ public abstract partial class CommonTestSuite
         Assert.SkipUnless(dialect.SupportsUpdate, "This provider does not support UPDATE.");
 
         var id = DynamicKey();
-        ctx.InsertInto<DynamicColumnsEntity>()
+        ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicRow(id, "before", ("alpha", "keep"), ("beta", "old"), ("seeded", "kept")))
             .Insert()
             .Should().Be(1);
 
         // "alpha" and "seeded" are omitted from the update store: they must keep their stored values,
         // never the column default and never NULL.
-        ctx.Update<DynamicColumnsEntity>()
+        ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicRow(id, "after", ("beta", "new")))
             .Where(x => x.Id == id)
             .Update()
@@ -138,7 +138,7 @@ public abstract partial class CommonTestSuite
         var id = DynamicKey();
 
         // Not matched -> INSERT branch; the dynamic keys extend the written column list.
-        ctx.MergeInto<DynamicColumnsEntity>()
+        ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicRow(id, "merged", ("alpha", "a1"), ("seeded", "s1")))
             .OnKeys()
             .WhenMatchedUpdate()
@@ -151,7 +151,7 @@ public abstract partial class CommonTestSuite
         inserted.Extra["seeded"].Should().Be("s1");
 
         // Matched -> UPDATE branch; the keys present in the source are refreshed.
-        ctx.MergeInto<DynamicColumnsEntity>()
+        ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicRow(id, "merged2", ("alpha", "a2"), ("seeded", "s2")))
             .OnKeys()
             .WhenMatchedUpdate()
@@ -176,7 +176,7 @@ public abstract partial class CommonTestSuite
 
         var id = DynamicKey();
 
-        ctx.MergeInto<DynamicColumnsEntity>()
+        ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicRow(id, "full", ("beta", "b1"), ("seeded", "s1")))
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -188,7 +188,7 @@ public abstract partial class CommonTestSuite
         inserted.Extra["beta"].Should().Be("b1");
         inserted.Extra["seeded"].Should().Be("s1");
 
-        ctx.MergeInto<DynamicColumnsEntity>()
+        ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicRow(id, "full2", ("beta", "b2"), ("seeded", "s2")))
             .OnKeys()
             .WhenMatched().ThenUpdate()

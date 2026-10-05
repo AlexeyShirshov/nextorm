@@ -11,3 +11,7 @@ docs/_site/
 docs/api/
 docs/xrefmap.yml
 docs/obj/
+
+# Python bytecode
+__pycache__/
+*.pyc

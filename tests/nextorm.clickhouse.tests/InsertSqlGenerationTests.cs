@@ -70,7 +70,7 @@ public class InsertSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var min = 1;
 
-        Normalize(ctx.InsertInto<IInsertEntity>()
+        Normalize(ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>().Where(s => s.Age > min), s => new { s.Name, s.Age })
             .ToSql())
             .Should().Be("insert into insert_entity (name, age) select Name, Age from insert_source\n where (Age > @min)");
@@ -81,7 +81,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age })
             .Returning(x => new { x.Id, x.Name })
             .ToSql();
@@ -94,7 +94,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Values(ctx.From<InsertSource>(), s => new { s.Name, s.Age });
 
@@ -108,7 +108,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning(x => new { x.Id }));
 
@@ -121,7 +121,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Value(x => x.Age, 5)
             .ToSql()
@@ -133,7 +133,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values([
                 new InsertEntity { Name = "a", Age = 1 },
                 new InsertEntity { Name = "b", Age = 2 },
@@ -147,7 +147,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.CreateQuoted();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ToSql()
             .Should().Be("insert into `insert_entity` (`name`) values (@p0)");
@@ -168,7 +168,7 @@ public class InsertSqlGenerationTests
     public void Returning_ShouldThrow()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var builder = ctx.InsertInto<IInsertEntity>()
+        var builder = ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .Returning();
 
@@ -181,7 +181,7 @@ public class InsertSqlGenerationTests
     public void ReturningIdentityFunction_ShouldThrow()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var builder = ctx.InsertInto<IInsertEntity>()
+        var builder = ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningIdentity<long>();
 
@@ -194,7 +194,7 @@ public class InsertSqlGenerationTests
     public void ReturningKey_ShouldThrow()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var builder = ctx.InsertInto<IInsertEntity>()
+        var builder = ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "a")
             .ReturningKey<long>();
 
@@ -214,7 +214,7 @@ public class InsertSqlGenerationTests
             new InsertSource { Name = "b", Age = 2 },
         };
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(sources, s => new { Name = s.Name, Age = s.Age })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
@@ -231,7 +231,7 @@ public class InsertSqlGenerationTests
             new InsertSource { Name = "b", Age = 2 },
         };
 
-        ctx.InsertInto<InsertEntity>()
+        ctx.CreateInsertBuilder<InsertEntity>()
             .Values(sources, s => new InsertEntity { Name = s.Name, Age = s.Age })
             .ToSql()
             .Should().Be("insert into insert_entity (name, age) values (@p0, @p1), (@p2, @p3)");
@@ -242,7 +242,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.InsertInto<IScalarEntity>()
+        ctx.CreateInsertBuilder<IScalarEntity>()
             .Value("a")
             .ToSql()
             .Should().Be("insert into scalar_entity (name) values (@p0)");
@@ -253,7 +253,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.InsertInto<IScalarEntity>()
+        ctx.CreateInsertBuilder<IScalarEntity>()
             .Values(new[] { "a", "b" })
             .ToSql()
             .Should().Be("insert into scalar_entity (name) values (@p0), (@p1)");
@@ -264,7 +264,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Values(x => x.Name, new[] { "a", "b" })
             .Values(x => x.Age, new[] { 1, 2 })
             .ToSql()
@@ -276,7 +276,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.InsertInto<IDefaultEntity>().ToSql();
+        var act = () => ctx.CreateInsertBuilder<IDefaultEntity>().ToSql();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -286,7 +286,7 @@ public class InsertSqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        var act = () => ctx.InsertInto<IInsertEntity>().Value(x => x.Name, SqlDefault.Value).ToSql();
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, SqlDefault.Value).ToSql();
 
         act.Should().Throw<NotSupportedException>();
     }

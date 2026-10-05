@@ -62,6 +62,21 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// </summary>
     public readonly bool NeedsParamRefresh;
     /// <summary>
+    /// The immutable guarded parameter-refresh recipe for this plan, or <see langword="null"/> when the
+    /// plan does not support the scalar subset and the original <c>ExtractParams</c> refresh path must be
+    /// used. The recipe is immutable and retains neither the miss-time closure nor a mutable command or
+    /// enumerator.
+    /// </summary>
+    internal ParamRefreshRecipe? ParamRecipe { get; private set; }
+
+    /// <summary>
+    /// Sets the immutable parameter-refresh recipe. Called exactly once, by the planner at plan
+    /// construction; the characterization tests use the same seam to install an intentionally
+    /// incompatible recipe and prove the mismatch-safe fallback. The recipe itself is never mutated.
+    /// </summary>
+    /// <param name="recipe">The recipe, or <see langword="null"/> to keep the original extraction path.</param>
+    internal void SetParamRecipe(ParamRefreshRecipe? recipe) => ParamRecipe = recipe;
+    /// <summary>
     /// Wraps an already prepared <see cref="DbCommand"/> and its execution options.
     /// </summary>
     /// <param name="dbCommand">The command to execute; its connection is captured for later resets.</param>

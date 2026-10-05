@@ -6,7 +6,7 @@
 
 ## Overview
 
-nextorm deliberately has no cross-provider JSON method. "Working with JSON" means different things on
+nextorm deliberately has no cross-provider JSON function surface. "Working with JSON" means different things on
 different providers, and the engine keeps those mechanisms separate instead of pretending they are one
 feature:
 
@@ -30,8 +30,16 @@ feature:
   native `JSON` value (`CAST(col AS JSON)` for a `String` column); `JSONAllPaths` projects as `string[]`
   and `JSONAllPathsWithTypes` as `Map(String, String)` → `Dictionary<string, string>`. A native `JSON`
   *column* is still not mapped (the driver returns it as `System.Text.Json.Nodes.JsonObject`).
-* **SQLite** does not expose any JSON construct. The database has JSON1, but nextorm does not map it
-  yet, so building the SQL throws `NotSupportedException`.
+* **SQLite** exposes the JSON1 surface through the provider-specific `SqlFunctions.Sqlite` (`json`/`jsonb`/
+  `json_extract`, the `->`/`->>` operators, `json_set`/`json_patch`, and the `json_each`/`json_tree` table
+  functions). The *cross-provider* JSON API is not mapped to it: the native `json`/`jsonb` type and the
+  text-JSON names (`json_value`/`json_query`/`json_modify`/`isjson`) throw `NotSupportedException`, so use
+  the JSON1 members directly (see the [SQLite provider](../providers/sqlite.md#sqlite-only-functions)).
+* **Every SQL provider** shares one JSON *terminal*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
+  [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) stream the query's projection to a caller-owned `Stream` as a JSON array or
+  NDJSON, serialized client-side with `System.Text.Json` (see [Streaming data to a Stream](28-streaming-data.md#json)).
+  This is a serialization terminal, not a SQL JSON function: it does not change the per-provider JSON
+  surfaces below.
 
 Because the mechanisms are different, the same conceptual result is written in different ways. Read the
 section for your provider; the [provider matrix](#provider-matrix) and
@@ -43,7 +51,7 @@ section for your provider; the [provider matrix](#provider-matrix) and
 |---|---|---|---|---|
 | SQL Server | Supported ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) | No - JSON lives in `nvarchar` | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Supported |
 | PostgreSQL | No | Supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | No | No |
-| SQLite | No | No | No | No |
+| SQLite | No | No | No (JSON1 via `SqlFunctions.Sqlite`) | No |
 | MySQL / MariaDB | No | Not exposed | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
 | ClickHouse | No | Not exposed | String JSON + JSONPath scalars + native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
 | In-memory | Not applicable (no SQL) | Not applicable | Not applicable | Not applicable |
@@ -88,7 +96,7 @@ NULL for an empty `FOR JSON` result). The clause is placed after `ORDER BY` and 
 `OPTION (...)`, so it composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (apply the hint first, then the
 terminal): a `for json path option (recompile)` query is valid. Use
 [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) to only attach the clause and keep the command composable. (Table hints,
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), attach to the `FROM` table and are independent of the
+[`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), attach to the `FROM` table and are independent of the
 JSON clause.) A dialect that does not support the clause rejects the command, and combining `ForJson`
 with `ForXml` throws `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
 
@@ -341,8 +349,9 @@ The construction and aggregation functions return `string?`; deserialize with
   `Dictionary<string, string>` (`mapKeys`/`mapValues` turn the map into a collection). A native `JSON`
   *column* is not mapped yet: the driver returns it as `System.Text.Json.Nodes.JsonObject`, so project
   JSON through a `String` column or cast it in SQL.
-* SQLite has JSON features in the database, but nextorm does not expose them yet; SQLite's JSON1
-  extension is likewise not mapped.
+* SQLite's JSON1 extension is exposed only through the provider-specific `SqlFunctions.Sqlite` surface
+  (`json_extract`, `->`/`->>`, `json_each`/`json_tree`, ...); the cross-provider native/`json_*` API is not
+  mapped to it, so those names throw `NotSupportedException`.
 * The in-memory provider produces no SQL, so `ForJson`/`ForXml` throw `NotSupportedException` and the
   JSON function surfaces do not apply to it.
 * PostgreSQL is the only provider whose columns are mapped as a native JSON type in the parameter path;

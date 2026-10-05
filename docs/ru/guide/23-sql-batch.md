@@ -1,6 +1,6 @@
 # Выполнение утверждений одним батчем
 
-> Батч отправляет несколько утверждений в базу **одним round trip на одной серверной сессии**. Именно это делает session-scoped временную таблицу пригодной за пулером уровня соединения, держит мутацию и читающий её запрос на одном backend и убирает лишний round trip, когда материализация сразу же читается. Собрать его можно через [`BatchExtensions.Batch`](xref:NextORM.Core.BatchExtensions).
+> Батч отправляет несколько утверждений в базу **одним round trip на одной серверной сессии**. Именно это делает session-scoped временную таблицу пригодной за пулером уровня соединения, держит мутацию и читающий её запрос на одном backend и убирает лишний round trip, когда материализация сразу же читается. Собрать его можно через [`BatchExtensions.CreateBatchBuilder`](xref:NextORM.Core.BatchExtensions).
 
 **Предварительно:** [Материализация запроса в таблицу](18-create-table-as.md) · [Транзакции](21-transactions.md) · [Обзор провайдеров](../providers/overview.md)
 
@@ -26,7 +26,7 @@ var orders = ctx.From("recent_orders")
 Это **две команды**, которые пулер уровня соединения как раз может развести по разным backend'ам, и чтение упадёт с `relation "…" does not exist`. Материализация и читающий запрос собираются в один батч:
 
 ```csharp
-var orders = ctx.Batch()
+var orders = ctx.CreateBatchBuilder()
     .CreateTempTable("recent_orders", ctx.From<IOrder>()
         .Where(x => x.Total > minTotal)
         .Select(x => new { x.Id, x.Total }))
@@ -84,12 +84,12 @@ select id, total from __nextorm_temp_xxxxxxxx
 
 ## Сборка батча напрямую
 
-`ctx.Batch()` возвращает `BatchBuilder` для нескольких утверждений, DML-шага с побочным эффектом или явного порядка.
+`ctx.CreateBatchBuilder()` возвращает `BatchBuilder` для нескольких утверждений, DML- или сырого SQL-шага с побочным эффектом либо явного порядка.
 
 Материализация + чтение:
 
 ```csharp
-var rows = ctx.Batch()
+var rows = ctx.CreateBatchBuilder()
     .CreateTempTable("recent_orders", ctx.From<IOrder>().Where(x => x.Total > minTotal).Select(x => new { x.Id, x.Total }))
     .CreateTempTable("recent_ids", ctx.From("recent_orders").Select(t => new { Id = t.GetInt32("id") }))
     .Query(ctx.From("recent_ids").Select(t => new { Id = t.GetInt32("id") }))
@@ -107,7 +107,7 @@ select id from recent_ids
 Замена постоянной таблицы — `CreateTable` с `DropExisting` сначала удаляет её, поэтому шаг можно выполнять повторно, а не падать на втором прогоне:
 
 ```csharp
-var rows = ctx.Batch()
+var rows = ctx.CreateBatchBuilder()
     .CreateTable("order_archive", ctx.From<IOrder>().Select(x => new { x.Id, x.Total }),
         o => o.DropExisting())
     .Query(ctx.From("order_archive").Select(t => new { Id = t.GetInt32("id") }))
@@ -126,8 +126,8 @@ select id from order_archive
 Мутация + чтение — запрос видит обновление на той же сессии:
 
 ```csharp
-var updated = ctx.Batch()
-    .Update(ctx.Update<IOrder>().Set(x => x.Status, "shipped").Where(x => x.Id == id))
+var updated = ctx.CreateBatchBuilder()
+    .Update(ctx.CreateUpdateBuilder<IOrder>().Set(x => x.Status, "shipped").Where(x => x.Id == id))
     .Query(ctx.From<IOrder>().Where(x => x.Id == id).Select(x => new { x.Id, x.Status }))
     .ToList();
 ```
@@ -140,7 +140,8 @@ select id, status from orders
 ```
 
 * `CreateTempTable(name, source, options?)` и `CreateTable(name, source, options?)` добавляют материализации, по порядку, сколько угодно. Опции можно передать как `CreateTableOptions` или как callback `CreateTableOptionsBuilder` (`o => o.DropExisting()`); постоянный `CreateTable` с `DropExisting` добавляет перед шагом `DROP TABLE IF EXISTS`, и шаг заменяет существующую таблицу.
-* `Insert(insert)`, `Update(update)`, `Delete(delete)` и `Truncate(truncate)` добавляют DML-утверждение с побочным эффектом, по порядку, сколько угодно. Они принимают те же билдеры, что и `ctx.InsertInto<T>()`, `ctx.Update<T>()`, `ctx.DeleteFrom<T>()`, `ctx.Truncate<T>()`; терминал билдера (`Insert()`, `Update()`, …) не вызывается — утверждение выполняет батч.
+* `Insert(insert)`, `Update(update)`, `Delete(delete)` и `Truncate(truncate)` добавляют DML-утверждение с побочным эффектом, по порядку, сколько угодно. Они принимают те же билдеры, что и `ctx.CreateInsertBuilder<T>()`, `ctx.CreateUpdateBuilder<T>()`, `ctx.CreateDeleteBuilder<T>()`, `ctx.CreateTruncateBuilder<T>()`; терминал билдера (`Insert()`, `Update()`, …) не вызывается — утверждение выполняет батч.
+* `Raw(sql)` добавляет сырой SQL-шаг с побочным эффектом, по порядку, сколько угодно: текст отправляется как есть, параметры не привязываются. Он подчиняется тому же правилу порядка, что и остальные шаги с побочным эффектом, — добавляется до `Query`/`AddQuery` (см. [Сырые шаги](#сырые-шаги)).
 * `Query<TResult>(query)` добавляет единственный результат-несущий запрос и возвращает терминал; он должен быть последним. Второй `Query` или любое утверждение после `Query` бросают `InvalidOperationException`. Чтобы пронести несколько наборов результатов, используйте `AddQuery<TResult>` и `Execute`/`ExecuteAsync` (см. [Несколько наборов результатов](#несколько-наборов-результатов)).
 * Каждое утверждение должно быть построено на контексте самого батча; утверждение, привязанное к другому `IDataContext`, отклоняется `ArgumentException`.
 
@@ -155,6 +156,22 @@ select id, total into #recent_orders from orders
 select id, total from #recent_orders
 ```
 
+## Сырые шаги
+
+`Raw(sql)` добавляет **сырой, побочный** шаг: строка отправляется ровно как задана, placeholders **не** переписываются, параметры не привязываются — это выход для DDL или провайдер-специфичных утверждений, которые не моделируют типизированные билдеры. Он добавляется до результат-несущего `Query`/`AddQuery`, как и любой другой шаг с побочным эффектом: `Raw` после `Query` или после первого `AddQuery` бросает `InvalidOperationException`, а батч всё равно обязан завершаться хотя бы одним результат-несущим запросом — батч из одних `Raw` отклоняется. Текст выполняется как есть и не привязывает параметров, поэтому передавайте только доверенный SQL — никогда не склеивайте `Raw`-строку с недоверенным пользовательским вводом.
+
+`Raw` участвует в `ToSql()`, а в многорезультатной форме `AddQuery`/`Execute` является одним из шагов с побочным эффектом, идущих перед запросами. SQL Server может прочитать результат хранимой процедуры через временную таблицу одним батчем, без транзакции:
+
+```csharp
+var rows = ctx.CreateBatchBuilder()
+    .Raw("create table #r (id int, total decimal(18,2))")
+    .Raw("insert into #r (id, total) exec dbo.MyProc @p = 42")
+    .Query(ctx.From("#r").Select(t => new { Id = t.GetInt32("id") }))
+    .ToList();
+```
+
+`INSERT … EXEC` не вкладывается (процедура, которая сама выполняет `INSERT … EXEC`, падает), и процедура должна вернуть **единственный** результат-набор, колонки которого совпадают с `#r` — текст передаётся как есть, поэтому NextORM не может проверить ни то, ни другое. `Raw` не привязывает параметров: `@p = 42` выше — доверенный литерал в тексте T-SQL, а не связанный параметр; значение, которое должно меняться, вызывающий обязан подставить сам.
+
 ## Несколько наборов результатов
 
 Батч может нести **больше одного** результат-несущего запроса. Добавляйте каждый через `AddQuery<TResult>` вместо терминала `Query<TResult>` для единственного результата, затем выполните весь батч один раз через `Execute()`/`ExecuteAsync(...)` и прочитайте наборы в порядке добавления:
@@ -163,15 +180,24 @@ select id, total from #recent_orders
 record OrderTotal(int Id, decimal Total);
 record OrderLine(int Id, string Status);
 
-var result = ctx.Batch()
+var result = ctx.CreateBatchBuilder()
     .AddQuery(ctx.From<IOrder>().Where(x => x.Status == "open")
         .Select(x => new OrderTotal(x.Id, x.Total)))
     .AddQuery(ctx.From<IOrder>().Where(x => x.Status == "shipped")
         .Select(x => new OrderLine(x.Id, x.Status)))
     .Execute();
 
-var open = result.Read<OrderTotal>();       // первый добавленный запрос
-var shipped = result.Read<OrderLine>();     // второй добавленный запрос
+foreach (var set in result)
+{
+    if (set.Index == 0)
+    {
+        IReadOnlyList<OrderTotal> open = set.Read<OrderTotal>();
+    }
+    else
+    {
+        IReadOnlyList<OrderLine> shipped = set.Read<OrderLine>();
+    }
+}
 ```
 
 Оба запроса уходят в базу **одним** батчем — один round trip, одна серверная сессия:
@@ -186,14 +212,14 @@ select id, status from orders
 
 `AddQuery` возвращает билдер, поэтому вызовы можно связывать в цепочку. Каждый результат-несущий запрос должен идти после утверждений с побочным эффектом: материализация или DML-шаг, добавленный после первого `AddQuery`, бросает `InvalidOperationException`. `AddQuery` и `Query` взаимно исключают друг друга: `Query` завершает батч, поэтому последующий `AddQuery` бросает исключение, и `Query` после `AddQuery` — тоже. `Execute()`/`ExecuteAsync()` без добавленного результат-несущего запроса бросает `InvalidOperationException`.
 
-Они возвращают [`BatchResult`](xref:NextORM.Core.BatchResult):
+`Execute()` возвращает [`BatchResult`](xref:NextORM.Core.BatchResult). Как и у сырого [`ProcedureResult`](12-raw-sql.md#несколько-наборов-результатов), сам объект результата перечисляем: `foreach (var set in result)` или `await foreach (var set in result)` выдаёт по курсору [`ResultSet`](xref:NextORM.Core.ResultSet) на набор, в порядке добавления запросов. Каждый курсор предоставляет `Index`, `FieldCount` и `ColumnNames` и читает **свой** набор с собственным `T` через `Read<T>()` или `ReadAsync<T>(ct)`. Кроме того, `BatchResult` сохраняет позиционный путь:
 
 | Член | Действие |
 |---|---|
 | `ResultSetCount` | Число наборов результатов, которые произвёл батч. |
-| `Read<TResult>()` | Возвращает следующий набор в порядке добавления запросов; каждый набор читается один раз. |
+| `Read<TResult>()` | Возвращает следующий набор позиционно, в порядке добавления запросов; каждый набор читается один раз. |
 
-`Read<TResult>()` типизирован: запрошенный тип должен совпадать с проектируемым типом следующего запроса, иначе бросается `InvalidOperationException`; чтение после последнего набора тоже бросает `InvalidOperationException`. `BatchResult` **нетерпеливый** (eager) и не владеет ни reader'ом, ни соединением — каждый набор буферизуется до возврата `Execute()`, поэтому он не освобождаемый (не `IDisposable`) и не стримит.
+`Read<TResult>()` типизирован: запрошенный тип должен совпадать с проектируемым типом следующего запроса, иначе бросается `InvalidOperationException` **без расхода набора**; чтение после последнего набора тоже бросает `InvalidOperationException`. Перечисление результата и позиционный `Read<TResult>()` нельзя смешивать — любое из этих использований бросает `InvalidOperationException`. `BatchResult` **нетерпеливый** (eager) и не владеет ни reader'ом, ни соединением — каждый набор буферизуется до возврата `Execute()`, поэтому он не освобождаемый (не `IDisposable`) и не стримит. Эта буферизация — единственное отличие от потокового `ProcedureResult`; интерфейс курсоров и правила одноразового обхода идентичны — полный контракт курсоров см. в разделе [Несколько наборов результатов](12-raw-sql.md#несколько-наборов-результатов).
 
 Для батча с единственным результатом терминал `Query<TResult>` по-прежнему рендерится без выполнения через `BatchQuery<TResult>.ToSql()`, а многорезультатная форма `AddQuery`/`Execute` рендерит весь батч без выполнения через `BatchBuilder.ToSql()` — оба рендерят тот же текст, что и выполнение, причём `BatchBuilder.ToSql()` требует хотя бы одного результат-несущего шага (иначе бросает `InvalidOperationException`).
 
@@ -212,9 +238,9 @@ select id, status from orders
 
 ## Ограничения
 
-* Батч завершается одним или несколькими результат-несущими запросами — одним, добавленным терминалом `Query<TResult>`, либо несколькими, добавленными `AddQuery<TResult>` и выполненными через `Execute`/`ExecuteAsync`, — и они последние. Утверждения перед ними — с побочным эффектом: материализации и DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`), не возвращающие колонок.
-* Многорезультатное выполнение **последовательное и нетерпеливое**: `BatchResult.Read<TResult>()` возвращает наборы в порядке добавления запросов, каждый набор читается один раз, а все наборы полностью буферизуются в памяти до возврата `Execute()`/`ExecuteAsync()` — стриминга и произвольного доступа нет. Стримит только терминал `BatchQuery<TResult>` с единственным результатом, через `ToAsyncEnumerable`.
-* Мутация, добавленная в батч, не может запрашивать возврат строк: терминалы `Returning()`/`ReturningIdentity()` дают другой тип билдера и не принимаются. Многотабличные `UpdateJoin`/`DeleteJoin` и `Merge` не являются батч-шагами. У сырого SQL/DDL нет командной модели.
+* Батч завершается одним или несколькими результат-несущими запросами — одним, добавленным терминалом `Query<TResult>`, либо несколькими, добавленными `AddQuery<TResult>` и выполненными через `Execute`/`ExecuteAsync`, — и они последние. Утверждения перед ними — с побочным эффектом: материализации, DML (`INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`) и сырые SQL-шаги, не возвращающие колонок.
+* Многорезультатное выполнение **последовательное и нетерпеливое**: `BatchResult` выдаёт свои наборы в порядке добавления запросов (через перечисление или `Read<TResult>()`), каждый набор читается один раз, а все наборы полностью буферизуются в памяти до возврата `Execute()`/`ExecuteAsync()` — стриминга и произвольного доступа нет. Стримит только терминал `BatchQuery<TResult>` с единственным результатом, через `ToAsyncEnumerable`.
+* Мутация, добавленная в батч, не может запрашивать возврат строк: терминалы `Returning()`/`ReturningIdentity()` дают другой тип билдера и не принимаются. Многотабличные `CreateUpdateJoinBuilder`/`DeleteJoin` и `Merge` не являются батч-шагами. Сырой SQL/DDL выражается вербатим-шагом `Raw(sql)` — см. [Сырые шаги](#сырые-шаги).
 * `ToSql()` показывает `;`-склеенный текст без выполнения: на терминале `BatchQuery<TResult>` для единственного результата и на `BatchBuilder` для многорезультатной формы `AddQuery`/`Execute` (`BatchBuilder.ToSql()` рендерит весь батч и требует хотя бы одного результат-несущего шага). На `DbBatch`-провайдере при выполнении утверждения всё равно отправляются отдельными командами одного батча.
 * Выполнение батча **не** проходит через интерцепторы запросов: их события несут `DbCommand`, тогда как команда `DbBatch` — это `DbBatchCommand`.
 * Рантайм-плейсхолдеры `SqlFunctions.Parameter` нельзя использовать в батч-запросе; захватите значение в локальную переменную (как и в любом запросе, рендерящемся как источник). Захваченные переменные становятся параметрами автоматически.

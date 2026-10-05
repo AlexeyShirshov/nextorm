@@ -708,8 +708,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
             .Should().HaveCount(9);
 
         _sut.ComplexEntity
-            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt)
-            .WithStrictness(JoinStrictness.Any)
+            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt, j => j.WithStrictness(JoinStrictness.Any))
             .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
             .ToList()
             .Should().HaveCount(3);
@@ -719,8 +718,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void AllStrictness_ShouldKeepEveryMatch()
     {
         _sut.ComplexEntity
-            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt)
-            .WithStrictness(JoinStrictness.All)
+            .LeftJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt, j => j.WithStrictness(JoinStrictness.All))
             .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
             .ToList()
             .Should().HaveCount(9);
@@ -733,8 +731,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         // it keeps the right row with the greatest id not exceeding the left id (ids are unique
         // 1..3), so the result matches the left rows one to one.
         var rows = _sut.ComplexEntity
-            .Join(_sut.ComplexEntity, (a, b) => a.Boolean == b.Boolean && a.Id >= b.Id)
-            .WithStrictness(JoinStrictness.Asof)
+            .Join(_sut.ComplexEntity, (a, b) => a.Boolean == b.Boolean && a.Id >= b.Id, j => j.WithStrictness(JoinStrictness.Asof))
             .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
             .ToList();
 
@@ -748,8 +745,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         // On a single node GLOBAL JOIN behaves like a regular join, so this only checks that the
         // rendered SQL is accepted and preserves the left-hand rows.
         var rows = _sut.SimpleEntity
-            .LeftJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
-            .Global()
+            .LeftJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id, j => j.Global())
             .Select(p => new { p.Item1.Id })
             .ToList();
 
@@ -1046,6 +1042,33 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         r.Text.Should().NotBeNull().And.Contain("\"name\"").And.Contain("alice");
     }
 
+    // #39 managed JSON streaming: ClickHouse does not derive CommonTestSuite, so the shared
+    // CommonTestSuite.JsonStream facts are mirrored here through their reusable bodies. complex_entity
+    // carries the same ids/rows as the shared fixture.
+    [Fact]
+    public void WriteJson_Array_ShouldMatchJsonSerializer_ForScalar()
+        => CommonTestSuite.WriteJsonArrayScalar(_sut);
+
+    [Fact]
+    public void WriteJson_Array_ShouldMatchJsonSerializer_ForFlatDto()
+        => CommonTestSuite.WriteJsonArrayFlatDto(_sut);
+
+    [Fact]
+    public void WriteJson_NdJson_ShouldMatchLineByLine()
+        => CommonTestSuite.WriteJsonNdJson(_sut);
+
+    [Fact]
+    public void WriteJson_IgnoreNull_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonIgnoreNull(_sut);
+
+    [Fact]
+    public void WriteJson_EmptyResult_ShouldProduceEmptyArray()
+        => CommonTestSuite.WriteJsonEmptyResult(_sut);
+
+    [Fact]
+    public void WriteJson_TypedColumns_ShouldMatchJsonSerializer()
+        => CommonTestSuite.WriteJsonTypedColumns(_sut);
+
     [Fact]
     public void ArrayColumns_ShouldProjectDirectly()
     {
@@ -1229,7 +1252,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
         var marker = "ins_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IInsertEntity>()
+        ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, marker)
             .Value(x => x.Age, 42)
             .Insert();
@@ -1248,7 +1271,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     {
         var ctx = _sut.DataProvider;
 
-        var act = () => ctx.InsertInto<IInsertEntity>()
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
             .Value(x => x.Name, "ins_unsupported")
             .ReturningIdentity(x => x.Id)
             .Single();
@@ -1305,6 +1328,115 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
+
+    /// <summary>
+    /// #116 reproducer on ClickHouse: an inner CTE declared inside the body of an outer CTE must be
+    /// hoisted into a single top-level <c>with</c> (a <c>with</c> nested inside a derived table is
+    /// invalid), execute, and return the same rows as the equivalent flat <c>With(...).With(...)</c>
+    /// chain.
+    /// </summary>
+    [Fact]
+    public void Cte_NestedOnClickHouse_ShouldHoistAndReturnData()
+    {
+        var ctx = _sut.DataProvider;
+
+        // Outer CTE "o" whose body is itself a query carrying CTE "i".
+        var inner = ctx.With("i", _sut.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id }))
+            .From("i")
+            .Select(t => new { id = t.GetInt64("id") });
+
+        var nested = ctx.With("o", inner)
+            .From("o")
+            .Select(t => new { id = t.GetInt64("id") });
+
+        // The equivalent flat chain: both declarations at the top level, "o" reads "i" directly.
+        var flat = ctx
+            .With("i", _sut.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id }))
+            .With("o", ctx.From("i").Select(t => new { id = t.GetInt64("id") }))
+            .From("o")
+            .Select(t => new { id = t.GetInt64("id") });
+
+        var nestedSql = SqlOf(ctx, nested);
+        var flatSql = SqlOf(ctx, flat);
+
+        // Exactly one top-level `with`; the inner declaration must not stay nested.
+        System.Text.RegularExpressions.Regex.Matches(nestedSql, @"\bwith\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count.Should().Be(1);
+        nestedSql.Should().NotContain("(with");
+        flatSql.Should().NotContain("(with");
+
+        var nestedRows = nested.ToList().Select(r => r.id).OrderBy(id => id).ToList();
+        var flatRows = flat.ToList().Select(r => r.id).OrderBy(id => id).ToList();
+
+        // complex_entity ids are 1..3; the inner CTE keeps 2 and 3, the outer one passes them through.
+        nestedRows.Should().Equal(flatRows).And.Equal(2, 3);
+    }
+
+    /// <summary>
+    /// SelectWhereMax: keeps the single whole row with the greatest <c>score</c>. The portable
+    /// window-function lowering must be accepted by ClickHouse unchanged.
+    /// </summary>
+    [Fact]
+    public void SelectWhereExtrema_Max_GlobalOne_ShouldReturnTheWholeExtremeRow()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>().SelectWhereMax(e => e.Score).ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Score.Should().Be(9);
+        (rows[0].Id, rows[0].Label).Should().BeOneOf((3, "three"), (4, "four"));
+    }
+
+    /// <summary>
+    /// SelectWhereMax grouped with <see cref="ExtremeRowTies.All"/>: every row tied on the group
+    /// maximum survives, and the all-null group contributes no rows.
+    /// </summary>
+    [Fact]
+    public void SelectWhereExtrema_Max_GroupedAll_ShouldReturnEveryTiedRowPerGroup()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>()
+            .SelectWhereMax(e => e.Score, ExtremeRowTies.All, e => e.Category)
+            .ToList();
+
+        rows.Should().HaveCount(5);
+        rows.Should().NotContain(r => r.Category == "d");
+        rows.Where(r => r.Category == "a").Select(r => r.Id).Should().BeEquivalentTo([3, 4]);
+        rows.Where(r => r.Category == "b").Select(r => r.Id).Should().BeEquivalentTo([5]);
+        rows.Where(r => r.Category == "c").Select(r => r.Id).Should().BeEquivalentTo([9]);
+        rows.Where(r => r.Category == null).Select(r => r.Id).Should().BeEquivalentTo([8]);
+    }
+
+    /// <summary>SelectWhereMax projection form over a ClickHouse table.</summary>
+    [Fact]
+    public void SelectWhereExtrema_Max_Projection_ShouldProjectTheExtremeRow()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>()
+            .SelectWhereMax(e => e.Score, e => new { e.Id, e.Label })
+            .ToList();
+
+        rows.Should().ContainSingle();
+        (rows[0].Id, rows[0].Label).Should().BeOneOf((3, "three"), (4, "four"));
+    }
+
+    /// <summary>
+    /// SelectWhereMin global with <see cref="ExtremeRowTies.All"/>: both minimum rows survive and
+    /// null comparison values are ignored.
+    /// </summary>
+    [Fact]
+    public void SelectWhereExtrema_Min_GlobalAll_ShouldReturnEveryTiedRow()
+    {
+        var rows = _sut.DataProvider.From<ExtremaEntity>()
+            .SelectWhereMin(e => e.Score, ExtremeRowTies.All)
+            .ToList();
+
+        rows.Should().HaveCount(2);
+        rows.Select(r => r.Id).Should().BeEquivalentTo([6, 10]);
+        rows.Should().OnlyContain(r => r.Score == 1);
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
+                cmd, createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken))
+            .DbCommand.CommandText.Replace("\r\n", "\n");
 }
 
 [SqlTable("uint64_entity")]

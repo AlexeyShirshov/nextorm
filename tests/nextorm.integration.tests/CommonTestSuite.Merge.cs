@@ -14,7 +14,7 @@ public abstract partial class CommonTestSuite
         var id = MergeKey();
         var marker = "mrg_" + Guid.NewGuid().ToString("N");
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -38,11 +38,11 @@ public abstract partial class CommonTestSuite
         var id = MergeKey();
         var marker = "mrg_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = id, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 2 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -67,11 +67,11 @@ public abstract partial class CommonTestSuite
         var newId = existingId + 1;
         var marker = "mrg_" + Guid.NewGuid().ToString("N");
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = existingId, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using([
                 new MergeEntity { Id = existingId, Name = marker, Age = 7 },
                 new MergeEntity { Id = newId, Name = marker, Age = 8 },
@@ -99,7 +99,7 @@ public abstract partial class CommonTestSuite
 
         if (!((DataContext)ctx).Dialect.SupportsMergeConditionalBranches)
         {
-            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
                 .OnKeys()
                 .WhenMatched((t, s) => t.Age < s.Age).ThenUpdate()
@@ -109,11 +109,11 @@ public abstract partial class CommonTestSuite
             return;
         }
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = id, Name = "keep", Age = 9 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = "low", Age = 5 })
             .OnKeys()
             .WhenMatched((t, s) => t.Age < s.Age).ThenUpdate()
@@ -124,7 +124,7 @@ public abstract partial class CommonTestSuite
         afterLow.Name.Should().Be("keep");
         afterLow.Age.Should().Be(9);
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = "high", Age = 20 })
             .OnKeys()
             .WhenMatched((t, s) => t.Age < s.Age).ThenUpdate()
@@ -144,7 +144,7 @@ public abstract partial class CommonTestSuite
 
         if (!((DataContext)ctx).Dialect.SupportsMergeConditionalBranches)
         {
-            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
                 .On((t, s) => t.Id == s.Id)
                 .WhenMatched().ThenUpdate()
@@ -154,11 +154,11 @@ public abstract partial class CommonTestSuite
             return;
         }
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = id, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = "new", Age = 2 })
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()
@@ -179,7 +179,7 @@ public abstract partial class CommonTestSuite
         if (!((DataContext)ctx).Dialect.SupportsMergeStatement)
         {
             var sourceIdUnsupported = id;
-            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(ctx.From<IMergeEntity>().Where(x => x.Id == sourceIdUnsupported))
                 .OnKeys()
                 .WhenMatched().ThenUpdate()
@@ -189,12 +189,12 @@ public abstract partial class CommonTestSuite
             return;
         }
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = id, Name = "src", Age = 3 })
             .Insert();
 
         var sourceId = id;
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(ctx.From<IMergeEntity>().Where(x => x.Id == sourceId))
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -215,7 +215,7 @@ public abstract partial class CommonTestSuite
 
         if (!((DataContext)ctx).Dialect.SupportsMergeStatement)
         {
-            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
                 .On((t, s) => t.Id == s.Id)
                 .WhenMatched().ThenUpdate(d => new { d.Name, d.Age })
@@ -225,11 +225,11 @@ public abstract partial class CommonTestSuite
             return;
         }
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = id, Name = "old", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 9 })
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate(d => new { d.Name, d.Age })
@@ -249,7 +249,7 @@ public abstract partial class CommonTestSuite
 
         if (!((DataContext)ctx).Dialect.SupportsMergeDelete)
         {
-            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
                 .On((t, s) => t.Id == s.Id)
                 .WhenMatched().ThenDelete()
@@ -259,11 +259,11 @@ public abstract partial class CommonTestSuite
             return;
         }
 
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = id, Name = "del", Age = 1 })
             .Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = "del", Age = 1 })
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenDelete()
@@ -282,7 +282,7 @@ public abstract partial class CommonTestSuite
 
         if (!((DataContext)ctx).Dialect.SupportsMergeBySourceDelete)
         {
-            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(new MergeEntity { Id = sourceId, Name = "s", Age = 2 })
                 .On((t, s) => t.Id == s.Id)
                 .WhenMatched().ThenUpdate()
@@ -292,12 +292,12 @@ public abstract partial class CommonTestSuite
             return;
         }
 
-        ctx.InsertInto<IMergeEntity>().Values([
+        ctx.CreateInsertBuilder<IMergeEntity>().Values([
             new MergeEntity { Id = sourceId, Name = "old", Age = 1 },
             new MergeEntity { Id = staleId, Name = "stale", Age = 1 },
         ]).Insert();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = sourceId, Name = "fresh", Age = 5 })
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()
@@ -315,7 +315,7 @@ public abstract partial class CommonTestSuite
         var id = MergeKey();
         var marker = "mrg_" + Guid.NewGuid().ToString("N");
 
-        await ctx.MergeInto<IMergeEntity>()
+        await ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 4 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -328,7 +328,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void Merge_ToSql_ShouldRenderMerge()
     {
-        var sql = _sut.DataProvider.MergeInto<IMergeEntity>()
+        var sql = _sut.DataProvider.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = MergeKey(), Name = "x", Age = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -348,7 +348,7 @@ public abstract partial class CommonTestSuite
 
         if (!dialect.SupportsReturning && !dialect.SupportsOutput)
         {
-            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+            var unsupported = () => ctx.CreateMergeBuilder<IMergeEntity>()
                 .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
                 .OnKeys()
                 .WhenMatchedUpdate()
@@ -360,7 +360,7 @@ public abstract partial class CommonTestSuite
             return;
         }
 
-        var inserted = ctx.MergeInto<IMergeEntity>()
+        var inserted = ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = marker, Age = 1 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -373,7 +373,7 @@ public abstract partial class CommonTestSuite
         inserted[0].Name.Should().Be(marker);
 
         var updatedName = marker + "_2";
-        var updated = ctx.MergeInto<IMergeEntity>()
+        var updated = ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = id, Name = updatedName, Age = 2 })
             .OnKeys()
             .WhenMatchedUpdate()

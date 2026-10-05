@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 
 namespace NextORM.MySql.Tests;
@@ -125,7 +126,7 @@ public class SqlGenerationTests
 
         // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
         // every dynamic key is backtick-quoted even though the global identifier-quoting flag is off.
-        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+        Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
             .Should().Contain("(id, `alpha`, `mid`, `zeta`) values (@p0, @p1, @p2, @p3)");
@@ -136,7 +137,7 @@ public class SqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        Normalize(ctx.Update<DynamicColumnsEntity>()
+        Normalize(ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
@@ -148,7 +149,7 @@ public class SqlGenerationTests
     {
         using var ctx = MySqlTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -168,7 +169,7 @@ public class SqlGenerationTests
         using var ctx = MySqlTestContext.Create();
 
         // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
             .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
@@ -178,15 +179,14 @@ public class SqlGenerationTests
     public void IndexHint_UseForceIgnore_ShouldRenderMySqlForms()
     {
         using var ctx = MySqlTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id")).Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity use index (idx_id)");
 
-        SqlOf(ctx, e.WithIndex(IndexHintKind.Force, "idx_id", "idx_other").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithIndex(IndexHintKind.Force, "idx_id", "idx_other")).Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity force index (idx_id, idx_other)");
 
-        SqlOf(ctx, e.WithIndex(IndexHintKind.Ignore, "idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithIndex(IndexHintKind.Ignore, "idx_id")).Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity ignore index (idx_id)");
     }
 
@@ -194,9 +194,9 @@ public class SqlGenerationTests
     public void IndexHint_WhitespaceNames_ShouldBeIgnored()
     {
         using var ctx = MySqlTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("  "));
 
-        SqlOf(ctx, e.WithIndex("  ").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity");
     }
 
@@ -204,9 +204,9 @@ public class SqlGenerationTests
     public void IndexHint_WithoutIndex_ShouldThrowOnMySql()
     {
         using var ctx = MySqlTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithoutIndex());
 
-        var act = () => SqlOf(ctx, e.WithoutIndex().Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*at least one index*");
     }
@@ -601,6 +601,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QueryHint_MultipleArguments_ShouldEmitBothHintsJoinedBySpace()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+
+        sql.Should().Be("select /*+ recompile fast 10 */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryHint_MultipleArguments_ShouldMatchSequentialCalls()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var multi = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+        var sequential = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile").Hint("fast 10"));
+
+        multi.Should().Be(sequential);
+    }
+
+    [Fact]
     public void QueryHint_WithCte_ShouldPlaceHintAfterTheTopLevelSelect()
     {
         using var ctx = MySqlTestContext.Create();
@@ -621,8 +644,7 @@ public class SqlGenerationTests
         using var ctx = MySqlTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("JOIN_ORDER(t1, t2)")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("JOIN_ORDER(t1, t2)"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().StartWith("select /*+ JOIN_ORDER(t1, t2) */");
@@ -635,7 +657,7 @@ public class SqlGenerationTests
         using var ctx = MySqlTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var sql = SqlOf(ctx, ctx.From(inner).WithSubQueryHint("NO_BNL()").Select(t => new { t.Id }));
+        var sql = SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("NO_BNL()")).Select(t => new { t.Id }));
 
         sql.Should().StartWith("select /*+ NO_BNL() */");
     }
@@ -680,7 +702,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Int)).Should().EndWith("FOR UPDATE SKIP LOCKED");
         SqlOf(ctx, e.ForShare(LockWaitMode.NoWait).Select(x => x.Int)).Should().EndWith("FOR SHARE NOWAIT");
 
-        SqlOf(ctx, e.WithIndex(IndexHintKind.Force, "idx_int").Select(x => x.Int))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithIndex(IndexHintKind.Force, "idx_int")).Select(x => x.Int))
             .Should().Contain("FORCE INDEX (idx_int)");
     }
 
@@ -1060,6 +1082,76 @@ public class SqlGenerationTests
         sql.Should().Contain("group by nullableint");
         sql.Should().Contain("order by count(*) desc");
         sql.Should().Contain("limit 20 offset 1");
+    }
+
+    [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSingleTopLevelWith()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // MySQL 8 / MariaDB 10.2+ accept the ANSI `with` form (SqlDialectBase.MakeWith), so the nested
+        // declaration hoists into one flat top-level `with` instead of the (invalid on MySQL 5.7) nested
+        // `with i as (with ...)` shape.
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    // --- SelectWhereMax: window-rank lowering ---
+
+    private static string Dequoted(string sql) => sql
+        .Replace("\r\n", " ")
+        .Replace('\n', ' ')
+        .Replace("\"", string.Empty)
+        .Replace("[", string.Empty)
+        .Replace("]", string.Empty)
+        .Replace("`", string.Empty);
+
+    private static string OuterSelectList(string sql)
+    {
+        const string marker = "select ";
+        var start = sql.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return sql;
+        start += marker.Length;
+        var end = sql.IndexOf(" from ", start, StringComparison.Ordinal);
+        return end < 0 ? sql[start..] : sql[start..end];
+    }
+
+    [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldRenderRowNumberFilteredToTheSingleExtreme()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 
 }

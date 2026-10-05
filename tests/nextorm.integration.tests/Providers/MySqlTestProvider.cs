@@ -62,8 +62,15 @@ internal sealed class MySqlTestProvider : ITestProvider
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
 
-    public IDataContext CreateContext() =>
-        new MySqlDataContext(MySqlContainer.ConnectionString, new DataContextBuilder());
+    public IDataContext CreateContext() => CreateContext(null);
+
+    public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
+    {
+        var builder = new DataContextBuilder();
+        if (loggerFactory is not null)
+            builder = builder.UseLoggerFactory(loggerFactory);
+        return new MySqlDataContext(MySqlContainer.ConnectionString, builder);
+    }
 
     public void EnsureSeeded()
     {
@@ -100,11 +107,16 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists merge_entity",
         "drop table if exists delete_entity",
         "drop table if exists dynamic_entity",
+        "drop table if exists eager_link",
+        "drop table if exists eager_tag",
         "drop table if exists eager_note",
         "drop table if exists eager_child",
         "drop table if exists eager_parent",
         "drop table if exists query_filter_target",
         "drop table if exists query_filter_entity",
+        "drop table if exists extrema_entity",
+        "drop table if exists orders",
+        "drop table if exists person",
 
         "create table simple_entity (id int not null primary key)",
 
@@ -221,6 +233,23 @@ internal sealed class MySqlTestProvider : ITestProvider
         )
         """,
 
+        """
+        create table eager_tag
+        (
+            id int not null primary key,
+            name varchar(100) null
+        )
+        """,
+
+        """
+        create table eager_link
+        (
+            id int not null primary key,
+            parent_id int not null,
+            child_id int not null
+        )
+        """,
+
         // Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
         // target table. Both carry the tenant/soft-delete columns the shared suite filters on.
         """
@@ -241,6 +270,57 @@ internal sealed class MySqlTestProvider : ITestProvider
             is_deleted tinyint(1) not null,
             name varchar(100) null
         )
+        """,
+
+        // SelectWhereMax/SelectWhereMin fixtures (#115): a nullable comparison value (score) and a
+        // nullable group key (category), with ties, a null group, an all-null group and a category
+        // absent from the data (for the empty-result case).
+        """
+        create table extrema_entity
+        (
+            id int not null primary key,
+            score int null,
+            category varchar(50) null,
+            label varchar(50) not null
+        )
+        """,
+        """
+        insert into extrema_entity (id, score, category, label) values
+            (1, null, 'a', 'one'),
+            (2, 5, 'a', 'two'),
+            (3, 9, 'a', 'three'),
+            (4, 9, 'a', 'four'),
+            (5, 3, 'b', 'five'),
+            (6, 1, 'b', 'six'),
+            (7, null, null, 'seven'),
+            (8, 7, null, 'eight'),
+            (9, 4, 'c', 'nine'),
+            (10, 1, 'b', 'ten'),
+            (11, null, 'd', 'eleven')
+        """,
+
+        // Join-alias fixtures (#113): one order whose buyer and approver are two different people,
+        // plus an unlinked person so RIGHT/FULL alias joins have an unmatched row to return.
+        """
+        create table person
+        (
+            id int not null primary key,
+            name varchar(100) null
+        )
+        """,
+        """
+        insert into person (id, name) values (10, 'Buyer'), (20, 'Approver'), (30, 'Unlinked')
+        """,
+        """
+        create table orders
+        (
+            id int not null primary key,
+            buyer_id int not null,
+            approver_id int not null
+        )
+        """,
+        """
+        insert into orders (id, buyer_id, approver_id) values (1, 10, 20), (2, 20, 10)
         """
     ];
 }

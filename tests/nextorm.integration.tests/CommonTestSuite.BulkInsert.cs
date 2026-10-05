@@ -12,7 +12,7 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var rows = Enumerable.Range(0, 25).Select(i => new InsertEntity { Name = marker, Age = i }).ToList();
 
-        var written = ctx.BulkInsertInto<IInsertEntity>().Values(rows).BulkInsert();
+        var written = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).BulkInsert();
 
         written.Should().Be(25);
 
@@ -27,7 +27,7 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var rows = Enumerable.Range(0, 25).Select(i => new InsertEntity { Name = marker, Age = i }).ToList();
 
-        var written = ctx.BulkInsertInto<IInsertEntity>(o => o.MaxBatchSize(4)).Values(rows).BulkInsert();
+        var written = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.MaxBatchSize(4)).Values(rows).BulkInsert();
 
         written.Should().Be(25);
 
@@ -40,7 +40,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = _sut.DataProvider;
 
-        var written = ctx.BulkInsertInto<IInsertEntity>().Values(Array.Empty<InsertEntity>()).BulkInsert();
+        var written = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(Array.Empty<InsertEntity>()).BulkInsert();
 
         written.Should().Be(0);
     }
@@ -53,7 +53,7 @@ public abstract partial class CommonTestSuite
         var rows = Enumerable.Range(0, 25).Select(i => new InsertEntity { Name = marker, Age = i }).ToList();
         var seen = new List<int>();
 
-        ctx.BulkInsertInto<IInsertEntity>(o => o.MaxBatchSize(10).NotifyAfter(10, (n, _) => seen.Add(n)))
+        ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.MaxBatchSize(10).NotifyAfter(10, (n, _) => seen.Add(n)))
             .Values(rows)
             .BulkInsert();
 
@@ -72,7 +72,7 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var rows = Enumerable.Range(0, 25).Select(i => new InsertEntity { Name = marker, Age = i }).ToList();
 
-        var act = () => ctx.BulkInsertInto<IInsertEntity>(o => o
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
                 .MaxBatchSize(10)
                 .NotifyAfter(1, (_, _) => throw new InvalidOperationException("boom")))
             .Values(rows)
@@ -89,7 +89,7 @@ public abstract partial class CommonTestSuite
         var rows = Enumerable.Range(0, 25).Select(i => new InsertEntity { Name = marker, Age = i }).ToList();
         using var cts = new CancellationTokenSource();
 
-        var act = () => ctx.BulkInsertInto<IInsertEntity>(o => o
+        var act = () => ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o
                 .MaxBatchSize(10)
                 .ProgressCancellationTokenSource(cts)
                 .NotifyAfter(10, (_, _) => cts.Cancel()))
@@ -108,7 +108,7 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var rows = Enumerable.Range(0, 3).Select(i => new InsertEntity { Name = marker, Age = i }).ToList();
 
-        var keys = ctx.BulkInsertInto<IInsertEntity>().Values(rows).ReturningKey<long>().ToList();
+        var keys = ctx.CreateBulkInsertBuilder<IInsertEntity>().Values(rows).ReturningKey<long>().ToList();
 
         keys.Should().HaveCount(3);
         keys.Should().OnlyContain(key => key > 0);
@@ -124,7 +124,7 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var rows = Enumerable.Range(0, 5).Select(i => new BulkDestinationEntity { Name = marker, Age = i }).ToList();
 
-        var written = ctx.BulkInsertInto<IBulkDestinationEntity>(o => o.Table("insert_entity")).Values(rows).BulkInsert();
+        var written = ctx.CreateBulkInsertBuilder<IBulkDestinationEntity>(o => o.Table("insert_entity")).Values(rows).BulkInsert();
 
         written.Should().Be(5);
 
@@ -142,7 +142,7 @@ public abstract partial class CommonTestSuite
 
         try
         {
-            var written = ctx.BulkInsertInto<IDeleteEntity>(o => o.KeepIdentity()).Values(rows).BulkInsert();
+            var written = ctx.CreateBulkInsertBuilder<IDeleteEntity>(o => o.KeepIdentity()).Values(rows).BulkInsert();
 
             written.Should().Be(2);
 
@@ -151,7 +151,7 @@ public abstract partial class CommonTestSuite
         }
         finally
         {
-            ctx.DeleteFrom<IDeleteEntity>().Where(x => ids.Contains(x.Id)).Delete();
+            ctx.CreateDeleteBuilder<IDeleteEntity>().Where(x => ids.Contains(x.Id)).Delete();
         }
     }
 
@@ -164,12 +164,12 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var id = Random.Shared.NextInt64(8_000_000_000L, 9_000_000_000L);
 
-        var first = ctx.BulkInsertInto<IInsertEntity>(o => o.KeepIdentity())
+        var first = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepIdentity())
             .Values([new InsertEntity { Id = id, Name = marker, Age = 1 }])
             .BulkInsert();
         first.Should().Be(1);
 
-        var second = ctx.BulkInsertInto<IInsertEntity>(o => o.KeepIdentity().IgnoreDuplicates())
+        var second = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepIdentity().IgnoreDuplicates())
             .Values([new InsertEntity { Id = id, Name = marker, Age = 2 }])
             .BulkInsert();
         second.Should().Be(0);
@@ -189,13 +189,13 @@ public abstract partial class CommonTestSuite
         var marker = InsertMarker();
         var id = Random.Shared.NextInt64(9_000_000_000L, 10_000_000_000L);
 
-        var inserted = ctx.BulkInsertInto<IInsertEntity>(o => o.KeepIdentity().IgnoreDuplicates())
+        var inserted = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepIdentity().IgnoreDuplicates())
             .Values([new InsertEntity { Id = id, Name = marker, Age = 1 }])
             .ReturningKey<long>()
             .ToList();
         inserted.Should().ContainSingle().Which.Should().Be(id);
 
-        var skipped = ctx.BulkInsertInto<IInsertEntity>(o => o.KeepIdentity().IgnoreDuplicates())
+        var skipped = ctx.CreateBulkInsertBuilder<IInsertEntity>(o => o.KeepIdentity().IgnoreDuplicates())
             .Values([new InsertEntity { Id = id, Name = marker, Age = 2 }])
             .ReturningKey<long>()
             .ToList();

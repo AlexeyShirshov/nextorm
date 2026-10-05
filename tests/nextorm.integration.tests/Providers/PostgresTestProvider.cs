@@ -55,8 +55,15 @@ internal sealed class PostgresTestProvider : ITestProvider
 
     public string SkipReason => PostgresContainer.Failure ?? "PostgreSQL is not available.";
 
-    public IDataContext CreateContext() =>
-        new PostgresDataContext(PostgresContainer.ConnectionString, new DataContextBuilder());
+    public IDataContext CreateContext() => CreateContext(null);
+
+    public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
+    {
+        var builder = new DataContextBuilder();
+        if (loggerFactory is not null)
+            builder = builder.UseLoggerFactory(loggerFactory);
+        return new PostgresDataContext(PostgresContainer.ConnectionString, builder);
+    }
 
     public void EnsureSeeded()
     {
@@ -88,11 +95,18 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists merge_entity;
         drop table if exists delete_entity;
         drop table if exists dynamic_entity;
+        drop table if exists eager_link;
+        drop table if exists eager_tag;
         drop table if exists eager_note;
         drop table if exists eager_child;
         drop table if exists eager_parent;
         drop table if exists query_filter_target;
         drop table if exists query_filter_entity;
+        drop table if exists extrema_entity;
+        drop table if exists extreme_parity_144;
+        drop table if exists extreme_alias_144;
+        drop table if exists orders;
+        drop table if exists person;
 
         create table simple_entity (id integer primary key);
         insert into simple_entity (id) select generate_series(1, 10);
@@ -199,6 +213,19 @@ internal sealed class PostgresTestProvider : ITestProvider
             text varchar(100)
         );
 
+        create table eager_tag
+        (
+            id integer primary key,
+            name varchar(100)
+        );
+
+        create table eager_link
+        (
+            id integer primary key,
+            parent_id integer not null,
+            child_id integer not null
+        );
+
         -- Global query filter fixtures (#108 D6): the filtered source table and the INSERT ... SELECT
         -- target table. Both carry the tenant/soft-delete columns the shared suite filters on.
         create table query_filter_entity
@@ -216,5 +243,75 @@ internal sealed class PostgresTestProvider : ITestProvider
             is_deleted boolean not null,
             name varchar(100)
         );
+
+        -- SelectWhereMax/SelectWhereMin fixtures (#115): a nullable comparison value (score) and a
+        -- nullable group key (category), with ties, a null group, an all-null group and a category
+        -- absent from the data (for the empty-result case).
+        create table extrema_entity
+        (
+            id integer primary key,
+            score integer,
+            category varchar(50),
+            label varchar(50) not null
+        );
+        insert into extrema_entity (id, score, category, label) values
+            (1, null, 'a', 'one'),
+            (2, 5, 'a', 'two'),
+            (3, 9, 'a', 'three'),
+            (4, 9, 'a', 'four'),
+            (5, 3, 'b', 'five'),
+            (6, 1, 'b', 'six'),
+            (7, null, null, 'seven'),
+            (8, 7, null, 'eight'),
+            (9, 4, 'c', 'nine'),
+            (10, 1, 'b', 'ten'),
+            (11, null, 'd', 'eleven');
+
+        -- Extreme-row native/portable parity fixture (#144 D7): nullable integral extreme/group keys
+        -- (k1, k2, g), a nullable string payload (label) and a nullable integral payload (n).
+        create table extreme_parity_144
+        (
+            id integer primary key,
+            g integer,
+            k1 integer,
+            k2 integer,
+            label varchar(50),
+            n integer
+        );
+        insert into extreme_parity_144 (id, g, k1, k2, label, n) values
+            (1, 10, 1, 99, null, null),
+            (2, 10, 1, 9, 'a-1-9', 7),
+            (3, 10, 1, 9, 'a-1-9b', 8),
+            (4, 10, null, 1, 'null-k1', 6),
+            (5, 20, 2, 1, 'b-2-1', 1),
+            (6, 20, 3, 0, 'b-3-0', 2),
+            (7, null, 5, 5, 'null-group', 3),
+            (8, 30, null, 4, 'null-k1-30', 4),
+            (9, 30, null, null, 'allnull', 5),
+            (10, 40, 1, 5, 'd-1-5', 9);
+
+        -- Alias-collision fixture (#144): mapped physical column names equal to the native renderers'
+        -- internal aliases (PG derived-table alias, CH source/tuple aliases).
+        create table extreme_alias_144
+        (
+            id integer primary key,
+            "__nextorm_extreme" integer,
+            "__nextorm_extreme_src" integer,
+            "__nextorm_extreme_tuple" integer,
+            g integer,
+            k integer
+        );
+        insert into extreme_alias_144 (id, "__nextorm_extreme", "__nextorm_extreme_src", "__nextorm_extreme_tuple", g, k) values
+            (1, 5, 1, 1, 10, 1),
+            (2, 7, 2, 2, 10, 3),
+            (3, 6, 3, 3, 20, 2);
+
+        -- Join-alias fixtures (#113): one order whose buyer and approver are two different people,
+        -- plus an unlinked person so RIGHT/FULL alias joins have an unmatched row to return.
+        create table person (id integer primary key, name varchar(100));
+        insert into person (id, name) values (10, 'Buyer'), (20, 'Approver'), (30, 'Unlinked');
+
+        create table orders (id integer primary key, buyer_id integer not null, approver_id integer not null);
+        insert into orders (id, buyer_id, approver_id) values (1, 10, 20), (2, 20, 10);
         """;
 }

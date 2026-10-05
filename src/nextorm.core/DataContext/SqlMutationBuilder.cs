@@ -3,7 +3,7 @@ using System.Text;
 namespace NextORM.Core;
 
 /// <summary>
-/// Renders the SQL text of a mutation command. The DML analogue of <see cref="SqlBuilder"/>: it turns
+/// Renders the SQL text of a mutation command. The DML analogue of <c>SqlBuilder</c>: it turns
 /// the command's target table, columns and values into a parameterised statement, resolving the naming
 /// convention and identifier quoting for the target provider. Split from the statement model
 /// (<see cref="MutationCommand"/>) and from execution (<see cref="QueryExecutor"/>) so each stays
@@ -191,8 +191,11 @@ internal static class SqlMutationBuilder
     /// <param name="parameters">The shared parameter accumulator (branch conditions and <c>VALUES</c> rows), or <see langword="null"/> to start a new one.</param>
     /// <param name="matchConditionSql">The rendered <c>ON &lt;condition&gt;</c> of an explicit match, or <see langword="null"/> to match on the keys.</param>
     /// <param name="branchConditions">The rendered <c>AND &lt;condition&gt;</c> of each branch in order, or <see langword="null"/>.</param>
+    /// <param name="targetFilterSql">The rendered <c>target</c>-qualified global-filter predicate to AND into the <c>ON</c> and every <c>WHEN NOT MATCHED BY SOURCE</c> arm, or <see langword="null"/> when no filter is active.</param>
+    /// <param name="dataContext">The executing context, used to enforce the bridge fail-closed expectation before any upsert SQL is produced. <see langword="null"/> (no context known) keeps the existing behavior.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     /// <exception cref="NotSupportedException">The dialect has no <c>ON CONFLICT</c>, <c>ON DUPLICATE KEY</c> or <c>MERGE</c> form.</exception>
+    /// <exception cref="InvalidOperationException">The context expects imported filters that the resolved metadata no longer carries.</exception>
     internal static (string Sql, List<Parameter> Parameters) MakeMerge(
         ISqlDialect dialect,
         bool quoteIdentifiers,
@@ -204,8 +207,16 @@ internal static class SqlMutationBuilder
         IReadOnlyList<Parameter>? sourceParameters = null,
         List<Parameter>? parameters = null,
         string? matchConditionSql = null,
-        IReadOnlyList<string?>? branchConditions = null)
+        IReadOnlyList<string?>? branchConditions = null,
+        string? targetFilterSql = null,
+        IDataContext? dataContext = null)
     {
+        // Merge/upsert is the one DML path that reads the target's global filters at render time
+        // (RenderMerge's native-upsert fallback). A command built before DataContextCache.Clear and
+        // rendered after it must not silently skip the filter, so run the same context-wide fail-closed
+        // check as the SELECT funnel before any upsert SQL is produced. No expectations means no-op.
+        QueryFilterExpectations.EnsureExpectedFiltersPresent(dataContext);
+
         parameterProvider ??= new DefaultParameterProvider();
         parameters ??= new List<Parameter>();
         var writer = StringBuilderPool.Shared.Get();
@@ -213,9 +224,9 @@ internal static class SqlMutationBuilder
         try
         {
             if (command.Branches is not null)
-                RenderFullMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, matchConditionSql, branchConditions);
+                RenderFullMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, matchConditionSql, branchConditions, targetFilterSql);
             else if (dialect.SupportsMerge)
-                RenderMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider);
+                RenderMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, targetFilterSql);
             else if (dialect.SupportsOnConflict || dialect.SupportsOnDuplicateKey)
                 RenderOnConflictUpsert(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider);
             else
@@ -628,7 +639,8 @@ internal static class SqlMutationBuilder
         MergeCommand command,
         List<Parameter> parameters,
         KeywordCase keywordCase,
-        IParameterProvider parameterProvider)
+        IParameterProvider parameterProvider,
+        string? targetFilterSql)
     {
         var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
         if (quoteIdentifiers)
@@ -656,8 +668,32 @@ internal static class SqlMutationBuilder
         var rows = StringBuilderPool.Shared.Get();
         try
         {
-            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
-            writer.Append(dialect.MakeMerge(table, columns, keys, updates, rows.ToString(), keywordCase, returningColumns));
+            if (targetFilterSql is null)
+            {
+                // Fail-closed last line of defence: an active, non-ignored target filter must never fall
+                // back to the native key-upsert skeleton, which cannot carry the predicate. The builder's
+                // capability guard and the target-filter renderer refuse earlier; this guarantees the
+                // predicate can never be silently dropped even on a direct render.
+                if (QueryFilterResolver.GetFilters(command.EntityType, command.FilterScope).Count > 0)
+                    throw new NotSupportedException(
+                        $"An active global query filter on entity type '{command.EntityType.Name}' cannot be represented in the {dialect.GetType().Name} key-upsert form, so the filter would be silently bypassed. Call IgnoreFilters() to disable the filter, or use the full-MERGE branch form on a provider that supports it.");
+
+                AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider, command.DynamicColumns);
+                writer.Append(dialect.MakeMerge(table, columns, keys, updates, rows.ToString(), keywordCase, returningColumns));
+                return;
+            }
+
+            // Filtered key upsert: the target predicate cannot be expressed by the dialect's native
+            // upsert skeleton, so the statement is built from the same ON/branch/returning helpers the
+            // general MERGE uses. The only delta from MakeMerge is the extra predicate in the ON.
+            var qualifyTarget = dialect.SupportsMergeTargetQualification;
+            writer.Append(SqlKeywords.Of(keywordCase, "merge into ")).Append(table);
+            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, null, null, command.DynamicColumns);
+            AppendMergeOnKeys(writer, keys, null, keywordCase, targetFilterSql);
+            AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.Matched, MergeActionKind.Update, command.UpdateColumns), null, keywordCase, qualifyTarget, command.DynamicColumns, null);
+            AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, new MergeBranch(MergeMatchKind.NotMatchedByTarget, MergeActionKind.Insert, ColumnProperties(command.Columns)), null, keywordCase, qualifyTarget, command.DynamicColumns, null);
+            AppendMergeReturning(writer, dialect, quoteIdentifiers, namingConvention, command, keywordCase);
+            writer.Append(dialect.MakeMergeStatementTerminator(keywordCase));
         }
         finally
         {
@@ -679,7 +715,8 @@ internal static class SqlMutationBuilder
         string? sourceSql,
         IReadOnlyList<Parameter>? sourceParameters,
         string? matchConditionSql,
-        IReadOnlyList<string?>? branchConditions)
+        IReadOnlyList<string?>? branchConditions,
+        string? targetFilterSql)
     {
         ValidateMergeBranches(dialect, command);
 
@@ -701,12 +738,12 @@ internal static class SqlMutationBuilder
         {
             writer.Append(SqlKeywords.Of(keywordCase, "merge into ")).Append(table);
             AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, command.DynamicColumns);
-            AppendMergeOnKeys(writer, keys, matchConditionSql, keywordCase);
+            AppendMergeOnKeys(writer, keys, matchConditionSql, keywordCase, targetFilterSql);
 
             for (var i = 0; i < command.Branches!.Count; i++)
             {
                 var condition = branchConditions is not null && i < branchConditions.Count ? branchConditions[i] : null;
-                AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, command.Branches[i], condition, keywordCase, qualifyTarget, command.DynamicColumns);
+                AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, command.Branches[i], condition, keywordCase, qualifyTarget, command.DynamicColumns, targetFilterSql);
             }
 
             AppendMergeReturning(writer, dialect, quoteIdentifiers, namingConvention, command, keywordCase);
@@ -786,27 +823,47 @@ internal static class SqlMutationBuilder
         }
     }
 
-    private static void AppendMergeOnKeys(StringBuilder writer, string[] keys, string? matchConditionSql, KeywordCase keywordCase)
+    private static void AppendMergeOnKeys(StringBuilder writer, string[] keys, string? matchConditionSql, KeywordCase keywordCase, string? targetFilterSql)
     {
         writer.Append(SqlKeywords.Of(keywordCase, " on "));
 
+        var wroteMatch = false;
         if (matchConditionSql is not null)
         {
-            writer.Append(matchConditionSql);
-            return;
+            // A filter must AND with the user's condition without losing its grouping; wrap the user
+            // condition only when a filter is appended, so the no-filter SQL stays byte-identical.
+            if (targetFilterSql is not null)
+                writer.Append('(').Append(matchConditionSql).Append(')');
+            else
+                writer.Append(matchConditionSql);
+
+            wroteMatch = true;
+        }
+        else
+        {
+            for (var i = 0; i < keys.Length; i++)
+            {
+                if (i > 0)
+                    writer.Append(SqlKeywords.Of(keywordCase, " and "));
+
+                writer.Append("target.").Append(keys[i]).Append(" = source.").Append(keys[i]);
+                wroteMatch = true;
+            }
         }
 
-        for (var i = 0; i < keys.Length; i++)
+        if (targetFilterSql is not null)
         {
-            if (i > 0)
+            if (wroteMatch)
                 writer.Append(SqlKeywords.Of(keywordCase, " and "));
 
-            writer.Append("target.").Append(keys[i]).Append(" = source.").Append(keys[i]);
+            writer.Append('(').Append(targetFilterSql).Append(')');
         }
     }
 
     // Renders the WHEN <match> [AND <condition>] head of a branch; the action is appended by the caller.
-    private static void AppendMergeWhen(StringBuilder writer, MergeMatchKind match, string? condition, KeywordCase keywordCase)
+    // For a WHEN NOT MATCHED BY SOURCE arm the active target filter is ANDed in (grouped), so a bare
+    // delete arm cannot delete a row the filter hides.
+    private static void AppendMergeWhen(StringBuilder writer, MergeMatchKind match, string? condition, KeywordCase keywordCase, string? targetFilterSql)
     {
         writer.Append(match switch
         {
@@ -815,8 +872,13 @@ internal static class SqlMutationBuilder
             _ => SqlKeywords.Of(keywordCase, " when matched"),
         });
 
-        if (condition is not null)
+        var filter = match == MergeMatchKind.NotMatchedBySource ? targetFilterSql : null;
+        if (condition is not null && filter is not null)
+            writer.Append(SqlKeywords.Of(keywordCase, " and (")).Append(condition).Append(") and (").Append(filter).Append(')');
+        else if (condition is not null)
             writer.Append(SqlKeywords.Of(keywordCase, " and ")).Append(condition);
+        else if (filter is not null)
+            writer.Append(SqlKeywords.Of(keywordCase, " and (")).Append(filter).Append(')');
     }
 
     private static void AppendMergeBranch(
@@ -828,17 +890,18 @@ internal static class SqlMutationBuilder
         string? condition,
         KeywordCase keywordCase,
         bool qualifyTarget,
-        DynamicColumnSet? dynamicColumns)
+        DynamicColumnSet? dynamicColumns,
+        string? targetFilterSql)
     {
         switch (branch.Action)
         {
             case MergeActionKind.Update:
-                AppendMergeWhen(writer, MergeMatchKind.Matched, condition, keywordCase);
+                AppendMergeWhen(writer, MergeMatchKind.Matched, condition, keywordCase, targetFilterSql);
                 writer.Append(SqlKeywords.Of(keywordCase, " then update set "));
                 AppendMergeAssignments(writer, dialect, quoteIdentifiers, namingConvention, branch.Columns, qualifyTarget, dynamicColumns);
                 break;
             case MergeActionKind.Insert:
-                AppendMergeWhen(writer, MergeMatchKind.NotMatchedByTarget, condition, keywordCase);
+                AppendMergeWhen(writer, MergeMatchKind.NotMatchedByTarget, condition, keywordCase, targetFilterSql);
                 var insertColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, branch.Columns);
                 if (dynamicColumns is not null)
                     insertColumns = [.. insertColumns, .. dynamicColumns.RenderKeys(dialect)];
@@ -856,11 +919,11 @@ internal static class SqlMutationBuilder
                 writer.Append(')');
                 break;
             case MergeActionKind.Nothing:
-                AppendMergeWhen(writer, branch.Match, condition, keywordCase);
+                AppendMergeWhen(writer, branch.Match, condition, keywordCase, targetFilterSql);
                 writer.Append(SqlKeywords.Of(keywordCase, " then do nothing"));
                 break;
             default:
-                AppendMergeWhen(writer, branch.Match, condition, keywordCase);
+                AppendMergeWhen(writer, branch.Match, condition, keywordCase, targetFilterSql);
                 writer.Append(SqlKeywords.Of(keywordCase, " then delete"));
                 break;
         }

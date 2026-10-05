@@ -53,10 +53,10 @@ public class DurationConverterTests
 
         using var ctx = new SqliteDataContext(conn, new DataContextBuilder());
 
-        ctx.InsertInto<IConverterDurationEntity>()
+        ctx.CreateInsertBuilder<IConverterDurationEntity>()
             .Values(new ConverterDurationEntity { Id = 1, Elapsed = 90 })
             .Insert();
-        ctx.InsertInto<IConverterDurationEntity>()
+        ctx.CreateInsertBuilder<IConverterDurationEntity>()
             .Values(new ConverterDurationEntity { Id = 2, Elapsed = 30 })
             .Insert();
 

@@ -6,7 +6,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a key upsert (a "merge" of a source row set into the target table), started with
-/// <see cref="DataContextExtensions.MergeInto{TEntity}"/>. The source is a mapped entity or a batch of
+/// <see cref="DataContextExtensions.CreateMergeBuilder{TEntity}"/>. The source is a mapped entity or a batch of
 /// entities; the database decides, per key, whether to update the existing row or insert a new one. The
 /// statement is rendered through the active dialect as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>
 /// (PostgreSQL, SQLite), <c>INSERT ... ON DUPLICATE KEY UPDATE</c> (MySQL, MariaDB) or <c>MERGE</c>
@@ -48,9 +48,9 @@ public sealed partial class MergeBuilder<TEntity>
     }
 
     /// <summary>
-    /// Disables <b>all</b> global query filters declared for the target entity type, so the inserted
-    /// side of the merge is not validated against them. Repeatable: a later call accumulates with the
-    /// earlier scope.
+    /// Disables <b>all</b> global query filters declared for the target entity type for this statement:
+    /// the merge target is no longer constrained or refused by them and the inserted side is not
+    /// validated against them. Repeatable: a later call accumulates with the earlier scope.
     /// </summary>
     /// <returns>This builder, for chaining.</returns>
     public MergeBuilder<TEntity> IgnoreFilters()
@@ -60,10 +60,10 @@ public sealed partial class MergeBuilder<TEntity>
     }
 
     /// <summary>
-    /// Disables every global query filter declared for the given entity types, so the inserted side of
-    /// the merge is not validated against them. An empty or <see langword="null"/>
-    /// <paramref name="entityTypes"/> disables nothing. Repeatable: a later call accumulates (union)
-    /// with the earlier scope.
+    /// Disables every global query filter declared for the given entity types for this statement: the
+    /// merge target is no longer constrained or refused by them and the inserted side is not validated
+    /// against them. An empty or <see langword="null"/> <paramref name="entityTypes"/> disables nothing.
+    /// Repeatable: a later call accumulates (union) with the earlier scope.
     /// </summary>
     /// <param name="entityTypes">The entity types whose filters are disabled.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -78,9 +78,10 @@ public sealed partial class MergeBuilder<TEntity>
 
     /// <summary>
     /// Disables the named global query filters identified by <paramref name="filterKeys"/> on the target
-    /// entity type, so the inserted side of the merge is not validated against them. An empty or
-    /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing. Repeatable: a later call
-    /// accumulates (union) with the earlier scope.
+    /// entity type for this statement: the merge target is no longer constrained or refused by them and
+    /// the inserted side is not validated against them. An empty or <see langword="null"/>
+    /// <paramref name="filterKeys"/> disables nothing. Repeatable: a later call accumulates (union) with
+    /// the earlier scope.
     /// </summary>
     /// <param name="filterKeys">The filter keys to disable.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -96,7 +97,8 @@ public sealed partial class MergeBuilder<TEntity>
     /// <summary>
     /// Disables the named global query filters identified by <paramref name="filterKeys"/> only on the
     /// given <paramref name="entityTypes"/> (the intersection of keys and types); an empty
-    /// <paramref name="entityTypes"/> means any entity type. The key list is the gate: an empty or
+    /// <paramref name="entityTypes"/> means any entity type. The disabled filters no longer constrain,
+    /// refuse or validate this merge's target. The key list is the gate: an empty or
     /// <see langword="null"/> <paramref name="filterKeys"/> disables nothing even when entity types are
     /// supplied. Repeatable: a later call accumulates (union) with the earlier scope.
     /// </summary>
@@ -115,12 +117,16 @@ public sealed partial class MergeBuilder<TEntity>
     /// <summary>
     /// Validates the rows written by the merge's insert branch against the target entity type's active
     /// global query filters. Entity/batch sources are checked in memory; a query source is guarded by a
-    /// server-side pre-check. Called by every execution terminal before the statement runs.
+    /// server-side pre-check. Called by every execution terminal before the statement runs. On the
+    /// supported full-<c>MERGE</c> form this covers every branch combination (insert, update-only and
+    /// delete-only): the incoming source values are validated even when no row is inserted.
     /// </summary>
     /// <exception cref="QueryFilterException">A merged row violates an active filter.</exception>
     internal void ValidateFilters()
     {
-        if (_filterScope.All || !HasInsertBranch())
+        EnsureFilteredFormSupported();
+
+        if (_filterScope.All)
             return;
 
         if (_source is QueryCommand<TEntity> typedSource)
@@ -143,7 +149,9 @@ public sealed partial class MergeBuilder<TEntity>
     /// <exception cref="QueryFilterException">A merged row violates an active filter.</exception>
     internal Task ValidateFiltersAsync(CancellationToken cancellationToken)
     {
-        if (_filterScope.All || !HasInsertBranch())
+        EnsureFilteredFormSupported();
+
+        if (_filterScope.All)
             return Task.CompletedTask;
 
         if (_source is QueryCommand<TEntity> typedSource)
@@ -155,18 +163,36 @@ public sealed partial class MergeBuilder<TEntity>
         return Task.CompletedTask;
     }
 
-    private bool HasInsertBranch()
+    /// <summary>
+    /// Fail-closed capability guard for an active target filter. A mutation that cannot express the
+    /// filter as an atomic predicate on the write target (the in-memory key upsert, <c>ON CONFLICT</c> and
+    /// <c>ON DUPLICATE KEY</c> upserts, or any form without full-<c>MERGE</c> target-predicate support)
+    /// must refuse with <see cref="NotSupportedException"/> before source enumeration, validation or any
+    /// connection/command. The full-<c>MERGE</c> branch form on SQL Server / PostgreSQL 15+ and the SQL
+    /// Server key-upsert (routed through the same filtered <c>MERGE</c>) are allowed. Decided from
+    /// metadata only — no database round-trip.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The active form cannot isolate the write target.</exception>
+    internal void EnsureFilteredFormSupported()
     {
-        if (_whenNotMatchedInsert)
-            return true;
+        if (_filterScope.All || QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope, _dataContext).Count == 0)
+            return;
 
-        for (var i = 0; i < _branches.Count; i++)
+        // The form is decision-relevant only by actual branches: `.On(...)` without a branch is not a
+        // renderable full MERGE, it leaves the builder on the key-upsert path, so `.On(...)` alone must
+        // not make the full-MERGE capability check pass.
+        var fullMergeForm = _branches.Count > 0;
+        if (_dataContext is DataContext database)
         {
-            if (_branches[i].Action == MergeActionKind.Insert)
-                return true;
+            if (fullMergeForm ? database.Dialect.SupportsMergeStatement : database.Dialect.SupportsMerge)
+                return;
         }
 
-        return false;
+        throw new NotSupportedException(
+            "An active global query filter cannot isolate the write target of this merge atomically: the " +
+            "provider's key upsert form would silently bypass it. Call IgnoreFilters() to disable the " +
+            "filter, or use the full-MERGE branch form on a provider that supports it (SQL Server, " +
+            "PostgreSQL 15+).");
     }
 
     /// <summary>Uses a single mapped entity as the source row.</summary>
@@ -576,6 +602,8 @@ public sealed partial class MergeBuilder<TEntity>
 
     private MergeCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null)
     {
+        EnsureFilteredFormSupported();
+
         if (_columns.Count == 0 && _source is null && _dynamicColumns is null)
             throw new InvalidOperationException("No source rows were specified; call Using first.");
         if (_keys is null && _matchCondition is null)
@@ -623,8 +651,8 @@ public sealed partial class MergeBuilder<TEntity>
                 }
             }
 
-            var registry = hasCondition ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
-            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns);
+            var registry = hasCondition || HasActiveFilter() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
+            return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys ?? [], [], [.. _branches], returningColumns, _source, _matchCondition, registry, _dynamicColumns, _filterScope);
         }
 
         if (_source is not null)
@@ -643,8 +671,14 @@ public sealed partial class MergeBuilder<TEntity>
         if (updateColumns.Count == 0 && _dynamicColumns is null)
             throw new NotSupportedException($"Entity {typeof(TEntity)} has only key columns; a key upsert needs at least one non-key column to update.");
 
-        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns, dynamicColumns: _dynamicColumns);
+        // A filtered SQL Server key upsert is re-rendered as a general MERGE with the target filter in
+        // its ON, so it needs the condition-rendering registry even though it has no user condition.
+        var keyRegistry = HasActiveFilter() ? _registry ??= new EntityBuilder<TEntity>(_dataContext).ToCommand() : null;
+        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns, dynamicColumns: _dynamicColumns, filterScope: _filterScope, registry: keyRegistry);
     }
+
+    private bool HasActiveFilter()
+        => !_filterScope.All && QueryFilterResolver.GetFilters(typeof(TEntity), _filterScope, _dataContext).Count > 0;
 
     /// <summary>Builds the command whose <c>RETURNING</c>/<c>OUTPUT</c> clause returns <paramref name="returningColumns"/>.</summary>
     internal MergeCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns) => BuildCommand(returningColumns);

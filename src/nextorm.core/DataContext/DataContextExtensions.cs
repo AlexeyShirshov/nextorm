@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -32,20 +32,6 @@ public static class DataContextExtensions
         => (QueryCommand)Activator.CreateInstance(typeof(QueryCommand<>).MakeGenericType(resultType), dataContext, definition)!;
 
     /// <summary>
-    /// Executes a raw command text without parameters. Convenience overload of
-    /// <see cref="IRawCommandExecutor.ExecuteRaw(string, IReadOnlyList{ProcedureParameter})"/>.
-    /// </summary>
-    /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="sql">The command text to execute.</param>
-    /// <returns>The result, which must be disposed to release the reader and command.</returns>
-    /// <exception cref="NotSupportedException">The context does not support raw SQL execution.</exception>
-    public static ProcedureResult ExecuteRaw(this IDataContext dataContext, string sql)
-    {
-        ArgumentNullException.ThrowIfNull(dataContext);
-        return dataContext.ExecuteRaw(sql, Array.Empty<ProcedureParameter>());
-    }
-
-    /// <summary>
     /// Asynchronously executes a raw command text without parameters. Convenience overload of
     /// <see cref="IRawCommandExecutor.ExecuteRawAsync(string, IReadOnlyList{ProcedureParameter}, CancellationToken)"/>.
     /// </summary>
@@ -58,20 +44,6 @@ public static class DataContextExtensions
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         return dataContext.ExecuteRawAsync(sql, Array.Empty<ProcedureParameter>(), cancellationToken);
-    }
-
-    /// <summary>
-    /// Executes a stored procedure without parameters. Convenience overload of
-    /// <see cref="IRawCommandExecutor.ExecuteProcedure(string, IReadOnlyList{ProcedureParameter})"/>.
-    /// </summary>
-    /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="name">The procedure name, passed to the provider as-is.</param>
-    /// <returns>The result, which must be disposed to release the reader and command.</returns>
-    /// <exception cref="NotSupportedException">The context does not support stored procedures.</exception>
-    public static ProcedureResult ExecuteProcedure(this IDataContext dataContext, string name)
-    {
-        ArgumentNullException.ThrowIfNull(dataContext);
-        return dataContext.ExecuteProcedure(name, Array.Empty<ProcedureParameter>());
     }
 
     /// <summary>
@@ -99,17 +71,17 @@ public static class DataContextExtensions
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for the insert.</returns>
-    public static InsertBuilder<TEntity> InsertInto<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static InsertBuilder<TEntity> CreateInsertBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
     /// Starts a bulk insert over the mapping of <typeparamref name="TEntity"/> and returns its fluent
     /// builder. The type's metadata is resolved lazily and cached per process, exactly like
-    /// <see cref="InsertInto{TEntity}"/>; <paramref name="configEntity"/> therefore runs only on the first
+    /// <see cref="CreateInsertBuilder{TEntity}"/>; <paramref name="configEntity"/> therefore runs only on the first
     /// call for <typeparamref name="TEntity"/>. The write uses the provider's native bulk API where one
     /// exists and a chunked parameterised <c>INSERT ... VALUES</c> otherwise.
     /// </summary>
@@ -117,16 +89,16 @@ public static class DataContextExtensions
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for the bulk insert.</returns>
-    public static BulkInsertBuilder<TEntity> BulkInsertInto<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static BulkInsertBuilder<TEntity> CreateBulkInsertBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity), new BulkInsertOptions());
+        return new(dataContext, ResolveMetadata(dataContext, configEntity), new BulkInsertOptions());
     }
 
     /// <summary>
     /// Starts a bulk insert with explicit <see cref="BulkInsertOptions"/>. The type's metadata is resolved
-    /// lazily and cached per process, exactly like <see cref="InsertInto{TEntity}"/>; the write uses the
+    /// lazily and cached per process, exactly like <see cref="CreateInsertBuilder{TEntity}"/>; the write uses the
     /// provider's native bulk API where one exists and a chunked parameterised <c>INSERT ... VALUES</c>
     /// otherwise. The options shape the statement (batch limits, identity, conflict handling, timeout and
     /// progress).
@@ -138,17 +110,17 @@ public static class DataContextExtensions
     /// <returns>A builder for the bulk insert.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">An option value is not positive.</exception>
-    public static BulkInsertBuilder<TEntity> BulkInsertInto<TEntity>(this IDataContext dataContext, BulkInsertOptions options, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static BulkInsertBuilder<TEntity> CreateBulkInsertBuilder<TEntity>(this IDataContext dataContext, BulkInsertOptions options, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(options);
 
-        return new(dataContext, ResolveMetadata(configEntity), options);
+        return new(dataContext, ResolveMetadata(dataContext, configEntity), options);
     }
 
     /// <summary>
     /// Starts a bulk insert configured with the fluent <see cref="BulkInsertOptionsBuilder"/>. The type's
-    /// metadata is resolved lazily and cached per process, exactly like <see cref="InsertInto{TEntity}"/>.
+    /// metadata is resolved lazily and cached per process, exactly like <see cref="CreateInsertBuilder{TEntity}"/>.
     /// The callback must be an expression lambda that returns the builder (for example
     /// <c>o =&gt; o.MaxBatchSize(1_000)</c>), which keeps it distinct from the
     /// <see cref="EntityMetadataBuilder{TEntity}"/> overload.
@@ -159,7 +131,7 @@ public static class DataContextExtensions
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for the bulk insert.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
-    public static BulkInsertBuilder<TEntity> BulkInsertInto<TEntity>(this IDataContext dataContext, Func<BulkInsertOptionsBuilder, BulkInsertOptionsBuilder> configure, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static BulkInsertBuilder<TEntity> CreateBulkInsertBuilder<TEntity>(this IDataContext dataContext, Func<BulkInsertOptionsBuilder, BulkInsertOptionsBuilder> configure, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(configure);
@@ -167,7 +139,7 @@ public static class DataContextExtensions
         var options = new BulkInsertOptionsBuilder();
         configure(options);
 
-        return new(dataContext, ResolveMetadata(configEntity), options.Build());
+        return new(dataContext, ResolveMetadata(dataContext, configEntity), options.Build());
     }
 
     /// <summary>
@@ -175,24 +147,24 @@ public static class DataContextExtensions
     /// builder. The source row set is supplied with <c>Using</c> and the match key with <c>OnKeys</c>;
     /// the statement is rendered as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>,
     /// <c>INSERT ... ON DUPLICATE KEY UPDATE</c> or <c>MERGE</c> depending on the provider. Like
-    /// <see cref="InsertInto{TEntity}"/>, the type's metadata is resolved lazily and cached per process,
+    /// <see cref="CreateInsertBuilder{TEntity}"/>, the type's metadata is resolved lazily and cached per process,
     /// so <paramref name="configEntity"/> runs only on the first call for <typeparamref name="TEntity"/>.
     /// </summary>
     /// <typeparam name="TEntity">The mapped entity type upserted.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for the key upsert.</returns>
-    public static MergeBuilder<TEntity> MergeInto<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static MergeBuilder<TEntity> CreateMergeBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
     /// Starts an <c>UPDATE</c> over the mapping of <typeparamref name="TEntity"/> and returns its fluent
     /// builder. Add the written columns with <c>Set</c> and the row filter with <c>Where</c>; omitting
-    /// <c>Where</c> updates every row. Like <see cref="InsertInto{TEntity}"/>, the type's metadata is
+    /// <c>Where</c> updates every row. Like <see cref="CreateInsertBuilder{TEntity}"/>, the type's metadata is
     /// resolved lazily and cached per process, so <paramref name="configEntity"/> runs only on the first
     /// call for <typeparamref name="TEntity"/>.
     /// </summary>
@@ -200,11 +172,11 @@ public static class DataContextExtensions
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for the update.</returns>
-    public static UpdateBuilder<TEntity> Update<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static UpdateBuilder<TEntity> CreateUpdateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -223,7 +195,7 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).UpdateEntity(entity);
+        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).UpdateEntity(entity);
     }
 
     /// <summary>
@@ -242,21 +214,83 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).UpdateEntityAsync(entity, cancellationToken);
+        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).UpdateEntityAsync(entity, cancellationToken);
     }
 
-    internal static IEntityMetadata ResolveMetadata<TEntity>(Action<EntityMetadataBuilder<TEntity>>? configEntity)
+    internal static IEntityMetadata ResolveMetadata<TEntity>(IDataContext? dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity)
     {
-        if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
+        // A configured mapping must win over an auto-published junction mapping: the many-to-many
+        // resolver publishes the auto-built junction into Metadata so the derived link source can read
+        // its columns, but that entry must not shadow an explicit From<TJunction>(cfg).
+        if (configEntity is not null && DataContextCache.AutoPublishedJunctionMetadata.ContainsKey(typeof(TEntity)))
         {
-            var eb = new EntityMetadataBuilder<TEntity>();
-            configEntity?.Invoke(eb);
-            metadata = eb.Build();
-            DataContextCache.Metadata[typeof(TEntity)] = metadata;
+            // Build outside the registration gate: the configuration callback is user code and must
+            // never run while the process-wide metadata gate is held.
+            var configuredBuilder = new EntityMetadataBuilder<TEntity>();
+            configEntity(configuredBuilder);
+            var configured = configuredBuilder.Build();
+
+            EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), configured);
+
+            lock (DataContextCache.MetadataRegistrationGate)
+            {
+                // Revalidate against the current entry: a concurrent writer may have replaced the
+                // auto-published junction entry while this thread built its mapping. If so, its
+                // mapping wins and the configured build is discarded.
+                if (!DataContextCache.AutoPublishedJunctionMetadata.ContainsKey(typeof(TEntity))
+                    && DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var raced)
+                    && !string.IsNullOrEmpty(raced.TableName))
+                {
+                    EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), raced);
+                    return raced;
+                }
+
+                DataContextCache.Metadata[typeof(TEntity)] = configured;
+                DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
+            }
+
+            // The auto-published mapping may already have seeded the per-property column-name cache;
+            // drop those names so the configured columns are resolved from now on.
+            MemberInfoExtensions.ClearColumnNames(typeof(TEntity));
+            return configured;
         }
 
+        if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
+        {
+            // Build outside the registration gate (no user code is invoked under it).
+            var eb = new EntityMetadataBuilder<TEntity>();
+            configEntity?.Invoke(eb);
+            var built = eb.Build();
+
+            EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), built);
+
+            lock (DataContextCache.MetadataRegistrationGate)
+            {
+                // Revalidate against the current entry: the EF Core bridge (or another thread) may have
+                // published a non-empty mapping while this thread built its own. The published entry
+                // wins, so a bridged import is not clobbered by an auto-built mapping.
+                if (DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var current) && !string.IsNullOrEmpty(current.TableName))
+                {
+                    EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), current);
+                    return current;
+                }
+
+                DataContextCache.Metadata[typeof(TEntity)] = built;
+
+                // A configured rebuild is no longer an auto-published junction entry.
+                if (configEntity is not null)
+                    DataContextCache.AutoPublishedJunctionMetadata.Remove(typeof(TEntity));
+            }
+
+            metadata = built;
+        }
+
+        EnsureExpectedFiltersPresent(dataContext, typeof(TEntity), metadata);
         return metadata;
     }
+
+    private static void EnsureExpectedFiltersPresent(IDataContext? dataContext, Type entityType, IEntityMetadata metadata)
+        => QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, metadata.Filters);
 
     /// <summary>
     /// Resolves the mapping of an entity type known only at run time (used by the table-valued
@@ -270,21 +304,31 @@ public static class DataContextExtensions
     /// must pick it up.
     /// </para>
     /// </summary>
+    /// <param name="dataContext">
+    /// The executing context, used to enforce the bridge fail-closed expectation. <see langword="null"/>
+    /// (no context known) keeps the existing behavior.
+    /// </param>
     /// <param name="entityType">The entity type to resolve.</param>
     /// <returns>The resolved entity metadata.</returns>
-    /// <exception cref="InvalidOperationException">The metadata builder for the type could not be created or produced no metadata, or a mapping declares a decimal precision/scale whose bound provider type is not decimal or as a partial pair.</exception>
+    /// <exception cref="InvalidOperationException">The metadata builder for the type could not be created or produced no metadata, a mapping declares a decimal precision/scale whose bound provider type is not decimal or as a partial pair, or the context expects imported filters the resolved metadata no longer carries.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A mapping declares a decimal precision/scale outside the allowed range (precision 1..38, scale 0..precision); propagated unwrapped from the reflected auto-build.</exception>
-    internal static IEntityMetadata ResolveMetadata(Type entityType)
+    internal static IEntityMetadata ResolveMetadata(IDataContext? dataContext, Type entityType)
     {
         ArgumentNullException.ThrowIfNull(entityType);
 
         // A configured mapping always wins, whether it was registered before or after an auto bind.
         if (DataContextCache.Metadata.TryGetValue(entityType, out var metadata) && !string.IsNullOrEmpty(metadata.TableName))
+        {
+            QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, metadata.Filters);
             return metadata;
+        }
 
         // The auto path keeps a private cache so it never shadows a later configured registration.
         if (DataContextCache.TvpMetadata.TryGetValue(entityType, out var autoMetadata))
+        {
+            QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, autoMetadata.Filters);
             return autoMetadata;
+        }
 
         var builderType = typeof(EntityMetadataBuilder<>).MakeGenericType(entityType);
         var builder = Activator.CreateInstance(builderType)
@@ -297,6 +341,10 @@ public static class DataContextExtensions
         // path reports exactly the same failure as the strongly typed one.
         metadata = build.Invoke(builder, BindingFlags.DoNotWrapExceptions, null, null, null) as IEntityMetadata
             ?? throw new InvalidOperationException($"Building entity metadata for {entityType.Name} returned no metadata.");
+
+        // Fail closed before the auto-built (filterless) metadata is cached or returned.
+        QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, metadata.Filters);
+
         DataContextCache.TvpMetadata[entityType] = metadata;
         return metadata;
     }
@@ -311,11 +359,11 @@ public static class DataContextExtensions
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for the delete.</returns>
-    public static DeleteBuilder<TEntity> DeleteFrom<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static DeleteBuilder<TEntity> CreateDeleteBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -332,7 +380,7 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).DeleteEntity(entity);
+        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).DeleteEntity(entity);
     }
 
     /// <summary>
@@ -350,7 +398,7 @@ public static class DataContextExtensions
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(entity);
 
-        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).DeleteEntityAsync(entity, cancellationToken);
+        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(dataContext, null)).DeleteEntityAsync(entity, cancellationToken);
     }
 
     /// <summary>
@@ -694,38 +742,38 @@ public static class DataContextExtensions
     /// <typeparam name="T2">The joined entity type.</typeparam>
     /// <param name="query">The joined query selecting the rows to update.</param>
     /// <returns>A builder for the assignments and the filter.</returns>
-    public static UpdateJoinBuilder<Projection<T1, T2>> UpdateJoin<T1, T2>(this JoinedEntityBuilder<T1, T2> query)
+    public static UpdateJoinBuilder<Projection<T1, T2>> CreateUpdateJoinBuilder<T1, T2>(this JoinedEntityBuilder<T1, T2> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return new UpdateJoinBuilder<Projection<T1, T2>>(query, typeof(T1));
     }
 
-    /// <summary>Starts a multi-table <c>UPDATE</c> over a three-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a three-table join. See <see cref="CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
     /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
     /// <typeparam name="T2">The second joined entity type.</typeparam>
     /// <typeparam name="T3">The third joined entity type.</typeparam>
     /// <param name="query">The joined query selecting the rows to update.</param>
     /// <returns>A builder for the assignments and the filter.</returns>
-    public static UpdateJoinBuilder<Projection<T1, T2, T3>> UpdateJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query)
+    public static UpdateJoinBuilder<Projection<T1, T2, T3>> CreateUpdateJoinBuilder<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return new UpdateJoinBuilder<Projection<T1, T2, T3>>(query, typeof(T1));
     }
 
-    /// <summary>Starts a multi-table <c>UPDATE</c> over a four-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a four-table join. See <see cref="CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
     /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
     /// <typeparam name="T2">The second joined entity type.</typeparam>
     /// <typeparam name="T3">The third joined entity type.</typeparam>
     /// <typeparam name="T4">The fourth joined entity type.</typeparam>
     /// <param name="query">The joined query selecting the rows to update.</param>
     /// <returns>A builder for the assignments and the filter.</returns>
-    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4>> UpdateJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query)
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4>> CreateUpdateJoinBuilder<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return new UpdateJoinBuilder<Projection<T1, T2, T3, T4>>(query, typeof(T1));
     }
 
-    /// <summary>Starts a multi-table <c>UPDATE</c> over a five-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a five-table join. See <see cref="CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
     /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
     /// <typeparam name="T2">The second joined entity type.</typeparam>
     /// <typeparam name="T3">The third joined entity type.</typeparam>
@@ -733,13 +781,13 @@ public static class DataContextExtensions
     /// <typeparam name="T5">The fifth joined entity type.</typeparam>
     /// <param name="query">The joined query selecting the rows to update.</param>
     /// <returns>A builder for the assignments and the filter.</returns>
-    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5>> UpdateJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query)
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5>> CreateUpdateJoinBuilder<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5>>(query, typeof(T1));
     }
 
-    /// <summary>Starts a multi-table <c>UPDATE</c> over a six-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a six-table join. See <see cref="CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
     /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
     /// <typeparam name="T2">The second joined entity type.</typeparam>
     /// <typeparam name="T3">The third joined entity type.</typeparam>
@@ -748,13 +796,13 @@ public static class DataContextExtensions
     /// <typeparam name="T6">The sixth joined entity type.</typeparam>
     /// <param name="query">The joined query selecting the rows to update.</param>
     /// <returns>A builder for the assignments and the filter.</returns>
-    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6>> UpdateJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query)
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6>> CreateUpdateJoinBuilder<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6>>(query, typeof(T1));
     }
 
-    /// <summary>Starts a multi-table <c>UPDATE</c> over a seven-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a seven-table join. See <see cref="CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
     /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
     /// <typeparam name="T2">The second joined entity type.</typeparam>
     /// <typeparam name="T3">The third joined entity type.</typeparam>
@@ -764,13 +812,13 @@ public static class DataContextExtensions
     /// <typeparam name="T7">The seventh joined entity type.</typeparam>
     /// <param name="query">The joined query selecting the rows to update.</param>
     /// <returns>A builder for the assignments and the filter.</returns>
-    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>> UpdateJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query)
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>> CreateUpdateJoinBuilder<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>>(query, typeof(T1));
     }
 
-    /// <summary>Starts a multi-table <c>UPDATE</c> over an eight-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <summary>Starts a multi-table <c>UPDATE</c> over an eight-table join. See <see cref="CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
     /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
     /// <typeparam name="T2">The second joined entity type.</typeparam>
     /// <typeparam name="T3">The third joined entity type.</typeparam>
@@ -781,10 +829,116 @@ public static class DataContextExtensions
     /// <typeparam name="T8">The eighth joined entity type.</typeparam>
     /// <param name="query">The joined query selecting the rows to update.</param>
     /// <returns>A builder for the assignments and the filter.</returns>
-    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>> UpdateJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query)
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>> CreateUpdateJoinBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query)
     {
         ArgumentNullException.ThrowIfNull(query);
         return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>>(query, typeof(T1));
+    }
+
+    /// <summary>
+    /// Starts the row-returning multi-table <c>DELETE</c> over the join of <paramref name="query"/>: the
+    /// target is the first table of the chain and the returned values may read the joined tables. Only
+    /// INNER <c>Join</c> joins are supported; outer/cross joins are rejected. PostgreSQL renders
+    /// <c>DELETE ... USING ... RETURNING</c>; every other provider rejects the returning form. The
+    /// whole-projection (identity) form returns every returnable mapped property of every item slot, in
+    /// slot order. Consumed through <see cref="DeleteJoinBuilder{TProjection}.Returning()"/> or
+    /// <see cref="DeleteJoinBuilder{TProjection}.Returning{TResult}(Expression{Func{TProjection, TResult}})"/>.
+    /// </summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted (the first table).</typeparam>
+    /// <typeparam name="T2">The joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A builder for the returned-row selector.</returns>
+    public static DeleteJoinBuilder<Projection<T1, T2>> CreateDeleteJoinBuilder<T1, T2>(this JoinedEntityBuilder<T1, T2> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new DeleteJoinBuilder<Projection<T1, T2>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts the row-returning multi-table <c>DELETE</c> over a three-table join. See <see cref="CreateDeleteJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A builder for the returned-row selector.</returns>
+    public static DeleteJoinBuilder<Projection<T1, T2, T3>> CreateDeleteJoinBuilder<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new DeleteJoinBuilder<Projection<T1, T2, T3>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts the row-returning multi-table <c>DELETE</c> over a four-table join. See <see cref="CreateDeleteJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A builder for the returned-row selector.</returns>
+    public static DeleteJoinBuilder<Projection<T1, T2, T3, T4>> CreateDeleteJoinBuilder<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new DeleteJoinBuilder<Projection<T1, T2, T3, T4>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts the row-returning multi-table <c>DELETE</c> over a five-table join. See <see cref="CreateDeleteJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A builder for the returned-row selector.</returns>
+    public static DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5>> CreateDeleteJoinBuilder<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts the row-returning multi-table <c>DELETE</c> over a six-table join. See <see cref="CreateDeleteJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A builder for the returned-row selector.</returns>
+    public static DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5, T6>> CreateDeleteJoinBuilder<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5, T6>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts the row-returning multi-table <c>DELETE</c> over a seven-table join. See <see cref="CreateDeleteJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A builder for the returned-row selector.</returns>
+    public static DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>> CreateDeleteJoinBuilder<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts the row-returning multi-table <c>DELETE</c> over an eight-table join. See <see cref="CreateDeleteJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="T8">The eighth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>A builder for the returned-row selector.</returns>
+    public static DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>> CreateDeleteJoinBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new DeleteJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>>(query, typeof(T1));
     }
 
     private static QueryCommand PrepareDeleteJoinSource<TProjection>(EntityBuilder<TProjection> query)
@@ -820,18 +974,18 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a <c>TRUNCATE TABLE</c> over the mapping of <typeparamref name="TEntity"/> and returns its
-    /// terminal. Resets the table faster than <c>DeleteFrom&lt;T&gt;().All()</c>; providers without a
+    /// terminal. Resets the table faster than <c>CreateDeleteBuilder&lt;T&gt;().All()</c>; providers without a
     /// native <c>TRUNCATE</c> (SQLite) reject it.
     /// </summary>
     /// <typeparam name="TEntity">The mapped entity type whose table is truncated.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for the truncate.</returns>
-    public static TruncateBuilder<TEntity> Truncate<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    public static TruncateBuilder<TEntity> CreateTruncateBuilder<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
 
-        return new(dataContext, ResolveMetadata(configEntity));
+        return new(dataContext, ResolveMetadata(dataContext, configEntity));
     }
 
     /// <summary>
@@ -841,20 +995,21 @@ public static class DataContextExtensions
     /// </summary>
     public static EntityBuilder<T> From<T>(this IDataContext dataContext, Action<EntityMetadataBuilder<T>>? configEntity = null)
     {
-        _ = ResolveMetadata(configEntity);
+        _ = ResolveMetadata(dataContext, configEntity);
 
         return new(dataContext) { Logger = dataContext.CommandLogger };
     }
 
     /// <summary>
     /// Starts a query over the mapping of <typeparamref name="T"/> with per-query source options. The
-    /// values set on <paramref name="options"/> (a <c>TABLESAMPLE</c> percentage or a ClickHouse
-    /// <c>SAMPLE</c> ratio) are copied into the returned builder; the options object is not retained.
+    /// values set on <paramref name="options"/> (a <c>TABLESAMPLE</c> percentage, a ClickHouse
+    /// <c>SAMPLE</c> ratio, or per-source table/index hints) are copied into the returned builder; the
+    /// options object is not retained.
     /// The type's metadata is resolved exactly like <see cref="From{T}(IDataContext, Action{EntityMetadataBuilder{T}}?)"/>.
     /// </summary>
     /// <typeparam name="T">The mapped entity type.</typeparam>
     /// <param name="dataContext">The context to execute against.</param>
-    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c>.</param>
+    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c> or <c>o =&gt; o.WithTableHint("nolock")</c>.</param>
     /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
     /// <returns>A builder for composing the query.</returns>
     public static EntityBuilder<T> From<T>(this IDataContext dataContext, Action<FromOptions> options, Action<EntityMetadataBuilder<T>>? configEntity = null)
@@ -865,7 +1020,7 @@ public static class DataContextExtensions
         var fromOptions = new FromOptions();
         options(fromOptions);
 
-        _ = ResolveMetadata(configEntity);
+        _ = ResolveMetadata(dataContext, configEntity);
 
         return new(dataContext)
         {
@@ -873,6 +1028,9 @@ public static class DataContextExtensions
             TableSampleClause = fromOptions.TableSampleClause,
             SampleRatio = fromOptions.SampleRatio,
             SampleOffset = fromOptions.SampleOffset,
+            TableHints = fromOptions.TableHints,
+            IndexHints = fromOptions.IndexHints,
+            IndexHintKind = fromOptions.IndexHintKind,
         };
     }
 
@@ -1014,12 +1172,12 @@ public static class DataContextExtensions
 
     /// <summary>
     /// Starts a query against a raw table (or CTE) name with per-query source options (a
-    /// <c>TABLESAMPLE</c> percentage or a ClickHouse <c>SAMPLE</c> ratio). Columns are read through
-    /// <see cref="TableAlias"/> accessors.
+    /// <c>TABLESAMPLE</c> percentage, a ClickHouse <c>SAMPLE</c> ratio, or per-source table/index
+    /// hints). Columns are read through <see cref="TableAlias"/> accessors.
     /// </summary>
     /// <param name="dataContext">The context to execute against.</param>
     /// <param name="table">The table or CTE name.</param>
-    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c>.</param>
+    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c> or <c>o =&gt; o.WithTableHint("nolock")</c>.</param>
     /// <returns>A builder for composing the query.</returns>
     public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table, Action<FromOptions> options)
     {
@@ -1036,6 +1194,9 @@ public static class DataContextExtensions
             TableSampleClause = fromOptions.TableSampleClause,
             SampleRatio = fromOptions.SampleRatio,
             SampleOffset = fromOptions.SampleOffset,
+            TableHints = fromOptions.TableHints,
+            IndexHints = fromOptions.IndexHints,
+            IndexHintKind = fromOptions.IndexHintKind,
         };
     }
 
@@ -1071,6 +1232,83 @@ public static class DataContextExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
+
+    /// <summary>
+    /// Starts a typed query from an ordinary CTE descriptor. The returned builder's primary source is
+    /// the CTE name carrying the descriptor's projection shape, so the CTE is read directly (no derived
+    /// <c>SELECT</c> wrapper) and every supported projection form resolves member access to the defining
+    /// query's output columns. The declaration and its reachable dependencies are attached to the
+    /// command, so a statement built over the source emits the required <c>WITH</c>. The descriptor is a
+    /// typed projection source, not a mapped entity. Recursion is not part of this API; ordinary CTEs only.
+    /// </summary>
+    /// <typeparam name="TResult">The CTE's projection shape.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="cte">The descriptor returned by <see cref="QueryCommand{TResult}.AsCte(string)"/>.</param>
+    /// <returns>A builder for composing the query over the CTE.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="cte"/> is <see langword="null"/>.</exception>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, Cte<TResult> cte)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(cte);
+
+        return new EntityBuilder<TResult>(dataContext)
+        {
+            Logger = dataContext.CommandLogger,
+            SourceFrom = new FromExpression(cte.Name, cte.Query),
+            Ctes = cte.Definitions,
+        };
+    }
+
+    /// <summary>
+    /// Starts the self-referencing read of a recursive common table expression inside the step callback
+    /// of <c>AsRecursiveCte</c>. The returned builder reads the CTE by its declared name and resolves
+    /// member access against the anchor's projection shape. A reference is only valid while its owning
+    /// step callback runs; using a captured or foreign reference (owner mismatch, even under the same
+    /// name) throws before any database command is built.
+    /// </summary>
+    /// <typeparam name="TResult">The recursive CTE's projection shape.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="reference">The self-reference handed to the step callback.</param>
+    /// <returns>A builder reading the recursive CTE from within its own step.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="reference"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The reference is used outside its defining step (a captured or foreign reference).</exception>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, CteReference<TResult> reference)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(reference);
+
+        if (!RecursiveCteScope.IsActive(reference.Owner))
+            throw new InvalidOperationException(
+                $"The recursive common table expression reference '{reference.Name}' is used outside its defining step; a self-reference is only valid inside the AsRecursiveCte callback that receives it.");
+
+        return new EntityBuilder<TResult>(dataContext)
+        {
+            Logger = dataContext.CommandLogger,
+            SourceFrom = FromExpression.ForRecursiveReference(reference),
+        };
+    }
+
+    /// <summary>
+    /// Starts a query from an existing <see cref="QueryCommand{TResult}"/> with per-source options. The
+    /// values set on <paramref name="options"/> (currently the derived-table <c>SubQueryHint</c>) are
+    /// copied into the returned builder; the options object is not retained.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="query">The command whose definition drives the query.</param>
+    /// <param name="options">Configures the derived-table source, for example <c>o =&gt; o.WithSubQueryHint("NestLoop(t1)")</c>.</param>
+    /// <returns>A builder for composing the query further.</returns>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query, Action<FromOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var fromOptions = new FromOptions();
+        options(fromOptions);
+
+        return new(dataContext, query) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint };
+    }
 
     /// <summary>
     /// Starts a query over a lazy temporary table created by
@@ -1115,6 +1353,28 @@ public static class DataContextExtensions
         => new(dataContext, builder) { Logger = dataContext.CommandLogger };
 
     /// <summary>
+    /// Starts a new query builder that shares the source and definition of an existing builder, with
+    /// per-source options. The values set on <paramref name="options"/> (currently the derived-table
+    /// <c>SubQueryHint</c>) are copied into the returned builder; the options object is not retained.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="builder">The builder to copy the query shape from.</param>
+    /// <param name="options">Configures the derived-table source, for example <c>o =&gt; o.WithSubQueryHint("NestLoop(t1)")</c>.</param>
+    /// <returns>A new builder bound to <paramref name="dataContext"/>.</returns>
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, EntityBuilder<TResult> builder, Action<FromOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var fromOptions = new FromOptions();
+        options(fromOptions);
+
+        return new(dataContext, builder) { Logger = dataContext.CommandLogger, SubQueryHint = fromOptions.SubQueryHint };
+    }
+
+    /// <summary>
     /// Starts a query from a table-valued function. <paramref name="call"/> must be a call to a static
     /// method annotated with <see cref="SqlTableFunctionAttribute"/> (or declared in an annotated
     /// type); its arguments are rendered as the function arguments and are parameterised like any
@@ -1141,6 +1401,129 @@ public static class DataContextExtensions
         return entity;
     }
 
+    /// <summary>
+    /// Explicit factory alias of <see cref="From{T}(IDataContext, Action{EntityMetadataBuilder{T}}?)"/>: starts a
+    /// query over the mapping of <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The mapped entity type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<T> CreateQueryBuilder<T>(this IDataContext dataContext, Action<EntityMetadataBuilder<T>>? configEntity = null)
+        => dataContext.From(configEntity);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From{T}(IDataContext, Action{FromOptions}, Action{EntityMetadataBuilder{T}}?)"/>:
+    /// starts a query over the mapping of <typeparamref name="T"/> with per-query source options.
+    /// </summary>
+    /// <typeparam name="T">The mapped entity type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="options">Configures the primary source.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<T> CreateQueryBuilder<T>(this IDataContext dataContext, Action<FromOptions> options, Action<EntityMetadataBuilder<T>>? configEntity = null)
+        => dataContext.From(options, configEntity);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From(IDataContext, string)"/>: starts a query against a raw table
+    /// (or CTE) name.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="table">The table or CTE name.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<TableAlias> CreateQueryBuilder(this IDataContext dataContext, string table)
+        => dataContext.From(table);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From(IDataContext, string, Action{FromOptions})"/>: starts a query
+    /// against a raw table (or CTE) name with per-query source options.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="table">The table or CTE name.</param>
+    /// <param name="options">Configures the primary source.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<TableAlias> CreateQueryBuilder(this IDataContext dataContext, string table, Action<FromOptions> options)
+        => dataContext.From(table, options);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From{TResult}(IDataContext, QueryCommand{TResult})"/>: starts a query
+    /// from an existing command's definition.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="query">The command whose definition drives the query.</param>
+    /// <returns>A builder for composing the query further.</returns>
+    public static EntityBuilder<TResult> CreateQueryBuilder<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
+        => dataContext.From(query);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From{TResult}(IDataContext, QueryCommand{TResult}, Action{FromOptions})"/>:
+    /// starts a query from an existing command's definition with per-source options.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="query">The command whose definition drives the query.</param>
+    /// <param name="options">Configures the derived-table source.</param>
+    /// <returns>A builder for composing the query further.</returns>
+    public static EntityBuilder<TResult> CreateQueryBuilder<TResult>(this IDataContext dataContext, QueryCommand<TResult> query, Action<FromOptions> options)
+        => dataContext.From(query, options);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From{TResult}(IDataContext, TempTableSource{TResult})"/>: starts a
+    /// query over a lazy temporary table.
+    /// </summary>
+    /// <typeparam name="TResult">The source query's projected row type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="tempTable">The lazy source to materialise and read.</param>
+    /// <returns>A builder for composing the query over the temporary table.</returns>
+    public static EntityBuilder<TableAlias> CreateQueryBuilder<TResult>(this IDataContext dataContext, TempTableSource<TResult> tempTable)
+        => dataContext.From(tempTable);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From{TResult}(IDataContext, EntityBuilder{TResult})"/>: starts a new
+    /// builder sharing an existing builder's source and definition.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="builder">The builder to copy the query shape from.</param>
+    /// <returns>A new builder bound to <paramref name="dataContext"/>.</returns>
+    public static EntityBuilder<TResult> CreateQueryBuilder<TResult>(this IDataContext dataContext, EntityBuilder<TResult> builder)
+        => dataContext.From(builder);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="From{TResult}(IDataContext, EntityBuilder{TResult}, Action{FromOptions})"/>:
+    /// starts a new builder sharing an existing builder's source and definition, with per-source options.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="builder">The builder to copy the query shape from.</param>
+    /// <param name="options">Configures the derived-table source.</param>
+    /// <returns>A new builder bound to <paramref name="dataContext"/>.</returns>
+    public static EntityBuilder<TResult> CreateQueryBuilder<TResult>(this IDataContext dataContext, EntityBuilder<TResult> builder, Action<FromOptions> options)
+        => dataContext.From(builder, options);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="FromSql(IDataContext, string, object?)"/>: starts a query from a raw
+    /// SQL fragment used as a composable <c>FROM</c> source.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="sql">The raw SQL fragment.</param>
+    /// <param name="parameters">An object whose public properties become the named parameters.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<TableAlias> CreateQueryBuilderFromSql(this IDataContext dataContext, string sql, object? parameters = null)
+        => dataContext.FromSql(sql, parameters);
+
+    /// <summary>
+    /// Explicit factory alias of <see cref="FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>:
+    /// starts a query from a table-valued function.
+    /// </summary>
+    /// <typeparam name="T">The function's row type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="call">A call to a static method annotated with <see cref="SqlTableFunctionAttribute"/>.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<T> CreateQueryBuilderFromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
+        => dataContext.FromTableFunction(call);
+
     /// <summary>Starts a CTE scope with a single non-recursive declaration.</summary>
     public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query)
         => new CteQuery(dataContext, [new CteDefinition(name, query)]);
@@ -1151,7 +1534,7 @@ public static class DataContextExtensions
     /// <see cref="MutationCteQuery{TResult}.From(string)"/>. The scope is typed by
     /// <typeparamref name="TResult"/> so the returned rows can be filtered, joined and projected.
     /// <para>
-    /// Example: <c>ctx.With("ins", ctx.InsertInto&lt;Order&gt;().Values(o).Returning(x =&gt; new { x.Id }))
+    /// Example: <c>ctx.With("ins", ctx.CreateInsertBuilder&lt;Order&gt;().Values(o).Returning(x =&gt; new { x.Id }))
     /// .From("ins").Select(r =&gt; new { r.Id })</c>.
     /// </para>
     /// </summary>
@@ -1172,6 +1555,94 @@ public static class DataContextExtensions
         ArgumentException.ThrowIfNullOrEmpty(name);
 
         return MutationCteQuery<TResult>.Create(dataContext, name, insert);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a single-table <c>UPDATE ... RETURNING</c>: the update runs as the CTE body and its returned
+    /// rows are read through <see cref="MutationCteQuery{TResult}.From(string)"/>. Only PostgreSQL accepts
+    /// a data-modifying CTE body.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose rows are updated by the CTE body.</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="update">The returning update that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TEntity, TResult>(this IDataContext dataContext, string name, UpdateReturningBuilder<TEntity, TResult> update)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, update);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a single-table <c>DELETE ... RETURNING</c>. See
+    /// <see cref="With{TEntity, TResult}(IDataContext, string, UpdateReturningBuilder{TEntity, TResult})"/>
+    /// for the full contract.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose rows are removed by the CTE body.</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="delete">The returning delete that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TEntity, TResult>(this IDataContext dataContext, string name, DeleteReturningBuilder<TEntity, TResult> delete)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(delete);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, delete);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a multi-table <c>UPDATE ... FROM ... RETURNING</c>. See
+    /// <see cref="With{TEntity, TResult}(IDataContext, string, UpdateReturningBuilder{TEntity, TResult})"/>
+    /// for the full contract.
+    /// </summary>
+    /// <typeparam name="TProjection">The positional join projection (<c>Projection&lt;T1, ...&gt;</c>).</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="update">The returning multi-table update that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TProjection, TResult>(this IDataContext dataContext, string name, UpdateJoinReturningBuilder<TProjection, TResult> update)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, update);
+    }
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression whose body
+    /// is a multi-table <c>DELETE ... USING ... RETURNING</c>. See
+    /// <see cref="With{TEntity, TResult}(IDataContext, string, DeleteReturningBuilder{TEntity, TResult})"/>
+    /// for the full contract.
+    /// </summary>
+    /// <typeparam name="TProjection">The positional join projection (<c>Projection&lt;T1, ...&gt;</c>).</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="delete">The returning multi-table delete that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">The active provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public static MutationCteQuery<TResult> With<TProjection, TResult>(this IDataContext dataContext, string name, DeleteJoinReturningBuilder<TProjection, TResult> delete)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(delete);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, delete);
     }
 
     /// <summary>

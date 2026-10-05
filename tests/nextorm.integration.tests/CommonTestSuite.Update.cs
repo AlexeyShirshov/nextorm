@@ -14,12 +14,12 @@ public abstract partial class CommonTestSuite
         var keep = UpdateKey();
         var change = keep + 1;
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = keep, Name = "keep", Age = 1 },
             new DeleteEntity { Id = change, Name = "change", Age = 2 },
         ]).Insert();
 
-        var affected = ctx.Update<IDeleteEntity>()
+        var affected = ctx.CreateUpdateBuilder<IDeleteEntity>()
             .Set(x => x.Name, "updated")
             .Where(x => x.Id == change)
             .Update();
@@ -35,11 +35,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = UpdateKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "inc", Age = 10 })
             .Insert();
 
-        ctx.Update<IDeleteEntity>()
+        ctx.CreateUpdateBuilder<IDeleteEntity>()
             .Set(x => x.Age, x => x.Age + 1)
             .Where(x => x.Id == id)
             .Update();
@@ -53,7 +53,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = UpdateKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 3 })
             .Insert();
 
@@ -70,7 +70,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = _sut.DataProvider;
 
-        ctx.Update<IDeleteEntity>()
+        ctx.CreateUpdateBuilder<IDeleteEntity>()
             .Set(x => x.Name, "nobody")
             .Where(x => x.Id == UpdateKey())
             .Update()
@@ -83,7 +83,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = UpdateKey();
 
-        await ctx.InsertInto<IDeleteEntity>()
+        await ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "async", Age = 1 })
             .InsertAsync(TestContext.Current.CancellationToken);
 
@@ -102,11 +102,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = UpdateKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
             .Insert();
 
-        var updated = ctx.Update<IDeleteEntity>()
+        var updated = ctx.CreateUpdateBuilder<IDeleteEntity>()
             .Set(x => x.Name, "after")
             .Where(x => x.Id == id)
             .Returning(x => new { x.Id, x.Name })
@@ -124,11 +124,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = UpdateKey();
 
-        await ctx.InsertInto<IDeleteEntity>()
+        await ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "ret2", Age = 2 })
             .InsertAsync(TestContext.Current.CancellationToken);
 
-        var updated = await ctx.Update<IDeleteEntity>()
+        var updated = await ctx.CreateUpdateBuilder<IDeleteEntity>()
             .Set(x => x.Name, "ret2-updated")
             .Where(x => x.Id == id)
             .Returning(x => x.Name)
@@ -145,14 +145,14 @@ public abstract partial class CommonTestSuite
         var source = UpdateKey();
         var target = source + 1;
 
-        ctx.InsertInto<IDeleteEntity>().Values([
+        ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = source, Name = "src", Age = 1 },
             new DeleteEntity { Id = target, Name = "tgt", Age = 1 },
         ]).Insert();
 
         var affected = ctx.From<IDeleteEntity>()
             .Join(ctx.From<IDeleteEntity>(), (t, s) => t.Id == target && s.Id == source)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, p => p.Item2.Name)
             .Update();
 
@@ -166,7 +166,7 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var key = UpdateKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = key, Name = "before", Age = 1 })
             .Insert();
 
@@ -175,7 +175,7 @@ public abstract partial class CommonTestSuite
 
         var affected = e
             .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "after")
             .Update();
 
@@ -190,14 +190,14 @@ public abstract partial class CommonTestSuite
         var source = UpdateKey();
         var target = source + 1;
 
-        await ctx.InsertInto<IDeleteEntity>().Values([
+        await ctx.CreateInsertBuilder<IDeleteEntity>().Values([
             new DeleteEntity { Id = source, Name = "asrc", Age = 1 },
             new DeleteEntity { Id = target, Name = "atgt", Age = 1 },
         ]).InsertAsync(TestContext.Current.CancellationToken);
 
         var affected = await ctx.From<IDeleteEntity>()
             .Join(ctx.From<IDeleteEntity>(), (t, s) => t.Id == target && s.Id == source)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, p => p.Item2.Name)
             .UpdateAsync(TestContext.Current.CancellationToken);
 
@@ -209,7 +209,7 @@ public abstract partial class CommonTestSuite
     public void Update_ToSql_ShouldRenderUpdate()
     {
         var sql = _sut.DataProvider
-            .Update<IDeleteEntity>()
+            .CreateUpdateBuilder<IDeleteEntity>()
             .Set(x => x.Name, "x")
             .Where(x => x.Id == 1)
             .ToSql();
@@ -223,11 +223,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = UpdateKey();
 
-        await ctx.InsertInto<IDeleteEntity>()
+        await ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
             .InsertAsync(TestContext.Current.CancellationToken);
 
-        var affected = await ctx.Update<IDeleteEntity>()
+        var affected = await ctx.CreateUpdateBuilder<IDeleteEntity>()
             .Set(x => x.Name, "after")
             .Where(x => x.Id == id)
             .UpdateAsync(TestContext.Current.CancellationToken);
@@ -244,11 +244,11 @@ public abstract partial class CommonTestSuite
         var ctx = _sut.DataProvider;
         var id = UpdateKey();
 
-        ctx.InsertInto<IDeleteEntity>()
+        ctx.CreateInsertBuilder<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
             .Insert();
 
-        var rows = ctx.Update<DeleteEntity>()
+        var rows = ctx.CreateUpdateBuilder<DeleteEntity>()
             .Set(x => x.Name, "after")
             .Where(x => x.Id == id)
             .Returning()

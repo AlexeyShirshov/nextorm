@@ -29,7 +29,7 @@ using var ctx = new PostgresDataContext(connectionString, new DataContextBuilder
 var transactions = (ITransactionManager)ctx;
 
 await using var tx = await transactions.BeginTransactionAsync();
-ctx.InsertInto<IOrder>().Values(new Order { Id = 42, Total = 10m }).Insert();
+ctx.CreateInsertBuilder<IOrder>().Values(new Order { Id = 42, Total = 10m }).Insert();
 ctx.From<IOrder>().Where(x => x.Id == 42).ToList(); // видит незакоммиченную строку
 await tx.CommitAsync();
 ```

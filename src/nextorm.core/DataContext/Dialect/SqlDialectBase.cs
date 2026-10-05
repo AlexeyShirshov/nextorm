@@ -232,6 +232,12 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; PostgreSQL opts into <c>DISTINCT ON</c>.</summary>
     public virtual IDistinctOnRenderer? DistinctOn => null;
 
+    /// <summary>Defaults to <c>null</c>; a dialect with a native <c>SelectWhereMax</c>/<c>SelectWhereMin</c> strategy opts in.</summary>
+    public virtual IExtremeRowRenderer? ExtremeRowRenderer => null;
+
+    /// <summary>Defaults to <c>false</c>; every built-in dialect opts into <c>SelectWhereMax</c>/<c>SelectWhereMin</c>.</summary>
+    public virtual bool SupportsSelectWhereMinMax => false;
+
     /// <summary>
     /// Wraps the rendered table-function call, or returns it unchanged. ClickHouse uses it to cast the
     /// unsigned <c>numbers</c> column to a type the row reader supports.
@@ -303,6 +309,15 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Renders the trailing <c>SETTINGS key = value, ...</c> clause.</summary>
     public virtual string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings, KeywordCase keywordCase = KeywordCase.Lower)
         => Kw(keywordCase, " settings ") + string.Join(", ", settings.Select(static s => s.Key + " = " + s.Value));
+
+    /// <summary>
+    /// Provider settings that must be present query-locally so an <c>OUTER JOIN</c> yields SQL <c>NULL</c>
+    /// for the unmatched side instead of the provider's column default. Defaults to <see langword="null"/>
+    /// (every dialect but ClickHouse produces SQL nulls natively). ClickHouse returns
+    /// <c>join_use_nulls=1</c>; the core preparation injects it for a reference-navigation query only and
+    /// rejects a conflicting user-supplied value.
+    /// </summary>
+    public virtual IReadOnlyList<KeyValuePair<string, string>>? OuterJoinNullSettings => null;
 
     /// <inheritdoc/>
     public abstract string MakeParam(string name);
@@ -770,6 +785,9 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual string MakeSubqueryPredicate(string keyword, string query, bool asPredicate) => $"{keyword}({query})";
 
+    /// <inheritdoc/>
+    public virtual bool SupportsReferenceToCollectionNavigation => true;
+
     // ClickHouse's distributed GLOBAL IN predicate; every other dialect rejects it.
     /// <inheritdoc/>
     public virtual bool SupportsGlobalPredicates => false;
@@ -953,6 +971,19 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public virtual bool SupportsDataModifyingCtes => false;
+
+    /// <summary>
+    /// Defaults to <c>true</c>: the relational dialects can render a recursive CTE. ClickHouse has no
+    /// recursive <c>WITH</c> and overrides this to <c>false</c>. The flag gates only the new typed
+    /// recursive API, never a legacy <c>WithRecursive</c> declaration.
+    /// </summary>
+    public virtual bool SupportsRecursiveCte => true;
+
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL returns the affected rows of a multi-table <c>UPDATE ... FROM ... JOIN</c>.</summary>
+    public virtual bool SupportsUpdateJoinReturning => false;
+
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL returns the affected rows of a multi-table <c>DELETE ... USING ... JOIN</c>.</summary>
+    public virtual bool SupportsDeleteJoinReturning => false;
 
     /// <summary>Defaults to <c>true</c>; ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation through <see cref="MakeDeleteHead"/>.</summary>
     public virtual bool SupportsDelete => true;

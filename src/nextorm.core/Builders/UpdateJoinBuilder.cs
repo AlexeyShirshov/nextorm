@@ -5,7 +5,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a multi-table <c>UPDATE</c> (the <c>UPDATE ... FROM</c>/join form), started with
-/// <see cref="DataContextExtensions.UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/>. The target is
+/// <see cref="DataContextExtensions.CreateUpdateJoinBuilder{T1, T2}(JoinedEntityBuilder{T1, T2})"/>. The target is
 /// the first table of the join chain; the columns to write are supplied with <c>Set(...)</c>, whose
 /// right-hand side may read any joined table. The rows to change are selected by the join and an
 /// optional <see cref="Where"/>.
@@ -132,6 +132,48 @@ public sealed class UpdateJoinBuilder<TProjection>
     }
 
     /// <summary>
+    /// Switches the builder to the whole-projection (identity) row-returning terminal: every returnable
+    /// mapped property of every item slot is returned, in slot order, so a self-join of one type keeps its
+    /// <c>Item1</c>/<c>Item2</c> values distinct (a repeated CLR type stays separated by slot). Equivalent
+    /// to <c>Returning(p =&gt; p)</c>. The updated rows carry the post-update target values, and the builder
+    /// can be consumed directly or as a data-modifying CTE body through <c>With(name, update)</c>. Returned
+    /// columns get deterministic per-slot aliases; explicit projections are unchanged and no call adds a
+    /// <c>RETURNING</c> list implicitly.
+    /// <para>
+    /// PostgreSQL only, on INNER joins and for arities 2–8; every other provider and every outer join
+    /// rejects. A returned item whose mapped property is a multi-column <see cref="Range{T}"/> is rejected,
+    /// as is a required member with no counterpart in the joined source shape.
+    /// </para>
+    /// </summary>
+    /// <returns>A returning builder whose terminals produce the full <typeparamref name="TProjection"/>.</returns>
+    /// <exception cref="NotSupportedException">A returned mapped property is a multi-column <see cref="Range{T}"/>, or the provider/join is unsupported.</exception>
+    /// <exception cref="QueryPreparationException">A returned item slot has no registered entity metadata and exposes no readable columns.</exception>
+    public UpdateJoinReturningBuilder<TProjection, TProjection> Returning()
+    {
+        var parameter = Expression.Parameter(typeof(TProjection), "p");
+        var identity = Expression.Lambda<Func<TProjection, TProjection>>(parameter, parameter);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(identity);
+        return new UpdateJoinReturningBuilder<TProjection, TProjection>(this, columns, selectList, oneColumn, identity);
+    }
+
+    /// <summary>
+    /// Switches the builder to a row-returning terminal that materialises a projection of the updated rows
+    /// through PostgreSQL's <c>UPDATE ... FROM ... RETURNING</c> form. A selected member may reference any
+    /// joined table (for example <c>Returning(p =&gt; new { p.Item1.Id, p.Item2.Name })</c>). Only
+    /// PostgreSQL supports returning rows from a multi-table update; every other provider rejects it.
+    /// </summary>
+    /// <typeparam name="TResult">The projected row shape.</typeparam>
+    /// <param name="projection">Selects the mapped columns to return.</param>
+    /// <returns>A returning builder whose terminals produce <typeparamref name="TResult"/>.</returns>
+    /// <exception cref="NotSupportedException">The projection references something other than mapped properties.</exception>
+    public UpdateJoinReturningBuilder<TProjection, TResult> Returning<TResult>(Expression<Func<TProjection, TResult>> projection)
+    {
+        ArgumentNullException.ThrowIfNull(projection);
+        var (columns, selectList, oneColumn) = JoinedReturningProjection.Parse(projection);
+        return new UpdateJoinReturningBuilder<TProjection, TResult>(this, columns, selectList, oneColumn, projection);
+    }
+
+    /// <summary>
     /// Renders the parameterised SQL this builder would execute, without executing it. Useful for
     /// diagnostics and for verifying SQL generation without a database.
     /// </summary>
@@ -161,7 +203,10 @@ public sealed class UpdateJoinBuilder<TProjection>
     public Task<int> UpdateAsync(CancellationToken cancellationToken = default)
         => RequireExecutor().Execute(BuildCommand(), cancellationToken);
 
-    private UpdateJoinCommand BuildCommand()
+    /// <summary>The context the update executes on.</summary>
+    internal IDataContext DataContext => _query.DataProvider;
+
+    internal UpdateJoinCommand BuildCommand(IReadOnlyList<IPropertyMetadata>? returningColumns = null, LambdaExpression? returningProjection = null)
     {
         if (_assignments.Count == 0)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...).");
@@ -175,7 +220,7 @@ public sealed class UpdateJoinBuilder<TProjection>
         // Only the source, joins and condition of this command are used; the projection is a placeholder
         // and column preparation is skipped (IgnoreColumns), exactly like the multi-table DELETE source.
         var source = JoinedMutationSource.Prepare(_query, "UPDATE");
-        return new UpdateJoinCommand(_targetType, source, [.. _assignments]);
+        return new UpdateJoinCommand(_targetType, source, [.. _assignments], returningColumns, returningProjection);
     }
 
     private void SetAssignment(UpdateJoinAssignment assignment)

@@ -52,8 +52,7 @@ public sealed class SqlServerFeaturesTests : ProviderTestSuite
     [Fact]
     public void TableHint_ShouldExecute()
     {
-        var withTableHint = _sut.SimpleEntity
-            .WithTableHint("nolock")
+        var withTableHint = _sut.DataProvider.From<SimpleEntity>(o => o.WithTableHint("nolock"))
             .Select(x => x.Id)
             .ToList();
         withTableHint.Should().HaveCount(10);

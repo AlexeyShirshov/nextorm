@@ -1,0 +1,39 @@
+{
+  "subcommand": "perf",
+  "stage": "A",
+  "executed": false,
+  "recorded_command": [
+    "dotnet",
+    "run",
+    "--project",
+    "benchmarks/nextorm.benchmark",
+    "-c",
+    "Release",
+    "--",
+    "--anyCategories=acceptance"
+  ],
+  "recorded_exit_code": 0,
+  "wall_seconds": 45.788,
+  "cases": [
+    "Nextorm_Count",
+    "Nextorm_GroupByCount",
+    "Nextorm_Cached",
+    "Cached_PlanOnly_Param",
+    "Prepared_ToList",
+    "Cached_ToList",
+    "Nextorm_Cached_ToListAsync"
+  ],
+  "failures": 0,
+  "log": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-stage-a/acceptance.log",
+  "log_sha256": "928f5537dc3e6e7023befe6d31344c6893415481f8ad45fc09772c7ef7d30b1d",
+  "log_sha256_matches_manifest": true,
+  "ratios": {
+    "cachedToListOverPreparedToList": 2.0993,
+    "growthVsBaselinePercent": 12.27,
+    "allocatedRatio": 7.6493,
+    "allocatedGrowthPercent": 3.04,
+    "threshold": 2.24388,
+    "exceeds20Percent": false
+  },
+  "validated": true
+}

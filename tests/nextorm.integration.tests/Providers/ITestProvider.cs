@@ -181,4 +181,11 @@ public interface ITestProvider
     void EnsureSeeded();
 
     IDataContext CreateContext();
+
+    /// <summary>
+    /// Creates a context that routes its diagnostics through <paramref name="loggerFactory"/>. Providers
+    /// that can honour the factory override this; the default ignores it and returns the ordinary
+    /// context, so a diagnostic-observation test must skip when the provider does not override.
+    /// </summary>
+    IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory) => CreateContext();
 }

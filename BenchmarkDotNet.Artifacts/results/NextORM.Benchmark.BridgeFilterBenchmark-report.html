@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.BridgeFilterBenchmark-20261001-100657</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+Categories=bridge-filter  
+</code></pre>
+
+<table>
+<thead><tr><th>Method        </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Native_Warm_Prepare</td><td>2.394 ms</td><td>0.7315 ms</td><td>0.0401 ms</td><td>0.37</td><td>164.0625</td><td>1367.37 KB</td><td>1.28</td>
+</tr><tr><td>Native_Rebind_ToList</td><td>2.638 ms</td><td>0.8238 ms</td><td>0.0452 ms</td><td>0.40</td><td>89.8438</td><td>759.48 KB</td><td>0.71</td>
+</tr><tr><td>Native_Cached_ToList</td><td>4.171 ms</td><td>12.6676 ms</td><td>0.6944 ms</td><td>0.64</td><td>89.8438</td><td>755.58 KB</td><td>0.71</td>
+</tr><tr><td>Bridge_Rebind_ToList</td><td>4.578 ms</td><td>17.0296 ms</td><td>0.9334 ms</td><td>0.70</td><td>125.0000</td><td>1072.14 KB</td><td>1.00</td>
+</tr><tr><td>Bridge_Warm_Prepare</td><td>4.606 ms</td><td>1.5057 ms</td><td>0.0825 ms</td><td>0.71</td><td>234.3750</td><td>1966.08 KB</td><td>1.84</td>
+</tr><tr><td>Bridge_Cached_ToList</td><td>6.596 ms</td><td>16.4974 ms</td><td>0.9043 ms</td><td>1.01</td><td>125.0000</td><td>1070.55 KB</td><td>1.00</td>
+</tr></tbody></table>
+</body>
+</html>

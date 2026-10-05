@@ -21,8 +21,10 @@ internal sealed class RelationshipMetadata : IRelationshipMetadata
     private readonly Type _dependentType;
     private readonly Type _principalType;
     private readonly PropertyInfo? _principalKeyProperty;
+    private readonly RelationshipJunctionDeclaration? _junctionDeclaration;
     private readonly Lazy<ResolvedKeys> _keys;
     private readonly Lazy<IRelationshipMetadata?> _inverse;
+    private readonly Lazy<RelationshipJunctionMetadata?> _junction;
 
     internal RelationshipMetadata(
         RelationshipKind kind,
@@ -33,7 +35,8 @@ internal sealed class RelationshipMetadata : IRelationshipMetadata
         PropertyInfo foreignKey,
         PropertyInfo? principalKey,
         Type dependentType,
-        Type principalType)
+        Type principalType,
+        RelationshipJunctionDeclaration? junction = null)
     {
         Kind = kind;
         DeclaringType = declaringType;
@@ -44,8 +47,10 @@ internal sealed class RelationshipMetadata : IRelationshipMetadata
         _principalKeyProperty = principalKey;
         _dependentType = dependentType;
         _principalType = principalType;
+        _junctionDeclaration = junction;
         _keys = new Lazy<ResolvedKeys>(ResolveKeys, LazyThreadSafetyMode.ExecutionAndPublication);
         _inverse = new Lazy<IRelationshipMetadata?>(() => RelationshipResolver.FindInverse(this), LazyThreadSafetyMode.ExecutionAndPublication);
+        _junction = new Lazy<RelationshipJunctionMetadata?>(ResolveJunction, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public RelationshipKind Kind { get; }
@@ -67,8 +72,19 @@ internal sealed class RelationshipMetadata : IRelationshipMetadata
 
     public IRelationshipMetadata? Inverse => _inverse.Value;
 
+    public RelationshipJunctionMetadata? Junction => _junction.Value;
+
     private ResolvedKeys ResolveKeys()
     {
+        // A many-to-many relationship has no dependent foreign key of its own: the rows on either side are
+        // tied through the junction, so the exposed foreign key is the child-side key and the principal key
+        // the parent-side key. The junction descriptor validates the parent/child-to-junction type pairs.
+        if (_junctionDeclaration is not null)
+        {
+            var junction = _junction.Value!;
+            return new ResolvedKeys(junction.ChildKey, junction.ParentKey);
+        }
+
         var foreignKey = RelationshipResolver.ResolveProperty(_dependentType, ForeignKeyProperty, DeclaringType, Navigation);
         var principalKey = _principalKeyProperty is not null
             ? RelationshipResolver.ResolvePrincipalProperty(_principalType, _principalKeyProperty, DeclaringType, Navigation)
@@ -86,6 +102,28 @@ internal sealed class RelationshipMetadata : IRelationshipMetadata
         return new ResolvedKeys(new[] { foreignKey }, new[] { principalKey });
     }
 
+    private RelationshipJunctionMetadata? ResolveJunction()
+    {
+        if (_junctionDeclaration is not { } declaration)
+            return null;
+
+        return new RelationshipJunctionMetadata(
+            declaration.JunctionType,
+            ResolveJunctionProperties(_principalType, declaration.ParentKey),
+            ResolveJunctionProperties(_dependentType, declaration.ChildKey),
+            ResolveJunctionProperties(declaration.JunctionType, declaration.JunctionParentForeignKey),
+            ResolveJunctionProperties(declaration.JunctionType, declaration.JunctionChildForeignKey));
+    }
+
+    private IReadOnlyList<IPropertyMetadata> ResolveJunctionProperties(Type entityType, IReadOnlyList<PropertyInfo> properties)
+    {
+        var resolved = new IPropertyMetadata[properties.Count];
+        for (var i = 0; i < properties.Count; i++)
+            resolved[i] = RelationshipResolver.ResolveProperty(entityType, properties[i], DeclaringType, Navigation);
+
+        return resolved;
+    }
+
     private sealed class ResolvedKeys
     {
         internal ResolvedKeys(IReadOnlyList<IPropertyMetadata> foreignKey, IReadOnlyList<IPropertyMetadata> principalKey)
@@ -98,4 +136,27 @@ internal sealed class RelationshipMetadata : IRelationshipMetadata
 
         internal IReadOnlyList<IPropertyMetadata> PrincipalKey { get; }
     }
+}
+
+/// <summary>
+/// The CLR-member declaration of a many-to-many junction carried by a <see cref="RelationshipMetadata"/>
+/// until <see cref="RelationshipMetadata.Junction"/> is read: it keeps the junction type and the four
+/// selected members unresolved, so a relationship can be declared before the junction type is registered.
+/// </summary>
+internal sealed class RelationshipJunctionDeclaration
+{
+    /// <summary>The CLR type of the junction entity.</summary>
+    public required Type JunctionType { get; init; }
+
+    /// <summary>The parent-side key members.</summary>
+    public required IReadOnlyList<PropertyInfo> ParentKey { get; init; }
+
+    /// <summary>The child-side key members.</summary>
+    public required IReadOnlyList<PropertyInfo> ChildKey { get; init; }
+
+    /// <summary>The junction members that reference the parent key.</summary>
+    public required IReadOnlyList<PropertyInfo> JunctionParentForeignKey { get; init; }
+
+    /// <summary>The junction members that reference the child key.</summary>
+    public required IReadOnlyList<PropertyInfo> JunctionChildForeignKey { get; init; }
 }

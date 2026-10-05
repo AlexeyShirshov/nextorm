@@ -159,7 +159,7 @@ Inserting a row serializes the mapped object into the document stored in the col
 `DateTimeOffset` need no converter — `System.Text.Json` writes them as ISO 8601:
 
 ```csharp
-ctx.InsertInto<Customer>()
+ctx.CreateInsertBuilder<Customer>()
     .Values(new Customer
     {
         Id = 1,
@@ -267,7 +267,7 @@ guide and show PostgreSQL output; other dialects differ only in keyword casing a
 **Writing.** An insert sends the provider representation as a bound parameter:
 
 ```csharp
-ctx.InsertInto<Order>()
+ctx.CreateInsertBuilder<Order>()
     .Values(new Order { Id = 1, Status = Status.Active })
     .Insert();
 ```
@@ -280,7 +280,7 @@ insert into orders (id, status) values (@p0, @p1)
 in a `SET` list is converted the same way:
 
 ```csharp
-ctx.Update<Order>()
+ctx.CreateUpdateBuilder<Order>()
     .Set(x => x.Status, Status.Closed)
     .Where(x => x.Id == 1)
     .Update();

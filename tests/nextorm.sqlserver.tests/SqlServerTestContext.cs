@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using NextORM.Core;
 
 namespace NextORM.SqlServer.Tests;
@@ -24,4 +25,24 @@ internal static class SqlServerTestContext
 
     public static SqlServerDataContext CreateSqlServer() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
+
+    /// <summary>
+    /// Creates a SQL Server context that exposes the <c>protected</c> CSV typed-column hook
+    /// (<see cref="SqlServerDataContext.MapTypedColumnExpression"/>) so tests can inspect the mapped
+    /// expression directly. The tests never open a connection.
+    /// </summary>
+    public static CsvHookSqlServerDataContext CreateCsvHook() =>
+        new(PlaceholderConnectionString, new DataContextBuilder());
+}
+
+/// <summary>
+/// A <see cref="SqlServerDataContext"/> for tests that need the otherwise-<c>protected</c> CSV
+/// typed-column hook; it re-exposes the hook publicly without widening the production surface.
+/// </summary>
+internal sealed class CsvHookSqlServerDataContext(string connectionString, DataContextBuilder builder)
+    : SqlServerDataContext(connectionString, builder)
+{
+    /// <summary>Re-exposes <see cref="SqlServerDataContext.MapTypedColumnExpression"/> to this test assembly.</summary>
+    public new Expression MapTypedColumnExpression(SelectExpression column, Expression record, Type storageType)
+        => base.MapTypedColumnExpression(column, record, storageType);
 }

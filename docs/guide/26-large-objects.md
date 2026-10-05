@@ -8,6 +8,8 @@
 
 By default a `byte[]`/`string` projection is materialised whole: the row reader calls `GetValue`/`GetString` and the entire value lands in a managed array or string. For a file, image or document column of a few megabytes that is an avoidable allocation and can exhaust memory. The LOB terminals open the provider's streaming accessors instead (`DbDataReader.GetStream`/`GetTextReader`) and hand back an object you read incrementally.
 
+For a whole result set rather than a single LOB column, the JSON streaming terminal applies the same idea to rows: [`WriteJson`](28-streaming-data.md#json) / `WriteJsonAsync` write the query's `Select` projection to a caller-owned `Stream` with O(buffer) live memory and never close the destination. See [Streaming data to a Stream](28-streaming-data.md).
+
 ## Terminals
 
 Sync overloads take the parameters as a `params ReadOnlySpan<object?>`:
@@ -207,6 +209,7 @@ On the in-memory provider the value is materialised before the terminal wraps it
 ## See also
 
 * [Projections](../querying/01-projections.md)
+* [Streaming data to a Stream](28-streaming-data.md)
 * [Raw SQL](12-raw-sql.md)
 * [PostgreSQL provider](../providers/postgres.md) · [SQL Server provider](../providers/sqlserver.md)
 * [Limitations and out-of-scope features](../advanced/limitations.md)

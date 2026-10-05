@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 using NpgsqlTypes;
 
@@ -86,7 +87,7 @@ public class SqlGenerationTests
 
         // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
         // every dynamic key is double-quoted even though the global identifier-quoting flag is off.
-        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+        Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
             .Should().Contain("(id, \"alpha\", \"mid\", \"zeta\") values (@p0, @p1, @p2, @p3)");
@@ -97,7 +98,7 @@ public class SqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        Normalize(ctx.Update<DynamicColumnsEntity>()
+        Normalize(ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
@@ -109,7 +110,7 @@ public class SqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -126,7 +127,7 @@ public class SqlGenerationTests
     {
         using var ctx = PostgresTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicWritableEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicWritableEntity>()
             .Using(new DynamicWritableEntity { Id = 1, Label = "L", Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null } })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -146,7 +147,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
             .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
@@ -156,9 +157,9 @@ public class SqlGenerationTests
     public void IndexHint_ShouldThrowBecauseNotSupported()
     {
         using var ctx = PostgresTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        var act = () => SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }));
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Index hints*");
     }
@@ -540,8 +541,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .WithStrictness(JoinStrictness.Any)
+        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.WithStrictness(JoinStrictness.Any))
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*join modifier is not supported*");
@@ -554,8 +554,7 @@ public class SqlGenerationTests
         var simple = ctx.From<ISimpleEntity>();
         var complex = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
-            .Global()
+        var act = () => SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id, j => j.Global())
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*GLOBAL join modifier is not supported*");
@@ -650,8 +649,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
-            .WithJoinHint("NestLoop(t1 t3)")
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), j => j.WithJoinHint("NestLoop(t1 t3)"))
             .Select(p => new { p.Item1.Id, p.Item2.String }));
 
         // The hint folds into the statement-level comment; the join modifier must not replace the join
@@ -702,6 +700,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QueryHint_MultipleArguments_ShouldEmitBothHintsJoinedBySpace()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+
+        sql.Should().Be("select /*+ recompile fast 10 */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryHint_MultipleArguments_ShouldMatchSequentialCalls()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var multi = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+        var sequential = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile").Hint("fast 10"));
+
+        multi.Should().Be(sequential);
+    }
+
+    [Fact]
     public void QueryHint_WithCte_ShouldPlaceHintAfterTheTopLevelSelect()
     {
         using var ctx = PostgresTestContext.Create();
@@ -730,8 +751,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("HashJoin(t1 t2)")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("HashJoin(t1 t2)"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().StartWith("select /*+ HashJoin(t1 t2) */");
@@ -744,7 +764,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var sql = SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var sql = SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         sql.Should().StartWith("select /*+ SeqScan(t1) */");
     }
@@ -1990,6 +2010,63 @@ public class SqlGenerationTests
         sql.Should().StartWith("with first as (select id from complex_entity");
         sql.Should().Contain("), second as (select id from first)");
         sql.Should().EndWith("select id from second");
+    }
+
+    [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSingleTopLevelWith()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        // PostgreSQL renders the hoisted declaration tree as one flat `with`, with the nested `i`
+        // declared before the `o` that consumes it; still the ANSI form (no `recursive` needed here).
+        sql.Should().Be("with i as (select id from complex_entity\n where (id > 1)), o as (select id from i) select id from o");
+    }
+
+    [Fact]
+    public void Cte_ForwardSiblingReference_ShouldOrderDependencyBeforeConsumer()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // `b` reads the name `a` while `a` is declared only afterwards, so the hoist has to move the
+        // declaration of `a` ahead of `b` (declaration order alone is not the dependency order).
+        var a = ctx.From<IComplexEntity>().Where(x => x.Id > 1).Select(x => new { x.Id });
+        var b = ctx.From("a").Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("b", b).With("a", a).From("b").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with a as (select id from complex_entity");
+        sql.Should().Contain("), b as (select id from a)");
+        sql.Should().EndWith("select id from b");
+    }
+
+    [Fact]
+    public void Cte_NestedBodyJoinedToAnotherCte_ShouldHoistMergedDeclarations()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The joined side is a CTE scope whose body itself carries a nested declaration. Joining it
+        // merges its declarations into the outer statement (CteMerge.Merge), which the hoist then
+        // flattens into one top-level `with`.
+        var nested = ctx.With("i", ctx.From<ISimpleEntity>().Where(s => s.Id > 1).Select(s => new { s.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+        var right = ctx.With("o", nested).From("o");
+
+        var sql = SqlOf(ctx, e
+            .Join(right, (l, r) => l.Id == r.GetInt64("id"))
+            .Select(p => new { Id = p.Item1.Id, Other = p.Item2.GetInt64("id") }));
+
+        sql.Should().StartWith("with i as (select id from simple_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().Contain("from complex_entity as \"t1\" join o as \"t2\"");
     }
 
     [Fact]
@@ -4323,5 +4400,430 @@ public class SqlGenerationTests
             .Should().Contain("range_agg(during)");
         SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.range_intersect_agg(x.During) }))
             .Should().Contain("range_intersect_agg(during)");
+    }
+
+    // --- SelectWhereMax / SelectWhereMin: the window-rank lowering and its guards ---
+    //
+    // PostgreSQL has a native extreme-row strategy for direct integral keys (see
+    // ExtremeRowNativeSqlGenerationTests). The global cases below deliberately use a non-integral
+    // (DateTime?) key so they keep exercising the portable window-rank lowering; an integral key would
+    // now dispatch into the native branch.
+
+    private static string Dequoted(string sql) => sql
+        .Replace("\r\n", " ")
+        .Replace('\n', ' ')
+        .Replace("\"", string.Empty)
+        .Replace("[", string.Empty)
+        .Replace("]", string.Empty)
+        .Replace("`", string.Empty);
+
+    private static string OuterSelectList(string sql)
+    {
+        const string marker = "select ";
+        var start = sql.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return sql;
+        start += marker.Length;
+        var end = sql.IndexOf(" from ", start, StringComparison.Ordinal);
+        return end < 0 ? sql[start..] : sql[start..end];
+    }
+
+    [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldRenderRowNumberFilteredToTheSingleExtreme()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by dt desc)");
+        norm.Should().Contain("where ").And.Contain("= 1");
+        norm.Should().Contain("dt is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_GroupedOne_ShouldPartitionByTheGroupKey()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e
+            .SelectWhereMax(x => x.Int, ExtremeRowTies.One, x => x.String)
+            .Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (partition by somestring order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_GroupedAll_ShouldUseRankToKeepEveryTie()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e
+            .SelectWhereMax(x => x.Int, ExtremeRowTies.All, x => x.String)
+            .Select(x => new { x.Id })));
+
+        norm.Should().Contain("rank() over (partition by somestring order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Datetime, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by dt desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("dt is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMin_Projection_ShouldOrderTheValueAscending()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Datetime, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by dt)");
+        norm.Should().NotContain("dt desc");
+        norm.Should().Contain("dt is not null");
+        norm.Should().Contain("= 1");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_WithWhere_ShouldAndTheNotNullFilterWithTheCondition()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id > 0).SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        norm.Should().Contain("nullableint is not null and");
+        norm.Should().Contain("id >");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithDistinctOn_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.DistinctOn(x => x.Id).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*DISTINCT ON*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithGroupBy_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.GroupBy(x => x.Int).SelectWhereMax(x => x.Int).Select(x => new { x.Int }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*GROUP BY*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithJoin_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id);
+
+        var act = () => SqlOf(ctx, joined.SelectWhereMax(p => p.Item2.Int, p => new { p.Item1.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*joins*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_WholeRow_ShouldRenderExplicitColumnsAndDropTheRank()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<SimpleEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Id).ToCommand()));
+
+        var outer = OuterSelectList(norm);
+        outer.Should().Contain("id");
+        outer.Should().NotContain("__nextorm_rn");
+        outer.Should().NotContain("*");
+    }
+
+    // --- grouped whole-row form --------------------------------------------------------------
+
+    [Fact]
+    public void SelectWhereMax_GroupedWholeRowOne_ShouldPartitionAndProjectExplicitColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<SimpleEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Id, ExtremeRowTies.One, x => x.Id).ToCommand()));
+
+        norm.Should().Contain("row_number() over (partition by id order by id desc)");
+        norm.Should().Contain("id is not null");
+        norm.Should().Contain("= 1");
+        var outer = OuterSelectList(norm);
+        outer.Should().Contain("id");
+        outer.Should().NotContain("__nextorm_rn");
+        outer.Should().NotContain("*");
+    }
+
+    [Fact]
+    public void SelectWhereMin_GroupedWholeRowOne_ShouldPartitionAndOrderAscending()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<SimpleEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Id, ExtremeRowTies.One, x => x.Id).ToCommand()));
+
+        norm.Should().Contain("row_number() over (partition by id order by id)");
+        norm.Should().NotContain("id desc");
+        norm.Should().Contain("= 1");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    // --- projection grouped / global ---------------------------------------------------------
+
+    [Fact]
+    public void SelectWhereMax_ProjectionGroupedOne_ShouldProjectPerGroupWinner()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => x.String)));
+
+        norm.Should().Contain("row_number() over (partition by somestring order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring").And.NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMin_ProjectionGroupedOne_ShouldProjectPerGroupWinner()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.One, x => x.String)));
+
+        norm.Should().Contain("row_number() over (partition by somestring order by nullableint)");
+        norm.Should().NotContain("nullableint desc");
+        norm.Should().Contain("= 1");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_ProjectionGroupedAll_ShouldUseRankToKeepEveryTiePerGroup()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String }, ExtremeRowTies.All, x => x.String)));
+
+        norm.Should().Contain("rank() over (partition by somestring order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_ProjectionGlobalAll_ShouldUseRankWithoutPartition()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.All)));
+
+        norm.Should().Contain("rank() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CompositeGroupKey_ShouldPartitionByEveryComponent()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id }, ExtremeRowTies.One, x => new { x.String, x.Boolean })));
+
+        norm.Should().Contain("partition by somestring, b");
+        norm.Should().Contain("= 1");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Singleton_ShouldRenderTheSingleRowUpperBound()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.Where(x => x.Id == 1L).SelectWhereMax(x => x.Datetime).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by dt desc)");
+        norm.Should().Contain("id = ");
+        norm.Should().Contain("= 1");
+    }
+
+    [Fact]
+    public void SelectWhereMax_WithDistinct_ShouldKeepTheDistinctOnTheOuterSelect()
+    {
+        // DISTINCT is one of the few modifiers the lowering can compose: it is applied to the surviving
+        // projection after the rank filter, so the keyword must survive on the outer statement.
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.Distinct().SelectWhereMax(x => x.Datetime, x => new { x.Id })));
+
+        norm.Should().Contain("select distinct ");
+        norm.Should().Contain("= 1");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    // --- C4 modifier guards ------------------------------------------------------------------
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithCte_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var scope = ctx.With("c", ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var act = () => SqlOf(ctx, scope.From("c").SelectWhereMax(t => t["id"].AsInt).Select(t => t["id"].AsInt));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*common table expressions*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithWindowFunction_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int)
+            .Select(x => new { R = SqlFunctions.Sql.row_number().Over(partitionBy: () => x.Int) }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*window functions*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithHaving_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Having(x => x.Id > 0).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*HAVING*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithTableSample_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>(o => o.TableSample(10));
+
+        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*TABLESAMPLE*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithTemporal_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.ForSystemTime(TemporalClause.All()).SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*FOR SYSTEM_TIME*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithRowLock_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.ForUpdate().SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*row locking*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithTableHint_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>(o => o.WithTableHint("SeqScan(t1)"));
+
+        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*table hints*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithIndexHint_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>(o => o.WithIndex("idx_id"));
+
+        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*index hints*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithTablesInScopeHint_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>().WithTablesInScopeHint("SeqScan(t1)");
+
+        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*tables-in-scope hints*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithQueryHint_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id }).Hint("SeqScan(t1)"));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*query hints*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CombinedWithSetOperation_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })
+            .UnionAll(ctx.From<IComplexEntity>().Select(x => new { x.Id })));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*set operation*");
+    }
+
+    [Fact]
+    public void SelectWhereMax_OverDerivedSource_ShouldThrowBeforeSql()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var derived = ctx.From(ctx.From<ISimpleEntity>().Select(x => new { x.Id }));
+
+        var act = () => SqlOf(ctx, derived.SelectWhereMax(x => x.Id, x => x.Id));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*single physical-table source*");
     }
 }

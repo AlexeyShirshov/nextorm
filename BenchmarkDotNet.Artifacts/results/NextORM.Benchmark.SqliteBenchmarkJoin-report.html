@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkJoin-20261005-211531</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code></code></pre>
+
+<table>
+<thead><tr><th>Method    </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Median</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>Nextorm_Prepared</td><td>137.5 &mu;s</td><td>2.67 &mu;s</td><td>3.57 &mu;s</td><td>137.8 &mu;s</td><td>1.4648</td><td>-</td><td>13.01 KB</td>
+</tr><tr><td>Dapper</td><td>278.8 &mu;s</td><td>5.50 &mu;s</td><td>12.29 &mu;s</td><td>274.7 &mu;s</td><td>1.9531</td><td>-</td><td>21.45 KB</td>
+</tr><tr><td>Linq2Db_Compiled</td><td>284.0 &mu;s</td><td>5.61 &mu;s</td><td>11.96 &mu;s</td><td>281.7 &mu;s</td><td>2.9297</td><td>-</td><td>28.63 KB</td>
+</tr><tr><td>Nextorm_Cached</td><td>496.0 &mu;s</td><td>13.23 &mu;s</td><td>33.68 &mu;s</td><td>487.0 &mu;s</td><td>15.6250</td><td>-</td><td>129.53 KB</td>
+</tr><tr><td>EFCore_Compiled</td><td>708.4 &mu;s</td><td>13.83 &mu;s</td><td>29.18 &mu;s</td><td>706.3 &mu;s</td><td>13.6719</td><td>3.9063</td><td>124.14 KB</td>
+</tr><tr><td>Linq2Db</td><td>722.7 &mu;s</td><td>14.15 &mu;s</td><td>29.22 &mu;s</td><td>722.1 &mu;s</td><td>11.7188</td><td>-</td><td>105.35 KB</td>
+</tr><tr><td>EFCore</td><td>1,216.4 &mu;s</td><td>92.62 &mu;s</td><td>255.10 &mu;s</td><td>1,111.1 &mu;s</td><td>19.5313</td><td>3.9063</td><td>182.11 KB</td>
+</tr></tbody></table>
+</body>
+</html>

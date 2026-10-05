@@ -2,11 +2,15 @@
   href: query-filters.md
 - name: Entity Framework Core integration
   href: integration-efcore.md
+- name: EF Core query-filter bridge
+  href: ef-core-query-filters.md
 - name: Eager loading child collections
   href: eager-loading.md
 - name: Relationships and single-query loading
   href: relationships.md
 - name: Limitations and out-of-scope features
   href: limitations.md
+- name: Native extreme-row strategies
+  href: select-where-extrema-native.md
 - name: API quick reference
   href: api-reference.md

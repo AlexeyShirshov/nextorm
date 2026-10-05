@@ -16,6 +16,8 @@ This is the nextorm equivalent of EF Core global query filters and linq2db query
 
 Declare the filter where the entity's mapping is configured with `From<T>`. The declaration runs once, when the type's metadata is first built, so the condition is part of the mapping rather than of one query:
 
+> The examples on this page use a `Document` entity mapped to `documents(id, tenant_id, is_deleted)` and an `Attachment` entity mapped to `attachments(id, document_id, is_deleted)`. `Document` declares a soft-delete filter keyed `"soft-delete"` and a tenant filter keyed `"tenant"` that reads the tenant id from `c.Properties["tenant"]`; `Attachment` declares an anonymous soft-delete filter; the write examples use an `ArchivedDocument` entity mapped to `archived_documents(id, tenant_id, is_deleted)` as the `INSERT … SELECT` target.
+
 ```csharp
 ctx.From<Document>(m => m.HasQueryFilter(d => !d.IsDeleted));
 ```
@@ -44,6 +46,25 @@ Give a filter a **key** so it can be targeted individually by `IgnoreFilters`:
 ctx.From<Document>(m => m
     .HasQueryFilter("soft-delete", (d, c) => !d.IsDeleted)
     .HasQueryFilter("tenant", (d, c) => d.TenantId == (int)c.Properties["tenant"]));
+```
+
+Both predicates are then `and`-ed into every read of `Document`; the tenant value is a bound parameter, not an inlined literal:
+
+```csharp
+var ids = ctx.From<Document>()
+    .Where(d => d.Id == 10)
+    .Select(d => d.Id)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from documents
+ where ((id = 10 and not (is_deleted)) and tenant_id = @p0)
+
+-- SQL Server
+select id from documents
+ where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p0)
 ```
 
 A keyed filter occupies a **slot**: a repeated call with the same key **replaces** the earlier filter, and passing a `null` `filter` **removes** the slot. Anonymous filters (declared without a key) are additive — several are combined with `and` — and are reported with the key [`QueryFilters.AnonymousKey`](xref:NextORM.Core.QueryFilters.AnonymousKey), the empty string `""`.
@@ -145,6 +166,18 @@ var deleted = ctx.From<Document>()
     .ToList();
 ```
 
+The tenant filter is still applied; only the soft-delete predicate is dropped:
+
+```sql
+-- PostgreSQL
+select id from documents
+ where (id = 10 and tenant_id = @p0)
+
+-- SQL Server
+select id from documents
+ where (id = 10 and tenant_id = @p0)
+```
+
 The original builder is unchanged; only the returned copy ignores the filters. **Repeated calls accumulate (union), they do not replace**: `IgnoreFilters(["a"]).IgnoreFilters(["b"])` disables both `a` and `b`, and the order of calls and duplicate keys do not matter. Type-only and key-only selectors also accumulate independently, while a single `IgnoreFilters(keys, types)` call is an **intersection** — each of its keys applies only to the listed types. A combined call is never folded into another selector's union. A scope that is empty (an empty or `null` key/type list) disables nothing, and an all-or-nothing `IgnoreFilters()` dominates any selective scope combined with it.
 
 Once the query command exists, [`QueryCommand.IgnoreFilters`](xref:NextORM.Core.QueryCommand.IgnoreFilters) reads back the result: it is `true` when **any** filter is disabled — whether by the all-or-nothing form or by a selective scope — and `false` when none is. Its setter is all-or-nothing (`true` disables every filter, `false` clears the scope) because a `bool` cannot express a selective disable; the selective scope itself is the authoritative state.
@@ -159,6 +192,52 @@ A filter is attached to the entity type and is injected wherever that type appea
 | Join source | into the join's `ON` condition for the joined entity |
 | Subquery | into the subquery when it is prepared |
 | Mutation target (`UPDATE` / `DELETE`) | into the statement's `WHERE`, combined with the predicate or the key equality |
+| `MERGE` target (SQL Server, PostgreSQL) | into the `MERGE ... ON` condition and every `WHEN NOT MATCHED BY SOURCE` arm (see [Write-target isolation](#write-target-isolation)) |
+
+For example, the filter of a joined entity is injected into that join's `ON`, while the filter of the main source stays in `WHERE`:
+
+```csharp
+var rows = ctx.From<Attachment>()
+    .Join(ctx.From<Document>(), (a, d) => a.DocumentId == d.Id)
+    .Select(p => p.Item1.Id)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id from attachments as "t1"
+ join documents as "t2" on ((t1.document_id = t2.id and not (t2.is_deleted)) and t2.tenant_id = @p0)
+ where not (t1.is_deleted)
+
+-- SQL Server
+select t1.id from attachments as [t1]
+ join documents as [t2] on ((t1.document_id = t2.id and not ((t2.is_deleted) = 1)) and t2.tenant_id = @p0)
+ where not ((t1.is_deleted) = 1)
+```
+
+A subquery prepared as part of an outer query is filtered the same way:
+
+```csharp
+var rows = ctx.From<Document>()
+    .Select(d => new { d.Id, sid = ctx.From<Attachment>()
+        .Where(a => a.DocumentId == d.Id)
+        .Select(a => a.Id)
+        .First() })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select t1.id, (select t2.id from attachments as "t2"
+ where (t2.document_id = t1.id and not (t2.is_deleted))
+limit 1) as "sid" from documents as "t1"
+ where (not (t1.is_deleted) and t1.tenant_id = @p0)
+
+-- SQL Server
+select t1.id, (select top(1) t2.id from attachments as [t2]
+ where (t2.document_id = t1.id and not ((t2.is_deleted) = 1))) as [sid] from documents as [t1]
+ where (not ((t1.is_deleted) = 1) and t1.tenant_id = @p0)
+```
 
 The main source of a join is the first table, so a filter declared for `T1` applies to `Item1` exactly as in a plain query.
 
@@ -170,13 +249,13 @@ A filter declared for the target entity applies to a mutation of that entity exa
 
 | Statement | Filter |
 |---|---|
-| `Update<T>().Where(...).Update()` | `and`-ed into the `WHERE` with the predicate |
+| `CreateUpdateBuilder<T>().Where(...).Update()` | `and`-ed into the `WHERE` with the predicate |
 | `Update(entity)` (key form) | `WHERE <pk> = @p and <filter>` — a row excluded by the filter is not updated |
-| `DeleteFrom<T>().Where(...).Delete()` | `and`-ed into the `WHERE` with the predicate |
+| `CreateDeleteBuilder<T>().Where(...).Delete()` | `and`-ed into the `WHERE` with the predicate |
 | `Delete(entity)` (key form) | `WHERE <pk> = @p and <filter>` — a row excluded by the filter is not deleted |
-| `Update<T>().Set(...).Update()` with no `Where` | every **filtered** row is updated (the filter still applies) |
-| `DeleteFrom<T>().All()` | explicit full-table delete: **no** filter is applied |
-| `UpdateJoin(...)` / join `Delete()` | the target (first table) and every joined source are filtered |
+| `CreateUpdateBuilder<T>().Set(...).Update()` with no `Where` | every **filtered** row is updated (the filter still applies) |
+| `CreateDeleteBuilder<T>().All()` | explicit full-table delete: **no** filter is applied |
+| `CreateUpdateJoinBuilder(...)` / join `Delete()` | the target (first table) and every joined source are filtered |
 
 For the key forms, the filter is `and`-ed to the key equality, so `ctx.Delete(entity)` returns `0` if the filter excludes that key. The filter is injected into the mutation's prepared condition, so the rendered SQL reflects the effective filter set. Unlike a read, a mutation is neither prepared nor plan-cached, so there is no plan key for the filter to take part in.
 
@@ -184,31 +263,77 @@ For the key forms, the filter is `and`-ed to the key equality, so `ctx.Delete(en
 
 ```csharp
 // Ignore only the soft-delete filter; the tenant filter still applies.
-ctx.DeleteFrom<Document>()
+ctx.CreateDeleteBuilder<Document>()
     .IgnoreFilters(["soft-delete"])
     .Where(d => d.IsDeleted)
     .Delete();
 
 // Ignore every target filter, then update only the named column.
-ctx.Update<Document>()
+ctx.CreateUpdateBuilder<Document>()
     .IgnoreFilters()
     .Set(d => d.Archived, true)
     .Update();
 ```
 
-`INSERT` / `MERGE` do not filter their target (there is no `FROM` for it); `INSERT … SELECT` filters the source as any read — and the written rows are validated instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)).
+Those rules are visible in the rendered statement — the active filter and the predicate share one `WHERE`, and `IgnoreFilters(["soft-delete"])` removes only the soft-delete term:
+
+```sql
+-- PostgreSQL
+update documents set is_deleted = @p0 where ((id = 10 and not (is_deleted)) and tenant_id = @p1)
+
+delete from documents where (is_deleted and tenant_id = @p0)
+
+-- SQL Server
+update documents set is_deleted = @p0 where ((id = 10 and not ((is_deleted) = 1)) and tenant_id = @p1)
+
+delete from documents where ((is_deleted) = 1 and tenant_id = @p0)
+```
+
+`INSERT` / `MERGE` do not inject a target filter through a source `FROM` (the target has no `FROM`); under an active filter a full `MERGE` constrains the target inside the statement, and the key-upsert forms that cannot do so **refuse** (see [Write-target isolation](#write-target-isolation)). `INSERT … SELECT` filters its source as any read — and the written rows are validated instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)).
 
 ## INSERT and MERGE (validation)
 
-An `INSERT` or `MERGE` never injects a filter into its **target** — the target has no `FROM` — so a write is never silently restricted. Instead the values about to be written are validated against the target entity's active filters (minus the `IgnoreFilters` scope) **before** the statement runs; a violation raises [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) (a [`DataContextException`](xref:NextORM.Core.DataContextException)).
+Neither an `INSERT` nor a `MERGE` injects a target filter through a source `FROM` — the target has no `FROM` — so a write is never silently restricted. A **full `MERGE`** (and the SQL Server key upsert, which renders as the same form) instead constrains the target atomically inside the statement, while an `ON CONFLICT` / `ON DUPLICATE KEY` / in-memory key upsert — which cannot carry the predicate — **refuses** (see [Write-target isolation](#write-target-isolation)). Independently, the values about to be written are validated against the target entity's active filters (minus the `IgnoreFilters` scope) **before** the statement runs; a violation raises [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) (a [`DataContextException`](xref:NextORM.Core.DataContextException)).
 
 | Statement | What is validated |
 |---|---|
-| `InsertInto<T>().Value(...)` / `Values(entity)` / batch `Values(...)` | every written row against the target filters |
-| `BulkInsertInto<T>()` | every row in the source |
-| `MergeInto<T>().Using(...)` | the rows of the merge's insert branch |
-| `InsertInto<T>().Values(source, mapping)` (`INSERT … SELECT`) | a server-side pre-check of the source rows |
-| `MergeInto<T>().Using(query)` (query-sourced `MERGE`) | a server-side pre-check of the source rows |
+| `CreateInsertBuilder<T>().Value(...)` / `Values(entity)` / batch `Values(...)` | every written row against the target filters |
+| `CreateBulkInsertBuilder<T>()` | every row in the source |
+| `CreateMergeBuilder<T>().Using(...)` | the source rows of **every** `MERGE` branch — insert, update-only and delete-only |
+| `CreateInsertBuilder<T>().Values(source, mapping)` (`INSERT … SELECT`) | a server-side pre-check of the source rows |
+| `CreateMergeBuilder<T>().Using(query)` (query-sourced `MERGE`) | a server-side pre-check of the source rows |
+
+An `INSERT` never carries a target filter; an `INSERT … SELECT` filters only its source:
+
+```csharp
+// A target INSERT is never filtered; the written row is validated instead.
+ctx.CreateInsertBuilder<Document>()
+    .Values(new Document { Id = 1, TenantId = 1, IsDeleted = false })
+    .Insert();
+
+// INSERT … SELECT filters its source as a read and pre-checks the written rows.
+ctx.CreateInsertBuilder<ArchivedDocument>()
+    .Values(ctx.From<Document>().Where(d => d.Id > 0), d => new { d.Id, d.TenantId, d.IsDeleted })
+    .Insert();
+```
+
+```sql
+-- PostgreSQL
+insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
+
+insert into archived_documents (id, tenant_id, is_deleted)
+select id, tenant_id as "TenantId", is_deleted as "IsDeleted" from documents
+ where (((id > 0) and not (is_deleted)) and tenant_id = @p0)
+
+-- SQL Server
+insert into documents (id, tenant_id, is_deleted) values (@p0, @p1, @p2)
+
+insert into archived_documents (id, tenant_id, is_deleted)
+select id, tenant_id as [TenantId], is_deleted as [IsDeleted] from documents
+ where (((id > 0) and not ((is_deleted) = 1)) and tenant_id = @p0)
+```
+
+On the supported full-`MERGE` form the source-value validation covers **every branch combination** — an update-only or delete-only `MERGE` validates its incoming source rows just like one that inserts, and a non-passing source row throws [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) before any mutation, even when the statement would not insert a row.
 
 For a materialised entity the filter is evaluated directly against it. For the column/value forms only the written columns carry a value, so validation is **fail-closed**: if an active filter reads a column the statement does **not** write, the write is **rejected** with a [`QueryFilterException`](xref:NextORM.Core.QueryFilterException) rather than let through — a database default could satisfy or violate the filter, and nextorm does not guess. Write the column explicitly, or disable the filter for the statement with `IgnoreFilters`.
 
@@ -219,13 +344,72 @@ A multi-row or bulk write is not atomic either. A synchronous bulk source is val
 `IgnoreFilters` on the [`InsertBuilder<T>`](xref:NextORM.Core.InsertBuilder`1), [`BulkInsertBuilder<T>`](xref:NextORM.Core.BulkInsertBuilder`1) and [`MergeBuilder<T>`](xref:NextORM.Core.MergeBuilder`1) disables the corresponding filters from validation too, with the same four overloads and semantics as the read builder:
 
 ```csharp
-ctx.InsertInto<Document>()
+ctx.CreateInsertBuilder<Document>()
     .IgnoreFilters(["soft-delete"])
     .Values(document)
     .Insert();
 ```
 
 A filter declared in the builder-function form (`FilterFunc`) cannot be validated against a written row — it is evaluated only while a query plan is built — so a write whose active **target** filter is declared as a function is rejected (fail-closed) unless the filter is disabled with `IgnoreFilters`; declare the filter as a predicate (`FilterLambda`) when the write must be validated. `INSERT … SELECT` still filters its **source** as a read, and `UPDATE` / `DELETE` are unaffected (see [Builder-function filters](#builder-function-filters-filterfunc)).
+
+## Write-target isolation
+
+A write is filtered on two sides, and they are independent:
+
+- the **source** of an `INSERT … SELECT` or a query-sourced `MERGE` is an ordinary read, so a filter declared for the source entity is injected into the source query as usual;
+- the **target** has no `FROM`, so its filter is not part of any source query. Under an active, non-ignored target filter the operation is constrained atomically in the statement where the dialect can express it; where it cannot, the command **refuses** with `NotSupportedException` before any mutation. A capability/form refusal happens before any read, but a query-sourced merge may first run its source pre-check read before a translation/render refusal. The predicate is never silently dropped: an active filter that cannot be translated to a target predicate is a fail-closed error, not a bypass.
+
+For the full `MERGE` form (SQL Server, PostgreSQL) the target predicate is injected into the `MERGE ... ON` condition and — on SQL Server, which has the arm — appended to every `WHEN NOT MATCHED BY SOURCE` branch. A target row hidden by the filter is therefore never matched, never updated and never deleted by the merge, including its delete arm. The SQL Server key upsert renders as the same `MERGE` form and takes the same predicate, so it is filtered too.
+
+```csharp
+ctx.CreateMergeBuilder<Document>()
+    .Using(new Document { Id = 1, TenantId = 1, IsDeleted = true })
+    .OnKeys()
+    .WhenMatched().ThenUpdate()
+    .WhenNotMatched().ThenInsert()
+    .Merge();
+```
+
+On a full `MERGE`, the active target filter joins the `ON` search condition:
+
+```sql
+-- PostgreSQL
+merge into documents as target using (values (@p1, @p2, @p3)) as source (id, tenant_id, is_deleted)
+ on target.id = source.id and ((not (target.is_deleted) and target.tenant_id = @p0))
+ when matched then update set tenant_id = source.tenant_id, is_deleted = source.is_deleted
+ when not matched then insert (id, tenant_id, is_deleted) values (source.id, source.tenant_id, source.is_deleted)
+
+-- SQL Server
+merge into documents as target using (values (@p1, @p2, @p3)) as source (id, tenant_id, is_deleted)
+ on target.id = source.id and ((not ((target.is_deleted) = 1) and target.tenant_id = @p0))
+ when matched then update set target.tenant_id = source.tenant_id, target.is_deleted = source.is_deleted
+ when not matched then insert (id, tenant_id, is_deleted) values (source.id, source.tenant_id, source.is_deleted);
+```
+
+**Form rule.** The atomic form is a real multi-branch `MERGE`, which requires actual `WhenMatched()`/`WhenNotMatched()` branches. Calling `.On(...)` does not turn the key-upsert shortcut (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`) into a full `MERGE`; the two are distinct forms. On a provider that has no full-`MERGE` support (SQLite, MySQL, MariaDB, in-memory), a branchless `.On(...)` under an active filter therefore fails closed with `NotSupportedException` before any source read.
+
+**PostgreSQL is a server prerequisite, not a client-side guard.** PostgreSQL 15+ is required for the server to execute the general `MERGE`; nextorm does not discover or configure the server version and performs **no version read**. Capability-based rendering is version-independent — the library emits the statement from the dialect's capability flags alone, and an older server rejects it server-side. There is no library-side "PostgreSQL < 15 refuses" path.
+
+| Provider / form | Target filter under an active, non-ignored filter |
+|---|---|
+| SQL Server — full `MERGE` and key upsert (`MERGE`) | injected into `ON` and into every `WHEN NOT MATCHED BY SOURCE` arm |
+| PostgreSQL (server 15+) — full `MERGE` | injected into `ON` (PostgreSQL has no `WHEN NOT MATCHED BY SOURCE`) |
+| PostgreSQL, SQLite — key upsert (`ON CONFLICT`) | `NotSupportedException` — fail closed |
+| MySQL, MariaDB — key upsert (`ON DUPLICATE KEY`) | `NotSupportedException` — fail closed |
+| In-memory — key upsert | `NotSupportedException` — fail closed |
+| Any provider — no active filter, or the filter is disabled | native behavior, no extra predicate |
+
+The capability refusal is a **metadata decision, before any connection, command or read** (zero database round-trips); the exception message points to `IgnoreFilters()` or to a full-`MERGE`-capable provider/form. It is deliberate fail-closed behavior, not a bug.
+
+`IgnoreFilters` bypasses the target filter for the statement, with the same four overloads as elsewhere (all-or-nothing, by entity type, by key, and the key/type intersection). A scope that disables the target entity's filter — or all filters — restores the provider's native upsert without the predicate; a selective scope that does not cover the target filter leaves it active, so an `ON CONFLICT` / `ON DUPLICATE KEY` upsert still refuses.
+
+### Limits of target isolation
+
+- **Existence oracle on a unique-index collision (insert arm only).** When a `MERGE`'s insert arm attempts a row whose key collides with a target row the filter hides, the provider reports its native unique-constraint error for whichever unique index it hits — not only the PK/merge key — revealing that a hidden target row exists; it cannot be removed without dropping the unique constraint. The composite-key mitigation (include the tenant/filter column) applies to the primary/merge key only, since it prevents a hidden row's key from colliding with a visible source key but does not cover other unique indexes. An update-only or delete-only `MERGE` never inserts, so a hidden row is a silent no-op (the filtered-out row is simply not matched) and exposes no oracle.
+- **Source-value validation is a separate read.** For `INSERT … SELECT` and a query-sourced `MERGE`, the written source values are checked by a separate existence query (`QueryFilterValidator`) with a **TOCTOU** window. It validates source values, not target rows, so it does not reveal hidden target existence and it does not make the write atomic (see [INSERT and MERGE (validation)](#insert-and-merge-validation)).
+- The refusal above is the intended safe outcome when the dialect cannot isolate the target atomically.
+
+With **no filter** configured the write path is unchanged: no predicate is added and no operation refuses.
 
 ## Builder-function filters (`FilterFunc`)
 
@@ -281,11 +465,74 @@ ctx.From<Document>(m => m.HasQueryFilter((b, c) =>
 - **Captured collections.** A predicate that closes over a collection — for example `ids.Contains(e.Id)` — captures it as a runtime value and is rejected with `NotSupportedException`. The function runs only at plan build, so the collection cannot stay a bound `IN` list; declare the filter as a predicate (`FilterLambda`) or use a `SqlFunctions.Parameter<T>(idx)` placeholder instead.
 - **Foreign captured context.** A predicate that closes over an `IDataContext` other than the one passed to the function is rejected with `NotSupportedException`: reading it on a shared plan would silently return the wrong context's values. Read the function's `IDataContext` parameter instead.
 - **`INSERT` / `MERGE` target validation.** A function filter is evaluated only while a query plan is built, so it cannot be validated against a written row; a write whose active **target** filter is declared as a function is rejected (fail-closed) unless the filter is disabled with `IgnoreFilters`. Declare the filter as a predicate (`FilterLambda`) when the write must be validated.
-- **Filter functions on `FromSql` / raw sources** are not applied (the raw SQL is passed through as written; the same holds for predicate filters).
+- **Filter functions on unbound `FromSql` / raw sources** are not applied (the raw SQL is passed through as written; the same holds for predicate filters). Bind the source with [`BindEntity<TEntity>`](#filters-on-bound-raw-sources) to opt in.
 
 ## In-memory provider
 
-The in-memory provider applies the same predicate to the registered sequence before projection and joins, so soft-delete and multi-tenancy queries behave identically to SQL providers. The `IgnoreFilters` overloads are honoured there too.
+The in-memory provider applies the same predicate to the registered sequence before projection and joins, so soft-delete and multi-tenancy queries behave identically to SQL providers. The `IgnoreFilters` overloads are honoured there too. For a write — the key-upsert merge is the only write it applies — an active, non-ignored filter makes the operation **refuse** with `NotSupportedException` (fail closed; see [Write-target isolation](#write-target-isolation)); `IgnoreFilters` restores the native behavior.
+
+## Filters on bound raw sources
+
+A [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object))/`From(string)` source has no mapped entity type, so nextorm cannot know which columns a filter reads. Call [`BindEntity<TEntity>`](xref:NextORM.Core.EntityBuilderExtensions.BindEntity``1(NextORM.Core.EntityBuilder{NextORM.Core.TableAlias},System.Collections.Generic.IReadOnlyCollection{System.String})) as the first operation on the source to attach entity metadata and declare the columns the raw SQL exposes; nextorm then applies each active global filter to that source best-effort:
+
+```csharp
+var rows = dataContext
+    .FromSql("select id, tenant_id, is_deleted from documents")
+    .BindEntity<Document>(["id", "tenant_id", "is_deleted"])
+    .Where(t => t.Id > 10)
+    .Select(t => t.Id)
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from (select id, tenant_id, is_deleted from documents) as "t1"
+ where (((t1.id > 10) and not (t1.is_deleted)) and t1.tenant_id = @p0)
+
+-- SQL Server
+select id from (select id, tenant_id, is_deleted from documents) as [t1]
+ where (((t1.id > 10) and not ((t1.is_deleted) = 1)) and t1.tenant_id = @p0)
+```
+
+`availableColumns` are the **output/SQL names** of the raw select list — a configured column mapping wins, otherwise the name the projection expects — and they are compared case-insensitively. The list is a caller declaration, not a schema read: nextorm does not parse the SQL or query the schema, and binding neither adds nor renames output columns, so the columns you project remain your responsibility.
+
+The exact signature is:
+
+```csharp
+public static EntityBuilder<TEntity> BindEntity<TEntity>(
+    this EntityBuilder<TableAlias> source,
+    IReadOnlyCollection<string> availableColumns)
+```
+
+For each active filter on `TEntity`:
+
+- if every column the filter reads is declared, the filter is `and`-ed into the source;
+- if a required column is missing, the filter is **skipped** (no exception) and a `RawSourceFilterSkipped` warning is logged on the `NextORM.QueryFilters` logger category with reason `MissingColumns` and the missing names — the **physical mapped column names** the filter reads, not the caller's declared output names;
+- **with an empty declared-column list**, a filter with a proven zero-column dependency (a predicate that reads no mapped column, such as a constant) is applied; a column-dependent or undetermined filter is skipped with a warning (reason `UndeterminedColumns`).
+
+Filters are evaluated independently — one skipped filter does not stop the others — and [`IgnoreFilters`](#disabling-filters-for-one-query) disables the selected filters before this analysis, so an ignored filter is never reported. The warning is emitted once per skipped filter while the query plan is prepared (a cache miss); a plan-cache hit does not re-emit it. The message carries only the entity type name, the source ordinal, the filter key, the reason and the missing column names (physical mapped column names only) — never SQL text, table names, parameter values or captured values. Wire an `ILoggerFactory` and enable the `NextORM.QueryFilters` category at `Warning` to see it (categories are topic-based, so filtering that category is enough):
+
+```csharp
+using var loggerFactory = LoggerFactory.Create(builder => builder
+    .AddFilter("NextORM.QueryFilters", LogLevel.Warning)
+    .AddConsole());
+
+var ctx = new SqliteDataContext(builder => builder.UseLoggerFactory(loggerFactory));
+```
+
+`BindEntity` must be the first operation after the source is created; a later call (after `Where`/`Select`/`Join`/projection) throws `InvalidOperationException`. Another source shape, or binding to `TableAlias`, throws `NotSupportedException`; a `null` source or column collection throws `ArgumentNullException`, and a `null`/blank entry throws `ArgumentException` (an empty collection is allowed, and the receiver is not mutated — a new typed builder is returned). `WithSql`, `PrepareFromSql` and `ExecuteRaw` are unchanged and do not take part, and the in-memory provider still rejects a raw source.
+
+> **Not a security guarantee.** nextorm trusts the column list you supply: a filter whose columns you forget to declare is silently skipped, and the raw source then returns rows the filter would have excluded. Treat `BindEntity` as a convenience for composing filters over a trusted raw source, not as an enforcement or isolation boundary; keep row-level authorization in the SQL itself when it must be enforced.
+
+### Joined bound sources and the main source
+
+Binding is **per source**, not per entity type: each joined raw source uses its own `BindEntity<TEntity>` binding and its own declared column list, and never borrows the main source's binding or another occurrence's. The same entity type joined twice with different declared columns keeps both bindings independent. A joined source's compatible filters are merged into **that join's** `ON` condition; a skipped filter on one occurrence warns separately and leaves the other occurrences and the other filters unaffected, and an outer join's predicates stay in `ON` and are never moved into `WHERE`.
+
+The main source's filters are always evaluated against the **main source's own binding**, even when the command is a joined projection. In that case the retained predicates are re-rooted onto the projection's **main** alias, `Item1` (`Projection<T1, …>`), and placed in the `WHERE` clause; they are never resolved from a join-side binding or alias.
+
+`SourceOrdinal` identifies where a skip happened: the main source is `0`, and join index `j` (zero-based) is `j + 1`, counting **all** joins — including unbound ones — so the ordinal is the join's position, not the number of bound sources.
+
+A `CROSS`/`CROSS APPLY` join has no `ON` clause, so a bound raw source on such a join has no predicate to attach to: its compatible filters are placed in `WHERE` instead, and nextorm never fabricates an `ON` for a join that has none. `OUTER APPLY`/`PASTE` are left unchanged, because moving their predicates into `WHERE` would change the result.
 
 ## Metadata
 
@@ -308,15 +555,6 @@ public interface IQueryFilterMetadata
 
 - **Process-global, first-registration-wins.** Filters are registered **process-globally** and the first registration for an entity type wins (consistent with nextorm metadata): a later `From<T>(cfg)` / `HasQueryFilter` for the same type is ignored — filters are not scoped to a `DataContext`.
 - **Disable scope follows the entry builder.** The selective scope is carried by the builder that starts the query; calling `IgnoreFilters` on a builder that is then used as a join source is not propagated. Use one of the type/key overloads on the query's entry builder instead. Eagerly-loaded `LoadWith` children are the exception: they inherit the entry builder's scope by union (see [Eager loading](eager-loading.md)).
-- **Key-form mutations apply filters but do not expose `IgnoreFilters`.** `Update(entity)` and `Delete(entity)` honour the target filter, but their immediate terminal has no fluent `IgnoreFilters`; use the predicate form (`Update<T>().Where(...)` / `DeleteFrom<T>().Where(...)`) when you need to disable a filter on a mutation.
+- **Key-form mutations apply filters but do not expose `IgnoreFilters`.** `Update(entity)` and `Delete(entity)` honour the target filter, but their immediate terminal has no fluent `IgnoreFilters`; use the predicate form (`CreateUpdateBuilder<T>().Where(...)` / `CreateDeleteBuilder<T>().Where(...)`) when you need to disable a filter on a mutation.
 - **Plan lifetime.** A context value read by a filter is captured as a runtime parameter (plan-cache safe). The prepared plan retains the first `IDataContext` instance for its lifetime (bounded, one per plan shape).
-
-## Not yet
-
-The following are **not** available:
-
-- filtering the **target** of `INSERT` / `MERGE` / `UPSERT` (there is no `FROM` for it) — target filters are enforced by validating the written rows instead (see [INSERT and MERGE (validation)](#insert-and-merge-validation)); `INSERT … SELECT` already filters its **source** ([#123](https://github.com/AlexeyShirshov/nextorm/issues/123));
-- filters on `FromSql` / raw sources ([#124](https://github.com/AlexeyShirshov/nextorm/issues/124));
-- the EF Core bridge that forwards EF Core 10 keyed filters ([#125](https://github.com/AlexeyShirshov/nextorm/issues/125)).
-
-`UPDATE` and `DELETE` are covered (see [UPDATE and DELETE (DML)](#update-and-delete-dml)).
+- **Open adapter units.** The ClickHouse no-EF-adapter slice and the MariaDB-specific shared-connection certification are tracked open units in milestone `1.0.9-b`; until they land, use the supported EF adapters (see [EF Core query-filter bridge](ef-core-query-filters.md)).

@@ -50,7 +50,7 @@ public abstract partial class CommonTestSuite
 
         try
         {
-            ctx.InsertInto<IRangeProbe>()
+            ctx.CreateInsertBuilder<IRangeProbe>()
                 .Values(new[]
                 {
                     new RangeProbe { Id = 1, During = new Range<int>(1, 10) },
@@ -78,7 +78,7 @@ public abstract partial class CommonTestSuite
                 .Select(x => x.Id).ToList().Should().Equal(1L);
 
             // An unbounded bound is stored as SQL NULL and reads back as infinite.
-            ctx.InsertInto<IRangeProbe>()
+            ctx.CreateInsertBuilder<IRangeProbe>()
                 .Values(new RangeProbe
                 {
                     Id = 3,

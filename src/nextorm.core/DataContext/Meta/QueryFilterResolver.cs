@@ -14,16 +14,34 @@ internal static class QueryFilterResolver
     /// </summary>
     /// <param name="entityType">The entity type whose filters are resolved, or <see langword="null"/>.</param>
     /// <param name="scope">The scope of filters disabled for the statement.</param>
+    /// <param name="dataContext">
+    /// The executing context, used to enforce the bridge fail-closed expectation. <see langword="null"/>
+    /// (no context known) keeps the existing behavior.
+    /// </param>
     /// <returns>The active filters, in declaration order.</returns>
-    public static IReadOnlyList<IQueryFilterMetadata> GetFilters(Type? entityType, QueryFilterScope scope)
+    /// <exception cref="InvalidOperationException">The context expects imported filters that the resolved metadata no longer carries.</exception>
+    public static IReadOnlyList<IQueryFilterMetadata> GetFilters(Type? entityType, QueryFilterScope scope, IDataContext? dataContext = null)
     {
         if (entityType is null || scope.All)
             return Array.Empty<IQueryFilterMetadata>();
 
-        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+        // Resolve through the normal path (a configured mapping wins over the auto mapping) instead of
+        // requiring DataContextCache.Metadata to have been primed by an earlier From<T>: a source bound
+        // with BindEntity must get its filters on first use and after DataContextCache.Clear() has
+        // dropped the metadata. Synthetic source shapes (a raw TableAlias, a joined projection) have no
+        // entity filters and must not be auto-resolved into the metadata caches.
+        var metadata = entityType == typeof(TableAlias) || typeof(IProjection).IsAssignableFrom(entityType)
+            ? null
+            : DataContextExtensions.ResolveMetadata(dataContext, entityType);
+        if (metadata is null)
             return Array.Empty<IQueryFilterMetadata>();
 
         var declared = metadata.Filters;
+
+        // Fail closed: a bridge-bound context whose imported filters vanished from the resolved metadata
+        // must refuse rather than silently apply fewer filters.
+        QueryFilterExpectations.EnsureFiltersPresent(dataContext, entityType, declared);
+
         if (declared.Count == 0)
             return declared;
 

@@ -6,14 +6,14 @@ namespace NextORM.EntityFrameworkCore.Tests;
 
 /// <summary>
 /// <see cref="NextOrmModelMapper.Register"/> refuses EF model shapes the read-only MVP cannot represent
-/// correctly, instead of silently mapping them wrong: global query filters, inheritance (TPH/TPT/TPC)
-/// and schema-qualified tables. It also refuses a second, different mapping for a CLR type already in
-/// the process-wide metadata cache.
+/// correctly, instead of silently mapping them wrong: inheritance (TPH/TPT/TPC) and schema-qualified
+/// tables. Global query filters are imported, not refused. It also refuses a second, different mapping
+/// for a CLR type already in the process-wide metadata cache.
 /// </summary>
 public sealed class NextOrmModelMapperValidationTests : EfCoreMetadataCleanup
 {
     [Fact]
-    public void Register_ShouldThrow_WhenEntityDeclaresQueryFilter()
+    public void Register_ShouldAccept_WhenEntityDeclaresQueryFilter()
     {
         var builder = new ModelBuilder();
         builder.Entity<FilteredRow>(entity =>
@@ -26,7 +26,10 @@ public sealed class NextOrmModelMapperValidationTests : EfCoreMetadataCleanup
 
         var act = () => NextOrmModelMapper.Register(builder.FinalizeModel());
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*query filter*");
+        act.Should().NotThrow();
+        var filter = DataContextCache.Metadata[typeof(FilteredRow)].Filters.Should().ContainSingle().Subject;
+        filter.Key.Should().Be(QueryFilters.AnonymousKey);
+        filter.Lambda.Should().NotBeNull();
     }
 
     [Fact]

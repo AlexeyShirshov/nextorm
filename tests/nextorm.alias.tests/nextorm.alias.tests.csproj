@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <!-- Pinned to the last open-source (Apache-2.0) release; 8.x switched to the commercial Xceed license. -->
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="System.Linq.Async" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Xunit.DependencyInjection.Logging" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
+    <!-- The join-alias generator runs as an analyzer over this test assembly, so aliases written in
+         the tests (Alias.Buyer etc.) compile against the generated projection/builder types. -->
+    <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- The generator is referenced build-only as an analyzer (ReferenceOutputAssembly=false), so its
+       assembly is not copied next to the tests by default. The diagnostics harness loads the real
+       generator type through reflection, so copy the analyzer output into the test output dir. This
+       keeps the reference shape exactly as required while making the hand-rolled CSharpGeneratorDriver
+       tests possible. -->
+  <Target Name="CopyJoinAliasGeneratorForHarness" AfterTargets="Build">
+    <MSBuild Projects="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework">
+      <Output TaskParameter="TargetOutputs" ItemName="_JoinAliasGeneratorAssembly" />
+    </MSBuild>
+    <Copy SourceFiles="@(_JoinAliasGeneratorAssembly)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

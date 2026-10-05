@@ -52,6 +52,10 @@
   href: 26-large-objects.md
 - name: Dynamic columns
   href: 27-dynamic-columns.md
+- name: Streaming data to a Stream
+  href: 28-streaming-data.md
+- name: Implicit navigation queries
+  href: 29-implicit-navigation.md
 - name: Provider-specific SQL
   items:
     - name: Overview

@@ -16,6 +16,12 @@ public interface IContextEnvironment
     /// </summary>
     ILogger? CommandLogger { get; }
     /// <summary>
+    /// The logger category that reports global query-filter diagnostics (for example a filter skipped on a
+    /// bound raw source), or <see langword="null"/> when logging is disabled. The default implementation
+    /// returns <see langword="null"/> so existing external implementations keep compiling.
+    /// </summary>
+    ILogger? QueryFilterLogger => null;
+    /// <summary>
     /// Whether rows returned by the provider must be mapped to results, as opposed to using a scalar
     /// or in-memory fast path.
     /// </summary>

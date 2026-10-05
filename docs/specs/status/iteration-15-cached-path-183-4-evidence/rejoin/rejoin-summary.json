@@ -1,0 +1,516 @@
+{
+  "generated_utc": "2026-10-05T09:28:22Z",
+  "tree_old": "/home/alex/sources/nextorm-worktrees/183-baseline",
+  "tree_new": "/home/alex/sources/nextorm",
+  "job": "NEXTORM_BENCH_FULL=1 -> single Job.Default (Medium-equivalent), out-of-process, --memory --statisticalTest 99.9%",
+  "pinning": "taskset -c 3 (high-priority setup failed: Permission denied in all 10 runs)",
+  "rounds_valid": 5,
+  "rounds_invalid": [],
+  "loadavg_range": [
+    2.06,
+    10.21
+  ],
+  "signature_gate": "all valid rounds old Where_CachedHit_PlanOnly alloc=652813, new=458410 (one new round initially 469610, re-run to 458410, excluded)",
+  "rounds": [
+    {
+      "round": 1,
+      "signature_gate": {
+        "old_where_planonly_alloc": 652813,
+        "new_where_planonly_alloc": 458410,
+        "expected_old": 652813,
+        "expected_new": 458410,
+        "passed": true
+      },
+      "loadavg": {
+        "old_before": "6.27",
+        "old_after": "3.32",
+        "new_before": "3.22",
+        "new_after": "2.75"
+      },
+      "arms": {
+        "Where_CachedHit_PlanOnly": {
+          "old_mean": 558105.7222986355,
+          "new_mean": 460070.96433221723,
+          "delta_pct": -17.565624943361733,
+          "old_ci99_9": [
+            546952.1441652298,
+            569259.3004320413
+          ],
+          "new_ci99_9": [
+            438387.7430886032,
+            481754.1855758313
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 652813,
+          "new_alloc": 458410
+        },
+        "Where_CachedHit_ToList": {
+          "old_mean": 1745304.1675347222,
+          "new_mean": 1692240.2822115384,
+          "delta_pct": -3.0403803709549186,
+          "old_ci99_9": [
+            1709484.7934848233,
+            1781123.5415846212
+          ],
+          "new_ci99_9": [
+            1660716.638756037,
+            1723763.9256670398
+          ],
+          "ci_non_overlapping": false,
+          "old_alloc": 725976,
+          "new_alloc": 531572
+        },
+        "Join_CachedHit_PlanOnly": {
+          "old_mean": 3391395.913118132,
+          "new_mean": 2003391.475809488,
+          "delta_pct": -40.927230935785346,
+          "old_ci99_9": [
+            2228277.391929825,
+            4554514.434306439
+          ],
+          "new_ci99_9": [
+            1533547.4779827115,
+            2473235.4736362644
+          ],
+          "ci_non_overlapping": false,
+          "old_alloc": 1226479,
+          "new_alloc": 1172871
+        },
+        "Join_CachedHit_ToList": {
+          "old_mean": 15461712.400815217,
+          "new_mean": 8963192.5678125,
+          "delta_pct": -42.02975494913541,
+          "old_ci99_9": [
+            15162556.947844397,
+            15760867.853786036
+          ],
+          "new_ci99_9": [
+            7321988.086723573,
+            10604397.048901428
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 1305095,
+          "new_alloc": 1259495
+        }
+      }
+    },
+    {
+      "round": 2,
+      "signature_gate": {
+        "old_where_planonly_alloc": 652813,
+        "new_where_planonly_alloc": 458410,
+        "expected_old": 652813,
+        "expected_new": 458410,
+        "passed": true
+      },
+      "loadavg": {
+        "old_before": "4.01",
+        "old_after": "9.28",
+        "new_before": "4.40",
+        "new_after": "4.01"
+      },
+      "arms": {
+        "Where_CachedHit_PlanOnly": {
+          "old_mean": 764726.4047550154,
+          "new_mean": 506534.552734375,
+          "delta_pct": -33.76264379197861,
+          "old_ci99_9": [
+            671103.2377399427,
+            858349.571770088
+          ],
+          "new_ci99_9": [
+            481182.271795251,
+            531886.8336734991
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 652813,
+          "new_alloc": 458410
+        },
+        "Where_CachedHit_ToList": {
+          "old_mean": 2183967.421246408,
+          "new_mean": 1711806.507533482,
+          "delta_pct": -21.619411952741487,
+          "old_ci99_9": [
+            2061438.6462096062,
+            2306496.19628321
+          ],
+          "new_ci99_9": [
+            1674315.873590522,
+            1749297.141476442
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 725976,
+          "new_alloc": 531572
+        },
+        "Join_CachedHit_PlanOnly": {
+          "old_mean": 2212191.7356468025,
+          "new_mean": 1898376.1541539633,
+          "delta_pct": -14.185731572723984,
+          "old_ci99_9": [
+            1695194.889435107,
+            2729188.581858498
+          ],
+          "new_ci99_9": [
+            1646118.3667140303,
+            2150633.941593896
+          ],
+          "ci_non_overlapping": false,
+          "old_alloc": 1223279,
+          "new_alloc": 1172871
+        },
+        "Join_CachedHit_ToList": {
+          "old_mean": 4407534.23735119,
+          "new_mean": 3584708.8764204546,
+          "delta_pct": -18.66860962662043,
+          "old_ci99_9": [
+            3763426.567760608,
+            5051641.906941772
+          ],
+          "new_ci99_9": [
+            3505960.8644298636,
+            3663456.8884110455
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 1290695,
+          "new_alloc": 1248295
+        }
+      }
+    },
+    {
+      "round": 3,
+      "signature_gate": {
+        "old_where_planonly_alloc": 652813,
+        "new_where_planonly_alloc": 458410,
+        "expected_old": 652813,
+        "expected_new": 458410,
+        "passed": true
+      },
+      "loadavg": {
+        "old_before": "9.55",
+        "old_after": "4.74",
+        "new_before": "8.86",
+        "new_after": "10.21"
+      },
+      "arms": {
+        "Where_CachedHit_PlanOnly": {
+          "old_mean": 561143.7072380515,
+          "new_mean": 414343.2197666952,
+          "delta_pct": -26.160943369374667,
+          "old_ci99_9": [
+            548631.6903117782,
+            573655.7241643247
+          ],
+          "new_ci99_9": [
+            408192.1143720028,
+            420494.3251613877
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 652813,
+          "new_alloc": 458410
+        },
+        "Where_CachedHit_ToList": {
+          "old_mean": 1695666.4380450582,
+          "new_mean": 1561470.8729876895,
+          "delta_pct": -7.914030852204837,
+          "old_ci99_9": [
+            1678717.7032554317,
+            1712615.1728346846
+          ],
+          "new_ci99_9": [
+            1530331.7436189314,
+            1592610.0023564475
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 725976,
+          "new_alloc": 531572
+        },
+        "Join_CachedHit_PlanOnly": {
+          "old_mean": 3377648.991758242,
+          "new_mean": 2332998.843191964,
+          "delta_pct": -30.928321773971046,
+          "old_ci99_9": [
+            2270137.3436633665,
+            4485160.639853117
+          ],
+          "new_ci99_9": [
+            1877591.7126109214,
+            2788405.973773007
+          ],
+          "ci_non_overlapping": false,
+          "old_alloc": 1226479,
+          "new_alloc": 1172871
+        },
+        "Join_CachedHit_ToList": {
+          "old_mean": 4464090.449590774,
+          "new_mean": 9380130.729375,
+          "delta_pct": 110.12411901812789,
+          "old_ci99_9": [
+            3989016.6712019313,
+            4939164.227979617
+          ],
+          "new_ci99_9": [
+            6834530.845555489,
+            11925730.61319451
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 1298695,
+          "new_alloc": 1248295
+        }
+      }
+    },
+    {
+      "round": 4,
+      "signature_gate": {
+        "old_where_planonly_alloc": 652813,
+        "new_where_planonly_alloc": 458410,
+        "expected_old": 652813,
+        "expected_new": 458410,
+        "passed": true
+      },
+      "loadavg": {
+        "old_before": "7.06",
+        "old_after": "2.65",
+        "new_before": "6.32",
+        "new_after": "6.37"
+      },
+      "arms": {
+        "Where_CachedHit_PlanOnly": {
+          "old_mean": 601443.0159801136,
+          "new_mean": 401337.78077491553,
+          "delta_pct": -33.27085524122446,
+          "old_ci99_9": [
+            572016.461837507,
+            630869.5701227203
+          ],
+          "new_ci99_9": [
+            393377.9720626393,
+            409297.58948719176
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 652813,
+          "new_alloc": 458410
+        },
+        "Where_CachedHit_ToList": {
+          "old_mean": 3617783.610625,
+          "new_mean": 1767834.576450893,
+          "delta_pct": -51.13487243242042,
+          "old_ci99_9": [
+            2690330.156128117,
+            4545237.0651218835
+          ],
+          "new_ci99_9": [
+            1701452.5207523983,
+            1834216.6321493876
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 725976,
+          "new_alloc": 531572
+        },
+        "Join_CachedHit_PlanOnly": {
+          "old_mean": 2471145.390438988,
+          "new_mean": 2818701.3932291665,
+          "delta_pct": 14.064571195806366,
+          "old_ci99_9": [
+            1796025.3512965196,
+            3146265.429581456
+          ],
+          "new_ci99_9": [
+            2134280.7115764557,
+            3503122.0748818773
+          ],
+          "ci_non_overlapping": false,
+          "old_alloc": 1223279,
+          "new_alloc": 1172871
+        },
+        "Join_CachedHit_ToList": {
+          "old_mean": 3283989.6630608975,
+          "new_mean": 9249331.9940625,
+          "delta_pct": 181.6492420211063,
+          "old_ci99_9": [
+            3137264.417416493,
+            3430714.908705302
+          ],
+          "new_ci99_9": [
+            7305605.406743378,
+            11193058.581381623
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 1290695,
+          "new_alloc": 1256295
+        }
+      }
+    },
+    {
+      "round": 5,
+      "signature_gate": {
+        "old_where_planonly_alloc": 652813,
+        "new_where_planonly_alloc": 458410,
+        "expected_old": 652813,
+        "expected_new": 458410,
+        "passed": true
+      },
+      "loadavg": {
+        "old_before": "2.33",
+        "old_after": "2.35",
+        "new_before": "2.06",
+        "new_after": "2.66"
+      },
+      "arms": {
+        "Where_CachedHit_PlanOnly": {
+          "old_mean": 538920.0548650568,
+          "new_mean": 405021.07865547837,
+          "delta_pct": -24.845795772641292,
+          "old_ci99_9": [
+            530137.206340418,
+            547702.9033896956
+          ],
+          "new_ci99_9": [
+            394895.7339829733,
+            415146.4233279834
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 652813,
+          "new_alloc": 458410
+        },
+        "Where_CachedHit_ToList": {
+          "old_mean": 1785869.6513110632,
+          "new_mean": 1502131.7912554825,
+          "delta_pct": -15.887937837304072,
+          "old_ci99_9": [
+            1748510.548187221,
+            1823228.7544349055
+          ],
+          "new_ci99_9": [
+            1473535.427230561,
+            1530728.155280404
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 725976,
+          "new_alloc": 531572
+        },
+        "Join_CachedHit_PlanOnly": {
+          "old_mean": 4487761.82203125,
+          "new_mean": 1908376.934375,
+          "delta_pct": -57.47597555185692,
+          "old_ci99_9": [
+            3119726.3456996353,
+            5855797.298362865
+          ],
+          "new_ci99_9": [
+            1499182.424196927,
+            2317571.444553073
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 1223279,
+          "new_alloc": 1172871
+        },
+        "Join_CachedHit_ToList": {
+          "old_mean": 3684647.558159722,
+          "new_mean": 3320499.504153481,
+          "delta_pct": -9.882846276567973,
+          "old_ci99_9": [
+            3497096.570479059,
+            3872198.545840385
+          ],
+          "new_ci99_9": [
+            3184182.98410007,
+            3456816.0242068926
+          ],
+          "ci_non_overlapping": true,
+          "old_alloc": 1298695,
+          "new_alloc": 1248295
+        }
+      }
+    }
+  ],
+  "per_arm": {
+    "Where_CachedHit_PlanOnly": {
+      "median_delta_pct": -26.160943369374667,
+      "min_delta_pct": -33.76264379197861,
+      "max_delta_pct": -17.565624943361733,
+      "all_delta_pct": [
+        -17.565624943361733,
+        -33.76264379197861,
+        -26.160943369374667,
+        -33.27085524122446,
+        -24.845795772641292
+      ],
+      "rounds_gt20pct": [],
+      "rounds_lt_minus20pct": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "rounds_gt20pct_ci_nonoverlapping": [],
+      "regression_gt20_ci_separated_on_ge2": false,
+      "sign_flip_across_rounds": false
+    },
+    "Where_CachedHit_ToList": {
+      "median_delta_pct": -15.887937837304072,
+      "min_delta_pct": -51.13487243242042,
+      "max_delta_pct": -3.0403803709549186,
+      "all_delta_pct": [
+        -3.0403803709549186,
+        -21.619411952741487,
+        -7.914030852204837,
+        -51.13487243242042,
+        -15.887937837304072
+      ],
+      "rounds_gt20pct": [],
+      "rounds_lt_minus20pct": [
+        2,
+        4
+      ],
+      "rounds_gt20pct_ci_nonoverlapping": [],
+      "regression_gt20_ci_separated_on_ge2": false,
+      "sign_flip_across_rounds": false
+    },
+    "Join_CachedHit_PlanOnly": {
+      "median_delta_pct": -30.928321773971046,
+      "min_delta_pct": -57.47597555185692,
+      "max_delta_pct": 14.064571195806366,
+      "all_delta_pct": [
+        -40.927230935785346,
+        -14.185731572723984,
+        -30.928321773971046,
+        14.064571195806366,
+        -57.47597555185692
+      ],
+      "rounds_gt20pct": [],
+      "rounds_lt_minus20pct": [
+        1,
+        3,
+        5
+      ],
+      "rounds_gt20pct_ci_nonoverlapping": [],
+      "regression_gt20_ci_separated_on_ge2": false,
+      "sign_flip_across_rounds": true
+    },
+    "Join_CachedHit_ToList": {
+      "median_delta_pct": -9.882846276567973,
+      "min_delta_pct": -42.02975494913541,
+      "max_delta_pct": 181.6492420211063,
+      "all_delta_pct": [
+        -42.02975494913541,
+        -18.66860962662043,
+        110.12411901812789,
+        181.6492420211063,
+        -9.882846276567973
+      ],
+      "rounds_gt20pct": [
+        3,
+        4
+      ],
+      "rounds_lt_minus20pct": [
+        1
+      ],
+      "rounds_gt20pct_ci_nonoverlapping": [
+        3,
+        4
+      ],
+      "regression_gt20_ci_separated_on_ge2": true,
+      "sign_flip_across_rounds": true
+    }
+  }
+}

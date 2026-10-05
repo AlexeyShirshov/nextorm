@@ -1,0 +1,447 @@
+{
+  "artifact_dir": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/perf",
+  "host_meta": {
+    "title": "NextORM.Benchmark.SqliteBenchmarkStageA-20261004-212436",
+    "runtime": ".NET 10.0.12 (10.0.12, 10.0.1226.42308)",
+    "job": "SqliteBenchmarkStageA.Where_Construct: ShortRun(Toolchain=InProcessEmitToolchain, IterationCount=3, LaunchCount=1, WarmupCount=3)"
+  },
+  "measurement": {
+    "interleave": "A1->B1->A2->B2->A3->B3 (base vs candidate, git stash switch)",
+    "base": "752943d (working tree with src/tests stashed)",
+    "candidate": "752943d + uncommitted U2 changes incl. ParamRefreshRecipe.cs",
+    "bench_command": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=stage-a --exporters json",
+    "job": "ShortRun, IterationCount=3, LaunchCount=1, WarmupCount=3, InProcessEmitToolchain"
+  },
+  "runs": {
+    "A": {
+      "r1": {
+        "Where_CachedHit_PlanOnly": {
+          "display": "Where_CachedHit_PlanOnly",
+          "mean_ns": 565660.5958658854,
+          "stddev_ns": 15648.232176881982,
+          "stderr_ns": 9034.511059664577,
+          "ci_margin_ns": 285482.0068905643,
+          "n": 3,
+          "allocated_bytes_per_op": 652818
+        },
+        "Where_CachedHit_ToList": {
+          "display": "Where_CachedHit_ToList",
+          "mean_ns": 1916398.7923177083,
+          "stddev_ns": 26990.193150268708,
+          "stderr_ns": 15582.795280787632,
+          "ci_margin_ns": 492401.59653855464,
+          "n": 3,
+          "allocated_bytes_per_op": 725984
+        },
+        "Join_CachedHit_PlanOnly": {
+          "display": "Join_CachedHit_PlanOnly",
+          "mean_ns": 2124487.7805989585,
+          "stddev_ns": 309983.4123303585,
+          "stderr_ns": 178969.00655325127,
+          "ci_margin_ns": 5655251.382682974,
+          "n": 3,
+          "allocated_bytes_per_op": 1226493
+        },
+        "Join_CachedHit_ToList": {
+          "display": "Join_CachedHit_ToList",
+          "mean_ns": 3778816.1692708335,
+          "stddev_ns": 242097.33204438395,
+          "stderr_ns": 139774.95982591528,
+          "ci_margin_ns": 4416756.56608602,
+          "n": 3,
+          "allocated_bytes_per_op": 1301918
+        }
+      },
+      "r2": {
+        "Where_CachedHit_PlanOnly": {
+          "display": "Where_CachedHit_PlanOnly",
+          "mean_ns": 614305.6748046875,
+          "stddev_ns": 34796.79154968208,
+          "stderr_ns": 20089.936968144244,
+          "ci_margin_ns": 634823.0121247637,
+          "n": 3,
+          "allocated_bytes_per_op": 652818
+        },
+        "Where_CachedHit_ToList": {
+          "display": "Where_CachedHit_ToList",
+          "mean_ns": 1775602.9967447917,
+          "stddev_ns": 12924.890769295698,
+          "stderr_ns": 7462.1891648993815,
+          "ci_margin_ns": 235798.1217271974,
+          "n": 3,
+          "allocated_bytes_per_op": 725983
+        },
+        "Join_CachedHit_PlanOnly": {
+          "display": "Join_CachedHit_PlanOnly",
+          "mean_ns": 1719229.83203125,
+          "stddev_ns": 10808.796998026386,
+          "stderr_ns": 6240.461856426553,
+          "ci_margin_ns": 197192.69398545753,
+          "n": 3,
+          "allocated_bytes_per_op": 1218483
+        },
+        "Join_CachedHit_ToList": {
+          "display": "Join_CachedHit_ToList",
+          "mean_ns": 3585836.494140625,
+          "stddev_ns": 17267.934087319107,
+          "stderr_ns": 9969.646393662402,
+          "ci_margin_ns": 315031.39922634483,
+          "n": 3,
+          "allocated_bytes_per_op": 1293913
+        }
+      },
+      "r3": {
+        "Where_CachedHit_PlanOnly": {
+          "display": "Where_CachedHit_PlanOnly",
+          "mean_ns": 631540.9210611979,
+          "stddev_ns": 35808.22095892273,
+          "stderr_ns": 20673.886009835638,
+          "ci_margin_ns": 653275.2496883613,
+          "n": 3,
+          "allocated_bytes_per_op": 652818
+        },
+        "Where_CachedHit_ToList": {
+          "display": "Where_CachedHit_ToList",
+          "mean_ns": 1833319.5406901042,
+          "stddev_ns": 39647.42548796542,
+          "stderr_ns": 22890.451778152466,
+          "ci_margin_ns": 723316.6320902449,
+          "n": 3,
+          "allocated_bytes_per_op": 725984
+        },
+        "Join_CachedHit_PlanOnly": {
+          "display": "Join_CachedHit_PlanOnly",
+          "mean_ns": 1666981.0110677083,
+          "stddev_ns": 18998.67439872059,
+          "stderr_ns": 10968.889778347384,
+          "ci_margin_ns": 346606.5453463807,
+          "n": 3,
+          "allocated_bytes_per_op": 1226483
+        },
+        "Join_CachedHit_ToList": {
+          "display": "Join_CachedHit_ToList",
+          "mean_ns": 3568623.8561197915,
+          "stddev_ns": 178823.0458090329,
+          "stderr_ns": 103243.53363515393,
+          "ci_margin_ns": 3262398.0408001738,
+          "n": 3,
+          "allocated_bytes_per_op": 1301895
+        }
+      }
+    },
+    "B": {
+      "r1": {
+        "Where_CachedHit_PlanOnly": {
+          "display": "Where_CachedHit_PlanOnly",
+          "mean_ns": 513780.1490885417,
+          "stddev_ns": 22730.755877143612,
+          "stderr_ns": 13123.608024552534,
+          "ci_margin_ns": 414693.60452954815,
+          "n": 3,
+          "allocated_bytes_per_op": 540016
+        },
+        "Where_CachedHit_ToList": {
+          "display": "Where_CachedHit_ToList",
+          "mean_ns": 1710686.1624348958,
+          "stddev_ns": 31067.747825553437,
+          "stderr_ns": 17936.97257019869,
+          "ci_margin_ns": 566791.3728882456,
+          "n": 3,
+          "allocated_bytes_per_op": 613182
+        },
+        "Join_CachedHit_PlanOnly": {
+          "display": "Join_CachedHit_PlanOnly",
+          "mean_ns": 1698934.775390625,
+          "stddev_ns": 61654.5634762411,
+          "stderr_ns": 35596.27881977667,
+          "ci_margin_ns": 1124808.752592663,
+          "n": 3,
+          "allocated_bytes_per_op": 1229684
+        },
+        "Join_CachedHit_ToList": {
+          "display": "Join_CachedHit_ToList",
+          "mean_ns": 4411425.58984375,
+          "stddev_ns": 261415.1215740329,
+          "stderr_ns": 150928.09081100667,
+          "ci_margin_ns": 4769184.9593559755,
+          "n": 3,
+          "allocated_bytes_per_op": 1305113
+        }
+      },
+      "r2": {
+        "Where_CachedHit_PlanOnly": {
+          "display": "Where_CachedHit_PlanOnly",
+          "mean_ns": 484151.74951171875,
+          "stddev_ns": 16957.73657613181,
+          "stderr_ns": 9790.553777076464,
+          "ci_margin_ns": 309372.2418835086,
+          "n": 3,
+          "allocated_bytes_per_op": 540016
+        },
+        "Where_CachedHit_ToList": {
+          "display": "Where_CachedHit_ToList",
+          "mean_ns": 1666496.3587239583,
+          "stddev_ns": 70184.4174813356,
+          "stderr_ns": 40520.99232576619,
+          "ci_margin_ns": 1280425.0428120422,
+          "n": 3,
+          "allocated_bytes_per_op": 613182
+        },
+        "Join_CachedHit_PlanOnly": {
+          "display": "Join_CachedHit_PlanOnly",
+          "mean_ns": 1532288.9208984375,
+          "stddev_ns": 1729.0866690105627,
+          "stderr_ns": 998.2886538054418,
+          "ci_margin_ns": 31544.977526989507,
+          "n": 3,
+          "allocated_bytes_per_op": 1218483
+        },
+        "Join_CachedHit_ToList": {
+          "display": "Join_CachedHit_ToList",
+          "mean_ns": 3425308.4244791665,
+          "stddev_ns": 9105.793353564197,
+          "stderr_ns": 5257.232243865395,
+          "ci_margin_ns": 166123.56792268943,
+          "n": 3,
+          "allocated_bytes_per_op": 1293913
+        }
+      },
+      "r3": {
+        "Where_CachedHit_PlanOnly": {
+          "display": "Where_CachedHit_PlanOnly",
+          "mean_ns": 507287.0725911458,
+          "stddev_ns": 41764.030427755606,
+          "stderr_ns": 24112.47420990842,
+          "ci_margin_ns": 761931.3854486773,
+          "n": 3,
+          "allocated_bytes_per_op": 540013
+        },
+        "Where_CachedHit_ToList": {
+          "display": "Where_CachedHit_ToList",
+          "mean_ns": 1618620.8753255208,
+          "stddev_ns": 37346.7177141949,
+          "stderr_ns": 21562.13752563939,
+          "ci_margin_ns": 681343.1577002704,
+          "n": 3,
+          "allocated_bytes_per_op": 613182
+        },
+        "Join_CachedHit_PlanOnly": {
+          "display": "Join_CachedHit_PlanOnly",
+          "mean_ns": 1785142.953125,
+          "stddev_ns": 23755.46856488509,
+          "stderr_ns": 13715.226170662101,
+          "ci_margin_ns": 433388.1785412274,
+          "n": 3,
+          "allocated_bytes_per_op": 1218483
+        },
+        "Join_CachedHit_ToList": {
+          "display": "Join_CachedHit_ToList",
+          "mean_ns": 4059574.248046875,
+          "stddev_ns": 55566.58798572013,
+          "stderr_ns": 32081.384531504544,
+          "ci_margin_ns": 1013741.4165965783,
+          "n": 3,
+          "allocated_bytes_per_op": 1293913
+        }
+      }
+    }
+  },
+  "rounds_time_deltas_B_minus_A": {
+    "Where_CachedHit_PlanOnly": {
+      "unit": "ns_per_op",
+      "per_round": {
+        "r1": -51880.44677734369,
+        "r2": -130153.92529296875,
+        "r3": -124253.84847005206
+      },
+      "values": [
+        -51880.44677734369,
+        -130153.92529296875,
+        -124253.84847005206
+      ],
+      "median": -124253.84847005206,
+      "min": -130153.92529296875,
+      "max": -51880.44677734369,
+      "range": 78273.47851562506
+    },
+    "Where_CachedHit_ToList": {
+      "unit": "ns_per_op",
+      "per_round": {
+        "r1": -205712.6298828125,
+        "r2": -109106.63802083349,
+        "r3": -214698.6653645835
+      },
+      "values": [
+        -205712.6298828125,
+        -109106.63802083349,
+        -214698.6653645835
+      ],
+      "median": -205712.6298828125,
+      "min": -214698.6653645835,
+      "max": -109106.63802083349,
+      "range": 105592.02734375
+    },
+    "Join_CachedHit_PlanOnly": {
+      "unit": "ns_per_op",
+      "per_round": {
+        "r1": -425553.0052083335,
+        "r2": -186940.9111328125,
+        "r3": 118161.94205729174
+      },
+      "values": [
+        -425553.0052083335,
+        -186940.9111328125,
+        118161.94205729174
+      ],
+      "median": -186940.9111328125,
+      "min": -425553.0052083335,
+      "max": 118161.94205729174,
+      "range": 543714.9472656252
+    },
+    "Join_CachedHit_ToList": {
+      "unit": "ns_per_op",
+      "per_round": {
+        "r1": 632609.4205729165,
+        "r2": -160528.0696614585,
+        "r3": 490950.3919270835
+      },
+      "values": [
+        632609.4205729165,
+        -160528.0696614585,
+        490950.3919270835
+      ],
+      "median": 490950.3919270835,
+      "min": -160528.0696614585,
+      "max": 632609.4205729165,
+      "range": 793137.490234375
+    }
+  },
+  "rounds_alloc_deltas_B_minus_A": {
+    "Where_CachedHit_PlanOnly": {
+      "unit": "bytes_per_op",
+      "per_round": {
+        "r1": -112802,
+        "r2": -112802,
+        "r3": -112805
+      },
+      "values": [
+        -112802,
+        -112802,
+        -112805
+      ],
+      "median": -112802,
+      "min": -112805,
+      "max": -112802,
+      "range": 3
+    },
+    "Where_CachedHit_ToList": {
+      "unit": "bytes_per_op",
+      "per_round": {
+        "r1": -112802,
+        "r2": -112801,
+        "r3": -112802
+      },
+      "values": [
+        -112802,
+        -112801,
+        -112802
+      ],
+      "median": -112802,
+      "min": -112802,
+      "max": -112801,
+      "range": 1
+    },
+    "Join_CachedHit_PlanOnly": {
+      "unit": "bytes_per_op",
+      "per_round": {
+        "r1": 3191,
+        "r2": 0,
+        "r3": -8000
+      },
+      "values": [
+        3191,
+        0,
+        -8000
+      ],
+      "median": 0,
+      "min": -8000,
+      "max": 3191,
+      "range": 11191
+    },
+    "Join_CachedHit_ToList": {
+      "unit": "bytes_per_op",
+      "per_round": {
+        "r1": 3195,
+        "r2": 0,
+        "r3": -7982
+      },
+      "values": [
+        3195,
+        0,
+        -7982
+      ],
+      "median": 0,
+      "min": -7982,
+      "max": 3195,
+      "range": 11177
+    }
+  },
+  "acceptance": {
+    "command": "timeout 300s dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance",
+    "exit_code": 0,
+    "wall_seconds": 50,
+    "case_count": 7,
+    "cases": [
+      {
+        "name": "Nextorm_Count",
+        "mean_raw": 2.262,
+        "mean_unit": "ms",
+        "mean_ns": 2262000.0,
+        "allocated_bytes": 363202.56
+      },
+      {
+        "name": "Nextorm_GroupByCount",
+        "mean_raw": 67.28,
+        "mean_unit": "ms",
+        "mean_ns": 67280000.0,
+        "allocated_bytes": 52502200.32
+      },
+      {
+        "name": "Nextorm_Cached",
+        "mean_raw": 2.071,
+        "mean_unit": "ms",
+        "mean_ns": 2071000.0000000002,
+        "allocated_bytes": 581642.24
+      },
+      {
+        "name": "Cached_PlanOnly_Param",
+        "mean_raw": 614.4,
+        "mean_unit": "us",
+        "mean_ns": 614400.0,
+        "allocated_bytes": 518410.24
+      },
+      {
+        "name": "Prepared_ToList",
+        "mean_raw": 942.2,
+        "mean_unit": "us",
+        "mean_ns": 942200.0,
+        "allocated_bytes": 77967.36
+      },
+      {
+        "name": "Cached_ToList",
+        "mean_raw": 2258.4,
+        "mean_unit": "us",
+        "mean_ns": 2258400.0,
+        "allocated_bytes": 596367.36
+      },
+      {
+        "name": "Nextorm_Cached_ToListAsync",
+        "mean_raw": 2.02,
+        "mean_unit": "ms",
+        "mean_ns": 2020000.0,
+        "allocated_bytes": 639078.4
+      }
+    ],
+    "log": "benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U2/perf/acceptance.log"
+  }
+}

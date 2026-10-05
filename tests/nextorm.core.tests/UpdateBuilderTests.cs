@@ -14,7 +14,7 @@ public class UpdateBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var toSql = () => ctx.Update<ConventionalEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).ToSql();
+        var toSql = () => ctx.CreateUpdateBuilder<ConventionalEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).ToSql();
 
         toSql.Should().Throw<NotSupportedException>();
     }
@@ -24,7 +24,7 @@ public class UpdateBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.Update<ConventionalEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).Update();
+        var act = () => ctx.CreateUpdateBuilder<ConventionalEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).Update();
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -34,7 +34,7 @@ public class UpdateBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.Update<ConventionalEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).UpdateAsync();
+        var act = () => ctx.CreateUpdateBuilder<ConventionalEntity>().Set(x => x.Name, "a").Where(x => x.Id == 1).UpdateAsync();
 
         await act.Should().ThrowAsync<NotSupportedException>();
     }
@@ -54,7 +54,7 @@ public class UpdateBuilderTests
     {
         using var ctx = new InMemoryDataContext();
 
-        var act = () => ctx.Update<ConventionalEntity>()
+        var act = () => ctx.CreateUpdateBuilder<ConventionalEntity>()
             .Set(x => x.Name, "a")
             .Where(x => x.Id == 1)
             .Returning()
@@ -70,7 +70,7 @@ public class UpdateBuilderTests
 
         var act = () => ctx.From<ConventionalEntity>()
             .Join(ctx.From<ConventionalEntity>(), (a, b) => a.Id == b.Id)
-            .UpdateJoin()
+            .CreateUpdateJoinBuilder()
             .Set(p => p.Item1.Name, "a")
             .ToSql();
 

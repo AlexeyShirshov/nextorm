@@ -60,7 +60,7 @@ public sealed class ConcurrencyException(string message) : Exception(message);
 
 var originalVersion = order.Version;
 
-var affected = ctx.Update<IOrder>()
+var affected = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Set(o => o.Version, o => o.Version + 1)          // portable: bump in SQL
     .Where(o => o.Id == order.Id && o.Version == originalVersion)
@@ -91,7 +91,7 @@ After a successful update the token has changed. When the provider can return ro
 in the same statement:
 
 ```csharp
-var row = ctx.Update<IOrder>()
+var row = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Set(o => o.Version, o => o.Version + 1)
     .Where(o => o.Id == order.Id && o.Version == order.Version)
@@ -138,13 +138,13 @@ and the write-back are the same as for any token — compare `Revision` in `Wher
 back with `Returning`:
 
 ```csharp
-var affected = ctx.Update<IOrder>()
+var affected = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Where(o => o.Id == order.Id && o.Revision == order.Revision)
     .Update();                                        // stale token → 0 rows
 
 // The same check and the read-back can be combined in one statement:
-var row = ctx.Update<IOrder>()
+var row = ctx.CreateUpdateBuilder<IOrder>()
     .Set(o => o.Status, "paid")
     .Where(o => o.Id == order.Id && o.Revision == order.Revision)
     .Returning(o => new { o.Id, o.Revision })         // UPDATE ... RETURNING xmin
@@ -173,7 +173,7 @@ When the same row may or may not exist, a full `MERGE` can insert or update atom
 match, on providers that render conditional branches (SQL Server, PostgreSQL 15+):
 
 ```csharp
-ctx.MergeInto<IOrder>()
+ctx.CreateMergeBuilder<IOrder>()
     .Using(order)                                     // entity, batch or server-side query
     .OnKeys()
     .WhenMatched((t, s) => t.Version == s.Version)
@@ -226,7 +226,7 @@ public sealed class OrderTracker
             if (entity.Status == status)                          // detect change
                 continue;
 
-            var n = _ctx.Update<IOrder>()
+            var n = _ctx.CreateUpdateBuilder<IOrder>()
                 .Set(o => o.Status, entity.Status)
                 .Set(o => o.Version, o => o.Version + 1)
                 .Where(o => o.Id == id && o.Version == version)

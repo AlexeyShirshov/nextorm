@@ -48,6 +48,7 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
         if (x.Strictness != y.Strictness) return false;
         if (x.IsGlobal != y.IsGlobal) return false;
         if (!string.Equals(x.JoinHint, y.JoinHint, StringComparison.Ordinal)) return false;
+        if (!TableHintsEqual(x.TableHints, y.TableHints)) return false;
 
         // A JoinInto join carries the identity of its declaration (child type, keys, collection, kind),
         // which the rendered condition/source alone cannot distinguish. Distinct declarations must not
@@ -59,6 +60,25 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
 
         //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetFromExpressionPlanEqualityComparer().Equals(x.From, y.From)) return false;
+
+        return true;
+    }
+
+    // Ordinal sequence equality for the optional per-join table-hint list. Null and an empty list are
+    // equivalent (the fluent setter normalizes blank-only input to null), so both mean "no hints" and
+    // must map to the same plan key; otherwise the lists are compared order-sensitively by count.
+    private static bool TableHintsEqual(IReadOnlyList<string>? x, IReadOnlyList<string>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+
+        var xCount = x?.Count ?? 0;
+        var yCount = y?.Count ?? 0;
+        if (xCount != yCount) return false;
+
+        for (var i = 0; i < xCount; i++)
+        {
+            if (!string.Equals(x![i], y![i], StringComparison.Ordinal)) return false;
+        }
 
         return true;
     }
@@ -80,6 +100,12 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
             hash.Add(obj.IsGlobal);
 
             hash.Add(obj.JoinHint);
+
+            if (obj.TableHints is { Count: > 0 } tableHints)
+            {
+                for (var i = 0; i < tableHints.Count; i++)
+                    hash.Add(tableHints[i], StringComparer.Ordinal);
+            }
 
             if (obj.JoinIntoIdentity is { } identity)
                 hash.Add(identity.GetHashCode());

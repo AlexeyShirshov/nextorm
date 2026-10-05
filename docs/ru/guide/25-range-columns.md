@@ -52,7 +52,7 @@ ctx.From<Reservation>(b => b
 Свойство-пара читается и пишется как любое другое. Запись `Range<int>(1, 10)` кладёт `1` и `10` в две колонки; чтение собирает `new Range<int>(lower, upper, …, lowerIsNull, upperIsNull, …)` с инклюзивностью из маппинга:
 
 ```csharp
-ctx.InsertInto<Reservation>()
+ctx.CreateInsertBuilder<Reservation>()
     .Values(new Reservation { Id = 1, During = new Range<int>(1, 10) })
     .Insert();
 
@@ -137,7 +137,7 @@ select id from reservation
 * **Пустой диапазон не представим.** Пара `NULL`-границ — это *неограниченный* диапазон, поэтому `Range<T>.Empty` отклоняется при записи и при трансляции с `NotSupportedException`.
 * **Range-возвращающие операторы отклоняются.** `range_union`, `range_intersection`, `range_difference`, конструкторы диапазонов и агрегаты `range_agg`/`range_intersect_agg` не имеют скалярной формы над парой и бросают `NotSupportedException`. Используйте PostgreSQL, если они нужны.
 * **Multirange — не пара.** `Range<T>[]` отображается только на нативную multirange-колонку PostgreSQL.
-* **Запись по селектору и returning отклоняются.** `InsertInto<T>().Value(x => x.During, …)`, `Values(source, mapping)` по маппингу и `Returning(x => x.During)` адресуют одну колонку и бросают `NotSupportedException`; используйте формы по сущности.
+* **Запись по селектору и returning отклоняются.** `CreateInsertBuilder<T>().Value(x => x.During, …)`, `Values(source, mapping)` по маппингу и `Returning(x => x.During)` адресуют одну колонку и бросают `NotSupportedException`; используйте формы по сущности.
 * Свойство `[RangeColumns]` нельзя комбинировать с `[ValueConverter]` или `[JsonColumn]`.
 
 ## См. также

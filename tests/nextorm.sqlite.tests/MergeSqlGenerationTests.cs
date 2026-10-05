@@ -51,7 +51,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -65,7 +65,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using([
                 new MergeEntity { Id = 1, Name = "a", Age = 1 },
                 new MergeEntity { Id = 2, Name = "b", Age = 2 },
@@ -82,7 +82,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.MergeInto<IUnkeyedEntity>()
+        var act = () => ctx.CreateMergeBuilder<IUnkeyedEntity>()
             .Using(new UnkeyedEntity { Name = "a" })
             .OnKeys();
 
@@ -94,7 +94,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        var act = () => ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -109,7 +109,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqliteTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatchedUpdate()

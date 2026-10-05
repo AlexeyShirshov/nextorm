@@ -1,7 +1,7 @@
 # Изменение данных (UPDATE)
 
 > nextorm изменяет строки по той же модели явных команд, что `INSERT` и `DELETE`:
-> [`Update<TEntity>()`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+> [`CreateUpdateBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
 > строит параметризованный `UPDATE <table> SET ... [WHERE ...]`, а расширение контекста
 > [`Update<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,``0))
 > обновляет по объявленному ключу сущности. Отслеживания изменений и `SaveChanges` нет: каждый терминал
@@ -11,19 +11,19 @@
 
 ## Обновление строк по предикату
 
-[`Update<TEntity>()`](xref:NextORM.Core.DataContextExtensions.Update``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
+[`CreateUpdateBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}}))
 возвращает [`UpdateBuilder<TEntity>`](xref:NextORM.Core.UpdateBuilder`1). Добавьте по одному `Set` на
 записываемую колонку, затем `Where`, и завершите `Update()`/`UpdateAsync()`, чтобы получить число
 затронутых строк:
 
 ```csharp
-var updated = ctx.Update<ISimpleEntity>()
+var updated = ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Name, "renamed")
     .Set(x => x.Age, 42)
     .Where(x => x.Id == 1)
     .Update();
 
-await ctx.Update<ISimpleEntity>()
+await ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Name, "renamed")
     .Where(x => x.Age > 10)
     .UpdateAsync(cancellationToken);
@@ -59,7 +59,7 @@ await ctx.Update<ISimpleEntity>()
 записывает сразу все mapped-колонки сущности, кроме ключа, identity и computed:
 
 ```csharp
-ctx.Update<ISimpleEntity>()
+ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(entity)
     .Where(x => x.Id == entity.Id)
     .Update();
@@ -74,7 +74,7 @@ ctx.Update<ISimpleEntity>()
 таблицу:
 
 ```csharp
-ctx.Update<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update simple_entity set archived = @p0
+ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update simple_entity set archived = @p0
 ```
 
 Если у сущности объявлены [глобальные фильтры запроса](../advanced/query-filters.md), предикат всё равно
@@ -94,14 +94,14 @@ ctx.Update<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update sim
 состояние, а повторные вызовы накапливаются:
 
 ```csharp
-ctx.Update<Document>()
+ctx.CreateUpdateBuilder<Document>()
     .IgnoreFilters(["soft-delete"])   // оставляем фильтр тенанта, убираем soft-delete
     .Set(d => d.Archived, true)
     .Where(d => d.IsDeleted)
     .Update();
 ```
 
-В multi-table `UpdateJoin` фильтруются цель (первая таблица) и все источники соединений. `INSERT` и
+В multi-table `CreateUpdateJoinBuilder` фильтруются цель (первая таблица) и все источники соединений. `INSERT` и
 `MERGE` не фильтруют свою цель. Полная матрица — в разделе
 [UPDATE и DELETE (DML)](../advanced/query-filters.md#update-и-delete-dml).
 
@@ -123,13 +123,13 @@ await ctx.UpdateAsync(new SimpleEntity { Id = 1, Name = "renamed" });
 провайдера, читаются через `Single()`/`ToList()`:
 
 ```csharp
-var updated = ctx.Update<ISimpleEntity>()
+var updated = ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Archived, true)
     .Where(x => x.Age > 10)
     .Returning(x => new { x.Id, x.Name })
     .ToList();
 
-var one = ctx.Update<ISimpleEntity>()
+var one = ctx.CreateUpdateBuilder<ISimpleEntity>()
     .Set(x => x.Archived, true)
     .Where(x => x.Id == 1)
     .Returning()
@@ -143,14 +143,14 @@ var one = ctx.Update<ISimpleEntity>()
 
 ## Обновление из join
 
-[`UpdateJoin()`](xref:NextORM.Core.DataContextExtensions.UpdateJoin``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))
+[`CreateUpdateJoinBuilder()`](xref:NextORM.Core.DataContextExtensions.CreateUpdateJoinBuilder``2(NextORM.Core.JoinedEntityBuilder{``0,``1}))
 на join-запросе строит multi-table `UPDATE`, где target — **первая** таблица join, а значения `SET` могут
 читать любую присоединённую таблицу:
 
 ```csharp
 var updated = ctx.From<IOrder>()
     .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Set(p => p.Item1.Total, p => p.Item1.Total + p.Item2.Credit)
     .Where(p => p.Item2.Tier == "gold")
@@ -167,6 +167,46 @@ update orders as "t1" set status = @p0, total = (t1.total + t2.credit) from cust
 присоединённую таблицу (`p.Item2...`). `Where` фильтрует по всей проекции, а терминал —
 `Update()`/`UpdateAsync()` (число затронутых строк) или `ToSql()`.
 
+Multi-table `Returning()`/`Returning(projection)` доступен только на PostgreSQL
+(`UPDATE ... FROM ... RETURNING`), на INNER-соединениях и для арностей 2–8. `Returning()` — эквивалент
+`Returning(p => p)` — возвращает всю соединённую проекцию (`Projection<T1, ...>`): каждое returnable
+mapped-свойство каждого item-слота, в порядке слотов, где `Item1` — цель обновления, а повторяющийся
+CLR-тип остаётся различимым по слоту, поэтому self-join одной сущности сохраняет значения
+`Item1`/`Item2` раздельно. Update возвращает значения цели после обновления. `Returning(p => new { ... })`
+возвращает явную проекцию; возвращённые колонки получают детерминированные per-slot алиасы, а явные
+проекции не меняются. Ни один вызов `Returning()` не добавляет список `RETURNING` неявно. Возвращаемый
+item, чьё mapped-свойство — многоколоночный `Range<T>`, отклоняется, а обязательный член без соответствия
+в форме соединённого источника отклоняется с указанием слота и члена. Работает и как обычный терминал, и
+как тело модифицирующего CTE через `With(имя, update)`:
+
+```csharp
+var updated = ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateUpdateJoinBuilder()
+    .Set(p => p.Item1.Status, "priority")
+    .Where(p => p.Item2.Tier == "gold")
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+update orders as "t1" set status = @p0 from customers as "t2" where t1.customer_id = t2.id and t2.tier = 'gold' returning t1.id as "OrderId", t2.name as "CustomerName"
+```
+
+Форма без параметров возвращает все returnable-колонки обоих слотов под детерминированными per-slot
+алиасами (`__s1_*`, `__s2_*`, …):
+
+```csharp
+var whole = ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateUpdateJoinBuilder()
+    .Set(p => p.Item1.Status, "priority")
+    .Where(p => p.Item2.Tier == "gold")
+    .Returning()          // эквивалент .Returning(p => p)
+    .ToList();
+```
+
 Поддерживаются только INNER `Join`: условия join складываются в фильтр (или остаются `ON` join), поэтому
 внешний join молча менял бы набор обновляемых строк — `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin`
 бросают `NotSupportedException`. PostgreSQL и SQLite рендерят `UPDATE ... FROM`, SQL Server —
@@ -181,7 +221,7 @@ var recent = ctx.With("recent", ctx.From<IOrder>().Where(o => o.Id > 1000).Selec
 
 var updated = ctx.From<IOrder>()
     .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
-    .UpdateJoin()
+    .CreateUpdateJoinBuilder()
     .Set(p => p.Item1.Status, "priority")
     .Update();
 ```
@@ -195,6 +235,31 @@ with recent as (select id from orders where (id > 1000)) update orders as "t1" s
 последующем join, и для рекурсивных CTE (SQL Server дописывает `OPTION (MAXRECURSION n)`). Два разных
 объявления CTE с одинаковым именем по сторонам join отклоняются с `InvalidOperationException`: один
 `WITH` не может связать одно имя с двумя определениями. См. [Common table expressions](08-cte.md).
+
+## UPDATE как тело модифицирующего CTE (PostgreSQL)
+
+На PostgreSQL возвращающий строки `UPDATE` может быть телом модифицирующего CTE: передайте его в
+`With(имя, update)` и читайте обновлённые строки типизированно через `From(имя)`:
+
+```csharp
+var updated = dataContext
+    .With("upd", dataContext.CreateUpdateBuilder<IOrder>()
+        .Set(x => x.Total, 0)
+        .Where(x => x.CustomerId == 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("upd")
+    .Select(r => new { r.Id, r.Total })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+with upd as (update orders set total = @p0 where customer_id = 7 returning id, total) select id, total from upd as "t1"
+```
+
+Соединённая форма работает так же — `With(имя, update)` над multi-table
+`CreateUpdateJoinBuilder().Returning(...)`. Проекция `RETURNING` обязательна (мутация только с побочным эффектом вне
+области охвата), и такая инструкция никогда не кэшируется. См. [Common table expressions](08-cte.md).
 
 ## Поддержка провайдерами
 

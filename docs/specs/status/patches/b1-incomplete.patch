@@ -1,0 +1,602 @@
+diff --git a/src/nextorm.core/DataContext/Cache/QueryPlan.cs b/src/nextorm.core/DataContext/Cache/QueryPlan.cs
+index cf802c4..dd64eb4 100644
+--- a/src/nextorm.core/DataContext/Cache/QueryPlan.cs
++++ b/src/nextorm.core/DataContext/Cache/QueryPlan.cs
+@@ -36,6 +36,24 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
+         _hashPlan = ComputeHash(cmd, sql, _comparer);
+     }
+ 
++    /// <summary>
++    /// Test-only construction path: builds a plan whose stable hash is supplied by the caller instead
++    /// of being computed from <paramref name="cmd"/>/<paramref name="sql"/>. It is never used by the
++    /// production path; the tests reach it through <c>InternalsVisibleTo</c> to drive a real
++    /// <see cref="QueryPlanStore"/> hash collision and prove the store still falls back to structural
++    /// <see cref="Equals(QueryPlan?)"/>. No public surface and no mutable/thread-static switch.
++    /// </summary>
++    /// <param name="cmd">The command to describe.</param>
++    /// <param name="sql">The generated SQL, which participates in equality.</param>
++    /// <param name="forcedHash">The hash to freeze into the plan, so two unequal plans can share one.</param>
++    internal QueryPlan(QueryCommand cmd, string? sql, int forcedHash)
++    {
++        QueryCommand = cmd;
++        _sql = sql;
++        _comparer = cmd.GetQueryPlanEqualityComparer();
++        _hashPlan = forcedHash;
++    }
++
+     private static int ComputeHash(QueryCommand cmd, string? sql, QueryPlanEqualityComparer comparer)
+     {
+         if (sql is not null)
+diff --git a/src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs b/src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs
+index 6e97b59..94c2508 100644
+--- a/src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs
++++ b/src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs
+@@ -98,9 +98,165 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
+         return new ExpressionComparer().Compare2(left, right);
+     }
+ 
++    /// <summary>
++    /// Parameter bindings for one <c>Equals</c> call: up to four <c>(a, b)</c> pairs stored inline,
++    /// so the common case allocates nothing. A fifth concurrent binding spills every current binding
++    /// into a <see cref="Dictionary{TKey,TValue}"/> and stays in dictionary mode for the rest of the
++    /// call (no reverse migration). Lookup is by reference identity, matching the dictionary's
++    /// default comparer for <see cref="ParameterExpression"/>.
++    /// </summary>
++    private struct ParameterScope
++    {
++        private const int InlineCapacity = 4;
++
++        private ParameterExpression? _a0, _b0;
++        private ParameterExpression? _a1, _b1;
++        private ParameterExpression? _a2, _b2;
++        private ParameterExpression? _a3, _b3;
++        private int _count;
++        private Dictionary<ParameterExpression, ParameterExpression>? _spilled;
++
++        public bool TryAdd(ParameterExpression a, ParameterExpression b)
++        {
++            if (_spilled is not null)
++            {
++                return _spilled.TryAdd(a, b);
++            }
++
++            for (var i = 0; i < _count; i++)
++            {
++                // Identity lookup: ReferenceEquals is exactly EqualityComparer<ParameterExpression>.Default,
++                // so the inline scan agrees with the spilled Dictionary<ParameterExpression, ...> mode.
++                if (ReferenceEquals(GetInlineA(i), a))
++                {
++                    // The same ParameterExpression instance is already in scope, i.e. a nested lambda
++                    // reused an outer parameter, so the two trees cannot line up.
++                    return false;
++                }
++            }
++
++            if (_count < InlineCapacity)
++            {
++                SetInline(_count, a, b);
++                _count++;
++                return true;
++            }
++
++            // Fifth concurrent binding: move every inline binding into a dictionary and stay in
++            // dictionary mode for the rest of the call.
++            var spilled = new Dictionary<ParameterExpression, ParameterExpression>(InlineCapacity * 2);
++            for (var i = 0; i < InlineCapacity; i++)
++            {
++                spilled.Add(GetInlineA(i)!, GetInlineB(i)!);
++            }
++
++            SetInline(0, null, null);
++            SetInline(1, null, null);
++            SetInline(2, null, null);
++            SetInline(3, null, null);
++            _count = 0;
++            _spilled = spilled;
++
++            return _spilled.TryAdd(a, b);
++        }
++
++        public void Remove(ParameterExpression a)
++        {
++            if (_spilled is not null)
++            {
++                _spilled.Remove(a);
++                return;
++            }
++
++            for (var i = 0; i < _count; i++)
++            {
++                if (ReferenceEquals(GetInlineA(i), a))
++                {
++                    _count--;
++                    if (i != _count)
++                    {
++                        SetInline(i, GetInlineA(_count), GetInlineB(_count));
++                    }
++
++                    SetInline(_count, null, null);
++                    return;
++                }
++            }
++        }
++
++        public readonly bool TryGetValue(
++            ParameterExpression a,
++            [NotNullWhen(true)] out ParameterExpression? b)
++        {
++            if (_spilled is not null)
++            {
++                return _spilled.TryGetValue(a, out b);
++            }
++
++            for (var i = 0; i < _count; i++)
++            {
++                // Identity lookup, matching the spilled Dictionary's EqualityComparer<ParameterExpression>.Default.
++                if (ReferenceEquals(GetInlineA(i), a))
++                {
++                    b = GetInlineB(i)!;
++                    return true;
++                }
++            }
++
++            b = null;
++            return false;
++        }
++
++        private readonly ParameterExpression? GetInlineA(int i) => i switch
++        {
++            0 => _a0,
++            1 => _a1,
++            2 => _a2,
++            3 => _a3,
++            // No aliasing default: an out-of-range slot must fail loudly instead of silently reading slot 3.
++            _ => throw new ArgumentOutOfRangeException(nameof(i), i, "Inline parameter slot must be 0..3."),
++        };
++
++        private readonly ParameterExpression? GetInlineB(int i) => i switch
++        {
++            0 => _b0,
++            1 => _b1,
++            2 => _b2,
++            3 => _b3,
++            // No aliasing default: an out-of-range slot must fail loudly instead of silently reading slot 3.
++            _ => throw new ArgumentOutOfRangeException(nameof(i), i, "Inline parameter slot must be 0..3."),
++        };
++
++        private void SetInline(int i, ParameterExpression? a, ParameterExpression? b)
++        {
++            switch (i)
++            {
++                case 0:
++                    _a0 = a;
++                    _b0 = b;
++                    break;
++                case 1:
++                    _a1 = a;
++                    _b1 = b;
++                    break;
++                case 2:
++                    _a2 = a;
++                    _b2 = b;
++                    break;
++                case 3:
++                    _a3 = a;
++                    _b3 = b;
++                    break;
++                default:
++                    // No aliasing default: an out-of-range slot must fail loudly instead of silently writing slot 3.
++                    throw new ArgumentOutOfRangeException(nameof(i), i, "Inline parameter slot must be 0..3.");
++            }
++        }
++    }
++
+     private struct ExpressionComparer
+     {
+-        private Dictionary<ParameterExpression, ParameterExpression> _parameterScope;
++        private ParameterScope _parameterScope;
+ 
+         public bool Compare(Expression? left, Expression? right)
+         {
+@@ -215,8 +371,6 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
+                 return false;
+             }
+ 
+-            _parameterScope ??= new Dictionary<ParameterExpression, ParameterExpression>();
+-
+             for (var i = 0; i < n; i++)
+             {
+                 var (p1, p2) = (a.Parameters[i], b.Parameters[i]);
+@@ -233,9 +387,6 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
+ 
+                 if (!_parameterScope.TryAdd(p1, p2))
+                 {
+-                    // The same ParameterExpression instance is already in scope, i.e. a nested
+-                    // lambda reused an outer parameter, so the two trees cannot line up. Report
+-                    // "not equal" (which costs a cache miss) instead of throwing.
+                     for (var j = 0; j < i; j++)
+                     {
+                         _parameterScope.Remove(a.Parameters[j]);
+@@ -290,10 +441,9 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
+                 && CompareMemberList(a.Members, b.Members);
+ 
+         private readonly bool CompareParameter(ParameterExpression a, ParameterExpression b)
+-            => _parameterScope != null
+-                && _parameterScope.TryGetValue(a, out var mapped)
+-                    ? mapped.Type == b.Type
+-                    : a.Type == b.Type;
++            => _parameterScope.TryGetValue(a, out var mapped)
++                ? mapped.Type == b.Type
++                : a.Type == b.Type;
+ 
+         private bool CompareRuntimeVariables(RuntimeVariablesExpression a, RuntimeVariablesExpression b)
+             => CompareExpressionList(a.Variables, b.Variables);
+diff --git a/tests/nextorm.core.tests/ExpressionPlanEqualityComparerNodeTests.cs b/tests/nextorm.core.tests/ExpressionPlanEqualityComparerNodeTests.cs
+index 894b94d..f831372 100644
+--- a/tests/nextorm.core.tests/ExpressionPlanEqualityComparerNodeTests.cs
++++ b/tests/nextorm.core.tests/ExpressionPlanEqualityComparerNodeTests.cs
+@@ -366,6 +366,180 @@ public class ExpressionPlanEqualityComparerNodeTests
+             .Should().NotBe(comparer.GetHashCode(Add(Constant(1), Constant(3))));
+     }
+ 
++    // A lambda of `arity` int parameters whose body sums them with `seed`. Every parameter of one
++    // lambda is registered before its body is compared, so `arity` is the number of live concurrent
++    // bindings the scope sees: <=4 stays inline, the 5th spills into a dictionary and stays there.
++    private static Expression FlatLambda(int arity, int seed)
++    {
++        var parameters = new ParameterExpression[arity];
++        for (var i = 0; i < arity; i++)
++        {
++            parameters[i] = Parameter(typeof(int), "p" + i);
++        }
++
++        Expression body = Constant(seed);
++        for (var i = 0; i < arity; i++)
++        {
++            body = Add(body, parameters[i]);
++        }
++
++        var typeArguments = new Type[arity + 1];
++        for (var i = 0; i < arity; i++)
++        {
++            typeArguments[i] = typeof(int);
++        }
++
++        typeArguments[arity] = typeof(int);
++
++        return Lambda(GetFuncType(typeArguments), body, parameters);
++    }
++
++    // Outer lambda with three parameters whose body invokes an inner lambda with three more
++    // parameters, then reads an outer parameter again: the deepest comparison holds six concurrent
++    // bindings (a one-way spill past the inline capacity of four) and must unwind both scopes.
++    private static Expression NestedSpillLambda(int seed)
++    {
++        var o0 = Parameter(typeof(int), "o0");
++        var o1 = Parameter(typeof(int), "o1");
++        var o2 = Parameter(typeof(int), "o2");
++        var i0 = Parameter(typeof(int), "i0");
++        var i1 = Parameter(typeof(int), "i1");
++        var i2 = Parameter(typeof(int), "i2");
++
++        var inner = Lambda<Func<int, int, int, int>>(
++            Add(Add(i0, i1), Add(i2, Constant(seed))), i0, i1, i2);
++
++        return Lambda<Func<int, int, int, int>>(
++            Add(Invoke(inner, o0, o1, o2), o0), o0, o1, o2);
++    }
++
++    // Two sibling inner lambdas share the name "x" (shadowing the outer "x") but are distinct
++    // instances; the second body reads the outer parameter, so it only compares after the first
++    // inner scope has unwound.
++    private static Expression SiblingShadowingLambda(int seed)
++    {
++        var outer = Parameter(typeof(int), "x");
++        var shadowA = Parameter(typeof(int), "x");
++        var shadowB = Parameter(typeof(int), "x");
++
++        var lambdaA = Lambda<Func<int, int>>(Add(shadowA, Constant(seed)), shadowA);
++        var lambdaB = Lambda<Func<int, int>>(Add(shadowB, outer), shadowB);
++
++        return Lambda<Func<int, int>>(
++            Block(Invoke(lambdaA, outer), Invoke(lambdaB, outer)), outer);
++    }
++
++    // The inner lambda reuses the outer lambda's very ParameterExpression instance, so the scope's
++    // TryAdd rejects it (duplicate binding) and the comparison reports "not equal" without throwing.
++    private static Expression ReusedParameterLambda(int seed)
++    {
++        var p = Parameter(typeof(int), "x");
++        var inner = Lambda<Func<int, int>>(Add(p, Constant(seed)), p);
++
++        return Lambda<Func<int, int>>(Invoke(inner, p), p);
++    }
++
++    [Fact]
++    public void Lambda_DifferentDelegateTypes_ShouldRejectAtOuterTypeGuard()
++    {
++        // A 0-parameter and a 1-parameter lambda have different delegate types, so the outer
++        // ExpressionPlanEqualityComparer.Equals type guard rejects them before CompareLambda runs;
++        // the arity check inside CompareLambda is defensively unreachable from the public factory.
++        var comparer = CreateComparer();
++        var zero = Lambda<Func<int>>(Constant(1));
++        var one = Lambda<Func<int, int>>(Constant(1), Parameter(typeof(int), "p"));
++
++        comparer.Equals(zero, one).Should().BeFalse("different delegate types are rejected by the outer type guard");
++
++        // Distinct param-bearing trees that DO reach the parameter scope: a failed comparison must
++        // fully unwind, so the next equivalent pair still compares equal.
++        var p1 = Parameter(typeof(int), "x");
++        var matching = Lambda<Func<int, int>>(Add(p1, Constant(1)), p1);
++        var p2 = Parameter(typeof(int), "x");
++        var mismatching = Lambda<Func<int, int>>(Add(p2, Constant(2)), p2);
++        var p3 = Parameter(typeof(int), "x");
++        var equivalent = Lambda<Func<int, int>>(Add(p3, Constant(1)), p3);
++
++        comparer.Equals(matching, mismatching).Should().BeFalse();
++        comparer.Equals(matching, equivalent).Should().BeTrue("a failed scoped comparison must leave no binding behind");
++    }
++
++    [Fact]
++    public void Lambda_InlineAndSpillBoundaries_ShouldCompareAndUnwind()
++    {
++        foreach (var arity in new[] { 0, 1, 3, 4, 5, 8 })
++        {
++            var comparer = CreateComparer();
++
++            comparer.Equals(FlatLambda(arity, 1), FlatLambda(arity, 1))
++                .Should().BeTrue("arity {0} must compare structurally", arity);
++            comparer.Equals(FlatLambda(arity, 1), FlatLambda(arity, 2))
++                .Should().BeFalse("arity {0} must report a body mismatch", arity);
++            comparer.Equals(FlatLambda(arity, 7), FlatLambda(arity, 7))
++                .Should().BeTrue("arity {0} must unwind its live bindings", arity);
++        }
++    }
++
++    [Fact]
++    public void Lambda_NestedScopes_ShouldSpillAndUnwind()
++    {
++        var comparer = CreateComparer();
++
++        comparer.Equals(NestedSpillLambda(1), NestedSpillLambda(1)).Should().BeTrue();
++        comparer.Equals(NestedSpillLambda(1), NestedSpillLambda(2)).Should().BeFalse();
++        comparer.Equals(NestedSpillLambda(3), NestedSpillLambda(3))
++            .Should().BeTrue("both nested scopes must unwind after the mismatch");
++    }
++
++    [Fact]
++    public void Lambda_SiblingScopes_ShouldShadowAndUnwind()
++    {
++        var comparer = CreateComparer();
++
++        comparer.Equals(SiblingShadowingLambda(1), SiblingShadowingLambda(1)).Should().BeTrue();
++        comparer.Equals(SiblingShadowingLambda(1), SiblingShadowingLambda(2)).Should().BeFalse();
++        comparer.Equals(SiblingShadowingLambda(5), SiblingShadowingLambda(5))
++            .Should().BeTrue("the second sibling must compare after the first scope unwound");
++    }
++
++    [Fact]
++    public void Lambda_ReusedOuterParameter_ShouldReportNotEqualWithoutLeakingScope()
++    {
++        var comparer = CreateComparer();
++
++        comparer.Equals(ReusedParameterLambda(1), ReusedParameterLambda(1)).Should().BeFalse();
++        comparer.Equals(FlatLambda(2, 1), FlatLambda(2, 1))
++            .Should().BeTrue("the duplicate-binding rejection must leave the comparer clean");
++    }
++
++    [Fact]
++    public void Parameter_NullAndFreeInteractions_ShouldGuard()
++    {
++        var comparer = CreateComparer();
++        var bound = Parameter(typeof(int), "x");
++
++        comparer.Equals(null, bound).Should().BeFalse();
++        comparer.Equals(bound, null).Should().BeFalse();
++        comparer.Equals(null, null).Should().BeTrue();
++
++        // A free (unbound) parameter has no scope entry, so it falls back to the type guard.
++        comparer.Equals(bound, Parameter(typeof(int), "y")).Should().BeTrue();
++        comparer.Equals(bound, Parameter(typeof(long), "y")).Should().BeFalse();
++    }
++
++    [Fact]
++    public void Reentrancy_FailedNestedComparison_ShouldNotLeakScope()
++    {
++        var comparer = CreateComparer();
++
++        // A matching nested pair, then a mismatching flat pair spanning the spill boundary: storage
++        // must not be shared between the two Equals calls, and each failed call must fully unwind.
++        comparer.Equals(SiblingShadowingLambda(4), SiblingShadowingLambda(4)).Should().BeTrue();
++        comparer.Equals(NestedSpillLambda(1), NestedSpillLambda(2)).Should().BeFalse();
++        comparer.Equals(FlatLambda(8, 1), FlatLambda(8, 2)).Should().BeFalse();
++        comparer.Equals(FlatLambda(8, 9), FlatLambda(8, 9)).Should().BeTrue();
++    }
++
+     private sealed class BindingTarget
+     {
+         public int Id { get; set; }
+diff --git a/tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs b/tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs
+index fcb5f6d..946d79e 100644
+--- a/tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs
++++ b/tests/nextorm.core.tests/ExpressionPlanEqualityComparerTests.cs
+@@ -51,4 +51,76 @@ public class ExpressionPlanEqualityComparerTests
+         // per (thread, comparer) makes the result deterministic.
+         mismatches.Should().Be(0);
+     }
++
++    /// <summary>
++    /// <see cref="ExpressionPlanEqualityComparer.Equals(Expression?, Expression?)"/> allocates one
++    /// parameter scope per call, so a shared comparer must let threads compare nested lambdas (which
++    /// spill past the inline capacity of 4) concurrently with mixed true/false outcomes. Only the
++    /// hash path was covered before, and the hash visitor is thread-static by design; this pins the
++    /// structural-comparison path under contention.
++    /// </summary>
++    [Fact]
++    public void Equals_ShouldBeThreadSafe_WithNestedLambdas()
++    {
++        var sut = new ExpressionPlanEqualityComparer(new QueryProvider());
++        var equalLeft = Nested(1);
++        var equalRight = Nested(1);
++        var differentLeft = Nested(1);
++        var differentRight = Nested(2);
++
++        sut.Equals(equalLeft, equalRight).Should().BeTrue();
++        sut.Equals(differentLeft, differentRight).Should().BeFalse();
++
++        const int workers = 4;
++        using var barrier = new Barrier(workers);
++        var mismatches = 0;
++
++        var threads = Enumerable.Range(0, workers)
++            .Select(_ => new Thread(() =>
++            {
++                barrier.SignalAndWait();
++                for (var i = 0; i < 5_000; i++)
++                {
++                    if (!sut.Equals(equalLeft, equalRight))
++                    {
++                        Interlocked.Increment(ref mismatches);
++                    }
++
++                    if (sut.Equals(differentLeft, differentRight))
++                    {
++                        Interlocked.Increment(ref mismatches);
++                    }
++                }
++            }))
++            .ToArray();
++
++        foreach (var thread in threads)
++        {
++            thread.Start();
++        }
++
++        foreach (var thread in threads)
++        {
++            thread.Join();
++        }
++
++        mismatches.Should().Be(0);
++    }
++
++    private static Expression Nested(int seed)
++    {
++        var o0 = Expression.Parameter(typeof(int), "o0");
++        var o1 = Expression.Parameter(typeof(int), "o1");
++        var o2 = Expression.Parameter(typeof(int), "o2");
++        var i0 = Expression.Parameter(typeof(int), "i0");
++        var i1 = Expression.Parameter(typeof(int), "i1");
++        var i2 = Expression.Parameter(typeof(int), "i2");
++
++        var inner = Expression.Lambda<Func<int, int, int, int>>(
++            Expression.Add(Expression.Add(i0, i1), Expression.Add(i2, Expression.Constant(seed))),
++            i0, i1, i2);
++
++        return Expression.Lambda<Func<int, int, int, int>>(
++            Expression.Add(Expression.Invoke(inner, o0, o1, o2), o0), o0, o1, o2);
++    }
+ }
+diff --git a/tests/nextorm.core.tests/PlanKeyStructureTests.cs b/tests/nextorm.core.tests/PlanKeyStructureTests.cs
+index eef8d00..8a31ac5 100644
+--- a/tests/nextorm.core.tests/PlanKeyStructureTests.cs
++++ b/tests/nextorm.core.tests/PlanKeyStructureTests.cs
+@@ -1,3 +1,4 @@
++using System.Data.Common;
+ using System.Linq.Expressions;
+ using FluentAssertions;
+ using static System.Linq.Expressions.Expression;
+@@ -11,7 +12,11 @@ namespace NextORM.Core.Tests;
+ /// different shape, switch/catch/element-init counts) must all report "not equal" instead of throwing
+ /// or - worse - reporting equal. Also covers <see cref="QueryPlan"/> identity and the
+ /// <c>LinqSource</c> FROM branch, which is only produced by the in-memory SelectMany/GroupJoin path.
++/// It also drives the real <see cref="QueryPlanStore"/> through the test-only forced-hash
++/// <see cref="QueryPlan"/> seam, so it joins the "Query cache controls" collection that serializes
++/// every test touching the process-wide plan store.
+ /// </summary>
++[Collection("Query cache controls")]
+ public class PlanKeyStructureTests
+ {
+     private static ExpressionPlanEqualityComparer Comparer() => new(new QueryProvider());
+@@ -251,6 +256,81 @@ public class PlanKeyStructureTests
+         plan.GetHashCode().Should().Be(hash, "plan identity must survive the cache-version swap");
+     }
+ 
++    /// <summary>
++    /// The plan store is a dictionary keyed by the structural hash, so two <em>unequal</em> plans that
++    /// share one effective hash must still be stored and found independently. The forced-hash seam
++    /// pins a real <see cref="QueryPlanStore.TryGet"/>/<c>Set</c> collision instead of only asserting
++    /// the comparer-level invariant: store A, look up B (must miss), store B, then each key resolves
++    /// to its own holder and an equivalent key to A still resolves to A.
++    /// </summary>
++    [Fact]
++    public void QueryPlanStore_ForcedHashCollision_ShouldFallBackToStructuralEquality()
++    {
++        using var ctx = new InMemoryDataContext();
++        var repo = new InMemoryRepository(ctx);
++
++        var cmdA = repo.SimpleEntity.Select(x => x.Id);
++        // A second, independently issued command from the same builder/config shape: a distinct
++        // QueryCommand instance, unlike the production warm-up that reuses the very same command.
++        // Reusing cmdA would make QueryPlan.Equals short-circuit on command reference equality and
++        // never reach the structural fallback this test exists to pin.
++        var cmdA2 = repo.SimpleEntity.Select(x => x.Id);
++        var cmdB = repo.SimpleEntity.Where(x => x.Id > 0).Select(x => x.Id);
++        cmdA.PrepareCommand(CancellationToken.None);
++        cmdA2.PrepareCommand(CancellationToken.None);
++        cmdB.PrepareCommand(CancellationToken.None);
++
++        cmdA.Should().NotBeSameAs(cmdA2);
++        cmdA.GetQueryPlanEqualityComparer().Equals(cmdA, cmdA2)
++            .Should().BeTrue("the second command is the same query shape and must be structurally equal");
++
++        // Drop any plan the prepares above may have memoized on this thread, then drive the store
++        // exclusively through the forced-hash plans. Single-threaded: the store is [ThreadStatic],
++        // and this class is serialized through the "Query cache controls" collection.
++        QueryPlanStore.Clear();
++
++        const int forcedHash = 0x5EED_1234;
++        var contextType = typeof(PlanKeyStructureTests);
++        var holderA = new StubCommandHolder();
++        var holderB = new StubCommandHolder();
++
++        var planA1 = new QueryPlan(cmdA, null, forcedHash);
++        var planA2 = new QueryPlan(cmdA2, null, forcedHash); // equivalent key to planA1, distinct command
++        var planB = new QueryPlan(cmdB, null, forcedHash);  // structurally unequal, same forced hash
++
++        planA1.GetHashCode().Should().Be(forcedHash);
++        planB.GetHashCode().Should().Be(forcedHash);
++        planA1.Equals(planA2).Should().BeTrue("same command shape is the same key");
++        planA1.Equals(planB).Should().BeFalse("different query shape must stay a different key");
++
++        QueryPlanStore.Set(contextType, planA1, holderA);
++        QueryPlanStore.TryGet(contextType, planB, out var collisionHolder, out var collisionPlan)
++            .Should().BeFalse("an equal hash must not collapse two unequal keys");
++        collisionHolder.Should().BeNull();
++        collisionPlan.Should().BeNull();
++
++        QueryPlanStore.Set(contextType, planB, holderB);
++
++        QueryPlanStore.TryGet(contextType, planA1, out var foundA, out var storedA).Should().BeTrue();
++        foundA.Should().BeSameAs(holderA);
++        storedA.Should().BeSameAs(planA1);
++
++        QueryPlanStore.TryGet(contextType, planA2, out var foundAEquiv, out var storedAEquiv).Should().BeTrue();
++        foundAEquiv.Should().BeSameAs(holderA, "an equivalent key must find the first plan");
++        storedAEquiv.Should().BeSameAs(planA1);
++
++        QueryPlanStore.TryGet(contextType, planB, out var foundB, out var storedB).Should().BeTrue();
++        foundB.Should().BeSameAs(holderB);
++        storedB.Should().BeSameAs(planB);
++    }
++
++    private sealed class StubCommandHolder : IDbCommandHolder
++    {
++        public void ResetConnection(DbConnection conn, IDataContext dbContext)
++        {
++        }
++    }
++
+     /// <summary>
+     /// Nested lambdas whose inner parameter shadows the outer one by name must compare structurally:
+     /// the comparer maps parameters by scope (instance), so the shared name is irrelevant and the

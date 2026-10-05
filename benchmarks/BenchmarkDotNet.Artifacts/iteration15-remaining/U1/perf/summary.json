@@ -1,0 +1,684 @@
+{
+  "host": {
+    "cpu": "AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz",
+    "logical_cores": 8,
+    "physical_cores": 4,
+    "os": "Linux Ubuntu 22.04.5 LTS",
+    "runtime": ".NET 10.0.12 / SDK 10.0.401",
+    "bdn": "BenchmarkDotNet v0.15.8",
+    "git_head": "752943d7a8114c611832b210484f1d910026a863",
+    "start_uptime": "20:50:52 up 2 days, 12:19, load average: 5.80, 5.03, 5.00"
+  },
+  "runs": {
+    "A1": {
+      "exit_code": 0,
+      "wall_s": 95.529,
+      "loadavg": "6.54, 5.79, 5.29",
+      "log": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/run-A1.log"
+    },
+    "B1": {
+      "exit_code": 0,
+      "wall_s": 94.813,
+      "loadavg": "11.33, 7.95, 6.14",
+      "log": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/run-B1.log"
+    },
+    "A2": {
+      "exit_code": 0,
+      "wall_s": 95.389,
+      "loadavg": "6.52, 7.69, 6.26",
+      "log": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/run-A2.log"
+    },
+    "B2": {
+      "exit_code": 0,
+      "wall_s": 94.929,
+      "loadavg": "6.05, 7.45, 6.33",
+      "log": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/run-B2.log"
+    },
+    "A3": {
+      "exit_code": 0,
+      "wall_s": 82.473,
+      "loadavg": "6.25, 7.46, 6.45",
+      "log": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/run-A3.log"
+    },
+    "B3": {
+      "exit_code": 0,
+      "wall_s": 92.424,
+      "loadavg": "5.60, 7.09, 6.43",
+      "log": "/home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1/benchmarks/BenchmarkDotNet.Artifacts/iteration15-remaining/U1/perf/run-B3.log"
+    }
+  },
+  "command": [
+    "dotnet",
+    "run",
+    "--project",
+    "benchmarks/nextorm.benchmark",
+    "-c",
+    "Release",
+    "--",
+    "--anyCategories=stage-a",
+    "--exporters",
+    "json",
+    "--artifacts",
+    "<per-run-dir>"
+  ],
+  "notes": [
+    "scripts/validate_inner_loop.py ABSENT in repo; scope followed manually.",
+    "DEVIATION: no $E/U1/perf/A{1,2,3}/B{1,2,3} artifact dirs were created. All 6 runs wrote to the repo-root cwd-relative ./BenchmarkDotNet.Artifacts/results/, overwriting each run; only the last run (B3) report/full-compressed.json survives there. Per-run per-arm numbers were parsed from the full BDN stdout logs run-A*.log/run-B*.log, which retain Mean/StdDev/CI99.9/Allocated for every run.",
+    "Allocated is identical across the 3 A rounds and across the 3 B rounds per arm (deterministic).",
+    "Per-run JSON report path (last run only): repo-root BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStageA-report-full-compressed.json (untracked, mtime 2026-10-04 21:00)."
+  ],
+  "per_arm": {
+    "Where_Construct": {
+      "mean_us": {
+        "1": 129.579,
+        "B1": 143.413,
+        "2": 132.134,
+        "B2": 124.598,
+        "3": 131.831,
+        "B3": 133.38
+      },
+      "stddev_us": {
+        "1": 3.044,
+        "B1": 3.066,
+        "2": 12.682,
+        "B2": 13.195,
+        "3": 5.553,
+        "B3": 7.664
+      },
+      "alloc_bytes": {
+        "1": 254402.6,
+        "B1": 254402.6,
+        "2": 254402.6,
+        "B2": 254402.6,
+        "3": 254402.6,
+        "B3": 254402.6
+      },
+      "ci999_margin_us": {
+        "1": 55.536,
+        "B1": 55.936,
+        "2": 231.367,
+        "B2": 240.717,
+        "3": 101.311,
+        "B3": 139.825
+      },
+      "delta_us": {
+        "1": 13.834,
+        "2": -7.536,
+        "3": 1.549
+      },
+      "alloc_delta_bytes": {
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "delta_median_us": 1.549,
+      "delta_min_us": -7.536,
+      "delta_max_us": 13.834,
+      "delta_range_us": 21.37,
+      "alloc_delta_median_bytes": 0.0,
+      "alloc_delta_min_bytes": 0.0,
+      "alloc_delta_max_bytes": 0.0
+    },
+    "Where_Prepare_NoHash": {
+      "mean_us": {
+        "1": 252.721,
+        "B1": 335.092,
+        "2": 254.646,
+        "B2": 231.994,
+        "3": 317.509,
+        "B3": 280.279
+      },
+      "stddev_us": {
+        "1": 6.52,
+        "B1": 15.737,
+        "2": 8.475,
+        "B2": 1.684,
+        "3": 13.585,
+        "B3": 15.07
+      },
+      "alloc_bytes": {
+        "1": 388014.1,
+        "B1": 388003.8,
+        "2": 388014.1,
+        "B2": 388014.1,
+        "3": 388014.1,
+        "B3": 388014.1
+      },
+      "ci999_margin_us": {
+        "1": 118.947,
+        "B1": 287.097,
+        "2": 154.617,
+        "B2": 30.726,
+        "3": 247.845,
+        "B3": 274.936
+      },
+      "delta_us": {
+        "1": 82.371,
+        "2": -22.652,
+        "3": -37.23
+      },
+      "alloc_delta_bytes": {
+        "1": -10.2,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "delta_median_us": -22.652,
+      "delta_min_us": -37.23,
+      "delta_max_us": 82.371,
+      "delta_range_us": 119.601,
+      "alloc_delta_median_bytes": 0.0,
+      "alloc_delta_min_bytes": -10.2,
+      "alloc_delta_max_bytes": 0.0
+    },
+    "Where_Prepare_Hash": {
+      "mean_us": {
+        "1": 364.91,
+        "B1": 418.731,
+        "2": 366.406,
+        "B2": 317.556,
+        "3": 354.186,
+        "B3": 377.123
+      },
+      "stddev_us": {
+        "1": 22.722,
+        "B1": 32.804,
+        "2": 22.311,
+        "B2": 6.179,
+        "3": 11.481,
+        "B3": 17.253
+      },
+      "alloc_bytes": {
+        "1": 435210.2,
+        "B1": 435210.2,
+        "2": 435210.2,
+        "B2": 435210.2,
+        "3": 435210.2,
+        "B3": 435210.2
+      },
+      "ci999_margin_us": {
+        "1": 414.527,
+        "B1": 598.469,
+        "2": 407.032,
+        "B2": 112.725,
+        "3": 209.452,
+        "B3": 314.757
+      },
+      "delta_us": {
+        "1": 53.821,
+        "2": -48.85,
+        "3": 22.937
+      },
+      "alloc_delta_bytes": {
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "delta_median_us": 22.937,
+      "delta_min_us": -48.85,
+      "delta_max_us": 53.821,
+      "delta_range_us": 102.671,
+      "alloc_delta_median_bytes": 0.0,
+      "alloc_delta_min_bytes": 0.0,
+      "alloc_delta_max_bytes": 0.0
+    },
+    "Where_CachedHit_PlanOnly": {
+      "mean_us": {
+        "1": 707.694,
+        "B1": 629.694,
+        "2": 636.194,
+        "B2": 542.184,
+        "3": 682.599,
+        "B3": 584.913
+      },
+      "stddev_us": {
+        "1": 56.541,
+        "B1": 54.266,
+        "2": 49.22,
+        "B2": 43.991,
+        "3": 64.293,
+        "B3": 24.763
+      },
+      "alloc_bytes": {
+        "1": 652820.5,
+        "B1": 609617.9,
+        "2": 652820.5,
+        "B2": 609617.9,
+        "3": 652820.5,
+        "B3": 609617.9
+      },
+      "ci999_margin_us": {
+        "1": 1031.519,
+        "B1": 990.02,
+        "2": 897.952,
+        "B2": 802.561,
+        "3": 1172.936,
+        "B3": 451.775
+      },
+      "delta_us": {
+        "1": -78.0,
+        "2": -94.01,
+        "3": -97.686
+      },
+      "alloc_delta_bytes": {
+        "1": -43202.6,
+        "2": -43202.6,
+        "3": -43202.6
+      },
+      "delta_median_us": -94.01,
+      "delta_min_us": -97.686,
+      "delta_max_us": -78.0,
+      "delta_range_us": 19.686,
+      "alloc_delta_median_bytes": -43202.6,
+      "alloc_delta_min_bytes": -43202.6,
+      "alloc_delta_max_bytes": -43202.6
+    },
+    "Where_CachedHit_ToList": {
+      "mean_us": {
+        "1": 2100.0,
+        "B1": 2002.0,
+        "2": 2138.0,
+        "B2": 1755.0,
+        "3": 1964.0,
+        "B3": 1923.0
+      },
+      "stddev_us": {
+        "1": 91.0,
+        "B1": 202.0,
+        "2": 136.0,
+        "B2": 10.0,
+        "3": 52.0,
+        "B3": 92.0
+      },
+      "alloc_bytes": {
+        "1": 725985.3,
+        "B1": 682793.0,
+        "2": 725995.5,
+        "B2": 682782.7,
+        "3": 725985.3,
+        "B3": 682793.0
+      },
+      "ci999_margin_us": {
+        "1": 1661.0,
+        "B1": 3688.0,
+        "2": 2488.0,
+        "B2": 180.0,
+        "3": 954.0,
+        "B3": 1675.0
+      },
+      "delta_us": {
+        "1": -98.0,
+        "2": -383.0,
+        "3": -41.0
+      },
+      "alloc_delta_bytes": {
+        "1": -43192.3,
+        "2": -43212.8,
+        "3": -43192.3
+      },
+      "delta_median_us": -98.0,
+      "delta_min_us": -383.0,
+      "delta_max_us": -41.0,
+      "delta_range_us": 342.0,
+      "alloc_delta_median_bytes": -43192.3,
+      "alloc_delta_min_bytes": -43212.8,
+      "alloc_delta_max_bytes": -43192.3
+    },
+    "Where_Prepared_ToList": {
+      "mean_us": {
+        "1": 904.158,
+        "B1": 1032.0,
+        "2": 947.52,
+        "B2": 884.875,
+        "3": 935.607,
+        "B3": 1229.0
+      },
+      "stddev_us": {
+        "1": 14.067,
+        "B1": 46.0,
+        "2": 11.49,
+        "B2": 18.624,
+        "3": 67.245,
+        "B3": 143.0
+      },
+      "alloc_bytes": {
+        "1": 77967.4,
+        "B1": 77967.4,
+        "2": 77967.4,
+        "B2": 77967.4,
+        "3": 77967.4,
+        "B3": 77967.4
+      },
+      "ci999_margin_us": {
+        "1": 256.636,
+        "B1": 835.0,
+        "2": 209.613,
+        "B2": 339.762,
+        "3": 1226.805,
+        "B3": 2606.0
+      },
+      "delta_us": {
+        "1": 127.842,
+        "2": -62.645,
+        "3": 293.393
+      },
+      "alloc_delta_bytes": {
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "delta_median_us": 127.842,
+      "delta_min_us": -62.645,
+      "delta_max_us": 293.393,
+      "delta_range_us": 356.038,
+      "alloc_delta_median_bytes": 0.0,
+      "alloc_delta_min_bytes": 0.0,
+      "alloc_delta_max_bytes": 0.0
+    },
+    "Join_Construct": {
+      "mean_us": {
+        "1": 514.584,
+        "B1": 599.538,
+        "2": 507.678,
+        "B2": 484.878,
+        "3": 560.263,
+        "B3": 531.368
+      },
+      "stddev_us": {
+        "1": 23.396,
+        "B1": 37.604,
+        "2": 7.97,
+        "B2": 7.618,
+        "3": 57.798,
+        "B3": 19.411
+      },
+      "alloc_bytes": {
+        "1": 600033.3,
+        "B1": 600043.5,
+        "2": 600033.3,
+        "B2": 600033.3,
+        "3": 600043.5,
+        "B3": 600043.5
+      },
+      "ci999_margin_us": {
+        "1": 426.825,
+        "B1": 686.04,
+        "2": 145.405,
+        "B2": 138.984,
+        "3": 1054.454,
+        "B3": 354.126
+      },
+      "delta_us": {
+        "1": 84.954,
+        "2": -22.8,
+        "3": -28.895
+      },
+      "alloc_delta_bytes": {
+        "1": 10.2,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "delta_median_us": -22.8,
+      "delta_min_us": -28.895,
+      "delta_max_us": 84.954,
+      "delta_range_us": 113.849,
+      "alloc_delta_median_bytes": 0.0,
+      "alloc_delta_min_bytes": 0.0,
+      "alloc_delta_max_bytes": 10.2
+    },
+    "Join_Prepare_NoHash": {
+      "mean_us": {
+        "1": 962.621,
+        "B1": 967.375,
+        "2": 844.547,
+        "B2": 825.428,
+        "3": 1013.0,
+        "B3": 862.339
+      },
+      "stddev_us": {
+        "1": 35.468,
+        "B1": 39.121,
+        "2": 19.952,
+        "B2": 14.314,
+        "3": 60.0,
+        "B3": 25.635
+      },
+      "alloc_bytes": {
+        "1": 851261.4,
+        "B1": 851251.2,
+        "2": 851251.2,
+        "B2": 851251.2,
+        "3": 851261.4,
+        "B3": 851251.2
+      },
+      "ci999_margin_us": {
+        "1": 647.07,
+        "B1": 713.71,
+        "2": 364.0,
+        "B2": 261.145,
+        "3": 1101.0,
+        "B3": 467.677
+      },
+      "delta_us": {
+        "1": 4.754,
+        "2": -19.119,
+        "3": -150.661
+      },
+      "alloc_delta_bytes": {
+        "1": -10.2,
+        "2": 0.0,
+        "3": -10.2
+      },
+      "delta_median_us": -19.119,
+      "delta_min_us": -150.661,
+      "delta_max_us": 4.754,
+      "delta_range_us": 155.415,
+      "alloc_delta_median_bytes": -10.2,
+      "alloc_delta_min_bytes": -10.2,
+      "alloc_delta_max_bytes": 0.0
+    },
+    "Join_Prepare_Hash": {
+      "mean_us": {
+        "1": 1114.0,
+        "B1": 1304.0,
+        "2": 1003.0,
+        "B2": 975.537,
+        "3": 1109.0,
+        "B3": 1063.0
+      },
+      "stddev_us": {
+        "1": 62.0,
+        "B1": 98.0,
+        "2": 28.0,
+        "B2": 5.236,
+        "3": 28.0,
+        "B3": 94.0
+      },
+      "alloc_bytes": {
+        "1": 895262.7,
+        "B1": 895252.5,
+        "2": 895262.7,
+        "B2": 895262.7,
+        "3": 895262.7,
+        "B3": 895262.7
+      },
+      "ci999_margin_us": {
+        "1": 1129.0,
+        "B1": 1795.0,
+        "2": 504.0,
+        "B2": 95.527,
+        "3": 510.0,
+        "B3": 1720.0
+      },
+      "delta_us": {
+        "1": 190.0,
+        "2": -27.463,
+        "3": -46.0
+      },
+      "alloc_delta_bytes": {
+        "1": -10.2,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "delta_median_us": -27.463,
+      "delta_min_us": -46.0,
+      "delta_max_us": 190.0,
+      "delta_range_us": 236.0,
+      "alloc_delta_median_bytes": 0.0,
+      "alloc_delta_min_bytes": -10.2,
+      "alloc_delta_max_bytes": 0.0
+    },
+    "Join_CachedHit_PlanOnly": {
+      "mean_us": {
+        "1": 2064.0,
+        "B1": 2033.0,
+        "2": 1642.0,
+        "B2": 1779.0,
+        "3": 1964.0,
+        "B3": 1588.0
+      },
+      "stddev_us": {
+        "1": 192.0,
+        "B1": 82.0,
+        "2": 59.0,
+        "B2": 45.0,
+        "3": 180.0,
+        "B3": 24.0
+      },
+      "alloc_bytes": {
+        "1": 1218488.3,
+        "B1": 1175275.5,
+        "2": 1218478.1,
+        "B2": 1175275.5,
+        "3": 1218478.1,
+        "B3": 1175275.5
+      },
+      "ci999_margin_us": {
+        "1": 3505.0,
+        "B1": 1489.0,
+        "2": 1085.0,
+        "B2": 817.0,
+        "3": 3285.0,
+        "B3": 433.0
+      },
+      "delta_us": {
+        "1": -31.0,
+        "2": 137.0,
+        "3": -376.0
+      },
+      "alloc_delta_bytes": {
+        "1": -43212.8,
+        "2": -43202.6,
+        "3": -43202.6
+      },
+      "delta_median_us": -31.0,
+      "delta_min_us": -376.0,
+      "delta_max_us": 137.0,
+      "delta_range_us": 513.0,
+      "alloc_delta_median_bytes": -43202.6,
+      "alloc_delta_min_bytes": -43212.8,
+      "alloc_delta_max_bytes": -43202.6
+    },
+    "Join_CachedHit_ToList": {
+      "mean_us": {
+        "1": 4894.0,
+        "B1": 4161.0,
+        "2": 3656.0,
+        "B2": 4146.0,
+        "3": 3944.0,
+        "B3": 3537.0
+      },
+      "stddev_us": {
+        "1": 888.0,
+        "B1": 198.0,
+        "2": 47.0,
+        "B2": 241.0,
+        "3": 630.0,
+        "B3": 54.0
+      },
+      "alloc_bytes": {
+        "1": 1293926.4,
+        "B1": 1250723.8,
+        "2": 1293916.2,
+        "B2": 1250713.6,
+        "3": 1293926.4,
+        "B3": 1250713.6
+      },
+      "ci999_margin_us": {
+        "1": 16195.0,
+        "B1": 3616.0,
+        "2": 861.0,
+        "B2": 4390.0,
+        "3": 11496.0,
+        "B3": 983.0
+      },
+      "delta_us": {
+        "1": -733.0,
+        "2": 490.0,
+        "3": -407.0
+      },
+      "alloc_delta_bytes": {
+        "1": -43202.6,
+        "2": -43202.6,
+        "3": -43212.8
+      },
+      "delta_median_us": -407.0,
+      "delta_min_us": -733.0,
+      "delta_max_us": 490.0,
+      "delta_range_us": 1223.0,
+      "alloc_delta_median_bytes": -43202.6,
+      "alloc_delta_min_bytes": -43212.8,
+      "alloc_delta_max_bytes": -43202.6
+    },
+    "Join_Prepared_ToList": {
+      "mean_us": {
+        "1": 1017.0,
+        "B1": 1016.0,
+        "2": 973.231,
+        "B2": 1120.0,
+        "3": 1118.0,
+        "B3": 980.319
+      },
+      "stddev_us": {
+        "1": 22.0,
+        "B1": 38.0,
+        "2": 14.707,
+        "B2": 56.0,
+        "3": 83.0,
+        "B3": 22.45
+      },
+      "alloc_bytes": {
+        "1": 80220.2,
+        "B1": 80220.2,
+        "2": 80220.2,
+        "B2": 80220.2,
+        "3": 80220.2,
+        "B3": 80220.2
+      },
+      "ci999_margin_us": {
+        "1": 392.0,
+        "B1": 689.0,
+        "2": 268.313,
+        "B2": 1025.0,
+        "3": 1516.0,
+        "B3": 409.58
+      },
+      "delta_us": {
+        "1": -1.0,
+        "2": 146.769,
+        "3": -137.681
+      },
+      "alloc_delta_bytes": {
+        "1": 0.0,
+        "2": 0.0,
+        "3": 0.0
+      },
+      "delta_median_us": -1.0,
+      "delta_min_us": -137.681,
+      "delta_max_us": 146.769,
+      "delta_range_us": 284.45,
+      "alloc_delta_median_bytes": 0.0,
+      "alloc_delta_min_bytes": 0.0,
+      "alloc_delta_max_bytes": 0.0
+    }
+  }
+}

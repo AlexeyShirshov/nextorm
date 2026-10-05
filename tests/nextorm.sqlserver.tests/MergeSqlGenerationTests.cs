@@ -51,7 +51,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -65,7 +65,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using([
                 new MergeEntity { Id = 1, Name = "a", Age = 1 },
                 new MergeEntity { Id = 2, Name = "b", Age = 2 },
@@ -82,7 +82,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.MergeInto<IUnkeyedEntity>()
+        var act = () => ctx.CreateMergeBuilder<IUnkeyedEntity>()
             .Using(new UnkeyedEntity { Name = "a" })
             .OnKeys();
 
@@ -94,7 +94,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -109,7 +109,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenDelete()
@@ -123,7 +123,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenUpdate(d => new { d.Name })
@@ -137,7 +137,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -152,7 +152,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatchedUpdate()
@@ -167,7 +167,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(ctx.From<IMergeEntity>())
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -181,7 +181,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        var act = () => ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(ctx.From<IMergeEntity>())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -196,7 +196,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        var act = () => ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenDoNothing()
@@ -211,7 +211,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .On((t, s) => t.Id == s.Id && s.Age > 0)
             .WhenMatched().ThenUpdate()
@@ -225,7 +225,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched((t, s) => t.Name != s.Name).ThenUpdate()
@@ -239,7 +239,7 @@ public class MergeSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -255,7 +255,7 @@ public class MergeSqlGenerationTests
 
         // A query source projects the identity column, so an explicit On(...) over it is valid: the
         // guard only rejects a column the VALUES-derived source does not declare.
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(ctx.From<IMergeEntity>())
             .On((t, s) => t.Id == s.Id)
             .WhenMatched().ThenUpdate()
@@ -271,7 +271,7 @@ public class MergeSqlGenerationTests
 
         // Total is computed and excluded from the VALUES-derived source, so a branch condition that
         // reaches it through the source has no matching derived column.
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        var act = () => ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatched((t, s) => s.Total > 0).ThenUpdate()
@@ -288,7 +288,7 @@ public class MergeSqlGenerationTests
 
         // The same generated column is a projected column of the query source, so on that path the
         // condition renders instead of being rejected.
-        ctx.MergeInto<IMergeEntity>()
+        ctx.CreateMergeBuilder<IMergeEntity>()
             .Using(ctx.From<IMergeEntity>())
             .OnKeys()
             .WhenMatched((t, s) => s.Total > 0).ThenUpdate()

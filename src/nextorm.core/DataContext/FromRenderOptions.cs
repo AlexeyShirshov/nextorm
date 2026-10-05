@@ -1,3 +1,5 @@
+using System.Linq.Expressions;
+
 namespace NextORM.Core;
 
 /// <summary>
@@ -13,6 +15,11 @@ namespace NextORM.Core;
 /// <param name="IndexHints">Index-hint index names rendered after the table name and before the alias, or <c>null</c>.</param>
 /// <param name="IndexHintKind">The intent of <paramref name="IndexHints"/>.</param>
 /// <param name="TablesInScopeHints">Hints applied to every physical table in the command's scope, or <c>null</c>.</param>
+/// <param name="SourceParameter">
+/// The lambda parameter that denotes this source when it is a navigation-injected join (#148-B R2.2),
+/// so alias resolution can bind by occurrence identity instead of by CLR type. <c>null</c> for an
+/// ordinary FROM/join source, which keeps the type-based resolution unchanged.
+/// </param>
 internal readonly record struct FromRenderOptions(
     bool NeedAlias,
     Type? EntityType,
@@ -21,4 +28,5 @@ internal readonly record struct FromRenderOptions(
     TemporalClause? Temporal = null,
     IReadOnlyList<string>? IndexHints = null,
     IndexHintKind IndexHintKind = IndexHintKind.Use,
-    IReadOnlyList<string>? TablesInScopeHints = null);
+    IReadOnlyList<string>? TablesInScopeHints = null,
+    ParameterExpression? SourceParameter = null);

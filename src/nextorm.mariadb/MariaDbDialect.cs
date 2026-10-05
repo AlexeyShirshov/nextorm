@@ -36,6 +36,9 @@ public sealed class MariaDbDialect : MySqlDialect
     /// <summary>MariaDB 10.3+ renders <c>PERCENTILE_CONT</c>/<c>PERCENTILE_DISC</c> as window functions.</summary>
     public override bool SupportsPercentileWindow => true;
 
+    /// <summary>MariaDB 10.2+ renders <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with a window function.</summary>
+    public override bool SupportsSelectWhereMinMax => true;
+
     /// <summary>
     /// MariaDB has no <c>ANY_VALUE</c> in the supported range: the SQL-2023 <c>T626</c> feature
     /// (MDEV-10426) is still pending and targeted for 13.2, so <c>any_agg</c> is gated off even though

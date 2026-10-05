@@ -52,4 +52,49 @@ public class DataContextCacheClearTests
             File.Delete(path);
         }
     }
+
+    /// <summary>
+    /// Cache-clear lifetime characterization (Stage A, task #183 row 7): after a process-wide clear, the
+    /// same closure shape is rebuilt and re-binds the current captured value instead of serving the
+    /// stale plan. The B2 refresh/lifetime work must keep this cut valid.
+    /// </summary>
+    [Fact]
+    public void Clear_Should_Rebuild_And_Rebind_The_Captured_Value()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-clear-rebind-{Guid.NewGuid():N}.db");
+        using (var conn = new SqliteConnection($"Data Source={path}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "create table simple_entity (id integer primary key);" +
+                              "insert into simple_entity (id) values (42);";
+            cmd.ExecuteNonQuery();
+        }
+
+        try
+        {
+            using var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+            ctx.PurgeQueryCache();
+
+            var threshold = 0;
+            var first = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+                ctx.From<ISimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id),
+                createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+            first.DbCommandParams[0].Value.Should().Be(0);
+
+            DataContextCache.Clear();
+
+            threshold = 100;
+            var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(
+                ctx.From<ISimpleEntity>().Where(x => x.Id > threshold).Select(x => x.Id),
+                createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+
+            second.Should().NotBeSameAs(first, "the cleared plan must be rebuilt");
+            second.DbCommandParams[0].Value.Should().Be(100, "the rebuilt plan binds the current capture");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

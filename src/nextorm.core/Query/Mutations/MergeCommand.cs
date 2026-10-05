@@ -83,6 +83,7 @@ internal sealed class MergeCommand : MutationCommand
     /// <param name="matchCondition">An explicit <c>ON &lt;condition&gt;</c> over <c>(target, source)</c>, or <see langword="null"/> to match on <see cref="Keys"/>.</param>
     /// <param name="registry">A <see cref="QueryCommand"/> carrier used to render condition expressions (the target entity's command), or <see langword="null"/>.</param>
     /// <param name="dynamicColumns">The entity store's dynamic columns carried in the source/INSERT/SET, or <see langword="null"/>.</param>
+    /// <param name="filterScope">The effective global-filter scope of the builder (the filters the statement must honor), or <see langword="null"/> for none.</param>
     public MergeCommand(
         Type entityType,
         string tableName,
@@ -96,9 +97,11 @@ internal sealed class MergeCommand : MutationCommand
         QueryCommand? source = null,
         LambdaExpression? matchCondition = null,
         QueryCommand? registry = null,
-        DynamicColumnSet? dynamicColumns = null)
+        DynamicColumnSet? dynamicColumns = null,
+        QueryFilterScope? filterScope = null)
         : base(SqlStatementType.Merge, entityType)
     {
+        FilterScope = filterScope ?? QueryFilterScope.None;
         TableName = tableName;
         IsTableNameAuto = isTableNameAuto;
         Columns = columns;
@@ -118,6 +121,13 @@ internal sealed class MergeCommand : MutationCommand
     /// renders a general <c>MERGE</c> instead of a native upsert.
     /// </summary>
     public IReadOnlyList<MergeBranch>? Branches { get; }
+
+    /// <summary>
+    /// The effective global-filter scope of the builder: the active target filters (those not disabled by
+    /// <c>IgnoreFilters</c>) must be rendered into the statement so a row they hide is never matched,
+    /// updated or deleted. <see cref="QueryFilterScope.None"/> when the builder disabled nothing.
+    /// </summary>
+    public QueryFilterScope FilterScope { get; }
 
     /// <summary>The mapped columns returned through <c>OUTPUT</c>/<c>RETURNING</c>, or <see langword="null"/>.</summary>
     public override IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }

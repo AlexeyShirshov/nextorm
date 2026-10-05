@@ -75,7 +75,7 @@ public class SqlGenerationTests
 
         // The dictionary's insertion order (zeta, alpha, mid) must not leak: keys are ordinal-sorted and
         // every dynamic key is bracket-quoted even though the global identifier-quoting flag is off.
-        Normalize(ctx.InsertInto<DynamicColumnsEntity>()
+        Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
             .Values(DynamicWriteEntity())
             .ToSql())
             .Should().Contain("(id, [alpha], [mid], [zeta]) values (@p0, @p1, @p2, @p3)");
@@ -86,7 +86,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        Normalize(ctx.Update<DynamicColumnsEntity>()
+        Normalize(ctx.CreateUpdateBuilder<DynamicColumnsEntity>()
             .Set(DynamicWriteEntity())
             .Where(x => x.Id == 1)
             .ToSql())
@@ -98,7 +98,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicColumnsEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicColumnsEntity>()
             .Using(DynamicWriteEntity())
             .OnKeys()
             .WhenMatchedUpdate()
@@ -117,7 +117,7 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = Normalize(ctx.MergeInto<DynamicWritableEntity>()
+        var sql = Normalize(ctx.CreateMergeBuilder<DynamicWritableEntity>()
             .Using(new DynamicWritableEntity { Id = 1, Label = "L", Extra = { ["zeta"] = 2L, ["alpha"] = "a", ["mid"] = null } })
             .OnKeys()
             .WhenMatched().ThenUpdate()
@@ -137,7 +137,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         // Regression guard: an entity without a dynamic store must render the exact pre-change SQL.
-        ctx.InsertInto<IMergeEntity>()
+        ctx.CreateInsertBuilder<IMergeEntity>()
             .Values(new MergeEntity { Id = 1, Name = "a", Age = 5, Total = 9 })
             .ToSql()
             .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2)");
@@ -147,9 +147,9 @@ public class SqlGenerationTests
     public void IndexHint_WithIndex_ShouldEmitWithIndex()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity with (index(idx_id))");
     }
 
@@ -157,9 +157,9 @@ public class SqlGenerationTests
     public void IndexHint_ShouldMergeWithTableHintIntoSingleWithClause()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock").WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Be("select id from simple_entity with (nolock, index(idx_id))");
     }
 
@@ -167,9 +167,9 @@ public class SqlGenerationTests
     public void KeywordCase_Upper_ShouldUppercaseTableHintsAndIndexHint()
     {
         using var ctx = SqlServerTestContext.CreateUppercase();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock").WithIndex("idx_id"));
 
-        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+        SqlOf(ctx, e.Select(x => new { x.Id }))
             .Should().Contain("WITH (nolock, INDEX(idx_id))");
     }
 
@@ -823,6 +823,29 @@ public class SqlGenerationTests
         var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
 
         sql.Should().EndWith(" option (recompile)");
+    }
+
+    [Fact]
+    public void QueryHint_MultipleArguments_ShouldEmitBothHintsInOrder()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+
+        sql.Should().EndWith(" option (recompile, fast 10)");
+    }
+
+    [Fact]
+    public void QueryHint_MultipleArguments_ShouldMatchSequentialCalls()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var multi = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile", "fast 10"));
+        var sequential = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile").Hint("fast 10"));
+
+        multi.Should().Be(sequential);
     }
 
     [Fact]
@@ -1541,6 +1564,66 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_NestedBody_ShouldHoistIntoSinglePlainWith()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var inner = ctx.With("i", e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with i as (select id from complex_entity");
+        sql.Should().Contain("), o as (select id from i)");
+        sql.Should().EndWith("select id from o");
+        sql.Should().NotContain("with i as (with");
+    }
+
+    [Fact]
+    public void Cte_NestedRecursive_ShouldHoistAndOmitRecursiveKeyword()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var nums = ctx.WithRecursive("nums", anchor.UnionAll(step));
+
+        var inner = nums.From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new CteNumberRow { n = t["n"].AsInt }));
+
+        // T-SQL declares a recursive CTE with `with` alone, even after the nested declaration is hoisted.
+        sql.Should().StartWith("with nums as (");
+        sql.Should().NotContain("with recursive");
+        sql.Should().Contain("), o as (select n from nums)");
+    }
+
+    [Fact]
+    public void Cte_NestedRecursive_WithMaxRecursion_ShouldKeepOptionAfterHoist()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var nums = ctx.WithRecursive("nums", anchor.UnionAll(step), 75);
+
+        var inner = nums.From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt });
+
+        var sql = SqlOf(ctx, ctx.With("o", inner).From("o").Select(t => new CteNumberRow { n = t["n"].AsInt }));
+
+        // The recursion-depth option belongs to the hoisted recursive declaration and stays on the
+        // flattened statement.
+        sql.Should().StartWith("with nums as (");
+        sql.Should().Contain("), o as (select n from nums)");
+        sql.Should().EndWith("option (maxrecursion 75)");
+        sql.Should().NotContain("with recursive");
+    }
+
+    [Fact]
     public void RowNumber_ShouldEmitOverWithPartitionAndOrder()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -1911,18 +1994,37 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        SqlOf(ctx, ctx.From<IComplexEntity>().WithTableHint("nolock").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock")).Select(x => new { x.Id }))
             .Should().Be("select id from complex_entity with (nolock)");
 
-        SqlOf(ctx, ctx.From<IComplexEntity>().WithTableHint("nolock", "index(ix_id)").Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock", "index(ix_id)")).Select(x => new { x.Id }))
             .Should().Be("select id from complex_entity with (nolock, index(ix_id))");
+    }
+
+    [Fact]
+    public void TableHint_BlankAfterHint_ShouldKeepEarlierHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // A blank name must be a no-op; a later blank call must not clear the hint set earlier.
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint("nolock").WithTableHint(" ")).Select(x => new { x.Id }))
+            .Should().Be("select id from complex_entity with (nolock)");
+    }
+
+    [Fact]
+    public void TableHint_BlankOnly_ShouldNotEmitWithClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.WithTableHint(" ")).Select(x => new { x.Id }))
+            .Should().Be("select id from complex_entity");
     }
 
     [Fact]
     public void TableHint_WithJoin_ShouldPlaceHintBeforeAlias()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.From<ISimpleEntity>().WithTableHint("nolock");
+        var simple = ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock"));
         var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id }));
@@ -1936,8 +2038,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("loop")
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("loop"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("inner loop join complex_entity as [t2] on cast(t1.id as bigint) = t2.id");
@@ -1949,8 +2050,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .LeftJoin(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+            .LeftJoin(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         sql.Should().Contain("left hash join complex_entity as [t2]");
@@ -1962,8 +2062,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .CrossJoin(ctx.From<IComplexEntity>())
-            .WithJoinHint("hash")
+            .CrossJoin(ctx.From<IComplexEntity>(), j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*join hint*");
@@ -1987,13 +2086,131 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .WithTableHint("rowlock")
-            .WithIndex("idx_id")
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock").WithIndex("idx_id"))
             .WithTablesInScopeHint("nolock")
             .Select(x => new { x.Id }));
 
         sql.Should().Contain("from simple_entity with (rowlock, nolock, index(idx_id))");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldEmitWithClauseOnJoinedTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("from simple_entity as [t1]");
+        sql.Should().Contain("join complex_entity with (nolock) as [t2]");
+        sql.Should().NotContain("simple_entity with (");
+    }
+
+    [Fact]
+    public void JoinTableHint_OnTwoJoins_ShouldTargetOnlyTheLastJoin()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .Join(ctx.From<ISalesEntity>(), (p, s2) => p.Item2.Id == s2.Id, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("join complex_entity as [t2]");
+        sql.Should().Contain("join sales with (nolock) as [t3]");
+        sql.Should().NotContain("complex_entity with (");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldMergeWithTablesInScopeHintIntoSingleClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock"))
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
+            .WithTablesInScopeHint("updlock")
+            .Select(p => new { p.Item1.Id }));
+
+        // The primary table merges its own hint with the scope hint; the joined table merges the
+        // per-join hint first, then the scope hint, into one WITH clause.
+        sql.Should().Contain("from simple_entity with (rowlock, updlock) as [t1]");
+        sql.Should().Contain("join complex_entity with (nolock, updlock) as [t2]");
+
+        // Each physical table carries exactly one WITH clause: the per-join hint must not be emitted
+        // a second time next to the scope hint.
+        (sql.Split("with (").Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldBeIndependentOfJoinHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock").WithJoinHint("hash"))
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("inner hash join complex_entity with (nolock) as [t2]");
+    }
+
+    [Fact]
+    public void JoinTableHint_BlankCall_ShouldKeepPreviousHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // A blank-only call with no prior hint emits no WITH clause at all.
+        var noPrior = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint(" "))
+            .Select(p => new { p.Item1.Id }));
+
+        noPrior.Should().Contain("join complex_entity as [t2]");
+        noPrior.Should().NotContain("complex_entity with (");
+
+        // A blank-only call and a no-arg call after a real hint keep the real hint.
+        var kept = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock").WithJoinTableHint(" ").WithJoinTableHint())
+            .Select(p => new { p.Item1.Id }));
+
+        kept.Should().Contain("join complex_entity with (nolock) as [t2]");
+    }
+
+    [Fact]
+    public void JoinTableHint_OnApplyJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(complex, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
+    }
+
+    [Fact]
+    public void JoinTableHint_OnDerivedTableJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From(ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id, c.String }));
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(derived, (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("nolock"))
+            .Select(p => new { p.Item1.Id }));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*physical table*");
+    }
+
+    [Fact]
+    public void JoinTableHint_ShouldIgnoreBlankEntries()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinTableHint("  ", "nolock", null!))
+            .Select(p => new { p.Item1.Id }));
+
+        sql.Should().Contain("complex_entity with (nolock) as [t2]");
     }
 
     [Fact]
@@ -2002,7 +2219,7 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var inner = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
 
-        var act = () => SqlOf(ctx, ctx.From(inner).WithSubQueryHint("SeqScan(t1)").Select(t => new { t.Id }));
+        var act = () => SqlOf(ctx, ctx.From(inner, o => o.WithSubQueryHint("SeqScan(t1)")).Select(t => new { t.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Subquery hints*");
     }
@@ -2012,10 +2229,8 @@ public class SqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
-            .WithTableHint("nolock")
-            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-            .WithJoinHint("hash")
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("nolock"))
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("hash"))
             .Select(p => new { p.Item1.Id })
             .Hint("recompile"));
 
@@ -2026,9 +2241,7 @@ public class SqlGenerationTests
     public void EmptyJoinHint_ShouldThrow()
     {
         using var ctx = SqlServerTestContext.Create();
-        var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id);
-
-        var act = () => joined.WithJoinHint("   ");
+        var act = () => ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id, j => j.WithJoinHint("   "));
 
         act.Should().Throw<ArgumentException>();
     }
@@ -2521,9 +2734,8 @@ public class SqlGenerationTests
     public void ForUpdate_SkipLocked_WithTableHint_ShouldCombineHints()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.WithTableHint("rowlock").ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
             .Should().Be("select id from simple_entity with (rowlock, updlock, readpast)");
     }
 
@@ -2564,9 +2776,8 @@ public class SqlGenerationTests
     public void ForUpdate_WithTableHint_ShouldCombineHints()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.WithTableHint("rowlock").ForUpdate().Select(x => x.Id))
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.WithTableHint("rowlock")).ForUpdate().Select(x => x.Id))
             .Should().Be("select id from simple_entity with (rowlock, updlock)");
     }
 
@@ -2934,7 +3145,7 @@ public class SqlGenerationTests
         var ordered = () => e.OrderBy(x => x.Id).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
         ordered.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
 
-        var hinted = () => e.WithTableHint("nolock").Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        var hinted = () => ctx.From<ISalesEntity>(o => o.WithTableHint("nolock")).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
         hinted.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
     }
 
@@ -3149,5 +3360,54 @@ public class SqlGenerationTests
         sql.Should().Contain("order by count(*) desc");
         sql.Should().Contain("offset 1 rows");
         sql.Should().Contain("fetch next 20 rows only");
+    }
+
+    // --- SelectWhereMax: window-rank lowering ---
+
+    private static string Dequoted(string sql) => sql
+        .Replace("\r\n", " ")
+        .Replace('\n', ' ')
+        .Replace("\"", string.Empty)
+        .Replace("[", string.Empty)
+        .Replace("]", string.Empty)
+        .Replace("`", string.Empty);
+
+    private static string OuterSelectList(string sql)
+    {
+        const string marker = "select ";
+        var start = sql.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0) return sql;
+        start += marker.Length;
+        var end = sql.IndexOf(" from ", start, StringComparison.Ordinal);
+        return end < 0 ? sql[start..] : sql[start..end];
+    }
+
+    [Fact]
+    public void SelectWhereMax_GlobalOne_ShouldRenderRowNumberFilteredToTheSingleExtreme()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int).Select(x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Projection_ShouldProjectTheExtremeRowAndDropTheRank()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Int, x => new { x.Id, x.String })));
+
+        norm.Should().Contain("row_number() over (order by nullableint desc)");
+        norm.Should().Contain("= 1");
+        norm.Should().Contain("nullableint is not null");
+        OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
+        OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 }

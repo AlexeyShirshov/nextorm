@@ -298,7 +298,7 @@ PostgreSQL — единственный провайдер, принимающи
 
 ```csharp
 var rows = dataContext
-    .With("ins", dataContext.InsertInto<IOrder>()
+    .With("ins", dataContext.CreateInsertBuilder<IOrder>()
         .Value(x => x.CustomerId, 7)
         .Returning(x => new { x.Id, x.Total }))
     .From("ins")

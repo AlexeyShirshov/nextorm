@@ -53,8 +53,15 @@ internal sealed class ClickHouseTestProvider : ITestProvider
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";
 
-    public IDataContext CreateContext() =>
-        new ClickHouseDataContext(ClickHouseContainer.ConnectionString, new DataContextBuilder());
+    public IDataContext CreateContext() => CreateContext(null);
+
+    public IDataContext CreateContext(Microsoft.Extensions.Logging.ILoggerFactory? loggerFactory)
+    {
+        var builder = new DataContextBuilder();
+        if (loggerFactory is not null)
+            builder = builder.UseLoggerFactory(loggerFactory);
+        return new ClickHouseDataContext(ClickHouseContainer.ConnectionString, builder);
+    }
 
     public void EnsureSeeded()
     {
@@ -232,6 +239,94 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             is_deleted Bool,
             name Nullable(String)
         ) engine = Memory
+        """,
+
+        // SelectWhereMax/SelectWhereMin fixtures: ClickHouse does not derive CommonTestSuite, so the
+        // same deterministic data is re-pinned by ClickHouseIntegrationTests.
+        "drop table if exists extrema_entity",
         """
+        create table extrema_entity
+        (
+            id Int32,
+            score Nullable(Int32),
+            category Nullable(String),
+            label String
+        ) engine = Memory
+        """,
+        """
+        insert into extrema_entity (id, score, category, label) values
+            (1, null, 'a', 'one'),
+            (2, 5, 'a', 'two'),
+            (3, 9, 'a', 'three'),
+            (4, 9, 'a', 'four'),
+            (5, 3, 'b', 'five'),
+            (6, 1, 'b', 'six'),
+            (7, null, null, 'seven'),
+            (8, 7, null, 'eight'),
+            (9, 4, 'c', 'nine'),
+            (10, 1, 'b', 'ten'),
+            (11, null, 'd', 'eleven')
+        """,
+
+        // Extreme-row native/portable parity fixture (#144 D7): nullable integral extreme/group keys
+        // (k1, k2, g), a nullable string payload (label) and a nullable integral payload (n).
+        "drop table if exists extreme_parity_144",
+        """
+        create table extreme_parity_144
+        (
+            id Int32,
+            g Nullable(Int32),
+            k1 Nullable(Int32),
+            k2 Nullable(Int32),
+            label Nullable(String),
+            n Nullable(Int32)
+        ) engine = Memory
+        """,
+        """
+        insert into extreme_parity_144 (id, g, k1, k2, label, n) values
+            (1, 10, 1, 99, null, null),
+            (2, 10, 1, 9, 'a-1-9', 7),
+            (3, 10, 1, 9, 'a-1-9b', 8),
+            (4, 10, null, 1, 'null-k1', 6),
+            (5, 20, 2, 1, 'b-2-1', 1),
+            (6, 20, 3, 0, 'b-3-0', 2),
+            (7, null, 5, 5, 'null-group', 3),
+            (8, 30, null, 4, 'null-k1-30', 4),
+            (9, 30, null, null, 'allnull', 5),
+            (10, 40, 1, 5, 'd-1-5', 9)
+        """,
+
+        // Alias-collision fixture (#144): mapped physical column names equal to the native renderers'
+        // internal aliases (PG derived-table alias, CH source/tuple aliases).
+        "drop table if exists extreme_alias_144",
+        """
+        create table extreme_alias_144
+        (
+            id Int32,
+            `__nextorm_extreme` Nullable(Int32),
+            `__nextorm_extreme_src` Nullable(Int32),
+            `__nextorm_extreme_tuple` Nullable(Int32),
+            g Nullable(Int32),
+            k Nullable(Int32)
+        ) engine = Memory
+        """,
+        """
+        insert into extreme_alias_144 (id, `__nextorm_extreme`, `__nextorm_extreme_src`, `__nextorm_extreme_tuple`, g, k) values
+            (1, 5, 1, 1, 10, 1),
+            (2, 7, 2, 2, 10, 3),
+            (3, 6, 3, 3, 20, 2)
+        """,
+
+        // Implicit-navigation reference fixtures (#148-B D8): ClickHouse does not derive
+        // CommonTestSuite, so the reference-navigation cases are re-pinned by
+        // ClickHouseImplicitNavigationTests over these Memory tables.
+        "drop table if exists eager_link",
+        "drop table if exists eager_tag",
+        "drop table if exists eager_child",
+        "drop table if exists eager_parent",
+        "create table eager_parent (id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_child (id Int32, parent_id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_tag (id Int32, name Nullable(String)) engine = Memory",
+        "create table eager_link (id Int32, parent_id Int32, child_id Int32) engine = Memory"
     ];
 }

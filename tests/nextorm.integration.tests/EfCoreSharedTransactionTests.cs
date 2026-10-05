@@ -12,6 +12,7 @@ namespace NextORM.Integration.Tests;
 /// container, but it deliberately goes through <c>db.CreateNextOrmContext()</c> rather than building
 /// the provider context by hand.
 /// </summary>
+[Collection("EF query filter lifecycle")]
 public sealed class EfCoreSharedTransactionTests
 {
     [Fact]

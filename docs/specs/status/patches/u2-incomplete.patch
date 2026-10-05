@@ -1,0 +1,544 @@
+diff --git a/src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs b/src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs
+index 8d84ca7..94383c5 100644
+--- a/src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs
++++ b/src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs
+@@ -62,6 +62,13 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
+     /// </summary>
+     public readonly bool NeedsParamRefresh;
+     /// <summary>
++    /// The immutable guarded parameter-refresh recipe for this plan, or <see langword="null"/> when the
++    /// plan does not support the scalar subset and the original <c>ExtractParams</c> refresh path must be
++    /// used. The recipe is immutable and retains neither the miss-time closure nor a mutable command or
++    /// enumerator.
++    /// </summary>
++    internal ParamRefreshRecipe? ParamRecipe { get; set; }
++    /// <summary>
+     /// Wraps an already prepared <see cref="DbCommand"/> and its execution options.
+     /// </summary>
+     /// <param name="dbCommand">The command to execute; its connection is captured for later resets.</param>
+diff --git a/src/nextorm.core/DataContext/Cache/ParamRefreshRecipe.cs b/src/nextorm.core/DataContext/Cache/ParamRefreshRecipe.cs
+new file mode 100644
+index 0000000..a47ae4f
+--- /dev/null
++++ b/src/nextorm.core/DataContext/Cache/ParamRefreshRecipe.cs
+@@ -0,0 +1,300 @@
++using System.Data.Common;
++using System.Linq.Expressions;
++using System.Reflection;
++
++namespace NextORM.Core;
++
++/// <summary>
++/// Immutable, guarded recipe that re-binds a cached plan's captured scalar parameters from the fresh
++/// closure instances of a re-built command, without re-rendering the statement.
++/// </summary>
++/// <remarks>
++/// The recipe stores, per refreshed parameter, the parameter name, the closure type, the member to read
++/// and a compiled member accessor that takes the current closure instance. It never retains the first
++/// closure, a mutable <see cref="DbCommand"/> or an enumerator, and it does not capture a fresh closure
++/// in the reusable recipe.
++/// <para>
++/// Only the provably-equivalent scalar subset is supported: every refreshed parameter must come from a
++/// captured member access whose root is a constant (typically a compiler-generated) closure, the member
++/// name must be the parameter name, no value converter/duration/stability/runtime parameter may be
++/// involved, and the command must have no joins, grouping, HAVING, PREWHERE, sorting, windows, array
++/// joins, CTEs, unions, referenced queries or outer references. Anything else leaves the cached command
++/// without a recipe, and the original <c>ExtractParams</c> path runs unchanged.
++/// </para>
++/// <para>
++/// All compatibility checks (parameter count/name/shape and closure collection) run before any accessor
++/// is invoked, so a mismatch falls back without evaluating a single closure twice.
++/// </para>
++/// </remarks>
++internal sealed class ParamRefreshRecipe
++{
++    private readonly string[] _names;
++    private readonly Type[] _closureTypes;
++    private readonly MemberInfo[] _members;
++    private readonly Func<object?, object?>[] _accessors;
++
++    private ParamRefreshRecipe(string[] names, Type[] closureTypes, MemberInfo[] members, Func<object?, object?>[] accessors)
++    {
++        _names = names;
++        _closureTypes = closureTypes;
++        _members = members;
++        _accessors = accessors;
++    }
++
++    /// <summary>The number of parameters the recipe refreshes.</summary>
++    internal int Count => _names.Length;
++
++    /// <summary>
++    /// Builds a recipe for <paramref name="queryCommand"/>, or returns <see langword="null"/> when the
++    /// command/parameter pair is not in the provably-equivalent scalar subset.
++    /// </summary>
++    /// <param name="queryCommand">The command whose miss-time render produced <paramref name="parameters"/>.</param>
++    /// <param name="parameters">The ordered parameters produced by the miss-time render.</param>
++    /// <returns>The recipe, or <see langword="null"/> when the original extraction path must be used.</returns>
++    internal static ParamRefreshRecipe? TryCreate(QueryCommand queryCommand, List<Parameter> parameters)
++    {
++        if (parameters.Count == 0)
++            return null;
++
++        if (!HasSupportedShape(queryCommand))
++            return null;
++
++        for (var i = 0; i < parameters.Count; i++)
++        {
++            var parameter = parameters[i];
++            // Only a captured closure scalar is supported: no fixed (stable) value, no converter or
++            // duration normalization, no runtime placeholder, and a structural captured key.
++            if (parameter.Stable
++                || parameter.HasConversion
++                || parameter.CapturedKey is null
++                || NormParam.IsName(parameter.Name))
++            {
++                return null;
++            }
++        }
++
++        var captures = new Dictionary<string, Capture>(StringComparer.Ordinal);
++        if (!TryCollect(queryCommand.PreparedCondition!, captures))
++            return null;
++
++        if (queryCommand.ProjectionExpression is { } projection && !TryCollect(projection, captures))
++            return null;
++
++        // Every parameter must resolve to exactly one unambiguous captured member, and no captured
++        // member may be left over that the parameter list does not use (otherwise a capture came from a
++        // path this recipe does not model).
++        if (captures.Count != parameters.Count)
++            return null;
++
++        var names = new string[parameters.Count];
++        var closureTypes = new Type[parameters.Count];
++        var members = new MemberInfo[parameters.Count];
++        var accessors = new Func<object?, object?>[parameters.Count];
++        for (var i = 0; i < parameters.Count; i++)
++        {
++            var name = parameters[i].Name;
++            if (!captures.TryGetValue(name, out var capture))
++                return null;
++
++            names[i] = name;
++            closureTypes[i] = capture.ClosureType;
++            members[i] = capture.Member;
++            accessors[i] = CompileAccessor(capture.Node, capture.ClosureType);
++        }
++
++        return new ParamRefreshRecipe(names, closureTypes, members, accessors);
++    }
++
++    /// <summary>
++    /// Re-binds the cached command's parameters from the fresh closures of <paramref name="queryCommand"/>.
++    /// Returns <see langword="false"/> (after evaluating nothing) when any compatibility check fails, so
++    /// the caller can run the original extraction path.
++    /// </summary>
++    /// <param name="queryCommand">The freshly built command matching the cached plan.</param>
++    /// <param name="dbCommandParams">The cached command's parameter collection, in placeholder order.</param>
++    /// <returns><see langword="true"/> when the parameters were refreshed; otherwise <see langword="false"/>.</returns>
++    internal bool TryBind(QueryCommand queryCommand, DbParameterCollection dbCommandParams)
++    {
++        // Validate the bound shape against the cached collection before touching any captured value.
++        if (dbCommandParams.Count != _names.Length)
++            return false;
++
++        for (var i = 0; i < _names.Length; i++)
++        {
++            if (!string.Equals(dbCommandParams[i].ParameterName, _names[i], StringComparison.Ordinal))
++                return false;
++        }
++
++        if (queryCommand.PreparedCondition is null)
++            return false;
++
++        var captures = new Dictionary<string, Capture>(StringComparer.Ordinal);
++        if (!TryCollect(queryCommand.PreparedCondition, captures))
++            return false;
++
++        if (queryCommand.ProjectionExpression is { } projection && !TryCollect(projection, captures))
++            return false;
++
++        if (captures.Count != _names.Length)
++            return false;
++
++        // Match the collected shape to the recipe; still no accessor has run.
++        var roots = new object?[_names.Length];
++        for (var i = 0; i < _names.Length; i++)
++        {
++            if (!captures.TryGetValue(_names[i], out var capture)
++                || capture.ClosureType != _closureTypes[i]
++                || capture.Member != _members[i])
++            {
++                return false;
++            }
++
++            roots[i] = capture.Root;
++        }
++
++        // Evaluate every accessor exactly once, then write; a throwing getter cannot leave a partial
++        // corrupt bind behind.
++        var values = new object?[_names.Length];
++        for (var i = 0; i < _names.Length; i++)
++            values[i] = _accessors[i](roots[i]) ?? DBNull.Value;
++
++        for (var i = 0; i < _names.Length; i++)
++            dbCommandParams[i].Value = values[i];
++
++        return true;
++    }
++
++    private static bool HasSupportedShape(QueryCommand queryCommand)
++    {
++        // Captures may only come from a scalar WHERE and (optionally) the projection. Every other
++        // parameter-bearing clause is out of the supported subset.
++        if (queryCommand.PreparedCondition is null)
++            return false;
++
++        if (queryCommand.Joins is { Length: > 0 })
++            return false;
++
++        if (queryCommand.GroupingList is { Length: > 0 })
++            return false;
++
++        if (queryCommand.PreparedHaving is not null)
++            return false;
++
++        if (queryCommand.PreparedPreWhere is not null)
++            return false;
++
++        if (queryCommand.Sorting is { Length: > 0 })
++            return false;
++
++        if (queryCommand.Windows is { Count: > 0 })
++            return false;
++
++        if (queryCommand.ArrayJoinExpressions is { Count: > 0 })
++            return false;
++
++        if (queryCommand.Ctes is { Count: > 0 })
++            return false;
++
++        if (queryCommand.UnionQuery is not null)
++            return false;
++
++        if (queryCommand.ReferencedQueries is { Count: > 0 })
++            return false;
++
++        if (queryCommand.OuterReferences is { Count: > 0 })
++            return false;
++
++        return true;
++    }
++
++    private static bool TryCollect(Expression expression, Dictionary<string, Capture> captures)
++    {
++        var collector = new Collector(captures);
++        collector.Visit(expression);
++        return !collector.Failed;
++    }
++
++    // A compiled member accessor over the closure instance; the delegate closes over no query state and
++    // does not retain the miss-time closure.
++    private static Func<object?, object?> CompileAccessor(MemberExpression node, Type closureType)
++    {
++        var parameter = Expression.Parameter(typeof(object));
++        var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(parameter, closureType));
++        var body = Expression.Convert(replace.Visit(node), typeof(object));
++        return Expression.Lambda<Func<object?, object>>(body, parameter).Compile();
++    }
++
++    /// <summary>
++    /// Collects the captured closure member accesses of an expression, keyed by member name, and rejects
++    /// a name that maps to more than one distinct closure instance or member.
++    /// </summary>
++    private sealed class Collector : ExpressionVisitor
++    {
++        private readonly Dictionary<string, Capture> _captures;
++
++        internal Collector(Dictionary<string, Capture> captures) => _captures = captures;
++
++        internal bool Failed;
++
++        protected override Expression VisitMember(MemberExpression node)
++        {
++            if (node.Expression is not null && TryFindRootConstant(node, out var root))
++            {
++                var name = node.Member.Name;
++                if (_captures.TryGetValue(name, out var existing))
++                {
++                    // A repeated name is only unambiguous when every occurrence reads the same member
++                    // from the same closure instance.
++                    if (existing.Member != node.Member
++                        || existing.ClosureType != root.Type
++                        || !ReferenceEquals(existing.Root, root.Value))
++                    {
++                        Failed = true;
++                    }
++                }
++                else
++                {
++                    _captures[name] = new Capture(root.Type, node.Member, root.Value, node);
++                }
++
++                // The whole member subtree is one captured value; do not descend and record inner
++                // members again.
++                return node;
++            }
++
++            return base.VisitMember(node);
++        }
++
++        private static bool TryFindRootConstant(Expression expression, out ConstantExpression root)
++        {
++            var current = expression;
++            while (current is MemberExpression member && member.Expression is not null)
++                current = member.Expression;
++
++            if (current is ConstantExpression constant)
++            {
++                root = constant;
++                return true;
++            }
++
++            root = null!;
++            return false;
++        }
++    }
++
++    private sealed class Capture
++    {
++        internal Capture(Type closureType, MemberInfo member, object? root, MemberExpression node)
++        {
++            ClosureType = closureType;
++            Member = member;
++            Root = root;
++            Node = node;
++        }
++
++        internal Type ClosureType { get; }
++        internal MemberInfo Member { get; }
++        internal object? Root { get; }
++        internal MemberExpression Node { get; }
++    }
++}
+diff --git a/src/nextorm.core/DataContext/QueryPlanner.cs b/src/nextorm.core/DataContext/QueryPlanner.cs
+index 49186a3..ca53516 100644
+--- a/src/nextorm.core/DataContext/QueryPlanner.cs
++++ b/src/nextorm.core/DataContext/QueryPlanner.cs
+@@ -687,6 +687,11 @@ internal sealed class QueryPlanner : IQueryPlanner
+                 SequentialAccess = sequentialAccess,
+             });
+ 
++            // Build the immutable guarded refresh recipe once, on the miss. Unsupported shapes leave it
++            // null and keep the original ExtractParams refresh on every hit.
++            if (needsParamRefresh)
++                compiledQuery.ParamRecipe = ParamRefreshRecipe.TryCreate(queryCommand, @params!);
++
+             if (createEnumerator)
+             {
+                 var enumerator = CreateResultSetEnumerator(compiledQuery!, ownsCommand: streamingRows);
+@@ -725,17 +730,7 @@ internal sealed class QueryPlanner : IQueryPlanner
+             else
+             {
+                 if (!compiledQuery.NoParams && compiledQuery.NeedsParamRefresh)
+-                {
+-                    var dbCommandParams = compiledQuery.DbCommandParams;
+-
+-                    var pp = ExtractParams(queryCommand);
+-                    for (int i = 0; i < pp.Count; i++)
+-                    {
+-                        // Normalize null to DBNull for providers that reject null parameter values.
+-                        dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
+-                        Debug.Assert(dbCommandParams[i].ParameterName == pp[i].Name, $"ParameterName {dbCommandParams[i].ParameterName} not equals {pp[i].Name}");
+-                    }
+-                }
++                    RefreshParameters(queryCommand, compiledQuery);
+             }
+ 
+             // A plan can be stored by a buffered terminal (createEnumerator: false) and later requested
+@@ -754,6 +749,31 @@ internal sealed class QueryPlanner : IQueryPlanner
+         }
+     }
+ 
++    // Refreshes the cached command's parameter values for the current command. A supported plan uses the
++    // immutable recipe (validated count/name/shape before any accessor runs); any mismatch falls through
++    // to the original ExtractParams path. This replaces the Debug.Assert-only protection with a runtime
++    // guarantee, so a malformed recipe can never corrupt the bind.
++    private void RefreshParameters<TResult>(QueryCommand queryCommand, DbPreparedQueryCommand<TResult> compiledQuery)
++    {
++        var dbCommandParams = compiledQuery.DbCommandParams;
++
++        if (compiledQuery.ParamRecipe is { } recipe && recipe.TryBind(queryCommand, dbCommandParams))
++            return;
++
++        var pp = ExtractParams(queryCommand);
++        if (pp.Count != dbCommandParams.Count)
++        {
++            throw new InvalidOperationException(
++                $"The cached plan binds {dbCommandParams.Count} parameter(s) but the refreshed command produced {pp.Count}; the cached plan and the command shape disagree.");
++        }
++
++        for (var i = 0; i < pp.Count; i++)
++        {
++            // Normalize null to DBNull for providers that reject null parameter values.
++            dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
++        }
++    }
++
+     public void ResetPreparation(QueryCommand queryCommand)
+     {
+         //_clearCache = true;
+diff --git a/src/nextorm.core/Parameter.cs b/src/nextorm.core/Parameter.cs
+index 6e7677c..d958830 100644
+--- a/src/nextorm.core/Parameter.cs
++++ b/src/nextorm.core/Parameter.cs
+@@ -34,4 +34,13 @@ public class Parameter(string name, object? value)
+     /// Internal: an engine bookkeeping detail, not part of the public contract.
+     /// </summary>
+     internal ExpressionKey? CapturedKey { get; set; }
++
++    /// <summary>
++    /// True when <see cref="Value"/> went through a column converter or a duration-storage
++    /// normalization while the parameter was built, so re-reading the raw captured value would not
++    /// reproduce <see cref="Value"/>. The immutable guarded parameter-refresh recipe refuses such
++    /// parameters and routes them to the original extraction path. Internal: an engine bookkeeping
++    /// detail, not part of the public contract.
++    /// </summary>
++    internal bool HasConversion { get; set; }
+ }
+diff --git a/src/nextorm.core/Visitors/BaseExpressionVisitor.cs b/src/nextorm.core/Visitors/BaseExpressionVisitor.cs
+index e3c9869..2c6163e 100644
+--- a/src/nextorm.core/Visitors/BaseExpressionVisitor.cs
++++ b/src/nextorm.core/Visitors/BaseExpressionVisitor.cs
+@@ -246,7 +246,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
+                 return false;
+         }
+ 
+-        _params.Add(new Parameter(name, NormalizeParameterValue(value)) { CapturedKey = key });
++        var normalized = NormalizeParameterValue(value);
++        _params.Add(new Parameter(name, normalized)
++        {
++            CapturedKey = key,
++            // The guarded refresh recipe must not re-read the raw captured value when normalizing it
++            // would not reproduce the bound value. A converter always counts (it may be value
++            // dependent), a duration scope only when the value is a TimeSpan, and any remaining
++            // normalization (enum coercion, duration storage) is caught by comparing the results.
++            // The duration scope itself is set for every comparison on a dialect without a native
++            // duration, so the scope alone is not a signal.
++            HasConversion = ConverterContext is not null
++                || (DurationUnitContext is not null && value is TimeSpan)
++                || !Equals(normalized, value),
++        });
+         return true;
+     }
+     /// <summary>
+diff --git a/tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs b/tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs
+index 0c4f6db..e99a415 100644
+--- a/tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs
++++ b/tests/nextorm.sqlite.tests/CachedPathCharacterizationTests.cs
+@@ -227,13 +227,23 @@ public class CachedPathCharacterizationTests
+     private sealed class CountingProbe
+     {
+         public int Reads;
++        public int Value = 5;
+ 
+         public int Threshold
+         {
+             get
+             {
+                 Reads++;
+-                return 5;
++                return Value;
++            }
++        }
++
++        public int Other
++        {
++            get
++            {
++                Reads++;
++                return Value;
+             }
+         }
+     }
+@@ -256,6 +266,79 @@ public class CachedPathCharacterizationTests
+         probe.Reads.Should().Be(1, "a captured parameter refresh must evaluate the captured member exactly once");
+     }
+ 
++    // Same source site, two different probe instances: the closure type and the member chain are part of
++    // the plan key while the captured value is not, so the second Prepare is a cache hit with a fresh
++    // closure.
++    private static QueryCommand<long> WhereProbe(EntityBuilder<IComplexEntity> e, CountingProbe probe)
++        => e.Where(x => x.Id > probe.Threshold).Select(x => x.Id);
++
++    [Fact]
++    public void SameClosureSite_RepeatedExecution_ShouldNotReuseFirstClosure()
++    {
++        using var ctx = SqliteTestContext.Create();
++        ctx.PurgeQueryCache();
++        var e = ctx.From<IComplexEntity>();
++        var a = new CountingProbe { Value = 1 };
++        var b = new CountingProbe { Value = 2 };
++
++        var first = Prepare(ctx, WhereProbe(e, a), cache: true);
++        first.DbCommandParams[0].Value.Should().Be(1);
++        first.NeedsParamRefresh.Should().BeTrue();
++        first.ParamRecipe.Should().NotBeNull("a simple captured scalar is in the supported recipe subset");
++
++        a.Reads = 0;
++        b.Reads = 0;
++        var second = Prepare(ctx, WhereProbe(e, b), cache: true);
++
++        ReferenceEquals(first, second).Should().BeTrue("the captured value is not part of the plan key");
++        b.Reads.Should().Be(1, "the current closure is evaluated exactly once on the refresh");
++        a.Reads.Should().Be(0, "the reusable recipe must not reuse the first closure");
++        second.DbCommandParams[0].Value.Should().Be(2, "the shared cached command re-binds the second closure's value");
++    }
++
++    // The immutable recipe validates parameter count/name/shape before evaluating any closure; an
++    // incompatible recipe must fall back to the original ExtractParams path without corrupting the bind.
++    [Fact]
++    public void CachedPlan_WithIncompatibleRecipe_ShouldFallBackWithoutCorruptingTheBind()
++    {
++        using var ctx = SqliteTestContext.Create();
++        ctx.PurgeQueryCache();
++        var e = ctx.From<IComplexEntity>();
++        var a = new CountingProbe { Value = 1 };
++        var b = new CountingProbe { Value = 2 };
++
++        var target = Prepare(ctx, WhereProbe(e, a), cache: true);
++        target.ParamRecipe.Should().NotBeNull();
++
++        // A recipe whose slot count does not match the cached command's parameter count.
++        var countMismatch = Prepare(ctx, e.Where(x => x.Id > a.Threshold || x.Id > b.Other).Select(x => x.Id), cache: true);
++        countMismatch.ParamRecipe.Should().NotBeNull();
++        target.ParamRecipe = countMismatch.ParamRecipe;
++
++        a.Reads = 0;
++        b.Reads = 0;
++        var countHit = Prepare(ctx, WhereProbe(e, b), cache: true);
++
++        ReferenceEquals(target, countHit).Should().BeTrue("the second WhereProbe hits the cached plan");
++        countHit.DbCommandParams[0].Value.Should().Be(2, "the fallback extracts the current closure value");
++        b.Reads.Should().Be(1, "the original extraction path evaluates the current closure exactly once");
++        a.Reads.Should().Be(0, "the incompatible recipe never evaluates the stale closure");
++
++        // A same-count recipe whose parameter name differs must also be rejected.
++        var nameMismatch = Prepare(ctx, e.Where(x => x.Id > a.Other).Select(x => x.Id), cache: true);
++        nameMismatch.ParamRecipe.Should().NotBeNull();
++        target.ParamRecipe = nameMismatch.ParamRecipe;
++
++        a.Reads = 0;
++        b.Reads = 0;
++        var nameHit = Prepare(ctx, WhereProbe(e, b), cache: true);
++
++        ReferenceEquals(target, nameHit).Should().BeTrue();
++        nameHit.DbCommandParams[0].Value.Should().Be(2);
++        b.Reads.Should().Be(1);
++        a.Reads.Should().Be(0);
++    }
++
+     // ---------------------------------------------------------------------------------------------
+     // Row: converter / raw SQL. The converter half is covered by
+     // ConvertedCapturedEnum_ShouldBindTheProviderValue above; this is the raw-SQL fallback baseline.

@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System.Linq.Expressions;
+using System.Reflection;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -41,9 +43,16 @@ internal readonly struct SqlBuilder
         var entityType = cmd.EntityType;
         ArgumentNullException.ThrowIfNull(entityType);
 
+        // A SelectWhereMax/SelectWhereMin command is lowered to a portable window-function derived
+        // table (see MakeExtremeRowSelect) instead of the plain single-statement rendering below.
+        if (cmd.ExtremeRow is not null)
+            return MakeExtremeRowSelect(cmd, selectInto);
+
         var selectList = cmd.SelectList;
         var from = cmd.From;
-        var ctes = cmd.Ctes;
+        // A command whose declarations were hoisted into the enclosing statement's top-level WITH must
+        // not emit a WITH of its own (see CteHoister); only the root of the render emits it.
+        var ctes = _ctx.SuppressCtes ? null : cmd.Ctes;
 
         var sqlBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
         var selectBuilder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
@@ -501,7 +510,11 @@ internal readonly struct SqlBuilder
 
                         if (needAliasForColumn)
                         {
-                            selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                            // A generated output name (an unaliased computed scalar) is an alias only for
+                            // a typed-CTE declaration body; anywhere else the column keeps its implicit
+                            // name (the alias text was null before, and MakeColumnAlias emits nothing).
+                            var alias = item.PropertyName ?? (_ctx.ExactProjectionAliases ? item.OutputName : null);
+                            selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(alias, _ctx.KeywordCase));
                         }
 
                         selectBuilder.Append(", ");
@@ -587,6 +600,587 @@ internal readonly struct SqlBuilder
             if (sqlBuilder is not null)
                 StringBuilderPool.Shared.Return(sqlBuilder);
         }
+    }
+
+    /// <summary>
+    /// Renders a <c>SelectWhereMax</c>/<c>SelectWhereMin</c> command. Compatibility is validated first,
+    /// then the dialect's optional <see cref="ISqlDialect.ExtremeRowRenderer"/> decides - from a
+    /// prepared description, before any side effect - whether to render natively; otherwise the command
+    /// is lowered to the portable window-function query:
+    /// <code>
+    /// select &lt;projection&gt; from (
+    ///     select *, row_number() | rank() over (partition by ... order by ... desc|asc) as rn
+    ///     from &lt;source&gt; where &lt;condition&gt;
+    /// ) t1 where t1.rn = 1
+    /// </code>
+    /// The source rows plus the synthetic rank column form the derived table; the outer statement
+    /// projects the command's select list over it. The rank column is dropped by the projection and is
+    /// named to avoid colliding with a mapped source column. Works on every provider whose dialect
+    /// reports <see cref="ISqlDialect.SupportsSelectWhereMinMax"/>.
+    /// </summary>
+    private string? MakeExtremeRowSelect(QueryCommand cmd, string? selectInto)
+    {
+        if (!_ctx.Dialect.SupportsSelectWhereMinMax)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} does not support SelectWhereMax/SelectWhereMin.");
+
+        EnsureExtremeRowCompatible(cmd, selectInto);
+
+        // Native generation is an optional dialect capability, limited to the single-row One form: All
+        // keeps every tied winner and stays on the portable rank lowering. The eligibility decision is
+        // made from a side-effect-free description BEFORE any build-context/parameter/alias work; a
+        // missing capability or a negative answer keeps the portable window-function lowering. A
+        // renderer failure propagates as an error and never falls back late.
+        var renderer = _ctx.Dialect.ExtremeRowRenderer;
+        if (renderer is not null
+            && cmd.ExtremeRow!.Ties == ExtremeRowTies.One
+            // A source without mapped metadata (a name-addressed or temporary table) cannot provide the
+            // canonical payload aliases and column types the native renderer decides on. Such a source
+            // keeps the portable lowering instead of failing the read on a native-capable provider.
+            && DataContextCache.Metadata.TryGetValue(cmd.EntityType!, out var entityMeta))
+        {
+            // Build the entity projection once for the whole native preparation: the eligibility
+            // description resolves its payload lazily from this list (a renderer that only reads
+            // Keys/Groups never builds it), and the alias and outer stages reuse the same instance.
+            var (entitySelectList, _) = EntitySelectListBuilder.Build(
+                cmd.EntityType!,
+                entityMeta,
+                CancellationToken.None);
+
+            if (renderer.CanRender(MakeExtremeRowDescription(cmd, entitySelectList)))
+                return MakeNativeExtremeRowSelect(cmd, renderer, entitySelectList);
+        }
+
+        return MakePortableExtremeRowSelect(cmd);
+    }
+
+    /// <summary>
+    /// Builds the portable lowering: the ranked inner derived table plus the outer statement that
+    /// projects the select list and keeps <c>rn = 1</c>.
+    /// </summary>
+    private string? MakePortableExtremeRowSelect(QueryCommand cmd)
+    {
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+        var rankColumn = MakeExtremeRowRankName(entityType);
+        var innerSql = MakePortableExtremeRowInner(cmd, entityType, from, rankColumn);
+        return MakeExtremeRowOuter(cmd, entityType, innerSql, rankColumn);
+    }
+
+    /// <summary>
+    /// Builds the inner derived table of the portable lowering: the filtered source rows plus the
+    /// synthetic window-rank column. The filter (key components <c>IS NOT NULL</c> ANDed with the
+    /// source condition) is shared with the native source builder.
+    /// </summary>
+    private string? MakePortableExtremeRowInner(QueryCommand cmd, Type entityType, FromExpression from, string rankColumn)
+    {
+        // --- inner derived table: the source rows plus the window rank ---
+        string? innerSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var inner = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+                var rankSql = MakeExtremeRowRankExpression(cmd, entityType, rankColumn);
+
+                if (!_ctx.ParamMode)
+                    inner!.Append(Kw("select ")).Append('*').Append(", ").Append(rankSql).Append(Kw(" from ")).Append(fromSql);
+
+                AppendExtremeRowSourceFilter(cmd, entityType, inner);
+
+                innerSql = inner?.ToString();
+            }
+            finally
+            {
+                if (inner is not null) StringBuilderPool.Shared.Return(inner);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return innerSql;
+    }
+
+    /// <summary>
+    /// Appends the source filter shared by the portable inner derived table and the native source: an
+    /// <c>IS NOT NULL</c> predicate per extreme-key component (comparison nulls must not win the
+    /// extremum and would surface an all-null group) ANDed with the source's own condition. In
+    /// parameter mode it walks the same expressions in the same order and emits nothing; a
+    /// condition-only source still opens the <c>where</c>.
+    /// </summary>
+    private void AppendExtremeRowSourceFilter(QueryCommand cmd, Type entityType, StringBuilder? inner)
+    {
+        var valueColumns = cmd.ExtremeRowColumns ?? [];
+        var hasNotNullFilter = valueColumns.Length > 0;
+        var hasCondition = cmd.PreparedCondition is not null;
+
+        if (!hasNotNullFilter && !hasCondition)
+            return;
+
+        if (!_ctx.ParamMode)
+            inner!.AppendLine().Append(Kw(" where "));
+
+        if (hasNotNullFilter)
+        {
+            for (var i = 0; i < valueColumns.Length; i++)
+            {
+                if (!_ctx.ParamMode && i > 0)
+                    inner!.Append(Kw(" and "));
+
+                var (_, valueColumn) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
+                if (!_ctx.ParamMode)
+                    inner!.Append(valueColumn).Append(' ').Append(Kw("is not null"));
+            }
+
+            if (hasCondition && !_ctx.ParamMode)
+                inner!.Append(Kw(" and "));
+        }
+
+        if (cmd.PreparedCondition is { } condition)
+            SqlSourceRenderer.MakeWhere(in _ctx, inner, entityType, condition, 0);
+    }
+
+    /// <summary>
+    /// Renders the command through the dialect's optional native extreme-row capability. The shared
+    /// path builds the same filtered source as the portable lowering (without the rank), hands it to
+    /// the renderer together with the canonical payload/key/group aliases, and wraps the returned
+    /// winning-row source in the same outer projection/order statement. A renderer exception
+    /// propagates unchanged.
+    /// </summary>
+    private string? MakeNativeExtremeRowSelect(QueryCommand cmd, IExtremeRowRenderer renderer, SelectExpression[] entitySelectList)
+    {
+        var entityType = cmd.EntityType!;
+        var from = cmd.From!;
+
+        var sourceSql = MakeNativeExtremeRowSource(cmd, entityType, from);
+
+        // Parameter mode emits no SQL; the outer call still walks the projection and ordering so the
+        // collected parameters stay in step with the SQL pass.
+        if (_ctx.ParamMode || sourceSql is null)
+            return MakeExtremeRowOuter(cmd, entityType, null, rankColumn: null, entitySelectList);
+
+        var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entitySelectList);
+        var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
+            sourceSql,
+            cmd.ExtremeRow!.Kind == ExtremeKind.Max,
+            payloadAliases,
+            keyAliases,
+            groupAliases,
+            _ctx.KeywordCase));
+
+        return MakeExtremeRowOuter(cmd, entityType, winnerSql, rankColumn: null, entitySelectList);
+    }
+
+    /// <summary>
+    /// Builds the native strategy's filtered source: <c>select * from &lt;source&gt; where
+    /// &lt;key-component IS NOT NULL&gt; [and &lt;condition&gt;]</c> - the portable inner minus the
+    /// synthetic rank. The renderer turns this into the winning-row source. Parameter mode walks the
+    /// same expressions in the same order and emits nothing.
+    /// </summary>
+    private string? MakeNativeExtremeRowSource(QueryCommand cmd, Type entityType, FromExpression from)
+    {
+        string? sourceSql = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var source = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var fromSql = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(false, entityType, false));
+
+                if (!_ctx.ParamMode)
+                    source!.Append(Kw("select ")).Append('*').Append(Kw(" from ")).Append(fromSql);
+
+                AppendExtremeRowSourceFilter(cmd, entityType, source);
+
+                sourceSql = source?.ToString();
+            }
+            finally
+            {
+                if (source is not null) StringBuilderPool.Shared.Return(source);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return sourceSql;
+    }
+
+    /// <summary>
+    /// Resolves the canonical payload aliases (every mapped source column, in declaration order) and
+    /// the key/group aliases (the physical column names of the direct mapped key components) from the
+    /// projection built once by the native dispatch. Only reached after
+    /// <see cref="IExtremeRowRenderer.CanRender"/> accepted the description, which constraints the
+    /// key/group components to direct mapped columns.
+    /// </summary>
+    private (string[] Payload, string[] Keys, string[] Groups) MakeExtremeRowAliases(QueryCommand cmd, SelectExpression[] entityColumns)
+    {
+        var payload = new string[entityColumns.Length];
+        for (var i = 0; i < entityColumns.Length; i++)
+        {
+            var column = entityColumns[i];
+            payload[i] = column.RangeColumns is not null
+                ? column.PropertyName!
+                : column.PropertyInfo!.GetPropertyColumnName(_ctx.NamingConvention);
+        }
+
+        return (payload, MakeExtremeRowKeyAliases(cmd.ExtremeRowColumns), MakeExtremeRowKeyAliases(cmd.ExtremeRowGroupByColumns));
+    }
+
+    private string[] MakeExtremeRowKeyAliases(SelectExpression[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return [];
+
+        var aliases = new string[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            if (columns[i].Expression is not MemberExpression { Member: PropertyInfo property })
+                throw new InvalidOperationException("The native extreme-row renderer requires direct mapped key columns.");
+
+            aliases[i] = property.GetPropertyColumnName(_ctx.NamingConvention);
+        }
+
+        return aliases;
+    }
+
+    /// <summary>
+    /// Builds the side-effect-free description the dialect's optional native renderer decides on. It
+    /// reads only prepared metadata: it never renders SQL, allocates an alias or touches the parameter
+    /// list, so a rejected candidate leaves no state behind for the portable lowering. The payload is
+    /// projected lazily from the prebuilt <paramref name="entitySelectList"/>, so a renderer that only
+    /// reads <see cref="ExtremeRowDescription.Keys"/>/<see cref="ExtremeRowDescription.Groups"/> never
+    /// materializes it.
+    /// </summary>
+    private static ExtremeRowDescription MakeExtremeRowDescription(QueryCommand cmd, SelectExpression[] entitySelectList)
+        => new(
+            cmd.ExtremeRow!.Kind == ExtremeKind.Max,
+            MakeExtremeRowDescriptionColumns(cmd.ExtremeRowColumns),
+            MakeExtremeRowDescriptionColumns(cmd.ExtremeRowGroupByColumns),
+            () => MakeExtremeRowPayloadDescription(entitySelectList));
+
+    private static ExtremeRowRenderColumn[] MakeExtremeRowDescriptionColumns(SelectExpression[]? columns)
+    {
+        if (columns is null || columns.Length == 0)
+            return [];
+
+        var result = new ExtremeRowRenderColumn[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var expression = columns[i].Expression;
+            var property = (expression as MemberExpression)?.Member as PropertyInfo;
+            IPropertyMetadata? metadata = null;
+            var hasMetadata = property is not null
+                && DataContextCache.Metadata.TryGetValue(property.DeclaringType!, property, out metadata);
+
+            result[i] = new ExtremeRowRenderColumn(
+                columns[i].PropertyType,
+                columns[i].Nullable,
+                hasMetadata && metadata!.Converter is null && !metadata.IsComputed,
+                hasMetadata && metadata!.Converter is not null);
+        }
+
+        return result;
+    }
+
+    private static ExtremeRowRenderColumn[] MakeExtremeRowPayloadDescription(SelectExpression[] columns)
+    {
+        var result = new ExtremeRowRenderColumn[columns.Length];
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var column = columns[i];
+
+            // EntitySelectListBuilder stores the property access wrapped in a LambdaExpression, unlike
+            // the key/group columns (which carry the bare member-access body), so the lambda must be
+            // unwrapped before the direct-mapped test. A Range<T> property expands into two physical
+            // columns and a computed property is not a plain mapped column, so neither is native-eligible
+            // as payload; both keep the portable lowering.
+            var body = column.Expression is LambdaExpression lambda ? lambda.Body : column.Expression;
+            IPropertyMetadata? metadata = null;
+            var hasMetadata = body is MemberExpression { Member: PropertyInfo property }
+                && DataContextCache.Metadata.TryGetValue(property.DeclaringType!, property, out metadata);
+
+            result[i] = new ExtremeRowRenderColumn(
+                column.PropertyType,
+                column.Nullable,
+                hasMetadata && metadata!.Converter is null && !metadata.IsComputed && column.RangeColumns is null,
+                hasMetadata && metadata!.Converter is not null);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Builds the entity projection on demand for the outer expansion when the native dispatch did not
+    /// already hand one in (the portable lowering). Throws for a source without mapped metadata.
+    /// </summary>
+    private static SelectExpression[] BuildExtremeRowEntitySelectList(Type entityType)
+    {
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var entityMeta))
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a mapped entity source.");
+
+        var (columns, _) = EntitySelectListBuilder.Build(entityType, entityMeta, CancellationToken.None);
+        return columns;
+    }
+
+    /// <summary>
+    /// Wraps the already-rendered <paramref name="innerSql"/> (the portable ranked derived table or the
+    /// native winning-row source) in the outer statement: the command's projection, DISTINCT, the
+    /// user's output ordering, and - for the portable strategy - the <c>rn = 1</c> filter on
+    /// <paramref name="rankColumn"/>. <paramref name="rankColumn"/> is <see langword="null"/> for the
+    /// native strategy, whose source already selects the winners. <paramref name="entitySelectList"/> is
+    /// the projection built once by the native dispatch and reused here; the portable path passes
+    /// <see langword="null"/> and the projection is built on demand.
+    /// </summary>
+    private string? MakeExtremeRowOuter(
+        QueryCommand cmd,
+        Type entityType,
+        string? innerSql,
+        string? rankColumn,
+        SelectExpression[]? entitySelectList = null)
+    {
+        // --- outer statement over the derived table ---
+        string? result = null;
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            string? alias = null;
+            if (!_ctx.ParamMode)
+            {
+                // Register the derived table as a physical-shaped source so member access of the
+                // command's select list resolves to its aliased columns; the inner `select *` exposes
+                // the source's physical column names.
+                _ctx.ColumnsProvider.Add(entityType, false);
+                alias = _ctx.AliasProvider!.GetNextAlias(new FromExpression(entityType));
+            }
+
+            var outer = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+            try
+            {
+                var selectList = cmd.SelectList;
+
+                if (!_ctx.ParamMode)
+                {
+                    outer!.Append(Kw("select "));
+
+                    if (cmd.Tag is { Length: > 0 } tag)
+                        outer.Append(MakeTagComment(tag)).Append(' ');
+
+                    if (cmd.IsDistinct)
+                        outer.Append(Kw("distinct "));
+
+                    if (cmd.IgnoreColumns || selectList is null || selectList.Length == 0)
+                    {
+                        // The inner derived table selects the source columns plus the synthetic rank
+                        // column, so a bare `*` here would leak that rank column into the result. With no
+                        // explicit projection, expand the entity's mapped columns explicitly (the same
+                        // shape the normal whole-row select path prepares) so the rank is dropped. The
+                        // native dispatch hands its single projection in; the portable path builds it.
+                        var entityColumns = entitySelectList ?? BuildExtremeRowEntitySelectList(entityType);
+                        for (var i = 0; i < entityColumns.Length; i++)
+                        {
+                            if (i > 0) outer.Append(", ");
+
+                            var item = entityColumns[i];
+                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
+                            outer.Append(column);
+
+                            if (needAliasForColumn)
+                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                        }
+                    }
+                    else
+                    {
+                        for (var i = 0; i < selectList.Length; i++)
+                        {
+                            if (i > 0) outer.Append(", ");
+
+                            var item = selectList[i];
+                            var (needAliasForColumn, column) = SqlSourceRenderer.MakeColumn(in _ctx, item, entityType, dontNeedAlias: false, renameAware: true);
+                            outer.Append(column);
+
+                            if (needAliasForColumn)
+                                outer.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
+                        }
+                    }
+
+                    outer.AppendLine().Append(Kw("from ")).Append('(').Append(innerSql).Append(')')
+                        .Append(_ctx.Dialect.MakeTableAlias(alias!, _ctx.KeywordCase));
+
+                    if (rankColumn is not null)
+                    {
+                        outer.AppendLine().Append(Kw(" where ")).Append(alias).Append('.')
+                            .Append(_ctx.Dialect.MakeColumnReference(rankColumn)).Append(" = 1");
+                    }
+
+                    AppendOrderBy(cmd, entityType, outer);
+                }
+                else
+                {
+                    // Parameter pass: walk the same expressions in the same order as the SQL pass.
+                    if (!cmd.IgnoreColumns && selectList is not null)
+                    {
+                        for (var i = 0; i < selectList.Length; i++)
+                            SqlSourceRenderer.MakeColumn(in _ctx, selectList[i], entityType, dontNeedAlias: false, renameAware: true);
+                    }
+
+                    if (cmd.Sorting is { Length: > 0 } sorting)
+                    {
+                        for (var i = 0; i < sorting.Length; i++)
+                        {
+                            if (sorting[i].PreparedExpression is { } prepared)
+                                SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0);
+                        }
+                    }
+                }
+
+                result = outer?.ToString();
+            }
+            finally
+            {
+                if (outer is not null) StringBuilderPool.Shared.Return(outer);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Renders the <c>order by</c> of the surviving rows on the outer statement. Mirrors the plain
+    /// select-list ordering: a prepared expression is rendered through the column visitor, an ordinal
+    /// is emitted verbatim. A parameter-mode caller walks the expressions separately.
+    /// </summary>
+    private void AppendOrderBy(QueryCommand cmd, Type entityType, StringBuilder target)
+    {
+        if (cmd.Sorting is not { Length: > 0 } sorting)
+            return;
+
+        target.AppendLine().Append(Kw("order by "));
+        for (var i = 0; i < sorting.Length; i++)
+        {
+            if (i > 0) target.Append(", ");
+
+            if (sorting[i].PreparedExpression is { } prepared)
+                target.Append(SqlSourceRenderer.MakeSort(in _ctx, entityType, prepared, 0));
+            else
+                target.Append(sorting[i].ColumnIndex);
+
+            if (sorting[i].Direction == OrderDirection.Desc)
+                target.Append(Kw(" desc"));
+        }
+    }
+
+    /// <summary>
+    /// Renders <c>row_number()</c> (single survivor) or <c>rank()</c> (every tied survivor) over the
+    /// optional group partition and the value ordering. <c>Max</c> orders the value descending,
+    /// <c>Min</c> ascending (the default direction). Multiple keys of a composite selector are emitted
+    /// in order. Parameter mode visits the keys but emits nothing.
+    /// </summary>
+    private string MakeExtremeRowRankExpression(QueryCommand cmd, Type entityType, string rankColumn)
+    {
+        var extreme = cmd.ExtremeRow!;
+        var valueColumns = cmd.ExtremeRowColumns ?? [];
+        var groupColumns = cmd.ExtremeRowGroupByColumns ?? [];
+
+        var builder = _ctx.ParamMode ? null : StringBuilderPool.Shared.Get();
+        try
+        {
+            if (builder is not null)
+                builder.Append(extreme.Ties == ExtremeRowTies.All ? "rank()" : "row_number()").Append(Kw(" over ("));
+
+            for (var i = 0; i < groupColumns.Length; i++)
+            {
+                if (builder is not null)
+                    builder.Append(i == 0 ? Kw("partition by ") : ", ");
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, groupColumns[i], entityType, dontNeedAlias: true);
+                if (builder is not null) builder.Append(column);
+            }
+
+            for (var i = 0; i < valueColumns.Length; i++)
+            {
+                if (builder is not null)
+                {
+                    if (i == 0)
+                        builder.Append(groupColumns.Length > 0 ? Kw(" order by ") : Kw("order by "));
+                    else
+                        builder.Append(", ");
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(in _ctx, valueColumns[i], entityType, dontNeedAlias: true);
+                if (builder is not null)
+                {
+                    builder.Append(column);
+                    if (extreme.Kind == ExtremeKind.Max)
+                        builder.Append(Kw(" desc"));
+                }
+            }
+
+            if (builder is not null)
+                builder.Append(')').Append(_ctx.Dialect.MakeColumnAlias(rankColumn, _ctx.KeywordCase));
+
+            return builder?.ToString() ?? string.Empty;
+        }
+        finally
+        {
+            if (builder is not null) StringBuilderPool.Shared.Return(builder);
+        }
+    }
+
+    /// <summary>
+    /// Returns a rank-column name that no mapped column of <paramref name="entityType"/> uses, so the
+    /// synthetic column cannot shadow or be shadowed by a source column when the derived table selects
+    /// <c>*</c> plus the rank.
+    /// </summary>
+    private static string MakeExtremeRowRankName(Type entityType)
+    {
+        const string seed = "__nextorm_rn";
+        if (!DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
+            return seed;
+
+        var properties = metadata.Properties;
+        var name = seed;
+        while (true)
+        {
+            var collides = false;
+            for (var i = 0; i < properties.Count; i++)
+            {
+                if (string.Equals(properties[i].ColumnName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    collides = true;
+                    break;
+                }
+            }
+
+            if (!collides) return name;
+            name += "_";
+        }
+    }
+
+    /// <summary>
+    /// Rejects the combinations the derived-table lowering cannot express, before any SQL is assembled.
+    /// The modifier checks are shared with the in-memory evaluator (see
+    /// <see cref="ExtremeRowCompatibility.EnsureModifiersCompatible"/>); only the SQL-only source shape
+    /// and the SELECT ... INTO wrapper are checked here.
+    /// </summary>
+    private static void EnsureExtremeRowCompatible(QueryCommand cmd, string? selectInto)
+    {
+        if (selectInto is not null)
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin cannot be rendered as a SELECT ... INTO source.");
+
+        ExtremeRowCompatibility.EnsureModifiersCompatible(cmd);
+
+        if (cmd.From is null || cmd.From.SubQuery is not null)
+            throw new BuildSqlCommandException("SelectWhereMax/SelectWhereMin requires a single physical-table source.");
     }
 
     /// <summary>
@@ -728,6 +1322,10 @@ internal readonly struct SqlBuilder
                     whereSql.Length == 0 ? null : whereSql.ToString(),
                     _ctx.KeywordCase);
 
+                var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsDeleteJoinReturning, "removed");
+                if (returning is not null)
+                    sql += _ctx.Dialect.MakeReturning(returning, _ctx.KeywordCase);
+
                 return (sql, _ctx.Params);
             }
             finally
@@ -828,6 +1426,10 @@ internal readonly struct SqlBuilder
                     whereSql.Length == 0 ? null : whereSql.ToString(),
                     _ctx.KeywordCase);
 
+                var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsUpdateJoinReturning, "updated");
+                if (returning is not null)
+                    sql += _ctx.Dialect.MakeReturning(returning, _ctx.KeywordCase);
+
                 return (sql, _ctx.Params);
             }
             finally
@@ -846,6 +1448,236 @@ internal readonly struct SqlBuilder
 
     /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the configured <see cref="KeywordCase"/>.</summary>
     private string Kw(string text) => SqlKeywords.Of(_ctx.KeywordCase, text);
+
+    /// <summary>
+    /// Renders the <c>RETURNING</c> list of a multi-table mutation, qualifying every returned column by
+    /// the alias of the joined table that owns it. The selector runs over the positional join projection,
+    /// so a selected member may reference any joined source
+    /// (<c>p =&gt; new { p.Item1.Id, p.Item2.Name }</c>). Returns <see langword="null"/> when the mutation
+    /// returns nothing.
+    /// </summary>
+    /// <param name="columns">The mapped columns the mutation returns, or <see langword="null"/> for a plain mutation.</param>
+    /// <param name="projection">The selector that defines the returned columns, or <see langword="null"/>.</param>
+    /// <param name="returningSupported">Whether the dialect can return rows from this multi-table mutation.</param>
+    /// <param name="operation">The past-tense operation name used in the rejection message.</param>
+    /// <returns>The rendered returning expressions, or <see langword="null"/>.</returns>
+    /// <exception cref="NotSupportedException">Rows were requested but the dialect cannot return them.</exception>
+    private IReadOnlyList<string>? MakeJoinReturning(
+        IReadOnlyList<IPropertyMetadata>? columns,
+        LambdaExpression? projection,
+        bool returningSupported,
+        string operation)
+    {
+        if (columns is not { Count: > 0 } || projection is null)
+            return null;
+
+        if (!returningSupported)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot return {operation} rows from a multi-table mutation.");
+
+        var parameter = projection.Parameters[0];
+        _ctx.ColumnsProvider.PushScope(projection.Parameters);
+        try
+        {
+            var items = EnumerateReturningMembers(projection);
+            var rendered = new List<string>(items.Count);
+            var isIdentity = TypeFacts.UnwrapConvert(projection.Body) is ParameterExpression;
+            for (var i = 0; i < items.Count; i++)
+            {
+                using var visitor = _ctx.CreateColumnVisitor(parameter.Type, 0, dontNeedAlias: false);
+                try
+                {
+                    visitor.Visit(items[i].Expression);
+                }
+                catch (BuildSqlCommandException ex) when (isIdentity && TryGetIdentityAddress(items[i].Expression, out var addressSlot, out var addressMember))
+                {
+                    // A joined source that exposes only a partial shape cannot satisfy the full returned
+                    // item; fail before the database with the slot/member identity rather than the raw
+                    // column-resolution error.
+                    var itemOrdinal = addressSlot + 1;
+                    throw new QueryPreparationException(
+                        $"The identity multi-table RETURNING form cannot resolve member '{addressMember}' of item {itemOrdinal} ({projection.Parameters[0].Type.GetProperty("Item" + itemOrdinal)?.PropertyType.Name ?? "item"}) against the joined source shape; add the member to the joined source projection or drop it from the returned item.", ex);
+                }
+
+                // The outer CTE read addresses a derived-style member under the name the body exposes:
+                // a projection member that keeps its source name (p.Item1.Id -> "Id") is read back under
+                // the mapped column name ("id"), so aliasing it to the CLR name would make the outer
+                // reference miss it. Only a renamed member (TargetId = p.Item1.Id) exposes the alias and
+                // must be aliased with the dialect's quoted-identifier style.
+                //
+                // An identity member's name IS the deterministic per-slot alias the
+                // outer CTE shape stores, so it must be emitted unconditionally — including on a derived
+                // joined slot, where the visitor exposes no physical column name to compare against.
+                var renamed = isIdentity
+                    || (visitor.ColumnName is { } physical
+                        && !string.Equals(physical, items[i].Name, StringComparison.OrdinalIgnoreCase));
+                rendered.Add(renamed
+                    ? visitor.ToString() + _ctx.Dialect.MakeColumnAlias(items[i].Name, _ctx.KeywordCase)
+                    : visitor.ToString());
+            }
+
+            return rendered;
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopScope();
+        }
+    }
+
+    // Expands a joined returning selector into the member expressions whose column references are
+    // qualified in the RETURNING list, paired with the projection member name the outer CTE read
+    // addresses.
+    private static List<(Expression Expression, string Name)> EnumerateReturningMembers(LambdaExpression projection)
+    {
+        var body = TypeFacts.UnwrapConvert(projection.Body);
+        List<(Expression, string)> members;
+
+        // The identity form expands every mapped property of every slot and exposes
+        // each under a deterministic per-slot alias, so a self-join of the same type keeps its Item1/Item2
+        // columns distinct in the RETURNING list and in the outer CTE read.
+        if (body is ParameterExpression)
+            return EnumerateIdentityMembers(projection);
+
+        switch (body)
+        {
+            case NewExpression { Arguments.Count: > 0 } newExpression:
+            {
+                var newMembers = newExpression.Members;
+                members = new List<(Expression, string)>(newExpression.Arguments.Count);
+                for (var i = 0; i < newExpression.Arguments.Count; i++)
+                {
+                    var name = newMembers is not null && i < newMembers.Count
+                        ? newMembers[i].Name
+                        : newExpression.Constructor!.GetParameters()[i].Name!;
+                    members.Add((newExpression.Arguments[i], name));
+                }
+
+                break;
+            }
+
+            case MemberInitExpression { Bindings.Count: > 0 } memberInit:
+            {
+                members = new List<(Expression, string)>(memberInit.Bindings.Count);
+                for (var i = 0; i < memberInit.Bindings.Count; i++)
+                {
+                    if (memberInit.Bindings[i] is MemberAssignment assignment)
+                        members.Add((assignment.Expression, assignment.Member.Name));
+                }
+
+                break;
+            }
+
+            case MemberExpression memberExpression:
+                members = [(body, memberExpression.Member.Name)];
+                break;
+
+            default:
+                throw new NotSupportedException(
+                    $"A joined RETURNING projection member of node kind '{body.NodeType}' is not supported; select a mapped member. Project the returned columns explicitly, for example p => new {{ p.Item1.Id, p.Item2.Name }}.");
+        }
+
+        // Fail closed: an empty RETURNING list is never valid, so a selector that expands to zero members
+        // throws instead of emitting a bare RETURNING.
+        if (members.Count == 0)
+        {
+            throw new NotSupportedException(
+                "A joined RETURNING projection selected no mapped members; project at least one explicitly, for example p => new { p.Item1.Id, p.Item2.Name }.");
+        }
+
+        return members;
+    }
+
+    // Expands the identity selector into p.ItemN.Property expressions, one per
+    // mapped property of every slot, paired with the deterministic per-slot alias the outer CTE read
+    // addresses. Mirrors JoinedReturningProjection.ParseIdentity's slot/property order.
+    private static List<(Expression Expression, string Name)> EnumerateIdentityMembers(LambdaExpression projection)
+    {
+        var projectionType = projection.Parameters[0].Type;
+        var entityTypes = projectionType.GetGenericArguments();
+        var parameter = projection.Parameters[0];
+        var entries = new List<(Expression Expression, int Slot, string Column)>();
+
+        for (var slot = 0; slot < entityTypes.Length; slot++)
+        {
+            // Same eligibility as JoinedReturningProjection.ParseIdentity: registered metadata when it
+            // exists, otherwise the slot's readable CLR surface (a metadata-less derived/read-CTE joined
+            // side). Keeping the two in lockstep is what lets the parse-accepted slot render instead of
+            // throwing only at ToSql()/Single().
+            IReadOnlyList<IPropertyMetadata> slotProperties;
+            if (DataContextCache.Metadata.TryGetValue(entityTypes[slot], out var metadata) && metadata.Properties.Count > 0)
+            {
+                slotProperties = metadata.Properties;
+            }
+            else
+            {
+                slotProperties = JoinedReturningProjection.ShapeColumns(entityTypes[slot]);
+                if (slotProperties.Count == 0)
+                    throw new QueryPreparationException(
+                        $"No metadata is registered for {entityTypes[slot].Name} and it exposes no readable columns, so the identity multi-table RETURNING form cannot expand item {slot + 1} ('{projectionType.GetProperty("Item" + (slot + 1))?.Name ?? "Item" + (slot + 1)}' of {projectionType.Name}). Register every joined entity with From<T>/Join<T> on the same data context.");
+            }
+
+            var itemAccess = Expression.Property(parameter, "Item" + (slot + 1));
+            foreach (var property in slotProperties)
+            {
+                if (property.RangeColumns is not null)
+                    throw RangeColumnPairs.NotReturnable(property);
+
+                entries.Add((Expression.Property(itemAccess, property.PropertyInfo), slot, property.ColumnName));
+            }
+        }
+
+        // Allocate across the whole flattened output so a repeated column or an alias-shaped column name
+        // cannot collapse two slots onto one alias. The same ordered pairs drive the prepared CTE shape
+        // (see MutationCteQuery.BuildShape), so the RETURNING list and the outer read always agree.
+        var pairs = new (int Slot, string Column)[entries.Count];
+        for (var i = 0; i < entries.Count; i++)
+            pairs[i] = (entries[i].Slot, entries[i].Column);
+
+        var aliases = ProjectionAliasCache.AllocateIdentityAliases(pairs);
+        var members = new List<(Expression, string)>(entries.Count);
+        for (var i = 0; i < entries.Count; i++)
+            members.Add((entries[i].Expression, aliases[i]));
+
+        return members;
+    }
+
+    /// <summary>
+    /// Recognizes an identity member access of the form <c>p.ItemN.Member</c> and yields the zero-based
+    /// item slot (<c>ItemN</c> is one-based, so <c>slot = ordinal - 1</c>) and the CLR member name. Used
+    /// to report a member of a returned identity item that the joined source shape cannot resolve, with
+    /// the slot/member address instead of the raw column-resolution error.
+    /// </summary>
+    /// <param name="expression">The returning member expression to inspect.</param>
+    /// <param name="slot">The zero-based item slot when the expression addresses an identity member.</param>
+    /// <param name="member">The CLR member name when the expression addresses an identity member.</param>
+    /// <returns><see langword="true"/> when the expression is a <c>p.ItemN.Member</c> access.</returns>
+    private static bool TryGetIdentityAddress(Expression expression, out int slot, out string member)
+    {
+        slot = -1;
+        member = string.Empty;
+
+        if (expression is not MemberExpression memberAccess || memberAccess.Member is not PropertyInfo memberProperty)
+            return false;
+
+        var target = memberAccess.Expression;
+        while (target is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            target = unary.Operand;
+
+        if (target is not MemberExpression itemAccess || itemAccess.Member is not PropertyInfo itemProperty)
+            return false;
+
+        var itemName = itemProperty.Name;
+        if (itemName.Length <= 4
+            || !itemName.StartsWith("Item", StringComparison.Ordinal)
+            || !int.TryParse(itemName.AsSpan(4), out var ordinal)
+            || ordinal < 1)
+        {
+            return false;
+        }
+
+        slot = ordinal - 1;
+        member = memberProperty.Name;
+        return true;
+    }
 
     /// <summary>
     /// Returns <paramref name="hints"/> with <paramref name="hint"/> appended, or a single-element list

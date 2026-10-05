@@ -1,24 +1,30 @@
 # Data modification (DELETE)
 
-> nextorm removes rows with the same explicit-command model as `INSERT`: [`DeleteFrom<TEntity>()`](xref:NextORM.Core.DataContextExtensions.DeleteFrom``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `DELETE FROM <table> [WHERE ...]`, the context extension [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) deletes by the entity's declared key, and a joined query can end in a multi-table delete. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
+> nextorm removes rows with the same explicit-command model as `INSERT`: [`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) builds a parameterised `DELETE FROM <table> [WHERE ...]`, the context extension [`Delete<TEntity>(entity)`](xref:NextORM.Core.DataContextExtensions.Delete``1(NextORM.Core.IDataContext,``0)) deletes by the entity's declared key, and a joined query can end in a multi-table delete. There is no change tracking and no `SaveChanges`: every terminal issues exactly one command.
 
 **Prerequisites:** [Data modification (INSERT)](15-insert-statement.md) · [Filtering (WHERE)](01-filtering-where.md) · [Joins](02-joins.md) · [Provider overview](../providers/overview.md)
 
 ## Deleting rows by predicate
 
-[`DeleteFrom<TEntity>()`](xref:NextORM.Core.DataContextExtensions.DeleteFrom``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) removes rows and returns the number of deleted rows:
+[`CreateDeleteBuilder<TEntity>()`](xref:NextORM.Core.DataContextExtensions.CreateDeleteBuilder``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) removes rows and returns the number of deleted rows:
 
 ```csharp
-var deleted = ctx.DeleteFrom<ISimpleEntity>()
+var deleted = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Delete();
 
-await ctx.DeleteFrom<ISimpleEntity>()
+await ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .DeleteAsync(cancellationToken);
 ```
 
-`Where` accepts the same predicate expressions as a query (`From<T>().Where(...)`), and repeating it combines the predicates with `and`. `DeleteFrom<T>().ToSql()` renders the statement without opening a connection.
+```sql
+-- PostgreSQL
+delete from simple_entity where id = 1
+delete from simple_entity where (age > 10)
+```
+
+`Where` accepts the same predicate expressions as a query (`From<T>().Where(...)`), and repeating it combines the predicates with `and`. `CreateDeleteBuilder<T>().ToSql()` renders the statement without opening a connection.
 
 * Values captured in the predicate become parameters (`x => x.Id == id` renders `id = @id`); inline literals are emitted verbatim, exactly as in a query `WHERE`.
 * `Delete()`/`DeleteAsync()` return the affected-row count (`0` when nothing matched). ClickHouse reports no count (its mutation returns none).
@@ -28,7 +34,7 @@ await ctx.DeleteFrom<ISimpleEntity>()
 Deleting every row requires the explicit `All()` marker, so an unfiltered full-table delete cannot be written by accident. Combining `Where` and `All` throws `InvalidOperationException`:
 
 ```csharp
-ctx.DeleteFrom<ISimpleEntity>().All().Delete();   // delete from simple_entity
+ctx.CreateDeleteBuilder<ISimpleEntity>().All().Delete();   // delete from simple_entity
 ```
 
 ## Deleting by key
@@ -38,6 +44,11 @@ The key form deletes exactly the row identified by the entity's declared key (`[
 ```csharp
 ctx.Delete(new SimpleEntity { Id = 1 });          // delete from simple_entity where id = @p0
 await ctx.DeleteAsync(new SimpleEntity { Id = 1 });
+```
+
+```sql
+-- PostgreSQL
+delete from simple_entity where id = @p0
 ```
 
 ## Global query filters
@@ -55,7 +66,7 @@ the four `IgnoreFilters` overloads (all, by entity type, by filter key, key-and-
 is stateful and repeated calls accumulate:
 
 ```csharp
-ctx.DeleteFrom<Document>()
+ctx.CreateDeleteBuilder<Document>()
     .IgnoreFilters(["soft-delete"])   // keep tenant scoping, drop soft-delete
     .Where(d => d.IsDeleted)
     .Delete();
@@ -79,15 +90,21 @@ See [UPDATE and DELETE (DML)](../advanced/query-filters.md#update-and-delete-dml
 `Returning()` / `Returning(projection)` materialise the removed rows through the provider's `RETURNING`/`OUTPUT` form, read through `Single()`/`ToList()`:
 
 ```csharp
-var removed = ctx.DeleteFrom<ISimpleEntity>()
+var removed = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Age > 10)
     .Returning(x => new { x.Id, x.Name })
     .ToList();
 
-var one = ctx.DeleteFrom<ISimpleEntity>()
+var one = ctx.CreateDeleteBuilder<ISimpleEntity>()
     .Where(x => x.Id == 1)
     .Returning()
     .Single();
+```
+
+```sql
+-- PostgreSQL
+delete from simple_entity where (age > 10) returning id, name
+delete from simple_entity where id = 1 returning id, name, age
 ```
 
 | Provider | Form |
@@ -100,10 +117,10 @@ var one = ctx.DeleteFrom<ISimpleEntity>()
 
 ## Truncating a table
 
-`Truncate<TEntity>()` renders the provider's native `TRUNCATE TABLE`, resetting a table faster than `DeleteFrom<T>().All()`:
+`CreateTruncateBuilder<TEntity>()` renders the provider's native `TRUNCATE TABLE`, resetting a table faster than `CreateDeleteBuilder<T>().All()`:
 
 ```csharp
-var cleared = ctx.Truncate<ISimpleEntity>().Execute();   // truncate table simple_entity
+var cleared = ctx.CreateTruncateBuilder<ISimpleEntity>().Execute();   // truncate table simple_entity
 ```
 
 SQL Server, PostgreSQL, MySQL, MariaDB and ClickHouse have `TRUNCATE TABLE`; SQLite has no `TRUNCATE` and throws `NotSupportedException`, and the in-memory context is query-only and throws `NotSupportedException` too. `Execute()`/`ExecuteAsync()` return the affected-row count where the provider reports one (`0` otherwise).
@@ -119,6 +136,11 @@ var removed = await ctx.From<ISimpleEntity>()
     .DeleteAsync(cancellationToken);
 ```
 
+```sql
+-- PostgreSQL
+delete from simple_entity as "t1" using complex_entity as "t2" where cast(t1.id as bigint) = t2.id and t2.somestring = 'archived'
+```
+
 | Provider | Rendered form |
 |---|---|
 | PostgreSQL | `DELETE FROM <t> AS a USING <u> AS b WHERE ...` |
@@ -128,8 +150,44 @@ var removed = await ctx.From<ISimpleEntity>()
 
 * The target is the first table (`Item1`); only `Join` (INNER) is accepted. `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin` and the `APPLY` joins throw `NotSupportedException`, because they change which rows are deleted.
 * The terminals are extension methods on the joined builder for arities 2–8; `Delete()`/`DeleteAsync()` return the affected-row count. `ToSql()` renders the statement without opening a connection and throws on an in-memory context.
-* `Returning` is not available on a multi-table delete; read the removed rows back with a separate query if needed.
+* `CreateDeleteJoinBuilder()` starts the row-returning multi-table delete; its `Returning()`/`Returning(projection)` terminals are available on PostgreSQL only (`DELETE ... USING ... RETURNING`), on INNER joins and for arities 2–8. `Returning()` — equivalent to `Returning(p => p)` — returns the whole joined projection (`Projection<T1, ...>`): every returnable mapped property of every item slot, in source order. `Item1` is the delete target and every repeated CLR type stays distinct by slot, so a self-join of one entity keeps its `Item1`/`Item2` values apart. A delete returns the removed-row values. `Returning(p => new { p.Item1.Id, p.Item2.Name })` returns an explicit projection instead, read through `Single()`/`ToList()`; returned columns get deterministic per-slot aliases, and explicit projections are unchanged. No `Returning()` call adds a `RETURNING` list implicitly. It works both as a normal terminal and as a data-modifying CTE body through `With(name, delete)`. A returned item whose mapped property is a multi-column `Range<T>` is rejected, and a required member with no counterpart in the joined source shape is rejected naming the slot and member. See [Common table expressions](08-cte.md).
 * A joined side may be a CTE, whose declaration is hoisted before the `DELETE` (PostgreSQL `with c as (…) delete from <t> as "t1" using c as "t2" where …`); the target stays the first physical table and the CTE may sit on any join position. See [Common table expressions](08-cte.md).
+
+```csharp
+var all = await ctx.From<IOrder>()
+    .Join(ctx.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .Where(p => p.Item2.Tier == "gold")
+    .CreateDeleteJoinBuilder()
+    .Returning()          // equivalent to .Returning(p => p)
+    .ToListAsync(cancellationToken);
+```
+
+### DELETE as a data-modifying CTE body (PostgreSQL)
+
+On PostgreSQL a row-returning joined `DELETE` can be the body of a data-modifying CTE: pass it to
+`With(name, delete)` and read the removed rows typed through `From(name)`:
+
+```csharp
+var doomed = dataContext
+    .From<IOrder>()
+    .Join(dataContext.From<ICustomer>(), (o, c) => o.CustomerId == c.Id)
+    .CreateDeleteJoinBuilder()
+    .Returning(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.Name });
+
+var removed = dataContext
+    .With("del", doomed)
+    .From("del")
+    .Select(r => new { r.OrderId, r.CustomerName })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+with del as (delete from orders as "t1" using customers as "t2" where t1.customer_id = t2.id returning t1.id as "OrderId", t2.name as "CustomerName") select "OrderId", "CustomerName" from del as "t1"
+```
+
+A `RETURNING` projection is required (a side-effect-only mutation is out of scope), and such a statement
+is never plan-cached. See [Common table expressions](08-cte.md).
 
 ### Delete based on a CTE
 
@@ -151,7 +209,7 @@ The `with …` is emitted before the mutation on every provider with a multi-tab
 
 ## Notes and out-of-scope
 
-* The in-memory context is query-only: `Delete`/`DeleteAsync`/`Truncate` (like every other write) throw `NotSupportedException`; query your own collections instead. `INSERT` on the in-memory provider is likewise out of scope by design.
+* The in-memory context is query-only: `Delete`/`DeleteAsync`/`CreateTruncateBuilder` (like every other write) throw `NotSupportedException`; query your own collections instead. `INSERT` on the in-memory provider is likewise out of scope by design.
 * `DELETE` is not prepared or plan-cached — optimisation in nextorm targets read-only queries only (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one command per call.
 * There is deliberately no built-in soft-delete behaviour; soft delete is expressed with a [global query filter](../advanced/query-filters.md) plus an explicit `UPDATE`. A full `MERGE` with arbitrary branches is not part of this surface, and `UPDATE` lives in its own guide ([Data modification (UPDATE)](17-update-statement.md)).
 

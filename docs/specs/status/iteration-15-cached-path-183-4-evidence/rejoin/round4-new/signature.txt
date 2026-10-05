@@ -1,0 +1,4 @@
+Where_CachedHit_PlanOnly=458410
+Where_CachedHit_ToList=531572
+Join_CachedHit_PlanOnly=1172871
+Join_CachedHit_ToList=1256295

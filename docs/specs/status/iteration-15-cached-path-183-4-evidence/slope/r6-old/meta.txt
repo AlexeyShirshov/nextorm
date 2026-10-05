@@ -1,0 +1,9 @@
+round=6 variant=old inprocess=true workdir=/home/alex/sources/nextorm-worktrees/183-baseline
+NEXTORM_BENCH_FULL=<unset>
+NEXTORM_BENCH_DB=/home/alex/sources/nextorm-worktrees/183-baseline/benchmarks/nextorm.benchmark/data/test.db
+loadavg_before=4.12 4.14 3.75 6/553 50452
+start=2026-10-05T07:35:06Z
+exit=0
+loadavg_after=4.34 4.19 3.78 6/519 50975
+end=2026-10-05T07:35:33Z
+artifact_copied=yes

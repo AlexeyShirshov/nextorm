@@ -26,65 +26,82 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
     /// <typeparam name="T3">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3> Join<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
-        => JoinCore(_, JoinType.Inner, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3> Join<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Inner, joinCondition, options);
     /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="T3"/>; unmatched left-hand rows are kept with <see langword="null"/> values on the right.</summary>
     /// <typeparam name="T3">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3> LeftJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
-        => JoinCore(_, JoinType.Left, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3> LeftJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Left, joinCondition, options);
     /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="T3"/>; unmatched right-hand rows are kept with <see langword="null"/> values on the left.</summary>
     /// <typeparam name="T3">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3> RightJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
-        => JoinCore(_, JoinType.Right, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3> RightJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Right, joinCondition, options);
     /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="T3"/>; rows from both sides are kept, with <see langword="null"/> on the missing side.</summary>
     /// <typeparam name="T3">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3> FullJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
-        => JoinCore(_, JoinType.Full, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3> FullJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Full, joinCondition, options);
     /// <summary>Adds a <c>CROSS JOIN</c> over <typeparamref name="T3"/>, producing the Cartesian product without a join condition.</summary>
     /// <typeparam name="T3">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3> CrossJoin<T3>(EntityBuilder<T3> _)
-        => JoinCore(_, JoinType.Cross, null);
+    public new JoinedEntityBuilder<T1, T2, T3> CrossJoin<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over <typeparamref name="T3"/>, evaluating the joined table once per left-hand row; rows with no match are dropped.</summary>
     /// <typeparam name="T3">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3> CrossApply<T3>(EntityBuilder<T3> _)
-        => JoinCore(_, JoinType.CrossApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3> CrossApply<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over <typeparamref name="T3"/>, evaluating the joined table once per left-hand row; unmatched left rows are kept.</summary>
     /// <typeparam name="T3">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T3"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(EntityBuilder<T3> _)
-        => JoinCore(_, JoinType.OuterApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3> OuterApply<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2> SemiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2>)base.SemiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2> SemiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2> AntiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2>)base.AntiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2> AntiJoin<T3>(EntityBuilder<T3> _, Expression<Func<Projection<T1, T2>, T3, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3> PasteJoin<T3>(EntityBuilder<T3> _)
-        => JoinCore(_, JoinType.Paste, null);
-    private JoinedEntityBuilder<T1, T2, T3> JoinCore<T3>(EntityBuilder<T3> _, JoinType joinType, LambdaExpression? joinCondition)
+    internal new JoinedEntityBuilder<T1, T2, T3> PasteJoin<T3>(EntityBuilder<T3> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Paste, null, options);
+    private JoinedEntityBuilder<T1, T2, T3> JoinCore<T3>(EntityBuilder<T3> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
         if (Condition is not null)
             throw new NotImplementedException();
 
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T3) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
+        {
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            EntityType = joinCondition is null ? typeof(T3) : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        });
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -104,19 +121,11 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2> Global()
-        => (JoinedEntityBuilder<T1, T2>)base.Global();
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2> WithStrictness(JoinStrictness strictness)
-        => (JoinedEntityBuilder<T1, T2>)base.WithStrictness(strictness);
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2>)base.LeftArrayJoin(array);
-    /// <inheritdoc/>
-    protected override void OnLastJoinReplaced(JoinExpression join) => JoinCondition = join;
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -147,62 +156,79 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     /// <typeparam name="T4">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> Join<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
-        => JoinCore(_, JoinType.Inner, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4> Join<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Inner, joinCondition, options);
     /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="T4"/>; unmatched left-hand rows are kept with <see langword="null"/> values on the right.</summary>
     /// <typeparam name="T4">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> LeftJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
-        => JoinCore(_, JoinType.Left, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4> LeftJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Left, joinCondition, options);
     /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="T4"/>; unmatched right-hand rows are kept with <see langword="null"/> values on the left.</summary>
     /// <typeparam name="T4">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> RightJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
-        => JoinCore(_, JoinType.Right, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4> RightJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Right, joinCondition, options);
     /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="T4"/>; rows from both sides are kept, with <see langword="null"/> on the missing side.</summary>
     /// <typeparam name="T4">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> FullJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
-        => JoinCore(_, JoinType.Full, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4> FullJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Full, joinCondition, options);
     /// <summary>Adds a <c>CROSS JOIN</c> over <typeparamref name="T4"/>, producing the Cartesian product without a join condition.</summary>
     /// <typeparam name="T4">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossJoin<T4>(EntityBuilder<T4> _)
-        => JoinCore(_, JoinType.Cross, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossJoin<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over <typeparamref name="T4"/>, evaluating the joined table once per left-hand row; rows with no match are dropped.</summary>
     /// <typeparam name="T4">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossApply<T4>(EntityBuilder<T4> _)
-        => JoinCore(_, JoinType.CrossApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4> CrossApply<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over <typeparamref name="T4"/>, evaluating the joined table once per left-hand row; unmatched left rows are kept.</summary>
     /// <typeparam name="T4">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T4"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(EntityBuilder<T4> _)
-        => JoinCore(_, JoinType.OuterApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4> OuterApply<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3> SemiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3>)base.SemiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3> SemiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3> AntiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3>)base.AntiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3> AntiJoin<T4>(EntityBuilder<T4> _, Expression<Func<Projection<T1, T2, T3>, T4, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> PasteJoin<T4>(EntityBuilder<T4> _)
-        => JoinCore(_, JoinType.Paste, null);
-    private JoinedEntityBuilder<T1, T2, T3, T4> JoinCore<T4>(EntityBuilder<T4> _, JoinType joinType, LambdaExpression? joinCondition)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> PasteJoin<T4>(EntityBuilder<T4> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Paste, null, options);
+    private JoinedEntityBuilder<T1, T2, T3, T4> JoinCore<T4>(EntityBuilder<T4> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T4) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
+        {
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            EntityType = joinCondition is null ? typeof(T4) : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        });
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -215,16 +241,10 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3> Global()
-        => (JoinedEntityBuilder<T1, T2, T3>)base.Global();
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3> WithStrictness(JoinStrictness strictness)
-        => (JoinedEntityBuilder<T1, T2, T3>)base.WithStrictness(strictness);
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -250,62 +270,79 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     /// <typeparam name="T5">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Join<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
-        => JoinCore(_, JoinType.Inner, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Join<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Inner, joinCondition, options);
     /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="T5"/>; unmatched left-hand rows are kept with <see langword="null"/> values on the right.</summary>
     /// <typeparam name="T5">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
-        => JoinCore(_, JoinType.Left, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Left, joinCondition, options);
     /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="T5"/>; unmatched right-hand rows are kept with <see langword="null"/> values on the left.</summary>
     /// <typeparam name="T5">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> RightJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
-        => JoinCore(_, JoinType.Right, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> RightJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Right, joinCondition, options);
     /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="T5"/>; rows from both sides are kept, with <see langword="null"/> on the missing side.</summary>
     /// <typeparam name="T5">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> FullJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
-        => JoinCore(_, JoinType.Full, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> FullJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Full, joinCondition, options);
     /// <summary>Adds a <c>CROSS JOIN</c> over <typeparamref name="T5"/>, producing the Cartesian product without a join condition.</summary>
     /// <typeparam name="T5">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossJoin<T5>(EntityBuilder<T5> _)
-        => JoinCore(_, JoinType.Cross, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossJoin<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over <typeparamref name="T5"/>, evaluating the joined table once per left-hand row; rows with no match are dropped.</summary>
     /// <typeparam name="T5">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossApply<T5>(EntityBuilder<T5> _)
-        => JoinCore(_, JoinType.CrossApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> CrossApply<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over <typeparamref name="T5"/>, evaluating the joined table once per left-hand row; unmatched left rows are kept.</summary>
     /// <typeparam name="T5">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T5"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(EntityBuilder<T5> _)
-        => JoinCore(_, JoinType.OuterApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> OuterApply<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> SemiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.SemiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> SemiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> AntiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.AntiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> AntiJoin<T5>(EntityBuilder<T5> _, Expression<Func<Projection<T1, T2, T3, T4>, T5, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> PasteJoin<T5>(EntityBuilder<T5> _)
-        => JoinCore(_, JoinType.Paste, null);
-    private JoinedEntityBuilder<T1, T2, T3, T4, T5> JoinCore<T5>(EntityBuilder<T5> _, JoinType joinType, LambdaExpression? joinCondition)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> PasteJoin<T5>(EntityBuilder<T5> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Paste, null, options);
+    private JoinedEntityBuilder<T1, T2, T3, T4, T5> JoinCore<T5>(EntityBuilder<T5> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T5) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
+        {
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            EntityType = joinCondition is null ? typeof(T5) : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        });
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -318,16 +355,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> Global()
-        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.Global();
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> WithStrictness(JoinStrictness strictness)
-        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.WithStrictness(strictness);
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -353,62 +384,79 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     /// <typeparam name="T6">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Join<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
-        => JoinCore(_, JoinType.Inner, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Join<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Inner, joinCondition, options);
     /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="T6"/>; unmatched left-hand rows are kept with <see langword="null"/> values on the right.</summary>
     /// <typeparam name="T6">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
-        => JoinCore(_, JoinType.Left, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Left, joinCondition, options);
     /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="T6"/>; unmatched right-hand rows are kept with <see langword="null"/> values on the left.</summary>
     /// <typeparam name="T6">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> RightJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
-        => JoinCore(_, JoinType.Right, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> RightJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Right, joinCondition, options);
     /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="T6"/>; rows from both sides are kept, with <see langword="null"/> on the missing side.</summary>
     /// <typeparam name="T6">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> FullJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
-        => JoinCore(_, JoinType.Full, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> FullJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Full, joinCondition, options);
     /// <summary>Adds a <c>CROSS JOIN</c> over <typeparamref name="T6"/>, producing the Cartesian product without a join condition.</summary>
     /// <typeparam name="T6">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossJoin<T6>(EntityBuilder<T6> _)
-        => JoinCore(_, JoinType.Cross, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossJoin<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over <typeparamref name="T6"/>, evaluating the joined table once per left-hand row; rows with no match are dropped.</summary>
     /// <typeparam name="T6">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossApply<T6>(EntityBuilder<T6> _)
-        => JoinCore(_, JoinType.CrossApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> CrossApply<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over <typeparamref name="T6"/>, evaluating the joined table once per left-hand row; unmatched left rows are kept.</summary>
     /// <typeparam name="T6">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T6"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(EntityBuilder<T6> _)
-        => JoinCore(_, JoinType.OuterApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> OuterApply<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> SemiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.SemiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> SemiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> AntiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.AntiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> AntiJoin<T6>(EntityBuilder<T6> _, Expression<Func<Projection<T1, T2, T3, T4, T5>, T6, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> PasteJoin<T6>(EntityBuilder<T6> _)
-        => JoinCore(_, JoinType.Paste, null);
-    private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> JoinCore<T6>(EntityBuilder<T6> _, JoinType joinType, LambdaExpression? joinCondition)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> PasteJoin<T6>(EntityBuilder<T6> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Paste, null, options);
+    private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> JoinCore<T6>(EntityBuilder<T6> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T6) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
+        {
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            EntityType = joinCondition is null ? typeof(T6) : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        });
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -421,16 +469,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Global()
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.Global();
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> WithStrictness(JoinStrictness strictness)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.WithStrictness(strictness);
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -456,62 +498,79 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     /// <typeparam name="T7">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Join<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
-        => JoinCore(_, JoinType.Inner, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Join<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Inner, joinCondition, options);
     /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="T7"/>; unmatched left-hand rows are kept with <see langword="null"/> values on the right.</summary>
     /// <typeparam name="T7">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
-        => JoinCore(_, JoinType.Left, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Left, joinCondition, options);
     /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="T7"/>; unmatched right-hand rows are kept with <see langword="null"/> values on the left.</summary>
     /// <typeparam name="T7">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> RightJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
-        => JoinCore(_, JoinType.Right, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> RightJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Right, joinCondition, options);
     /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="T7"/>; rows from both sides are kept, with <see langword="null"/> on the missing side.</summary>
     /// <typeparam name="T7">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> FullJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
-        => JoinCore(_, JoinType.Full, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> FullJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Full, joinCondition, options);
     /// <summary>Adds a <c>CROSS JOIN</c> over <typeparamref name="T7"/>, producing the Cartesian product without a join condition.</summary>
     /// <typeparam name="T7">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossJoin<T7>(EntityBuilder<T7> _)
-        => JoinCore(_, JoinType.Cross, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossJoin<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over <typeparamref name="T7"/>, evaluating the joined table once per left-hand row; rows with no match are dropped.</summary>
     /// <typeparam name="T7">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossApply<T7>(EntityBuilder<T7> _)
-        => JoinCore(_, JoinType.CrossApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> CrossApply<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over <typeparamref name="T7"/>, evaluating the joined table once per left-hand row; unmatched left rows are kept.</summary>
     /// <typeparam name="T7">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T7"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(EntityBuilder<T7> _)
-        => JoinCore(_, JoinType.OuterApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> OuterApply<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> SemiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.SemiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> SemiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> AntiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.AntiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> AntiJoin<T7>(EntityBuilder<T7> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, T7, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> PasteJoin<T7>(EntityBuilder<T7> _)
-        => JoinCore(_, JoinType.Paste, null);
-    private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> JoinCore<T7>(EntityBuilder<T7> _, JoinType joinType, LambdaExpression? joinCondition)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> PasteJoin<T7>(EntityBuilder<T7> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Paste, null, options);
+    private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> JoinCore<T7>(EntityBuilder<T7> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T7) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
+        {
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            EntityType = joinCondition is null ? typeof(T7) : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        });
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -524,16 +583,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Global()
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.Global();
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> WithStrictness(JoinStrictness strictness)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.WithStrictness(strictness);
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -559,62 +612,79 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     /// <typeparam name="T8">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Join<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
-        => JoinCore(_, JoinType.Inner, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Join<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Inner, joinCondition, options);
     /// <summary>Adds a <c>LEFT JOIN</c> over <typeparamref name="T8"/>; unmatched left-hand rows are kept with <see langword="null"/> values on the right.</summary>
     /// <typeparam name="T8">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
-        => JoinCore(_, JoinType.Left, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Left, joinCondition, options);
     /// <summary>Adds a <c>RIGHT JOIN</c> over <typeparamref name="T8"/>; unmatched right-hand rows are kept with <see langword="null"/> values on the left.</summary>
     /// <typeparam name="T8">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> RightJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
-        => JoinCore(_, JoinType.Right, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> RightJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Right, joinCondition, options);
     /// <summary>Adds a <c>FULL JOIN</c> over <typeparamref name="T8"/>; rows from both sides are kept, with <see langword="null"/> on the missing side.</summary>
     /// <typeparam name="T8">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
     /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="options">Optional per-join configuration, for example <c>j =&gt; j.Global()</c> or <c>j =&gt; j.WithStrictness(JoinStrictness.Any)</c>.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> FullJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
-        => JoinCore(_, JoinType.Full, joinCondition);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> FullJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Full, joinCondition, options);
     /// <summary>Adds a <c>CROSS JOIN</c> over <typeparamref name="T8"/>, producing the Cartesian product without a join condition.</summary>
     /// <typeparam name="T8">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossJoin<T8>(EntityBuilder<T8> _)
-        => JoinCore(_, JoinType.Cross, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossJoin<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Cross, null, options);
     /// <summary>Adds a <c>CROSS APPLY</c> over <typeparamref name="T8"/>, evaluating the joined table once per left-hand row; rows with no match are dropped.</summary>
     /// <typeparam name="T8">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossApply<T8>(EntityBuilder<T8> _)
-        => JoinCore(_, JoinType.CrossApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> CrossApply<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.CrossApply, null, options);
     /// <summary>Adds an <c>OUTER APPLY</c> over <typeparamref name="T8"/>, evaluating the joined table once per left-hand row; unmatched left rows are kept.</summary>
     /// <typeparam name="T8">The entity type of the joined table.</typeparam>
     /// <param name="_">The builder identifying the table to join; only its table metadata is used, not its query state.</param>
+    /// <param name="options">Optional per-join configuration; a cross join rejects every modifier at render time, while an APPLY folds a join hint into the statement-level hint comment on inline-hint dialects.</param>
     /// <returns>A builder over the projection extended with <typeparamref name="T8"/>.</returns>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(EntityBuilder<T8> _)
-        => JoinCore(_, JoinType.OuterApply, null);
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> OuterApply<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.OuterApply, null, options);
     /// <summary>Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> SemiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.SemiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> SemiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.SemiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>; only the left-hand columns survive.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> AntiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.AntiJoin(_, joinCondition);
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> AntiJoin<T8>(EntityBuilder<T8> _, Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, T8, bool>> joinCondition, Action<JoinOptions>? options = null)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.AntiJoin(_, joinCondition, options);
     /// <summary>Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>; the projection exposes both sides.</summary>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> PasteJoin<T8>(EntityBuilder<T8> _)
-        => JoinCore(_, JoinType.Paste, null);
-    private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> JoinCore<T8>(EntityBuilder<T8> _, JoinType joinType, LambdaExpression? joinCondition)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> PasteJoin<T8>(EntityBuilder<T8> _, Action<JoinOptions>? options = null)
+        => JoinCore(_, JoinType.Paste, null, options);
+    private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> JoinCore<T8>(EntityBuilder<T8> _, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
     {
+        var opts = new JoinOptions();
+        options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T8) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType)
+        {
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
+            EntityType = joinCondition is null ? typeof(T8) : null,
+            Strictness = opts.Strictness ?? JoinStrictness.Default,
+            IsGlobal = opts.IsGlobal,
+            JoinHint = opts.JoinHint,
+            TableHints = opts.TableHints
+        });
         cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
@@ -627,16 +697,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Global()
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.Global();
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> WithStrictness(JoinStrictness strictness)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.WithStrictness(strictness);
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>
@@ -676,16 +740,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> : EntityBuilder
         return r;
     }
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Global()
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.Global();
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> WithStrictness(JoinStrictness strictness)
-        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.WithStrictness(strictness);
-    /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> ArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.ArrayJoin(array);
     /// <inheritdoc/>
-    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
+    internal new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.LeftArrayJoin(array);
     /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
     /// <param name="condition">The predicate each row must satisfy.</param>

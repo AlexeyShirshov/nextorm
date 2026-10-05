@@ -1,0 +1,6 @@
+tag=new-filterB
+tree=/home/alex/sources/nextorm
+exit=0
+wall=18.803
+loadavg=3.61 4.79 5.08 9/523 82224
+args=--filter *Join_CachedHit*

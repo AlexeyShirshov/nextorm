@@ -5,8 +5,9 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Validates the rows written by an <c>INSERT</c> or <c>MERGE</c> against the target entity type's
-/// active global query filters. The filters are never injected into the target of a write; instead the
-/// values being written are checked before the statement executes, and a violation raises a
+/// active global query filters. On a supported <c>MERGE</c> (and <c>UPDATE</c>/<c>DELETE</c>) the filter
+/// is also injected into the statement's target predicate; the remaining writes — and the inserted rows
+/// of a merge — are checked before the statement executes, and a violation raises a
 /// <see cref="QueryFilterException"/>.
 /// </summary>
 /// <remarks>
@@ -172,7 +173,7 @@ internal static class QueryFilterValidator
 
     private static List<(string Key, Func<TEntity, bool> Predicate)> BuildEntityPredicates<TEntity>(QueryFilterScope scope, IDataContext dataContext, string operation)
     {
-        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope);
+        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope, dataContext);
         var predicates = new List<(string, Func<TEntity, bool>)>(filters.Count);
 
         foreach (var filter in filters)
@@ -202,7 +203,7 @@ internal static class QueryFilterValidator
 
     private static List<(string Key, Func<object?[], bool> Predicate)> BuildColumnPredicates(Type entityType, IReadOnlyList<IPropertyMetadata> writtenColumns, QueryFilterScope scope, IDataContext dataContext, string operation)
     {
-        var filters = QueryFilterResolver.GetFilters(entityType, scope);
+        var filters = QueryFilterResolver.GetFilters(entityType, scope, dataContext);
         var predicates = new List<(string, Func<object?[], bool>)>(filters.Count);
         if (filters.Count == 0)
             return predicates;
@@ -320,7 +321,7 @@ internal static class QueryFilterValidator
         string operation,
         IReadOnlyList<IPropertyMetadata>? projectedColumns)
     {
-        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope);
+        var filters = QueryFilterResolver.GetFilters(typeof(TEntity), scope, dataContext);
         if (filters.Count == 0)
             return null;
 

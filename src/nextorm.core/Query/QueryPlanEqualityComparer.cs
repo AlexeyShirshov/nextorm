@@ -45,6 +45,26 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         if (x == y) return true;
         if (x is null || y is null) return false;
 
+        return EqualsCore(x, y, includeCtes: true);
+    }
+
+    /// <summary>
+    /// Compares two CTE bodies for the plan key. A body built as a nested <c>With(...).From(...)</c>
+    /// carries the declarations of its own <c>WITH</c>, but those are hoisted into the enclosing
+    /// statement's top-level list (<see cref="CteHoister"/>) and are compared there, so they are ignored
+    /// here; otherwise the nested form and the equivalent flat <c>With(...).With(...)</c> chain would key
+    /// different plans.
+    /// </summary>
+    internal bool CteBodiesEqual(QueryCommand? x, QueryCommand? y)
+    {
+        if (x == y) return true;
+        if (x is null || y is null) return false;
+
+        return EqualsCore(x, y, includeCtes: false);
+    }
+
+    private bool EqualsCore(QueryCommand x, QueryCommand y, bool includeCtes)
+    {
         if (x.EntityType != y.EntityType) return false;
 
         if (x.ResultType != y.ResultType) return false;
@@ -73,6 +93,23 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (xDistinctOn is null || yDistinctOn is null) return false;
 
             if (!_expComparer.Equals(xDistinctOn.Expression, yDistinctOn.Expression)) return false;
+        }
+
+        var xExtremeRow = x.ExtremeRow;
+        var yExtremeRow = y.ExtremeRow;
+        if (xExtremeRow is not null || yExtremeRow is not null)
+        {
+            if (xExtremeRow is null || yExtremeRow is null) return false;
+
+            if (xExtremeRow.Kind != yExtremeRow.Kind) return false;
+
+            if (xExtremeRow.Ties != yExtremeRow.Ties) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.ValueSelector, yExtremeRow.ValueSelector)) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.GroupBy, yExtremeRow.GroupBy)) return false;
+
+            if (!_expComparer.Equals(xExtremeRow.Projection, yExtremeRow.Projection)) return false;
         }
 
         if (!WindowsEqual(x.Windows, y.Windows)) return false;
@@ -153,7 +190,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!Equals(x.UnionQuery, y.UnionQuery)) return false;
 
-        if (!CteDefinitionsEqual(x.Ctes, y.Ctes)) return false;
+        if (includeCtes && !CteDefinitionsEqual(x.Ctes, y.Ctes)) return false;
 
         if (!StringListsEqual(x.Hints, y.Hints)) return false;
 
@@ -302,7 +339,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
                 continue;
             }
 
-            if (!Equals(a.Query, b.Query)) return false;
+            if (!CteBodiesEqual(a.Query, b.Query)) return false;
         }
 
         return true;
@@ -319,6 +356,23 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         if (obj is null)
             return 0;
 
+        return GetHashCodeCore(obj, includeCtes: true);
+    }
+
+    /// <summary>
+    /// Hash of a CTE body that ignores the body's own nested declarations; see
+    /// <see cref="CteBodiesEqual"/>. Must stay consistent with its equality counterpart.
+    /// </summary>
+    internal int GetCteBodyHashCode(QueryCommand? obj)
+    {
+        if (obj is null)
+            return 0;
+
+        return GetHashCodeCore(obj, includeCtes: false);
+    }
+
+    private int GetHashCodeCore(QueryCommand obj, bool includeCtes)
+    {
         // #if PLAN_CACHE
         //         if (obj.PlanHash.HasValue)
         //             return obj.PlanHash.Value;
@@ -413,6 +467,19 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
                 hash.Add(distinctOn.Expression, _expComparer);
             }
 
+            if (obj.ExtremeRow is { } extremeRow)
+            {
+                hash.Add((int)extremeRow.Kind);
+                hash.Add((int)extremeRow.Ties);
+                hash.Add(extremeRow.ValueSelector, _expComparer);
+
+                if (extremeRow.GroupBy is { } extremeGroupBy)
+                    hash.Add(extremeGroupBy, _expComparer);
+
+                if (extremeRow.Projection is { } extremeProjection)
+                    hash.Add(extremeProjection, _expComparer);
+            }
+
             if (obj.TableSample is { } tablesample)
             {
                 hash.Add(tablesample.Method);
@@ -471,7 +538,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
                     hash.Add(outerReferences[i], _expComparer);
             }
 
-            if (obj.CtesPlanHash != 0)
+            if (includeCtes && obj.CtesPlanHash != 0)
                 hash.Add(obj.CtesPlanHash);
 
             if (obj.HintsPlanHash != 0)

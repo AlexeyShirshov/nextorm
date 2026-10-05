@@ -19,6 +19,16 @@
   `PublicAPI.Shipped.txt` содержит текущую поверхность; CI-шаг падает при незаявленном
   добавлении/удалении публичного члена.
 
+## Статус сопутствующего блокера размещения (join-alias)
+
+- ✅ **Размещение генератора join-alias закрыто (2026-10-01).** `src/nextorm.core/nextorm.core.csproj`
+  упаковывает `nextorm.core.sourcegenerator` в `analyzers/dotnet/cs` пакета `nextorm`
+  (`TargetsForTfmSpecificContentInPackage` → `_AddSourceGeneratorToPackage`, целевой путь
+  `TfmSpecificPackageFile PackagePath="analyzers/dotnet/cs"`), поэтому блокер «непривязанный stub /
+  изменение графа пакета» из `docs/specs/status/join-alias-113-1.md` (пункт 1) снят: потребителю не
+  нужна дополнительная ссылка. Новый публичный член `NextORM.Core.JoinSlotAttribute` внести в
+  `PublicAPI.Unshipped.txt` при заморозке (ср. IF6/DC3).
+
 ## Что вносить (не дублировать удалённое)
 
 - **Новое (Фазы 1–2):** 16 capability-интерфейсов `NextORM.Core.I*` и 16 nullable DIM-свойств

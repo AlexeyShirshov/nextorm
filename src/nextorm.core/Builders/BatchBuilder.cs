@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Data;
 using System.Data.Common;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
@@ -15,15 +16,15 @@ namespace NextORM.Core;
 /// <para>
 /// A provider capable of a single-round-trip batch opts in through
 /// <see cref="ISqlDialect.SupportsBatch"/> (PostgreSQL, SQL Server, MySQL, MariaDB and SQLite). The
-/// in-memory context has no batch executor, so <see cref="Batch(IDataContext)"/> rejects it immediately;
+/// in-memory context has no batch executor, so <see cref="CreateBatchBuilder(IDataContext)"/> rejects it immediately;
 /// a database-backed provider without the capability throws <see cref="NotSupportedException"/> when the
 /// batch renders instead of silently degrading to separate statements.
 /// </para>
 /// </summary>
 /// <example>
 /// <code>
-/// var rows = ctx.Batch()
-///     .Update(ctx.Update&lt;Order&gt;().Set(o =&gt; o.Status, "shipped").Where(o =&gt; o.Id == id))
+/// var rows = ctx.CreateBatchBuilder()
+///     .Update(ctx.CreateUpdateBuilder&lt;Order&gt;().Set(o =&gt; o.Status, "shipped").Where(o =&gt; o.Id == id))
 ///     .Query(ctx.From&lt;Order&gt;().Where(o =&gt; o.Id == id).Select(o =&gt; new { o.Id, o.Status }))
 ///     .ToList();
 /// </code>
@@ -34,7 +35,7 @@ public static class BatchExtensions
     /// <param name="context">The context that executes the batch.</param>
     /// <returns>A builder for the batch's statements.</returns>
     /// <exception cref="NotSupportedException">The context cannot execute batches (the in-memory context).</exception>
-    public static BatchBuilder Batch(this IDataContext context)
+    public static BatchBuilder CreateBatchBuilder(this IDataContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -184,6 +185,30 @@ public sealed class BatchBuilder
     {
         ArgumentNullException.ThrowIfNull(truncate);
         return AddMutation(truncate.DataContext, truncate.BuildBatchCommand(), nameof(truncate));
+    }
+
+    /// <summary>
+    /// Adds a verbatim, side-effecting raw SQL statement to the batch. The text is rendered exactly as
+    /// given — placeholders are not rewritten — and carries no parameters, so a value that must vary
+    /// cannot be captured from an expression tree. Useful for statements the command model does not
+    /// cover, such as SQL Server <c>INSERT ... EXEC</c> or scripts touching a session-scoped
+    /// <c>#temp</c> table. It must be added before the result-bearing queries. The text is executed
+    /// verbatim and binds no parameters, so pass only trusted SQL — never concatenate untrusted user
+    /// input into a raw statement.
+    /// </summary>
+    /// <param name="sql">The statement text; it runs before the result-bearing queries.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="sql"/> is <see langword="null"/>, empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">A result-bearing query has already been added; add raw statements before <see cref="Query{TResult}"/>/<see cref="AddQuery{TResult}"/>.</exception>
+    /// <remarks>The batch must still end with at least one result-bearing query.</remarks>
+    public BatchBuilder Raw(string sql)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sql);
+        if (_hasResult)
+            throw new InvalidOperationException("A result-bearing query has already been added; add raw statements before Query()/AddQuery().");
+
+        _steps.Add(BatchStepSpec.ForRaw(sql));
+        return this;
     }
 
     /// <summary>
@@ -338,17 +363,28 @@ public sealed class BatchBuilder
 /// The eagerly materialised result sets of a batch built with <see cref="BatchBuilder.AddQuery{TResult}"/>
 /// and executed with <see cref="BatchBuilder.Execute"/> or <see cref="BatchBuilder.ExecuteAsync"/>. Every
 /// set is fully buffered in memory, so the instance owns no reader or connection and is not disposable.
+/// The result object itself enumerates its result sets: <c>foreach (var set in result)</c> or
+/// <c>await foreach (var set in result)</c> yields a <see cref="ResultSet"/> cursor per set. The legacy
+/// <see cref="Read{TResult}"/> path reads sets positionally.
 /// </summary>
-public sealed class BatchResult
+public sealed class BatchResult : IEnumerable<ResultSet>, IAsyncEnumerable<ResultSet>, IResultSetCursorSource
 {
     private readonly IReadOnlyList<IList> _sets;
     private readonly IReadOnlyList<Type> _resultTypes;
+    private readonly IReadOnlyList<string[]> _columnNames;
     private int _index;
+    private int _cursorIndex = -1;
+    private bool _legacyReadUsed;
+    private bool _setsStarted;
+    private bool _setsEnumerated;
+    private bool _traversalActive;
+    private bool _currentCursorConsumed;
 
-    internal BatchResult(IReadOnlyList<IList> sets, IReadOnlyList<Type> resultTypes)
+    internal BatchResult(IReadOnlyList<IList> sets, IReadOnlyList<Type> resultTypes, IReadOnlyList<string[]> columnNames)
     {
         _sets = sets;
         _resultTypes = resultTypes;
+        _columnNames = columnNames;
     }
 
     /// <summary>The number of result sets the batch produced, in the order the queries were added.</summary>
@@ -365,11 +401,15 @@ public sealed class BatchResult
     /// one call per set (the first call returns the first set, the second call the second set, and so on).
     /// A call with the wrong <typeparamref name="TResult"/> throws without consuming the set, so it can be
     /// retried with the matching type; reading past the last set throws. Use
-    /// <see cref="ResultSetCount"/> to know how many sets exist.
+    /// <see cref="ResultSetCount"/> to know how many sets exist. This positional path cannot be mixed with
+    /// enumerating the result object.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">There is no further result set, or the next set's projected type is not <typeparamref name="TResult"/>.</exception>
+    /// <exception cref="InvalidOperationException">There is no further result set, the next set's projected type is not <typeparamref name="TResult"/>, or the result was enumerated.</exception>
     public IReadOnlyList<TResult> Read<TResult>()
     {
+        ThrowIfSetTraversalStarted();
+        _legacyReadUsed = true;
+
         if (_index >= _sets.Count)
             throw new InvalidOperationException($"The batch has {_sets.Count} result set(s); every result set has already been read.");
 
@@ -381,6 +421,156 @@ public sealed class BatchResult
         _index++;
         return set;
     }
+
+    /// <summary>
+    /// Returns an enumerator over the buffered result sets of the batch in the order the queries were
+    /// added, yielding a <see cref="ResultSet"/> cursor per set. Each set can be consumed once with
+    /// <see cref="ResultSet.Read{T}"/> or <see cref="ResultSet.ReadAsync{T}"/>.
+    /// </summary>
+    /// <returns>A one-shot, forward-only sequence of result-set cursors; empty when the batch has none.</returns>
+    /// <exception cref="InvalidOperationException">The result was already enumerated or read with <see cref="Read{TResult}"/>.</exception>
+    public IEnumerator<ResultSet> GetEnumerator()
+    {
+        BeginSetTraversal();
+        return EnumerateSets().GetEnumerator();
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    /// <summary>
+    /// Returns an async enumerator over the buffered result sets of the batch. See <see cref="GetEnumerator"/>;
+    /// the batch is eager, so this never touches a reader.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the traversal between sets.</param>
+    /// <returns>A one-shot, forward-only async sequence of result-set cursors; empty when the batch has none.</returns>
+    /// <exception cref="InvalidOperationException">The result was already enumerated or read with <see cref="Read{TResult}"/>.</exception>
+    public IAsyncEnumerator<ResultSet> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    {
+        BeginSetTraversal();
+        return EnumerateSetsAsync(cancellationToken).GetAsyncEnumerator(cancellationToken);
+    }
+
+    private IEnumerable<ResultSet> EnumerateSets()
+    {
+        if (_setsEnumerated)
+            throw AlreadyEnumerated();
+
+        _setsEnumerated = true;
+        _traversalActive = true;
+        try
+        {
+            for (var i = 0; i < _sets.Count; i++)
+            {
+                _cursorIndex = i;
+                _currentCursorConsumed = false;
+                yield return new ResultSet(this, i, _columnNames[i]);
+
+                InvalidateCurrentCursor();
+            }
+        }
+        finally
+        {
+            InvalidateCurrentCursor();
+            _traversalActive = false;
+        }
+    }
+
+    private async IAsyncEnumerable<ResultSet> EnumerateSetsAsync([EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        if (_setsEnumerated)
+            throw AlreadyEnumerated();
+
+        _setsEnumerated = true;
+        _traversalActive = true;
+        try
+        {
+            for (var i = 0; i < _sets.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _cursorIndex = i;
+                _currentCursorConsumed = false;
+                yield return new ResultSet(this, i, _columnNames[i]);
+
+                InvalidateCurrentCursor();
+            }
+
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            InvalidateCurrentCursor();
+            _traversalActive = false;
+        }
+    }
+
+    IReadOnlyList<T> IResultSetCursorSource.ReadCurrentSet<T>(ResultSet cursor)
+    {
+        var set = BeginCursorRead(cursor);
+        var expected = _resultTypes[cursor.Index];
+        if (expected != typeof(T))
+            throw new InvalidOperationException($"Result set {cursor.Index} projects '{expected.Name}', not '{typeof(T).Name}'; read it with the matching type.");
+
+        return (IReadOnlyList<T>)set;
+    }
+
+    IAsyncEnumerable<T> IResultSetCursorSource.ReadCurrentSetAsync<T>(ResultSet cursor, CancellationToken cancellationToken)
+        => ReadCurrentSetAsyncCore<T>(cursor, cancellationToken);
+
+    private async IAsyncEnumerable<T> ReadCurrentSetAsyncCore<T>(ResultSet cursor, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        // Mirrors ProcedureResult: consume the set when enumeration starts, not when the method is called.
+        var set = (IReadOnlyList<T>)((IResultSetCursorSource)this).ReadCurrentSet<T>(cursor);
+        foreach (var item in set)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    private IList BeginCursorRead(ResultSet cursor)
+    {
+        if (!cursor.IsInitialized
+            || !ReferenceEquals(cursor.Source, this)
+            || !_traversalActive
+            || cursor.Index != _cursorIndex)
+        {
+            throw new InvalidOperationException("The result-set cursor is stale: the outer traversal has advanced or ended, and a cursor is valid only while its set is current.");
+        }
+
+        if (_currentCursorConsumed)
+            throw new InvalidOperationException("This result set has already been read; each set can be read once, either eagerly or lazily.");
+
+        _currentCursorConsumed = true;
+        return _sets[cursor.Index];
+    }
+
+    private void InvalidateCurrentCursor()
+    {
+        _cursorIndex = -1;
+        _currentCursorConsumed = false;
+    }
+
+    private void BeginSetTraversal()
+    {
+        if (_legacyReadUsed)
+            throw new InvalidOperationException("Result sets were already read with Read<TResult>(); a batch supports a single traversal style.");
+
+        if (_setsStarted)
+            throw new InvalidOperationException("Result sets were already enumerated; each batch supports a single traversal.");
+
+        _setsStarted = true;
+    }
+
+    private void ThrowIfSetTraversalStarted()
+    {
+        if (_setsStarted)
+            throw new InvalidOperationException("Result sets are being enumerated; Read<TResult>() cannot be mixed with that traversal.");
+    }
+
+    private static InvalidOperationException AlreadyEnumerated()
+        => new("This result-set enumeration has already been consumed; each batch supports a single traversal.");
 }
 
 /// <summary>

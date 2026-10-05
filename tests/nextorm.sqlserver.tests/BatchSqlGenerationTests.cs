@@ -14,7 +14,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var sql = ctx.Batch()
+        var sql = ctx.CreateBatchBuilder()
             .CreateTable("archive_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("archive_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
@@ -27,7 +27,7 @@ public class BatchSqlGenerationTests
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.Batch()
+        var act = () => ctx.CreateBatchBuilder()
             .CreateTempTable("recent_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("recent_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
@@ -52,8 +52,8 @@ public class BatchSqlGenerationTests
         var value = 42;
         var min = 5;
 
-        var sql = ctx.Batch()
-            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+        var sql = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
             .Query(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .ToSql();
 
@@ -71,8 +71,8 @@ public class BatchSqlGenerationTests
         var min = 5;
         var max = 6;
 
-        var sql = ctx.Batch()
-            .Update(ctx.Update<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
+        var sql = ctx.CreateBatchBuilder()
+            .Update(ctx.CreateUpdateBuilder<ISimpleEntity>().Set(x => x.Id, value).Where(x => x.Id > min))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id > min).Select(x => new { x.Id }))
             .AddQuery(ctx.From<ISimpleEntity>().Where(x => x.Id < max).Select(x => new { x.Id }))
             .ToSql();
