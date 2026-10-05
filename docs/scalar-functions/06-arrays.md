@@ -142,18 +142,24 @@ result can be projected like a scalar column.
 
 > The row-value (tuple) surface is cross-provider and built from `System.Tuple.Create` /
 > `new Tuple<...>` / `System.Tuple<...>.ItemN`: a constructor renders through the dialect's row
-> constructor — `tuple(a, b)` on ClickHouse, `ROW(a, b)` on PostgreSQL — and access to an element of a
-> *server-side* row renders through the dialect's positional access (`tupleElement(pair, 1)` on
-> ClickHouse, `(pair).f1` on PostgreSQL). Access to an element of an *inline* constructor
-> (`Tuple.Create(a, b).Item1`, `new ValueTuple<...>(a, b).Item2`) folds to the argument, so it works on
-> every dialect that can express the constructor. `System.Tuple<,> ==` (reference equality in C#) is
+> constructor — `tuple(a, b)` on ClickHouse, `ROW(a, b)` on PostgreSQL, and the flat ANSI `(a, b)` on
+> MySQL/MariaDB/SQLite — and access to an element of a *server-side* row renders through the dialect's
+> positional access (`tupleElement(pair, 1)` on ClickHouse, `(pair).f1` on PostgreSQL). MySQL/MariaDB/SQLite
+> have no server-side element access, so `System.Tuple<...>.ItemN` on a server row throws
+> `NotSupportedException` there. Access to an element of an *inline* constructor
+> (`Tuple.Create(a, b).Item1`, `new ValueTuple<...>(a, b).Item2`) folds to the argument and works on every
+> dialect that can express the constructor. `System.Tuple<,> ==` (reference equality in C#) is
 > reinterpreted as a SQL row-value comparison (`Tuple.Create(x.A, x.B) == Tuple.Create(1, 'a')` →
-> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` cannot appear in an expression tree. Requires a provider
-> with a native row type (see [`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
-> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple); PostgreSQL and ClickHouse); SQL Server,
-> MySQL, MariaDB, SQLite and the in-memory provider reject the surface, and tuple `IN`/`Contains` over a
-> value list is not translated yet. `untuple` is not supported because it changes the result column set
-> rather than producing a scalar.
+> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` cannot appear in an expression tree. On PostgreSQL and
+> ClickHouse the surface is the native row type ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
+> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple)); on MySQL/MariaDB/SQLite the flat `(a, b)`
+> constructor is accepted only as a **direct comparison operand** in `WHERE`/`HAVING`/`JOIN ON` — in
+> `Select`/`ORDER BY`/`GROUP BY` or as a function argument it throws `NotSupportedException` at
+> preparation. SQL Server and the in-memory provider reject the surface. Tuple `IN`/`Contains` over a value
+> list and materialising a raw `ROW(...)` are not translated yet
+> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193),
+> [#194](https://github.com/AlexeyShirshov/nextorm/issues/194)). `untuple` is not supported because it
+> changes the result column set rather than producing a scalar.
 
 > The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
 > for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`

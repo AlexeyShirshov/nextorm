@@ -43,7 +43,7 @@ construct.
 | Duration / interval columns | yes | yes | partial (provider interval mapping) |
 | Native JSON documents | yes on PostgreSQL | partial (type + `@>`/`#>>`/`Json.Value`; not the full `jsonb_*` library) | partial (JSON column mapping + Npgsql `EF.Functions.Json*`) |
 | Arrays and higher-order array functions | yes on PostgreSQL and ClickHouse | partial (PostgreSQL array operators) | partial |
-| Row values / tuples | yes on PostgreSQL and ClickHouse | yes | partial |
+| Row values / tuples | yes — PostgreSQL `ROW`/`(row).fN` and ClickHouse `tuple`/`tupleElement`; flat `(a, b)` comparison operand on MySQL/MariaDB/SQLite | yes | partial |
 | Range types and range-over-scalar-columns | yes | partial | partial |
 | Collation and ordinal string semantics | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
 | Naming conventions (e.g. snake_case) | yes (opt-in, built-in) | partial | partial |

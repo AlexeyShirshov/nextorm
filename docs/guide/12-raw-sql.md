@@ -41,6 +41,13 @@ The raw statement is passed through verbatim, including comments. Parameter plac
 the underlying ADO.NET provider expects (`@name` for SQL Server/PostgreSQL; Microsoft.Data.Sqlite also
 accepts `@name` even though nextorm's generated SQLite SQL uses `$name`).
 
+> **Raw row values are not re-materialised.** A `ROW(...)` (PostgreSQL) or `tuple(...)` (ClickHouse) value
+> selected by a hand-written statement is read like any other server value, but nextorm cannot convert it
+> back into a `System.Tuple<...>` — raw row materialisation is tracked in
+> [#194](https://github.com/AlexeyShirshov/nextorm/issues/194). The flat `(a, b)` constructor is a
+> builder-side surface for direct `==`/`!=` predicate operands (see
+> [Row values](../scalar-functions/06-arrays.md)), not part of raw SQL.
+
 ## [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
 ```csharp

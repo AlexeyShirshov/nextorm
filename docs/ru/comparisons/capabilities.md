@@ -42,7 +42,7 @@
 | Колонки-длительности / interval | yes | yes | partial (только маппинг interval провайдером) |
 | Нативные JSON-документы | yes на PostgreSQL | partial (тип + `@>`/`#>>`/`Json.Value`; не полная библиотека `jsonb_*`) | partial (маппинг JSON-колонок + Npgsql `EF.Functions.Json*`) |
 | Массивы и higher-order функции над массивами | yes на PostgreSQL и ClickHouse | partial (операторы массивов PostgreSQL) | partial |
-| Row values / tuple | yes на PostgreSQL и ClickHouse | yes | partial |
+| Row values / tuple | yes — PostgreSQL `ROW`/`(row).fN` и ClickHouse `tuple`/`tupleElement`; плоский операнд сравнения `(a, b)` в MySQL/MariaDB/SQLite | yes | partial |
 | Range-типы и range поверх пары скалярных колонок | yes | partial | partial |
 | Collation и ordinal-семантика строк | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
 | Соглашения об именах (например snake_case) | yes (opt-in, встроенное) | partial | partial |

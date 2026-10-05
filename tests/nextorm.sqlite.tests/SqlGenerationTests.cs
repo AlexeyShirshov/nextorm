@@ -3246,4 +3246,217 @@ public class SqlGenerationTests
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
 
+    // ---- Tuple / row constructor: the flat ANSI "(a, b)" form (#126) ----
+
+    [Fact]
+    public void Tuple_CreateEqualityInWhere_ShouldRenderFlatRowComparison()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a")).Select(x => new { x.Id }));
+
+        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+    }
+
+    [Fact]
+    public void Tuple_CreateInequalityInWhere_ShouldRenderFlatRowComparison()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) != Tuple.Create(2L, "b")).Select(x => new { x.Id }));
+
+        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+    }
+
+    [Fact]
+    public void Tuple_CreateAndOrCombinationInWhere_ShouldRenderFlatRowComparisons()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => (Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a"))
+                        || (Tuple.Create(x.Id, x.String) == Tuple.Create(2L, "b")))
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain("(id, somestring) = (1, 'a')");
+        sql.Should().Contain(" or ");
+        sql.Should().Contain("(id, somestring) = (2, 'b')");
+    }
+
+    [Fact]
+    public void Tuple_InlineElementAccess_ShouldFoldToArgumentInSelectFilterAndOrdering()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.From<IComplexEntity>().Select(x => Tuple.Create(x.Id, x.String).Item2))
+            .Should().Contain("somestring");
+
+        SqlOf(ctx, ctx.From<IComplexEntity>().Where(x => Tuple.Create(x.Id, x.String).Item1 == 1L).Select(x => new { x.Id }))
+            .Should().Contain("where id = 1");
+
+        SqlOf(ctx, ctx.From<IComplexEntity>().OrderBy(x => Tuple.Create(x.Id, x.String).Item1).Select(x => new { x.Id }))
+            .Should().Contain("order by id");
+    }
+
+    [Fact]
+    public void Tuple_ConstructorInSelect_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)));
+
+        act.Should().Throw<NotSupportedException>().Which.Message
+            .Should().Contain("SqliteDialect").And.Contain("row constructor");
+    }
+
+    [Fact]
+    public void Tuple_ServerSideElementAccess_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => x.Pair.Item1));
+
+        act.Should().Throw<NotSupportedException>().Which.Message
+            .Should().Contain("SqliteDialect").And.Contain("server-side");
+    }
+
+    [Fact]
+    public void Tuple_ConstructorInOrderBy_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .OrderBy(x => Tuple.Create(x.Id, x.String))
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqliteDialect");
+    }
+
+    [Fact]
+    public void Tuple_ConstructorInGroupBy_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .GroupBy(x => Tuple.Create(x.Id, x.String))
+            .Select(x => new { C = SqlFunctions.Sql.count() }));
+
+        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqliteDialect");
+    }
+
+    [Fact]
+    public void Tuple_ConstructorAsFunctionArgument_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.Sql.iif<Tuple<long, string?>>(
+            x.Id > 0L, Tuple.Create(x.Id, x.String), Tuple.Create(0L, (string?)"z"))));
+
+        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqliteDialect");
+    }
+
+    [Fact]
+    public void Tuple_ComparisonNestedInFunctionArgument_InWhere_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .Where(x => SqlFunctions.Sql.iif(Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a"), true, false))
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqliteDialect");
+    }
+
+    [Fact]
+    public void Tuple_NewConstructorEqualityInWhere_ShouldRenderFlatRowComparison()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => new Tuple<long, string?>(x.Id, x.String) == new Tuple<long, string>(1L, "a"))
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+    }
+
+    [Fact]
+    public void Tuple_NewConstructorInequalityInWhere_ShouldRenderFlatRowComparison()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => new Tuple<long, string?>(x.Id, x.String) != new Tuple<long, string>(2L, "b"))
+            .Select(x => new { x.Id }));
+
+        // SQLite accepts both spellings; the engine emits "!=" for every NotEqual, so the assertion pins the
+        // actual emitted token.
+        sql.Should().Contain("where (id, somestring) != (2, 'b')");
+    }
+
+    [Fact]
+    public void Tuple_CapturedOperandInComparison_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var local = Tuple.Create(1L, "a");
+
+        var act = () => SqlOf(ctx, e
+            .Where(x => Tuple.Create(x.Id, x.String) == local)
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().Which.Message
+            .Should().Contain("SqliteDialect").And.Contain("inline row constructor");
+    }
+
+    [Fact]
+    public void Tuple_NullOperandInComparison_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .Where(x => Tuple.Create(x.Id, x.String) == null)
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().Which.Message
+            .Should().Contain("SqliteDialect").And.Contain("null");
+    }
+
+    [Fact]
+    public void Tuple_RowComparisonInNonPredicatePosition_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var select = () => SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a")));
+        select.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqliteDialect");
+
+        var orderBy = () => SqlOf(ctx, e
+            .OrderBy(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a"))
+            .Select(x => new { x.Id }));
+        orderBy.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqliteDialect");
+    }
+
+    [Fact]
+    public void Tuple_ConvertWrappedConstructorOperand_ShouldRenderFlatRowComparison()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => (object)Tuple.Create(x.Id, x.String) == (object)Tuple.Create(1L, "a"))
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain("where (id, somestring) = (1, 'a')");
+    }
+
 }

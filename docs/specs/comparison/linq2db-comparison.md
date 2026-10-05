@@ -84,7 +84,7 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes on SQL Server and MySQL/MariaDB | yes | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
 | String JSON + native-JSON + dictionary functions (ClickHouse) | **yes on ClickHouse** (`JSONExtract*`/`JSONAllPaths`/`toJSONString`/`visitParam*`, plus dictionaries) | no dedicated API | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
 | Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | **yes** on PostgreSQL and ClickHouse | partial — PostgreSQL array operators (`PostgreSQLExtensions`); no ClickHouse `Array(T)`/higher-order/`ARRAY JOIN` API | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
-| Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes on PostgreSQL and ClickHouse | yes (`Sql.Row`; emulated where the provider has no native row) | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs` |
+| Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes — PostgreSQL `ROW`/`(row).fN` and ClickHouse `tuple`/`tupleElement`; flat `(a, b)` comparison operand on MySQL/MariaDB/SQLite | yes (`Sql.Row`; emulated where the provider has no native row) | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs`, `nextorm.mysql/MySqlDialect.cs`, `nextorm.sqlite/SqliteDialect.cs` |
 | Native range types + range-over-scalar-pairs (`Range<T>`, `Overlaps`, `range_contains`, bound inspection) | **yes** — native range/multirange types on PostgreSQL; a mapped **pair of scalar columns** (`[RangeColumns]`) on SQL Server/MySQL/MariaDB/SQLite/ClickHouse | partial — provider-native `NpgsqlRange<T>`/multirange mapping on PostgreSQL; no portable `Range<T>`/scalar-pair mapping | `Query/Range.cs`, `RangeColumnsAttribute`, `ISqlDialect.SupportsRanges`/`SupportsRangeColumns`, `SqlFunctions.Postgres` |
 | Conditional functions (`iif`/`choose`/`multi_if`) | **yes** | no | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes on SQL Server | yes (provider) | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
@@ -170,9 +170,10 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   `UPDATE`/`DELETE` filters and `INSERT`/`MERGE` validation ([query filters](../../advanced/query-filters.md)).
 * Command/connection interceptors and structured logging over the ADO pipeline
   ([interceptors](../../infrastructure/03-interceptors.md)).
-* Cross-provider row values: `System.Tuple`/`ValueTuple` constructors, element access and row comparison
-  render as `ROW(a, b)`/`(row).fN` on PostgreSQL and `tuple(a, b)`/`tupleElement` on ClickHouse, driven by
-  `ISqlDialect.Tuple`.
+* Cross-provider row values: `System.Tuple` constructors, element access and row comparison render as
+  `ROW(a, b)`/`(row).fN` on PostgreSQL, `tuple(a, b)`/`tupleElement` on ClickHouse, and the flat `(a, b)`
+  comparison operand on MySQL/MariaDB/SQLite, driven by `ISqlDialect.Tuple` (inline `.ItemN` folds;
+  MySQL/MariaDB/SQLite reject projection/ordering/grouping/function positions and server-side `.ItemN`).
 * Range types without a native range column: PostgreSQL maps `Range<T>` natively, while the other
   providers store it as a pair of scalar bounds (`[RangeColumns]`) and translate the whole predicate and
   inspection surface (`overlaps`, `range_contains`/`range_contained_by`, the positional and adjacency

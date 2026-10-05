@@ -142,18 +142,24 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 
 > Поверхность row-значений (кортежей) кросс-провайдерная и строится на `System.Tuple.Create` /
 > `new Tuple<...>` / `System.Tuple<...>.ItemN`: конструктор рендерится через row-конструктор диалекта —
-> `tuple(a, b)` в ClickHouse, `ROW(a, b)` в PostgreSQL — а доступ к элементу *серверного* row рендерится
-> через позиционный доступ диалекта (`tupleElement(pair, 1)` в ClickHouse, `(pair).f1` в PostgreSQL).
-> Доступ к элементу *inline*-конструктора (`Tuple.Create(a, b).Item1`,
-> `new ValueTuple<...>(a, b).Item2`) сворачивается в сам аргумент, поэтому работает на любом диалекте,
+> `tuple(a, b)` в ClickHouse, `ROW(a, b)` в PostgreSQL и плоский ANSI `(a, b)` в MySQL/MariaDB/SQLite — а
+> доступ к элементу *серверного* row рендерится через позиционный доступ диалекта
+> (`tupleElement(pair, 1)` в ClickHouse, `(pair).f1` в PostgreSQL). В MySQL/MariaDB/SQLite серверного
+> доступа к элементу нет, поэтому `System.Tuple<...>.ItemN` на серверном row бросает
+> `NotSupportedException`. Доступ к элементу *inline*-конструктора (`Tuple.Create(a, b).Item1`,
+> `new ValueTuple<...>(a, b).Item2`) сворачивается в сам аргумент и работает на любом диалекте,
 > умеющем выразить конструктор. `System.Tuple<,> ==` (в C# — ссылочное равенство) переинтерпретируется
 > как SQL-сравнение row-значений (`Tuple.Create(x.A, x.B) == Tuple.Create(1, 'a')` →
-> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` в дереве выражений недостижим. Требуется провайдер с
-> нативным row-типом (см. [`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
-> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple); PostgreSQL и ClickHouse); SQL Server,
-> MySQL, MariaDB, SQLite и провайдер in-memory отклоняют эту поверхность, а tuple `IN`/`Contains` по
-> списку значений пока не транслируется. `untuple` не поддерживается, так как меняет набор колонок
-> результата, а не даёт скаляр.
+> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` в дереве выражений недостижим. В PostgreSQL и ClickHouse
+> поверхность — это нативный row-тип ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
+> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple)); в MySQL/MariaDB/SQLite плоский конструктор
+> `(a, b)` принимается только как **прямой операнд сравнения** в `WHERE`/`HAVING`/`JOIN ON` — в
+> `Select`/`ORDER BY`/`GROUP BY` или как аргумент функции он бросает `NotSupportedException` при
+> подготовке. SQL Server и провайдер in-memory отклоняют эту поверхность. Tuple `IN`/`Contains` по
+> списку значений и материализация «сырого» `ROW(...)` пока не транслируются
+> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193),
+> [#194](https://github.com/AlexeyShirshov/nextorm/issues/194)). `untuple` не поддерживается, так как
+> меняет набор колонок результата, а не даёт скаляр.
 
 > Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
 > например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.

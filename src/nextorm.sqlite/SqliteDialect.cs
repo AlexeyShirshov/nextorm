@@ -336,6 +336,26 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite has no <c>DbBatch</c>; the statements are joined with <c>;</c> into one command.</summary>
     public override bool SupportsBatch => true;
+
+    /// <summary>
+    /// SQLite 3.15+ has no server-side row type but supports the flat row constructor <c>(a, b)</c> as an
+    /// operand of a row comparison (<c>(a, b) = (c, d)</c>); element access is not offered.
+    /// </summary>
+    public override ITupleRenderer? Tuple => SqliteTupleRenderer.Instance;
+}
+
+/// <summary>
+/// Renders the SQLite flat row constructor <c>(a, b)</c>. Element access returns <see langword="null"/>:
+/// SQLite has no server-side row field access, so <c>.ItemN</c> is valid only on an inline constructor
+/// (folded by <c>TupleSqlTranslator</c>).
+/// </summary>
+internal sealed class SqliteTupleRenderer : ITupleRenderer
+{
+    public static readonly SqliteTupleRenderer Instance = new();
+
+    public string RenderConstructor(IReadOnlyList<string> fields) => "(" + string.Join(", ", fields) + ")";
+
+    public string? RenderElement(string row, int oneBasedIndex) => null;
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer

@@ -511,6 +511,26 @@ public class MySqlDialect : SqlDialectBase
     /// select expressions, so a dynamic-columns read qualifies the appended star with the source alias.
     /// </summary>
     public override bool RequiresQualifiedSelectStar => true;
+
+    /// <summary>
+    /// MySQL/MariaDB have no server-side row type, but the flat row constructor <c>(a, b)</c> is a valid
+    /// operand of a row comparison (<c>(a, b) = (c, d)</c>); element access is not offered.
+    /// </summary>
+    public override ITupleRenderer? Tuple => MySqlTupleRenderer.Instance;
+}
+
+/// <summary>
+/// Renders the MySQL/MariaDB flat row constructor <c>(a, b)</c>. Element access returns <see langword="null"/>:
+/// neither provider has a server-side row field access, so <c>.ItemN</c> is valid only on an inline
+/// constructor (folded by <c>TupleSqlTranslator</c>).
+/// </summary>
+internal sealed class MySqlTupleRenderer : ITupleRenderer
+{
+    public static readonly MySqlTupleRenderer Instance = new();
+
+    public string RenderConstructor(IReadOnlyList<string> fields) => "(" + string.Join(", ", fields) + ")";
+
+    public string? RenderElement(string row, int oneBasedIndex) => null;
 }
 
 internal sealed class MySqlIifRenderer : IIifRenderer

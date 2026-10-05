@@ -42,6 +42,13 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity
 Microsoft.Data.Sqlite также принимает `@name`, хотя генерируемый nextorm SQL для SQLite использует
 `$name`).
 
+> **Сырые row-значения не материализуются обратно.** Значение `ROW(...)` (PostgreSQL) или `tuple(...)`
+> (ClickHouse), выбранное вручную написанной инструкцией, читается как любое другое серверное значение,
+> но nextorm не может преобразовать его обратно в `System.Tuple<...>` — материализация сырого row
+> отслеживается в [#194](https://github.com/AlexeyShirshov/nextorm/issues/194). Плоский конструктор
+> `(a, b)` — это поверхность билдера для прямых операндов предикатов `==`/`!=` (см.
+> [Row values](../scalar-functions/06-arrays.md)), а не часть сырого SQL.
+
 ## [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
 ```csharp

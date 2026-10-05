@@ -3410,4 +3410,57 @@ public class SqlGenerationTests
         OuterSelectList(norm).Should().Contain("id").And.Contain("somestring");
         OuterSelectList(norm).Should().NotContain("__nextorm_rn");
     }
+
+    // ---- Tuple / row constructor (#126): SQL Server has no row type at all ----
+
+    [Fact]
+    public void Tuple_ConstructorInSelect_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)));
+
+        act.Should().Throw<NotSupportedException>().Which.Message
+            .Should().Contain("SqlServerDialect").And.Contain("Row constructors");
+    }
+
+    [Fact]
+    public void Tuple_ConstructorInWhereComparison_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // Even as a direct comparison operand the constructor is rejected: SQL Server has no row value.
+        var act = () => SqlOf(ctx, e
+            .Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a"))
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().Which.Message.Should().Contain("SqlServerDialect");
+    }
+
+    [Fact]
+    public void Tuple_ServerSideElementAccess_ShouldThrowAtPreparation()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => x.Pair.Item1));
+
+        act.Should().Throw<NotSupportedException>().Which.Message
+            .Should().Contain("SqlServerDialect");
+    }
+
+    [Fact]
+    public void Tuple_InlineElementAccess_ShouldFoldToArgument()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // Inline folding is provider-independent and must keep working where construction is rejected.
+        SqlOf(ctx, ctx.From<IComplexEntity>().Select(x => Tuple.Create(x.Id, x.String).Item2))
+            .Should().Contain("somestring");
+
+        SqlOf(ctx, ctx.From<IComplexEntity>().Where(x => Tuple.Create(x.Id, x.String).Item1 == 1L).Select(x => new { x.Id }))
+            .Should().Contain("id = 1");
+    }
 }

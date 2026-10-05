@@ -61,6 +61,16 @@ public interface IQuarterlyEntity
     decimal? Q2 { get; set; }
 }
 
+[SqlTable("tuple_entity")]
+public interface ITupleEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("pair")]
+    Tuple<int, string> Pair { get; set; }
+}
+
 [SqlTable("dynamic_entity")]
 public class DynamicColumnsEntity
 {
