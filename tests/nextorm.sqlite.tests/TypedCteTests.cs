@@ -495,6 +495,56 @@ public class TypedCteTests
     }
 
     [Fact]
+    public void NestedReadCte_SyncTerminal_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Outer read CTE whose body declares an inner read CTE: the nested-read graph under test.
+            var inner = ctx.From<ITypedCtePerson>()
+                .Select(x => new { x.Id, x.Total })
+                .AsCte("nested_sync_inner");
+            var outer = ctx.From(inner)
+                .Select(o => new { o.Id, o.Total })
+                .AsCte("nested_sync_outer");
+
+            var command = ctx.From(outer).Select(x => new { x.Id, x.Total });
+
+            var first = command.ToList();
+            first.Select(r => r.Id).OrderBy(id => id).Should().Equal(1, 2, 3);
+            first.Single(r => r.Id == 2).Total.Should().Be(20);
+
+            // Behavioural warm-call check: a read-only nested CTE must execute again through the same
+            // (prepared/reused) command and still materialize the independently specified rows.
+            var second = command.ToList();
+            second.Select(r => r.Id).OrderBy(id => id).Should().Equal(1, 2, 3);
+            second.Single(r => r.Id == 2).Total.Should().Be(20);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task NestedReadCte_AsyncTerminal_Executes()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var inner = ctx.From<ITypedCtePerson>()
+                .Select(x => new { x.Id, x.Total })
+                .AsCte("nested_async_inner");
+            var outer = ctx.From(inner)
+                .Select(o => new { o.Id, o.Total })
+                .AsCte("nested_async_outer");
+
+            var rows = await ctx.From(outer).Select(x => new { x.Id, x.Total }).ToListAsync();
+
+            rows.Select(r => r.Id).OrderBy(id => id).Should().Equal(1, 2, 3);
+            rows.Single(r => r.Id == 2).Total.Should().Be(20);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
     public void ChainedCte_DifferingProjectionType_ShouldMaterializeAndRenderInnerReference()
     {
         var (ctx, path) = CreateDb();

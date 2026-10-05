@@ -494,12 +494,20 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// call-locally instead of clearing the sticky <see cref="Cache"/> flag.
     /// </summary>
     /// <remarks>
-    /// The walk follows exactly the declaration tree <see cref="CteHoister.Hoist"/> flattens (a CTE body's
-    /// own <c>Ctes</c>), because that is the only tree the renderer can lift into the statement's
-    /// top-level <c>WITH</c>. A declaration reachable only through a derived table, join, set-operation
-    /// branch or correlated reference is not hoisted and is rejected by
+    /// The getter first scans the command's own flat declaration list for a data-modifying body. When a
+    /// declaration carries further nested <c>Ctes</c>, a prepared command returns immediately: preparation
+    /// has already hoisted the transitive declaration tree into that flat list, so the mutation-first scan
+    /// is complete and no recursive visited set is needed on the warm path. Only an unprepared
+    /// (not-yet-hoisted) command recurses over the declaration tree, with a reference-identity
+    /// <see cref="HashSet{T}"/> so a cyclic declaration graph still terminates.
+    /// <para>
+    /// That recursion follows exactly the tree <see cref="CteHoister.Hoist"/> flattens (a CTE body's own
+    /// <c>Ctes</c>), because that is the only tree the renderer can lift into the statement's top-level
+    /// <c>WITH</c>. A declaration reachable only through a derived table, join, set-operation branch or
+    /// correlated reference is not hoisted and is rejected by
     /// <see cref="CteHoister.EnsureNoUnhoistedCtes"/> during preparation, before the cache lookup/store
     /// gates, so it cannot be cached either.
+    /// </para>
     /// </remarks>
     internal bool HasDataModifyingCte
     {
@@ -532,9 +540,16 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
             if (!nested)
                 return false;
 
-            // A CTE body declares its own CTEs (an unprepared or not-yet-hoisted graph): recurse with a
+            // A prepared command's flat list is already the complete hoisted declaration tree
+            // (PrepareCommand -> PrepareCtes), so every reachable mutation is in `ctes` and the flat
+            // scan above is conclusive: a nested body's own declarations are present at top level. The
+            // recursive probe would find nothing and only allocate its visited set on every warm lookup.
+            if (IsPrepared)
+                return false;
+
+            // A CTE body declares its own CTEs on an unprepared (not-yet-hoisted) graph: recurse with a
             // reference-identity visited set so a mutation nested deeper is still found and a cyclic
-            // declaration graph terminates. The set is allocated only on this rarer path.
+            // declaration graph terminates. The set is allocated only on this cold path.
             var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance) { this };
             for (var i = 0; i < ctes.Count; i++)
             {

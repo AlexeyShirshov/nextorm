@@ -1,0 +1,92 @@
+{
+  "issue": 166,
+  "cycle": "nested-read-cte-1",
+  "plan_revision": 1,
+  "iteration": "1/3",
+  "env": {
+    "DOTNET_GCHeapHardLimit": "0x80000000",
+    "DOTNET_gcServer": "0"
+  },
+  "measurement": {
+    "fixture": "nested read CTE: outer read CTE whose body declares a read CTE (no data-modifying CTE)",
+    "api": "GC.GetAllocatedBytesForCurrentThread()",
+    "warmup_iterations": 100,
+    "measured_iterations": 10000,
+    "measured_call": "QueryCommand.HasDataModifyingCte",
+    "method": "Iteration14CteLookupTests.NestedReadCteWarmReuse_AllocatesZero"
+  },
+  "before_after": {
+    "note": "Historical pre-F1 (red) value re-stated; the boundary-sweep re-measure after F1 is green.",
+    "before_bytes": 1760000,
+    "after_bytes": 0,
+    "before_source": "docs/specs/status/nested-read-cte-1-evidence/E02-allocation-red.log",
+    "after_source": "docs/specs/status/nested-read-cte-1-evidence/E02-target-green.log"
+  },
+  "red_before_F1_allocation": {
+    "historical": true,
+    "args": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NestedReadCteWarmReuse_AllocatesZero"],
+    "exit_code": 2,
+    "selected": 1,
+    "total": 1,
+    "succeeded": 0,
+    "failed": 1,
+    "skipped": 0,
+    "allocated_bytes": 1760000,
+    "failure": "Expected allocated to be 0L ... but found 1760000L",
+    "log": "docs/specs/status/nested-read-cte-1-evidence/E02-allocation-red.log"
+  },
+  "red_before_F1_behavior_three": {
+    "historical": true,
+    "args": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~CteReuse_VariantMatrix|FullyQualifiedName~NestedReadCte_PreservesSqlParametersAndPlanKey|FullyQualifiedName~NestedReadCte_SyncAsyncPolicyMatches"],
+    "exit_code": 2,
+    "selected": 3,
+    "total": 3,
+    "succeeded": 2,
+    "failed": 1,
+    "skipped": 0,
+    "note": "VariantMatrix and PreservesSqlParametersAndPlanKey pass on current code; SyncAsyncPolicyMatches additionally fails on the same 1,760,000-byte positive allocation because it exercises the shared QueryPlanner.cs:559 getter.",
+    "log": "docs/specs/status/nested-read-cte-1-evidence/E04-behavior-baseline.log"
+  },
+  "green_after_F1_four": {
+    "args": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NestedReadCteWarmReuse_AllocatesZero|FullyQualifiedName~CteReuse_VariantMatrix|FullyQualifiedName~NestedReadCte_PreservesSqlParametersAndPlanKey|FullyQualifiedName~NestedReadCte_SyncAsyncPolicyMatches"],
+    "exit_code": 0,
+    "selected": 4,
+    "total": 4,
+    "succeeded": 4,
+    "failed": 0,
+    "skipped": 0,
+    "allocated_bytes": 0,
+    "log": "docs/specs/status/nested-read-cte-1-evidence/E02-fours-green.log"
+  },
+  "green_after_F1_class": {
+    "args": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Iteration14CteLookupTests"],
+    "exit_code": 0,
+    "selected": 9,
+    "total": 9,
+    "succeeded": 9,
+    "failed": 0,
+    "skipped": 0,
+    "log": "docs/specs/status/nested-read-cte-1-evidence/E03-class-green.log"
+  },
+  "boundary_sweep_green": {
+    "args": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NestedReadCteWarmReuse_AllocatesZero"],
+    "exit_code": 0,
+    "selected": 1,
+    "total": 1,
+    "succeeded": 1,
+    "failed": 0,
+    "skipped": 0,
+    "allocated_bytes": 0,
+    "log": "docs/specs/status/nested-read-cte-1-evidence/E02-target-green.log"
+  },
+  "build": {
+    "args": ["dotnet", "build", "tests/nextorm.core.tests", "-c", "Debug"],
+    "exit_code": 0,
+    "warnings": 0,
+    "errors": 0,
+    "logs": [
+      "docs/specs/status/nested-read-cte-1-evidence/E02-build.log",
+      "docs/specs/status/nested-read-cte-1-evidence/E02-build-green.log"
+    ]
+  }
+}
