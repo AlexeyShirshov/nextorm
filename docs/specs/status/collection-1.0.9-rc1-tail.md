@@ -5,15 +5,15 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc1` (HEAD `b998df17`, pushed by the user); working tree clean except untracked `artifacts/`
 - collection revision: r1; evidence revision: rv1
-- collection status: **pending**
+- collection status: **incomplete** (G1 lane stopped at D140; no admissible revised plan — autonomous STOP, author clarification required in issue #140)
 
 ## Groups
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | in-progress |
+| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | incomplete |
 
-Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`.
+Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`. The already-made commits (D161 b06784c8, D197 95849d38) stay on `1.0.9-rc1` — no auto-rollback on stop.
 
 ## Tasks
 
@@ -21,14 +21,14 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 |---|---|---|---|---|---|
 | D161 | G1 | 1.0.9-rc1 | done | issue #161 — ClickHouse identifier quoting escapes backslashes; commit b06784c8 | docs/specs/status/rc1-tail-161-ch-escape-1.md |
 | D197 | G1 | 1.0.9-rc1 | done | issue #197 — PostgreSQL bare JsonNode read from native json/jsonb; commit 95849d38 | docs/specs/status/rc1-tail-197-pg-jsonnode-1.md |
-| D140 | G1 | 1.0.9-rc1 | pending | issue #140 — PostgreSQL free/partial column list in projection | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
-| D134 | G1 | 1.0.9-rc1 | pending | issue #134 — SQLite `ToDataReader` (streaming projection rowid locator) | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
-| D194 | G1 | 1.0.9-rc1 | pending | issue #194 — PostgreSQL raw `ROW`/composite materialization | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
-| D150 | G1 | 1.0.9-rc1 | pending | issue #150 — ClickHouse native extreme-row parity for float/double keys | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
-| D193 | G1 | 1.0.9-rc1 | pending | issue #193 — tuple `IN`/`Contains` translation/execution across providers | docs/specs/status/rc1-tail-193-tuple-in-1.md |
-| D198 | G1 | 1.0.9-rc1 | pending | issue #198 — ClickHouse native JSON option B (`[JsonColumn]`/JsonDocument/JsonElement) | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
-| D195 | G1 | 1.0.9-rc1 | pending | issue #195 — FTS5 maintenance/control command surface (DML commands) | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
-| D196 | G1 | 1.0.9-rc1 | pending | issue #196 — FTS5 maintenance real-SQLite tests + EN/RU docs (depends on D195) | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
+| D140 | G1 | 1.0.9-rc1 | incomplete | escalate decision — issue #140 scope unidentifiable, author clarification required (Q140); autonomous STOP, no admissible revised plan | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
+| D134 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
+| D194 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
+| D150 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
+| D193 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-193-tuple-in-1.md |
+| D198 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
+| D195 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
+| D196 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
 
 ## Decisions
 
@@ -50,15 +50,15 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 ## Общая верификация и восстановление
 
-- Last common C: none yet (collection pending).
+- Last common C: not run (lane stopped before the collection CHECK; single group ⇒ no C-E04 merge path).
 - Verification state: **unverified**.
-- Defect id and history: none.
-- Related corrective-task status file: none.
-- Next allowed step: dispatch the single `pdca-orchestrator` lane for G1; it picks the first `pending` task (D161) from this file, runs the full cycle, auto-commits, and updates the status.
+- Defect id and history: **D140 scope — F140-SCOPE, unresolved; author clarification required (Q140)**.
+- Related corrective-task status file: `docs/specs/status/rc1-tail-140-pg-free-columns-1.md`.
+- Next allowed step: **none — STOP**; waiting on the author's answer in issue #140 (Q140). Do not dispatch the lane.
 - Notice: host has no todowrite tool for subagents; task status files carry the progress log instead.
 
 ## Done / Verified / Incomplete
 
-- Done: —
-- Verified: —
-- Incomplete: —
+- Done: D161, D197.
+- Verified: —.
+- Incomplete: D140 (scope — F140-SCOPE, author clarification required) + D134, D194, D150, D193, D198, D195, D196 ("группа остановлена", not executed).
