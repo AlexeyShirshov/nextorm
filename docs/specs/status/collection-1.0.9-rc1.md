@@ -5,6 +5,7 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc1` = `main` = merge of `1.0.9-b` (tag `v1.0.9-b`); working tree clean
 - collection revision: r1; evidence revision: rv1
+- collection status: **done** — gate C **PASS** (`check`, rv1: C-E01 met, C-E02 met, C-E03 met, C-E04 met/N-A, single group, no merge)
 
 ## Groups
 
@@ -56,12 +57,12 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 - Last common C: D163 task-level CHECK PASS (all 10 G01 tasks done; queue terminal). Corrective `rc1-g01-c-evidence-1` has **completed its documentation scope (CHECK PASS, r=1, n=3/3)** and supplies the C-E03/C-E04 evidence pointers for the parent gate-C `check` invocation.
 - **Documentation outcome:** D141 — `R141-VERIFY` **MET** at HEAD `d60c80e3` by fresh compliant evidence (`docs/specs/status/rc1-141-validate-1-evidence.json`, `rv=2`: `brief` exit 0, `report` exit 0); the earlier waiver `W-C-D141-REPORT-CAP-1` is **WITHDRAWN** (see `docs/specs/status/rc1-141-version-gates-1.md`, `## Validator re-run disposition (corrective r2, closed)`); D127 — D127-E01..E10 closed (`E08`/`E09` closed by `8ed865b4`; `rc1-127-computed-empty-1.md:70-71`); D126 — E01..E13 recorded; C-E03 evidence supplied; C-E04 `N/A` (single group — no group branch/merge).
-- **Collection gate C: READY for the parent gate-C independent `Task → check` re-run** (not self-declared PASS) — the sole outstanding D141 C-E03 obligation (validator `report` exit 0) is resolved by the fresh compliant evidence (`docs/specs/status/rc1-141-validate-1-evidence.json`, `rv=2`, `brief` exit 0, `report` exit 0, HEAD `d60c80e3`); the former D127-E08 (INSERT empty-result-set) and D127-E09 (computed source value through an `OutputInto` table variable) product-test gaps are now closed by `8ed865b4` (`rc1-127-computed-empty-1.md:70-71`).
-- Readiness reason: no blocking defect remains; the parent gate-C independent `Task → check` re-run (a run, not merely a document) over the supplied C-E03 pointers is still required, and only that run may declare gate C PASS.
-- Verification state: fresh aggregate recorded at HEAD `8ed865b4` (see `## C run 2`): Debug/Release 0/0; unit 8442/0/2527; integration 3195/0/193 (all 5 providers); coverage 87.1/78.8; docfx 0 errors; perf 7/7. The corrective `rc1-g01-c-evidence-1` completed its documentation scope (CHECK PASS, r=1, n=3/3; commit `1327166b`); the subsequent corrective `rc1-141-validate-1` (r=2, n=1, rv=2) supplies fresh compliant D141 evidence (`report` exit 0). The historical aggregate `pass` in the `## C run` section remains an aggregate result only. Collection gate C is **READY** for the parent gate-C independent `Task → check` re-run.
+- **Collection gate C: PASS** (independent parent `Task → check` re-run, `check` rv1: C-E01 met, C-E02 met, C-E03 met, C-E04 met/N-A) — the former sole outstanding D141 C-E03 obligation (validator `report` exit 0) is resolved by the fresh compliant evidence (`docs/specs/status/rc1-141-validate-1-evidence.json`, `rv=2`, `brief` exit 0, `report` exit 0, HEAD `d60c80e3`; re-run commit `ece6bb5b`); the former D127-E08 (INSERT empty-result-set) and D127-E09 (computed source value through an `OutputInto` table variable) product-test gaps are closed by `8ed865b4` (`rc1-127-computed-empty-1.md:70-71`).
+- Readiness reason (historical): no blocking defect remained; the parent gate-C independent `Task → check` re-run over the supplied C-E03 evidence pointers was the last required step and declared gate C PASS (C-E01..C-E04).
+- Verification state: **`pass`** — fresh aggregate recorded at HEAD `8ed865b4` (see `## C run 2`): Debug/Release 0/0; unit 8442 total / 5915 passed / 0 failed / 2527 skipped; integration 3195 total / 0 failed / 193 skipped (all 5 required providers + MariaDB executed); coverage 87.1/78.8; docfx 0 errors; perf 7/7. The corrective `rc1-g01-c-evidence-1` completed its documentation scope (CHECK PASS, r=1, n=3/3; commit `1327166b`); the subsequent corrective `rc1-141-validate-1` (r=2, n=1, rv=2) supplies fresh compliant D141 evidence (`report` exit 0, commit `ece6bb5b`) and retires the waiver; aggregate unchanged by the later status-only commits. C-run-2 evidence pointers: `/tmp/nextorm-rc1-coll-c2/` (`04-test-debug.log`, `05-integration.log`, `09-reportgen.log`, `10-docfx.log`, `11-perf-acceptance.log`).
 - Defect id and history: `D141-REPORT-CAP` — historical `report` exit 2 (3-sweep cap), fresh `report` exit 2 (4-sweep / 3-build helper caps), `brief` exit 0; **0 fixes applied, no plan change**; the named waiver `W-C-D141-REPORT-CAP-1` (escalate route (a)) is **WITHDRAWN** — CHECK rejected it (an unconditional mandated check cannot be waived), and the compliant re-performance `rc1-141-validate-1` (r=2, rv=2) removed the need (`brief` exit 0, `report` exit 0, HEAD `d60c80e3`). `D127-E08/E09` — closed by `8ed865b4` with real integration tests (`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:2130/2174/2221/2277`; `rc1-127-computed-empty-1.md:70-71`). Evidence: `docs/specs/status/rc1-g01-c-evidence-1/provenance.md`; `docs/specs/status/rc1-141-validate-1-evidence.json`.
 - Related corrective-task status file: `docs/specs/status/rc1-g01-c-evidence-1.md`
-- Next allowed step: parent gate-C `check` runs an independent `Task → check` over the supplied evidence pointers (C-E03); the former D127-E08/E09 product-test gaps are closed by `8ed865b4` (`rc1-127-computed-empty-1.md:70-71`); C-E04 is `N/A` (single group — no group branch/merge); work remains on branch `1.0.9-rc1`.
+- Next allowed step: **none — collection complete.** Gate C **PASS** (independent parent `Task → check`, rv1; C-E01 met, C-E02 met, C-E03 met, C-E04 met/N-A) is recorded in `## ACT`; all 10 G01 tasks are done and their issues closed. Work remains on branch `1.0.9-rc1` (unpushed; push never).
 - Notice: host has no todowrite tool; task status files carry the progress log instead.
 - Notice: gh CLI was available; issue #141 was closed remotely (glab/gh exit 0, state CLOSED) — documented in the D141 status ACT. The commit is unpushed (push never authorized).
 - Notice: D126 is done — issue #126 closed; commit 4c10548a (unpushed); CHECK PASS r=4/rv=5 recorded in rc1-126-tuple-ctor-1.md; the earlier run-1 "remains pending" note is superseded.
@@ -73,7 +74,7 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Notice: D133 is done — task-level CHECK PASS (r=2, n=1/3, rv=D133.r2.ec1); issue #133 closed as a documented limitation; commit 6f46c774 (unpushed); measured that MySqlConnector 2.6.2 and ClickHouse.Driver 1.4.0 do not stream LOB memory-bounded (MySQL/MariaDB `GetStream`/`GetTextReader` buffer the whole value, ratios 4.00/7.99/8.00, `SequentialAccess` ignored; ClickHouse `GetStream` throws `NotImplementedException`, `GetTextReader` buffers 3.99), so `SupportsSequentialAccess` and provider `SupportsLobStreaming` stay false; EN+RU guide and the probe claim corrected plus a buffered-behavior guard added; no production change; reopen trigger = a driver providing true streaming; see docs/specs/status/rc1-133-streaming-lob-1.md.
 - Notice: D127 is done — task-level CHECK PASS (r=2, n=1/3, rv=D127.r2.ec1); issue #127 closed; commit b8a7c47a (unpushed); `OutputIntoTableVariable(variableName, columnDefinitions)` explicit declaration on INSERT/UPDATE/DELETE returning builders, one batch `DECLARE @t TABLE(...); <DML> OUTPUT … INTO @t; SELECT mapped cols FROM @t;`, MERGE excluded; defect D127-param-name-missingId closed; see docs/specs/status/rc1-127-mssql-output-into-1.md.
 - Notice: D163 is done — task-level CHECK PASS (r=1, n=1/3, rv=1); issue #163 closed as completed; commit 09c73590 (unpushed); verification/disposition closure of the ClickHouse reference→collection accepted provider limitation: explicit gate retained (`ClickHouseDialect.SupportsReferenceToCollectionNavigation=false`, precise `NotSupportedException`), rejection test passed on a real containerized ClickHouse (1/1, 0 skipped), EN+RU docs + revisit trigger intact, milestone note `1.0.9-rc1` (historical `1.0.9-rc2` does not bind); docs-only, no production/test/config change; see docs/specs/status/rc1-163-ch-refcollection-doc-1.md.
-- Notice: collection G01 is **done at task level** — all 10 tasks (D141, D126, D181, D182, D168, D131, D128, D133, D127, D163) completed and their issues closed. Collection gate C is **READY** for the parent gate-C independent `Task → check` re-run (see the durable fields above); the former D127-E08/E09 product-test gaps are closed by `8ed865b4` (`rc1-127-computed-empty-1.md:70-71`); the D141 C-E03 `report`-exit-0 obligation is resolved by `docs/specs/status/rc1-141-validate-1-evidence.json` (`rv=2`); the historical aggregate PASS is an aggregate result only. This is a single-group collection, so no group branch was created and **no `git merge --no-ff` was performed**; all authorized commits are on branch `1.0.9-rc1` (unpushed).
+- Notice: collection G01 is **done** — all 10 tasks (D141, D126, D181, D182, D168, D131, D128, D133, D127, D163) completed and their issues closed. Collection gate C is **PASS** (independent parent `Task → check`, rv1; C-E01..C-E04; see `## ACT`); the D127-E08/E09 product-test gaps are closed by `8ed865b4` (`rc1-127-computed-empty-1.md:70-71`); the D141 C-E03 `report`-exit-0 obligation is resolved by `docs/specs/status/rc1-141-validate-1-evidence.json` (`rv=2`, commit `ece6bb5b`); the historical aggregate PASS is an aggregate result only. This is a single-group collection, so no group branch was created and **no `git merge --no-ff` was performed**; all authorized commits are on branch `1.0.9-rc1` (unpushed).
 
 ## C run (aggregate, 2026-10-06 02:28 UTC)
 
@@ -172,7 +173,60 @@ marked superseded.
 
 - Done: D141 (#141) — commit 45107d9c; D126 (#126) — commit 4c10548a; D181 (#181) — commit 99c41de2; D182 (#182) — commit c75ef84a; D168 (#168) — commit 4bba446d; D131 (#131) — commit c28b70e3; D128 (#128) — commit a4fd86c6; D133 (#133) — commit 6f46c774; D127 (#127) — commit b8a7c47a; D163 (#163) — commit 09c73590
 - Verified: D141 CHECK PASS, rv=D141.ContractA.strong.1; D126 CHECK PASS, rv=5; D181 CHECK PASS, rv=D181.r3.ec1; D182 CHECK PASS, rv=D182.r2.ec1; D168 CHECK PASS, rv=D168.r2.ec1; D131 CHECK PASS, rv=1; D128 CHECK PASS, rv=D128.r2.ec1; D133 CHECK PASS, rv=D133.r2.ec1; D127 CHECK PASS, rv=D127.r2.ec1; D163 CHECK PASS, rv=1
-- Incomplete: — (all 10 G01 tasks done at task level); collection gate C is **READY** for the parent gate-C independent `Task → check` re-run (see durable fields above); the D141 C-E03 `report`-exit-0 obligation is resolved by `docs/specs/status/rc1-141-validate-1-evidence.json` (`rv=2`); the former D127-E08/E09 product-test gaps are closed by `8ed865b4` (`rc1-127-computed-empty-1.md:70-71`).
+- Incomplete: `—` (all 10 G01 tasks done; collection gate C **PASS**, `check` rv1: C-E01 met, C-E02 met, C-E03 met, C-E04 met/N-A; see `## ACT`).
+
+## ACT (collection 1.0.9-rc1, 2026-10-06 09:06 UTC, HEAD `ece6bb5b`)
+
+- **Gate C: PASS** (`check`, rv1) — independent parent `Task → check` re-run over the supplied C-E03 pointers:
+  - C-E01 truthful admission — **met**
+  - C-E02 exclusive ownership — **met**
+  - C-E03 verified completion — **met**
+  - C-E04 safe integration — **met / N-A** (single group G01 ⇒ no group branch, no `git merge --no-ff`)
+- **Group G01: `done`**; all 10 tasks `done`:
+
+  | task | group | issue | commit | status |
+  |---|---|---|---|---|
+  | D141 | G01 | #141 | `45107d9c` | done |
+  | D126 | G01 | #126 | `4c10548a` | done |
+  | D181 | G01 | #181 | `99c41de2` | done |
+  | D182 | G01 | #182 | `c75ef84a` | done |
+  | D168 | G01 | #168 | `4bba446d` | done |
+  | D131 | G01 | #131 | `c28b70e3` | done |
+  | D128 | G01 | #128 | `a4fd86c6` | done |
+  | D133 | G01 | #133 | `6f46c774` | done |
+  | D127 | G01 | #127 | `b8a7c47a` | done |
+  | D163 | G01 | #163 | `09c73590` | done |
+
+- **Corrective cycles:** `rc1-g01-c-evidence-1` `1327166b`; `rc1-127-computed-empty-1` `8ed865b4`
+  (D127-E08/E09 tests, product unchanged); status reconciliation `d60c80e3`; `rc1-141-validate-1`
+  `ece6bb5b` (D141 `R141-VERIFY` re-run to a real `validate_inner_loop.py report` exit 0; waiver
+  `W-C-D141-REPORT-CAP-1` withdrawn). Current HEAD `ece6bb5b`.
+- **Final aggregate** (at `8ed865b4`, unchanged by the later status-only commits):
+  - build Debug/Release — 0 warnings / 0 errors
+  - unit — 8442 total / 5915 passed / 0 failed / 2527 skipped
+  - integration — 3195 total / 0 failed / 193 skipped (PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse,
+    SQLite all executed; no required provider skipped)
+  - coverage — line 87.1% / branch 78.8% (≥85/75)
+  - docfx — exit 0 (2 pre-existing warnings)
+  - perf acceptance — exactly 7 cases / 0 failures
+  - logs — `/tmp/nextorm-rc1-coll-c2/`
+- **Done:** D141 (#141) `45107d9c`; D126 (#126) `4c10548a`; D181 (#181) `99c41de2`; D182 (#182)
+  `c75ef84a`; D168 (#168) `4bba446d`; D131 (#131) `c28b70e3`; D128 (#128) `a4fd86c6`; D133 (#133)
+  `6f46c774`; D127 (#127) `b8a7c47a`; D163 (#163) `09c73590`.
+- **Verified:** each child CHECK PASS (D141 rv=2 / `D141.ContractA.strong.1`; D126 rv=5; D181
+  rv=`D181.r3.ec1`; D182 rv=`D182.r2.ec1`; D168 rv=`D168.r2.ec1`; D131 rv=1; D128 rv=`D128.r2.ec1`; D133
+  rv=`D133.r2.ec1`; D127 rv=`D127.r2.ec1`; D163 rv=1); collection gate C `check` rv1 = **PASS**
+  (C-E01..C-E04); aggregate evidence `/tmp/nextorm-rc1-coll-c2/`.
+- **Incomplete:** `—` (none).
+- **Deferred / excluded (not in lanes, unchanged):** #161, #150, #140, #134 blocked (re-entry triggers
+  recorded in `## Decisions`); #132 recommended close (JSON1 already present, `SqlFunctions.Sqlite.cs:83-273`).
+- **Follow-ups created this run (milestone 1.0.9-rc1):** #193, #194, #195, #196, #197, #198.
+- **Changed artefacts:** `docs/specs/status/**` status files only (this collection status file + corrective
+  status logs); no `src/**`, `tests/**`, config or product code change in this ACT.
+- **Commit list / HEAD:** branch `1.0.9-rc1`, commits unpushed (push never). HEAD `ece6bb5b`
+  (`#141 Re-verify D141 with compliant single-sweep boundary evidence`).
+- **Integration:** no `collection/1.0.9-rc1` ref, no group worktree, no merge (single group ⇒ nothing to
+  clean up).
 
 ## C run 2 (aggregate, 2026-10-06 03:35 UTC, HEAD 8ed865b4)
 

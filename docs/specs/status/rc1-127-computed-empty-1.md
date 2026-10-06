@@ -266,3 +266,4 @@ Per-provider (parsed from `integration.xml`; all five providers executed):
   full integration exit 0 Total 3195 / Passed 3002 / Failed 0 / Skipped 193.
 
 2026-10-06T00:00:00Z | ACT | revision r=1 | CHECK PASS (rv=1); E08/E09 closed; cycle complete
+2026-10-06T09:06Z | ACT | revision r=1 | collection gate C PASS declared by the parent check (rv1); D127-E08/E09 closure confirmed; no further action | docs/specs/status/collection-1.0.9-rc1.md

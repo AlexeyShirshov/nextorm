@@ -209,6 +209,7 @@ All pointers are relative to `docs/specs/status/rc1-141-validate-1-evidence/`.
 2026-10-06T03:56:10Z | DO | r2 | 1/3 | five container providers proven executed inside E-T11 (PG 753, SQL Server 675, MySQL 579, MariaDB 50, ClickHouse 177; failures 0) | docs/specs/status/rc1-141-validate-1-evidence/r2/provider-container-evidence.json
 2026-10-06T03:56:29Z | DO | r2 | 1/3 | brief exit 0 and report exit 0; R141-VERIFY met on fresh r=2 evidence; no src change, no commit | docs/specs/status/rc1-141-validate-1-evidence/r2/validator-brief.txt,docs/specs/status/rc1-141-validate-1-evidence/r2/validator-report.txt
 2026-10-06T09:04Z | ACT | r2 | 1/3 | CHECK PASS finalized; rv=2 evidence contract table persisted; P2 fixes (E-T11 command provenance; r=1 receipts relabeled historical/superseded); R141-VERIFY met; gate C ready for parent revalidation; no src change | docs/specs/status/rc1-141-validate-1.md
+2026-10-06T09:06Z | ACT | r2 | 1/3 | collection gate C PASS declared by the parent check (rv1): C-E01..C-E04 met (C-E04 N-A); the earlier "ready for parent revalidation" note is superseded; R141-VERIFY met; no src change | docs/specs/status/collection-1.0.9-rc1.md
 ```
 
 ## ACT

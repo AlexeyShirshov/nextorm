@@ -118,6 +118,7 @@ evidence pointers for that invocation.
 2026-10-06T03:00Z | DO | r1 | 3/3 | DO started (r=1, n=3/3): bound concrete execution files for D126/D131/D128/D163 | docs/specs/status/collection-1.0.9-rc1.md
 2026-10-06T08:04Z | CHECK | r1 | 3/3 | CHECK (r=1, n=3/3) PASS for the corrective documentation scope; CE-R01..CE-R06 met; CE-R02 via waiver W-C-D141-REPORT-CAP-1 (report EXIT 2, two verbatim FAILs); does not establish D127 product-test completion or collection readiness | docs/specs/status/rc1-g01-c-evidence-1/check-v3-evidence.txt
 2026-10-06T08:05Z | ACT | r1 | 3/3 | ACT done: documentation scope finalized; D141 waiver is the authorized exception; D127-E08/E09 remain open product-test gaps (outside docs-only scope); collection gate C BLOCKED; C-E04 N/A (no merge); next plan empty | docs/specs/status/rc1-g01-c-evidence-1.md
+2026-10-06T09:06Z | ACT | r1 | 3/3 | collection gate C PASS declared by the parent check (rv1): C-E01 met, C-E02 met, C-E03 met, C-E04 met/N-A; the earlier BLOCKED note is superseded; no further action | docs/specs/status/collection-1.0.9-rc1.md
 ```
 
 ## CHECK (r=1, n=3/3) — PASS
