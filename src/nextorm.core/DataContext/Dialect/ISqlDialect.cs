@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace NextORM.Core;
 
@@ -278,11 +279,29 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsArrayJoin { get; }
     /// <summary>
-    /// True when the provider has a JSON type and can render the JSON surface: the <c>json</c>/<c>jsonb</c>
-    /// functions and the access/containment operators in <see cref="CommonFunctions"/>. The safe default is
-    /// <c>false</c>; only PostgreSQL opts in today.
+    /// True when the provider has a native JSON storage type and can store a <see cref="JsonColumnAttribute"/> as it
+    /// (rather than as text): the <see cref="JsonColumnStorage.Auto"/>/<see cref="JsonColumnStorage.Native"/>
+    /// storage forms resolve to <see cref="NativeJsonProviderType"/> when this is <c>true</c>. The safe
+    /// default is <c>false</c>; PostgreSQL and ClickHouse opt in today. This flag does <b>not</b> gate the
+    /// PostgreSQL <c>json</c>/<c>jsonb</c> functions and operators — that surface is
+    /// <see cref="SupportsPostgresJsonSql"/>.
     /// </summary>
     bool SupportsJson { get; }
+    /// <summary>
+    /// True when the provider can render the PostgreSQL JSON surface: the <c>json</c>/<c>jsonb</c> functions
+    /// and the access/containment operators translated by <c>JsonSqlTranslator</c>. The safe default is
+    /// <c>false</c>; only PostgreSQL opts in. Declared as a default interface method so existing external
+    /// implementations keep compiling and so a provider with native JSON storage (ClickHouse) does not
+    /// accidentally admit PostgreSQL JSON syntax.
+    /// </summary>
+    bool SupportsPostgresJsonSql => false;
+    /// <summary>
+    /// The CLR type the provider's native JSON representation materializes as (and binds a parameter to),
+    /// consulted only when native JSON storage is selected by <see cref="SupportsJson"/>. The safe default is
+    /// <see cref="JsonElement"/>; ClickHouse overrides it with <c>JsonObject</c>. Declared as a default
+    /// interface method so existing external implementations keep compiling.
+    /// </summary>
+    Type NativeJsonProviderType => typeof(JsonElement);
     /// <summary>
     /// True when the provider can render the JSON-as-text functions of <see cref="CommonFunctions"/>
     /// (<c>json_value</c>, <c>json_query</c>, <c>json_modify</c>, <c>isjson</c>), where JSON is stored in

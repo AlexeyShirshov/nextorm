@@ -22,7 +22,8 @@
 - `INTERSECT ALL` / `EXCEPT ALL` are supported ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`);
 - arrays are supported ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) is `true`): array parameters with the `any`/`all` quantifiers
   and the array functions;
-- JSON/JSONB is supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson) is `true`): the `json_agg`/`jsonb_agg` aggregates, the
+- JSON/JSONB is supported ([`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) is `true`, PostgreSQL only; native `jsonb` storage is
+  [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)): the `json_agg`/`jsonb_agg` aggregates, the
   construction/access functions and the `->`/`->>`/`@>`/`?` operators, with `JsonDocument`/`JsonElement`/
   `JsonNode` parameters bound as `jsonb`;
 - `greatest`/`least` and the aggregate `FILTER (WHERE ...)` clause are enabled ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) is `true` and

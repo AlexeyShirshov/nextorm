@@ -324,6 +324,10 @@ public class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsJson => true;
 
+    // PostgreSQL (and only PostgreSQL) renders the json/jsonb functions and access/containment operators.
+    /// <inheritdoc/>
+    public override bool SupportsPostgresJsonSql => true;
+
     // PostgreSQL accepts the FILTER (WHERE ...) aggregate clause from 9.4 (SQL:2003 T612),
     // greatest/least, date_trunc and the string_agg/array_agg aggregate surface. A version below 9.4
     // rejects the filtered-aggregate overloads instead of emitting SQL the server cannot parse.

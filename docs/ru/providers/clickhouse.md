@@ -236,7 +236,7 @@ public sealed class TvpRow
 | Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`), а также серверные/кластерные `url(url, format, structure)`, `s3(url, format, structure)`, `file(path, format, structure)`, `remote(addresses, db, table)`, `remote_secure(...)`, `cluster(cluster, db, table)`, `cluster_all_replicas(...)` (схема строки — generic-интерфейс `TRow` вызывающего), `values` (структура из `TRow`) |
 | Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Поверхность кортежей | нативная колонка/выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7); `Tuple.Create(a, b, ...)` рендерится как `tuple(a, b, ...)`, а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)`, оба под [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` не поддерживается (меняет набор колонок результата) |
-| Нативный тип колонки JSON | замаплен для «голого» свойства `System.Text.Json.Nodes.JsonObject` (чтение и параметр); «голый» скаляр верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции — используйте анонимный тип или DTO. `[JsonColumn]` со storage `Native`, «голые» `JsonDocument`/`JsonElement`, «голая» `string` и легаси-алиас `Object('json')` не поддерживаются. См. [Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку) |
+| Нативный тип колонки JSON | нативный тип `JSON` с корнем-объектом: свойство `[JsonColumn]` (`Auto`/`Native`: POCO/`JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом) и «голые» `JsonObject`/`JsonDocument`/`JsonElement` (чтение и параметр) отображаются на него; массивы/скалярные корни отклоняются fail-closed. «Голый» скаляр верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции — используйте анонимный тип или DTO. `Text` сохраняет колонку `String`; «голая» `string` и легаси-алиас `Object('json')` не поддерживаются. См. [Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку) |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` (у драйвера нет потоковых геттеров) |
 
 ## Замечания и ограничения
@@ -264,12 +264,17 @@ public sealed class TvpRow
   `JSONAllPaths` принимает нативное значение `JSON` (колонку `String` приведите через
   `CAST(col AS JSON)`); `json_all_paths` проецируется как `string[]`, а `json_all_paths_with_types`
   отдаёт нативный `Map(String, String)` как `Dictionary<string, string>` (мост к коллекции —
-  `mapKeys`/`mapValues`). Нативная *колонка* `JSON` отображает «голый» `System.Text.Json.Nodes.JsonObject`
-  и на чтение, и как параметр; проецируйте через анонимный тип или DTO, потому что «голый» скаляр
-  верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции.
-  `[JsonColumn]` со storage `Native`, «голые» `JsonDocument`/`JsonElement`, чтение «голой» `string` из
-  колонки `JSON` и легаси-алиас `Object('json')` не поддерживаются; `Auto` storage у `[JsonColumn]`
-  остаётся текстовым ([Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку)).
+  `mapKeys`/`mapValues`). Нативный *тип колонки* `JSON` имеет корень-объект и обслуживает свойство
+  `[JsonColumn]` (`Auto`/`Native`: POCO/`JsonObject`/`JsonDocument`/`JsonElement` с корнем-объектом), а
+  также «голые» `JsonObject`/`JsonDocument`/`JsonElement` в проекции и параметре; проецируйте через
+  анонимный тип или DTO, потому что «голый» скаляр верхнего уровня `Select(x => x.Doc)` не
+  обрабатывается ядровым классификатором проекции. Пустой `{}` остаётся непустым значением, а SQL `NULL`
+  в `Nullable(JSON)` остаётся отличным от него. Массивы/скалярные корни отклоняются fail-closed с
+  `NotSupportedException`; чтение «голой» `string` из колонки `JSON` и легаси-алиас `Object('json')` не
+  поддерживаются — алиасу нужен connection-level `allow_experimental_object_type` (который nextorm
+  никогда не выставляет), и даже тогда чтение материализуется как `Tuple<SByte,String>`, а не через
+  нативный транспорт `JsonObject`
+  ([Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку)).
 - В `hits_v1` и других широких таблицах колонок намного больше, чем объявляет интерфейс сущности.
   Вместо маппинга всех колонок лишние можно спроецировать по имени через
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (см.

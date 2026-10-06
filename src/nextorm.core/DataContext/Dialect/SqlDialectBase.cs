@@ -91,6 +91,10 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <inheritdoc/>
     public virtual bool SupportsJson => false;
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL renders the JSON functions/operators surface.</summary>
+    public virtual bool SupportsPostgresJsonSql => false;
+    /// <summary>Defaults to <see cref="System.Text.Json.JsonElement"/>; ClickHouse uses <c>JsonObject</c>.</summary>
+    public virtual Type NativeJsonProviderType => typeof(System.Text.Json.JsonElement);
     /// <inheritdoc/>
     public virtual bool SupportsTextJson => false;
     /// <summary>Defaults to <c>null</c>; only SQL Server opts into the postfix XML data-type methods.</summary>

@@ -120,9 +120,15 @@ cast error on first execution instead of at mapping-build time.
 `[JsonColumn]` stores any serializable CLR object as JSON. The **storage** is chosen by the dialect:
 
 - `JsonColumnStorage.Auto` (default) uses the provider's native JSON type where it has one
-  (PostgreSQL `jsonb`) and a text column otherwise;
-- `JsonColumnStorage.Native` forces `jsonb` (PostgreSQL only);
+  (PostgreSQL `jsonb`, ClickHouse object-rooted `JSON`) and a text column otherwise;
+- `JsonColumnStorage.Native` forces the native type (PostgreSQL `jsonb` or ClickHouse `JSON`);
 - `JsonColumnStorage.Text` forces a text column.
+
+The native provider representation is `JsonElement` on PostgreSQL and `JsonObject` on ClickHouse.
+ClickHouse's native `JSON` is object-rooted, so a model that does not serialize to a JSON object throws
+`NotSupportedException` — use `Text` for array/scalar roots. The legacy ClickHouse `Object('json')`
+alias is not supported by this integration; see
+[JSON support](../guide/14-json.md#map-a-clr-object-to-a-native-json-column).
 
 ```csharp
 public sealed class Address
@@ -177,8 +183,8 @@ ctx.CreateInsertBuilder<Customer>()
 insert into customers (id, address) values (@p0, @p1)
 ```
 
-`@p1` carries the serialized document (a `JsonElement` on a native `jsonb` column, a `string` on a text
-column):
+`@p1` carries the serialized document (a `JsonElement` on PostgreSQL `jsonb`, a `JsonObject` on
+ClickHouse `JSON`, a `string` on a text column):
 
 ```json
 {"City":"Berlin","Lines":["a","b"],"UpdatedAt":"2026-09-25T12:34:56+00:00"}
@@ -203,9 +209,10 @@ select id, address from customers
  where id = 1
 ```
 
-On the client the engine reads the column as the provider value (a `JsonElement` on a native `jsonb`
-column, a `string` on a text column) and runs the converter's `ConvertFromProvider`, i.e.
-`JsonElement.Deserialize<Address>()` or `JsonSerializer.Deserialize<Address>(text)`. `System.Text.Json`
+On the client the engine reads the column as the provider value (a `JsonElement` on PostgreSQL `jsonb`,
+a `JsonObject` on ClickHouse `JSON`, a `string` on a text column) and runs the converter's
+`ConvertFromProvider`, i.e. `JsonElement.Deserialize<Address>()`,
+`JsonObject.Deserialize<Address>()` or `JsonSerializer.Deserialize<Address>(text)`. `System.Text.Json`
 reconstructs the graph and turns `"UpdatedAt"` from ISO 8601 back into a `DateTimeOffset` — again with no
 converter or manual parsing.
 
@@ -219,8 +226,8 @@ var addresses = ctx.From<Customer>().Select(x => x.Address).ToList();
 ```
 
 A constant compared against a JSON column is serialized to its provider representation before it is
-bound, so the predicate runs against the stored document (document equality on a native `jsonb` column,
-text equality on a text column):
+bound, so the predicate runs against the stored document (document equality on a native `jsonb`/`JSON`
+column, text equality on a text column):
 
 ```csharp
 var berlin = new Address { City = "Berlin", Lines = [], UpdatedAt = DateTimeOffset.UnixEpoch };
@@ -232,8 +239,9 @@ select id, address from customers
  where address = @p0
 ```
 
-`@p0` carries the serialized `Address` (a `JsonElement` on PostgreSQL by default, the JSON string on a
-text column). The same conversion applies inside an anonymous projection (`Select(x => new { x.Address })`).
+`@p0` carries the serialized `Address` (a `JsonElement` on PostgreSQL `jsonb`, a `JsonObject` on
+ClickHouse `JSON`, the JSON string on a text column). The same conversion applies inside an anonymous
+projection (`Select(x => new { x.Address })`).
 Comparison is by the serialized representation, so it matches when the stored document equals the
 serialized constant — the serializer options must therefore be stable.
 
@@ -248,7 +256,7 @@ must be readable and bindable.
 | SQL Server | — (`nvarchar(max)`) | `nvarchar(max)` | `nvarchar` |
 | MySQL / MariaDB | — (`longtext`) | `longtext` | `longtext` |
 | SQLite | — (`TEXT`) | `TEXT` | `TEXT` |
-| ClickHouse | — (`String`) | `String` | `String` |
+| ClickHouse | `JSON` (read/written as `JsonObject`, object-rooted) | `String` | `String` |
 | In-memory | CLR value | CLR value | CLR value |
 
 ## Null handling

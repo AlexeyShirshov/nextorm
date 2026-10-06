@@ -59,7 +59,7 @@ internal static class RowMapperFactory
 
         var converter = ResolveConverter(column.Converter, dialect);
         if (converter is not null)
-            return MapConvertedColumn(column, param, converter);
+            return MapConvertedColumn(column, param, converter, dialect);
 
         Expression getter;
         if (column.IsWideCountNarrowed && realType == typeof(int))
@@ -82,7 +82,7 @@ internal static class RowMapperFactory
         }
         else
         {
-            getter = GetReaderAccessor(column, param, realType);
+            getter = GetReaderAccessor(column, param, realType, dialect);
         }
 
         if (column.Nullable)
@@ -115,8 +115,18 @@ internal static class RowMapperFactory
     private static IPropertyValueConverter? ResolveConverter(IPropertyValueConverter? converter, ISqlDialect? dialect)
         => converter is IJsonColumnConverter json && dialect is not null ? json.Resolve(dialect) : converter;
 
-    private static Expression GetReaderAccessor(SelectExpression column, Expression param, Type readType)
+    private static Expression GetReaderAccessor(SelectExpression column, Expression param, Type readType, ISqlDialect? dialect)
     {
+        if (readType == typeof(JsonObject) && dialect?.NativeJsonProviderType != typeof(JsonObject))
+        {
+            // Only a dialect that materializes its native JSON as System.Text.Json.Nodes.JsonObject
+            // (ClickHouse) may read the typed accessor; elsewhere JsonObject is not a driver type, so
+            // keep the provider-agnostic rejection the column mapper had before this branch existed
+            // instead of emitting a GetFieldValue<JsonObject> a driver cannot satisfy.
+            throw new NotSupportedException(
+                $"Property '{column.PropertyName}' with index ({column.Index}) has type {readType} which is not supported");
+        }
+
         if (readType == typeof(JsonNode))
         {
             // A bare System.Text.Json.Nodes.JsonNode is not a driver-readable type (Npgsql exposes
@@ -142,10 +152,10 @@ internal static class RowMapperFactory
         return Expression.Call(accessor, method, Expression.Constant(column.Index));
     }
 
-    private static Expression MapConvertedColumn(SelectExpression column, Expression param, IPropertyValueConverter converter)
+    private static Expression MapConvertedColumn(SelectExpression column, Expression param, IPropertyValueConverter converter, ISqlDialect? dialect)
     {
         var providerType = converter.ProviderType;
-        var getter = GetReaderAccessor(column, param, providerType);
+        var getter = GetReaderAccessor(column, param, providerType, dialect);
         var isDbNull = Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index));
 
         if (converter.ConvertsNulls)

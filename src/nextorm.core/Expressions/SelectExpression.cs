@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace NextORM.Core;
 
@@ -251,6 +252,14 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         else if (readType == typeof(JsonElement))
         {
             return GetFieldValueMI.MakeGenericMethod(typeof(JsonElement));
+        }
+        else if (readType == typeof(JsonObject))
+        {
+            // ClickHouse's native JSON is materialized by the driver as a JsonObject; the typed accessor
+            // reads it without boxing. The accessor selector only reaches this branch for a dialect whose
+            // NativeJsonProviderType is JsonObject (see RowMapperFactory.GetReaderAccessor); PostgreSQL and
+            // every other dialect keep their previous not-supported rejection.
+            return GetFieldValueMI.MakeGenericMethod(typeof(JsonObject));
         }
         else if (readType == typeof(byte[]))
         {

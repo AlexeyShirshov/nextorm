@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using ClickHouse.Driver.ADO.Parameters;
 using FluentAssertions;
@@ -66,6 +67,27 @@ public class ClickHouseJsonObjectMappingTests
         sql.Should().Contain("doc");
     }
 
+    [Fact]
+    public void BareTopLevelJsonObjectScalarProjection_ShouldFailClosedWithNamedLimitation()
+    {
+        // Retained limitation (docs/providers/clickhouse.md, docs/advanced/limitations.md): a bare
+        // top-level scalar JsonObject projection is not handled by the core projection classifier —
+        // project through a named shape such as Select(x => new { x.Doc }) or a DTO. Without the guard
+        // the empty select list reached the row materializer, which failed with an opaque
+        // "Incorrect number of arguments for constructor" (System.ArgumentException). It must now fail
+        // closed at preparation with a clear message naming the shape.
+        using var ctx = ClickHouseTestContext.Create();
+
+        var command = ctx.From<IJsonObjectEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Doc);
+
+        var act = () => SqlOf(ctx, command);
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*bare top-level scalar*JsonObject*");
+    }
+
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> command)
         => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
                 command, createEnumerator: false, storeInCache: false, CancellationToken.None))
@@ -112,6 +134,74 @@ public class ClickHouseJsonObjectMappingTests
         var result = Invoke(MapColumn(typeof(string)), "hello");
 
         result.Should().Be("hello");
+    }
+
+    [Fact]
+    public void BareJsonDocumentProjection_ShouldAdaptFromNativeJsonObject()
+    {
+        var doc = new JsonObject
+        {
+            ["name"] = "alice",
+            ["nested"] = new JsonObject { ["x"] = 1 },
+        };
+
+        var result = Invoke(MapColumn(typeof(JsonDocument)), doc).Should().BeOfType<JsonDocument>().Subject;
+
+        result.RootElement.GetProperty("name").GetString().Should().Be("alice");
+        result.RootElement.GetProperty("nested").GetProperty("x").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public void BareJsonElementProjection_ShouldAdaptFromNativeJsonObject()
+    {
+        var doc = new JsonObject { ["name"] = "alice" };
+
+        var result = (JsonElement)Invoke(MapColumn(typeof(JsonElement)), doc)!;
+
+        result.ValueKind.Should().Be(JsonValueKind.Object);
+        result.GetProperty("name").GetString().Should().Be("alice");
+    }
+
+    [Fact]
+    public void BareJsonDocumentProjection_SqlNull_ShouldMaterializeNull()
+    {
+        var result = Invoke(MapColumn(typeof(JsonDocument)), DBNull.Value);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void BareJsonElementProjection_SqlNull_ShouldBeUndefined()
+    {
+        // JsonElement is a value type, so SQL NULL cannot be null; it stays distinct from {} as the
+        // default (Undefined) element.
+        var result = (JsonElement)Invoke(MapColumn(typeof(JsonElement)), DBNull.Value)!;
+
+        result.ValueKind.Should().Be(JsonValueKind.Undefined);
+    }
+
+    [Fact]
+    public void BareNullableJsonElementProjection_SqlNull_ShouldMaterializeNull()
+    {
+        // JsonElement? is a nullable value type: a SQL NULL must be a true null, not default(JsonElement)
+        // (ValueKind Undefined) surfaced as a present value.
+        var column = new SelectExpression(typeof(JsonElement?)) { Index = 0, PropertyName = "Doc" };
+        var body = ClickHouseTestContext.CreateClickHouse().MapColumnExpression(column, Record);
+
+        body.Type.Should().Be(typeof(JsonElement?));
+
+        var result = Invoke(body, DBNull.Value);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void BareNullableJsonElementProjection_Value_ShouldAdapt()
+    {
+        var result = (JsonElement)Invoke(MapColumn(typeof(JsonElement?)), new JsonObject { ["name"] = "alice" })!;
+
+        result.ValueKind.Should().Be(JsonValueKind.Object);
+        result.GetProperty("name").GetString().Should().Be("alice");
     }
 
     private static Expression MapColumn(Type type)

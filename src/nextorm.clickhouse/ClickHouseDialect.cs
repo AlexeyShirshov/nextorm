@@ -281,6 +281,20 @@ public class ClickHouseDialect : SqlDialectBase
     public override bool SupportsWindowFrameGroups => true;
 
     /// <summary>
+    /// ClickHouse has a native <c>JSON</c> type and stores a mapped JSON column as it. This is the
+    /// storage capability only: the PostgreSQL JSON functions/operators surface stays opt-out, because
+    /// ClickHouse has no <c>json_agg</c>/<c>-&gt;</c>/<c>@&gt;</c> and its own JSON surface is
+    /// <see cref="SupportsJsonExtract"/>.
+    /// </summary>
+    public override bool SupportsJson => true;
+
+    /// <summary>
+    /// ClickHouse materializes and binds its native <c>JSON</c> type as a
+    /// <see cref="System.Text.Json.Nodes.JsonObject"/> (the driver's object-root DOM).
+    /// </summary>
+    public override Type NativeJsonProviderType => typeof(System.Text.Json.Nodes.JsonObject);
+
+    /// <summary>
     /// ClickHouse implements the <c>JSONExtract*</c>/<c>JSONHas</c>/<c>visitParamExtract*</c> string-JSON
     /// family and the JSONPath scalars <c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>.
     /// </summary>

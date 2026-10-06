@@ -122,10 +122,16 @@ public object? Payload { get; set; }
 `[JsonColumn]` хранит любой сериализуемый CLR-объект как JSON. **Форма хранения** выбирается
 диалектом:
 
-- `JsonColumnStorage.Auto` (по умолчанию) — нативный JSON-тип, где он есть (PostgreSQL `jsonb`),
-  иначе текстовая колонка;
-- `JsonColumnStorage.Native` — принудительно `jsonb` (только PostgreSQL);
+- `JsonColumnStorage.Auto` (по умолчанию) — нативный JSON-тип, где он есть (PostgreSQL `jsonb`,
+  ClickHouse `JSON` с корнем-объектом), иначе текстовая колонка;
+- `JsonColumnStorage.Native` — принудительно нативный тип (PostgreSQL `jsonb` или ClickHouse `JSON`);
 - `JsonColumnStorage.Text` — принудительно текстовая колонка.
+
+Нативное представление провайдера — `JsonElement` в PostgreSQL и `JsonObject` в ClickHouse. Нативный
+`JSON` в ClickHouse имеет корень-объект, поэтому модель, не сериализующаяся в JSON-объект, бросает
+`NotSupportedException` — для корней-массивов/скаляров используйте `Text`. Легаси-алиас ClickHouse
+`Object('json')` в этой интеграции не поддерживается; см.
+[Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку).
 
 ```csharp
 public sealed class Address
@@ -180,7 +186,8 @@ ctx.CreateInsertBuilder<Customer>()
 insert into customers (id, address) values (@p0, @p1)
 ```
 
-`@p1` несёт сериализованный документ (`JsonElement` в нативной `jsonb`-колонке, `string` в текстовой):
+`@p1` несёт сериализованный документ (`JsonElement` в PostgreSQL `jsonb`, `JsonObject` в ClickHouse
+`JSON`, `string` в текстовой):
 
 ```json
 {"City":"Berlin","Lines":["a","b"],"UpdatedAt":"2026-09-25T12:34:56+00:00"}
@@ -204,9 +211,10 @@ select id, address from customers
  where id = 1
 ```
 
-На клиенте движок читает колонку как представление провайдера (`JsonElement` в нативной `jsonb`-колонке,
-`string` в текстовой) и выполняет `ConvertFromProvider` конвертера, то есть
-`JsonElement.Deserialize<Address>()` или `JsonSerializer.Deserialize<Address>(text)`. `System.Text.Json`
+На клиенте движок читает колонку как представление провайдера (`JsonElement` в PostgreSQL `jsonb`,
+`JsonObject` в ClickHouse `JSON`, `string` в текстовой) и выполняет `ConvertFromProvider` конвертера,
+то есть `JsonElement.Deserialize<Address>()`, `JsonObject.Deserialize<Address>()` или
+`JsonSerializer.Deserialize<Address>(text)`. `System.Text.Json`
 восстанавливает граф и превращает `"UpdatedAt"` из ISO 8601 обратно в `DateTimeOffset` — снова без
 конвертера и ручного разбора.
 
@@ -220,8 +228,8 @@ var addresses = ctx.From<Customer>().Select(x => x.Address).ToList();
 ```
 
 Константа в сравнении с JSON-колонкой сериализуется в представление провайдера до биндинга параметра,
-поэтому предикат сравнивается с хранимым документом (равенство документов в нативной `jsonb`-колонке,
-равенство строк в текстовой):
+поэтому предикат сравнивается с хранимым документом (равенство документов в нативной колонке
+`jsonb`/`JSON`, равенство строк в текстовой):
 
 ```csharp
 var berlin = new Address { City = "Berlin", Lines = [], UpdatedAt = DateTimeOffset.UnixEpoch };
@@ -233,8 +241,8 @@ select id, address from customers
  where address = @p0
 ```
 
-`@p0` несёт сериализованный `Address` (`JsonElement` в PostgreSQL по умолчанию, JSON-строка в
-текстовой колонке). Та же конвертация применяется внутри анонимной проекции
+`@p0` несёт сериализованный `Address` (`JsonElement` в PostgreSQL `jsonb`, `JsonObject` в ClickHouse
+`JSON`, JSON-строка в текстовой колонке). Та же конвертация применяется внутри анонимной проекции
 (`Select(x => new { x.Address })`). Сравнение идёт по сериализованному представлению, поэтому совпадает,
 когда хранимый документ равен сериализованной константе — то есть настройки сериализатора должны быть
 стабильными.
@@ -250,7 +258,7 @@ select id, address from customers
 | SQL Server | — (`nvarchar(max)`) | `nvarchar(max)` | `nvarchar` |
 | MySQL / MariaDB | — (`longtext`) | `longtext` | `longtext` |
 | SQLite | — (`TEXT`) | `TEXT` | `TEXT` |
-| ClickHouse | — (`String`) | `String` | `String` |
+| ClickHouse | `JSON` (чтение/запись через `JsonObject`, корень-объект) | `String` | `String` |
 | In-memory | CLR-значение | CLR-значение | CLR-значение |
 
 ## Семантика NULL

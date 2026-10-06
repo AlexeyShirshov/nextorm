@@ -635,6 +635,20 @@ public partial class QueryCommand
 
 
                     }
+                    // A bare top-level DOM scalar projection (x => x.Doc where Doc is a bare
+                    // JsonObject/JsonDocument/JsonElement property with no [JsonColumn] converter) is
+                    // not handled by any projection shape: the single-column branch only recognizes the
+                    // exact JsonNode type, so no branch matches and the select list would stay empty
+                    // (the row mapper then fails with an opaque "Incorrect number of arguments for
+                    // constructor"). Fail early with a clear message instead. The wrapped form
+                    // (Select(x => new { x.Doc })) expands through the NewExpression branch above and an
+                    // attributed [JsonColumn] DOM property carries a converter, so neither is affected.
+                    else if (TypeFacts.UnwrapConvert(cmd._exp.Body) is MemberExpression domMember
+                        && TypeFacts.IsBareDomScalar(domMember.Type))
+                    {
+                        throw new NotSupportedException(
+                            $"The bare top-level scalar projection '{domMember.Type}' at Select position 0 is not supported; project it inside a named shape (for example Select(x => new {{ x.Doc }}) or a DTO) instead.");
+                    }
                 }
                 else
                 {

@@ -22,7 +22,8 @@
 - `INTERSECT ALL` / `EXCEPT ALL` поддерживаются ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) равно `true`);
 - массивы поддерживаются ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) равно `true`): параметры-массивы с квантификаторами
   `any`/`all` и функции для массивов;
-- JSON/JSONB поддерживается ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson) равно `true`): агрегаты `json_agg`/`jsonb_agg`, функции
+- JSON/JSONB поддерживается ([`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) равно `true`, только PostgreSQL; нативное хранение `jsonb` —
+  [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)): агрегаты `json_agg`/`jsonb_agg`, функции
   построения/доступа и операторы `->`/`->>`/`@>`/`?`, а параметры `JsonDocument`/`JsonElement`/`JsonNode`
   привязываются как `jsonb`;
 - `greatest`/`least` и предложение `FILTER (WHERE ...)` у агрегатов включены ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) равно `true`, а

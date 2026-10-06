@@ -17,8 +17,10 @@ namespace NextORM.Core;
 /// parameter through <see cref="SqlOperandTranslator"/>.
 /// </para>
 /// <para>
-/// Only a dialect that opts in with <see cref="ISqlDialect.SupportsJson"/> (PostgreSQL) may use these
-/// constructs; every other provider rejects them with a clear message.
+/// Only a dialect that opts in with <see cref="ISqlDialect.SupportsPostgresJsonSql"/> (PostgreSQL) may use
+/// these constructs; every other provider rejects them with a clear message. This is deliberately distinct
+/// from <see cref="ISqlDialect.SupportsJson"/>, which only advertises native JSON <i>storage</i> (both
+/// PostgreSQL and ClickHouse opt into that).
 /// </para>
 /// </summary>
 internal static class JsonSqlTranslator
@@ -303,7 +305,7 @@ internal static class JsonSqlTranslator
 
     private static void RequireJsonSupport(BaseExpressionVisitor visitor)
     {
-        if (!visitor.Dialect.SupportsJson)
+        if (!visitor.Dialect.SupportsPostgresJsonSql)
             throw new NotSupportedException(
                 "JSON is not supported by this provider: the json/jsonb functions and operators require PostgreSQL.");
     }

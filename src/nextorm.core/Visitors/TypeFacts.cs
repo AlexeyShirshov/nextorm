@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace NextORM.Core;
@@ -79,6 +80,19 @@ internal static class TypeFacts
         || type == typeof(JsonNode)
         || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
         || type.IsArray;
+
+    /// <summary>
+    /// True for the JSON DOM scalar types that are explicitly named as a bare top-level projection
+    /// limitation: <see cref="JsonObject"/>, <see cref="JsonDocument"/> and <see cref="JsonElement"/>.
+    /// These have a provider representation (native <c>JSON</c>) but no single-column projection shape
+    /// of their own, so <c>Select(x =&gt; x.Doc)</c> over such a property (with no <c>[JsonColumn]</c>
+    /// converter) is rejected up front. The exact <see cref="JsonNode"/> type is deliberately excluded:
+    /// it is a recognised single-column scalar (see <see cref="IsSingleColumnProjection"/>), and a
+    /// <see cref="Nullable{T}"/> wrapping <see cref="JsonElement"/> is handled by the nullable branch
+    /// there. Used by the query preparer to fail fast instead of building an empty select list.
+    /// </summary>
+    internal static bool IsBareDomScalar(Type type) =>
+        type == typeof(JsonObject) || type == typeof(JsonDocument) || type == typeof(JsonElement);
 
     /// <summary>
     /// True for the <see cref="System.Tuple"/> family (arity 1..7), the CLR shape the ClickHouse

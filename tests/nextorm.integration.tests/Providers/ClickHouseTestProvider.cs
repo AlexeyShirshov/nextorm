@@ -208,6 +208,20 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (2, '{}')
         """,
 
+        // #198: native JSON backing the [JsonColumn] Auto/Native object-root POCO round-trip, the native
+        // parameter path and the Nullable(JSON) SQL-NULL-vs-{} distinction. auto_doc/native_doc are the
+        // physical types asserted through system.columns; null_doc stays nullable.
+        "drop table if exists json_native_poco",
+        """
+        create table json_native_poco
+        (
+            id Int32,
+            auto_doc JSON,
+            native_doc JSON,
+            null_doc Nullable(JSON)
+        ) engine = Memory
+        """,
+
         "drop table if exists tuple_entity",
         """
         create table tuple_entity

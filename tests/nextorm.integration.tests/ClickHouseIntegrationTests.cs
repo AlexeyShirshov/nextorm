@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using NextORM.Core;
@@ -1190,6 +1191,164 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         read.Count.Should().Be(0);
     }
 
+    // #198 native JSON as [JsonColumn] storage: Auto and Native both serialize an object-root POCO
+    // through the object-root JsonObject transport, and the physical columns really are native JSON.
+    [Fact]
+    public void NativeJsonColumn_AutoAndNative_ShouldRoundTripObjectRootPoco()
+    {
+        var ctx = _sut.DataProvider;
+        var payload = new ChNativeJsonPoco
+        {
+            Name = "poco-\u00e9",
+            Count = 3,
+            Nested = new ChNativeJsonNested { Inner = "in", Tags = [1, 2, 3] },
+        };
+
+        ctx.CreateInsertBuilder<IChJsonColumnEntity>()
+            .Values(new ChJsonColumnEntity { Id = 200, AutoDoc = payload, NativeDoc = payload })
+            .Insert();
+
+        var row = ctx.From<ChJsonColumnEntity>().Where(x => x.Id == 200).ToList().Single();
+
+        row.AutoDoc.Should().BeEquivalentTo(payload);
+        row.NativeDoc.Should().BeEquivalentTo(payload);
+
+        // Independent DB-content verification: the physical column type is the native JSON storage.
+        PhysicalJsonType(ctx, "json_native_poco", "auto_doc").Should().Be("JSON");
+        PhysicalJsonType(ctx, "json_native_poco", "native_doc").Should().Be("JSON");
+    }
+
+    // #198 the native parameter path: a JsonObject, an object-root JsonDocument and an object-root
+    // JsonElement all bind as ClickHouse JSON and read back through the bare JsonObject projection.
+    [Fact]
+    public void NativeJsonParameter_ObjectRootDomValues_ShouldRoundTrip()
+    {
+        var ctx = _sut.DataProvider;
+        var obj = new JsonObject { ["kind"] = "object", ["n"] = 1 };
+        var expectedDocument = new JsonObject { ["kind"] = "document", ["n"] = 2 };
+        using var document = JsonDocument.Parse("""{"kind":"document","n":2}""");
+        var expectedElement = new JsonObject { ["kind"] = "element", ["n"] = 3 };
+        var element = JsonSerializer.SerializeToElement(new { kind = "element", n = 3 });
+
+        InsertNativeJson(ctx, 201, obj);
+        InsertNativeJson(ctx, 202, document);
+        InsertNativeJson(ctx, 203, element);
+
+        var rows = ctx.From<IChJsonNativeBareEntity>()
+            .Where(x => x.Id >= 201 && x.Id <= 203)
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.NativeDoc })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        JsonNode.DeepEquals(rows.Single(r => r.Id == 201).NativeDoc, obj).Should().BeTrue();
+        JsonNode.DeepEquals(rows.Single(r => r.Id == 202).NativeDoc, expectedDocument).Should().BeTrue();
+        JsonNode.DeepEquals(rows.Single(r => r.Id == 203).NativeDoc, expectedElement).Should().BeTrue();
+    }
+
+    // #198 bare projection over a native JSON column: JsonObject, JsonDocument and JsonElement all
+    // materialize the same object root.
+    [Fact]
+    public void BareNativeJsonProjection_JsonObjectJsonDocumentJsonElement_ShouldRead()
+    {
+        var ctx = _sut.DataProvider;
+
+        var obj = ctx.From<IJsonObjectEntity>().Where(x => x.Id == 1).Select(x => new { x.Doc }).First().Doc;
+        obj["name"]!.GetValue<string>().Should().Be("bob");
+        obj["nested"]!["x"]!.GetValue<long>().Should().Be(2);
+
+        using var doc = ctx.From<IJsonDocumentEntity>().Where(x => x.Id == 1).Select(x => new { x.Doc }).First().Doc;
+        doc.RootElement.GetProperty("name").GetString().Should().Be("bob");
+        doc.RootElement.GetProperty("nested").GetProperty("x").GetInt32().Should().Be(2);
+
+        var element = ctx.From<IJsonElementEntity>().Where(x => x.Id == 1).Select(x => new { x.Doc }).First().Doc;
+        element.ValueKind.Should().Be(JsonValueKind.Object);
+        element.GetProperty("name").GetString().Should().Be("bob");
+        element.GetProperty("nested").GetProperty("x").GetInt32().Should().Be(2);
+    }
+
+    // #198 SQL NULL in Nullable(JSON) is distinct from an empty object, through both the bare projection
+    // and the [JsonColumn] nullable converter.
+    [Fact]
+    public void NativeJsonNullable_SqlNull_ShouldBeDistinctFromEmptyObject()
+    {
+        var ctx = _sut.DataProvider;
+
+        // id 210 -> {} bound as a native object-root parameter; id 211 -> SQL NULL.
+        using (ctx.ExecuteRaw(
+            "insert into json_native_poco (id, null_doc) values (@id, @doc)",
+            [new ProcedureParameter("id", 210), new ProcedureParameter("doc", new JsonObject())]))
+        {
+        }
+        using (ctx.ExecuteRaw("insert into json_native_poco (id, null_doc) values (211, NULL)"))
+        {
+        }
+
+        var bare = ctx.From<IChJsonNativeBareEntity>()
+            .Where(x => x.Id == 210 || x.Id == 211)
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.NullDoc })
+            .ToList();
+
+        var empty = bare.Single(r => r.Id == 210).NullDoc;
+        empty.Should().NotBeNull();
+        empty!.Count.Should().Be(0);
+        bare.Single(r => r.Id == 211).NullDoc.Should().BeNull();
+
+        var converted = ctx.From<IChJsonNullableColumnEntity>()
+            .Where(x => x.Id == 210 || x.Id == 211)
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.NullDoc })
+            .ToList();
+
+        converted.Single(r => r.Id == 210).NullDoc.Should().NotBeNull();
+        converted.Single(r => r.Id == 211).NullDoc.Should().BeNull();
+    }
+
+    // #198 a non-object root (array/string element) is rejected with the object-root guard before the
+    // command ever reaches the server, so nothing is written.
+    [Fact]
+    public void NativeJsonColumn_NonObjectRoot_ShouldThrowObjectRootGuardBeforeExecution()
+    {
+        var ctx = _sut.DataProvider;
+
+        var arrayRoot = () => ctx.CreateInsertBuilder<IChJsonArrayRootEntity>()
+            .Values(new ChJsonArrayRootEntity { Id = 220, Values = [1, 2, 3] })
+            .Insert();
+
+        arrayRoot.Should().Throw<NotSupportedException>().WithMessage("*object-root*");
+
+        var elementRoot = () => ctx.CreateInsertBuilder<IChJsonElementRootEntity>()
+            .Values(new ChJsonElementRootEntity { Id = 221, Value = JsonSerializer.SerializeToElement("text") })
+            .Insert();
+
+        elementRoot.Should().Throw<NotSupportedException>().WithMessage("*object-root*");
+
+        // The guard fired before any server round-trip: neither row was inserted.
+        ctx.From<IChJsonNativeBareEntity>()
+            .Where(x => x.Id == 220 || x.Id == 221)
+            .Select(x => x.Id)
+            .ToList()
+            .Should().BeEmpty();
+    }
+
+    private static void InsertNativeJson(IDataContext ctx, int id, object value)
+    {
+        using (ctx.ExecuteRaw(
+            "insert into json_native_poco (id, native_doc) values (@id, @doc)",
+            [new ProcedureParameter("id", id), new ProcedureParameter("doc", value)]))
+        {
+        }
+    }
+
+    private static string PhysicalJsonType(IDataContext ctx, string table, string column)
+    {
+        using var probe = ctx.ExecuteRaw(
+            "select type from system.columns "
+            + $"where database = currentDatabase() and table = '{table}' and name = '{column}'");
+        return probe.Read<string>().Single();
+    }
+
     // #39 managed JSON streaming: ClickHouse does not derive CommonTestSuite, so the shared
     // CommonTestSuite.JsonStream facts are mirrored here through their reusable bodies. complex_entity
     // carries the same ids/rows as the shared fixture.
@@ -1631,6 +1790,128 @@ public interface IJsonObjectEntity
     int Id { get; set; }
     [Column("doc")]
     JsonObject Doc { get; set; }
+}
+
+// #198: the same native JSON column projected as the other object-root DOM types.
+[SqlTable("json_object_entity")]
+public interface IJsonDocumentEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("doc")]
+    JsonDocument Doc { get; set; }
+}
+
+[SqlTable("json_object_entity")]
+public interface IJsonElementEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("doc")]
+    JsonElement Doc { get; set; }
+}
+
+// #198: the [JsonColumn] Auto/Native object-root POCO over a native JSON column.
+public sealed class ChNativeJsonPoco
+{
+    public string? Name { get; set; }
+    public int Count { get; set; }
+    public ChNativeJsonNested? Nested { get; set; }
+}
+
+public sealed class ChNativeJsonNested
+{
+    public string? Inner { get; set; }
+    public List<int> Tags { get; set; } = [];
+}
+
+[SqlTable("json_native_poco")]
+public interface IChJsonColumnEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("auto_doc")]
+    [JsonColumn]
+    ChNativeJsonPoco AutoDoc { get; set; }
+
+    [Column("native_doc")]
+    [JsonColumn(Storage = JsonColumnStorage.Native)]
+    ChNativeJsonPoco NativeDoc { get; set; }
+}
+
+public sealed class ChJsonColumnEntity : IChJsonColumnEntity
+{
+    public int Id { get; set; }
+    public ChNativeJsonPoco AutoDoc { get; set; } = new();
+    public ChNativeJsonPoco NativeDoc { get; set; } = new();
+}
+
+// #198: the nullable [JsonColumn] read and the bare JsonObject read over Nullable(JSON).
+[SqlTable("json_native_poco")]
+public interface IChJsonNullableColumnEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("null_doc")]
+    [JsonColumn(Storage = JsonColumnStorage.Native)]
+    ChNativeJsonPoco? NullDoc { get; set; }
+}
+
+[SqlTable("json_native_poco")]
+public interface IChJsonNativeBareEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("native_doc")]
+    JsonObject NativeDoc { get; set; }
+
+    [Column("null_doc")]
+    JsonObject? NullDoc { get; set; }
+}
+
+// #198: non-object root models that must fail the object-root guard before execution.
+[SqlTable("json_native_poco")]
+public interface IChJsonArrayRootEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("native_doc")]
+    [JsonColumn(Storage = JsonColumnStorage.Native)]
+    List<int> Values { get; set; }
+}
+
+public sealed class ChJsonArrayRootEntity : IChJsonArrayRootEntity
+{
+    public int Id { get; set; }
+    public List<int> Values { get; set; } = [];
+}
+
+[SqlTable("json_native_poco")]
+public interface IChJsonElementRootEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("native_doc")]
+    [JsonColumn(Storage = JsonColumnStorage.Native)]
+    JsonElement Value { get; set; }
+}
+
+public sealed class ChJsonElementRootEntity : IChJsonElementRootEntity
+{
+    public int Id { get; set; }
+    public JsonElement Value { get; set; }
 }
 
 [SqlTable("tuple_entity")]
