@@ -23,7 +23,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | D197 | G1 | 1.0.9-rc1 | done | issue #197 — PostgreSQL bare JsonNode read from native json/jsonb; commit 95849d38 | docs/specs/status/rc1-tail-197-pg-jsonnode-1.md |
 | D140 | G1 | 1.0.9-rc1 | done | issue #140 — docs-only (author option A): documented EN+RU that jsonb_to_record/jsonb_to_recordset need a caller-declared TRow (alias column-definition list AS x(a int, b text)) and that schema-less use is via [DynamicColumns]/raw ToDataReader/ResultSet/jsonb_each*; docfx exit 0; commit 85083fb8 | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
 | D134 | G1 | 1.0.9-rc1 | done | issue #134 — SQLite ToDataReader enabled (variant A, locator-free buffered); R06 open-failure leak fixed; docs EN+RU; CHECK pass r=1/n=3; coverage 87.2%/78.9%; benchmark 7/7; commit 65477266 | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
-| D194 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
+| D194 | G1 | 1.0.9-rc1 | done | issue #194 — PostgreSQL raw ROW/composite materialization; CHECK PASS r=2/rv2/n=3/3; commit 451d5c6e | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
 | D150 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
 | D193 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-193-tuple-in-1.md |
 | D198 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
@@ -54,12 +54,12 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Verification state: **unverified**.
 - Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; no open defect.
 - Related corrective-task status file: —.
-- Next allowed step: continue the single lane — D194 next, then D150 → D193 → D198 → D195 → D196.
+- Next allowed step: D150 next, then D193 → D198 → D195 → D196.
 - Notice: host has no todowrite tool for subagents; task status files carry the progress log instead.
 
 ## Done / Verified / Incomplete
 
-- Done: D161, D197, D140, D134.
+- Done: D161, D197, D140, D134, D194.
 - Verified: —.
 - Incomplete: —.
 
@@ -70,4 +70,7 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - The `incomplete "группа остановлена"` marks on D134/D194/D150/D193/D198/D195/D196 were an artifact of the outside-cycle blocker; those tasks were **never executed** and are re-armed to `pending`.
 - D161 (#161) and D197 (#197) remain `done` — their commits are valid.
 - Verification state: **unverified** (collection not yet verified).
-- Next allowed step: continue the single lane — D194 next, then D150 → D193 → D198 → D195 → D196.
+- Next allowed step: D150 next, then D193 → D198 → D195 → D196.
+- D194 complete: PostgreSQL raw `ROW(...)`/composite materialization shipped (caller-registered
+  composites, NULL/error contracts, EN+RU docs, PG integration tests); CHECK PASS r2/rv2 n=3/3; commit
+  `451d5c6e`. The D194 status file is kept. Collection verification state remains **unverified**.
