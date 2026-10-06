@@ -5,13 +5,13 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc1` (HEAD `b998df17`, pushed by the user); working tree clean except untracked `artifacts/`
 - collection revision: r1; evidence revision: rv1
-- collection status: **in-progress (resumed after author clarification on #140)**
+- collection status: **done — gate C PASS**
 
 ## Groups
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | done (corrective revalidation complete) |
+| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | done |
 
 Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`. The already-made commits (D161 b06784c8, D197 95849d38) stay on `1.0.9-rc1` — no auto-rollback on stop.
 
@@ -50,12 +50,12 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 ## Общая верификация и восстановление
 
-- Last common C: parent gate-C verdict FAIL (C-E03 unmet: missing CHECK r=2 / escalate waiver / validator not run / status rot); corrective task rc1-tail-193-verify-1 — independent CHECK r=2 PASS; parent C re-run pending.
-- Verification state: **unverified**.
+- Last common C: parent gate-C verdict **PASS** (`check`, rv1): C-E01 met / C-E02 met / C-E03 met / C-E04 met (N/A — single group, no group branch and no merge). The earlier FAIL (C-E03 unmet: missing CHECK r=2 / escalate waiver / validator not run / status rot) was corrected by `rc1-tail-193-verify-1` and the parent C re-run now passes.
+- Verification state: **pass** — fresh aggregate at HEAD `276d636e`, collection CHECK evidence root `/tmp/nextorm-rc1-tail-c3/`.
 - Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; D193 defects (W1–W4, F1/F7/F10/F12/F14) all fixed/verified, none open; no open defect; D193 evidence/status rot (missing CHECK r=2, commit claims, integration totals) corrected by rc1-tail-193-verify-1; W1–W4 fixed in e19d751a, none open.
 - Related corrective-task status file: docs/specs/status/rc1-tail-193-verify-1.md.
-- Corrective task `rc1-tail-199-sticky-cache-1` (defect **#199**, confirmed **P1** by the parent gate C): scalar `IN`/`Contains` SQL translation poisoned the shared `QueryCommand` cache policy; fixed at the source (removed the sticky `QueryCommand.Cache` write; preparation-time call-local scalar-unkeyed classification + `storeInCache` suppression). Independent CHECK **PASS** r1/n=2/3/rv1; task status file `docs/specs/status/rc1-tail-199-sticky-cache-1.md`. This is a corrective reference only — the historical G1 verification is **not** rewritten and the collection verification state remains **unverified** until the parent C re-run.
-- Next allowed step: re-run parent gate C after this ACT.
+- Corrective task `rc1-tail-199-sticky-cache-1` (defect **#199**, confirmed **P1** by the parent gate C): scalar `IN`/`Contains` SQL translation poisoned the shared `QueryCommand` cache policy; fixed at the source (removed the sticky `QueryCommand.Cache` write; preparation-time call-local scalar-unkeyed classification + `storeInCache` suppression). Independent CHECK **PASS** r1/n=2/3/rv1; task status file `docs/specs/status/rc1-tail-199-sticky-cache-1.md`. This is a corrective reference only — the historical G1 verification is **not** rewritten; the parent gate C re-run then returned **PASS** (rv1), so the collection verification state is now **pass**.
+- Next allowed step: — (collection closed; gate C PASS).
 - Notice: host has no todowrite tool for subagents; task status files carry the progress log instead.
 
 ## Done / Verified / Incomplete
@@ -89,3 +89,24 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
   (`AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`) as DML commands; SQL-generation,
   execution (incl. real SQLite FTS5) and provider-rejection tests; EN+RU docs; CHECK PASS r=1 n=2/3;
   commit `79d50db3`. D196 remains pending and binds to the frozen FC195-1/rv=1.
+
+## ACT
+
+- **Done**: group **G1 = `done`**; all 10 tasks `done`:
+  D161 #161 `b06784c8`; D197 #197 `95849d38`; D140 #140 `85083fb8`; D134 #134 `65477266`;
+  D194 #194 `451d5c6e`; D150 #150 `4d0237bf`; D193 #193 `e19d751a`; D198 #198 `b179dc7f`;
+  D195 #195 `79d50db3`; D196 #196 `e474bbfa`.
+- **Verified**: **gate C = PASS** (`check`, rv1) — C-E01 met, C-E02 met, C-E03 met, C-E04 met/N-A (single group, no group branch and no merge). Fresh aggregate at HEAD `276d636e` (logs `/tmp/nextorm-rc1-tail-c3/`):
+  - build Debug/Release **0 warnings / 0 errors**;
+  - unit **8929 total / 6312 passed / 0 failed / 2617 skipped**;
+  - integration **3311 total / 0 failed / 197 skipped** — PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse, SQLite all executed, none skipped entirely;
+  - coverage **line 87.0 % / branch 79.2 %** (≥ 85 / 75);
+  - docfx **exit 0** (2 pre-existing warnings);
+  - perf acceptance **exactly 7 cases / 0 failures**; BDN artifacts restored.
+- **Incomplete**: —
+- **Deferred (in-milestone, not blockers)**: D193 — tuple-typed `QueryCommand` RHS (`(a,b) IN (SELECT x,y ...)`), `Rest`/nested tuple (arity ≥ 8), alternate opaque-tuple bulk binding — deferred with re-open triggers; D193 uncovered wide-scan positive branches kept as `guard` rows with an aggregate trigger; #199 — F1 scalar-PREWHERE execution and F2 scanner-rescan optimization deferred with triggers.
+- **Changed artefacts**: `docs/specs/status/collection-1.0.9-rc1-tail.md` (this file); corrective status files `docs/specs/status/rc1-tail-193-verify-1.md`, `docs/specs/status/rc1-tail-199-sticky-cache-1.md`; per-task status files and EN+RU docs carried by each task's own commit. Evidence root `/tmp/nextorm-rc1-tail-c3/` (build, unit, integration, coverage, docfx, perf, BDN-restore logs).
+- **Commit list**: D161 `b06784c8` · D197 `95849d38` · D140 `85083fb8` · D134 `65477266` · D194 `451d5c6e` · D150 `4d0237bf` · D193 `e19d751a` · D198 `b179dc7f` · D195 `79d50db3` · D196 `e474bbfa` · corrective `rc1-tail-193-verify-1` `9858fbe3` (real CHECK r=2 PASS + validator brief/report exit 0 + status-rot/integration reconciliation) · corrective `rc1-tail-199-sticky-cache-1` `085288c9` (fixed sticky `command.Cache=false` at `InValuesTranslator.cs:58-59`; regression red 2/2 → green 13/13; independent CHECK PASS).
+- **HEAD**: `276d636e` (bookkeeping), branch `1.0.9-rc1`.
+- **Integration**: no `collection/1.0.9-rc1-tail` ref, no group worktree, no merge (single group ⇒ nothing to clean up). Push never; commits on branch `1.0.9-rc1` are unpushed.
+- **Issues**: 10 lane issues closed (#161, #197, #140, #134, #194, #150, #193, #198, #195, #196); #140 closed as docs-disposition (workaround paths documented EN+RU); #132 closed already-done; follow-up #199 created and fixed.
