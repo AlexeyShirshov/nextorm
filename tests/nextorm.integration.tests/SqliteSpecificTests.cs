@@ -1732,18 +1732,28 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
 
     [Fact]
     [Trait("Issue", "195")]
+    [Trait("Issue", "196")]
     public void Fts5Maintenance_AllOperations_ShouldExecuteAndKeepIndexQueryable()
     {
         var ctx = _sut.DataProvider;
         ResetFtsTables(ctx);
         NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello").Should().Equal(1L, 3L);
 
-        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").AutoMerge(4).Execute().Should().BeGreaterThanOrEqualTo(0);
-        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").CrisisMerge(2).Execute();
-        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Merge(8).Execute();
-        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").IntegrityCheck().Execute();
-        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Optimize().Execute();
-        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Rebuild().Execute();
+        // D196 (#196): every operation-family result is captured and asserted nonnegative; FC195-1
+        // does not freeze an exact affected-row count, so only ">= 0" is required.
+        var autoMerge = ctx.CreateSqliteFts5CommandBuilder("fts5_docs").AutoMerge(4).Execute();
+        var crisisMerge = ctx.CreateSqliteFts5CommandBuilder("fts5_docs").CrisisMerge(2).Execute();
+        var merge = ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Merge(8).Execute();
+        var integrityCheck = ctx.CreateSqliteFts5CommandBuilder("fts5_docs").IntegrityCheck().Execute();
+        var optimize = ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Optimize().Execute();
+        var rebuild = ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Rebuild().Execute();
+
+        autoMerge.Should().BeGreaterThanOrEqualTo(0);
+        crisisMerge.Should().BeGreaterThanOrEqualTo(0);
+        merge.Should().BeGreaterThanOrEqualTo(0);
+        integrityCheck.Should().BeGreaterThanOrEqualTo(0);
+        optimize.Should().BeGreaterThanOrEqualTo(0);
+        rebuild.Should().BeGreaterThanOrEqualTo(0);
 
         // The maintenance operations must not change the rows the index selects.
         NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello").Should().Equal(1L, 3L);
@@ -1752,18 +1762,29 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
 
     [Fact]
     [Trait("Issue", "195")]
+    [Trait("Issue", "196")]
     public async Task Fts5Maintenance_AllOperations_ShouldExecuteAsyncAndKeepIndexQueryable()
     {
         var ctx = _sut.DataProvider;
         ResetFtsTables(ctx);
 
         var cancellationToken = TestContext.Current.CancellationToken;
-        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").AutoMerge(4).ExecuteAsync(cancellationToken);
-        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").CrisisMerge(2).ExecuteAsync(cancellationToken);
-        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Merge(8).ExecuteAsync(cancellationToken);
-        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").IntegrityCheck().ExecuteAsync(cancellationToken);
-        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Optimize().ExecuteAsync(cancellationToken);
-        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Rebuild().ExecuteAsync(cancellationToken);
+
+        // D196 (#196): every operation-family result is captured and asserted nonnegative; FC195-1
+        // does not freeze an exact affected-row count.
+        var autoMerge = await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").AutoMerge(4).ExecuteAsync(cancellationToken);
+        var crisisMerge = await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").CrisisMerge(2).ExecuteAsync(cancellationToken);
+        var merge = await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Merge(8).ExecuteAsync(cancellationToken);
+        var integrityCheck = await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").IntegrityCheck().ExecuteAsync(cancellationToken);
+        var optimize = await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Optimize().ExecuteAsync(cancellationToken);
+        var rebuild = await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Rebuild().ExecuteAsync(cancellationToken);
+
+        autoMerge.Should().BeGreaterThanOrEqualTo(0);
+        crisisMerge.Should().BeGreaterThanOrEqualTo(0);
+        merge.Should().BeGreaterThanOrEqualTo(0);
+        integrityCheck.Should().BeGreaterThanOrEqualTo(0);
+        optimize.Should().BeGreaterThanOrEqualTo(0);
+        rebuild.Should().BeGreaterThanOrEqualTo(0);
 
         NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello").Should().Equal(1L, 3L);
     }

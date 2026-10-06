@@ -255,10 +255,10 @@ omitted) render the one-column form:
 |---|---|---|
 | `AutoMerge(value)` | `('automerge', value)` | `value` is 0..16; other values throw |
 | `CrisisMerge(value)` | `('crisismerge', value)` | `value` is nonnegative; `0`/`1` pass through unchanged |
-| `Merge(pages)` | `('merge', pages)` | any signed `int`, passed through unchanged |
+| `Merge(pages)` | `('merge', pages)` | any signed `int`, passed through unchanged (never `abs`) |
 | `Optimize()` | `('optimize')` | one-column form |
 | `Rebuild()` | `('rebuild')` | one-column form; unavailable for contentless FTS5 tables |
-| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` or `('integrity-check', 0\|1)` | flag omitted → one-column form; `true` also verifies external content |
+| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` or `('integrity-check', 0\|1)` | flag omitted → one-column form; `false` → `0`, `true` → `1`; `true` also verifies external content |
 
 The builder is immutable — each operation returns a new builder — and its terminals are `ToSql()`
 (renders without touching the database), `Execute()` (`int` affected rows) and
@@ -276,14 +276,15 @@ int affected = builder.Optimize().Execute();
 await builder.IntegrityCheck(checkExternalContent: true).ExecuteAsync(cancellationToken);
 ```
 
-The table name is validated (null, empty, whitespace or a NUL character is rejected). Calling a
-terminal before choosing an operation throws `InvalidOperationException`. The builder is SQLite-only:
-on every other provider it throws
-`NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
-before any database access. `Execute`/`ExecuteAsync` return the driver's affected-row `int` unchanged
-and native SQLite errors propagate; `Rebuild` is unavailable for contentless FTS5 tables, and
-`IntegrityCheck(true)` also verifies external content. These statements are a command surface, not
-scalar/table-valued functions and not part of `SqlFunctions.Sqlite`.
+The table name is preserved verbatim (a `.` is a literal character, not a separator) and validated:
+null, empty, whitespace or a NUL character is rejected. Calling a terminal before choosing an
+operation throws `InvalidOperationException`. The builder is SQLite-only: on every other provider it
+throws `NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
+before any database access. On success, `Execute`/`ExecuteAsync` return the driver's affected-row
+`int`, nonnegative and with no fixed count promised; `ExecuteAsync` forwards its `CancellationToken`
+to the driver; native SQLite errors propagate; `Rebuild` is unavailable for contentless FTS5 tables,
+and `IntegrityCheck(true)` also verifies external content. These statements are a command surface,
+not scalar/table-valued functions and not part of `SqlFunctions.Sqlite`.
 
 ### FTS3 / FTS4
 

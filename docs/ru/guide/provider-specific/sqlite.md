@@ -254,10 +254,10 @@ select rowid, title from "article_fts"($query) where rowid > 0 order by rowid
 |---|---|---|
 | `AutoMerge(value)` | `('automerge', value)` | `value` — 0..16; другие значения бросают |
 | `CrisisMerge(value)` | `('crisismerge', value)` | `value` неотрицателен; `0`/`1` проходят без изменений |
-| `Merge(pages)` | `('merge', pages)` | любое знаковое `int`, передаётся без изменений |
+| `Merge(pages)` | `('merge', pages)` | любое знаковое `int`, передаётся без изменений (никогда не `abs`) |
 | `Optimize()` | `('optimize')` | одноколоночная форма |
 | `Rebuild()` | `('rebuild')` | одноколоночная форма; недоступна для contentless-таблиц FTS5 |
-| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` или `('integrity-check', 0\|1)` | флаг опущен → одноколоночная форма; `true` проверяет и внешнее содержимое |
+| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` или `('integrity-check', 0\|1)` | флаг опущен → одноколоночная форма; `false` → `0`, `true` → `1`; `true` проверяет и внешнее содержимое |
 
 Builder неизменяемый — каждая операция возвращает новый builder, — а его терминалы: `ToSql()`
 (рендерит, не обращаясь к базе), `Execute()` (`int` затронутых строк) и
@@ -275,14 +275,15 @@ int affected = builder.Optimize().Execute();
 await builder.IntegrityCheck(checkExternalContent: true).ExecuteAsync(cancellationToken);
 ```
 
-Имя таблицы валидируется (null, пустое, из пробелов или с символом NUL отклоняется). Вызов
-терминала до выбора операции бросает `InvalidOperationException`. Builder — SQLite-only: на любом
-другом провайдере он бросает
+Имя таблицы сохраняется дословно (`.` — обычный символ, а не разделитель) и валидируется: null,
+пустое, из пробелов или с символом NUL отклоняется. Вызов терминала до выбора операции бросает
+`InvalidOperationException`. Builder — SQLite-only: на любом другом провайдере он бросает
 `NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
-до любого доступа к базе. `Execute`/`ExecuteAsync` возвращают `int` затронутых строк драйвера без
-изменений, а нативные ошибки SQLite пробрасываются; `Rebuild` недоступна для contentless-таблиц
-FTS5, а `IntegrityCheck(true)` проверяет и внешнее содержимое. Эти инструкции — поверхность команд,
-а не скалярные/табличные функции и не часть `SqlFunctions.Sqlite`.
+до любого доступа к базе. При успехе `Execute`/`ExecuteAsync` возвращают `int` затронутых строк
+драйвера — неотрицательный, без обещания фиксированного числа; `ExecuteAsync` передаёт свой
+`CancellationToken` драйверу; нативные ошибки SQLite пробрасываются; `Rebuild` недоступна для
+contentless-таблиц FTS5, а `IntegrityCheck(true)` проверяет и внешнее содержимое. Эти инструкции —
+поверхность команд, а не скалярные/табличные функции и не часть `SqlFunctions.Sqlite`.
 
 ### FTS3 / FTS4
 

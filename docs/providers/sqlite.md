@@ -229,7 +229,7 @@ var scores = ctx.From<Article>()
 
 Creating and populating the index stays outside the query surface (create the virtual table with raw
 SQL), but the FTS5 maintenance/control commands are available through the SQLite-only command builder
-`IDataContext.CreateSqliteFts5CommandBuilder(tableName)`:
+`IDataContext.CreateSqliteFts5CommandBuilder(string tableName)`:
 
 | Operation | Rendered values | Notes |
 |---|---|---|
@@ -257,9 +257,10 @@ var affected = builder.Optimize().Execute();
 
 The builder is SQLite-only: on every other provider the surface throws
 `NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
-before any database access. `Execute`/`ExecuteAsync` return the driver's affected-row `int` unchanged
-(not page or repair counts); native SQLite errors propagate. `Rebuild` is unavailable for contentless
-FTS5 tables, and `IntegrityCheck(true)` also verifies external content.
+before any database access. On success, `Execute`/`ExecuteAsync` return the driver's affected-row
+`int`, nonnegative for a successful maintenance command; nextorm promises no fixed count or value
+(these are not page or repair counts). Native SQLite errors propagate. `Rebuild` is unavailable for
+contentless FTS5 tables, and `IntegrityCheck(true)` also verifies external content.
 
 See [SQLite-specific SQL](../guide/provider-specific/sqlite.md) for the full list, the native SQLite
 spelling and the version/build-option requirements.

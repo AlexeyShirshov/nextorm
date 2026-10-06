@@ -231,7 +231,7 @@ var scores = ctx.From<Article>()
 
 Создание и наполнение индекса остаются вне поверхности запросов (создавайте виртуальную таблицу
 сырым SQL), но команды обслуживания/управления FTS5 доступны через специфичный для SQLite command
-builder `IDataContext.CreateSqliteFts5CommandBuilder(tableName)`:
+builder `IDataContext.CreateSqliteFts5CommandBuilder(string tableName)`:
 
 | Операция | Рендерящиеся значения | Примечание |
 |---|---|---|
@@ -259,10 +259,11 @@ var affected = builder.Optimize().Execute();
 
 Builder — SQLite-only: на любом другом провайдере поверхность бросает
 `NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
-до любого доступа к базе. `Execute`/`ExecuteAsync` возвращают `int` затронутых строк драйвера без
-изменений (не число страниц и не счётчики восстановления); нативные ошибки SQLite пробрасываются.
-`Rebuild` недоступна для contentless-таблиц FTS5, а `IntegrityCheck(true)` проверяет и внешнее
-содержимое.
+до любого доступа к базе. При успехе `Execute`/`ExecuteAsync` возвращают `int` затронутых строк
+драйвера — неотрицательный для успешной команды обслуживания; nextorm не обещает фиксированного
+числа или значения (это не число страниц и не счётчики восстановления). Нативные ошибки SQLite
+пробрасываются. `Rebuild` недоступна для contentless-таблиц FTS5, а `IntegrityCheck(true)` проверяет
+и внешнее содержимое.
 
 Полный список, нативное написание в SQLite и требования к версии/опциям сборки — в разделе
 [Специфичный для SQLite SQL](../guide/provider-specific/sqlite.md).

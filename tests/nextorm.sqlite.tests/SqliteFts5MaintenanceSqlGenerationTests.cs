@@ -135,4 +135,35 @@ public class SqliteFts5MaintenanceSqlGenerationTests
         ctx.CreateSqliteFts5CommandBuilder(tableName).Optimize().ToSql()
             .Should().Be($"INSERT INTO {quoted} ({quoted}) VALUES ('optimize')");
     }
+
+    // D196 (#196): the verbatim table name must survive byte-for-byte through all eight
+    // maintenance/control forms for snake_case and camelCase. A renderer that trims,
+    // case-normalizes or splits the identifier would break these golden strings. The expected
+    // SQL is literal golden data: only the verbatim name is substituted, every keyword, column,
+    // quoted identifier and value is written out, and no form carries a trailing semicolon.
+    [Theory]
+    [Trait("Issue", "196")]
+    [InlineData("snake_case")]
+    [InlineData("camelCase")]
+    public void VerbatimTableName_ShouldRenderAllEightOperationForms(string name)
+    {
+        using var ctx = SqliteTestContext.CreateUppercaseQuoted();
+
+        ctx.CreateSqliteFts5CommandBuilder(name).AutoMerge(4).ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\", \"rank\") VALUES ('automerge', 4)");
+        ctx.CreateSqliteFts5CommandBuilder(name).CrisisMerge(2).ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\", \"rank\") VALUES ('crisismerge', 2)");
+        ctx.CreateSqliteFts5CommandBuilder(name).Merge(-3).ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\", \"rank\") VALUES ('merge', -3)");
+        ctx.CreateSqliteFts5CommandBuilder(name).Optimize().ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\") VALUES ('optimize')");
+        ctx.CreateSqliteFts5CommandBuilder(name).Rebuild().ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\") VALUES ('rebuild')");
+        ctx.CreateSqliteFts5CommandBuilder(name).IntegrityCheck().ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\") VALUES ('integrity-check')");
+        ctx.CreateSqliteFts5CommandBuilder(name).IntegrityCheck(false).ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\", \"rank\") VALUES ('integrity-check', 0)");
+        ctx.CreateSqliteFts5CommandBuilder(name).IntegrityCheck(true).ToSql()
+            .Should().Be($"INSERT INTO \"{name}\" (\"{name}\", \"rank\") VALUES ('integrity-check', 1)");
+    }
 }
