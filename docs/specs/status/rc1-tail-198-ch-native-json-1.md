@@ -462,6 +462,8 @@ Task/status:
   `docs/providers/{clickhouse,overview,postgres}.md`, `docs/advanced/limitations.md`,
   `docs/infrastructure/04-value-converters.md` (+ `docs/ru/**` mirrors).
 - Evidence (D198.7R2): `artifacts/pdca/D198/{docfx.log,perf-acceptance-final.log,perf-D198JsonRead.log,perf-r2.md,coverage-r2.log,build-debug-final-r2.log,scope-final-r2.txt}`.
+- Base commit: `cd1a7c6c` (`artifacts/pdca/D198/baseline-head.txt`).
+- Evidence (r=3 CHECK/ACT): `artifacts/pdca/D198/{check3-coverage.log,r3-full-integration.log,r3-core.log,r3-clickhouse.log,r3-postgres.log,r3-pg-integration.log,r3-full-native.log,r3-scope.txt,ch-integration-r3.log,core-json-tests-r3.log,clickhouse-json-tests-r3.log,postgres-json-tests-r3.log}`.
 
 ## Evidence contract (rv=3; E198-01..E198-18)
 
