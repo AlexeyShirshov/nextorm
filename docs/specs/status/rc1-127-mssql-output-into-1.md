@@ -67,8 +67,8 @@ SQL Server: `OUTPUT … INTO` a table variable (`DECLARE @t TABLE (...)`); gener
 | D127-E05 | real container UPDATE/DELETE table-variable populated AND empty set | `SqlServerSpecificTests.cs:1958,2002` | closed |
 | D127-E06 | sync + async execution all DML | `SqlServerSpecificTests.cs:2041,2068,2100` | closed |
 | D127-E07 | nullable/value/reference source values | value `id`/`age`; nullable reference `name` NULL round-trip at `SqlServerSpecificTests.cs:1937-1954` | closed |
-| D127-E08 | INSERT empty-result set | **gap: no test exists** | **open — not closed** |
-| D127-E09 | computed source value through OutputInto table-variable | **gap: no `OutputInto*` test references a computed column** | **open — not closed** |
+| D127-E08 | INSERT empty-result set | tests/nextorm.integration.tests/SqlServerSpecificTests.cs:2130; artifacts/d127/rc1-127-computed-empty-1/sqlserver-class.log | closed |
+| D127-E09 | computed source value through OutputInto table-variable | SqlServerSpecificTests.cs:2174 (Insert), :2221 (Update), :2277 (Delete); artifacts/d127/rc1-127-computed-empty-1/sqlserver-class.log | closed |
 | D127-E10 | EN+RU docs: no "phase" wording, comparison table vs existing-table output, no public→specs links | `docs/guide/15-insert-statement.md:531-572,576-582`, `docs/ru/guide/15-insert-statement.md:534-577,579-585`; link audit found no `docs/**` or `readme.md` hits | closed |
 
 Run evidence: `artifacts/d127/test-sqlserver.log:4-8` (697 total / 697 succeeded / 0 failed / 0 skipped);
@@ -169,4 +169,21 @@ Recon persisted (run 10 start).
 - Commit plan: a single commit on `1.0.9-rc1` containing exactly the D127 change set (9 src + 7 tests + EN/RU docs + this status file); `artifacts/` never staged; no push, no merge.
 - Defect `D127-param-name-missingId`: **CLOSED** — a captured-closure local binds under its source name (`@missingId`); 2 test parameter names corrected (`"missingId"`), production unchanged; 1 fix applied, no plan-revision change.
 - Issue outcome: #127 closed remotely with the summary comment (feature shipped); commit unpushed per collection rules.
+
+## ACT addendum — corrective cycle rc1-127-computed-empty-1
+
+- Corrective cycle `rc1-127-computed-empty-1` (branch `1.0.9-rc1`, cycle N=1, plan revision r=1, attempt n=1/3)
+  **closed the two residual parent criteria D127-E08 and D127-E09**; both evidence rows above now read `closed`.
+- **Product code unchanged** — `git diff --stat -- src` is empty; the E08/E09 reds were a test
+  parameter-naming defect (`rc1-127-param-indexer-name`) fixed entirely in
+  `tests/nextorm.integration.tests/SqlServerSpecificTests.cs`.
+- Evidence: build exit 0 (0 warnings / 0 errors); real SQL Server class run exit 0 —
+  Total 91 / Passed 91 / Failed 0 / Skipped 0 (E08 + 3×E09 new, 6 inherited D127 cases green);
+  full integration exit 0 — Total 3195 / Passed 3002 / Failed 0 / Skipped 193 (all 5 required
+  providers executed). Logs: `artifacts/d127/rc1-127-computed-empty-1/`.
+- Commit sha: see git log.
+- Observation only (non-blocking, no product change): the plan-cache-key wording at `:52-53` is
+  imprecise — the `OutputInto` path (`OutputIntoBuilder.cs:36-63`, `MutationCommand.cs:31-37`)
+  bypasses `QueryPlanStore`, so there is no plan-cache key to include the declaration/variable name.
+  Correctness of the shipped behavior is unaffected.
 

@@ -2124,11 +2124,232 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         ctx.From<IMergeEntity>().Where(x => x.Id == id1 || x.Id == id2).Select(x => x.Id).ToList().Should().BeEmpty();
     }
 
+    // E08 (residual D127 criterion): a builder-generated INSERT ... SELECT whose source predicate matches no
+    // rows writes nothing into the table variable, so the read-back is empty and the target table is untouched.
+    [Fact]
+    public async Task OutputIntoTableVariable_Insert_EmptyResultSet_ShouldReturnEmptyAndNotChangeTarget()
+    {
+        var ctx = _sut.DataProvider;
+        var absentMarker = "tvar_empty_" + Guid.NewGuid().ToString("N");
+
+        int CountInsertEntity()
+        {
+            using var count = ctx.ExecuteRaw("select count(*) as cnt from insert_entity");
+            return count.Read<int>().Single();
+        }
+
+        var before = CountInsertEntity();
+
+        var syncSql = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Values(ctx.From<IInsertEntity>().Where(x => x.Name == absentMarker), x => new { x.Name, x.Age })
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql();
+
+        syncSql.Should().StartWith("declare @t table (id bigint, name nvarchar(100));");
+        syncSql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
+        syncSql.Should().EndWith("; select id, name from @t");
+
+        ExecuteTableVariableBatch(ctx, syncSql, new ProcedureParameter("absentMarker", absentMarker))
+            .Should().BeEmpty();
+
+        var asyncSql = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Values(ctx.From<IInsertEntity>().Where(x => x.Name == absentMarker), x => new { x.Name, x.Age })
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t2", "id bigint, name nvarchar(100)")
+            .ToSql();
+
+        var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoRow>(
+            ctx, asyncSql, [new ProcedureParameter("absentMarker", absentMarker)], TestContext.Current.CancellationToken);
+
+        asyncRows.Should().BeEmpty();
+
+        // a zero-row INSERT ... SELECT must not add a row to the target table
+        CountInsertEntity().Should().Be(before);
+    }
+
+    // E09 (residual D127 criterion): a computed column value round-trips through the table-variable read-back.
+    // 42 = basis 21 * 2; the declared table-variable columns are plain storage columns without IDENTITY/AS.
+    [Fact]
+    public async Task OutputIntoTableVariable_Insert_ComputedColumn_ShouldReadBackComputedValue()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists output_into_computed_127");
+        Execute(ctx, "create table output_into_computed_127 (id bigint identity(1,1) primary key, basis int not null, total as (basis * 2) persisted)");
+
+        try
+        {
+            var syncSql = ctx.CreateInsertBuilder<OutputIntoComputedEntity>()
+                .Values(new OutputIntoComputedEntity { Basis = 21 })
+                .Returning(x => new { x.Id, x.Basis, x.Total })
+                .OutputIntoTableVariable("@t", "id bigint, basis int, total int")
+                .ToSql();
+
+            syncSql.Should().StartWith("declare @t table (");
+            syncSql.Should().Contain("output inserted.id, inserted.basis, inserted.total into @t (id, basis, total)");
+            syncSql.Should().NotContainEquivalentOf("identity");
+            syncSql.Should().NotContainEquivalentOf(" as ");
+            syncSql.Should().EndWith("; select id, basis, total from @t");
+
+            var syncRows = ExecuteTableVariableBatch<OutputIntoComputedRow>(ctx, syncSql, new ProcedureParameter("p0", 21));
+
+            syncRows.Should().ContainSingle();
+            syncRows[0].Basis.Should().Be(21);
+            syncRows[0].Total.Should().Be(42);
+
+            // computed vs 0: a zero basis yields a real computed 0, read back as 0 (not a missing/default value)
+            var asyncSql = ctx.CreateInsertBuilder<OutputIntoComputedEntity>()
+                .Values(new OutputIntoComputedEntity { Basis = 0 })
+                .Returning(x => new { x.Id, x.Basis, x.Total })
+                .OutputIntoTableVariable("@t2", "id bigint, basis int, total int")
+                .ToSql();
+
+            var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoComputedRow>(
+                ctx, asyncSql, [new ProcedureParameter("p0", 0)], TestContext.Current.CancellationToken);
+
+            asyncRows.Should().ContainSingle();
+            asyncRows[0].Basis.Should().Be(0);
+            asyncRows[0].Total.Should().Be(0);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_into_computed_127");
+        }
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Update_ComputedColumn_ShouldReadBackComputedValue()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists output_into_computed_127");
+        Execute(ctx, "create table output_into_computed_127 (id bigint identity(1,1) primary key, basis int not null, total as (basis * 2) persisted)");
+
+        try
+        {
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 21 }).Insert();
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 21 }).Insert();
+            var ids = ctx.From<OutputIntoComputedEntity>().OrderBy(x => x.Id).Select(x => x.Id).ToList();
+            ids.Should().HaveCount(2);
+            var id1 = ids[0];
+            var id2 = ids[1];
+
+            var syncSql = ctx.CreateUpdateBuilder<OutputIntoComputedEntity>()
+                .Set(x => x.Basis, 22)
+                .Where(x => x.Id == id1)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t2", "id bigint, total int")
+                .ToSql();
+
+            syncSql.Should().StartWith("declare @t2 table (");
+            syncSql.Should().Contain("output inserted.id, inserted.total into @t2 (id, total)");
+            syncSql.Should().EndWith("; select id, total from @t2");
+
+            var syncRows = ExecuteTableVariableBatch<OutputIntoTotalRow>(
+                ctx, syncSql, new ProcedureParameter("p0", 22), new ProcedureParameter("id1", id1));
+
+            syncRows.Should().ContainSingle();
+            syncRows[0].Id.Should().Be(id1);
+            syncRows[0].Total.Should().Be(44);
+
+            var asyncSql = ctx.CreateUpdateBuilder<OutputIntoComputedEntity>()
+                .Set(x => x.Basis, 22)
+                .Where(x => x.Id == id2)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t3", "id bigint, total int")
+                .ToSql();
+
+            var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoTotalRow>(
+                ctx, asyncSql,
+                [new ProcedureParameter("p0", 22), new ProcedureParameter("id2", id2)],
+                TestContext.Current.CancellationToken);
+
+            asyncRows.Should().ContainSingle();
+            asyncRows[0].Id.Should().Be(id2);
+            asyncRows[0].Total.Should().Be(44);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_into_computed_127");
+        }
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Delete_ComputedColumn_ShouldReadBackComputedValue()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists output_into_computed_127");
+        Execute(ctx, "create table output_into_computed_127 (id bigint identity(1,1) primary key, basis int not null, total as (basis * 2) persisted)");
+
+        try
+        {
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 22 }).Insert();
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 22 }).Insert();
+            var ids = ctx.From<OutputIntoComputedEntity>().OrderBy(x => x.Id).Select(x => x.Id).ToList();
+            ids.Should().HaveCount(2);
+            var id1 = ids[0];
+            var id2 = ids[1];
+
+            var syncSql = ctx.CreateDeleteBuilder<OutputIntoComputedEntity>()
+                .Where(x => x.Id == id1)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t3", "id bigint, total int")
+                .ToSql();
+
+            syncSql.Should().StartWith("declare @t3 table (");
+            syncSql.Should().Contain("output deleted.id, deleted.total into @t3 (id, total)");
+            syncSql.Should().EndWith("; select id, total from @t3");
+
+            var syncRows = ExecuteTableVariableBatch<OutputIntoTotalRow>(
+                ctx, syncSql, new ProcedureParameter("id1", id1));
+
+            syncRows.Should().ContainSingle();
+            syncRows[0].Id.Should().Be(id1);
+            syncRows[0].Total.Should().Be(44);
+
+            var asyncSql = ctx.CreateDeleteBuilder<OutputIntoComputedEntity>()
+                .Where(x => x.Id == id2)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t4", "id bigint, total int")
+                .ToSql();
+
+            var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoTotalRow>(
+                ctx, asyncSql, [new ProcedureParameter("id2", id2)], TestContext.Current.CancellationToken);
+
+            asyncRows.Should().ContainSingle();
+            asyncRows[0].Id.Should().Be(id2);
+            asyncRows[0].Total.Should().Be(44);
+
+            ctx.From<OutputIntoComputedEntity>().Select(x => x.Id).ToList().Should().BeEmpty();
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_into_computed_127");
+        }
+    }
+
     private static IReadOnlyList<OutputIntoRow> ExecuteTableVariableBatch(
         IDataContext ctx, string sql, params ProcedureParameter[] parameters)
     {
         using var result = ctx.ExecuteRaw(sql, parameters);
         return result.Read<OutputIntoRow>();
+    }
+
+    private static IReadOnlyList<TRow> ExecuteTableVariableBatch<TRow>(
+        IDataContext ctx, string sql, params ProcedureParameter[] parameters)
+    {
+        using var result = ctx.ExecuteRaw(sql, parameters);
+        return result.Read<TRow>();
+    }
+
+    private static async Task<IReadOnlyList<TRow>> ExecuteTableVariableBatchAsync<TRow>(
+        IDataContext ctx, string sql, ProcedureParameter[] parameters, CancellationToken cancellationToken)
+    {
+        await using var result = await ctx.ExecuteRawAsync(sql, parameters, cancellationToken);
+        var rows = new List<TRow>();
+        await foreach (var row in result.ReadAsync<TRow>(cancellationToken))
+            rows.Add(row);
+
+        return rows;
     }
 
     [SqlTable("output_into_row")]
@@ -2139,6 +2360,47 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         [Column("name")]
         public string? Name { get; set; }
+    }
+
+    // E09: the computed column is mapped with DatabaseGeneratedOption.Computed, so Values(...)/Set(...) never
+    // write it and it is only read back through Returning(...).
+    [SqlTable("output_into_computed_127")]
+    private sealed class OutputIntoComputedEntity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("basis")]
+        public int Basis { get; set; }
+
+        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+        [Column("total")]
+        public int Total { get; set; }
+    }
+
+    [SqlTable("output_into_computed_row")]
+    private sealed class OutputIntoComputedRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("basis")]
+        public int Basis { get; set; }
+
+        [Column("total")]
+        public int Total { get; set; }
+    }
+
+    [SqlTable("output_into_total_row")]
+    private sealed class OutputIntoTotalRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("total")]
+        public int Total { get; set; }
     }
 
     private static void Execute(IDataContext ctx, string sql)
