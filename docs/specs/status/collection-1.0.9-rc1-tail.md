@@ -21,14 +21,14 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 |---|---|---|---|---|---|
 | D161 | G1 | 1.0.9-rc1 | done | issue #161 — ClickHouse identifier quoting escapes backslashes; commit b06784c8 | docs/specs/status/rc1-tail-161-ch-escape-1.md |
 | D197 | G1 | 1.0.9-rc1 | done | issue #197 — PostgreSQL bare JsonNode read from native json/jsonb; commit 95849d38 | docs/specs/status/rc1-tail-197-pg-jsonnode-1.md |
-| D140 | G1 | 1.0.9-rc1 | pending | issue #140 — RESOLVED as author option A (docs-only): document EN+RU that without a caller-declared TRow the schema-less use is via [DynamicColumns]/raw reader/jsonb_each; jsonb_to_record(set) requires a declared schema; close #140 | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
-| D134 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
-| D194 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
-| D150 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
-| D193 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-193-tuple-in-1.md |
-| D198 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
-| D195 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
-| D196 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
+| D140 | G1 | 1.0.9-rc1 | done | issue #140 — docs-only (author option A): documented EN+RU that jsonb_to_record/jsonb_to_recordset need a caller-declared TRow (alias column-definition list AS x(a int, b text)) and that schema-less use is via [DynamicColumns]/raw ToDataReader/ResultSet/jsonb_each*; docfx exit 0; commit 85083fb8 | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
+| D134 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
+| D194 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
+| D150 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
+| D193 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-193-tuple-in-1.md |
+| D198 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
+| D195 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
+| D196 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
 
 ## Decisions
 
@@ -59,9 +59,9 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 ## Done / Verified / Incomplete
 
-- Done: D161, D197.
+- Done: D161, D197, D140.
 - Verified: —.
-- Incomplete: D140 (scope — F140-SCOPE, author clarification required) + D134, D194, D150, D193, D198, D195, D196 ("группа остановлена", not executed).
+- Incomplete: —.
 
 ## Resume (2026-10-06)
 
@@ -70,4 +70,4 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - The `incomplete "группа остановлена"` marks on D134/D194/D150/D193/D198/D195/D196 were an artifact of the outside-cycle blocker; those tasks were **never executed** and are re-armed to `pending`.
 - D161 (#161) and D197 (#197) remain `done` — their commits are valid.
 - Verification state: **unverified** (collection not yet verified).
-- Next allowed step: resume the single lane — D140 first, then D134 → D194 → D150 → D193 → D198 → D195 → D196.
+- Next allowed step: continue the single lane — D134 next, then D194 → D150 → D193 → D198 → D195 → D196.
