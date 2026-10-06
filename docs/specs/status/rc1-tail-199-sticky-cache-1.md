@@ -428,7 +428,7 @@ symbols/locations once created.
 2026-10-06T22:40:01Z | CHECK | r1 | n2/3 | CHECK re-gather (2nd batch) completed — fresh current-revision coverage rc=0 (8929/0/8731/198), line 88.4% (48051/54295) >= 85, branch 80.1% (25828/32229) >= 75; stay in CHECK r1/n2/3 | /tmp/nextorm-199-r1/coverage-summary-loop2.md, /tmp/nextorm-199-r1/coverage-loop2.log
 2026-10-06T22:40:01Z | CHECK | r1 | n2/3 | reconciliation recorded: E01–E17 rows bound to verified artifacts + R199-01/03/04-E08/07/08 mappings; no product/test code changed | /tmp/nextorm-199-r1/check-reconciliation.md
 2026-10-06T22:43:11Z | CHECK | r1 | n2/3 | check verdict: PASS — all applicable R199-01..R199-09 satisfied; R199-10/E16 post-PASS | check-verdict
-2026-10-06T22:43:11Z | ACT | r1 | n2/3 | cycle closed; flow closed; task-owned commit made | __COMMIT_SHA__
+2026-10-06T22:43:11Z | ACT | r1 | n2/3 | cycle closed; flow closed; task-owned commit made | 085288c9414df929fe91bdcd3726e42425c2c769
 
 ## CHECK re-gather (2nd batch) — evidence reconciliation (r1/n2/3)
 
@@ -452,7 +452,7 @@ symbols/locations once created.
   | E13 | coverage | rc 0; line 88.4 %, branch 80.1 % | `coverage-summary-loop2.md` |
   | E14 | status/docs | status updated; no public-doc change (intentional); XML-doc on internals | this file |
   | E15 | independent certification | **satisfied — final PASS** (r1/n=2/3/rv1): all applicable R199-01..R199-09 satisfied | check-verdict |
-  | E16 | commit | **done** (D6): task-owned commit `__COMMIT_SHA__`, message begins `#199`; no push | `git show --stat --oneline HEAD` |
+  | E16 | commit | **done** (D6): task-owned commit `085288c9414df929fe91bdcd3726e42425c2c769`, message begins `#199`; no push | `git show --stat --oneline HEAD` |
   | E17 | PREWHERE | deferred F1; guard `QueryCommand.QueryPreparer.cs:2148,2294`; F2 trigger = measured scanner overhead | — |
 
 - **R199-01**: red proof `red.log` (exit 2); cached-plan-reuse assertions `tests/nextorm.sqlite.tests/D199ScalarInPlanCacheTests.cs:141-142` (shared Any, after the ordinary `x.Id > 0` replacement at `:156`), `:184-185` (shared Count), `:453-454` (ordinary replacement) — `ReferenceEquals(first, second).Should().BeTrue(...)`.
