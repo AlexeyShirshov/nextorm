@@ -54,6 +54,7 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Verification state: **unverified**.
 - Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; D193 defects (W1–W4, F1/F7/F10/F12/F14) all fixed/verified, none open; no open defect; D193 evidence/status rot (missing CHECK r=2, commit claims, integration totals) corrected by rc1-tail-193-verify-1; W1–W4 fixed in e19d751a, none open.
 - Related corrective-task status file: docs/specs/status/rc1-tail-193-verify-1.md.
+- Corrective task `rc1-tail-199-sticky-cache-1` (defect **#199**, confirmed **P1** by the parent gate C): scalar `IN`/`Contains` SQL translation poisoned the shared `QueryCommand` cache policy; fixed at the source (removed the sticky `QueryCommand.Cache` write; preparation-time call-local scalar-unkeyed classification + `storeInCache` suppression). Independent CHECK **PASS** r1/n=2/3/rv1; task status file `docs/specs/status/rc1-tail-199-sticky-cache-1.md`. This is a corrective reference only — the historical G1 verification is **not** rewritten and the collection verification state remains **unverified** until the parent C re-run.
 - Next allowed step: re-run parent gate C after this ACT.
 - Notice: host has no todowrite tool for subagents; task status files carry the progress log instead.
 

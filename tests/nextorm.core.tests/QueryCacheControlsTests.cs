@@ -82,6 +82,38 @@ public class QueryCacheControlsTests
         command.Cache.Should().BeTrue();
     }
 
+    // A captured scalar Contains must not mutate the persistent command policy when the call is prepared
+    // without caching (the InMemory fixture cannot establish the SQL regression; the SQLite D199 suite
+    // does that).
+    [Fact]
+    public void CapturedScalarContains_PrepareWithoutCaching_ShouldPreserveCommandPolicy()
+    {
+        using var ctx = CreateContext();
+        var values = new List<int> { 1 };
+        var command = ctx.From<SimpleEntity>().Where(x => values.Contains(x.Id)).Select(x => x.Id);
+
+        ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken);
+
+        command.Cache.Should().BeTrue(
+            "preparing a captured scalar Contains without caching must not mutate the persistent command policy");
+    }
+
+    // An explicitly disabled caller policy is authoritative and must not be re-enabled by preparing a
+    // captured scalar Contains.
+    [Fact]
+    public void CapturedScalarContains_ShouldRespectExplicitDisabledPolicy()
+    {
+        using var ctx = CreateContext();
+        var values = new List<int> { 1 };
+        var command = ctx.From<SimpleEntity>().Where(x => values.Contains(x.Id)).Select(x => x.Id);
+        command.Cache = false;
+
+        ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+
+        command.Cache.Should().BeFalse(
+            "an explicitly disabled cache policy must not be re-enabled by preparing a captured scalar Contains");
+    }
+
     [Fact]
     public void UseQueryCache_False_Should_Disable_Plan_Cache()
     {

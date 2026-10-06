@@ -98,6 +98,12 @@ public partial class QueryCommand
             // the planner suppresses the call-local cache instead of reusing a stale plan.
             cmd.HasUnkeyedTupleInValues = ScanUnkeyedTupleInValues(cmd);
 
+            // A scalar (non-tuple) captured value list has the same shape-follows-the-collection property.
+            // Its WHERE/PREWHERE shape is folded into the plan key, but a list in HAVING, a JOIN ON, a
+            // SELECT column, a nested subquery or a descendant condition swapped into a shared command is
+            // not keyed, so flag the command for the planner's call-local cache suppression.
+            cmd.HasUnkeyedScalarInValues = ScanUnkeyedScalarInValues(cmd);
+
             cmd._isPrepared = true;
             cmd._selectList = selectList ?? [];
             cmd._groupingList = groupingList ?? [];
@@ -2107,6 +2113,246 @@ public partial class QueryCommand
             }
 
             if (from.TableFunction is { } tableFunction && InValues.ContainsTupleInValues(tableFunction.Call))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Scans every clause whose captured-collection shape is <b>not</b> folded into the plan key for a
+        /// scalar (non-tuple) <c>IN</c>/<c>Contains</c> and returns <see langword="true"/> when one exists.
+        /// It mirrors <see cref="ScanUnkeyedTupleInValues(QueryCommand)"/> over the SELECT projection, HAVING, JOIN
+        /// conditions and sources, GROUP BY, ORDER BY, ARRAY JOIN, LIMIT BY / DISTINCT ON / extreme-row
+        /// selectors, named windows, outer references, FROM sources, set-operation operands, CTE bodies and
+        /// referenced subqueries. Unlike the tuple scan, a <b>descendant</b> command's WHERE/PREWHERE is
+        /// also scanned: a scalar list captured there is not re-keyed when the query is swapped into the
+        /// context-shared <c>Any</c>/<c>Count</c> command, so the owner must flag it. The root's own
+        /// WHERE/PREWHERE is excluded because its shape is folded into its own plan key. A false positive
+        /// only forgoes caching (harmless); a false negative would reuse a plan rendered for another
+        /// collection shape (a wrong result).
+        /// </summary>
+        internal static bool ScanUnkeyedScalarInValues(QueryCommand cmd)
+        {
+            var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
+            return ScanUnkeyedScalarInValues(cmd, visited, true);
+        }
+
+        private static bool ScanUnkeyedScalarInValues(QueryCommand cmd, HashSet<QueryCommand> visited, bool isRoot)
+        {
+            if (!visited.Add(cmd))
+                return false;
+
+            // A descendant's condition belongs to the owner's rendered statement: the swap into a shared
+            // command does not re-key the owner from the referenced query's WHERE shape, so scan it. The
+            // root's own WHERE/PREWHERE is shape-keyed and deliberately excluded.
+            if (!isRoot && HasUnkeyedScalarInCondition(cmd))
+                return true;
+
+            if (cmd._exp is { } projection && InValues.ContainsScalarInValues(projection))
+                return true;
+
+            if (cmd._having is { } having && InValues.ContainsScalarInValues(having))
+                return true;
+
+            if (cmd._groupExp is { } grouping && InValues.ContainsScalarInValues(grouping))
+                return true;
+
+            if (cmd._joins is { } joins)
+            {
+                for (var i = 0; i < joins.Length; i++)
+                {
+                    if (joins[i].JoinCondition is { } joinCondition && InValues.ContainsScalarInValues(joinCondition))
+                        return true;
+
+                    if (ScanUnkeyedScalarInFrom(joins[i].From, visited))
+                        return true;
+                }
+            }
+
+            // ORDER BY keys are not shape-keyed: a scalar value list there renders a shape-dependent SQL.
+            if (cmd._sorting is { } sorting)
+            {
+                for (var i = 0; i < sorting.Length; i++)
+                {
+                    if (sorting[i].SortExpression is { } sortExpression && InValues.ContainsScalarInValues(sortExpression))
+                        return true;
+
+                    if (sorting[i].PreparedExpression is { } preparedExpression && InValues.ContainsScalarInValues(preparedExpression))
+                        return true;
+                }
+            }
+
+            // ClickHouse ARRAY JOIN expressions; the prepared array is what the renderer consumes.
+            if (cmd._preparedArrayJoin is { } preparedArrayJoin)
+            {
+                for (var i = 0; i < preparedArrayJoin.Length; i++)
+                {
+                    if (InValues.ContainsScalarInValues(preparedArrayJoin[i]))
+                        return true;
+                }
+            }
+            else if (cmd._arrayJoins is { } arrayJoins)
+            {
+                for (var i = 0; i < arrayJoins.Length; i++)
+                {
+                    if (InValues.ContainsScalarInValues(arrayJoins[i]))
+                        return true;
+                }
+            }
+
+            if (cmd.LimitBy?.Expression is { } limitBy && InValues.ContainsScalarInValues(limitBy))
+                return true;
+
+            if (cmd.DistinctOn?.Expression is { } distinctOn && InValues.ContainsScalarInValues(distinctOn))
+                return true;
+
+            if (cmd.ExtremeRow is { } extremeRow)
+            {
+                if (InValues.ContainsScalarInValues(extremeRow.ValueSelector))
+                    return true;
+
+                if (extremeRow.GroupBy is { } extremeGroupBy && InValues.ContainsScalarInValues(extremeGroupBy))
+                    return true;
+
+                if (extremeRow.Projection is { } extremeProjection && InValues.ContainsScalarInValues(extremeProjection))
+                    return true;
+            }
+
+            // Named windows (WINDOW ... AS (PARTITION BY ... ORDER BY ...)) are not shape-keyed.
+            if (cmd._windows is { Count: > 0 } windows)
+            {
+                for (var i = 0; i < windows.Count; i++)
+                {
+                    var window = windows[i];
+
+                    for (var p = 0; p < window.PartitionBy.Count; p++)
+                    {
+                        if (InValues.ContainsScalarInValues(window.PartitionBy[p]))
+                            return true;
+                    }
+
+                    for (var o = 0; o < window.OrderBy.Count; o++)
+                    {
+                        if (InValues.ContainsScalarInValues(window.OrderBy[o].Expression))
+                            return true;
+                    }
+                }
+            }
+
+            // Correlated outer references render against this statement and are not shape-keyed.
+            if (cmd._outerRefs is { Count: > 0 } outerRefs)
+            {
+                for (var i = 0; i < outerRefs.Count; i++)
+                {
+                    if (InValues.ContainsScalarInValues(outerRefs[i]))
+                        return true;
+                }
+            }
+
+            // A derived table / PIVOT inner source / TVF argument renders inline in this statement.
+            if (ScanUnkeyedScalarInFrom(cmd._from, visited))
+                return true;
+
+            // A set-operation operand renders with this statement's provider and its own plan key does
+            // not fold the captured-collection shape.
+            if (cmd._union is { } union && ScanUnkeyedScalarInValues(union, visited, false))
+                return true;
+
+            // Hoisted CTE bodies render in the same statement.
+            if (cmd._ctes is { Count: > 0 } ctes)
+            {
+                for (var i = 0; i < ctes.Count; i++)
+                {
+                    if (ScanUnkeyedScalarInValues(ctes[i].Query, visited, false))
+                        return true;
+
+                    if (ctes[i].Mutation is { Source: { } mutationSource } && ScanUnkeyedScalarInValues(mutationSource, visited, false))
+                        return true;
+                }
+            }
+
+            // A nested subquery (or a correlated apply/CTE body) renders inside this statement, so a
+            // scalar value list there also makes this command's cached plan unsafe. Its WHERE/PREWHERE is
+            // scanned because the owner's plan key does not fold the referenced query's shape on a swap.
+            if (cmd._referencedQueries is { Count: > 0 } referenced)
+            {
+                for (var i = 0; i < referenced.Count; i++)
+                {
+                    if (ScanUnkeyedScalarInValues(referenced[i], visited, false))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// True when a descendant command's own WHERE/PREWHERE (raw or prepared) contains a scalar captured
+        /// collection. Scanning both forms is conservative: after preparation the query parameter may no
+        /// longer be a <see cref="ParameterExpression"/>, so the raw lambda remains the reliable probe.
+        /// </summary>
+        private static bool HasUnkeyedScalarInCondition(QueryCommand cmd)
+            => (cmd._condition is { } condition && InValues.ContainsScalarInValues(condition))
+            || (cmd._preWhere is { } preWhere && InValues.ContainsScalarInValues(preWhere))
+            || (cmd.PreparedCondition is { } preparedCondition && InValues.ContainsScalarInValues(preparedCondition))
+            || (cmd.PreparedPreWhere is { } preparedPreWhere && InValues.ContainsScalarInValues(preparedPreWhere));
+
+        /// <summary>
+        /// Scans a FROM source's rendered subqueries, commands and arguments for an unkeyed scalar value
+        /// list, recursing through nested sources and including their WHERE/PREWHERE conditions (the owner
+        /// does not re-key from a derived source's shape on a shared-command swap).
+        /// </summary>
+        private static bool ScanUnkeyedScalarInFrom(FromExpression? from, HashSet<QueryCommand> visited)
+        {
+            if (from is null)
+                return false;
+
+            if (from.SubQuery is { } subQuery && ScanUnkeyedScalarInValues(subQuery, visited, false))
+                return true;
+
+            if (from.ColumnShape is { } columnShape && ScanUnkeyedScalarInValues(columnShape, visited, false))
+                return true;
+
+            if (from.TempTable is { } tempTable && ScanUnkeyedScalarInValues(tempTable.Source, visited, false))
+                return true;
+
+            if (from.LinqSource is { } linqSource)
+            {
+                if (ScanUnkeyedScalarInValues(linqSource.OuterCommand, visited, false))
+                    return true;
+
+                if (linqSource.InnerCommand is { } innerCommand && ScanUnkeyedScalarInValues(innerCommand, visited, false))
+                    return true;
+
+                if (linqSource.CollectionSelector is { } collectionSelector && InValues.ContainsScalarInValues(collectionSelector))
+                    return true;
+
+                if (linqSource.ResultSelector is { } resultSelector && InValues.ContainsScalarInValues(resultSelector))
+                    return true;
+
+                if (linqSource.OuterKeySelector is { } outerKeySelector && InValues.ContainsScalarInValues(outerKeySelector))
+                    return true;
+
+                if (linqSource.InnerKeySelector is { } innerKeySelector && InValues.ContainsScalarInValues(innerKeySelector))
+                    return true;
+            }
+
+            if (from.XmlNodes is { } xmlNodes && InValues.ContainsScalarInValues(xmlNodes.Operand))
+                return true;
+
+            if (from.Pivot is { } pivot)
+            {
+                if (pivot.AggregateColumn is { } aggregateColumn && InValues.ContainsScalarInValues(aggregateColumn))
+                    return true;
+
+                if (pivot.ForColumn is { } forColumn && InValues.ContainsScalarInValues(forColumn))
+                    return true;
+
+                if (ScanUnkeyedScalarInFrom(pivot.Inner, visited))
+                    return true;
+            }
+
+            if (from.TableFunction is { } tableFunction && InValues.ContainsScalarInValues(tableFunction.Call))
                 return true;
 
             return false;

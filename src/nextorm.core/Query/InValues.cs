@@ -105,6 +105,38 @@ internal static class InValues
     }
 
     /// <summary>
+    /// Metadata-only probe: true when <paramref name="expression"/> contains a scalar-valued
+    /// <c>IN</c>/<c>Contains</c> node whose rendered SQL follows the captured collection's shape. It
+    /// never evaluates or enumerates the collection. The probe mirrors the scalar branch of
+    /// <see cref="InValuesTranslator.TranslateInValues"/>: the element type must not be the tuple family
+    /// (that path is handled by <see cref="ContainsTupleInValues"/>), <c>string.Contains</c> is rejected by
+    /// <see cref="TryGetArguments"/>, and an inline <see cref="NewArrayExpression"/> is deliberately
+    /// excluded because its values are part of the expression shape and never suppressed the cache.
+    /// </summary>
+    internal static bool ContainsScalarInValues(Expression expression)
+    {
+        var probe = new ScalarInValuesProbe();
+        probe.Visit(expression);
+        return probe.Found;
+    }
+
+    private sealed class ScalarInValuesProbe : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (!Found
+                && TryGetArguments(node, out _, out var valuesExp, out var elementType, out _)
+                && !TypeFacts.IsTupleFamily(elementType)
+                && valuesExp is not NewArrayExpression)
+                Found = true;
+
+            return base.VisitMethodCall(node);
+        }
+    }
+
+    /// <summary>
     /// True when the value an expression folds to is fully determined by the expression shape, i.e.
     /// it cannot change between two executions of a cached plan. Only inline arrays of immutable
     /// values and value-type <c>new</c> expressions over immutable arguments qualify: a captured

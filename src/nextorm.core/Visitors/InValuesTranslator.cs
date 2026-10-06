@@ -55,9 +55,10 @@ internal static class InValuesTranslator
         }
         else
         {
-            if (valuesExp is not NewArrayExpression && command is not null)
-                command.Cache = false;
-
+            // The sticky Cache flag is deliberately NOT set here: mutating a shared command (the
+            // context-wide Any/Count command) would disable the plan cache for every later query. A
+            // scalar list in a clause whose shape is not folded into the plan key is instead flagged by
+            // the preparation scan (HasUnkeyedScalarInValues) and suppressed call-locally by the planner.
             partition = InValues.EvaluatePartition(valuesExp, visitor.QueryProvider);
         }
 
