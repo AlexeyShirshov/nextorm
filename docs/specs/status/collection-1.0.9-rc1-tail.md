@@ -20,7 +20,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | task | group | branch | status | reason + patch | task status file |
 |---|---|---|---|---|---|
 | D161 | G1 | 1.0.9-rc1 | done | issue #161 — ClickHouse identifier quoting escapes backslashes; commit b06784c8 | docs/specs/status/rc1-tail-161-ch-escape-1.md |
-| D197 | G1 | 1.0.9-rc1 | done | issue #197 — PostgreSQL bare JsonNode read from native json/jsonb | docs/specs/status/rc1-tail-197-pg-jsonnode-1.md |
+| D197 | G1 | 1.0.9-rc1 | done | issue #197 — PostgreSQL bare JsonNode read from native json/jsonb; commit 95849d38 | docs/specs/status/rc1-tail-197-pg-jsonnode-1.md |
 | D140 | G1 | 1.0.9-rc1 | pending | issue #140 — PostgreSQL free/partial column list in projection | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
 | D134 | G1 | 1.0.9-rc1 | pending | issue #134 — SQLite `ToDataReader` (streaming projection rowid locator) | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
 | D194 | G1 | 1.0.9-rc1 | pending | issue #194 — PostgreSQL raw `ROW`/composite materialization | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
