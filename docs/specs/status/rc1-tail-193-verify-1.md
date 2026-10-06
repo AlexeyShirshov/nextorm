@@ -172,7 +172,7 @@ Disposition per pinned variant; evidence is `file:line` in the current tree.
 
 Finalized. Validator `report` gate exit 0 (`/tmp/nextorm-rc1-tail-193-verify-1/report.log`); independent
 CHECK **PASS** (`/tmp/nextorm-rc1-tail-193-verify-1/check.md`, no escalate waiver, no in-scope product
-defect); finalization committed in a single corrective commit `<sha>` (message
+defect); finalization committed in a single corrective commit `9858fbe3` (message
 `#193 Verify tuple IN CHECK and repair evidence/status`); no push.
 
 ## Final CHECK verdict

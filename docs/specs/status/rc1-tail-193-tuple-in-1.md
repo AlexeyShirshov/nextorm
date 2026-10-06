@@ -5,7 +5,7 @@
 - collection: `1.0.9-rc1-tail`
 - group: G1
 - branch: `1.0.9-rc1`
-- status: **done** (N=1, r=2, n=2/3, rv=1; W1–W4 + F1/F7/F10/F12/F14 applied; closing-CHECK arity coverage + variant matrix 2026-10-06T22:04Z; independent CHECK r=2 PASS via corrective task rc1-tail-193-verify-1, no product defect; independent CHECK round 1 FAIL on evidence/status kept historical; commits e19d751a + cd1a7c6c + corrective <sha>)
+- status: **done** (N=1, r=2, n=2/3, rv=1; W1–W4 + F1/F7/F10/F12/F14 applied; closing-CHECK arity coverage + variant matrix 2026-10-06T22:04Z; independent CHECK r=2 PASS via corrective task rc1-tail-193-verify-1, no product defect; independent CHECK round 1 FAIL on evidence/status kept historical; commits e19d751a + cd1a7c6c + corrective 9858fbe3)
 - cycle: N=1
 - plan revision: r=2
 - attempt: n=2/3
