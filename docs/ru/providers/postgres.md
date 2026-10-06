@@ -214,9 +214,11 @@ In-memory провайдер вычисляет всю поверхность ra
 
 ## JSON и JSONB
 
-PostgreSQL — единственный поддерживаемый провайдер с `json`/`jsonb`. Параметр `JsonDocument`,
-`JsonElement` или `JsonNode` привязывается как `jsonb`, поэтому операторы доступа и функции работают
-напрямую:
+PostgreSQL — единственный поддерживаемый провайдер с `json`/`jsonb`. Свойство `[JsonColumn]` отображает
+CLR-объект на нативную колонку `jsonb` на чтение и запись (`Auto` storage; `Native` принудительно
+включает `jsonb`, `Text` — текст), поэтому объект проходит цикл insert, update и `RETURNING`. Параметр
+`JsonDocument`, `JsonElement` или `JsonNode` привязывается как `jsonb`, поэтому операторы доступа и
+функции работают напрямую:
 
 ```csharp
 using System.Text.Json;
@@ -234,6 +236,8 @@ ctx.From<IComplexEntity>()
 ```
 
 Обычная строка с JSON привязывается как `text`; для разбора используйте `SqlFunctions.Postgres.json_cast(value)`.
+«Голая» *колонка* `JsonNode` не читается (у Npgsql нет для неё типизированного reader'а): отображайте
+свойство через `[JsonColumn]` или читайте как `JsonDocument`/`JsonElement`.
 Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
 описана в разделе [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.
@@ -329,7 +333,7 @@ join complex_entity as "t2" on t1.id = t2.id
 | Псевдоним производной таблицы / TVF | требуется |
 | `*ALL` | поддерживается |
 | Массивы | поддерживаются (`any(@array)`, `cardinality`, ...) |
-| JSON/JSONB | поддерживается (`json_agg`, `->`, ...; параметры `JsonDocument` привязываются как `jsonb`) |
+| JSON/JSONB | поддерживается (`json_agg`, `->`, ...; нативные колонки `json`/`jsonb` через `[JsonColumn]`; параметры `JsonDocument`/`JsonElement`/`JsonNode` привязываются как `jsonb`) |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`, `ToDataReader`) | поддерживается (`SequentialAccess`; одна колонка `byte[]`/`string` или многоколоночный reader, принадлежащий вызывающему) |
 | `greatest` / `least` / `date_trunc` | поддерживаются (`greatest`/`least` игнорируют NULL-аргументы) |
 | Условная функция | `iif(cond, a, b)` → `case when cond then a else b end` |

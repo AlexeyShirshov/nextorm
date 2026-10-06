@@ -53,7 +53,7 @@ Version-gates (G13,
 | `epic: code-generator` | 21 | CLI/T4-скаффолдинг маппингов из живой БД | none (маппинги только в коде) | **<span style="color:orange">Out-of-scope</span>** (заявленная граница) |
 | `epic: eager-load` | 12 | `[Association]`, `LoadWith`, `Include`, ordering/strategy | O2M/M2O-метаданные (`[Relationship]`/`HasMany`/`HasOne`) + `JoinInto` (O2M, O2O, M:N через junction) + уровень-1 `LoadWith` + неявная навигация по **объявленным** связям ([связи](../../advanced/relationships.md), [eager loading](../../advanced/eager-loading.md), [неявная навигация](../../guide/29-implicit-navigation.md)) | **Частичный паритет**: O2O, M:N-исполнение и неявная навигация по объявленным связям отгружены (остатки: составные junction-селекторы, составные ключи, M:N под `AsSingleQuery`); вывод по конвенции FK отсутствует и у linq2db; ordering/strategy — <span style="color:orange">out-of-scope</span> |
 | `epic: insert` | 16 | полнота INSERT/UPSERT, bulk, output | `INSERT VALUES/SELECT`, key-upsert, full MERGE, bulk — <span style="color:green">Done</span> | смешанно: см. §4 |
-| `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON (фаза 1: `[JsonColumn]`) — <span style="color:green">Done</span>; SQLite TVF (`json_each`/`json_tree`) — <span style="color:green">Done</span> | **<span style="color:green">Done</span>** (~~G14~~) |
+| `epic: json_sql` | 5 | JSON-типы, авто-сериализация объектов, `jsonpath`, SQLite TVF | PG native JSON + text-JSON + ClickHouse + PG `jsonpath` — <span style="color:green">Done</span>; объект↔JSON (фаза 1: `[JsonColumn]`, нативная PG-регрессия #131: оба типа `json`/`jsonb`) — <span style="color:green">Done</span>; SQLite TVF (`json_each`/`json_tree`) — <span style="color:green">Done</span> | **<span style="color:green">Done</span>** (~~G14~~) |
 | `epic: merge` | 5 | MERGE: immutable-модели, частичные setters, TPH/EF | full MERGE (SQL Server, PG15+) — <span style="color:green">Done</span>; inheritance/EF — <span style="color:orange">out-of-scope</span> | частично **Gap** (G-merge) |
 | `epic: output` | 6 | `OUTPUT`/`OUTPUT INTO`, несколько result-set'ов, INSERT…WithOutput в CTE | returning/output одного стейтмента — <span style="color:green">Done</span>; композируемый `INSERT ... RETURNING` как data-modifying CTE (PG) — <span style="color:green">Done</span>; `OUTPUT INTO` (SQL Server) и output у key-upsert — <span style="color:green">Done</span> | много-result-set — <span style="color:green">Done</span> (фаза 4 #70, включая #25: `AddQuery<TResult>` + `Execute`/`ExecuteAsync` → `BatchResult`); ~~G3~~ закрыт |
 | `epic: new-provider` | 4 | Oracle/Redshift/Sybase/SAP | provider breadth — граница | **<span style="color:orange">Out-of-scope</span>** |
@@ -145,9 +145,11 @@ LINQPad/gRPC-remote-context → **<span style="color:orange">Out-of-scope</span>
 `JsonColumnStorage`/`JsonColumnOptions` + `JsonColumnConverter<,>` поверх `System.Text.Json`; нативная
 `jsonb`-колонка (PostgreSQL) и текст (SQL Server/MySQL/MariaDB/ClickHouse/SQLite); read/write/UPDATE/
 MERGE/`Returning`. См. [Value converters и JSON-колонки](../../infrastructure/04-value-converters.md);
-фазы 1–2 поставлены (round-trip, `Returning`, проекции и сравнение с константой). Остаток по
-[`todo_json_streaming.md`](../roadmap/todo_json_streaming.md) (общий STJ-слой для стриминга); AOT-фаза
-(`JsonTypeInfo<T>`) — вне области.
+фазы 1–2 поставлены (round-trip, `Returning`, проекции и сравнение с константой). Нативная PG-регрессия
+#131 (06.10.2026, PostgreSQL 17.11) покрывает **оба** физических типа `json`/`jsonb`; чтение «голого»
+`JsonNode` из нативной колонки — follow-up [#197](https://github.com/AlexeyShirshov/nextorm/issues/197).
+Остаток по [`todo_json_streaming.md`](../roadmap/todo_json_streaming.md) (общий STJ-слой для стриминга);
+AOT-фаза (`JsonTypeInfo<T>`) — вне области.
 
 **~~G3~~. DML `RETURNING`/`OUTPUT` как композируемый источник — <span style="color:green">Done</span> (PostgreSQL).** `linq2db#5717`.
 <span style="color:green">Реализовано</span>: `ctx.With("ins", ctx.CreateInsertBuilder<T>().Values(v).Returning(x => new { x.Id }))` открывает

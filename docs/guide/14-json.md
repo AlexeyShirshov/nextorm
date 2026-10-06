@@ -189,6 +189,38 @@ select id from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 A plain JSON string is bound as `text`; parse it explicitly with `SqlFunctions.Postgres.json_cast(value)`
 (`cast(value as jsonb)`).
 
+### Map a CLR object to a native JSON column
+
+A `[JsonColumn]` property stores any serializable CLR object in the column as JSON. The default
+`JsonColumnStorage.Auto` uses the provider's native type where it has one, so on PostgreSQL the property
+maps to a native `jsonb` column for both read and write — insert, update and `RETURNING` — while `Native`
+forces `jsonb` and `Text` forces a text column. The property participates in projections and constant
+comparisons like any other converted column:
+
+```csharp
+[SqlTable("customers")]
+public sealed class Customer
+{
+    public long Id { get; set; }
+
+    [JsonColumn]
+    public Address Address { get; set; } = new();
+}
+```
+
+The mapping covers the property, not the schema: nextorm does not generate the column DDL, so the table
+must already have the `jsonb` column. See
+[Value converters](../infrastructure/04-value-converters.md#json-columns) for the fluent
+`JsonColumn(o => ...)` form and serializer options.
+
+Bare CLR JSON values are handled at the boundary, differently from a mapped column:
+
+* A `JsonDocument` or `JsonElement` value materializes from a `json`/`jsonb` column, and a parameter of
+  either type binds as `jsonb`.
+* A `JsonNode` parameter also binds as `jsonb`, but a bare `JsonNode` *column* is not read (Npgsql has no
+  typed reader for it) — map the property with `[JsonColumn]`, or read it as a `JsonDocument`/`JsonElement`.
+* A plain `string` maps to `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`.
+
 ### Build a JSON object or array in the projection
 
 Construction functions build a `json`/`jsonb` value from ordinary SQL expressions. String arguments that
@@ -354,15 +386,17 @@ The construction and aggregation functions return `string?`; deserialize with
   mapped to it, so those names throw `NotSupportedException`.
 * The in-memory provider produces no SQL, so `ForJson`/`ForXml` throw `NotSupportedException` and the
   JSON function surfaces do not apply to it.
-* PostgreSQL is the only provider whose columns are mapped as a native JSON type in the parameter path;
-  SQL Server and MySQL/MariaDB JSON is always text.
+* PostgreSQL is the only provider with native `json`/`jsonb` columns: a `[JsonColumn]` property maps a
+  CLR object to a native `jsonb` column (`Auto` storage) on read and write (insert, update and
+  `RETURNING`), and a `JsonDocument`/`JsonElement`/`JsonNode` parameter binds as `jsonb`. SQL Server and
+  MySQL/MariaDB JSON is always text.
 
 ## See also
 
 - [Querying and projections](../querying/index.md) - `ForJson`/`ForXml` for SQL Server.
 - [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) - the full PostgreSQL JSON/JSONB surface and the SQL Server / MySQL/MariaDB text-JSON functions.
 - [Table-valued functions](11-table-valued-functions.md#built-in-table-functions) - `openjson` and `string_split`.
-- [PostgreSQL provider](../providers/postgres.md) - JSON parameter binding and arrays.
+- [PostgreSQL provider](../providers/postgres.md) - JSON columns, parameter binding and arrays.
 - [SQL Server provider](../providers/sqlserver.md) - `FOR JSON`, `FOR XML` and text JSON.
 - [MySQL provider](../providers/mysql.md) and [MariaDB provider](../providers/mariadb.md) - text JSON over `JSON_EXTRACT`/`JSON_SET`.
 - [Limitations and out-of-scope features](../advanced/limitations.md)

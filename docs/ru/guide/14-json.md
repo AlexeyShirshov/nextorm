@@ -190,6 +190,39 @@ select id from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 Обычная JSON-строка привязывается как `text`; разберите её явно через
 `SqlFunctions.Postgres.json_cast(value)` (`cast(value as jsonb)`).
 
+### Отобразить CLR-объект на нативную JSON-колонку
+
+Свойство `[JsonColumn]` хранит любой сериализуемый CLR-объект в колонке как JSON. По умолчанию
+`JsonColumnStorage.Auto` использует нативный тип там, где он есть, поэтому в PostgreSQL свойство
+отображается на нативную колонку `jsonb` и на чтение, и на запись — insert, update и `RETURNING`;
+`Native` принудительно включает `jsonb`, а `Text` — текстовую колонку. Свойство участвует в проекциях и
+сравнениях с константой как любая другая сконвертированная колонка:
+
+```csharp
+[SqlTable("customers")]
+public sealed class Customer
+{
+    public long Id { get; set; }
+
+    [JsonColumn]
+    public Address Address { get; set; } = new();
+}
+```
+
+Отображение покрывает свойство, а не схему: nextorm не генерирует DDL колонки, поэтому колонка `jsonb`
+уже должна существовать в таблице. Fluent-форма `JsonColumn(o => ...)` и настройки сериализатора —
+в разделе [Конвертеры значений](../infrastructure/04-value-converters.md#json-колонки).
+
+«Голые» CLR-типы JSON обрабатываются на границе иначе, чем отображённая колонка:
+
+* Значение `JsonDocument` или `JsonElement` материализуется из колонки `json`/`jsonb`, а параметр любого
+  из этих типов привязывается как `jsonb`.
+* Параметр `JsonNode` тоже привязывается как `jsonb`, но «голая» *колонка* `JsonNode` не читается (у
+  Npgsql нет для неё типизированного reader'а) — отображайте свойство через `[JsonColumn]` или читайте
+  `JsonDocument`/`JsonElement`.
+* Обычная `string` отображается на `text`; используйте `SqlFunctions.Postgres.json_cast(value)`, чтобы
+  разобрать её как `jsonb`.
+
 ### Собрать JSON-объект или массив в проекции
 
 Функции конструирования собирают значение `json`/`jsonb` из обычных SQL-выражений. Строковые
@@ -358,15 +391,17 @@ from complex_entity
   не отображён, поэтому эти имена бросают `NotSupportedException`.
 * Провайдер in-memory не генерирует SQL, поэтому `ForJson`/`ForXml` бросают `NotSupportedException`, а
   JSON-поверхности к нему не применимы.
-* PostgreSQL — единственный провайдер, чьи параметры отображаются на нативный JSON-тип; JSON в
-  SQL Server и MySQL/MariaDB всегда текст.
+* PostgreSQL — единственный провайдер с нативными колонками `json`/`jsonb`: свойство `[JsonColumn]`
+  отображает CLR-объект на нативную колонку `jsonb` (`Auto` storage) на чтение и запись (insert,
+  update и `RETURNING`), а параметр `JsonDocument`/`JsonElement`/`JsonNode` привязывается как `jsonb`.
+  JSON в SQL Server и MySQL/MariaDB всегда текст.
 
 ## См. также
 
 - [Запросы и проекции](../querying/index.md) — `ForJson`/`ForXml` для SQL Server.
 - [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) — полная поверхность JSON/JSONB в PostgreSQL и текстовые JSON-функции SQL Server и MySQL/MariaDB.
 - [Табличные функции](11-table-valued-functions.md#встроенные-табличные-функции) — `openjson` и `string_split`.
-- [Провайдер PostgreSQL](../providers/postgres.md) — привязка JSON-параметров и массивы.
+- [Провайдер PostgreSQL](../providers/postgres.md) — JSON-колонки, привязка параметров и массивы.
 - [Провайдер SQL Server](../providers/sqlserver.md) — `FOR JSON`, `FOR XML` и текстовый JSON.
 - [Провайдер MySQL](../providers/mysql.md) и [провайдер MariaDB](../providers/mariadb.md) — текстовый JSON через `JSON_EXTRACT`/`JSON_SET`.
 - [Ограничения и что вне области](../advanced/limitations.md)

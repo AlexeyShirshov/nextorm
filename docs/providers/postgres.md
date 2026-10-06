@@ -213,7 +213,9 @@ See [PostgreSQL-specific SQL](../guide/provider-specific/postgresql.md#range-typ
 
 ## JSON and JSONB
 
-PostgreSQL is the only supported provider with `json`/`jsonb`. Passing a `JsonDocument`, `JsonElement`
+PostgreSQL is the only supported provider with `json`/`jsonb`. A `[JsonColumn]` property maps a CLR object
+to a native `jsonb` column on read and write (`Auto` storage; `Native` forces `jsonb`, `Text` forces text),
+so the object round-trips through insert, update and `RETURNING`. Passing a `JsonDocument`, `JsonElement`
 or `JsonNode` parameter binds it as `jsonb`, so the access operators and functions work directly:
 
 ```csharp
@@ -231,7 +233,9 @@ ctx.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. The full
+A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. A
+bare `JsonNode` *column* is not read (Npgsql has no typed reader for it): map the property with
+`[JsonColumn]`, or read it as a `JsonDocument`/`JsonElement`. The full
 surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...) is documented
 in [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.
@@ -327,7 +331,7 @@ join complex_entity as "t2" on t1.id = t2.id
 | Derived table / TVF alias | required |
 | `*ALL` | supported |
 | Arrays | supported (`any(@array)`, `cardinality`, ...) |
-| JSON/JSONB | supported (`json_agg`, `->`, ...; `JsonDocument` params bind as `jsonb`) |
+| JSON/JSONB | supported (`json_agg`, `->`, ...; native `json`/`jsonb` columns via `[JsonColumn]`; `JsonDocument`/`JsonElement`/`JsonNode` params bind as `jsonb`) |
 | LOB streaming (`ToStream`/`ToTextReader`, `ToDataReader`) | supported (`SequentialAccess`; single `byte[]`/`string` column, or a multi-column caller-owned reader) |
 | `greatest` / `least` / `date_trunc` | supported (`greatest`/`least` ignore NULL arguments) |
 | Conditional function | `iif(cond, a, b)` → `case when cond then a else b end` |
