@@ -595,6 +595,8 @@ select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
 
 The column types come from the provider's CLR-to-SQL type mapping (`byte`→`UInt8`, `int`→`integer`, `string`→`text`/`String`); a nullable value type becomes `Nullable(T)` on ClickHouse. Only `LeadingArgument` and `AliasColumnList` are recognized, and each provider opts into the specific form it renders ([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))): ClickHouse renders only `LeadingArgument` and PostgreSQL only `AliasColumnList`. A declared form the provider does not implement is rejected with `NotSupportedException` — it is never emitted as SQL without the column list — and every other provider throws as well.
 
+Because PostgreSQL requires the alias column definition list, `jsonb_to_record`/`jsonb_to_recordset` always need a caller-declared `TRow`; a free/partial column list without one is not supported. For a schema-less result use a `[DynamicColumns]` dictionary store (see [Dynamic columns](27-dynamic-columns.md)), the raw `ToDataReader`/`ResultSet` reader (see [Raw SQL](12-raw-sql.md#multiple-result-sets)) or the key/value expansion functions `jsonb_each`/`jsonb_each_text`/`jsonb_object_keys` (above). The canonical description is in [Dynamic record schema](provider-specific/postgresql.md#dynamic-record-schema).
+
 ## Provider differences
 
 | Provider | Behaviour |

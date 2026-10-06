@@ -324,8 +324,24 @@ other provider rejects `With(name, insert)` at build time with `NotSupportedExce
 ## Dynamic record schema
 
 `jsonb_to_record`/`jsonb_to_recordset` are exposed as table-valued functions whose result schema is
-declared by the caller's row type and rendered as the alias column-definition list
-(`AS x(a int, b text)`). See [Dynamic result schema](../11-table-valued-functions.md#dynamic-result-schema).
+declared by the caller's row type and rendered as the alias column-definition list. PostgreSQL
+**requires** that column definition list, for example `AS x(a int, b text)`:
+
+```sql
+select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+```
+
+A free/partial column list **without** a caller-declared `TRow` is not supported for these two
+functions. Schema-less scenarios are covered by the existing paths instead:
+
+* a `[DynamicColumns]` store (`Dictionary<string, object?>`) captures the row's unmapped columns —
+  see [Dynamic columns](../27-dynamic-columns.md);
+* the raw reader path — [`ResultSet`](../12-raw-sql.md#multiple-result-sets) columns are read by
+  `FieldCount`/`ColumnNames` without materialisation, and [`ToDataReader`](../26-large-objects.md)
+  streams them as a `DbDataReader`;
+* `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` expand a JSON object into key/value rows —
+  see [Dynamic result schema](../11-table-valued-functions.md#dynamic-result-schema).
+
 The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
 free-form column list) remain out of scope. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).

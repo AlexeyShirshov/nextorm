@@ -327,8 +327,24 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 ## Динамическая схема записи
 
 `jsonb_to_record`/`jsonb_to_recordset` доступны как табличные функции, схема результата которых
-объявляется типом строки вызывающего и рендерится списком определений колонок в псевдониме
-(`AS x(a int, b text)`). См. [Динамическая схема результата](../11-table-valued-functions.md#dynamic-result-schema).
+объявляется типом строки вызывающего и рендерится списком определений колонок в псевдониме.
+PostgreSQL **требует** такой список определений колонок, например `AS x(a int, b text)`:
+
+```sql
+select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+```
+
+Свободный/частичный список колонок **без** объявленного вызывающим `TRow` для этих двух функций не
+поддерживается. Сценарии без схемы покрываются существующими путями:
+
+* хранилище `[DynamicColumns]` (`Dictionary<string, object?>`) собирает не сопоставленные колонки
+  строки — см. [Динамические колонки](../27-dynamic-columns.md);
+* сырой путь чтения — колонки [`ResultSet`](../12-raw-sql.md#несколько-наборов-результатов) читаются
+  по `FieldCount`/`ColumnNames` без материализации, а [`ToDataReader`](../26-large-objects.md) отдаёт
+  их как `DbDataReader`;
+* `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` разворачивают JSON-объект в строки
+  ключ/значение — см. [Динамическая схема результата](../11-table-valued-functions.md#dynamic-result-schema).
+
 Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
 свободный список колонок) остаются вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
