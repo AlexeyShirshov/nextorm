@@ -1,0 +1,3 @@
+FAIL: more than one comprehensive boundary test sweep: 4
+FAIL: multiple boundary solution builds: 3
+EXIT=2

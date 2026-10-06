@@ -178,13 +178,23 @@ Command catalog (array-argv form; logs under `/tmp/nextorm-D126-rplus1/`):
 - E12 boundary sweep: full core/mysql/mariadb/sqlite/sqlserver projects
 - E13 coverage gates (`MIN_LINE_COVERAGE=85`, `MIN_BRANCH_COVERAGE=75`)
 
-Pinned rows (filled by later streams; DO fills only E01/E02 here):
+The table below holds the final E01–E13 results (all rows recorded):
 
 | Row | Command | Exit | Selected/P | Evidence |
 | --- | --- | --- | --- | --- |
 | 126-A-E01 | E01 brief validation | 0 | n/a | `/tmp/nextorm-D126-rplus1/brief.json` |
-| 126-A-E02 | E02 build | (pending) | (pending) | `/tmp/nextorm-D126-rplus1/build.log` |
-| 126-A-E03..E13 | planned | — | — | later stream |
+| 126-A-E02 | E02 build `dotnet build nextorm.slnx -c Debug` | 0 | 0 warnings / 0 errors | `:308`, `:320`; `/tmp/nextorm-D126-rplus1/build.log` |
+| 126-A-E03 | E03 core inner `~Tuple` | 0 | 18 | `:286` |
+| 126-A-E04 | E04 mysql inner `~Tuple` | 0 | 16/16/0/0 | `:329` |
+| 126-A-E05 | E05 mariadb inner `~Tuple` | 0 | 15/15 | `:330` |
+| 126-A-E06 | E06 sqlite inner `~Tuple` | 0 | 20/20 | `:331` |
+| 126-A-E07 | E07 sqlserver inner `~Tuple` | 0 | 4/4 | `:332` |
+| 126-A-E08 | E08 mysql container execution | 0 | MySQL 579/579/0/79 (assembly 3143/2950/0/193) | `:314`, `:323` |
+| 126-A-E09 | E09 mariadb container execution | 0 | MariaDB 50/50/0/0 (assembly 3143/2950/0/193) | `:314`, `:323` |
+| 126-A-E10 | E10 sqlite execution (in-process) | 0 | 4/4 | `:333` |
+| 126-A-E11 | E11 PG/CH regression | 0 | all Pass, unchanged | `:314` |
+| 126-A-E12 | E12 boundary: full core/mysql/mariadb/sqlite/sqlserver/postgres/clickhouse | 0 | core 1536, mysql 273, mariadb 181, sqlite 1033 (1 skip), sqlserver 560, postgres 756, clickhouse 491 | `:287-288` |
+| 126-A-E13 | E13 coverage gates | 0 | line 87.1% (45026/51648 ≥ 85), branch 78.8% (23230/29462 ≥ 75) | `:309`, `:321` |
 
 Test verification rows (r=3; new constructor-form coverage):
 

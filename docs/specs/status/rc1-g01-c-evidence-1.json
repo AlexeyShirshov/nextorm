@@ -1,0 +1,125 @@
+{
+  "unit": "rc1-g01-c-evidence-1",
+  "scope": {
+    "projects": [
+      "nextorm.slnx",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.core.tests",
+      "tests/nextorm.integration.tests",
+      "benchmarks/nextorm.benchmark"
+    ],
+    "selectors": [
+      "aggregate:nextorm.slnx Debug/Release builds + unit + coverage + docfx + perf",
+      "aggregate:nextorm.integration.tests container sweep",
+      "targeted:nextorm.postgres.tests",
+      "targeted:nextorm.mariadb.tests",
+      "targeted:nextorm.core.tests"
+    ],
+    "files": [
+      "docs/specs/status/rc1-g01-c-evidence-1.md",
+      "docs/specs/status/rc1-g01-c-evidence-1.json",
+      "docs/specs/status/collection-1.0.9-rc1.md",
+      "docs/specs/status/rc1-141-version-gates-1.md",
+      "docs/specs/status/rc1-127-mssql-output-into-1.md",
+      "docs/specs/status/rc1-126-tuple-ctor-1.md"
+    ],
+    "rationale": "Collection-level C evidence completion for group G01: an aggregate boundary sweep at HEAD 36e540e2 (builds/unit/integration/coverage/docfx/perf) plus the historical targeted D141 PostgreSQL/MariaDB/core full-project sweeps at revision 815e0127+d141-do. This cycle changes no compiled input (docs/specs/status only), so scope.rebuild is none. The single comprehensive boundary sweep at HEAD 36e540e2 is the container integration run (3191 cases); the three targeted project runs are labeled targeted in the provenance manifest (docs/specs/status/rc1-g01-c-evidence-1/provenance.md) and carry their true historical revision. All recorded executions are unfiltered: the aggregate executions are full-solution (nextorm.slnx) Debug/Release builds, a full-solution unit sweep, a full coverage collect, docfx and a full container integration run; the PostgreSQL/MariaDB/core executions are unfiltered full-project runs labeled targeted in the provenance prose. No `--filter` (or any other test selector) was applied to any execution; scope.selectors names these aggregate/targeted executions, not test filters.",
+    "rebuild": "none",
+    "boundary": "Aggregate HEAD 36e540e2 boundary sweep = the container integration run (3191 total / 0 failed / 193 skipped) plus the aggregate Debug/Release solution builds, coverage collect, docfx and perf-acceptance runs. The historical targeted D141 full-project boundary sweeps (postgres 756, mariadb 166, core 1524 at 815e0127+d141-do) are recorded as boundary because they were unfiltered full-assembly runs."
+  },
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "36e540e2",
+      "artifact_revision": "36e540e2",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Release"],
+      "phase": "boundary",
+      "source_revision": "36e540e2",
+      "artifact_revision": "36e540e2",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "815e0127+d141-do",
+      "artifact_revision": "815e0127+d141-do",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "nextorm.slnx", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "36e540e2",
+      "artifact_revision": "36e540e2",
+      "exit_code": 0,
+      "selected_count": 8438
+    },
+    {
+      "command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--", "-noColor"],
+      "phase": "boundary",
+      "source_revision": "36e540e2",
+      "artifact_revision": "36e540e2",
+      "exit_code": 0,
+      "selected_count": 3191,
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"}
+    },
+    {
+      "command": ["dotnet", "tool", "run", "dotnet-coverage", "collect", "-s", "coverage.settings.xml", "-f", "cobertura", "-o", "tests/coverage/coverage.cobertura.xml", "dotnet test --no-build --verbosity normal"],
+      "phase": "boundary",
+      "source_revision": "36e540e2",
+      "artifact_revision": "36e540e2",
+      "exit_code": 0,
+      "selected_count": 8438
+    },
+    {
+      "command": ["dotnet", "docfx", "docs/docfx.json"],
+      "phase": "boundary",
+      "source_revision": "36e540e2",
+      "artifact_revision": "36e540e2",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "run", "--project", "benchmarks/nextorm.benchmark", "-c", "Release", "--", "--anyCategories=acceptance"],
+      "phase": "boundary",
+      "source_revision": "36e540e2",
+      "artifact_revision": "36e540e2",
+      "exit_code": 0,
+      "selected_count": 7
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "815e0127+d141-do",
+      "artifact_revision": "815e0127+d141-do",
+      "exit_code": 0,
+      "selected_count": 756,
+      "targeted": true
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "815e0127+d141-do",
+      "artifact_revision": "815e0127+d141-do",
+      "exit_code": 0,
+      "selected_count": 166,
+      "targeted": true
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "815e0127+d141-do",
+      "artifact_revision": "815e0127+d141-do",
+      "exit_code": 0,
+      "selected_count": 1524,
+      "targeted": true
+    }
+  ]
+}

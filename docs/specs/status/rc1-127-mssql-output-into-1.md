@@ -56,6 +56,32 @@ SQL Server: `OUTPUT … INTO` a table variable (`DECLARE @t TABLE (...)`); gener
   "phase" wording and add a comparison table vs existing-table output; no public→specs links.
 - Evidence rows D127-E01..E10; CHECK re-gather budget 2.
 
+### D127 evidence rows E01–E10 (final)
+
+| Id | Criterion (from :54-56) | Evidence | Status |
+|---|---|---|---|
+| D127-E01 | SQL-gen INSERT table-variable | `tests/nextorm.sqlserver.tests/InsertSqlGenerationTests.cs:434,447` | closed |
+| D127-E02 | SQL-gen UPDATE/DELETE table-variable | `tests/nextorm.sqlserver.tests/UpdateSqlGenerationTests.cs:135`, `tests/nextorm.sqlserver.tests/DeleteSqlGenerationTests.cs:93` | closed |
+| D127-E03 | SQL-gen guards/rejections | `InsertSqlGenerationTests.cs:421,465,478,491`; postgres `InsertSqlGenerationTests.cs:672`, mysql `:349`, sqlite `:604` | closed |
+| D127-E04 | real container INSERT table-variable identity read-back + nullable reference NULL | `tests/nextorm.integration.tests/SqlServerSpecificTests.cs:1920`; `artifacts/d127/sqlserver-class.xml` | closed |
+| D127-E05 | real container UPDATE/DELETE table-variable populated AND empty set | `SqlServerSpecificTests.cs:1958,2002` | closed |
+| D127-E06 | sync + async execution all DML | `SqlServerSpecificTests.cs:2041,2068,2100` | closed |
+| D127-E07 | nullable/value/reference source values | value `id`/`age`; nullable reference `name` NULL round-trip at `SqlServerSpecificTests.cs:1937-1954` | closed |
+| D127-E08 | INSERT empty-result set | **gap: no test exists** | **open — not closed** |
+| D127-E09 | computed source value through OutputInto table-variable | **gap: no `OutputInto*` test references a computed column** | **open — not closed** |
+| D127-E10 | EN+RU docs: no "phase" wording, comparison table vs existing-table output, no public→specs links | `docs/guide/15-insert-statement.md:531-572,576-582`, `docs/ru/guide/15-insert-statement.md:534-577,579-585`; link audit found no `docs/**` or `readme.md` hits | closed |
+
+Run evidence: `artifacts/d127/test-sqlserver.log:4-8` (697 total / 697 succeeded / 0 failed / 0 skipped);
+`artifacts/d127/sqlserver-class.log:22-23` (`Total: 87, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0`, `EXIT=0`);
+`artifacts/d127/integration.log:437-439` (`Total: 3191, Errors: 0, Failed: 0, Skipped: 193, Not Run: 0`, `EXIT=0`).
+
+**Correction note:** the earlier `done` claim is **not verified against the full frozen criteria** while
+D127-E08 and D127-E09 remain open gaps. D127 is **not** marked superseded; the two gaps are open residual
+criteria, not a replacement of scope.
+
+Observation only: `examples/README.md` links fall outside the `docs/**` + `readme.md` public→specs rule and
+outside this cycle's scope; no public doc link audit violation was found in the rule's scope.
+
 ## Progress log
 
 Recon persisted (run 10 start).

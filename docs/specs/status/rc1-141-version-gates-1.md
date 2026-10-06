@@ -299,10 +299,36 @@ CHECK packet (consolidated frozen contract + crosswalk + matrices + integration 
 
 ## ACT
 
-- **CHECK result: PASS.** Frozen point: **plan revision r = 2**, **attempt n = 2**, evidence **contract revision `rv = D141.ContractA.strong.1`**. All acceptance criteria R141-PG/TYPE/CACHE/MDB/COMPAT/DOC/VERIFY are met; freeze is recorded here as the ACT baseline.
+- **CHECK result: PASS.** Frozen point: **plan revision r = 2**, **attempt n = 2**, evidence **contract revision `rv = D141.ContractA.strong.1`**. Criteria R141-PG/TYPE/CACHE/MDB/COMPAT/DOC are met. **`R141-VERIFY` is NOT met as originally recorded:** the historical `report` exited **2** (`FAIL: more than one comprehensive boundary test sweep: 3`), and the fresh re-run in `docs/specs/status/rc1-g01-c-evidence-1.json` is also rejected by the helper's sweep/build caps (`EXIT 2`), so verification rests on the named waiver `W-C-D141-REPORT-CAP-1` (see `## Validator re-run disposition (r2)`). Freeze is recorded here as the ACT baseline.
 - **Commit plan (executed by ACT).** Branch `1.0.9-rc1`, no worktree/merge (single collection group). Stage **only** the D141 change set by explicit path — 32 files (28 tracked-modified + 4 untracked-new), matching the `git status --short` snapshot above, plus the two collection status files. No `git add -A`; `docs/api/**` and `docs/_site/**` are gitignored and not staged. Commit message: `#141 Version-gate MariaDB 13 UPDATE RETURNING and PostgreSQL FILTER (<9.4)`. Auto-commit authorized by the collection (`pdca-collection` exception); **no push**.
 - **Issue close outcome.** `gh` **was available** in this environment; `gh issue close 141 --repo AlexeyShirshov/nextorm --comment "..."` exited **0** and issue #141 is **CLOSED** (verified via `gh issue view 141 --json state` → `CLOSED`). This **contradicts** the brief's premise that `gh` is unavailable, so the planned "_gh unavailable / not closed remotely_" Notice is **not** recorded (it would be false). **Notice:** issue #141 was closed remotely before the commit landed; the commit itself was not pushed, so the remote issue references an unpushed commit.
 
 ```
 2026-10-05T19:55:35Z | ACT | r2 | 2/2 | CHECK PASS frozen (rv=D141.ContractA.strong.1); status file finalized with ACT section; staging D141 change set by explicit path; gh issue #141 closed remotely (exit 0) | docs/specs/status/rc1-141-version-gates-1.md
+2026-10-06T02:49Z | CORRECTIVE | r2 | 2/2 | fresh collection evidence JSON created and validator re-run recorded; R141-VERIFY corrected to not-met-on-helper-gate; historical 3136/3137 superseded by HEAD 36e540e2 aggregate 3191/0/193 | docs/specs/status/rc1-g01-c-evidence-1.json; docs/specs/status/rc1-g01-c-evidence-1/provenance.md
+```
+
+## Validator re-run disposition (r2)
+
+- Fresh collection-level evidence JSON: `docs/specs/status/rc1-g01-c-evidence-1.json` (created by corrective
+  cycle `rc1-g01-c-evidence-1`). The original `/tmp/nextorm-D141-ContractA-strong/E141-evidence.json` was
+  left **unchanged**.
+- Re-run at corrective DO r=1, n=2/3: `scope.selectors` was reconciled to name the unfiltered
+  aggregate/targeted executions; no `--filter` was added and no execution was changed.
+- `validate_inner_loop.py brief docs/specs/status/rc1-g01-c-evidence-1.json` → **EXIT 0** (fresh;
+  `docs/specs/status/rc1-g01-c-evidence-1/validator-brief.txt`).
+- `validate_inner_loop.py report docs/specs/status/rc1-g01-c-evidence-1.json` → **EXIT 2**, verbatim
+  (`docs/specs/status/rc1-g01-c-evidence-1/validator-report.txt`):
+  - `FAIL: more than one comprehensive boundary test sweep: 4`
+  - `FAIL: multiple boundary solution builds: 3`
+- Interpretation: the helper's single-cycle caps (one comprehensive boundary sweep, one boundary solution
+  build) cannot represent a collection-level aggregate plus the historical D141 plan's three full
+  affected-project sweeps (PostgreSQL 756, MariaDB 166, core 1524 at `815e0127+d141-do`). All runs are green
+  (exit 0) and no execution was rewritten, omitted or reclassified. The fresh `report` exit is therefore
+  **2** — i.e. `R141-VERIFY` is **not met** on this helper gate — and the named waiver
+  `W-C-D141-REPORT-CAP-1` is recorded in `docs/specs/status/collection-1.0.9-rc1.md`.
+- **Supersession note:** the historical integration observations **3136** (`:180`) and **3137** (`:297`)
+  remain the historical results of their runs and are **superseded for collection completion** by the
+  aggregate run at HEAD `36e540e2` — total **3191**, failed **0**, skipped **193**
+  (`/tmp/nextorm-rc1-coll-c/06-integration.txt`). This is not a correction of the historical logs.
 ```

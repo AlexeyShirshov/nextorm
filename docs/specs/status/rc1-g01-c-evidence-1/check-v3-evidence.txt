@@ -1,0 +1,204 @@
+CHECK v3 deterministic evidence capture
+task: rc1-g01-c-evidence-1
+repo: /home/alex/sources/nextorm
+branch: 1.0.9-rc1
+HEAD: 36e540e25aaa1389e1b55f012192cd337f8ecd35
+captured (UTC): 2026-10-06T08:04Z
+
+================================================================================
+1) CRLF verification (byte-level) over changed/new status files
+================================================================================
+COMMAND:
+  python3 - <<'PY'
+  import sys
+  files = [
+   "docs/specs/status/collection-1.0.9-rc1.md",
+   "docs/specs/status/rc1-126-tuple-ctor-1.md",
+   "docs/specs/status/rc1-127-mssql-output-into-1.md",
+   "docs/specs/status/rc1-131-pg-json-column-1.md",
+   "docs/specs/status/rc1-141-version-gates-1.md",
+   "docs/specs/status/rc1-g01-c-evidence-1.md",
+   "docs/specs/status/rc1-g01-c-evidence-1.json",
+   "docs/specs/status/rc1-g01-c-evidence-1/provenance.md",
+   "docs/specs/status/rc1-g01-c-evidence-1/validator-brief.txt",
+   "docs/specs/status/rc1-g01-c-evidence-1/validator-report.txt",
+  ]
+  rc = 0
+  for f in files:
+      b = open(f, "rb").read()
+      total = b.count(b"\n")
+      lone = 0
+      for i, ch in enumerate(b):
+          if ch == 0x0A and (i == 0 or b[i-1] != 0x0D):
+              lone += 1
+      print(f"{f} {total} {lone}")
+      if lone != 0:
+          rc = 2
+  print(f"EXIT={rc}")
+  sys.exit(rc)
+  PY
+
+OUTPUT (path total_lines lone_LF):
+  docs/specs/status/collection-1.0.9-rc1.md 162 0
+  docs/specs/status/rc1-126-tuple-ctor-1.md 368 0
+  docs/specs/status/rc1-127-mssql-output-into-1.md 172 0
+  docs/specs/status/rc1-131-pg-json-column-1.md 148 0
+  docs/specs/status/rc1-141-version-gates-1.md 334 0
+  docs/specs/status/rc1-g01-c-evidence-1.md 117 0
+  docs/specs/status/rc1-g01-c-evidence-1.json 125 0
+  docs/specs/status/rc1-g01-c-evidence-1/provenance.md 79 0
+  docs/specs/status/rc1-g01-c-evidence-1/validator-brief.txt 1 0
+  docs/specs/status/rc1-g01-c-evidence-1/validator-report.txt 3 0
+  EXIT=0
+
+RESULT: all lone_LF == 0; script exit 0; shell ${PIPESTATUS} EXIT=0.
+
+COMMAND:
+  git diff --check; echo "EXIT=$?"
+OUTPUT:
+  EXIT=0
+(no whitespace-error output)
+
+================================================================================
+2) C-E04 predicate
+================================================================================
+COMMAND:
+  git show-ref --verify refs/heads/collection/1.0.9-rc1/g01; echo "EXIT=$?"
+OUTPUT:
+  fatal: 'refs/heads/collection/1.0.9-rc1/g01' - not a valid ref
+  EXIT=128
+
+COMMAND:
+  git show-ref | rg 'collection/1.0.9-rc1' || echo 'no rc1 collection refs'
+OUTPUT:
+  no rc1 collection refs
+(no group branch exists)
+
+================================================================================
+3) D127 ten rows confirmed against the CURRENT document
+================================================================================
+FILE: docs/specs/status/rc1-127-mssql-output-into-1.md
+FULL ROWS WITH LINE NUMBERS (Id | Evidence | Status):
+  63: | D127-E01 | SQL-gen INSERT table-variable | `tests/nextorm.sqlserver.tests/InsertSqlGenerationTests.cs:434,447` | closed |
+  64: | D127-E02 | SQL-gen UPDATE/DELETE table-variable | `tests/nextorm.sqlserver.tests/UpdateSqlGenerationTests.cs:135`, `tests/nextorm.sqlserver.tests/DeleteSqlGenerationTests.cs:93` | closed |
+  65: | D127-E03 | SQL-gen guards/rejections | `InsertSqlGenerationTests.cs:421,465,478,491`; postgres `InsertSqlGenerationTests.cs:672`, mysql `:349`, sqlite `:604` | closed |
+  66: | D127-E04 | real container INSERT table-variable identity read-back + nullable reference NULL | `tests/nextorm.integration.tests/SqlServerSpecificTests.cs:1920`; `artifacts/d127/sqlserver-class.xml` | closed |
+  67: | D127-E05 | real container UPDATE/DELETE table-variable populated AND empty set | `SqlServerSpecificTests.cs:1958,2002` | closed |
+  68: | D127-E06 | sync + async execution all DML | `SqlServerSpecificTests.cs:2041,2068,2100` | closed |
+  69: | D127-E07 | nullable/value/reference source values | value `id`/`age`; nullable reference `name` NULL round-trip at `SqlServerSpecificTests.cs:1937-1954` | closed |
+  70: | D127-E08 | INSERT empty-result set | **gap: no test exists** | **open — not closed** |
+  71: | D127-E09 | computed source value through OutputInto table-variable | **gap: no `OutputInto*` test references a computed column** | **open — not closed** |
+  72: | D127-E10 | EN+RU docs: no "phase" wording, comparison table vs existing-table output, no public→specs links | `docs/guide/15-insert-statement.md:531-572,576-582`, `docs/ru/guide/15-insert-statement.md:534-577,579-585`; link audit found no `docs/**` or `readme.md` hits | closed |
+
+COUNT: 10 rows total -> 8 closed (E01,E02,E03,E04,E05,E06,E07,E10); 2 open (E08,E09).
+Line 79 confirms: "D127-E08 and D127-E09 remain open gaps ... D127 is **not** marked superseded".
+
+================================================================================
+4) Pinned contract / ledger mapping
+================================================================================
+FILE: docs/specs/status/rc1-g01-c-evidence-1.md
+Durable fields (lines 4-7):
+  N  = 1        (Cycle: N = 1)
+  r  = 1        (Plan revision: r = 1)
+  n  = 3/3      (Attempt: n = 3/3)
+  rv = CEvidence.ContractA.1   (Evidence contract revision)
+
+CE-E01..CE-E08 contract rows (Evidence contract table, lines 52-59; columns:
+ID | Invocation/action | Required result | Bound artifact). The table has no
+per-row "status" column; observable status follows the table plus the D:CE task
+list / validator artifacts:
+  CE-E01 Aggregates at HEAD 36e540e2 (build D/R, unit, integration, coverage, docfx, perf)
+         -> required exits 0/0/0/0/0/0/0; counts unit 8438/0/2523, integ 3191/0/193,
+            coverage 87.1/78.8, docfx 0 err, perf 7/7; artifacts /tmp/nextorm-rc1-coll-c/...
+         -> status: satisfied by the C run aggregate (collection-1.0.9-rc1.md:78-92).
+  CE-E02 Targeted D141 sweeps at 815e0127+d141-do (PG 756/756, MariaDB 166/166, core 1524/1524, exit 0)
+         -> artifacts /tmp/nextorm-D141-ContractA-strong/r2/*, E141-evidence.json
+         -> status: satisfied (bound in C-E03 ledger D141 row).
+  CE-E03 Fresh collection-level evidence JSON
+         -> docs/specs/status/rc1-g01-c-evidence-1.json (valid JSON, schema fields, honest)
+         -> status: present (untracked new file).
+  CE-E04 validate_inner_loop.py brief <json>
+         -> docs/specs/status/rc1-g01-c-evidence-1/validator-brief.txt
+         -> status: present, EXIT=0 (file content "EXIT=0").
+  CE-E05 validate_inner_loop.py report <json>
+         -> docs/specs/status/rc1-g01-c-evidence-1/validator-report.txt
+         -> status: present, EXIT=2 with verbatim:
+            "FAIL: more than one comprehensive boundary test sweep: 4"
+            "FAIL: multiple boundary solution builds: 3"
+            covered by waiver W-C-D141-REPORT-CAP-1; not rewritten.
+  CE-E06 rc1-141 correction (disposition + ACT fix + supersession note; original /tmp JSON unchanged)
+         -> rc1-141-version-gates-1.md:231+, :302, :180, :297
+         -> status: present (that file modified: +28/-? per diff --stat).
+  CE-E07 D127 + D126 evidence tables (D127-E01..E10 with 2 open; run bindings; correction;
+         D126 E01-E13 final) -> rc1-127-...:57, rc1-126-...:183-187
+         -> status: present (both files modified).
+  CE-E08 Collection C-E03/C-E04 + waiver + durable fields (10 stable IDs; C-E04 N/A;
+         waiver or exit-0; fields updated; docs-only) -> collection-1.0.9-rc1.md
+         -> status: present (collection file modified; C-E03/C-E04 sections at :101-156).
+
+D:CE task list statuses (lines 40-46):
+  D:CE-01 STEP 0 plan -> done
+  D:CE-02 STEP 1 fresh JSON + provenance + validator brief/report -> done (revised n=2/3)
+  D:CE-03 STEP 1.5 rc1-141 disposition/ACT/supersession -> done (revised n=2/3)
+  D:CE-04 STEP 2 rc1-127 ten-row table + bindings + correction -> done
+  D:CE-05 STEP 3 rc1-126 individual E01-E13 final results -> done (revised n=2/3)
+  D:CE-06 STEP 4 collection C-E03/C-E04 + waiver + durable fields -> done (revised n=2/3)
+  D:CE-07 STEP 5 CHECK r=1,n=1/3 loop-back fixes (five) -> done
+
+Progress log (lines 99-116): last entry 2026-10-06T03:00Z | DO | r1 | 3/3 | DO started
+(bound concrete execution files for D126/D131/D128/D163). No CHECK entry for n=3/3 yet.
+
+FILE: docs/specs/status/collection-1.0.9-rc1.md
+C-E03 ledger (section "C-E03 evidence completion", lines 114-125). One line per ID:
+  D141 | rv `D141.ContractA.strong.1` | CHECK PASS `rc1-141-version-gates-1.md:302` (r=2,n=2) | ACT `:300-308` | done — R141-VERIFY not met on helper gate (report EXIT 2); waiver `W-C-D141-REPORT-CAP-1`
+  D126 | rv `rv=5` | CHECK PASS `rc1-126-tuple-ctor-1.md:349-351` (r=4,n=1) | ACT `:349-368` | done
+  D181 | rv `D181.r3.ec1` | CHECK PASS `rc1-181-sqlite-fts-1.md:362-364` (r=3,n=2/3) | ACT `:362-388` | done
+  D182 | rv `D182.r2.ec1` | CHECK PASS `rc1-182-mssql-scalars-1.md:146-149` (r=2,n=1/3) | ACT `:146-154` | done
+  D168 | rv `D168.r2.ec1` | CHECK PASS `rc1-168-mssql-boxing-1.md:173-175` (r=2,n=1/3) | ACT `:173-186` | done
+  D131 | rv `rv=1` | CHECK PASS `rc1-131-pg-json-column-1.md:3,140` (r=1,n=1/3) | ACT `:140-148` | done
+  D128 | rv `D128.r2.ec1` | CHECK PASS `rc1-128-ch-json-column-1.md:173-181` (r=2,n=1/3) | ACT `:173-181` | done
+  D133 | rv `D133.r2.ec1` | CHECK PASS `rc1-133-streaming-lob-1.md:149-151` (r=2,n=1/3) | ACT `:149-179` | done
+  D127 | rv `D127.r2.ec1` | CHECK PASS `rc1-127-mssql-output-into-1.md:163` (r=2,n=1/3) | ACT `:165-172` | done — two open gaps E08/E09
+  D163 | rv `rv=1` | CHECK PASS `rc1-163-ch-refcollection-doc-1.md:122,126-128` (r=1,n=1/3) | ACT `:126-128` | done
+
+Collection durable fields (lines 57-64): Documentation outcome recorded; Collection gate C: BLOCKED
+(D127-E08/E09 product-test gaps outside docs-only scope + parent gate-C independent Task->check re-run
+not yet performed). C-E04 section lines 137-144: ref not valid (exit 128), single-group => N/A, no merge.
+
+================================================================================
+5) Scope check
+================================================================================
+COMMAND:
+  git status --porcelain
+OUTPUT:
+   M docs/specs/status/collection-1.0.9-rc1.md
+   M docs/specs/status/rc1-126-tuple-ctor-1.md
+   M docs/specs/status/rc1-127-mssql-output-into-1.md
+   M docs/specs/status/rc1-131-pg-json-column-1.md
+   M docs/specs/status/rc1-141-version-gates-1.md
+  ?? artifacts/
+  ?? docs/specs/status/rc1-g01-c-evidence-1.json
+  ?? docs/specs/status/rc1-g01-c-evidence-1.md
+  ?? docs/specs/status/rc1-g01-c-evidence-1/
+
+COMMAND:
+  git status --porcelain | awk '$2 !~ /^docs\/specs\/status\// && $1!="??" {print}'
+OUTPUT:
+  (empty)
+
+=> No tracked file outside docs/specs/status/ changed. `artifacts/` is untracked and pre-existing
+   (not a tracked modification). New files are all under docs/specs/status/.
+
+COMMAND:
+  git diff --stat
+OUTPUT:
+   docs/specs/status/collection-1.0.9-rc1.md        | 98 ++++++++++++++++++++++--
+   docs/specs/status/rc1-126-tuple-ctor-1.md        | 16 +++-
+   docs/specs/status/rc1-127-mssql-output-into-1.md | 26 +++++++
+   docs/specs/status/rc1-131-pg-json-column-1.md    |  2 +-
+   docs/specs/status/rc1-141-version-gates-1.md     | 28 ++++++-
+   5 files changed, 157 insertions(+), 13 deletions(-)
+
+================================================================================
+END OF CAPTURE
+================================================================================
