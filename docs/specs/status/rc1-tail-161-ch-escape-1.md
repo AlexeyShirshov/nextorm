@@ -263,3 +263,4 @@ now ends at `:250`. Dialect anchors: `ClickHouseDialect.cs:483` (`Escape` → `Q
 - 2026-10-06T05:26Z | CHECK re-gather | r=1 | n=1/3 | request 1/2 complete: no plan/revision change, no `D:`/P1 status change, no production edit; throwaway probe removed | `git status`: only `docs/specs/status/rc1-tail-161-ch-escape-1.md` added
 - 2026-10-06T05:28Z | CHECK | r=1 | n=1/3 | CHECK re-gather complete; final verdict pending | this file
 - 2026-10-06T05:31Z | ACT | r=1 | n=1/3 | final CHECK PASS: R161-01..09 all met (0 unmet / 0 unverified), P1-1..P1-9 closed; status finalized; D161 row `done` in collection status; collection auto-commit, no push/merge | this file
+- 2026-10-06T05:32Z | ACT | r=1 | n=1/3 | task change commit b06784c8 (12 files, `#161 ClickHouse identifier quoting escapes backslashes`); no push, no merge | this file
