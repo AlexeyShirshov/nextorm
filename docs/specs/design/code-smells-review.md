@@ -7969,7 +7969,7 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 - **Тест равенства `ColumnsPlanHash`** — не добавлен; `ColumnsPlanHash`/`SelectExpressionPlanEqualityComparer` не менялись.
 - **Eager `BatchResult` (multi-result)** — не затронуто (скалярный срез).
 
-Открыто и перенесено: SQLite (`rowid`/`SqliteBlob`/`GetBytes`-чанки), MySQL/MariaDB (capability-тест `GetStream`/`GetTextReader`), фазы 2/3 (`ToDataReader`, `Stream`/`TextReader` в проекции), mid-read cancel. Детали — `docs/specs/status/lob-streaming-1.md`.
+Открыто и перенесено: SQLite (`rowid`/`SqliteBlob`/`GetBytes`-чанки), фазы 2/3 (`ToDataReader`, `Stream`/`TextReader` в проекции), mid-read cancel. MySQL/MariaDB (capability-тест `GetStream`/`GetTextReader`) — **закрыто измерением (D133, #133):** `MySqlConnector 2.6.2` и `ClickHouse.Driver 1.4.0` буферизуют LOB (`GetStream`/`GetTextReader` аллоцируют вместе со значением, `SequentialAccess` не меняет аллокации; ClickHouse `GetStream` → `NotImplementedException`), поэтому `SupportsSequentialAccess`/`SupportsLobStreaming` осознанно остаются `false` — capability корректна, не TODO; триггер пересмотра — драйвер с настоящим memory-bounded потоковым чтением. Детали — `docs/specs/status/rc1-133-streaming-lob-1.md`.
 
 ### Цикл #27 — цикл 2 (capability-эксперимент, 2026-09-27)
 
@@ -8076,6 +8076,10 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 - **DRY: четыре in-memory-ветки (ℹ️).** См. Наблюдение C цикла 5; триггер — пятый терминал.
 - **`(object[])parameters` async (ℹ️).** См. Наблюдение A цикла 5; триггер — следующий проход по nullable.
 - **Многоколоночный `ToDataReader` на in-memory — ограничение, не TODO** (нет `DbDataReader`).
+- **MySQL/MariaDB/ClickHouse LOB streaming — документированное ограничение, не TODO (D133/#133).**
+  Драйверы буферизуют LOB, `SupportsSequentialAccess`/`SupportsLobStreaming` осознанно `false`;
+  пересматривать только при появлении драйвера с настоящим memory-bounded потоковым чтением.
+  Измерения — `docs/specs/status/rc1-133-streaming-lob-1.md`.
 
 ## Перенесено из удалённых планов (2026-09-29)
 

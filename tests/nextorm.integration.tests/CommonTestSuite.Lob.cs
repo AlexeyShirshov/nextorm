@@ -6,10 +6,13 @@ namespace NextORM.Integration.Tests;
 
 /// <summary>
 /// Shared coverage for the streaming LOB terminals (<c>ToStream</c>/<c>ToTextReader</c> and their
-/// async twins). Only PostgreSQL and SQL Server implement them: the reader is opened with
+/// async twins). PostgreSQL, SQL Server and SQLite implement them: the reader is opened with
 /// <c>CommandBehavior.SequentialAccess</c> and the returned <see cref="Stream"/>/<see cref="TextReader"/>
-/// owns the reader and the per-call command until it is disposed. SQLite, MySQL/MariaDB, ClickHouse
-/// and the in-memory provider reject the terminal with <see cref="NotSupportedException"/>.
+/// owns the reader and the per-call command until it is disposed. MySQL/MariaDB and ClickHouse reject
+/// the terminal with <see cref="NotSupportedException"/> because their drivers do not provide
+/// memory-bounded LOB streaming (<c>SupportsSequentialAccess</c> is deliberately left false); the
+/// in-memory provider supports the scalar terminals over the materialized value but rejects the
+/// multi-column <c>ToDataReader</c>.
 /// </summary>
 public abstract partial class CommonTestSuite
 {

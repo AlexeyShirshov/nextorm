@@ -111,9 +111,14 @@ await foreach (var row in ctx.From("documents")
 A row projection that contains a streaming member is prepared fresh with
 `CommandBehavior.SequentialAccess` and is never written to the plan cache, so an ordinary buffered
 projection of the same shape keeps its plan. On SQLite the `rowid` locator is appended to these rows
-too, so the source must be a rowid-bearing table. A provider without sequential-access support
-(MySQL/MariaDB, ClickHouse) throws `NotSupportedException` when the query is executed; use the
-buffered `byte[]`/`string` projection there instead.
+too, so the source must be a rowid-bearing table. MySQL/MariaDB and ClickHouse do **not** provide
+memory-bounded LOB streaming: their drivers buffer the whole value even under
+`CommandBehavior.SequentialAccess`, so those dialects deliberately leave
+[`ISqlDialect.SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess) at
+its `false` default and the terminal throws `NotSupportedException` when the query is executed
+(`MySqlConnector`'s `GetStream`/`GetTextReader` both allocate with the value — measured ratio ≈ 4–8,
+and `ClickHouse.Driver`'s `GetStream` is not implemented at all). There is no streaming benefit to
+unlock, so use the buffered `byte[]`/`string` projection there instead.
 
 ## Providers
 
@@ -122,11 +127,11 @@ buffered `byte[]`/`string` projection there instead.
 | PostgreSQL | supported (`bytea` / `text`) |
 | SQL Server | supported (`varbinary(max)` / `nvarchar(max)`; the streaming mode is `CommandBehavior.SequentialAccess`) |
 | SQLite | supported (`blob` / `text`; the source must expose `rowid`) |
-| MySQL / MariaDB | `NotSupportedException` |
-| ClickHouse | `NotSupportedException` |
+| MySQL / MariaDB | `NotSupportedException` (the driver buffers; not memory-bounded) |
+| ClickHouse | `NotSupportedException` (`GetStream` not implemented; `GetTextReader` buffers) |
 | In-memory | supported (`MemoryStream`/`StringReader` over the single materialized value; see [In-memory](#in-memory)) |
 
-Streaming is implemented for **PostgreSQL, SQL Server and SQLite** in this release. The streaming terminal is opt-in: the ordinary buffered `byte[]`/`string` projection keeps working on every provider, and DML of a LOB is out of scope. MySQL/MariaDB and ClickHouse reject the terminal with a `NotSupportedException` whose message names the provider. The in-memory provider supports the scalar terminals as well, but with no `DbDataReader` to stream from it returns a plain BCL object over the materialized value — see [In-memory](#in-memory).
+Streaming is implemented for **PostgreSQL, SQL Server and SQLite** in this release. The streaming terminal is opt-in: the ordinary buffered `byte[]`/`string` projection keeps working on every provider, and DML of a LOB is out of scope. MySQL/MariaDB and ClickHouse reject the terminal with a `NotSupportedException` whose message names the provider, because their drivers do not offer memory-bounded LOB reads (they buffer the whole value; `SequentialAccess` does not change the allocations, and ClickHouse's `GetStream` is not implemented), so [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess) is deliberately `false` for them — the buffered projection is the supported path. The in-memory provider supports the scalar terminals as well, but with no `DbDataReader` to stream from it returns a plain BCL object over the materialized value — see [In-memory](#in-memory).
 
 The multi-column [`ToDataReader`](#multiple-columns-todatareader) terminal is available on PostgreSQL and SQL Server. SQLite rejects it because its streaming projection always carries the `rowid` locator; MySQL/MariaDB and ClickHouse reject it because they have no sequential-access support; the in-memory provider rejects it because it has no `DbDataReader` at all:
 
