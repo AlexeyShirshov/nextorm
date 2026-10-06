@@ -11,7 +11,7 @@
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | done |
+| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | done (corrective revalidation complete) |
 
 Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`. The already-made commits (D161 b06784c8, D197 95849d38) stay on `1.0.9-rc1` — no auto-rollback on stop.
 
@@ -25,7 +25,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | D134 | G1 | 1.0.9-rc1 | done | issue #134 — SQLite ToDataReader enabled (variant A, locator-free buffered); R06 open-failure leak fixed; docs EN+RU; CHECK pass r=1/n=3; coverage 87.2%/78.9%; benchmark 7/7; commit 65477266 | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
 | D194 | G1 | 1.0.9-rc1 | done | issue #194 — PostgreSQL raw ROW/composite materialization; CHECK PASS r=2/rv2/n=3/3; commit 451d5c6e | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
 | D150 | G1 | 1.0.9-rc1 | done | issue #150 — ClickHouse native extreme-row parity for float/double keys (direction-aware NaN-safe adaptation); CHECK PASS r1/rv1/n=1/3; EN+RU docs; real-CH 25.8 parity 35/0/0, CH unit 546/0/0; commit 4d0237bf | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
-| D193 | G1 | 1.0.9-rc1 | done | issue #193 — tuple `IN`/`Contains` over a flat value list of `System.Tuple`/`System.ValueTuple` (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite; SQL Server rejects every tuple form up front; W1–W4 + F1/F7/F10/F12/F14 fixed/verified, none open; CHECK evidence-completeness objection accepted by escalate (rv1 re-gather budget exhausted, no product defect); EN+RU docs + gap-analysis; commit e19d751a | docs/specs/status/rc1-tail-193-tuple-in-1.md |
+| D193 | G1 | 1.0.9-rc1 | done | issue #193 — tuple `IN`/`Contains` over a flat value list of `System.Tuple`/`System.ValueTuple` (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite; SQL Server rejects every tuple form up front; W1–W4 + F1/F7/F10/F12/F14 fixed/verified, none open; real independent CHECK r=2 PASS via rc1-tail-193-verify-1 (validator brief/report exit 0; boundary 3311/3114/0/197); EN+RU docs + gap-analysis; commit e19d751a; corrective commit <sha> | docs/specs/status/rc1-tail-193-tuple-in-1.md |
 | D198 | G1 | 1.0.9-rc1 | done | issue #198 — ClickHouse native JSON integrated into the core `[JsonColumn]` model (`SupportsJson` storage-only split, new DIM `SupportsPostgresJsonSql`/`NativeJsonProviderType`, `JsonObject`/`JsonDocument`/`JsonElement` native transport, legacy `Object('json')` measured-unsupported); CHECK PASS r=3/n=1/3/rv=3; commit b179dc7f | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
 | D195 | G1 | 1.0.9-rc1 | done | issue #195 complete — FTS5 maintenance command surface; CHECK PASS r=1 n=2/3; commit 79d50db3 | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
 | D196 | G1 | 1.0.9-rc1 | done | issue #196 — FTS5 maintenance verification; real-SQLite + rejection tests + EN/RU docs; CHECK PASS r=1 n=1/3; commit e474bbfa | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
@@ -50,11 +50,11 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 ## Общая верификация и восстановление
 
-- Last common C: not run (lane continues; single group ⇒ no C-E04 merge path).
+- Last common C: parent gate-C verdict FAIL (C-E03 unmet: missing CHECK r=2 / escalate waiver / validator not run / status rot); corrective task rc1-tail-193-verify-1 — independent CHECK r=2 PASS; parent C re-run pending.
 - Verification state: **unverified**.
-- Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; D193 defects (W1–W4, F1/F7/F10/F12/F14) all fixed/verified, none open; no open defect.
-- Related corrective-task status file: —.
-- Next allowed step: lane complete (single group); HEAD/commit `e474bbfa` (D196) — no C-E04 merge path.
+- Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; D193 defects (W1–W4, F1/F7/F10/F12/F14) all fixed/verified, none open; no open defect; D193 evidence/status rot (missing CHECK r=2, commit claims, integration totals) corrected by rc1-tail-193-verify-1; W1–W4 fixed in e19d751a, none open.
+- Related corrective-task status file: docs/specs/status/rc1-tail-193-verify-1.md.
+- Next allowed step: re-run parent gate C after this ACT.
 - Notice: host has no todowrite tool for subagents; task status files carry the progress log instead.
 
 ## Done / Verified / Incomplete
@@ -62,6 +62,7 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Done: D161, D197, D140, D134, D194, D150, D193, D198, D195, D196.
 - Verified: —.
 - Incomplete: —.
+- In progress: —.
 
 ## Resume (2026-10-06)
 

@@ -5,12 +5,12 @@
 - collection: `1.0.9-rc1-tail`
 - group: G1
 - branch: `1.0.9-rc1`
-- status: **done** (N=1, r=2, n=1/3, rv=1; W1–W4 + F1/F7/F10/F12/F14 applied; closing-CHECK arity coverage + variant matrix 2026-10-06T22:04Z; CHECK evidence-completeness objection accepted by escalate; ACT finalized)
+- status: **done** (N=1, r=2, n=2/3, rv=1; W1–W4 + F1/F7/F10/F12/F14 applied; closing-CHECK arity coverage + variant matrix 2026-10-06T22:04Z; independent CHECK r=2 PASS via corrective task rc1-tail-193-verify-1, no product defect; independent CHECK round 1 FAIL on evidence/status kept historical; commits e19d751a + cd1a7c6c + corrective <sha>)
 - cycle: N=1
 - plan revision: r=2
-- attempt: n=1/3
+- attempt: n=2/3
 - contract: rv=1
-- mode: autonomous (collection); no commit/push/merge
+- mode: autonomous (collection); product commit e19d751a, bookkeeping cd1a7c6c; push/merge never performed
 - base HEAD: `0c663bb7`
 
 ## Goal
@@ -596,7 +596,7 @@ Covered (cobertura `condition-coverage` from `coverage-r2.xml`):
 | W1 flag reset/clone | QueryCommand.cs:843, QueryCommand.Clone.cs:35 | line hit | sqlite plan-cache tests |
 | W4 preflight short-circuit `condition is null \|\| !ContainsTupleInValues` | QueryPreparer.cs:1860 | 4/4 | sqlserver 7 D193 tests + every non-tuple prepare |
 | W4 preflight `(as DataContext)?.Dialect is {} && dialect.Tuple is null` | QueryPreparer.cs:1863 (throw L1865) | 6/6 | sqlserver D193 tests (Tuple null) + sqlite/postgres/mysql (Tuple non-null) |
-| W4 call sites WHERE/PREWHERE/refresh | QueryPreparer.cs:2112, :2145, :175–176 | line hit | sqlserver D193 tests |
+| W4 call sites WHERE/PREWHERE/refresh | QueryPreparer.cs:2126, :2159, :175–176 | line hit | sqlserver D193 tests |
 | W1 scan `_exp` projection | QueryPreparer.cs:1884 | 4/4 | sqlite `TupleContains_InSelectColumn_...` |
 | W1 scan `_having` | QueryPreparer.cs:1887 | 4/4 | sqlite `..._InHaving_...`, `..._InNestedReferencedHaving_...` |
 | W1 scan `_joins` guard / loop / JoinCondition test | QueryPreparer.cs:1890/1892/1894 | 2/2, 2/2, 4/4 | sqlite `..._InJoinOn_...` |
@@ -954,7 +954,7 @@ Progress log:
 - 2026-10-06T16:45Z | DO | r=2 | n=1/3 | R4 scan-gap closure: `ScanUnkeyedTupleInValues` now also descends into `CteDefinition.Mutation.Source` (`QueryPreparer.cs:2010`) and `ScanUnkeyedTupleInFrom` into `FromExpression.ColumnShape` (`:2047`), `TempTable.Source` (`:2052`), `LinqSource.OuterCommand`/`InnerCommand` + the four selector lambdas (`:2058`), and `XmlNodes.Operand` (`:2080`); `ScanUnkeyedTupleInFrom` recursion reuses the `HashSet<QueryCommand>` visited guard | src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
 - 2026-10-06T16:45Z | DO | r=2 | n=1/3 | R1 arity breadth: core `Contains_ValueTupleArityOne_ShouldMatchBothRows` (:75), `Contains_ValueTupleAritySeven_ShouldMatchBothRows` (:86), `Contains_ReferenceTupleArityThree_ShouldMatchBothRows` (:104); sqlite `TupleContains_ValueTupleArityOne_ShouldRenderValuesInList` (:170), `TupleContains_ValueTupleAritySeven_ShouldRenderValuesInList` (:185), `TupleContains_ReferenceTupleArityThree_ShouldRenderValuesInList` (:202) | tests/nextorm.{core,sqlite}.tests/D193TupleIn*Tests.cs
 - 2026-10-06T16:45Z | DO | r=2 | n=1/3 | R3 default/null: core `Contains_DefaultValueTupleEntry_ShouldMatchDefaultsRow` (:119) — `default((int,int?))` is an ordinary `(0,null)` row; sqlite `TupleContains_DefaultValueTupleEntry_ShouldRenderOrdinaryRow` (:217) renders two params; sqlite `TupleContains_NullCollection_ShouldThrowArgumentNullException` (:233) adds the tuple-path null-collection `ArgumentNullException` (was only the direct `PartitionTuple` core test); null-entry `NotSupportedException` already covered by sqlite `TupleContains_NullReferenceTupleEntry_ShouldThrowNotSupported` (:158) and SQL Server pinned-message tests | tests/nextorm.{core,sqlite}.tests/D193TupleIn*Tests.cs
-- 2026-10-06T16:45Z | DO | r=2 | n=1/3 | R5 stale pointer corrected: W4 call-site row `QueryPreparer.cs:1924, :1957, :175–176` → `:2112, :2145, :175–176` (lines shifted by the scan additions). Plan/criteria untouched | this file
+- 2026-10-06T16:45Z | DO | r=2 | n=1/3 | R5 stale pointer corrected: W4 call-site row `QueryPreparer.cs:1924, :1957, :175–176` → `:2126, :2159, :175–176` (lines shifted by the scan additions). Plan/criteria untouched | this file
 - 2026-10-06T16:45Z | DO | r=2 | n=1/3 | build argv `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning / 0 Error | /tmp/D193-evidence/build-gaps.log
 - 2026-10-06T16:45Z | DO | r=2 | n=1/3 | focused argv `dotnet test tests/nextorm.<P>.tests -c Debug --no-build --filter "FullyQualifiedName~D193\|FullyQualifiedName~TupleIn"` exit 0 each: core 26/0/0, sqlite 27/0/0, sqlserver 10/0/0, postgres 4/0/0, mysql 4/0/0, mariadb 4/0/0, clickhouse 4/0/0 (total/failed/skipped) | /tmp/D193-evidence/test-{core,sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}-focused-gaps.log
 - 2026-10-06T16:45Z | DO | r=2 | n=1/3 | full affected suites exit 0: core 1647/1647/0/0 (+4), sqlite 1105/1104/0/1 (+5; the one skip is the pre-existing `NEXTORM_LOB_SQLITE_PROBE` gate), sqlserver 707/707/0/0 (unchanged) — no cache-hit regression from the widened scan | /tmp/D193-evidence/test-full-{core,sqlite,sqlserver}-gaps.log
@@ -984,7 +984,7 @@ result. The recursion keeps the reference-identity `visited` guard, so the new e
 | **R2** provider matrix by SQL assertions + execution; SQL Server rejects (incl. empty) | per-provider focused logs exit 0 — postgres/mysql/mariadb/clickhouse 4/0/0 each (`test-{postgres,mysql,mariadb,clickhouse}-focused-gaps.log`); SQL Server rejection `tests/nextorm.sqlserver.tests/D193TupleInSqlGenerationTests.cs` 10/0/0 (`test-sqlserver-focused-gaps.log`); execution boundary `DOCKER_HOST=… dotnet … integration … --filter "FullyQualifiedName~TupleIn"` 34/26/0/8 all six providers executed (`/tmp/D193-evidence/boundary-d193-r2.log`, `boundary-d193-r2.xml`, `integration-focused-tuplein.log`) |
 | **R3** empty/default/null + nullable-component membership deterministic | core `Contains_DefaultValueTupleEntry_ShouldMatchDefaultsRow` (`D193TupleInTests.cs:119`), `Contains_EmptyList_ShouldReturnNoRows` (:131), `Contains_NullableComponent_ShouldMatchNullTupleRow` (:142), `...Negation...` (:153); `PartitionTuple_NullCollection_ShouldThrowArgumentNullException` (:234), `PartitionTuple_NullTupleEntry_ShouldThrowNotSupported` (:272); sqlite `TupleContains_Empty_ShouldRenderAlwaysFalse` (`D193TupleInSqlGenerationTests.cs:52`), `TupleContains_NullableComponent_ShouldGuardAndUseNullArm` (:65), `TupleContains_DefaultValueTupleEntry_ShouldRenderOrdinaryRow` (:217), `TupleContains_NullCollection_ShouldThrowArgumentNullException` (:233), `TupleContains_NullReferenceTupleEntry_ShouldThrowNotSupported` (:158). Logs `test-{core,sqlite}-focused-gaps.log` |
 | **R4** cache rebinding + existing scalar behavior intact | `TupleContains_InWhere_SecondIdenticalCall_ShouldBeCacheHit`, `WhereTuple_ShapeChangeThroughCache_ShouldRebindAndKeepScalarCacheable`, `ScalarQuery_AfterWhereTupleQuery_ShouldStillBeCacheHit`, `SharedAnyCommand_AfterTupleQuery_ShouldStayCacheable`, HAVING/JOIN/SELECT/UNION/derived/nested rebuild tests (`tests/nextorm.sqlite.tests/D193TupleInPlanCacheTests.cs`); planner gate `QueryPlanner.cs:573`; scan closure table above; full suites exit 0 (`test-full-{core,sqlite,sqlserver}-gaps.log`) |
-| **R5** EN/RU docs match implementation | EN/RU `docs[/ru]/scalar-functions/06-arrays.md`, `docs[/ru]/advanced/limitations.md`, `docs[/ru]/providers/overview.md`, gap-analysis row (r=1/r=2 sections); stale W4 pointer corrected in this file (`:2112, :2145, :175–176`); no public doc links `docs/specs/**` |
+| **R5** EN/RU docs match implementation | EN/RU `docs[/ru]/scalar-functions/06-arrays.md`, `docs[/ru]/advanced/limitations.md`, `docs[/ru]/providers/overview.md`, gap-analysis row (r=1/r=2 sections); stale W4 pointer corrected in this file (`:2126, :2159, :175–176`); no public doc links `docs/specs/**` |
 | **R6** coverage/branch audit | CI-form `dotnet-coverage collect "dotnet test nextorm.slnx -c Debug"` exit 0; `reportgenerator` TextSummary: Assemblies 4, **Line 87.2% / Branch 79.1%** ≥ 85/75 (`/tmp/D193-evidence/coverage-final.xml`, `/tmp/D193-evidence/coverage-report-final/Summary.txt`, `coverage-collect-final.log`); `coverage-r2.xml` + `coverage-report/Summary.txt` (87.3/79.1); W1 scan branch-close 100% (`/tmp/D193-r2b/coverage-d193-final.xml`); manual Stryker-absent audit in the r=2 sections (new scan-field branches are defensive, named uncovered) |
 | **R7** perf evidence | `/tmp/D193-perf-r2/acceptance.log` (7 cases, 0 failures, exit 0; cached-vs-prepared 2.00 vs baseline 1.87, +6.7% < 2.244 trigger; alloc ratio 7.39 vs 7.42) and `/tmp/D193-perf-r2/in-bench.log` (scalar IN/Contains 5 cases, 0 failures); tuple expansion one-time per preparation, no per-row work (see the R7 section above) |
 
@@ -1147,7 +1147,7 @@ is unchanged (D193-W1..W4, F1/F7/F10/F12/F14, and the two r=1 runner defects rem
 
 - Status file 993 -> 1156 lines; `awk '!/\r$/' docs/specs/status/rc1-tail-193-tuple-in-1.md` -> **0 lines** (100% CRLF); this section was appended at the old EOF, prior content untouched.
 - All ten changed production files and the three D193 test files touched this cycle are CRLF (0 LF-only lines each).
-- `git status --porcelain` shows only the expected tracked modifications, the untracked status file and the nine untracked D193 test files; no `.bak`/`.orig`/`.patch` and no `BenchmarkDotNet.Artifacts`. **No commit / push / merge.**
+- `git status --porcelain` shows only the expected tracked modifications, the untracked status file and the nine untracked D193 test files; no `.bak`/`.orig`/`.patch` and no `BenchmarkDotNet.Artifacts`. **No push/merge. This block was a pre-commit snapshot; it was later committed as e19d751a (product) and cd1a7c6c (bookkeeping).**
 
 Final sweep verdict: build 0W/0E (exit 0); seven per-provider suites exit 0 (core 1647/0/0, sqlite 1105/1104/0/1,
 postgres 775/0/0, sqlserver 707/0/0, mysql 289/0/0, mariadb 196/0/0, clickhouse 550/0/0); full container
@@ -1351,11 +1351,59 @@ CRLF audit — every D193-modified/untracked `.cs`/`.md` file, `awk '!/\r$/' <fi
 
 No-commit hygiene:
 - HEAD — `git log -1 --format='%H %s'` → `0c663bb7ba32f190df97995add2f4131df3b0bbd #150 status: mark D150 done in collection 1.0.9-rc1-tail` (expected `0c663bb7 …`); base HEAD unchanged.
-- `git status --porcelain` lists the 19 modified + 10 untracked D193 files above, all **uncommitted**.
+- `git status --porcelain` lists the 19 modified + 10 untracked D193 files above, all later committed in e19d751a (product) and cd1a7c6c (bookkeeping).
 - No D193-created `.bak`/`.orig`/`.rej`/`*.patch` inside the repo. The `/tmp/D193-evidence` backups (`QueryPlanner.cs.bak`, `f1-scan.patch`, `D193-*.diff`) are **outside** the repo (allowed). The `.patch` files under `benchmarks/BenchmarkDotNet.Artifacts/**` and `docs/specs/experiments/**` are pre-existing **tracked** files, unchanged, and not created by D193.
-- **No `git commit`, `git push` or merge was performed.**
+- **No push or merge was performed. The D193 work was committed as e19d751a (product) and cd1a7c6c (bookkeeping); the historical ACT was an escalate-authorized evidence-completeness finalization, superseded by the independent CHECK r=2 and corrective task rc1-tail-193-verify-1.**
+
+## CHECK r=2 — verdict PASS (independent, corrective rc1-tail-193-verify-1) — 2026-10-07
+
+- verdict: **PASS** — independent `check` verdict (no escalate waiver); every pinned variant row closed by test/guard/deferred+trigger; E193-00..06 closed for rv=1; no in-scope product defect.
+- validator: `brief` exit 0 (`/tmp/nextorm-rc1-tail-193-verify-1/brief.log`), `report` exit 0 (`/tmp/nextorm-rc1-tail-193-verify-1/report.log`), evidence `/tmp/nextorm-rc1-tail-193-verify-1/evidence.json`
+- independent check report: `/tmp/nextorm-rc1-tail-193-verify-1/check.md`
+
+### Executions (5) — phase, exact command, exit code, selected count
+
+| # | Phase | Command | Exit | Selected |
+|---|---|---|---|---|
+| 1 | inner | `dotnet test tests/nextorm.core.tests -c Debug --filter FullyQualifiedName~D193TupleIn` | 0 | 32 |
+| 2 | inner | `dotnet test tests/nextorm.sqlite.tests -c Debug --filter FullyQualifiedName~D193TupleIn` | 0 | 36 |
+| 3 | inner | `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter FullyQualifiedName~D193TupleIn` | 0 | 10 |
+| 4 | boundary | `dotnet build nextorm.slnx -c Debug` | 0 | n/a |
+| 5 | boundary | `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet test tests/nextorm.integration.tests -c Debug` | 0 | 3311 |
+
+- Boundary solution build: `0 Warning(s) 0 Error(s)` (`/tmp/nextorm-rc1-tail-193-verify-1/build.log`).
+- Boundary integration sweep: **Total 3311 / Passed 3114 / Failed 0 / Skipped 197** (`/tmp/nextorm-rc1-tail-193-verify-1/integration.log`); all providers (PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse, SQLite) executed, no provider-unavailable skips.
+
+### W1–W4 status
+
+W1–W4 were all fixed in `e19d751a`; re-verified by the filtered tests (core 32, sqlite 36, sqlserver 10, exit 0) and the boundary integration sweep (3311/3114/0/197). None open.
+
+## Integration reconciliation (corrective rc1-tail-193-verify-1)
+
+- Fresh boundary sweep total **3311 / 3114 / 0 / 197** (`/tmp/nextorm-rc1-tail-193-verify-1/integration.log`, this task).
+- Parsed TRX breakdown (`/tmp/nextorm-rc1-tail-193-verify-1/reconciliation.md`; source TRX `/tmp/nextorm-rc1-tail-c/05-integration.trx`, same tree/HEAD as the fresh boundary sweep, both total 3311):
+
+| bucket | total | passed | failed | skipped |
+|---|---:|---:|---:|---:|
+| PostgreSQL | 826 | 800 | 0 | 26 |
+| SQL Server | 724 | 676 | 0 | 48 |
+| MySQL | 664 | 584 | 0 | 80 |
+| MariaDB | 55 | 55 | 0 | 0 |
+| ClickHouse | 205 | 205 | 0 | 0 |
+| SQLite | 714 | 674 | 0 | 40 |
+| provider-prefix subtotal | 3188 | 2994 | 0 | 194 |
+| provider-parameterized shared folded in: `CoreApiContractTests` 8 + `DialectCapabilityContractTests` 3 + `EfCoreQueryFilterLifecycleTests` 12 + `EfCoreServerSharedTransactionTests` 25 | 48 | 48 | 0 | 0 |
+| **provider rows total** | **3236** | **3042** | **0** | **194** |
+
+- Non-provider "other"/cross-cutting bucket = **75 / 72 / 3**: `IdentityReturningIntegrationTests` 50, `EfCoreQueryFilterBridgeTests` 20, `QueryFilterInMemoryParityTests` 1, `EfCoreSharedTransactionTests` 1, `LobPerfHarnessTests` 1 (skip), `LobCapabilityProbeTests` 2 (skip).
+- Arithmetic: **3236 + 75 = 3311; 3042 + 72 = 3114; 194 + 3 = 197.** Strict prefix-only split (without folding the 4 provider-parameterized shared classes) is 3187 / 2993 / 194 + 124 / 121 / 3 — also totals to 3311 / 3114 / 0 / 197.
+- The 3 non-provider / env-gated skips confirmed: `LobPerfHarnessTests.Measure_Streaming_Vs_Buffered_Lob_Allocations` (`NEXTORM_LOB_PERF`), `LobCapabilityProbeTests.MySql_Driver_Reads_Lobs_Buffered` and `LobCapabilityProbeTests.MariaDb_Driver_Reads_Lobs_Buffered` (`NEXTORM_LOB_PROBE`).
+- Baseline: TRX `/tmp/nextorm-rc1-tail-c/05-integration.trx` (same tree/HEAD as the fresh boundary sweep, both total 3311); reconciliation file `/tmp/nextorm-rc1-tail-193-verify-1/reconciliation.md`.
+- Historical totals belong to their own runs/commits, **not** this fresh sweep: D193 status `integration-postgap` 3295/3098/197; D198 check2 3300/3103/197; tail-c logs 3311/3114/197; boundary r=2 34/26/8.
 
 ## ACT — finalization (escalate-authorized) — 2026-10-06T22:20Z
+
+> Historical: this ACT was an escalate-authorized evidence-completeness finalization (no re-run). It is superseded by the independent CHECK r=2 and the corrective task rc1-tail-193-verify-1.
 
 Progress log:
 
