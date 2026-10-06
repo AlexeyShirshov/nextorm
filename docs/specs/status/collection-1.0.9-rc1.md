@@ -24,7 +24,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | D182 | G01 | 1.0.9-rc1 | done | issue #182 — SQL Server scalar-function parity | docs/specs/status/rc1-182-mssql-scalars-1.md |
 | D168 | G01 | 1.0.9-rc1 | done | issue #168 — SQL Server MapColumnExpression numeric boxing | docs/specs/status/rc1-168-mssql-boxing-1.md |
 | D131 | G01 | 1.0.9-rc1 | done | issue #131 — PostgreSQL native json/jsonb column mapping | docs/specs/status/rc1-131-pg-json-column-1.md |
-| D128 | G01 | 1.0.9-rc1 | pending | issue #128 — ClickHouse native JSON column mapping (scout reader site first) | docs/specs/status/rc1-128-ch-json-column-1.md |
+| D128 | G01 | 1.0.9-rc1 | done | issue #128 — ClickHouse native JSON column mapping (bare JsonObject read/write; B deferred #198) | docs/specs/status/rc1-128-ch-json-column-1.md |
 | D133 | G01 | 1.0.9-rc1 | pending | issue #133 — streaming LOB MySQL/MariaDB/ClickHouse | docs/specs/status/rc1-133-streaming-lob-1.md |
 | D127 | G01 | 1.0.9-rc1 | pending | issue #127 — SQL Server OUTPUT INTO table variable | docs/specs/status/rc1-127-mssql-output-into-1.md |
 | D163 | G01 | 1.0.9-rc1 | pending | issue #163 — ClickHouse ref→collection accepted limitation (docs/disposition) | docs/specs/status/rc1-163-ch-refcollection-doc-1.md |
@@ -54,12 +54,12 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 ## Общая верификация и восстановление
 
-- Last common C: D131 task-level CHECK PASS (see rc1-131-pg-json-column-1.md)
+- Last common C: D128 task-level CHECK PASS (see rc1-128-ch-json-column-1.md)
 - Blocking reason: —
 - Verification state: pending.
 - Defect id and history: —
 - Related corrective-task status file: —
-- Next allowed step: D128 pending — start its pdca-dotnet cycle (PLAN gather)
+- Next allowed step: D133 pending — start its pdca-dotnet cycle (PLAN gather)
 - Notice: host has no todowrite tool; task status files carry the progress log instead.
 - Notice: gh CLI was available; issue #141 was closed remotely (glab/gh exit 0, state CLOSED) — documented in the D141 status ACT. The commit is unpushed (push never authorized).
 - Notice: D126 is done — issue #126 closed; commit 4c10548a (unpushed); CHECK PASS r=4/rv=5 recorded in rc1-126-tuple-ctor-1.md; the earlier run-1 "remains pending" note is superseded.
@@ -67,9 +67,10 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Notice: D182 is done — task-level CHECK PASS (r=2, n=1/3, rv=D182.r2.ec1); issue #182 closed; commit c75ef84a (unpushed); SQL Server scalar-function parity shipped for the pinned 61-entry manifest = 51 covered + 10 excluded (E1–E7); defect D182-c1 closed; see docs/specs/status/rc1-182-mssql-scalars-1.md. The earlier "in-progress (PLAN gather dispatched)" note is superseded.
 - Notice: D168 is done — task-level CHECK PASS (r=2, n=1/3, rv=D168.r2.ec1); issue #168 closed; commit 4bba446d (unpushed); the general buffered SQL Server numeric mapping is now storage-typed with no per-row source boxing (perf gate B PASS: allocations 464→0 B/row, boxing 9→0, median ratio 0.3382); see docs/specs/status/rc1-168-mssql-boxing-1.md. Supersedes the earlier "D168 in-progress (PLAN gather dispatched)" note.
 - Notice: D131 is done — task-level CHECK PASS (r=1, n=1/3, rv1); issue #131 closed (already-implemented + verification/docs closure); commit c28b70e3 (unpushed); native `[JsonColumn]` `json`/`jsonb` read/write verified on real PostgreSQL 17.11 (new `PostgresJsonColumnTests` 2/2 + existing `CommonTestSuite.JsonColumn` 3/3, 0 skipped), stale parameter-path-only claims corrected in EN+RU docs, no production mapping change; bare `JsonNode` read follow-up #197 (milestone 1.0.9-rc1); see docs/specs/status/rc1-131-pg-json-column-1.md.
+- Notice: D128 is done — task-level CHECK PASS (r=2, n=1/3, rv=D128.r2.ec1); issue #128 closed; commit a4fd86c6 (unpushed); bare `JsonObject` read/write over a native ClickHouse `JSON` column is supported provider-locally (driver 1.4.0/server 25.8.33.6; unit 8/8, CH class 107/107, container 3185/0 failed, perf +0.9% alloc), `[JsonColumn]`/`Auto`/`SupportsJson` unchanged, option B (`JsonDocument`/`JsonElement`/legacy `Object('json')`) deferred to follow-up #198; see docs/specs/status/rc1-128-ch-json-column-1.md.
 
 ## Done / Verified / Incomplete
 
-- Done: D141 (#141) — commit 45107d9c; D126 (#126) — commit 4c10548a; D181 (#181) — commit 99c41de2; D182 (#182) — commit c75ef84a; D168 (#168) — commit 4bba446d; D131 (#131) — commit c28b70e3
-- Verified: D141 CHECK PASS, rv=D141.ContractA.strong.1; D126 CHECK PASS, rv=5; D181 CHECK PASS, rv=D181.r3.ec1; D182 CHECK PASS, rv=D182.r2.ec1; D168 CHECK PASS, rv=D168.r2.ec1; D131 CHECK PASS, rv=1
+- Done: D141 (#141) — commit 45107d9c; D126 (#126) — commit 4c10548a; D181 (#181) — commit 99c41de2; D182 (#182) — commit c75ef84a; D168 (#168) — commit 4bba446d; D131 (#131) — commit c28b70e3; D128 (#128) — commit a4fd86c6
+- Verified: D141 CHECK PASS, rv=D141.ContractA.strong.1; D126 CHECK PASS, rv=5; D181 CHECK PASS, rv=D181.r3.ec1; D182 CHECK PASS, rv=D182.r2.ec1; D168 CHECK PASS, rv=D168.r2.ec1; D131 CHECK PASS, rv=1; D128 CHECK PASS, rv=D128.r2.ec1
 - Incomplete: —
