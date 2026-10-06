@@ -45,6 +45,15 @@ public class MariaDbDialectTests
     }
 
     [Fact]
+    public void InheritedBackslashQuoting_ShouldRemainUnchanged()
+    {
+        // Scope lock for #161: MariaDB inherits MySQL quoting and must not adopt the ClickHouse
+        // backslash-escaping rule.
+        Dialect.QuoteIdentifier(@"a\b").Should().Be(@"`a\b`");
+        Dialect.Escape(@"a\b").Should().Be(@"`a\b`");
+    }
+
+    [Fact]
     public void LockingHooks_ShouldAcceptWaitModesOnLockInShareMode()
     {
         Dialect.Lock.Should().NotBeNull();

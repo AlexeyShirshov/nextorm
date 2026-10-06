@@ -254,6 +254,19 @@ public class ExtremeRowNativeSqlGenerationTests
     }
 
     [Fact]
+    public void SelectWhereMax_SpecialCharacterNames_ShouldEscapeNativeAliases()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IExtremeSpecialNativeEntity>();
+
+        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Payload }));
+
+        sql.Should().Contain(@"`k\\ey`");
+        sql.Should().Contain(@"`pay``load`");
+        sql.Should().NotContain(@"`k\ey`");
+    }
+
+    [Fact]
     public void SelectWhereMax_Global_ShouldRespectUppercaseKeywordCase()
     {
         using var ctx = ClickHouseTestContext.CreateUppercase();
@@ -653,4 +666,19 @@ public class ExtremeAliasNativeEntity
 
     [Column("k")]
     public int? K { get; set; }
+}
+
+/// <summary>A native extreme-row shape whose mapped key/payload names carry a backtick and a backslash.</summary>
+[SqlTable("extreme_special_native_entity")]
+public interface IExtremeSpecialNativeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("k\\ey")]
+    int? K { get; set; }
+
+    [Column("pay`load")]
+    string? Payload { get; set; }
 }

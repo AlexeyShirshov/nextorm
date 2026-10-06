@@ -66,10 +66,10 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
                 .Append(SqlKeywords.Of(keywordCase, "from ("))
                 .AppendLine().Append(' ')
                 .Append(SqlKeywords.Of(keywordCase, "select ")).Append(aggregate)
-                .Append(SqlKeywords.Of(keywordCase, " as ")).Append(Quote(tupleAlias))
+                .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(tupleAlias))
                 .AppendLine().Append(' ')
                 .Append(SqlKeywords.Of(keywordCase, "from (")).Append(request.SourceSql).Append(')')
-                .Append(SqlKeywords.Of(keywordCase, " as ")).Append(Quote(sourceAlias))
+                .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(sourceAlias))
                 .AppendLine().Append(' ')
                 .Append(SqlKeywords.Of(keywordCase, "having count() > 0"))
                 .Append(')');
@@ -90,10 +90,10 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
             .Append(SqlKeywords.Of(keywordCase, "from ("))
             .AppendLine().Append(' ')
             .Append(SqlKeywords.Of(keywordCase, "select ")).Append(groups).Append(", ").Append(aggregate)
-            .Append(SqlKeywords.Of(keywordCase, " as ")).Append(Quote(tupleAlias))
+            .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(tupleAlias))
             .AppendLine().Append(' ')
             .Append(SqlKeywords.Of(keywordCase, "from (")).Append(request.SourceSql).Append(')')
-            .Append(SqlKeywords.Of(keywordCase, " as ")).Append(Quote(sourceAlias))
+            .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(sourceAlias))
             .AppendLine().Append(' ')
             .Append(SqlKeywords.Of(keywordCase, "group by ")).Append(groups)
             .Append(')');
@@ -194,9 +194,9 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
             if (builder.Length > 0)
                 builder.Append(", ");
 
-            builder.Append("tupleElement(").Append(Quote(tupleAlias)).Append(", ")
+            builder.Append("tupleElement(").Append(ClickHouseDialect.Instance.QuoteIdentifier(tupleAlias)).Append(", ")
                 .Append((i + 1).ToString(CultureInfo.InvariantCulture)).Append(')')
-                .Append(SqlKeywords.Of(keywordCase, " as ")).Append(Quote(alias));
+                .Append(SqlKeywords.Of(keywordCase, " as ")).Append(ClickHouseDialect.Instance.QuoteIdentifier(alias));
         }
 
         return builder.ToString();
@@ -210,7 +210,7 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
     }
 
     private static string MakeKeyArgument(IReadOnlyList<string> keyAliases)
-        => keyAliases.Count == 1 ? Quote(keyAliases[0]) : MakeRow(keyAliases);
+        => keyAliases.Count == 1 ? ClickHouseDialect.Instance.QuoteIdentifier(keyAliases[0]) : MakeRow(keyAliases);
 
     private static string MakeRow(IReadOnlyList<string> names)
     {
@@ -233,7 +233,7 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
             if (i > 0)
                 builder.Append(", ");
 
-            builder.Append(Quote(names[i]));
+            builder.Append(ClickHouseDialect.Instance.QuoteIdentifier(names[i]));
         }
     }
 
@@ -247,6 +247,4 @@ internal sealed class ClickHouseExtremeRowRenderer : IExtremeRowRenderer
 
         return false;
     }
-
-    private static string Quote(string name) => "`" + name.Replace("`", "``") + "`";
 }

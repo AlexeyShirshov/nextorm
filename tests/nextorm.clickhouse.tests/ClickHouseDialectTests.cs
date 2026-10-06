@@ -47,6 +47,46 @@ public class ClickHouseDialectTests
         Dialect.MakeNow(false).Should().Be("now()");
     }
 
+    [Theory]
+    [InlineData(@"a`b", @"`a``b`")]
+    [InlineData(@"a\b", @"`a\\b`")]
+    [InlineData(@"a`b\", @"`a``b\\`")]
+    [InlineData(@"a\\b", @"`a\\\\b`")]
+    [InlineData(@"a`\`b", @"`a``\\``b`")]
+    [InlineData("", @"``")]
+    [InlineData("id", @"`id`")]
+    public void QuoteIdentifier_EscapesIdentifierCharacters(string input, string expected)
+    {
+        Dialect.QuoteIdentifier(input).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(@"a`b", @"`a``b`")]
+    [InlineData(@"a\b", @"`a\\b`")]
+    [InlineData(@"a`b\", @"`a``b\\`")]
+    [InlineData(@"a\\b", @"`a\\\\b`")]
+    [InlineData(@"a`\`b", @"`a``\\``b`")]
+    [InlineData("", @"``")]
+    [InlineData("id", @"`id`")]
+    public void Escape_EscapesIdentifierCharacters(string input, string expected)
+    {
+        Dialect.Escape(input).Should().Be(expected);
+    }
+
+    [Fact]
+    public void QuoteIdentifier_Null_PreservesExistingException()
+    {
+        var act = () => Dialect.QuoteIdentifier(null!);
+
+        act.Should().Throw<NullReferenceException>();
+    }
+
+    [Fact]
+    public void Escape_Null_PreservesEmptyQuotedIdentifier()
+    {
+        Dialect.Escape(null!).Should().Be(@"``");
+    }
+
     [Fact]
     public void ArrayCapabilities_ShouldBeEnabled()
     {

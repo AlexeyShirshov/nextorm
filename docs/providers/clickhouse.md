@@ -20,7 +20,9 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
 
 - parameter placeholder `@name`; the driver rewrites these to ClickHouse's native
   `{name:Type}` form and infers the type from the .NET value;
-- backtick-quoted identifiers and aliases;
+- backtick-quoted identifiers and aliases, escaping an embedded backslash (`\` → `\\`) and an embedded
+  backtick (`` ` `` → ``` `` ```). The correction is ClickHouse-specific: MySQL and MariaDB also quote
+  with backticks but do not treat backslash as an identifier escape, so their quoting is unchanged;
 - native `UInt64` columns and `ulong`/`ulong?` properties/projections materialise through the row
   reader's `DbDataReader.GetFieldValue<ulong>` accessor, so no SQL cast is needed (MySQL/MariaDB
   `BIGINT UNSIGNED` benefits from the same accessor);
@@ -203,7 +205,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Concat | `concat(a, b)` |
 | Coalesce | `coalesce` |
 | Boolean literal | `true` / `false` |
-| Identifier quoting | backticks (`` as `t1` ``) |
+| Identifier quoting | backticks (`` as `t1` ``); embedded `\` and backtick escaped |
 | Derived table alias | required |
 | TVF alias | required |
 | `*ALL` | supported |

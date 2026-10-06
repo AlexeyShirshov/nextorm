@@ -245,6 +245,50 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QuotedIdentifiers_ShouldEscapeMappedIdentifierCharacters()
+    {
+        using var ctx = ClickHouseTestContext.CreateQuoted();
+        var e = ctx.From<ISpecialCharEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Backtick, x.Backslash }));
+
+        sql.Should().Contain(@"`we``ird\\table`");
+        sql.Should().Contain(@"`col``umn`");
+        sql.Should().Contain(@"`back\\slash`");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_DerivedAlias_ShouldEscapeSpecialCharacters()
+    {
+        using var ctx = ClickHouseTestContext.CreateQuoted();
+        var source = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var sql = SqlOf(ctx, ctx.With(@"we`ird\name", source)
+            .From(@"we`ird\name")
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        sql.Should().Contain(@"`we``ird\\name`");
+    }
+
+    [Fact]
+    public void DynamicColumnsStore_Insert_ShouldEscapeSpecialCharacterKeys()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var entity = new DynamicColumnsEntity
+        {
+            Id = 1,
+            Extra = { ["a`b"] = 1L, [@"c\d"] = 2L },
+        };
+
+        var sql = Normalize(ctx.CreateInsertBuilder<DynamicColumnsEntity>()
+            .Values(entity)
+            .ToSql());
+
+        sql.Should().Contain(@"`a``b`");
+        sql.Should().Contain(@"`c\\d`");
+    }
+
+    [Fact]
     public void StringConcat_ShouldUseConcatFunction()
     {
         using var ctx = ClickHouseTestContext.Create();

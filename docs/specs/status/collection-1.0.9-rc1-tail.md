@@ -11,7 +11,7 @@
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | pending |
+| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | in-progress |
 
 Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`.
 
@@ -19,7 +19,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 
 | task | group | branch | status | reason + patch | task status file |
 |---|---|---|---|---|---|
-| D161 | G1 | 1.0.9-rc1 | pending | issue #161 — ClickHouse `QuoteIdentifier` must escape backslashes (`\`) | docs/specs/status/rc1-tail-161-ch-escape-1.md |
+| D161 | G1 | 1.0.9-rc1 | done | issue #161 — ClickHouse identifier quoting escapes backslashes | docs/specs/status/rc1-tail-161-ch-escape-1.md |
 | D197 | G1 | 1.0.9-rc1 | pending | issue #197 — PostgreSQL read `JsonNode` from native `json`/`jsonb` | docs/specs/status/rc1-tail-197-pg-jsonnode-1.md |
 | D140 | G1 | 1.0.9-rc1 | pending | issue #140 — PostgreSQL free/partial column list in projection | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
 | D134 | G1 | 1.0.9-rc1 | pending | issue #134 — SQLite `ToDataReader` (streaming projection rowid locator) | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |

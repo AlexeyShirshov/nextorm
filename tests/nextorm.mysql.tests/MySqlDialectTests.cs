@@ -53,6 +53,15 @@ public class MySqlDialectTests
     }
 
     [Fact]
+    public void QuoteIdentifier_ShouldNotEscapeBackslashes()
+    {
+        // Scope lock for #161: ClickHouse escapes backslashes; MySQL does not (its manual does not
+        // establish the same backslash-in-identifier rule), so this behavior must stay unchanged.
+        Dialect.QuoteIdentifier(@"a\b").Should().Be(@"`a\b`");
+        Dialect.Escape(@"a\b").Should().Be(@"`a\b`");
+    }
+
+    [Fact]
     public void TextJsonHooks_ShouldUseJsonExtractFamily()
     {
         Dialect.SupportsTextJson.Should().BeTrue();

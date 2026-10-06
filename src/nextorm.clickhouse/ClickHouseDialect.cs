@@ -479,11 +479,11 @@ public class ClickHouseDialect : SqlDialectBase
     };
 
     // ClickHouse quotes identifiers with backticks; single-quoted aliases are syntax errors.
-    /// <summary>ClickHouse quotes aliases with backticks (single-quoted aliases are syntax errors).</summary>
-    public override string Escape(string keyword) => "`" + keyword + "`";
+    /// <summary>ClickHouse quotes aliases with backticks (single-quoted aliases are syntax errors), escaping an embedded backslash or backtick. <see langword="null"/> yields the empty quoted identifier.</summary>
+    public override string Escape(string keyword) => QuoteIdentifier(keyword ?? string.Empty);
 
-    /// <summary>ClickHouse quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
-    public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
+    /// <summary>ClickHouse quotes a physical identifier with backticks, escaping an embedded backslash or backtick.</summary>
+    public override string QuoteIdentifier(string name) => "`" + name.Replace("\\", "\\\\").Replace("`", "``") + "`";
 
     /// <summary>ClickHouse qualifies a table with a database name (<c>`db`.`table`</c>); there is no separate schema level.</summary>
     public override bool SupportsCrossDatabase => true;
