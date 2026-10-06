@@ -10,7 +10,7 @@
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G01 | D141, D126, D181, D182, D168, D131, D128, D133, D127, D163 | D141 → D126 → D181 → D182 → D168 → D131 → D128 → D133 → D127 → D163 | current worktree | 1.0.9-rc1 | in-progress |
+| G01 | D141, D126, D181, D182, D168, D131, D128, D133, D127, D163 | D141 → D126 → D181 → D182 → D168 → D131 → D128 → D133 → D127 → D163 | current worktree | 1.0.9-rc1 | done |
 
 Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`.
 
@@ -27,7 +27,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | D128 | G01 | 1.0.9-rc1 | done | issue #128 — ClickHouse native JSON column mapping (bare JsonObject read/write; B deferred #198) | docs/specs/status/rc1-128-ch-json-column-1.md |
 | D133 | G01 | 1.0.9-rc1 | done | issue #133 — streaming LOB MySQL/MariaDB/ClickHouse (documented limitation) | docs/specs/status/rc1-133-streaming-lob-1.md |
 | D127 | G01 | 1.0.9-rc1 | done | issue #127 — SQL Server OUTPUT INTO table variable | docs/specs/status/rc1-127-mssql-output-into-1.md |
-| D163 | G01 | 1.0.9-rc1 | pending | issue #163 — ClickHouse ref→collection accepted limitation (docs/disposition) | docs/specs/status/rc1-163-ch-refcollection-doc-1.md |
+| D163 | G01 | 1.0.9-rc1 | done | issue #163 — ClickHouse ref→collection accepted limitation (docs/disposition) | docs/specs/status/rc1-163-ch-refcollection-doc-1.md |
 
 ## Decisions
 
@@ -54,12 +54,12 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 ## Общая верификация и восстановление
 
-- Last common C: D127 task-level CHECK PASS (see rc1-127-mssql-output-into-1.md)
+- Last common C: D163 task-level CHECK PASS (all 10 G01 tasks done; queue terminal)
 - Blocking reason: —
-- Verification state: pending.
+- Verification state: pass.
 - Defect id and history: —
 - Related corrective-task status file: —
-- Next allowed step: D163 pending — start its pdca-dotnet cycle (PLAN gather).
+- Next allowed step: All G01 tasks done; queue terminal (single group — no group branch/merge; work is on branch 1.0.9-rc1).
 - Notice: host has no todowrite tool; task status files carry the progress log instead.
 - Notice: gh CLI was available; issue #141 was closed remotely (glab/gh exit 0, state CLOSED) — documented in the D141 status ACT. The commit is unpushed (push never authorized).
 - Notice: D126 is done — issue #126 closed; commit 4c10548a (unpushed); CHECK PASS r=4/rv=5 recorded in rc1-126-tuple-ctor-1.md; the earlier run-1 "remains pending" note is superseded.
@@ -70,9 +70,11 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Notice: D128 is done — task-level CHECK PASS (r=2, n=1/3, rv=D128.r2.ec1); issue #128 closed; commit a4fd86c6 (unpushed); bare `JsonObject` read/write over a native ClickHouse `JSON` column is supported provider-locally (driver 1.4.0/server 25.8.33.6; unit 8/8, CH class 107/107, container 3185/0 failed, perf +0.9% alloc), `[JsonColumn]`/`Auto`/`SupportsJson` unchanged, option B (`JsonDocument`/`JsonElement`/legacy `Object('json')`) deferred to follow-up #198; see docs/specs/status/rc1-128-ch-json-column-1.md.
 - Notice: D133 is done — task-level CHECK PASS (r=2, n=1/3, rv=D133.r2.ec1); issue #133 closed as a documented limitation; commit 6f46c774 (unpushed); measured that MySqlConnector 2.6.2 and ClickHouse.Driver 1.4.0 do not stream LOB memory-bounded (MySQL/MariaDB `GetStream`/`GetTextReader` buffer the whole value, ratios 4.00/7.99/8.00, `SequentialAccess` ignored; ClickHouse `GetStream` throws `NotImplementedException`, `GetTextReader` buffers 3.99), so `SupportsSequentialAccess` and provider `SupportsLobStreaming` stay false; EN+RU guide and the probe claim corrected plus a buffered-behavior guard added; no production change; reopen trigger = a driver providing true streaming; see docs/specs/status/rc1-133-streaming-lob-1.md.
 - Notice: D127 is done — task-level CHECK PASS (r=2, n=1/3, rv=D127.r2.ec1); issue #127 closed; commit b8a7c47a (unpushed); `OutputIntoTableVariable(variableName, columnDefinitions)` explicit declaration on INSERT/UPDATE/DELETE returning builders, one batch `DECLARE @t TABLE(...); <DML> OUTPUT … INTO @t; SELECT mapped cols FROM @t;`, MERGE excluded; defect D127-param-name-missingId closed; see docs/specs/status/rc1-127-mssql-output-into-1.md.
+- Notice: D163 is done — task-level CHECK PASS (r=1, n=1/3, rv=1); issue #163 closed as completed; commit 09c73590 (unpushed); verification/disposition closure of the ClickHouse reference→collection accepted provider limitation: explicit gate retained (`ClickHouseDialect.SupportsReferenceToCollectionNavigation=false`, precise `NotSupportedException`), rejection test passed on a real containerized ClickHouse (1/1, 0 skipped), EN+RU docs + revisit trigger intact, milestone note `1.0.9-rc1` (historical `1.0.9-rc2` does not bind); docs-only, no production/test/config change; see docs/specs/status/rc1-163-ch-refcollection-doc-1.md.
+- Notice: collection G01 is **done** — all 10 tasks (D141, D126, D181, D182, D168, D131, D128, D133, D127, D163) completed and their issues closed; no incomplete tasks; queue terminal. This is a single-group collection, so no group branch was created and **no `git merge --no-ff` was performed**; all authorized commits are on branch `1.0.9-rc1` (unpushed).
 
 ## Done / Verified / Incomplete
 
-- Done: D141 (#141) — commit 45107d9c; D126 (#126) — commit 4c10548a; D181 (#181) — commit 99c41de2; D182 (#182) — commit c75ef84a; D168 (#168) — commit 4bba446d; D131 (#131) — commit c28b70e3; D128 (#128) — commit a4fd86c6; D133 (#133) — commit 6f46c774; D127 (#127) — commit b8a7c47a
-- Verified: D141 CHECK PASS, rv=D141.ContractA.strong.1; D126 CHECK PASS, rv=5; D181 CHECK PASS, rv=D181.r3.ec1; D182 CHECK PASS, rv=D182.r2.ec1; D168 CHECK PASS, rv=D168.r2.ec1; D131 CHECK PASS, rv=1; D128 CHECK PASS, rv=D128.r2.ec1; D133 CHECK PASS, rv=D133.r2.ec1; D127 CHECK PASS, rv=D127.r2.ec1
+- Done: D141 (#141) — commit 45107d9c; D126 (#126) — commit 4c10548a; D181 (#181) — commit 99c41de2; D182 (#182) — commit c75ef84a; D168 (#168) — commit 4bba446d; D131 (#131) — commit c28b70e3; D128 (#128) — commit a4fd86c6; D133 (#133) — commit 6f46c774; D127 (#127) — commit b8a7c47a; D163 (#163) — commit 09c73590
+- Verified: D141 CHECK PASS, rv=D141.ContractA.strong.1; D126 CHECK PASS, rv=5; D181 CHECK PASS, rv=D181.r3.ec1; D182 CHECK PASS, rv=D182.r2.ec1; D168 CHECK PASS, rv=D168.r2.ec1; D131 CHECK PASS, rv=1; D128 CHECK PASS, rv=D128.r2.ec1; D133 CHECK PASS, rv=D133.r2.ec1; D127 CHECK PASS, rv=D127.r2.ec1; D163 CHECK PASS, rv=1
 - Incomplete: —
