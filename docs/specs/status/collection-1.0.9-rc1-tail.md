@@ -5,13 +5,13 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc1` (HEAD `b998df17`, pushed by the user); working tree clean except untracked `artifacts/`
 - collection revision: r1; evidence revision: rv1
-- collection status: **incomplete** (G1 lane stopped at D140; no admissible revised plan — autonomous STOP, author clarification required in issue #140)
+- collection status: **in-progress (resumed after author clarification on #140)**
 
 ## Groups
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | incomplete |
+| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | in-progress |
 
 Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`. The already-made commits (D161 b06784c8, D197 95849d38) stay on `1.0.9-rc1` — no auto-rollback on stop.
 
@@ -21,14 +21,14 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 |---|---|---|---|---|---|
 | D161 | G1 | 1.0.9-rc1 | done | issue #161 — ClickHouse identifier quoting escapes backslashes; commit b06784c8 | docs/specs/status/rc1-tail-161-ch-escape-1.md |
 | D197 | G1 | 1.0.9-rc1 | done | issue #197 — PostgreSQL bare JsonNode read from native json/jsonb; commit 95849d38 | docs/specs/status/rc1-tail-197-pg-jsonnode-1.md |
-| D140 | G1 | 1.0.9-rc1 | incomplete | escalate decision — issue #140 scope unidentifiable, author clarification required (Q140); autonomous STOP, no admissible revised plan | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
-| D134 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
-| D194 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
-| D150 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
-| D193 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-193-tuple-in-1.md |
-| D198 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
-| D195 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
-| D196 | G1 | 1.0.9-rc1 | incomplete | группа остановлена | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
+| D140 | G1 | 1.0.9-rc1 | pending | issue #140 — RESOLVED as author option A (docs-only): document EN+RU that without a caller-declared TRow the schema-less use is via [DynamicColumns]/raw reader/jsonb_each; jsonb_to_record(set) requires a declared schema; close #140 | docs/specs/status/rc1-tail-140-pg-free-columns-1.md |
+| D134 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
+| D194 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
+| D150 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
+| D193 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-193-tuple-in-1.md |
+| D198 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
+| D195 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
+| D196 | G1 | 1.0.9-rc1 | pending | группа остановлена | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
 
 ## Decisions
 
@@ -62,3 +62,12 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Done: D161, D197.
 - Verified: —.
 - Incomplete: D140 (scope — F140-SCOPE, author clarification required) + D134, D194, D150, D193, D198, D195, D196 ("группа остановлена", not executed).
+
+## Resume (2026-10-06)
+
+- Blocker resolved: the author answered Q140 with **option A** — #140 is not a missing capability; the schema-less ("free/partial column list" without a caller-declared `TRow`) use case is already covered by `[DynamicColumns] Dictionary<string,object?>`, the raw `ToDataReader`/`ResultSet` path, and `jsonb_each`/`jsonb_each_text`/`jsonb_object_keys`; `jsonb_to_record`/`jsonb_to_recordset` require a declared schema (PostgreSQL requires a column definition list). #140 is closed on GitHub.
+- D140 is re-scoped to a **docs-only** cycle: document the workaround paths in EN+RU (`docs/guide/provider-specific/postgresql.md` + RU, `docs/advanced/limitations.md` + RU, and the table-valued-functions guide where the record contract is stated), then close the loop; no production code.
+- The `incomplete "группа остановлена"` marks on D134/D194/D150/D193/D198/D195/D196 were an artifact of the outside-cycle blocker; those tasks were **never executed** and are re-armed to `pending`.
+- D161 (#161) and D197 (#197) remain `done` — their commits are valid.
+- Verification state: **unverified** (collection not yet verified).
+- Next allowed step: resume the single lane — D140 first, then D134 → D194 → D150 → D193 → D198 → D195 → D196.
