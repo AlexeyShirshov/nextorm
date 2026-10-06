@@ -25,7 +25,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | D134 | G1 | 1.0.9-rc1 | done | issue #134 — SQLite ToDataReader enabled (variant A, locator-free buffered); R06 open-failure leak fixed; docs EN+RU; CHECK pass r=1/n=3; coverage 87.2%/78.9%; benchmark 7/7; commit 65477266 | docs/specs/status/rc1-tail-134-sqlite-datareader-1.md |
 | D194 | G1 | 1.0.9-rc1 | done | issue #194 — PostgreSQL raw ROW/composite materialization; CHECK PASS r=2/rv2/n=3/3; commit 451d5c6e | docs/specs/status/rc1-tail-194-pg-row-composite-1.md |
 | D150 | G1 | 1.0.9-rc1 | done | issue #150 — ClickHouse native extreme-row parity for float/double keys (direction-aware NaN-safe adaptation); CHECK PASS r1/rv1/n=1/3; EN+RU docs; real-CH 25.8 parity 35/0/0, CH unit 546/0/0; commit 4d0237bf | docs/specs/status/rc1-tail-150-ch-float-extreme-1.md |
-| D193 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-193-tuple-in-1.md |
+| D193 | G1 | 1.0.9-rc1 | done | issue #193 — tuple `IN`/`Contains` over a flat value list of `System.Tuple`/`System.ValueTuple` (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite; SQL Server rejects every tuple form up front; W1–W4 + F1/F7/F10/F12/F14 fixed/verified, none open; CHECK evidence-completeness objection accepted by escalate (rv1 re-gather budget exhausted, no product defect); EN+RU docs + gap-analysis; commit e19d751a | docs/specs/status/rc1-tail-193-tuple-in-1.md |
 | D198 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
 | D195 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
 | D196 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
@@ -52,14 +52,14 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 
 - Last common C: not run (lane continues; single group ⇒ no C-E04 merge path).
 - Verification state: **unverified**.
-- Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; no open defect.
+- Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; D193 defects (W1–W4, F1/F7/F10/F12/F14) all fixed/verified, none open; no open defect.
 - Related corrective-task status file: —.
-- Next allowed step: D193 next, then D198 → D195 → D196.
+- Next allowed step: D198 next, then D195 → D196.
 - Notice: host has no todowrite tool for subagents; task status files carry the progress log instead.
 
 ## Done / Verified / Incomplete
 
-- Done: D161, D197, D140, D134, D194, D150.
+- Done: D161, D197, D140, D134, D194, D150, D193.
 - Verified: —.
 - Incomplete: —.
 
@@ -70,7 +70,7 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - The `incomplete "группа остановлена"` marks on D134/D194/D150/D193/D198/D195/D196 were an artifact of the outside-cycle blocker; those tasks were **never executed** and are re-armed to `pending`.
 - D161 (#161) and D197 (#197) remain `done` — their commits are valid.
 - Verification state: **unverified** (collection not yet verified).
-- Next allowed step: D193 next, then D198 → D195 → D196.
+- Next allowed step: D198 next, then D195 → D196.
 - D194 complete: PostgreSQL raw `ROW(...)`/composite materialization shipped (caller-registered
   composites, NULL/error contracts, EN+RU docs, PG integration tests); CHECK PASS r2/rv2 n=3/3; commit
   `451d5c6e`. The D194 status file is kept. Collection verification state remains **unverified**.
@@ -79,3 +79,4 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
   Float16/Decimal/arity>3 floating keys stay portable; EN+RU docs; real-CH 25.8 parity CHECK PASS
   r1/rv1 n=1/3 (CH unit 546/0/0, real-CH parity 35/0/0); commit `4d0237bf`. Collection verification state
   remains **unverified**.
+- D193 complete: tuple `IN`/`Contains` over a flat value list of `System.Tuple`/`System.ValueTuple` (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite; SQL Server rejects every tuple form up front; W1–W4 cache/rejection fixes and F1/F7/F10/F12/F14 test/doc gaps fixed/verified; CHECK evidence-completeness objection accepted by escalate (rv1 re-gather budget exhausted), no product defect established; EN+RU docs + gap-analysis updated; commit `e19d751a`; evidence `docs/specs/status/rc1-tail-193-tuple-in-1.md` (+ `/tmp/D193-evidence/`: integration-postgap.xml, boundary-postgap.xml, coverage-postgap.xml, /tmp/D193-perf-r2/). Collection verification state remains **unverified**.
