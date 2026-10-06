@@ -29,7 +29,9 @@
   `json_all_paths_with_types`/`to_json_string`) через тот же флаг. Они принимают нативное значение
   `JSON` (`CAST(col AS JSON)` для колонки `String`); `JSONAllPaths` проецируется как `string[]`, а
   `JSONAllPathsWithTypes` — как `Map(String, String)` → `Dictionary<string, string>`. Нативная *колонка*
-  `JSON` пока не отображена (драйвер отдаёт её как `System.Text.Json.Nodes.JsonObject`).
+  `JSON`, спроецированная как «голый» `System.Text.Json.Nodes.JsonObject`, отображается и на чтение, и
+  как параметр (см. [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку));
+  остальные CLR-формы JSON на ClickHouse — нет, см. примечание в том разделе.
 * **SQLite** предоставляет поверхность JSON1 через провайдерную `SqlFunctions.Sqlite` (`json`/`jsonb`/
   `json_extract`, операторы `->`/`->>`, `json_set`/`json_patch` и табличные функции `json_each`/`json_tree`).
   Кросс-провайдерный JSON-API на неё не отображён: нативный тип `json`/`jsonb` и текстовые имена
@@ -52,7 +54,7 @@
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
 | SQLite | Нет | Нет | Нет (JSON1 через `SqlFunctions.Sqlite`) | Нет |
 | MySQL / MariaDB | Нет | Не отображаются | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
-| ClickHouse | Нет | Не отображаются | Строковый JSON + JSONPath-скаляры + функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
+| ClickHouse | Нет | Отображается для «голого» `JsonObject` (нативная колонка `JSON`) | Строковый JSON + JSONPath-скаляры + функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
 | In-memory | Не применимо (нет SQL) | Не применимо | Не применимо | Не применимо |
 
 «Нет» означает, что команда отклоняется через `NotSupportedException` при построении SQL, а не то, что
@@ -223,6 +225,17 @@ public sealed class Customer
 * Обычная `string` отображается на `text`; используйте `SqlFunctions.Postgres.json_cast(value)`, чтобы
   разобрать её как `jsonb`.
 
+На ClickHouse тот же раздел описывает нативную колонку `JSON`, но по другому контракту: **«голое»**
+свойство `System.Text.Json.Nodes.JsonObject` отображается на неё и при проекции, и как параметр
+(`ClickHouse.Driver` отдаёт нативный `JSON` как `JsonObject`). Проекция должна идти через именованную
+форму — `Select(x => new { x.Doc })` или DTO (буферизованный row mapper читает
+`GetFieldValue<JsonObject>`), а «голый» скаляр верхнего уровня `Select(x => x.Doc)` **не**
+обрабатывается ядровым классификатором проекции. Пустой документ `{}` остаётся непустым `JsonObject`,
+SQL `NULL` становится `null`, а параметр `JsonObject` привязывается как нативный тип `JSON`. Остальные
+CLR-формы JSON **не** отображаются: `[JsonColumn]` со storage `Native`, «голые» `JsonDocument`/
+`JsonElement`, чтение «голой» `string` из колонки `JSON` падают, легаси-алиас `Object('json')` не
+распознаётся, а `Auto` storage у `[JsonColumn]` на ClickHouse остаётся текстовым.
+
 ### Собрать JSON-объект или массив в проекции
 
 Функции конструирования собирают значение `json`/`jsonb` из обычных SQL-выражений. Строковые
@@ -383,9 +396,11 @@ from complex_entity
   набором `SupportsTextJson`. Функции нативного JSON принимают нативное значение `JSON` (колонку
   `String` приведите через `CAST(col AS JSON)`); `json_all_paths` проецируется как `string[]`, а
   `json_all_paths_with_types` — как `Dictionary<string, string>` (`mapKeys`/`mapValues` превращают map в
-  коллекцию). Нативная *колонка* `JSON` пока не отображена: драйвер отдаёт её как
-  `System.Text.Json.Nodes.JsonObject`, поэтому проецируйте JSON через колонку `String` или приведите её
-  в SQL.
+  коллекцию). Нативная *колонка* `JSON` отображает «голый» `JsonObject` и на чтение, и как параметр
+  (см. [Отобразить CLR-объект на нативную JSON-колонку](#отобразить-clr-объект-на-нативную-json-колонку));
+  `[JsonColumn]` со storage `Native`, «голые» `JsonDocument`/`JsonElement`, «голая» `string` и
+  легаси-алиас `Object('json')` не поддерживаются, а «голый» скаляр верхнего уровня
+  `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции.
 * Расширение JSON1 в SQLite отображается только через провайдерную поверхность `SqlFunctions.Sqlite`
   (`json_extract`, `->`/`->>`, `json_each`/`json_tree`, ...); кросс-провайдерный native/`json_*` API на неё
   не отображён, поэтому эти имена бросают `NotSupportedException`.

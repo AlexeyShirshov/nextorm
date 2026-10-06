@@ -257,12 +257,22 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 См. [Табличные функции](../11-table-valued-functions.md).
 
+## Нативные JSON-колонки
+
+Нативная колонка `JSON` отображается на «голое» свойство `System.Text.Json.Nodes.JsonObject` и на
+чтение, и как параметр (`ClickHouse.Driver` отдаёт `JSON` как `JsonObject`). Проецируйте через
+именованную форму (`Select(x => new { x.Doc })` или DTO): «голый» скаляр верхнего уровня
+`Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции. Пустой `{}` остаётся непустым
+объектом, SQL `NULL` становится `null`. `[JsonColumn]` со storage `Native`, «голые»
+`JsonDocument`/`JsonElement`, чтение «голой» `string` из колонки `JSON` и легаси-алиас `Object('json')`
+не поддерживаются; `Auto` storage у `[JsonColumn]` остаётся текстовым. См.
+[Поддержка JSON](../14-json.md#отобразить-clr-объект-на-нативную-json-колонку).
+
 ## Пока не поддерживается
 
-Нативный тип колонки `JSON` (его reader/type-mapping) пока не отображён. Серверные/кластерные табличные
-функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`, `cluster_all_replicas`) **предобъявлены**
-в `SqlFunctions.ClickHouse` и рендерят свой SQL, но их сквозной прогон на реальном кластере не покрыт и
-остаётся вне области охвата. См.
+Серверные/кластерные табличные функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,
+`cluster_all_replicas`) **предобъявлены** в `SqlFunctions.ClickHouse` и рендерят свой SQL, но их сквозной
+прогон на реальном кластере не покрыт и остаётся вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

@@ -253,12 +253,21 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 See [Table-valued functions](../11-table-valued-functions.md).
 
+## Native JSON columns
+
+A native `JSON` column maps to a bare `System.Text.Json.Nodes.JsonObject` property for both read and
+parameter (`ClickHouse.Driver` surfaces `JSON` as `JsonObject`). Project through a named shape
+(`Select(x => new { x.Doc })` or a DTO): a bare top-level scalar `Select(x => x.Doc)` is not handled by
+the core projection classifier. An empty `{}` stays a non-null object and SQL `NULL` becomes `null`. The
+`[JsonColumn]` `Native` storage, bare `JsonDocument`/`JsonElement`, a bare `string` read over a `JSON`
+column and the legacy `Object('json')` alias are not supported; `[JsonColumn]`'s `Auto` storage stays
+textual. See [JSON support](../14-json.md#map-a-clr-object-to-a-native-json-column).
+
 ## Not yet supported
 
-The native `JSON` column type (its reader/type-mapping) is not mapped yet. The server/cluster table
-functions (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`, `cluster_all_replicas`) **are**
-pre-declared on `SqlFunctions.ClickHouse` and render their SQL, but exercising them end-to-end against a
-real cluster is not covered and stays out of scope. See
+The server/cluster table functions (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,
+`cluster_all_replicas`) **are** pre-declared on `SqlFunctions.ClickHouse` and render their SQL, but
+exercising them end-to-end against a real cluster is not covered and stays out of scope. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also

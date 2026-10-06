@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -1042,6 +1043,85 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         r.Text.Should().NotBeNull().And.Contain("\"name\"").And.Contain("alice");
     }
 
+    // #128 native JSON column read as a bare JsonObject (no [JsonColumn] converter).
+    [Fact]
+    public void JsonObjectProjection_ShouldMaterializeNestedDocument()
+    {
+        var doc = _sut.DataProvider
+            .From<IJsonObjectEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { x.Doc })
+            .First()
+            .Doc;
+
+        doc.Should().NotBeNull();
+        doc["name"]!.GetValue<string>().Should().Be("bob");
+        doc["age"]!.GetValue<long>().Should().Be(25);
+        doc["nested"]!["x"]!.GetValue<long>().Should().Be(2);
+    }
+
+    [Fact]
+    public void JsonObjectProjection_EmptyObject_ShouldStayNonNullObject()
+    {
+        var doc = _sut.DataProvider
+            .From<IJsonObjectEntity>()
+            .Where(x => x.Id == 2)
+            .Select(x => new { x.Doc })
+            .First()
+            .Doc;
+
+        doc.Should().NotBeNull();
+        doc.Count.Should().Be(0);
+    }
+
+    [Fact]
+    public void JsonObjectParameter_ShouldRoundTripNestedDocument()
+    {
+        var ctx = _sut.DataProvider;
+        var payload = new JsonObject
+        {
+            ["name"] = "carol",
+            ["age"] = 41,
+            ["nested"] = new JsonObject { ["x"] = 9 },
+        };
+
+        using (ctx.ExecuteRaw(
+            "insert into json_object_entity (id, doc) values (@id, @doc)",
+            [new ProcedureParameter("id", 100), new ProcedureParameter("doc", payload)]))
+        {
+        }
+
+        var read = ctx.From<IJsonObjectEntity>()
+            .Where(x => x.Id == 100)
+            .Select(x => new { x.Doc })
+            .First()
+            .Doc;
+
+        read.Should().NotBeNull();
+        JsonNode.DeepEquals(read, payload).Should().BeTrue();
+    }
+
+    [Fact]
+    public void JsonObjectParameter_EmptyObject_ShouldRoundTripNonNullObject()
+    {
+        var ctx = _sut.DataProvider;
+
+        using (ctx.ExecuteRaw(
+            "insert into json_object_entity (id, doc) values (@id, @doc)",
+            [new ProcedureParameter("id", 101), new ProcedureParameter("doc", new JsonObject())]))
+        {
+        }
+
+        var read = ctx.From<IJsonObjectEntity>()
+            .Where(x => x.Id == 101)
+            .Select(x => new { x.Doc })
+            .First()
+            .Doc;
+
+        read.Should().NotBeNull();
+        read.Count.Should().Be(0);
+    }
+
     // #39 managed JSON streaming: ClickHouse does not derive CommonTestSuite, so the shared
     // CommonTestSuite.JsonStream facts are mirrored here through their reusable bodies. complex_entity
     // carries the same ids/rows as the shared fixture.
@@ -1471,6 +1551,18 @@ public interface IJsonEntity
     int Id { get; set; }
     [Column("doc")]
     string Doc { get; set; }
+}
+
+// #128: the bare JsonObject mapping over the native JSON column, separate from the string IJsonEntity
+// above so the existing SQL-function tests (which pass doc as a string expression) stay unchanged.
+[SqlTable("json_object_entity")]
+public interface IJsonObjectEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("doc")]
+    JsonObject Doc { get; set; }
 }
 
 [SqlTable("tuple_entity")]

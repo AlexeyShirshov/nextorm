@@ -191,6 +191,23 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (2, '{"flag":true,"list":[1,2,3]}')
         """,
 
+        // #128: a separate bare JsonObject mapping over a native JSON column. The json_entity fixture
+        // above keeps IJsonEntity.Doc as a string (the existing SQL-function path); this table backs the
+        // bare JsonObject projection/parameter round-trip.
+        "drop table if exists json_object_entity",
+        """
+        create table json_object_entity
+        (
+            id Int32,
+            doc JSON
+        ) engine = Memory
+        """,
+        """
+        insert into json_object_entity (id, doc) values
+            (1, '{"name":"bob","age":25,"nested":{"x":2}}'),
+            (2, '{}')
+        """,
+
         "drop table if exists tuple_entity",
         """
         create table tuple_entity

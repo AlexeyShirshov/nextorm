@@ -224,7 +224,7 @@ public sealed class TvpRow
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (учитывают фрейм; обычные `lag`/`lead` на ClickHouse отвергают явный фрейм) |
 | Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
-| Функции нативного JSON | `json_all_paths` → `JSONAllPaths` (проецируется как `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (нативный `Map(String, String)` отдаётся как `Dictionary<string, string>`; мост к коллекции — `mapKeys`/`mapValues`), `to_json_string` → `toJSONString`; все принимают нативное значение `JSON` (`CAST(col AS JSON)` для колонки `String`); сам нативный *тип колонки* `JSON` не замаплен |
+| Функции нативного JSON | `json_all_paths` → `JSONAllPaths` (проецируется как `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (нативный `Map(String, String)` отдаётся как `Dictionary<string, string>`; мост к коллекции — `mapKeys`/`mapValues`), `to_json_string` → `toJSONString`; все принимают нативное значение `JSON` (`CAST(col AS JSON)` для колонки `String`); нативный *тип колонки* `JSON` замаплен только как «голый» `JsonObject` |
 | Словари | `dictGet`, `dictGetOrDefault`, `dictHas`, `dictGetHierarchy`, `dictGetChildren`, `dictIsIn` (нужен сконфигурированный `CREATE DICTIONARY`) |
 | Session/info-функции | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` недоступны) |
 | `GROUP BY ... WITH TOTALS` | `with totals` (отдельная строка итогов не отдаётся `ClickHouse.Driver`) |
@@ -233,7 +233,7 @@ public sealed class TvpRow
 | Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`), а также серверные/кластерные `url(url, format, structure)`, `s3(url, format, structure)`, `file(path, format, structure)`, `remote(addresses, db, table)`, `remote_secure(...)`, `cluster(cluster, db, table)`, `cluster_all_replicas(...)` (схема строки — generic-интерфейс `TRow` вызывающего), `values` (структура из `TRow`) |
 | Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Поверхность кортежей | нативная колонка/выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7); `Tuple.Create(a, b, ...)` рендерится как `tuple(a, b, ...)`, а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)`, оба под [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` не поддерживается (меняет набор колонок результата) |
-| Нативный тип колонки JSON | не замаплен: `ClickHouse.Driver` читает нативную колонку `JSON` как `System.Text.Json.Nodes.JsonObject`, который row reader материализовать не умеет. Функции нативного JSON при этом доступны над любым JSON-выражением |
+| Нативный тип колонки JSON | замаплен для «голого» свойства `System.Text.Json.Nodes.JsonObject` (чтение и параметр); «голый» скаляр верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции — используйте анонимный тип или DTO. `[JsonColumn]` со storage `Native`, «голые» `JsonDocument`/`JsonElement`, «голая» `string` и легаси-алиас `Object('json')` не поддерживаются. См. [Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку) |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | `NotSupportedException` (у драйвера нет потоковых геттеров) |
 
 ## Замечания и ограничения
@@ -261,9 +261,12 @@ public sealed class TvpRow
   `JSONAllPaths` принимает нативное значение `JSON` (колонку `String` приведите через
   `CAST(col AS JSON)`); `json_all_paths` проецируется как `string[]`, а `json_all_paths_with_types`
   отдаёт нативный `Map(String, String)` как `Dictionary<string, string>` (мост к коллекции —
-  `mapKeys`/`mapValues`). Сама нативная *колонка* `JSON` при этом не замаплена: `ClickHouse.Driver`
-  отдаёт её как `System.Text.Json.Nodes.JsonObject`, для которого у row reader нет маппинга. Храните
-  JSON в колонке `String` (или приведите колонку в SQL), если нужно материализовать саму колонку.
+  `mapKeys`/`mapValues`). Нативная *колонка* `JSON` отображает «голый» `System.Text.Json.Nodes.JsonObject`
+  и на чтение, и как параметр; проецируйте через анонимный тип или DTO, потому что «голый» скаляр
+  верхнего уровня `Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции.
+  `[JsonColumn]` со storage `Native`, «голые» `JsonDocument`/`JsonElement`, чтение «голой» `string` из
+  колонки `JSON` и легаси-алиас `Object('json')` не поддерживаются; `Auto` storage у `[JsonColumn]`
+  остаётся текстовым ([Поддержка JSON](../guide/14-json.md#отобразить-clr-объект-на-нативную-json-колонку)).
 - В `hits_v1` и других широких таблицах колонок намного больше, чем объявляет интерфейс сущности.
   Вместо маппинга всех колонок лишние можно спроецировать по имени через
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (см.

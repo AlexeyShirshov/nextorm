@@ -223,7 +223,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (frame-respecting; the plain `lag`/`lead` reject an explicit frame on ClickHouse) |
 | String JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
-| Native JSON functions | `json_all_paths` → `JSONAllPaths` (projects as `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (native `Map(String, String)` surfaced as `Dictionary<string, string>`; `mapKeys`/`mapValues` bridge to a collection), `to_json_string` → `toJSONString`; all take a native `JSON` value (`CAST(col AS JSON)` for a `String` column), while the native `JSON` *column type* itself is not mapped |
+| Native JSON functions | `json_all_paths` → `JSONAllPaths` (projects as `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (native `Map(String, String)` surfaced as `Dictionary<string, string>`; `mapKeys`/`mapValues` bridge to a collection), `to_json_string` → `toJSONString`; all take a native `JSON` value (`CAST(col AS JSON)` for a `String` column), while a native `JSON` *column type* maps only as a bare `JsonObject` |
 | Dictionaries | `dictGet`, `dictGetOrDefault`, `dictHas`, `dictGetHierarchy`, `dictGetChildren`, `dictIsIn` (needs a configured `CREATE DICTIONARY`) |
 | Session/info functions | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` are not available) |
 | `GROUP BY ... WITH TOTALS` | `with totals` (the extra totals row is not surfaced by `ClickHouse.Driver`) |
@@ -232,7 +232,7 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
 | Table functions | `numbers`/`numbers_mt` (the `UInt64 number` column is cast to `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (the built-in `generate_random()`/`generate_random(seed)` fix the structure `id UInt64, value Float64, name String` and cast `id` to `Int64`), and the server/cluster functions `url(url, format, structure)`, `s3(url, format, structure)`, `file(path, format, structure)`, `remote(addresses, db, table)`, `remote_secure(...)`, `cluster(cluster, db, table)`, `cluster_all_replicas(...)` (the row shape is the caller's `TRow` interface) |
 | Array functions | over `Array(T)` columns/expressions: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Tuple surface | a native `Tuple(...)` column/expression projects as `System.Tuple<...>` (arity 1–7); `Tuple.Create(a, b, ...)` renders `tuple(a, b, ...)` and `System.Tuple<...>.ItemN` renders `tupleElement(t, n)`, both under [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` is not supported (it changes the result column set) |
-| Native JSON column type | not mapped: `ClickHouse.Driver` reads a native `JSON` column as `System.Text.Json.Nodes.JsonObject`, which the row reader cannot materialise. The native-JSON *functions* are available over any JSON-valued expression |
+| Native JSON column type | mapped for a bare `System.Text.Json.Nodes.JsonObject` property (read and parameter); a bare top-level scalar `Select(x => x.Doc)` is not handled by the core projection classifier — use an anonymous type or a DTO. `[JsonColumn]` `Native`, bare `JsonDocument`/`JsonElement`, a bare `string` and the legacy `Object('json')` alias are not supported. See [JSON support](../guide/14-json.md#map-a-clr-object-to-a-native-json-column) |
 | LOB streaming (`ToStream`/`ToTextReader`) | `NotSupportedException` (the driver exposes no streaming getters) |
 
 ## Notes and limitations
@@ -257,10 +257,13 @@ The `format(JSONEachRow, ...)`, `values()` and `input()` forms are **not** used 
   `json_all_paths_with_types`/`to_json_string`) are gated by `SupportsJsonExtract`. The `JSONAllPaths`
   pair takes a native `JSON` value (cast a `String` column with `CAST(col AS JSON)`); `json_all_paths`
   projects as `string[]`, and `json_all_paths_with_types` surfaces the native `Map(String, String)` as
-  `Dictionary<string, string>` (`mapKeys`/`mapValues` bridge it to a collection). A native `JSON`
-  *column*, however, is not mapped: `ClickHouse.Driver` surfaces it as
-  `System.Text.Json.Nodes.JsonObject`, which nextorm's row reader has no mapping for. Store JSON in
-  a `String` column (or cast the column in SQL) when you need to materialise the column itself.
+  `Dictionary<string, string>` (`mapKeys`/`mapValues` bridge it to a collection). A native `JSON` *column*
+  maps a bare `System.Text.Json.Nodes.JsonObject` for both read and parameter; project through an
+  anonymous type or a DTO because a bare top-level scalar `Select(x => x.Doc)` is not handled by the core
+  projection classifier. The `[JsonColumn]` `Native` storage, bare `JsonDocument`/`JsonElement`, a bare
+  `string` read over a `JSON` column and the legacy `Object('json')` alias are not supported;
+  `[JsonColumn]`'s `Auto` storage stays textual on ClickHouse
+  ([JSON support](../guide/14-json.md#map-a-clr-object-to-a-native-json-column)).
 - `hits_v1` and similar wide tables have far more columns than an entity interface declares. Rather
   than mapping every column, project the extra ones by name with
   [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (see

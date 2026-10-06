@@ -1,6 +1,9 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Text.Json.Nodes;
 using ClickHouse.Driver.ADO;
 using ClickHouse.Driver.ADO.Parameters;
 using NextORM.Core;
@@ -13,6 +16,9 @@ namespace NextORM.ClickHouse;
 /// </summary>
 public class ClickHouseDataContext : DataContext
 {
+    private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
+    private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+
     /// <summary>
     /// Creates a ClickHouse context that owns a connection built lazily from
     /// <paramref name="connectionString"/>.
@@ -45,9 +51,44 @@ public class ClickHouseDataContext : DataContext
     public override ISqlDialect Dialect => ClickHouseDialect.Instance;
 
     /// <summary>
+    /// Materializes a projected native ClickHouse <c>JSON</c> column as its driver type,
+    /// <see cref="JsonObject"/>, through the typed <c>GetFieldValue</c> accessor; a SQL <c>NULL</c>
+    /// becomes a null <see cref="JsonObject"/>. Every other column is mapped by the base implementation.
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="param">The data-reader expression the accessor is built from.</param>
+    /// <returns>An expression that reads the column value.</returns>
+    public override Expression MapColumnExpression(SelectExpression column, Expression param)
+    {
+        var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        // A converter (for example [JsonColumn]) keeps its own storage policy; the native-mapping
+        // shortcut applies to a bare JsonObject projection only.
+        if (realType == typeof(JsonObject) && column.Converter is null)
+            return MapJsonColumn(column, param);
+
+        return base.MapColumnExpression(column, param);
+    }
+
+    private static Expression MapJsonColumn(SelectExpression column, Expression param)
+    {
+        var index = Expression.Constant(column.Index);
+        var getter = Expression.Call(
+            Expression.Convert(param, typeof(DbDataReader)),
+            GetFieldValueMI.MakeGenericMethod(typeof(JsonObject)),
+            index);
+
+        // Defensive DBNull handling: a nullable JSON column materializes SQL NULL as a null JsonObject.
+        return Expression.Condition(
+            Expression.Call(param, IsDBNullMI, index),
+            Expression.Constant(null, typeof(JsonObject)),
+            getter);
+    }
+
+    /// <summary>
     /// Creates a <c>ClickHouseDbParameter</c>. The driver rewrites the ADO-style <c>@name</c>
     /// placeholder to <c>{name:Type}</c> and infers the ClickHouse type from the CLR value, so the
-    /// stored name omits the <c>@</c> prefix.
+    /// stored name omits the <c>@</c> prefix. A <see cref="JsonObject"/> is bound as the native
+    /// ClickHouse <c>JSON</c> type.
     /// </summary>
     /// <param name="name">The parameter name, without the provider prefix.</param>
     /// <param name="value">The parameter value, or <see langword="null"/>.</param>
@@ -56,11 +97,18 @@ public class ClickHouseDataContext : DataContext
     {
         // The driver rewrites the ADO-style @name placeholder to {name:Type} and infers the
         // ClickHouse type from the CLR value; the stored name is the one without the @ prefix.
-        return new ClickHouseDbParameter
+        var parameter = new ClickHouseDbParameter
         {
             ParameterName = name.TrimStart('@'),
             Value = value
         };
+
+        // The driver infers JSON from a JsonObject value; the explicit type makes the native JSON
+        // binding independent of that inference.
+        if (value is JsonObject)
+            parameter.ClickHouseType = "JSON";
+
+        return parameter;
     }
 
     /// <summary>
