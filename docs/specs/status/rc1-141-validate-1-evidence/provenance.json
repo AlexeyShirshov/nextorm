@@ -1,0 +1,150 @@
+{
+  "unit": "rc1-141-validate-1",
+  "head": "d60c80e3f382c19a13db2746f32af387e5bd8fe8",
+  "head_short": "d60c80e3",
+  "branch": "1.0.9-rc1",
+  "env": {
+    "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+  },
+  "timestamps": {
+    "cycle_started_utc": "2026-10-06T03:44:42Z",
+    "brief_validated_utc": "2026-10-06T03:44:55Z",
+    "build_utc": "2026-10-06T03:44:58Z",
+    "inner_tests_utc": "2026-10-06T03:45:45Z",
+    "boundary_sweep_utc": "2026-10-06T03:46:05Z",
+    "integration_run_utc": "2026-10-06T03:47:08Z",
+    "report_validated_utc": "2026-10-06T03:48:16Z"
+  },
+  "validator": {
+    "brief_exit_code": 0,
+    "brief_log": "docs/specs/status/rc1-141-validate-1-evidence/validator-brief.txt",
+    "report_exit_code": 0,
+    "report_log": "docs/specs/status/rc1-141-validate-1-evidence/validator-report.txt"
+  },
+  "executions": [
+    {
+      "id": "E-B01",
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "exit_code": 0,
+      "selected_count": 24,
+      "selected_count_basis": "24 project output (' -> ') lines in the Debug solution build log; a build selects no tests",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-B01.log"
+    },
+    {
+      "id": "E-T01",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~VersionGate"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 14,
+      "selected_count_basis": "xunit v3 test run summary total: 14",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T01.log"
+    },
+    {
+      "id": "E-T02",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~FilteredAggregates"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T02.log"
+    },
+    {
+      "id": "E-T03",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~StringAgg_WithFilter"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T03.log"
+    },
+    {
+      "id": "E-T04",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~CapabilityFlags"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T04.log"
+    },
+    {
+      "id": "E-T05",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 64,
+      "selected_count_basis": "xunit v3 test run summary total: 64",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T05.log"
+    },
+    {
+      "id": "E-T06",
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~VersionGate"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 9,
+      "selected_count_basis": "xunit v3 test run summary total: 9",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T06.log"
+    },
+    {
+      "id": "E-T07",
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~CapabilityFlags"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T07.log"
+    },
+    {
+      "id": "E-T08",
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 17,
+      "selected_count_basis": "xunit v3 test run summary total: 17",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T08.log"
+    },
+    {
+      "id": "E-T09",
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 55,
+      "selected_count_basis": "xunit v3 test run summary total: 55",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T09.log"
+    },
+    {
+      "id": "E-T10",
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~DialectCapabilityContractTests"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 3,
+      "selected_count_basis": "xunit v3 test run summary total: 3",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T10.log"
+    },
+    {
+      "id": "E-T11",
+      "command": ["dotnet", "test", "nextorm.slnx", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "exit_code": 0,
+      "selected_count": 8442,
+      "selected_count_basis": "solution test run summary total: 8442 (succeeded 8248, failed 0, skipped 194); the single comprehensive boundary sweep",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T11.log"
+    },
+    {
+      "id": "E-T12",
+      "command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-noColor"],
+      "phase": "boundary",
+      "exit_code": 0,
+      "selected_count": 3195,
+      "selected_count_basis": "integration TEST EXECUTION SUMMARY Total: 3195 (failed 0, skipped 193); all five provider containers started (PostgreSQL a1877941aa2e, SQL Server 4ab2d4542432, MySQL d703aedb9b21, MariaDB 525af9d6a314, ClickHouse 914f06a0ba5f)",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/E-T12.log"
+    }
+  ],
+  "r2_pointer": {
+    "plan_revision": "r=2",
+    "evidence": "docs/specs/status/rc1-141-validate-1-evidence/r2/provenance.json",
+    "evidence_json": "docs/specs/status/rc1-141-validate-1-evidence.json",
+    "provider_evidence": "docs/specs/status/rc1-141-validate-1-evidence/r2/provider-container-evidence.json",
+    "supersession": "r=1 E-T12 (separate full integration `dotnet run`) is retained here as a historical r=1 record; it is EXCLUDED from the r=2 compliant evidence and SUPERSEDED by the E-T11 in-sweep container proof -- not deleted, not relabeled."
+  }
+}

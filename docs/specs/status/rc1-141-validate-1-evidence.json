@@ -1,0 +1,109 @@
+{
+  "unit": "rc1-141-validate-1",
+  "scope": {
+    "projects": ["tests/nextorm.postgres.tests", "tests/nextorm.mariadb.tests", "tests/nextorm.core.tests", "tests/nextorm.integration.tests"],
+    "selectors": ["FullyQualifiedName~VersionGate", "FullyQualifiedName~FilteredAggregates", "FullyQualifiedName~StringAgg_WithFilter", "FullyQualifiedName~CapabilityFlags", "FullyQualifiedName~Returning", "FullyQualifiedName~DialectCapabilityContractTests"],
+    "files": ["docs/specs/status/rc1-141-validate-1.md", "docs/specs/status/rc1-141-validate-1-evidence.json", "docs/specs/status/rc1-141-version-gates-1.md", "docs/specs/status/collection-1.0.9-rc1.md"],
+    "rebuild": "none",
+    "boundary": "One fresh Debug solution build and one comprehensive solution test sweep (the single unfiltered `dotnet test nextorm.slnx`); all five container providers are proven from inside that sweep (JUnit artifact) with no separate integration run",
+    "rationale": "Documentation/status-only correction; freshly repeat affected checks and replace separate comprehensive provider sweeps with their encompassing solution sweep."
+  },
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 24
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~VersionGate"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 14
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~FilteredAggregates"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~StringAgg_WithFilter"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~CapabilityFlags"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 64
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~VersionGate"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 9
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~CapabilityFlags"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 17
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 55
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~DialectCapabilityContractTests"],
+      "phase": "inner",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": ["dotnet", "test", "nextorm.slnx", "-c", "Debug", "--no-build", "--report-xunit-junit", "--results-directory", "docs/specs/status/rc1-141-validate-1-evidence/r2/junit"],
+      "phase": "boundary",
+      "source_revision": "d60c80e3",
+      "artifact_revision": "d60c80e3",
+      "exit_code": 0,
+      "selected_count": 8442
+    }
+  ]
+}

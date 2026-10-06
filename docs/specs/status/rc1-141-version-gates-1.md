@@ -299,7 +299,7 @@ CHECK packet (consolidated frozen contract + crosswalk + matrices + integration 
 
 ## ACT
 
-- **CHECK result: PASS.** Frozen point: **plan revision r = 2**, **attempt n = 2**, evidence **contract revision `rv = D141.ContractA.strong.1`**. Criteria R141-PG/TYPE/CACHE/MDB/COMPAT/DOC are met. **`R141-VERIFY` is NOT met as originally recorded:** the historical `report` exited **2** (`FAIL: more than one comprehensive boundary test sweep: 3`), and the fresh re-run in `docs/specs/status/rc1-g01-c-evidence-1.json` is also rejected by the helper's sweep/build caps (`EXIT 2`), so verification rests on the named waiver `W-C-D141-REPORT-CAP-1` (see `## Validator re-run disposition (r2)`). Freeze is recorded here as the ACT baseline.
+- **CHECK result: PASS.** Frozen point: **plan revision r = 2**, **attempt n = 2**, evidence **contract revision `rv = D141.ContractA.strong.1`**. Criteria R141-PG/TYPE/CACHE/MDB/COMPAT/DOC are met. **`R141-VERIFY` is now MET:** fresh compliant evidence in `docs/specs/status/rc1-141-validate-1-evidence.json` (**`rv = 2`**) at HEAD `d60c80e3` yields `validate_inner_loop.py brief` **exit 0** and `report` **exit 0** (`docs/specs/status/rc1-141-validate-1-evidence/r2/validator-brief.txt`, `.../validator-report.txt`). The **r2 verification method** recorded under `## Validator re-run disposition (r2)` (three separate per-project boundary sweeps) is **superseded** by one comprehensive full-solution boundary sweep plus one boundary solution build; the `R141-VERIFY` acceptance criterion above is unchanged. *(Historical / superseded:* the earlier `report` exited **2** (`FAIL: more than one comprehensive boundary test sweep: 3`), and the `rc1-g01-c-evidence-1.json` re-run was also rejected by the helper's sweep/build caps (`EXIT 2`); the named waiver `W-C-D141-REPORT-CAP-1` is now **WITHDRAWN** — see `## Validator re-run disposition (corrective r2, closed)`.*) Freeze is recorded here as the ACT baseline.
 - **Commit plan (executed by ACT).** Branch `1.0.9-rc1`, no worktree/merge (single collection group). Stage **only** the D141 change set by explicit path — 32 files (28 tracked-modified + 4 untracked-new), matching the `git status --short` snapshot above, plus the two collection status files. No `git add -A`; `docs/api/**` and `docs/_site/**` are gitignored and not staged. Commit message: `#141 Version-gate MariaDB 13 UPDATE RETURNING and PostgreSQL FILTER (<9.4)`. Auto-commit authorized by the collection (`pdca-collection` exception); **no push**.
 - **Issue close outcome.** `gh` **was available** in this environment; `gh issue close 141 --repo AlexeyShirshov/nextorm --comment "..."` exited **0** and issue #141 is **CLOSED** (verified via `gh issue view 141 --json state` → `CLOSED`). This **contradicts** the brief's premise that `gh` is unavailable, so the planned "_gh unavailable / not closed remotely_" Notice is **not** recorded (it would be false). **Notice:** issue #141 was closed remotely before the commit landed; the commit itself was not pushed, so the remote issue references an unpushed commit.
 
@@ -308,7 +308,7 @@ CHECK packet (consolidated frozen contract + crosswalk + matrices + integration 
 2026-10-06T02:49Z | CORRECTIVE | r2 | 2/2 | fresh collection evidence JSON created and validator re-run recorded; R141-VERIFY corrected to not-met-on-helper-gate; historical 3136/3137 superseded by HEAD 36e540e2 aggregate 3191/0/193 | docs/specs/status/rc1-g01-c-evidence-1.json; docs/specs/status/rc1-g01-c-evidence-1/provenance.md
 ```
 
-## Validator re-run disposition (r2)
+## Validator re-run disposition (r2) — historical / superseded by the corrective r2 close-out below
 
 - Fresh collection-level evidence JSON: `docs/specs/status/rc1-g01-c-evidence-1.json` (created by corrective
   cycle `rc1-g01-c-evidence-1`). The original `/tmp/nextorm-D141-ContractA-strong/E141-evidence.json` was
@@ -332,3 +332,27 @@ CHECK packet (consolidated frozen contract + crosswalk + matrices + integration 
   aggregate run at HEAD `36e540e2` — total **3191**, failed **0**, skipped **193**
   (`/tmp/nextorm-rc1-coll-c/06-integration.txt`). This is not a correction of the historical logs.
 ```
+
+## Validator re-run disposition (corrective r2, closed)
+
+- Corrective cycle `rc1-141-validate-1` (plan revision `r = 2`, attempt `n = 1`, evidence contract revision
+  `rv = 2`) re-performed D141 verification with fresh compliant evidence at HEAD `d60c80e3`:
+  `docs/specs/status/rc1-141-validate-1-evidence.json`. This supersedes the **r2 verification method** only;
+  the `R141-VERIFY` acceptance criterion is preserved verbatim.
+- **Single-sweep / single-build structure:** exactly one boundary solution build (`dotnet build nextorm.slnx
+  -c Debug`, E-B01, 24 projects) and exactly one comprehensive unfiltered full-solution boundary sweep
+  (`dotnet test nextorm.slnx -c Debug --no-build --report-xunit-junit --results-directory
+  docs/specs/status/rc1-141-validate-1-evidence/r2/junit`, E-T11; selected 8442 = 8248 passed / 0 failed /
+  194 skipped). Ten inner filtered runs (E-T01..E-T10) all green.
+- **Validator result:** `validate_inner_loop.py brief` → **EXIT 0** and `report` → **EXIT 0**
+  (`docs/specs/status/rc1-141-validate-1-evidence/r2/validator-brief.txt`,
+  `.../validator-report.txt`) — no waiver, no validator edit, no fabricated counts.
+- **Five-provider proof:** all five container providers executed inside E-T11 with 0 failures (PostgreSQL
+  753, SQL Server 675, MySQL 579, MariaDB 50, ClickHouse 177), proven from E-T11's own JUnit artifact:
+  `docs/specs/status/rc1-141-validate-1-evidence/r2/provider-container-evidence.json` (result artifact
+  `.../r2/junit/*.junit.xml`).
+- **Supersession:** the `## Validator re-run disposition (r2)` method (three separate per-project boundary
+  sweeps plus a separate integration run) is **superseded** by this one comprehensive sweep + one build. The
+  historical exit-2 facts above remain as history under an explicit superseded marker. The r=1 E-T12 extra
+  `dotnet run` sweep is retained as history and is excluded/superseded. `R141-VERIFY` is now **MET**; no
+  `src/**` changed.

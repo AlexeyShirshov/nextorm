@@ -1,0 +1,142 @@
+{
+  "unit": "rc1-141-validate-1",
+  "cycle": "rc1-141-validate-1",
+  "plan_revision": "r=2",
+  "attempt": "n=1",
+  "evidence_contract_revision": "rv=2",
+  "head": "d60c80e3f382c19a13db2746f32af387e5bd8fe8",
+  "head_short": "d60c80e3",
+  "branch": "1.0.9-rc1",
+  "env": {
+    "DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"
+  },
+  "timestamps_utc": {
+    "r2_replan_and_preflight": "2026-10-06T03:53:53Z",
+    "boundary_build_finished": "2026-10-06T03:54:43Z",
+    "inner_tests_finished": "2026-10-06T03:54:56Z",
+    "boundary_sweep_finished": "2026-10-06T03:55:56Z",
+    "brief_validated": "2026-10-06T03:56:29Z",
+    "report_validated": "2026-10-06T03:56:29Z",
+    "timestamps_basis": "observed UTC log-write times during this fresh r=2 re-perform"
+  },
+  "validator": {
+    "brief_exit_code": 0,
+    "brief_log": "docs/specs/status/rc1-141-validate-1-evidence/r2/validator-brief.txt",
+    "report_exit_code": 0,
+    "report_log": "docs/specs/status/rc1-141-validate-1-evidence/r2/validator-report.txt",
+    "command": "python3 /home/alex/.config/opencode/skills/pdca-dotnet/scripts/validate_inner_loop.py <brief|report> docs/specs/status/rc1-141-validate-1-evidence.json"
+  },
+  "executions": [
+    {
+      "id": "E-B01",
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "exit_code": 0,
+      "selected_count": 24,
+      "selected_count_basis": "24 project ` -> ` output lines in the Debug solution build log; a build selects no tests",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-B01.log"
+    },
+    {
+      "id": "E-T01",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~VersionGate"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 14,
+      "selected_count_basis": "xunit v3 test run summary total: 14",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T01.log"
+    },
+    {
+      "id": "E-T02",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~FilteredAggregates"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T02.log"
+    },
+    {
+      "id": "E-T03",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~StringAgg_WithFilter"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T03.log"
+    },
+    {
+      "id": "E-T04",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~CapabilityFlags"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T04.log"
+    },
+    {
+      "id": "E-T05",
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 64,
+      "selected_count_basis": "xunit v3 test run summary total: 64",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T05.log"
+    },
+    {
+      "id": "E-T06",
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~VersionGate"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 9,
+      "selected_count_basis": "xunit v3 test run summary total: 9",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T06.log"
+    },
+    {
+      "id": "E-T07",
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~CapabilityFlags"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 1,
+      "selected_count_basis": "xunit v3 test run summary total: 1",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T07.log"
+    },
+    {
+      "id": "E-T08",
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 17,
+      "selected_count_basis": "xunit v3 test run summary total: 17",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T08.log"
+    },
+    {
+      "id": "E-T09",
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~Returning"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 55,
+      "selected_count_basis": "xunit v3 test run summary total: 55",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T09.log"
+    },
+    {
+      "id": "E-T10",
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~DialectCapabilityContractTests"],
+      "phase": "inner",
+      "exit_code": 0,
+      "selected_count": 3,
+      "selected_count_basis": "xunit v3 test run summary total: 3",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T10.log"
+    },
+    {
+      "id": "E-T11",
+      "command": ["dotnet", "test", "nextorm.slnx", "-c", "Debug", "--no-build", "--report-xunit-junit", "--results-directory", "docs/specs/status/rc1-141-validate-1-evidence/r2/junit"],
+      "phase": "boundary",
+      "exit_code": 0,
+      "selected_count": 8442,
+      "selected_count_basis": "solution test run summary total: 8442 (succeeded 8248, failed 0, skipped 194); the single comprehensive boundary sweep. MTP reporting flags were appended to this one command (no --filter) so its own JUnit artifact proves all five container providers executed: see provider-container-evidence.json",
+      "log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T11.log",
+      "junit_artifact_dir": "docs/specs/status/rc1-141-validate-1-evidence/r2/junit"
+    }
+  ],
+  "supersession_note": "r=1 E-T12 (separate full integration `dotnet run`) is retained in the parent evidence dir as a historical r=1 record; it is EXCLUDED from the r=2 compliant evidence and SUPERSEDED by the E-T11 in-sweep container proof -- not deleted, not relabeled.",
+  "scope_note": "r=2 compliant evidence has exactly one comprehensive unfiltered boundary sweep (E-T11) and one boundary solution build (E-B01); no separate integration run. r=1's method only is superseded; R141-VERIFY verbatim and acceptance criteria are unchanged."
+}
