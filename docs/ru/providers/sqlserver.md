@@ -8,8 +8,12 @@
 
 [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) (`src/nextorm.sqlserver/SqlServerDataContext.cs`) оборачивает `Microsoft.Data.SqlClient`. Он
 создаёт `SqlConnection`, передаёт значения параметров null как `DBNull` (иначе SqlClient не отправляет значение
-вообще), и переопределяет `MapColumnExpression`, чтобы читать числовые столбцы через `Convert.ChangeType`, потому что
-типизированные геттеры SqlClient строги к расширению.
+вообще), и переопределяет `MapColumnExpression`, чтобы читать числовые столбцы без боксинга: типизированные
+геттеры SqlClient строги к расширению, а storage-тип столбца известен только после открытия reader'а, поэтому
+маппер в рантайме разрешает `IDataRecord.GetFieldType` и читает соответствующим storage-типизированным
+геттером, конвертируя типизированным `Convert.To<T>` (маппинг `GetNumericGetter`/`GetTypedConversion`,
+общий с терминалом CSV). Только storage-тип вне закрытого числового набора откатывается к
+`GetValue`/`Convert.ChangeType`.
 
 [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) (`src/nextorm.sqlserver/SqlServerDialect.cs`) — это диалект:
 

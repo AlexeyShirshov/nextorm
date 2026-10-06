@@ -27,4 +27,14 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!--
+    #168 acceptance gate (D4): the acceptance benchmark is only compiled when the harness sets
+    -p:AcceptanceBenchmark=true and injects acceptance/AcceptanceHarness.targets via
+    -p:CustomAfterMicrosoftCommonTargets. Keeping it out of the normal build stops the gate from
+    running under `dotnet build nextorm.slnx` / the other benchmark suites.
+  -->
+  <ItemGroup>
+    <Compile Remove="acceptance/**/*.cs" />
+  </ItemGroup>
 </Project>

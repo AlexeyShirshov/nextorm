@@ -34,9 +34,10 @@
   колонки SQL Server. Терминал читает их через провайдерный хук `MapTypedColumnExpression`
   (`protected virtual` на `DataContext`, переопределён в `SqlServerDataContext`):
   storage-типизированный getter (`GetFieldType(ordinal)`) + типизированный `Convert.To<T>(storage)`,
-  без `object`/`IDataRecord.GetValue`/`Convert.ChangeType(object)`. Общий буферизованный
-  `MapColumnExpression` (по-прежнему боксит числовые SQL Server) не изменён и остаётся вне
-  области #112 (см. (c)).
+  без `object`/`IDataRecord.GetValue`/`Convert.ChangeType(object)`. В #168 общий буферизованный
+  `MapColumnExpression` переведён на ту же storage-типизированную диспетчеризацию (`GetFieldType`
+  в рантайме, общий с CSV хук `GetNumericGetter`/`GetTypedConversion`) и больше не боксит числовые
+  SQL Server; CSV-хук и общий путь теперь делят один маппинг (см. (c)).
 - Неизвестный или неконвертируемый storage-тип числовой колонки SQL Server бросает
   `NotSupportedException` **до записи заголовка** и любой строки данных.
 - Публичное поведение и ограничения: `docs/guide/28-streaming-data.md` + `docs/ru/guide/28-streaming-data.md`,
@@ -72,11 +73,14 @@
 - Триггер: экспорт строк с крупными BLOB; срез «chunked LOB streaming» — писать бинарное
   поле чанками из `SequentialAccess`-reader'а, не материализуя его целиком.
 
-### (c) Общая буферизованная материализация (не CSV) — вне области #112
+### (c) Общая буферизованная материализация (не CSV) — закрыто в #168
 
-Общий путь буферизованной материализации по-прежнему боксит числовые значения SQL Server
-через `MapColumnExpression`; CSV-путь больше его не использует (у терминала отдельный хук
-`MapTypedColumnExpression`, см. §1). Менять общий путь — отдельная работа, не срез #112.
+Общий путь буферизованной материализации больше не боксит числовые значения SQL Server:
+`SqlServerDataContext.MapColumnExpression` в #168 перешёл на рантайм-диспетчеризацию по
+`GetFieldType` и storage-типизированные геттеры, разделив `GetNumericGetter`/`GetTypedConversion`
+с CSV-хуком `MapTypedColumnExpression` (§1). Бокинг-фолбэк `GetValue`/`Convert.ChangeType`
+остался только для storage-типа вне закрытого числового набора. Нулевой бокинг и отсутствие
+регрессии по времени подтверждены paired-бенчмарком (`BenchmarkCategory("acceptance")`).
 
 ## 3. Источники
 

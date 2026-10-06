@@ -18,7 +18,12 @@ public class SqlServerDataContext : DataContext
 {
     private static readonly MethodInfo GetValueMethod = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+    private static readonly MethodInfo GetFieldTypeMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetFieldType))!;
     private static readonly MethodInfo ChangeTypeMethod = typeof(Convert).GetMethod(nameof(Convert.ChangeType), [typeof(object), typeof(Type)])!;
+    private static readonly Type[] NumericFieldTypes =
+    [
+        typeof(byte), typeof(short), typeof(int), typeof(long), typeof(float), typeof(double), typeof(decimal),
+    ];
     private static readonly MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
     private static readonly MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
     private static readonly MethodInfo GetInt32MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt32))!;
@@ -384,12 +389,11 @@ public class SqlServerDataContext : DataContext
             return base.MapColumnExpression(column, param);
 
         // SqlClient typed getters are strict: reading an int column through GetInt64 throws, and a
-        // computed numeric expression can be wider than the projected CLR type. Read the value and
-        // convert it instead of relying on the reader getter to widen the type.
+        // computed numeric expression can be wider than the projected CLR type. The storage type is only
+        // known once the reader is open, so dispatch on the runtime field type and read with the typed
+        // getter that matches it, converting with the matching typed Convert overload (no per-row box).
         var index = Expression.Constant(column.Index);
-        var value = Expression.Convert(
-            Expression.Call(ChangeTypeMethod, Expression.Call(param, GetValueMethod, index), Expression.Constant(type)),
-            column.PropertyType);
+        var value = BuildNumericValue(param, index, type, column.PropertyType);
 
         if (column.Nullable)
         {
@@ -413,11 +417,75 @@ public class SqlServerDataContext : DataContext
     }
 
     /// <summary>
+    /// Builds the numeric read for the buffered mapper. The mapper is compiled before the reader is
+    /// open, so the column's storage type is unknown; the accessor reads <see cref="IDataRecord.GetFieldType"/>
+    /// once per row and selects the typed getter for that storage type, converting with the matching
+    /// typed <c>Convert.To&lt;Target&gt;(storage)</c> overload (shared with the CSV typed hook via
+    /// <see cref="GetNumericGetter"/> and <see cref="GetTypedConversion"/>). This keeps the per-row path
+    /// free of the <c>GetValue</c>/<c>Convert.ChangeType</c> box. A storage type outside the closed
+    /// numeric set falls back to the legacy boxing path so an exotic computed projection still reads.
+    /// </summary>
+    /// <param name="record">The data-reader expression the accessor is built from.</param>
+    /// <param name="index">The constant column ordinal.</param>
+    /// <param name="target">The projection's non-nullable CLR numeric type.</param>
+    /// <param name="propertyType">The projection's declared type (the nullable wrapper when present).</param>
+    /// <returns>An expression that reads the column without boxing a supported numeric storage type.</returns>
+    private static Expression BuildNumericValue(Expression record, Expression index, Type target, Type propertyType)
+    {
+        var fieldType = Expression.Variable(typeof(Type), "fieldType");
+        var assign = Expression.Assign(fieldType, Expression.Call(record, GetFieldTypeMI, index));
+
+        Expression result = BuildBoxingFallback(record, index, target, propertyType);
+
+        for (var i = NumericFieldTypes.Length - 1; i >= 0; i--)
+        {
+            var storage = NumericFieldTypes[i];
+            var storageGetter = GetNumericGetter(storage)!;
+            Expression read;
+            if (storage == target)
+            {
+                read = Expression.Call(record, storageGetter, index);
+            }
+            else
+            {
+                // Every closed numeric source/destination pair has a typed Convert overload (7x7).
+                var conversion = GetTypedConversion(target, storage)!;
+                read = Expression.Call(conversion, Expression.Call(record, storageGetter, index));
+            }
+
+            if (read.Type != propertyType)
+                read = Expression.Convert(read, propertyType);
+
+            result = Expression.Condition(
+                Expression.ReferenceEqual(fieldType, Expression.Constant(storage, typeof(Type))),
+                read,
+                result);
+        }
+
+        return Expression.Block([fieldType], assign, result);
+    }
+
+    /// <summary>
+    /// The legacy object-based numeric read (<c>Convert.ChangeType(GetValue(index), target)</c>), kept as
+    /// the fallback arm of the runtime field-type dispatch so a storage type outside the closed numeric
+    /// set still materializes exactly as before.
+    /// </summary>
+    /// <param name="record">The data-reader expression the accessor is built from.</param>
+    /// <param name="index">The constant column ordinal.</param>
+    /// <param name="target">The projection's non-nullable CLR numeric type.</param>
+    /// <param name="propertyType">The projection's declared type (the nullable wrapper when present).</param>
+    /// <returns>An expression that reads the boxed value and converts it with <see cref="Convert.ChangeType(object, Type)"/>.</returns>
+    private static Expression BuildBoxingFallback(Expression record, Expression index, Type target, Type propertyType)
+        => Expression.Convert(
+            Expression.Call(ChangeTypeMethod, Expression.Call(record, GetValueMethod, index), Expression.Constant(target)),
+            propertyType);
+
+    /// <summary>
     /// CSV-terminal variant of <see cref="MapColumnExpression"/>: for an unconverted numeric column it
     /// reads the value with the typed getter of the reader's actual storage type (<paramref name="storageType"/>)
-    /// and converts it with the matching static <c>Convert.To&lt;Target&gt;(storage)</c> overload. That
-    /// keeps the per-row path free of <see cref="IDataRecord.GetValue"/> boxing while the shared buffered
-    /// mapper (<see cref="MapColumnExpression"/>) stays on its object-based widening.
+    /// and converts it with the matching static <c>Convert.To&lt;Target&gt;(storage)</c> overload. It shares
+    /// the getter/conversion lookup with the buffered mapper (<see cref="MapColumnExpression"/>), which
+    /// resolves the same pairing from the runtime <see cref="IDataRecord.GetFieldType"/>.
     /// </summary>
     /// <param name="column">The projected column being read.</param>
     /// <param name="record">The data-reader expression the accessor is built from.</param>

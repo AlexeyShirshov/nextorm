@@ -8,8 +8,12 @@
 
 [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) (`src/nextorm.sqlserver/SqlServerDataContext.cs`) wraps `Microsoft.Data.SqlClient`. It
 creates a `SqlConnection`, passes null parameter values as `DBNull` (SqlClient otherwise sends no value at
-all), and overrides `MapColumnExpression` to read numeric columns through `Convert.ChangeType` because
-SqlClient's typed getters are strict about widening.
+all), and overrides `MapColumnExpression` to read numeric columns without boxing: because SqlClient's
+typed getters are strict about widening and the column's storage type is known only once the reader is
+open, the mapper resolves `IDataRecord.GetFieldType` at runtime and reads with the matching
+storage-typed getter, converting with a typed `Convert.To<T>` (the `GetNumericGetter`/`GetTypedConversion`
+mapping shared with the CSV terminal). Only a storage type outside the closed numeric set falls back to
+`GetValue`/`Convert.ChangeType`.
 
 [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) (`src/nextorm.sqlserver/SqlServerDialect.cs`) is the dialect:
 
