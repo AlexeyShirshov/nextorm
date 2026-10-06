@@ -1,0 +1,2 @@
+https://github.com/AlexeyShirshov/nextorm/issues/197
+{"labels":["enhancement"],"milestone":"1.0.9-rc1","number":197,"state":"OPEN","title":"PostgreSQL: чтение JsonNode из нативных json/jsonb-колонок","url":"https://github.com/AlexeyShirshov/nextorm/issues/197"}

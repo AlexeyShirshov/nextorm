@@ -1,0 +1,75 @@
+=== date/utc ===
+Mon Oct  5 23:52:47 UTC 2026
+=== HEAD sha ===
+6bf362958ee4336e83a2a7550e49038184ff1caf
+=== branch ===
+1.0.9-rc1
+=== git status --short ===
+ M docs/specs/status/collection-1.0.9-rc1.md
+?? artifacts/
+?? docs/specs/status/rc1-168-mssql-boxing-1.md
+=== git status ===
+On branch 1.0.9-rc1
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   docs/specs/status/collection-1.0.9-rc1.md
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	artifacts/
+	docs/specs/status/rc1-168-mssql-boxing-1.md
+
+no changes added to commit (use "git add" and/or "git commit -a")
+=== dotnet --info ===
+.NET SDK:
+ Version:           10.0.401
+ Commit:            e34a38d2ae
+ Workload version:  10.0.400-manifests.63b36e85
+ MSBuild version:   18.9.11+e34a38d2a
+
+Runtime Environment:
+ OS Name:     ubuntu
+ OS Version:  22.04
+ OS Platform: Linux
+ RID:         linux-x64
+ Base Path:   /home/alex/.dotnet/sdk/10.0.401/
+
+.NET workloads installed:
+There are no installed workloads to display.
+Configured to use workload sets when installing new manifests.
+No workload sets are installed. Run "dotnet workload restore" to install a workload set.
+
+Host:
+  Version:      10.0.12
+  Architecture: x64
+  Commit:       95017c711e
+
+.NET SDKs installed:
+  10.0.401 [/home/alex/.dotnet/sdk]
+
+.NET runtimes installed:
+  Microsoft.AspNetCore.App 10.0.12 [/home/alex/.dotnet/shared/Microsoft.AspNetCore.App]
+  Microsoft.NETCore.App 10.0.12 [/home/alex/.dotnet/shared/Microsoft.NETCore.App]
+
+Other architectures found:
+  None
+
+Environment variables:
+  DOTNET_CLI_TELEMETRY_OPTOUT              [1]
+  DOTNET_ROOT                              [/home/alex/.dotnet]
+
+global.json file:
+  /home/alex/sources/nextorm/global.json
+
+Learn more:
+  https://aka.ms/dotnet/info
+
+Download .NET:
+  https://aka.ms/dotnet/download
+=== machine ===
+Linux alex-asus 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+8
+               total        used        free      shared  buff/cache   available
+Mem:            11Gi       5.9Gi       3.6Gi       185Mi       2.2Gi       5.4Gi
+Swap:          4.0Gi       2.0Gi       2.0Gi

@@ -1,0 +1,34 @@
+ M docs/advanced/limitations.md
+ M docs/guide/provider-specific/sqlite.md
+ M docs/providers/overview.md
+ M docs/providers/sqlite.md
+ M docs/ru/advanced/limitations.md
+ M docs/ru/guide/provider-specific/sqlite.md
+ M docs/ru/providers/overview.md
+ M docs/ru/providers/sqlite.md
+ M docs/specs/comparison/capability-matrix.md
+ M docs/specs/comparison/evidence-01-provider-specific-features.md
+ M docs/specs/comparison/linq2db-comparison.md
+ M docs/specs/comparison/provider-feature-comparison.md
+ M docs/specs/status/collection-1.0.9-rc1.md
+ M src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
+ M src/nextorm.core/DataContext/Dialect/ISqlDialect.cs
+ M src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs
+ M src/nextorm.core/DataContext/InMemoryScalarFunctionRewriter.cs
+ M src/nextorm.core/DataContext/SqlSourceRenderer.cs
+ M src/nextorm.core/Query/SqlFunctions.Sqlite.cs
+ M src/nextorm.core/Visitors/BaseExpressionVisitor.cs
+ M src/nextorm.core/Visitors/SqliteFunctionTranslator.cs
+ M src/nextorm.sqlite/SqliteDialect.cs
+ M src/nextorm.sqlite/SqliteFunctionRenderer.cs
+ M tests/nextorm.core.tests/InMemorySqliteFunctionsTests.cs
+ M tests/nextorm.integration.tests/SqliteSpecificTests.cs
+ M tests/nextorm.postgres.tests/SqliteFunctionsRejectionTests.cs
+ M tests/nextorm.sqlite.tests/SqlGenerationTests.cs
+ M tests/nextorm.sqlite.tests/SqliteFunctionsSqlGenerationTests.cs
+?? artifacts/
+?? docs/specs/status/rc1-181-sqlite-fts-1.md
+?? tests/nextorm.clickhouse.tests/SqliteFunctionsRejectionTests.cs
+?? tests/nextorm.mariadb.tests/SqliteFunctionsRejectionTests.cs
+?? tests/nextorm.mysql.tests/SqliteFunctionsRejectionTests.cs
+?? tests/nextorm.sqlserver.tests/SqliteFunctionsRejectionTests.cs

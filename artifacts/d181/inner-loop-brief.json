@@ -1,0 +1,26 @@
+{
+  "unit": "D181-D3/D4 SQLite FTS3/FTS4/FTS5 test stream",
+  "scope": {
+    "projects": [
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.core.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~Fts",
+      "FullyQualifiedName~FullText",
+      "FullyQualifiedName~Issue181"
+    ],
+    "files": [
+      "tests/nextorm.sqlite.tests/SqliteFunctionsSqlGenerationTests.cs",
+      "tests/nextorm.sqlite.tests/SqlGenerationTests.cs",
+      "tests/nextorm.sqlite.tests/SqliteSpecificTests.cs",
+      "tests/nextorm.core.tests/InMemorySqliteFunctionsTests.cs",
+      "tests/nextorm.postgres.tests/SqliteFunctionsRejectionTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "after tests compile: full sqlite/core/postgres projects + integration nextorm.integration.tests SqliteSpecificTests (no container needed for SQLite)",
+    "rationale": "FTS tests are confined to SQLite SQL-gen/execution + core in-memory + postgres rejection; SQLite real execution needs no container."
+  }
+}

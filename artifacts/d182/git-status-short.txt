@@ -1,0 +1,28 @@
+ M docs/guide/provider-specific/sqlserver.md
+ M docs/providers/sqlserver.md
+ M docs/ru/guide/provider-specific/sqlserver.md
+ M docs/ru/providers/sqlserver.md
+ M docs/ru/scalar-functions/03-date-and-time.md
+ M docs/ru/scalar-functions/04-conditionals-and-conversion.md
+ M docs/scalar-functions/03-date-and-time.md
+ M docs/scalar-functions/04-conditionals-and-conversion.md
+ M docs/specs/comparison/capability-matrix.md
+ M docs/specs/comparison/provider-feature-comparison.md
+ M docs/specs/roadmap/sql-capabilities-gap-analysis.md
+ M docs/specs/roadmap/sql-function-coverage-gap.md
+ M docs/specs/status/collection-1.0.9-rc1.md
+ M src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
+ M src/nextorm.core/Query/SqlFunctions.SqlServer.cs
+ M src/nextorm.core/Visitors/ArgumentFlattener.cs
+ M src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs
+ M src/nextorm.sqlserver/SqlServerDialect.cs
+ M tests/nextorm.core.tests/InMemoryScalarFunctionsTests.cs
+ M tests/nextorm.integration.tests/SqlServerSpecificTests.cs
+ M tests/nextorm.sqlite.tests/SqlServerFunctionsSqlGenerationTests.cs
+ M tests/nextorm.sqlserver.tests/SqlServerFunctionsSqlGenerationTests.cs
+?? artifacts/
+?? docs/specs/status/rc1-182-mssql-scalars-1.md
+?? tests/nextorm.clickhouse.tests/SqlServerFunctionsRejectionTests.cs
+?? tests/nextorm.mariadb.tests/SqlServerFunctionsRejectionTests.cs
+?? tests/nextorm.mysql.tests/SqlServerFunctionsRejectionTests.cs
+?? tests/nextorm.postgres.tests/SqlServerFunctionsRejectionTests.cs

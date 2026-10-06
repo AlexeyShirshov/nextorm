@@ -1,0 +1,1 @@
+postgres exit=0

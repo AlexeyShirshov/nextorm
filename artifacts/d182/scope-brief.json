@@ -1,0 +1,27 @@
+{
+  "unit": "D182.2-D182.4 date/binary/other SQL Server scalars",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.clickhouse.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~SqlServerFunctions",
+      "FullyQualifiedName~SqlServerScalar"
+    ],
+    "files": [
+      "src/nextorm.core/Query/SqlFunctions.SqlServer.cs",
+      "src/nextorm.sqlserver/SqlServerDialect.cs",
+      "src/nextorm.core/Visitors/SqlServerScalarFunctionTranslator.cs",
+      "src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "after tests compile: full core + sqlserver + rejection projects",
+    "rationale": "SQL Server function declarations/renderer/translator are confined to these files; unit+SQL-gen projects exercise changed branches without containers."
+  }
+}
