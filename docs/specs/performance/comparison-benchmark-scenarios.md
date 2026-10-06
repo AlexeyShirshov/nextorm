@@ -66,7 +66,12 @@ Branch: `1.0.9-b`.
 - Нулевая: `Nextorm_ToDataReader`, `Dapper_ExecuteReader`, `Linq2Db_ExecuteReader` — EF Core исключён (нет LINQ-raw-reader).
 - Все армы сводят колонки в **идентичный** sink (`long`-аккумулятор, `Consumer`), иначе dead-code elimination.
 - Headline-метрики: `Allocated` / `Gen0` / `Gen2` (суть — исчезновение per-row heap-объекта), время вторично.
-- На SQLite `ToDataReader` доступен только после #189; до этого класс либо отсутствует, либо помечается `[Benchmark(Description=...)]`-пометкой «после #189» (решается при реализации).
+- На SQLite `ToDataReader` доступен после #189 (D134, реализован 2026-10-06). Приёмка выбрана как
+  acceptance-набор `--anyCategories=acceptance` (7 зафиксированных кейсов, не трогаются); baseline
+  прогнан **до** правок кода: exit 0, 7/7 кейсов, global 48.08 s
+  (`/tmp/D134-evidence/baseline-acceptance.log`). Сравнительный zero-arm прогон `Nextorm_ToDataReader`
+  против `Dapper_ExecuteReader`/`Linq2Db_ExecuteReader` на `large_table` **не выполнялся** в этой
+  правке (остаётся item 10, #188) — чисел по нему не приводим, пока он не исполнен.
 
 ### 4.5 JSON/CSV cross-library
 
@@ -112,7 +117,7 @@ Branch: `1.0.9-b`.
 - `GroupBy`-трансляция `id % K` может отличаться по поддержке/плану между библиотеками — при реализации выбрать портируемую форму.
 - Zero-arm без идентичного sink даёт недостоверный результат (dead-code elimination) — sink обязателен.
 - Смешение reuse-стратегий искажает сравнение — строго держать Category A/B.
-- `ToDataReader` на SQLite после #189 может дать неожиданный allocation-профиль из-за non-sequential чтения BLOB — не использовать LOB в streaming-сценарии.
+- `ToDataReader` на SQLite после #189 (буферизованное, non-sequential чтение BLOB) может дать неожиданный allocation-профиль — не использовать LOB в streaming-сценарии (только не-LOB проекции).
 
 ## 11. Ссылки
 

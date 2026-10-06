@@ -133,18 +133,18 @@ unlock, so use the buffered `byte[]`/`string` projection there instead.
 
 Streaming is implemented for **PostgreSQL, SQL Server and SQLite** in this release. The streaming terminal is opt-in: the ordinary buffered `byte[]`/`string` projection keeps working on every provider, and DML of a LOB is out of scope. MySQL/MariaDB and ClickHouse reject the terminal with a `NotSupportedException` whose message names the provider, because their drivers do not offer memory-bounded LOB reads (they buffer the whole value; `SequentialAccess` does not change the allocations, and ClickHouse's `GetStream` is not implemented), so [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess) is deliberately `false` for them — the buffered projection is the supported path. The in-memory provider supports the scalar terminals as well, but with no `DbDataReader` to stream from it returns a plain BCL object over the materialized value — see [In-memory](#in-memory).
 
-The multi-column [`ToDataReader`](#multiple-columns-todatareader) terminal is available on PostgreSQL and SQL Server. SQLite rejects it because its streaming projection always carries the `rowid` locator; MySQL/MariaDB and ClickHouse reject it because they have no sequential-access support; the in-memory provider rejects it because it has no `DbDataReader` at all:
+The multi-column [`ToDataReader`](#multiple-columns-todatareader) terminal is available on PostgreSQL, SQL Server and SQLite. PostgreSQL and SQL Server hand the sequential-access command over; SQLite returns a **buffered, locator-free** reader (the query is not opened with `SequentialAccess` and no `rowid` is appended, so `FieldCount` equals the projection column count and the ordinals match `Select`). MySQL/MariaDB and ClickHouse reject it because they have no sequential-access support; the in-memory provider rejects it because it has no `DbDataReader` at all:
 
 | Provider | `ToDataReader` / `ToDataReaderAsync` |
 |---|---|
-| PostgreSQL | supported |
-| SQL Server | supported |
-| SQLite | `NotSupportedException` (rowid locator) |
+| PostgreSQL | supported (sequential-access) |
+| SQL Server | supported (sequential-access) |
+| SQLite | supported (buffered, locator-free; no chunked LOB) |
 | MySQL / MariaDB | `NotSupportedException` |
 | ClickHouse | `NotSupportedException` |
 | In-memory | `NotSupportedException` |
 
-SQLite has no row locator of its own, so `Microsoft.Data.Sqlite` returns a true streaming `SqliteBlob` only when the query also selects `rowid`. The dialect appends its own trailing locator column — [`ISqlDialect.LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn), `"rowid"` on SQLite and `null` on PostgreSQL/SQL Server — so the payload stays at ordinal `0` and is not part of the user projection. The query source must therefore be a normal rowid table: on a `view` or a `WITHOUT ROWID` table the command fails closed with the raw `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — there is no buffered fallback.
+On the **single-column streaming** terminals and named-column row streaming, SQLite has no row locator of its own, so `Microsoft.Data.Sqlite` returns a true streaming `SqliteBlob` only when the query also selects `rowid`. The dialect appends its own trailing locator column — [`ISqlDialect.LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn), `"rowid"` on SQLite and `null` on PostgreSQL/SQL Server — so the payload stays at ordinal `0` and is not part of the user projection. The query source must therefore be a normal rowid table: on a `view` or a `WITHOUT ROWID` table the single-column streaming command fails closed with the raw `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — there is no buffered fallback on that path. The multi-column `ToDataReader` does **not** use it: it prepares a locator-free buffered command (no `SequentialAccess`, no `rowid`), so it is not tied to a rowid-bearing source.
 
 ### In-memory
 
@@ -164,7 +164,7 @@ The terminal reads column ordinal `0` and requires **exactly one** column: zero 
 
 ## Multiple columns: `ToDataReader`
 
-When the projection has more than one column, or you need every row without materialising the result, use the `ToDataReader`/`ToDataReaderAsync` terminals. They return a caller-owned [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) over the same sequential-access command:
+When the projection has more than one column, or you need every row without materialising the result, use the `ToDataReader`/`ToDataReaderAsync` terminals. They return a caller-owned [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) over the provider's command — a sequential-access command on PostgreSQL/SQL Server, a buffered locator-free command on SQLite:
 
 ```csharp
 public static DbDataReader ToDataReader<TResult>(this QueryCommand<TResult> command, params ReadOnlySpan<object?> parameters);
@@ -189,11 +189,12 @@ while (reader.Read())
 
 The terminal does **not** apply the single-column guard: it hands the provider reader over as-is, so the [streaming projection contract](#ownership-and-disposal) still applies:
 
-* **Forward-only, sequential access.** Read columns in ascending ordinal order and do not read a column twice; a LOB column must be read before any later column.
+* **Forward-only, sequential access (PostgreSQL, SQL Server).** Read columns in ascending ordinal order and do not read a column twice; a LOB column must be read before any later column. On SQLite the reader is **buffered** instead: it is not opened with `SequentialAccess`, ordinals may be read in any order, and `FieldCount` equals the projection column count (no appended `rowid` locator). The reader is forward-only on every provider.
+* **SQLite is buffered, not chunked.** A `byte[]`/`string` column in a multi-column SQLite projection is read whole into managed memory (`Select(x => new { x.Id, x.Body })` round-trips `Body` via `GetString`/`GetValue`); there is no `SqliteBlob` chunking and therefore no O(buffer) benefit for that column. For a single large column on SQLite use `ToStream`/`ToTextReader`, which do stream.
 * **Ownership.** The returned reader owns the underlying `DbDataReader` and the per-call `DbCommand`; dispose it (`await using` on the async path) to release both. The context stays alive and usable.
 * **Cancellation.** The token cancels opening the reader; it is also linked into `Read`/`ReadAsync` and `NextResult`/`NextResultAsync`.
 
-`ToDataReader` is **not supported on SQLite** because the SQLite streaming projection always appends the `rowid` locator, so the terminal would expose a column the caller never projected; it fails closed with `NotSupportedException`. Use `ToStream`/`ToTextReader` for a single LOB column on SQLite. MySQL/MariaDB and ClickHouse reject the terminal because they have no sequential-access support, and the in-memory provider rejects it because it has no `DbDataReader`.
+`ToDataReader` is supported on SQLite for non-LOB projections and, with the buffered caveat above, for a LOB column inside a multi-column projection. MySQL/MariaDB and ClickHouse reject the terminal because they have no sequential-access support, and the in-memory provider rejects it because it has no `DbDataReader`.
 
 ## `SequentialAccess` and the plan cache
 

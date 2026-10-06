@@ -298,10 +298,12 @@ public static class QueryCommandExtensions
     /// <returns>A reader that owns the provider reader and the per-call command until it is disposed.</returns>
     /// <remarks>
     /// The caller owns the returned reader and must dispose it, which releases the provider reader and the
-    /// per-call command; the context and its connection stay open. The reader is forward-only and uses
-    /// sequential access: read columns in ascending ordinal order and do not read a column twice. Not
-    /// supported on SQLite (its <c>rowid</c> locator would be appended to the projection) and on providers
-    /// without sequential access, such as MySQL/MariaDB, ClickHouse and the in-memory provider.
+    /// per-call command; the context and its connection stay open. On PostgreSQL and SQL Server the reader
+    /// uses sequential access: read columns in ascending ordinal order and do not read a column twice. On
+    /// SQLite the projection is locator-free and buffered (non-sequential): <c>FieldCount</c> equals the
+    /// projection column count and a large BLOB is read whole rather than chunked. The terminal fails
+    /// closed on providers without sequential access (MySQL/MariaDB, ClickHouse) and on the in-memory
+    /// provider, which has no <see cref="DbDataReader"/>.
     /// </remarks>
     public static DbDataReader ToDataReader<TResult>(this QueryCommand<TResult> command, params ReadOnlySpan<object?> parameters)
         => ToDataReader(command, CancellationToken.None, parameters);
@@ -314,10 +316,12 @@ public static class QueryCommandExtensions
     /// <returns>A reader that owns the provider reader and the per-call command until it is disposed.</returns>
     /// <remarks>
     /// The caller owns the returned reader and must dispose it, which releases the provider reader and the
-    /// per-call command; the context and its connection stay open. The reader is forward-only and uses
-    /// sequential access: read columns in ascending ordinal order and do not read a column twice. Not
-    /// supported on SQLite (its <c>rowid</c> locator would be appended to the projection) and on providers
-    /// without sequential access, such as MySQL/MariaDB, ClickHouse and the in-memory provider.
+    /// per-call command; the context and its connection stay open. On PostgreSQL and SQL Server the reader
+    /// uses sequential access: read columns in ascending ordinal order and do not read a column twice. On
+    /// SQLite the projection is locator-free and buffered (non-sequential): <c>FieldCount</c> equals the
+    /// projection column count and a large BLOB is read whole rather than chunked. The terminal fails
+    /// closed on providers without sequential access (MySQL/MariaDB, ClickHouse) and on the in-memory
+    /// provider, which has no <see cref="DbDataReader"/>.
     /// </remarks>
     public static DbDataReader ToDataReader<TResult>(this QueryCommand<TResult> command, CancellationToken cancellationToken, params ReadOnlySpan<object?> parameters)
     {
@@ -327,7 +331,9 @@ public static class QueryCommandExtensions
         var context = RequireRelationalContext(command);
         EnsureDataReaderSupported(context);
 
-        var owner = context.OpenLobReader(command, parameters, cancellationToken);
+        var owner = context.Dialect.LobLocatorColumn is not null
+            ? context.OpenResultReader(command, parameters, cancellationToken, DataReaderTerminalName)
+            : context.OpenLobReader(command, parameters, cancellationToken, DataReaderTerminalName);
         try
         {
             return new LobDataReader(owner, cancellationToken);
@@ -346,10 +352,12 @@ public static class QueryCommandExtensions
     /// <returns>A task producing a reader that owns the provider reader and the per-call command until it is disposed.</returns>
     /// <remarks>
     /// The caller owns the returned reader and must dispose it, which releases the provider reader and the
-    /// per-call command; the context and its connection stay open. The reader is forward-only and uses
-    /// sequential access: read columns in ascending ordinal order and do not read a column twice. Not
-    /// supported on SQLite (its <c>rowid</c> locator would be appended to the projection) and on providers
-    /// without sequential access, such as MySQL/MariaDB, ClickHouse and the in-memory provider.
+    /// per-call command; the context and its connection stay open. On PostgreSQL and SQL Server the reader
+    /// uses sequential access: read columns in ascending ordinal order and do not read a column twice. On
+    /// SQLite the projection is locator-free and buffered (non-sequential): <c>FieldCount</c> equals the
+    /// projection column count and a large BLOB is read whole rather than chunked. The terminal fails
+    /// closed on providers without sequential access (MySQL/MariaDB, ClickHouse) and on the in-memory
+    /// provider, which has no <see cref="DbDataReader"/>.
     /// </remarks>
     public static Task<DbDataReader> ToDataReaderAsync<TResult>(this QueryCommand<TResult> command, params object?[] parameters)
         => ToDataReaderAsync(command, CancellationToken.None, parameters);
@@ -362,10 +370,12 @@ public static class QueryCommandExtensions
     /// <returns>A task producing a reader that owns the provider reader and the per-call command until it is disposed.</returns>
     /// <remarks>
     /// The caller owns the returned reader and must dispose it, which releases the provider reader and the
-    /// per-call command; the context and its connection stay open. The reader is forward-only and uses
-    /// sequential access: read columns in ascending ordinal order and do not read a column twice. Not
-    /// supported on SQLite (its <c>rowid</c> locator would be appended to the projection) and on providers
-    /// without sequential access, such as MySQL/MariaDB, ClickHouse and the in-memory provider.
+    /// per-call command; the context and its connection stay open. On PostgreSQL and SQL Server the reader
+    /// uses sequential access: read columns in ascending ordinal order and do not read a column twice. On
+    /// SQLite the projection is locator-free and buffered (non-sequential): <c>FieldCount</c> equals the
+    /// projection column count and a large BLOB is read whole rather than chunked. The terminal fails
+    /// closed on providers without sequential access (MySQL/MariaDB, ClickHouse) and on the in-memory
+    /// provider, which has no <see cref="DbDataReader"/>.
     /// </remarks>
     public static async Task<DbDataReader> ToDataReaderAsync<TResult>(this QueryCommand<TResult> command, CancellationToken cancellationToken, params object?[] parameters)
     {
@@ -375,7 +385,9 @@ public static class QueryCommandExtensions
         var context = RequireRelationalContext(command);
         EnsureDataReaderSupported(context);
 
-        var owner = await context.OpenLobReaderAsync(command, (object[]?)parameters, cancellationToken).ConfigureAwait(false);
+        var owner = context.Dialect.LobLocatorColumn is not null
+            ? await context.OpenResultReaderAsync(command, (object[]?)parameters, cancellationToken, DataReaderTerminalName).ConfigureAwait(false)
+            : await context.OpenLobReaderAsync(command, (object[]?)parameters, cancellationToken, DataReaderTerminalName).ConfigureAwait(false);
         try
         {
             return new LobDataReader(owner, cancellationToken);
@@ -465,8 +477,7 @@ public static class QueryCommandExtensions
         }
     }
 
-    internal const string LobDataReaderLocatorMessage =
-        "ToDataReader is not supported on providers that append a LOB locator column (SQLite); use ToStream/ToTextReader for a single LOB column.";
+    internal const string DataReaderTerminalName = "ToDataReader/ToDataReaderAsync";
 
     private const string LobProjectionMessageLeavingLocatorHint =
         "ToStream/ToTextReader require a projection with exactly one byte[] or string column; read several columns with ToDataReader instead.";
@@ -474,17 +485,14 @@ public static class QueryCommandExtensions
     private const string LobProjectionMessageLocatorDialect =
         "ToStream/ToTextReader require a projection with exactly one byte[] or string column.";
 
-    // The general reader needs the same sequential-access capability as the single-column terminals, but
-    // it cannot expose a dialect locator column, so it is narrower than they are: SQLite (which appends
-    // rowid) and the providers without sequential access both fail closed before opening the reader.
+    // The general reader follows one of two paths: the locator-free result seam on a locator dialect
+    // (SQLite, whose rowid locator would otherwise be appended to the projection) and the sequential LOB
+    // path elsewhere. Providers without sequential access fail closed before opening the reader.
     private static void EnsureDataReaderSupported(DataContext context)
     {
         if (!context.Dialect.SupportsSequentialAccess)
             throw new NotSupportedException(
-                $"ToDataReader is not supported by the {context.Dialect.GetType().Name} provider; it requires sequential-access support (PostgreSQL or SQL Server).");
-
-        if (context.Dialect.LobLocatorColumn is not null)
-            throw new NotSupportedException(LobDataReaderLocatorMessage);
+                $"ToDataReader is not supported by the {context.Dialect.GetType().Name} provider; it requires sequential-access support (PostgreSQL or SQL Server) or SQLite.");
     }
 
     private static string LobProjectionMessage(DataContext context)

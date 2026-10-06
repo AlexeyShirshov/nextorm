@@ -5348,6 +5348,27 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 
 **Итог цикла 5.** P0 — **нет**; P1 по **именам** — **нет**; P2 — **LOB2** (XML-doc in-memory); LOB1 (Шаг 5) — без изменений.
 
+**Цикл 6 (2026-10-06, D134/#134 — SQLite buffered multi-column `ToDataReader`).** Реализован дизайн `issue-189-todatareader-sqlite.md`, вариант A: `ToDataReader`/`ToDataReaderAsync` маршрутизируются по диалекту — locator-диалект (SQLite) → locator-free буферизованный `OpenResultReader`/`PrepareResultCommand` (`storeInCache: false`); не-locator sequential (PostgreSQL/SQL Server) → без изменений `OpenLobReader`; диалекты без sequential access и in-memory остаются fail-closed с именем терминала.
+
+**Публичной дельты нет.** Все четыре сигнатуры терминала и формы их параметров не изменились (sync `params ReadOnlySpan<object?>`, async `params object?[]`, у каждой есть двойник с `CancellationToken`); публичных типов не добавлено и не переименовано — `LobDataReader` остаётся `internal sealed` (переиспользован как generic owner-wrapper; его XML-doc лишь расширен с «LOB/sequential» на owner-владеющий forward-only reader).
+
+| Терминал | Комментарий |
+|---|---|
+| `QueryCommandExtensions.ToDataReader<TResult>(QueryCommand<TResult>, params ReadOnlySpan<object?>)` | Без изменения подписи; на SQLite — буферизованный locator-free reader (`FieldCount` = проекция, ordinals = `Select`, без `rowid`). |
+| `QueryCommandExtensions.ToDataReader<TResult>(QueryCommand<TResult>, CancellationToken, params ReadOnlySpan<object?>)` | Без изменения подписи. |
+| `QueryCommandExtensions.ToDataReaderAsync<TResult>(QueryCommand<TResult>, params object?[])` | Без изменения подписи. |
+| `QueryCommandExtensions.ToDataReaderAsync<TResult>(QueryCommand<TResult>, CancellationToken, params object?[])` | Без изменения подписи. |
+
+**EntityBuilder — N/A (R08).** `EntityBuilder<TEntity>` не предоставляет ни `ToDataReader`, ни `ToStream`/`ToTextReader`; эти терминалы живут на `QueryCommand<TResult>`, который возвращает `EntityBuilder<TEntity>.Select<TResult>(Expression<Func<TEntity,TResult>>)`. Поэтому у стримингового class-row случая нет точки входа на `EntityBuilder` и нет target/flush-семантики для документирования; R08 закрыт самим отсутствием (Roslyn: `members NextORM.Core.EntityBuilder<T>`).
+
+**SQLite caveat.** Reader в SQLite буферизованный, не sequential/чанковый: без `SequentialAccess`, ordinals читаются в любом порядке, колонка `byte[]`/`string` внутри многоколоночной проекции читается целиком. Путь одноколоночных `ToStream`/`ToTextReader` не изменён (потоковый `SqliteBlob`, источник должен раскрывать `rowid`).
+
+**P0 — нет; P1 по именам — нет.** Extend-only изменение поведения на существующих сигнатурах. **LOB1 (P2, Шаг 5) — без изменений:** новых публичных членов и смены подписей нет, поэтому инвентарь заморозки остаётся 8 сигнатур фазы 1 + 4 `ToDataReader`/`ToDataReaderAsync` + `ISqlDialect.SupportsSequentialAccess` + `ISqlDialect.LobLocatorColumn`; посторонние пункты LOB1 не закрываются.
+
+**Проверка (2026-10-06).** `roslyn members NextORM.Core.QueryCommandExtensions` — четыре терминала, подписи без изменений; `roslyn members NextORM.Core.EntityBuilder<TEntity>` — нет `ToDataReader`/`ToStream`/`ToTextReader`; `find -name 'PublicAPI*.txt'` — **0**. Статус цикла: `rc1-tail-134-sqlite-datareader-1.md`. Публичные доки EN+RU обновлены, ссылок на `docs/specs/**` нет.
+
+**Итог цикла 6.** P0 — **нет**; P1 по **именам** — **нет**; LOB1 (Шаг 5) — без изменений.
+
 ## Предрелизный аудит v1.0.8-b (2026-09-27, HEAD `aa5cfa7` + release-prep uncommitted; P0 — нет; P1 по именам/докам — нет; P2 — Шаг 5)
 
 **Вердикт: release-blocking P0/P1 по публичному API нет.** Скоуп — 10 issues милстоуна 1.0.8-b; публичная дельта — LOB-терминалы (#27: `ToStream`/`ToTextReader` + async, `ToDataReader<TResult>` + async, `ISqlDialect.SupportsSequentialAccess`/`LobLocatorColumn`), батч/multi-resultset (#25/#70: `BatchBuilder.AddQuery`/`Execute`/`ToSql`, `BatchResult`), bulk-copy паритет (#92), command timeout (#93), hints (#96), cache controls (#97), `TagQuery` (#98), per-query source override (#99), TVP (#73). Все секции реестра — P0 нет; прежние P1-доки закрыты в своих изменениях и не переоткрываются: **MRG6** (закрыт 23.09.2026), **TR1**/**TR5** (закрыты 23.09.2026), **CHJ1**/**CHCB1**/**CHARR2**/**HOAF2**/**CTAS5**/**BK1** (закрыты ранее).

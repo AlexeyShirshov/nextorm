@@ -779,9 +779,10 @@ public abstract partial class CommonTestSuite
         await act.Should().ThrowAsync<NotSupportedException>();
     }
 
-    // --- Multi-column DbDataReader terminal (issue #27, phase 2). PostgreSQL and SQL Server expose
-    // the reader; SQLite fails closed on its rowid locator and MySQL/MariaDB, ClickHouse and the
-    // in-memory provider have no sequential-access support. ---
+    // --- Multi-column DbDataReader terminal (issue #27, phase 2). PostgreSQL, SQL Server and SQLite
+    // expose the reader; MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access
+    // support. PostgreSQL/SQL Server return a sequential reader; SQLite returns a buffered locator-free
+    // reader, so the shared assertions deliberately avoid chunked/order-dependent LOB reads. ---
 
     private void RequireLobDataReader()
         => Assert.SkipUnless(

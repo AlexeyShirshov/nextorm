@@ -30,7 +30,7 @@ construct.
 | Raw SQL (whole query, composable source, and raw commands with parameters/output parameters/multiple result sets) | yes | yes | yes |
 | Multiple result sets from one batch (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`) | yes (PostgreSQL, SQL Server, MySQL, MariaDB, SQLite) | yes | no |
 | Stored procedures (`ExecuteProcedure`, `CommandType.StoredProcedure`) | yes (SQL Server, PostgreSQL, MySQL/MariaDB) | yes | yes |
-| Result-set streaming (LOB stream, `ToDataReader`) | yes | yes | partial (raw reader) |
+| Result-set streaming (LOB stream, `ToDataReader`) | yes (sequential LOB streaming on PostgreSQL/SQL Server; the SQLite `ToDataReader` is buffered and locator-free; MySQL/MariaDB/ClickHouse and in-memory reject) | yes | partial (raw reader) |
 | Result-set export to a stream (JSON, CSV) | yes | partial (client serialization) | partial (client serialization) |
 
 ## Types and mapping

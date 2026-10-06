@@ -516,32 +516,152 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
     }
 
     /// <summary>
-    /// The multi-column <c>ToDataReader</c> terminal is fail-closed on SQLite: its streaming projection
-    /// always appends a trailing <c>rowid</c> locator, so the terminal would expose a driver column the
-    /// caller never asked for. It is rejected before the reader is opened, and the context stays usable.
+    /// <c>ToDataReader</c> is a supported terminal on SQLite (issue #134): it uses the locator-free,
+    /// buffered result path, so a multi-column projection exposes exactly the projected columns with no
+    /// trailing <c>rowid</c> locator. These positive tests replace the former fail-closed expectations;
+    /// the PostgreSQL/SQL Server sequential contract is unchanged in the shared suite.
     /// </summary>
     [Fact]
-    public void LobDataReader_ToDataReader_ShouldThrowNotSupported()
+    public void LobDataReader_ToDataReader_SingleColumn_ShouldReadEveryRow()
     {
+        using var reader = _sut.SimpleEntity.OrderBy(it => it.Id).Select(it => it.Id).ToDataReader();
+
+        reader.FieldCount.Should().Be(1, "the locator-free path must not append a rowid column");
+        var ids = new List<int>();
+        while (reader.Read())
+            ids.Add(reader.GetInt32(0));
+
+        ids.Should().Equal(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    }
+
+    [Fact]
+    public void LobDataReader_ToDataReader_MultiColumn_ShouldReadEveryRow()
+    {
+        using var reader = _sut.ComplexEntity
+            .OrderBy(it => it.Id)
+            .Select(it => new { it.Id, it.String })
+            .ToDataReader();
+
+        reader.FieldCount.Should().Be(2, "SQLite's ToDataReader must not append a rowid locator");
+        var rows = new List<(long Id, string? Text)>();
+        while (reader.Read())
+            rows.Add((reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+
+        rows.Should().Equal((1L, "dadfasd"), (2L, "xxx"), (3L, null));
+    }
+
+    [Fact]
+    public async Task LobDataReader_ToDataReaderAsync_MultiColumn_ShouldReadEveryRow()
+    {
+        await using var reader = await _sut.ComplexEntity
+            .OrderBy(it => it.Id)
+            .Select(it => new { it.Id, it.String })
+            .ToDataReaderAsync(TestContext.Current.CancellationToken);
+
+        reader.FieldCount.Should().Be(2);
+        var rows = new List<(long Id, string? Text)>();
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            rows.Add((reader.GetInt64(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+
+        rows.Should().Equal((1L, "dadfasd"), (2L, "xxx"), (3L, null));
+    }
+
+    [Fact]
+    public void LobDataReader_ToDataReader_BufferedBlobAndText_ShouldRoundTripNullEmptyNonEmpty()
+    {
+        using var cleanup = SetUpLobReaderProbeTable();
+        using var reader = _sut.DataProvider.From<ILobReaderProbeEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Payload, x.Body })
+            .ToDataReader();
+
+        reader.FieldCount.Should().Be(3);
+        reader.GetName(1).Should().Be("payload");
+        reader.GetName(2).Should().Be("body");
+
+        var rows = new List<(int Id, byte[]? Payload, string? Body)>();
+        while (reader.Read())
+        {
+            var payload = reader.IsDBNull(1) ? null : (byte[])reader.GetValue(1);
+            var body = reader.IsDBNull(2) ? null : reader.GetString(2);
+            rows.Add((reader.GetInt32(0), payload, body));
+        }
+
+        rows.Should().HaveCount(3);
+        rows[0].Id.Should().Be(1);
+        rows[0].Payload.Should().Equal(new byte[] { 0x01, 0x02 });
+        rows[0].Body.Should().Be("hello");
+        rows[1].Payload.Should().BeEmpty("an empty blob must read back as an empty array, not null");
+        rows[1].Body.Should().BeEmpty("an empty string must read back as empty, not null");
+        rows[2].Payload.Should().BeNull();
+        rows[2].Body.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LobDataReader_ToDataReaderAsync_BufferedBlobAndText_ShouldRoundTripNullEmptyNonEmpty()
+    {
+        using var cleanup = SetUpLobReaderProbeTable();
+        await using var reader = await _sut.DataProvider.From<ILobReaderProbeEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Payload, x.Body })
+            .ToDataReaderAsync(TestContext.Current.CancellationToken);
+
+        reader.FieldCount.Should().Be(3);
+        var rows = new List<(int Id, byte[]? Payload, string? Body)>();
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            var payload = reader.IsDBNull(1) ? null : (byte[])reader.GetValue(1);
+            var body = reader.IsDBNull(2) ? null : reader.GetString(2);
+            rows.Add((reader.GetInt32(0), payload, body));
+        }
+
+        rows.Should().HaveCount(3);
+        rows[0].Id.Should().Be(1);
+        rows[0].Payload.Should().Equal(new byte[] { 0x01, 0x02 });
+        rows[0].Body.Should().Be("hello");
+        rows[1].Payload.Should().BeEmpty();
+        rows[1].Body.Should().BeEmpty();
+        rows[2].Payload.Should().BeNull();
+        rows[2].Body.Should().BeNull();
+    }
+
+    [Fact]
+    public void LobDataReader_ToDataReader_CancelledToken_ShouldThrowAndKeepContextUsable()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
         var command = _sut.ComplexEntity.OrderBy(it => it.Id).Select(it => new { it.Id, it.String });
 
-        var act = () => command.ToDataReader();
+        var act = () => command.ToDataReader(cts.Token);
 
-        act.Should().Throw<NotSupportedException>()
-            .WithMessage("ToDataReader is not supported on providers that append a LOB locator column (SQLite); use ToStream/ToTextReader for a single LOB column.");
-
+        act.Should().Throw<OperationCanceledException>();
         _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
     }
 
     [Fact]
-    public async Task LobDataReader_ToDataReaderAsync_ShouldThrowNotSupported()
+    public async Task LobDataReader_ToDataReaderAsync_CancelledToken_ShouldThrowAndKeepContextUsable()
     {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
         var command = _sut.ComplexEntity.OrderBy(it => it.Id).Select(it => new { it.Id, it.String });
 
-        var act = async () => await command.ToDataReaderAsync(TestContext.Current.CancellationToken);
+        var act = async () => await command.ToDataReaderAsync(cts.Token);
 
-        await act.Should().ThrowAsync<NotSupportedException>()
-            .WithMessage("ToDataReader is not supported on providers that append a LOB locator column (SQLite); use ToStream/ToTextReader for a single LOB column.");
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
+    }
+
+    [Fact]
+    public void LobDataReader_ToDataReader_Dispose_ShouldReleaseReaderAndKeepContextUsable()
+    {
+        var reader = _sut.ComplexEntity.OrderBy(it => it.Id).Select(it => new { it.Id, it.String }).ToDataReader();
+
+        reader.Read().Should().BeTrue();
+        reader.Dispose();
+        reader.Dispose();
+
+        var act = () => reader.Read();
+        act.Should().Throw<ObjectDisposedException>();
 
         _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First().Should().Be(1);
     }
@@ -570,9 +690,33 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         return new TeardownAction(() => Execute(ctx, "drop table if exists lob_without_rowid"));
     }
 
+    /// <summary>Seed for the buffered multi-column reader: non-empty, empty and NULL blob/text values.</summary>
+    private IDisposable SetUpLobReaderProbeTable()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists lob_reader_probe");
+        Execute(ctx, "create table lob_reader_probe (id integer primary key, payload blob, body text)");
+        Execute(ctx, "insert into lob_reader_probe (id, payload, body) values (1, x'0102', 'hello')");
+        Execute(ctx, "insert into lob_reader_probe (id, payload, body) values (2, x'', '')");
+        Execute(ctx, "insert into lob_reader_probe (id, payload, body) values (3, null, null)");
+        return new TeardownAction(() => Execute(ctx, "drop table if exists lob_reader_probe"));
+    }
+
     private sealed class TeardownAction(Action action) : IDisposable
     {
         public void Dispose() => action();
+    }
+
+    [SqlTable("lob_reader_probe")]
+    internal interface ILobReaderProbeEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("payload")]
+        byte[]? Payload { get; set; }
+        [Column("body")]
+        string? Body { get; set; }
     }
 
     [SqlTable("lob_view")]

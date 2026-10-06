@@ -405,9 +405,13 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
 
-        DbCommand? command = GetDbCommand(compiledQuery, @params);
+        // GetDbCommand returns the planner-created command, but it opens the connection first: if that
+        // throws, the command has already been minted and still has to be released here. Seeding the
+        // local with the plan's command makes the finally below cover that open-failure path.
+        DbCommand? command = compiledQuery.DbCommand;
         try
         {
+            command = GetDbCommand(compiledQuery, @params);
             var reader = RunReader(command!, compiledQuery.Behavior);
             var owner = new CommandReaderOwner(command, reader);
             command = null;
@@ -429,9 +433,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
 
-        DbCommand? command = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        // See the sync overload: the assignment only happens on success, so the finally still releases
+        // the planner-created command when the connection fails to open.
+        DbCommand? command = compiledQuery.DbCommand;
         try
         {
+            command = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
             var reader = await RunReaderAsync(command!, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
             var owner = new CommandReaderOwner(command, reader);
             command = null;
@@ -457,9 +464,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
 
-        DbCommand? command = GetDbCommand(compiledQuery, @params);
+        // See OpenLobReader: seeding the local with the plan's command lets the finally dispose it when
+        // GetDbCommand throws while opening the connection.
+        DbCommand? command = compiledQuery.DbCommand;
         try
         {
+            command = GetDbCommand(compiledQuery, @params);
             var reader = RunReader(command!, compiledQuery.Behavior);
             var owner = new CommandReaderOwner(command, reader);
             command = null;
@@ -481,9 +491,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
 
-        DbCommand? command = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        // See the sync overload: the assignment only happens on success, so the finally still releases
+        // the planner-created command when the connection fails to open.
+        DbCommand? command = compiledQuery.DbCommand;
         try
         {
+            command = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
             var reader = await RunReaderAsync(command!, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
             var owner = new CommandReaderOwner(command, reader);
             command = null;

@@ -8068,8 +8068,12 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 
 - **Mid-read cancel (P2, контракт отмены).** Токен действует только на открытие ридера; чтение
   возвращённого `Stream`/`TextReader` не отменяется. Триггер: следующая правка LOB-ридера.
-- **SQLite locator-backed multi-column `ToDataReader` (P2, фича).** Нужна отдельная модель скрытия
-  `rowid` + доказательство порядка чтения. Триггер: конкретный пользовательский сценарий.
+- **SQLite locator-backed multi-column `ToDataReader` (P2, фича) — ЗАКРЫТО (D134/#134, 2026-10-06).**
+  Реализован вариант A из `issue-189-todatareader-sqlite.md`: роутинг locator-диалекта на locator-free
+  буферизованный `OpenResultReader`/`PrepareResultCommand` (`storeInCache: false`). Отвергнутая
+  альтернатива B (скрытие `rowid` + доказательство порядка чтения) не реализовывалась и не нужна —
+  `rowid` вообще не добавляется на буферизованном пути. Статус:
+  `docs/specs/status/rc1-tail-134-sqlite-datareader-1.md`; реестр имён — `API-NAMING-REVIEW.md`, цикл 6.
 - **Двойное освобождение inner reader (ℹ️, корректность).** `LobDataReader.Dispose` +
   `CommandReaderOwner.Dispose` — безвредно (идемпотентно по ADO.NET). Триггер: следующая правка владения.
 - **`GetSchemaTable()` не делегируется (ℹ️).** Триггер: первый потребитель schema-метаданных.

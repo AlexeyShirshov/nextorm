@@ -310,7 +310,7 @@ using var reader = ctx.From<Document>()
 
 The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/26-large-objects.md).
 
-PostgreSQL also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite rejects it because its streaming projection always carries the `rowid` locator; MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support.
+PostgreSQL also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite supports it too, but via a buffered, locator-free reader (no `rowid`, no `SequentialAccess`, so no chunked LOB); MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support and reject it.
 
 ## Aliases
 

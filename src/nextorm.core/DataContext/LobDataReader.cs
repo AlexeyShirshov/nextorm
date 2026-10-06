@@ -5,15 +5,17 @@ using System.Data.Common;
 namespace NextORM.Core;
 
 /// <summary>
-/// A forward-only <see cref="DbDataReader"/> over a multi-column LOB projection. It owns the inner
+/// A forward-only <see cref="DbDataReader"/> over a multi-column projection. It owns the inner
 /// provider reader and the <see cref="CommandReaderOwner"/> (the per-call <c>DbCommand</c>);
 /// disposing or closing the reader releases both. The context and its connection are never closed
 /// here, so the caller must keep the context alive until the reader is disposed.
 /// </summary>
 /// <remarks>
-/// The reader exposes the provider's sequential-access ordering: columns must be read in ascending
-/// ordinal order and a LOB column must not be read twice or after a later column. Access is
-/// forward-only; <see cref="Read"/> and <see cref="NextResult"/> advance the reader irreversibly.
+/// The reader is forward-only on every provider. On a sequential-access provider (PostgreSQL,
+/// SQL Server) it exposes the provider's sequential ordering: columns must be read in ascending
+/// ordinal order and a LOB column must not be read twice or after a later column. On the locator-free
+/// SQLite path the reader is buffered and non-sequential, so access order is unrestricted. In both
+/// cases <see cref="Read"/> and <see cref="NextResult"/> advance the reader irreversibly.
 /// </remarks>
 internal sealed class LobDataReader : DbDataReader
 {

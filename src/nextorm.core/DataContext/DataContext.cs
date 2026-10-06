@@ -412,27 +412,34 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return prepared;
     }
 
-    internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenLobReader(prepared, @params);
     }
 
-    internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenLobReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
 
-    private DbPreparedQueryCommand<TResult> PrepareLobCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    private DbPreparedQueryCommand<TResult> PrepareLobCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken, string? terminalName = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
 
         if (!Dialect.SupportsSequentialAccess)
             throw new NotSupportedException(
                 $"Streaming LOB terminals (ToStream/ToTextReader) are not supported by the {Dialect.GetType().Name} provider; they require sequential-access support (PostgreSQL, SQL Server or SQLite).");
+
+        // The streaming LOB path cannot run a lazy temporary-table source for the same reason as the
+        // result seam: the source is a batch (DROP + CREATE TEMPORARY TABLE AS + read) that must share one
+        // session, not a lone SELECT. Only the multi-column reader (ToDataReader) opts into this guard by
+        // naming its terminal; the ToStream/ToTextReader callers keep their previous behavior.
+        if (terminalName is not null && queryCommand.HasTemporaryTableSource())
+            throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
     }
@@ -442,21 +449,23 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // SQLite, whose rowid locator would otherwise be appended). The plan is prepared per call with
     // storeInCache: false and without touching QueryCommand.Cache, so a shared command (for example
     // the context-cached AnyCommand) is never mutated and no plan is promoted into the plan cache.
-    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenResultReader(prepared, @params);
     }
 
-    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
 
-    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    private const string CsvTerminalName = "WriteCsv/WriteCsvAsync";
+
+    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken, string terminalName)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
 
@@ -465,10 +474,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // session, and it is consumed through the batch-aware enumerable/scalar terminals. Preparing the
         // read here would strip the batch and execute a lone SELECT against a table that was never
         // created, surfacing the provider's raw "table does not exist" error. Fail closed instead, before
-        // the CSV terminal writes the header.
+        // the calling terminal writes its header.
         if (queryCommand.HasTemporaryTableSource())
-            throw new NotSupportedException(
-                "The CSV terminal (WriteCsv/WriteCsvAsync) does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be streamed as CSV. Materialise the query first (for example ToList) and write the rows yourself.");
+            throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
             queryCommand,
@@ -478,6 +486,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             streamingRowsRequested: false,
             cancellationToken);
     }
+
+    // The message names the calling terminal so ToDataReader does not surface CSV wording, while the CSV
+    // terminal keeps its exact text.
+    private static string LazyTemporaryTableMessage(string terminalName) => terminalName == CsvTerminalName
+        ? "The CSV terminal (WriteCsv/WriteCsvAsync) does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be streamed as CSV. Materialise the query first (for example ToList) and write the rows yourself."
+        : $"The {terminalName} terminal does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be executed through a single forward-only reader. Materialise the query first (for example ToList) and read the rows from there.";
 
     internal bool IsDisposed => _disposed;
 

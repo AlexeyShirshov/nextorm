@@ -10,8 +10,10 @@ namespace NextORM.Core.Tests;
 /// Coverage for the <c>ToDataReader</c>/<c>ToDataReaderAsync</c> terminals and the internal
 /// <see cref="LobDataReader"/> wrapper. The in-memory provider rejects the terminals (it cannot
 /// stream); the wrapper is exercised over a substituted <see cref="DbDataReader"/> to pin that it
-/// is transparent, that disposal is idempotent, that the opening token still cancels reads, and
-/// that a locator dialect and a provider without sequential access are rejected before execution.
+/// is transparent, that disposal is idempotent, and that the opening token still cancels reads. On
+/// the dialect gate a provider without sequential access is still rejected before execution (even
+/// when it also declares a locator column), while a locator dialect that supports sequential access
+/// passes the gate and routes to the locator-free result reader.
 /// </summary>
 public class LobDataReaderTests
 {
@@ -68,9 +70,10 @@ public class LobDataReaderTests
         await act.Should().ThrowAsync<ObjectDisposedException>();
     }
 
-    // --- Dialect gate: rejected before the provider is touched. The fake context throws
-    // InvalidOperationException from its provider seam, so a NotSupportedException proves the
-    // terminal never reached execution. ---
+    // --- Dialect gate: a dialect without sequential access is rejected before the provider is
+    // touched, even when it also declares a locator column (the non-sequential check wins). The fake
+    // context throws InvalidOperationException from its provider seam, so a NotSupportedException
+    // proves the terminal never reached execution while reaching that seam proves it passed the gate. ---
 
     [Fact]
     public void ToDataReader_WithoutSequentialAccess_ShouldThrowNotSupportedBeforeExecution()
@@ -87,18 +90,69 @@ public class LobDataReaderTests
             command => command.ToDataReaderAsync());
 
     [Fact]
-    public void ToDataReader_WithLocatorDialect_ShouldThrowNotSupportedBeforeExecution()
+    public void ToDataReader_WithoutSequentialAccessWithLocator_ShouldStillThrowNotSupportedBeforeExecution()
         => AssertGate(
+            new TestDialect(sequentialAccess: false, locator: "rowid"),
+            BuildCommand,
+            command => command.ToDataReader());
+
+    [Fact]
+    public async Task ToDataReaderAsync_WithoutSequentialAccessWithLocator_ShouldStillThrowNotSupportedBeforeExecution()
+        => await AssertGateAsync(
+            new TestDialect(sequentialAccess: false, locator: "rowid"),
+            BuildCommand,
+            command => command.ToDataReaderAsync());
+
+    // A locator dialect that supports sequential access is no longer rejected: the terminal routes
+    // around the locator (SQLite uses the locator-free result reader), so it proceeds to the provider
+    // seam. The fake context throws InvalidOperationException there, which proves the dialect gate was
+    // passed; the actual SQLite behaviour is pinned in NextORM.Sqlite.Tests.
+    [Fact]
+    public void ToDataReader_WithLocatorDialect_ShouldNotBeRejectedBeforeExecution()
+        => AssertReachesProvider(
             new TestDialect(sequentialAccess: true, locator: "rowid"),
             BuildCommand,
             command => command.ToDataReader());
 
     [Fact]
-    public async Task ToDataReaderAsync_WithLocatorDialect_ShouldThrowNotSupportedBeforeExecution()
-        => await AssertGateAsync(
+    public async Task ToDataReaderAsync_WithLocatorDialect_ShouldNotBeRejectedBeforeExecution()
+        => await AssertReachesProviderAsync(
             new TestDialect(sequentialAccess: true, locator: "rowid"),
             BuildCommand,
             command => command.ToDataReaderAsync());
+
+    // A non-locator sequential dialect (the PostgreSQL/SQL Server shape) reading a lazy
+    // temporary-table source must fail closed before execution rather than surface a raw provider
+    // error; the guard names the ToDataReader terminal and not CSV.
+    [Fact]
+    public void ToDataReader_SequentialDialectWithTempTableSource_ShouldThrowNotSupportedBeforeExecution()
+    {
+        using var ctx = new FakeDialectContext(new TestDialect(sequentialAccess: true, locator: null));
+        var source = ctx.From<LobTestEntity>().Select(it => it.Id).AsTempTable();
+        var command = ctx.From(source).Select(t => t.GetInt32("id"));
+
+        var act = () => command.ToDataReader();
+
+        var exception = act.Should().Throw<NotSupportedException>().Which;
+        exception.Message.Should().Contain("ToDataReader", "the guard names the rejected terminal");
+        exception.Message.Should().NotContain("WriteCsv", "the guard must not surface the CSV terminal");
+        exception.Message.Should().NotContain("CSV", "the guard must not surface the CSV terminal");
+    }
+
+    [Fact]
+    public async Task ToDataReaderAsync_SequentialDialectWithTempTableSource_ShouldThrowNotSupportedBeforeExecution()
+    {
+        using var ctx = new FakeDialectContext(new TestDialect(sequentialAccess: true, locator: null));
+        var source = ctx.From<LobTestEntity>().Select(it => it.Id).AsTempTable();
+        var command = ctx.From(source).Select(t => t.GetInt32("id"));
+
+        var act = async () => await command.ToDataReaderAsync();
+
+        var exception = (await act.Should().ThrowAsync<NotSupportedException>()).Which;
+        exception.Message.Should().Contain("ToDataReader", "the guard names the rejected terminal");
+        exception.Message.Should().NotContain("WriteCsv", "the guard must not surface the CSV terminal");
+        exception.Message.Should().NotContain("CSV", "the guard must not surface the CSV terminal");
+    }
 
     private static void AssertGate<TResult>(
         ISqlDialect dialect,
@@ -110,7 +164,10 @@ public class LobDataReaderTests
 
         var invoke = () => act(command);
 
-        invoke.Should().Throw<NotSupportedException>();
+        var exception = invoke.Should().Throw<NotSupportedException>().Which;
+        exception.Message.Should().Contain("ToDataReader", "the guard names the rejected terminal");
+        exception.Message.Should().NotContain("WriteCsv", "the guard must not surface the CSV terminal");
+        exception.Message.Should().NotContain("CSV", "the guard must not surface the CSV terminal");
     }
 
     private static async Task AssertGateAsync<TResult>(
@@ -123,7 +180,38 @@ public class LobDataReaderTests
 
         var invoke = async () => await act(command);
 
-        await invoke.Should().ThrowAsync<NotSupportedException>();
+        var exception = (await invoke.Should().ThrowAsync<NotSupportedException>()).Which;
+        exception.Message.Should().Contain("ToDataReader", "the guard names the rejected terminal");
+        exception.Message.Should().NotContain("WriteCsv", "the guard must not surface the CSV terminal");
+        exception.Message.Should().NotContain("CSV", "the guard must not surface the CSV terminal");
+    }
+
+    private static void AssertReachesProvider<TResult>(
+        ISqlDialect dialect,
+        Func<FakeDialectContext, QueryCommand<TResult>> build,
+        Action<QueryCommand<TResult>> act)
+    {
+        using var ctx = new FakeDialectContext(dialect);
+        var command = build(ctx);
+
+        var invoke = () => act(command);
+
+        // Passing the dialect gate means the terminal prepares the query; preparation asks the context
+        // for a DbCommand, and the fake connection seam is where that throws.
+        invoke.Should().Throw<InvalidOperationException>();
+    }
+
+    private static async Task AssertReachesProviderAsync<TResult>(
+        ISqlDialect dialect,
+        Func<FakeDialectContext, QueryCommand<TResult>> build,
+        Func<QueryCommand<TResult>, Task> act)
+    {
+        using var ctx = new FakeDialectContext(dialect);
+        var command = build(ctx);
+
+        var invoke = async () => await act(command);
+
+        await invoke.Should().ThrowAsync<InvalidOperationException>();
     }
 
     private static QueryCommand<byte[]> BuildCommand(FakeDialectContext ctx) =>

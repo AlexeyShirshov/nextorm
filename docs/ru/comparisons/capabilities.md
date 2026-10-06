@@ -29,7 +29,7 @@
 | Сырой SQL (целый запрос, composable-источник и сырые команды с параметрами/выходными параметрами/несколькими наборами результатов) | yes | yes | yes |
 | Несколько наборов результатов из одного батча (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`) | yes (PostgreSQL, SQL Server, MySQL, MariaDB, SQLite) | yes | no |
 | Хранимые процедуры (`ExecuteProcedure`, `CommandType.StoredProcedure`) | yes (SQL Server, PostgreSQL, MySQL/MariaDB) | yes | yes |
-| Стриминг result-set (поток LOB, `ToDataReader`) | yes | yes | partial (сырой reader) |
+| Стриминг result-set (поток LOB, `ToDataReader`) | yes (последовательное потоковое чтение LOB на PostgreSQL/SQL Server; `ToDataReader` в SQLite буферизованный и без локатора; MySQL/MariaDB/ClickHouse и in-memory отклоняют) | yes | partial (сырой reader) |
 | Экспорт result-set в поток (JSON, CSV) | yes | partial (клиентская сериализация) | partial (клиентская сериализация) |
 
 ## Типы и маппинг

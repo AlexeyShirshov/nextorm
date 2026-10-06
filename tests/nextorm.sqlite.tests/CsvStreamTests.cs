@@ -417,7 +417,11 @@ public class CsvStreamTests
             .Select(t => new { Id = t.GetInt32("id") })
             .WriteCsv(destination, null, TestContext.Current.CancellationToken);
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*temporary table*");
+        // The CSV terminal keeps its own wording even though the shared guard is now parameterised.
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("*temporary table*")
+            .WithMessage("*WriteCsv/WriteCsvAsync*")
+            .WithMessage("*CSV*");
         destination.Length.Should().Be(0, "the guard must run before the header");
     }
 
@@ -432,7 +436,10 @@ public class CsvStreamTests
             .Select(t => new { Id = t.GetInt32("id") })
             .WriteCsvAsync(destination, null, TestContext.Current.CancellationToken);
 
-        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*temporary table*");
+        await act.Should().ThrowAsync<NotSupportedException>()
+            .WithMessage("*temporary table*")
+            .WithMessage("*WriteCsv/WriteCsvAsync*")
+            .WithMessage("*CSV*");
         destination.Length.Should().Be(0, "the guard must run before the header");
     }
 
