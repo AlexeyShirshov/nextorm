@@ -321,6 +321,30 @@ for the full set of forms; general read CTEs are in
 [Common table expressions](../08-cte.md). Every
 other provider rejects `With(name, insert)` at build time with `NotSupportedException`.
 
+## Raw rows and composites
+
+A raw statement that projects a single PostgreSQL record column — an anonymous `ROW(...)` or a
+caller-registered named composite — can be materialised into the matching `System.Tuple<...>` or the named
+CLR type. This is the PostgreSQL counterpart of the ClickHouse `tuple(...)` result; see
+[Raw SQL](../12-raw-sql.md#postgresql-raw-rows-and-composites) for the full shape matrix, the
+configuration and the error contract.
+
+```csharp
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring) as r from complex_entity order by id");
+
+var rows = result.Read<System.Tuple<int, string?>>();
+// rows[0].Item1 == 1, rows[0].Item2 == "..."
+```
+
+An anonymous `ROW(...)` needs no registration; a named composite must be registered on the caller-owned
+`NpgsqlDataSource` (`MapComposite<Point>()`) and the context created from `dataSource.CreateConnection()`.
+Only a single record column is supported. Unsupported shapes — a `ValueTuple`, arity ≥8, a nested or empty
+`ROW`, several or mixed record columns, an unregistered composite and a composite declared as
+`System.Tuple` — throw `NotSupportedException`; a `NULL` in a field declared as a non-nullable value type
+throws `InvalidOperationException` instead of substituting `default`. See
+[Raw SQL](../12-raw-sql.md#postgresql-raw-rows-and-composites).
+
 ## Dynamic record schema
 
 `jsonb_to_record`/`jsonb_to_recordset` are exposed as table-valued functions whose result schema is

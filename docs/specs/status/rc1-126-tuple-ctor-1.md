@@ -358,7 +358,7 @@ All artifacts under `/tmp/nextorm-D126-rplus1/final/`. Baseline production snaps
   tests; core guard tests; MySQL/MariaDB/SQLite/SQL Server test updates; EN/RU docs + specs; this status
   file). The collection-status update is a separate bookkeeping commit. Both remain **unpushed** — push
   never authorized; no merge.
-- Follow-ups (deferred, NOT part of #126): **#193** raw-row materialization; **#194** tuple `IN`/`Contains`
+- Follow-ups (deferred, NOT part of #126): **#194** raw-row materialization; **#193** tuple `IN`/`Contains`
   (both OPEN, milestone 1.0.9-rc1). Tuple `IN`/`Contains` and raw-`ROW` materialization remain out of scope.
 - Issue outcome: #126 closed with a summary naming the commit SHA, the CHECK PASS (r=4 / rv=5), the
   follow-ups #193/#194, and the unpushed state.

@@ -259,6 +259,14 @@ internal static class RowMapperFactory
     /// <param name="namingConventionType">The naming convention type, when one applies to name matching.</param>
     /// <param name="buildSelectList">Builds the projection; invoked only on a cache miss.</param>
     /// <param name="mapColumn">The provider's column accessor factory.</param>
+    /// <param name="recordKind">
+    /// The raw-row/composite record shape, or <see cref="RawRowKind.None"/> for an ordinary mapping. Part
+    /// of the cache key so a record mapper can never alias an ordinary mapper for the same column key.
+    /// </param>
+    /// <param name="recordSignature">
+    /// The structural record signature (tuple arity/item types), or <see langword="null"/> when the
+    /// result type already captures the shape. Part of the cache key.
+    /// </param>
     /// <returns>The compiled row mapper.</returns>
     public static Func<IDataRecord, TResult> GetOrBuildRaw<TResult>(
         Type providerType,
@@ -267,9 +275,11 @@ internal static class RowMapperFactory
         string columns,
         Type? namingConventionType,
         Func<SelectExpression[]> buildSelectList,
-        Func<SelectExpression, Expression, Expression> mapColumn)
+        Func<SelectExpression, Expression, Expression> mapColumn,
+        RawRowKind recordKind = RawRowKind.None,
+        string? recordSignature = null)
     {
-        var key = new RawMapperCacheKey(providerType, resultType, oneColumn, columns, namingConventionType);
+        var key = new RawMapperCacheKey(providerType, resultType, oneColumn, columns, namingConventionType, recordKind, recordSignature);
         if (MapperCache.TryGetRaw(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 

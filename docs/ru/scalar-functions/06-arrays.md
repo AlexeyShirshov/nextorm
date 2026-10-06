@@ -156,10 +156,16 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > `(a, b)` принимается только как **прямой операнд сравнения** в `WHERE`/`HAVING`/`JOIN ON` — в
 > `Select`/`ORDER BY`/`GROUP BY` или как аргумент функции он бросает `NotSupportedException` при
 > подготовке. SQL Server и провайдер in-memory отклоняют эту поверхность. Tuple `IN`/`Contains` по
-> списку значений и материализация «сырого» `ROW(...)` пока не транслируются
-> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193),
-> [#194](https://github.com/AlexeyShirshov/nextorm/issues/194)). `untuple` не поддерживается, так как
-> меняет набор колонок результата, а не даёт скаляр.
+> списку значений пока не транслируется ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)).
+> Материализация «сырого» `ROW(...)` — реализована в PostgreSQL
+> ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): одна колонка-запись `ROW(...)`
+> (арность 1..7) или зарегистрированный вызывающим именованный composite материализуется в
+> соответствующий `System.Tuple<...>`/именованный тип (см.
+> [Сырой SQL](../guide/12-raw-sql.md#сырые-postgresql-строки-и-composite-типы)); `ValueTuple`,
+> арность ≥8, вложенный/пустой `ROW`, несколько или смешанные колонки-записи, незарегистрированный
+> именованный composite и composite, объявленный как `System.Tuple`, остаются под гардом
+> `NotSupportedException`. `untuple` не поддерживается, так как меняет набор колонок результата,
+> а не даёт скаляр.
 
 > Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
 > например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.

@@ -41,11 +41,11 @@ The raw statement is passed through verbatim, including comments. Parameter plac
 the underlying ADO.NET provider expects (`@name` for SQL Server/PostgreSQL; Microsoft.Data.Sqlite also
 accepts `@name` even though nextorm's generated SQLite SQL uses `$name`).
 
-> **Raw row values are not re-materialised.** A `ROW(...)` (PostgreSQL) or `tuple(...)` (ClickHouse) value
-> selected by a hand-written statement is read like any other server value, but nextorm cannot convert it
-> back into a `System.Tuple<...>` — raw row materialisation is tracked in
-> [#194](https://github.com/AlexeyShirshov/nextorm/issues/194). The flat `(a, b)` constructor is a
-> builder-side surface for direct `==`/`!=` predicate operands (see
+> **Raw row values.** On PostgreSQL a hand-written statement that projects a single `ROW(...)` or a
+> caller-registered named composite column materialises it into the matching `System.Tuple<...>` or the
+> named type — see [PostgreSQL raw rows and composites](#postgresql-raw-rows-and-composites). ClickHouse
+> reads its native `tuple(...)` column as `System.Tuple<...>`; the flat `(a, b)` constructor on
+> MySQL/MariaDB/SQLite is a builder-side surface for direct `==`/`!=` predicate operands (see
 > [Row values](../scalar-functions/06-arrays.md)), not part of raw SQL.
 
 ## [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
@@ -365,6 +365,65 @@ IReadOnlyList<RawOrder> orders = result.Read<RawOrder>();
 ```
 
 Anything that is neither a scalar nor a parameterless-constructor mapped entity throws `NotSupportedException` (see [Mapping, parameters and caching](#mapping-parameters-and-caching)).
+
+### PostgreSQL raw rows and composites
+
+A raw PostgreSQL statement can project a **single record column** — an anonymous `ROW(a, b, ...)` or a
+named composite type — and `Read<T>()` materialises it into a declared CLR shape:
+
+* an anonymous `ROW(a)` … `ROW(a, ..., g)` (arity 1..7) materialises into the matching
+  `System.Tuple<...>` (`Tuple<T1>` … `Tuple<T1, ..., T7>`), and
+* a named composite type **registered by the caller** through Npgsql's `MapComposite<T>` materialises
+  into that named `T`.
+
+The record must be the **only** column of the result set, and every field must be a type the raw path
+already reads as a scalar (the same allow-list as a normal scalar column). The record column's shape is
+part of the cached result-mapper key, like any other raw shape.
+
+Anonymous `ROW(...)` needs no registration: the full `NpgsqlDataSourceBuilder` maps a record column to a
+null-preserving `object[]` by default. A named composite is a caller-registered driver type, so build the
+`NpgsqlDataSource`, register the composite there and pass `dataSource.CreateConnection()` to an existing
+external-connection context constructor. nextorm adds no public API, no global driver mapper, and the
+connection-string path (nextorm's own `CreateDbConnection`) is unchanged:
+
+```csharp
+var dataSource = new NpgsqlDataSourceBuilder(connectionString)
+    .MapComposite<Point>()   // register the named composite type
+    .Build();
+
+await using var dataContext = new PostgresDataContext(
+    dataSource.CreateConnection(), new DataContextBuilder());
+
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring) as r from complex_entity order by id");
+
+IReadOnlyList<System.Tuple<int, string?>> rows =
+    result.Read<System.Tuple<int, string?>>();
+```
+
+NULL semantics:
+
+* SQL `NULL` for the whole record column ⇒ CLR `null` (for a nullable/reference declared type); the
+  record is not opened.
+* a non-null record whose fields are **all** `NULL` ⇒ a **non-null** object with `null` items (never
+  `null`).
+* a `NULL` in a field declared as a **nullable** type ⇒ CLR `null`; the value is never replaced by
+  `default` (`0`, `""`, `false`).
+* a `NULL` in a field declared as a **non-nullable value type** ⇒ `InvalidOperationException`, never
+  `default(T)`.
+
+Unsupported shapes throw `NotSupportedException` with the message
+`PostgreSQL raw-row materialization is not supported: <reason>.`: a `System.ValueTuple<...>` result type,
+arity ≥8 or `Tuple<..., TRest>`, a nested `ROW(ROW(...))`, an empty `ROW()`, several record columns in
+one row, a mix of record and scalar columns, an unregistered named composite, and a named composite
+declared as `System.Tuple`. A data mismatch after the record is opened — a field that cannot be converted
+to the declared item type — throws `InvalidOperationException` with the message
+`PostgreSQL raw-row materialization failed: <reason>.`, preserving the driver exception as
+`InnerException` when one exists.
+
+Only PostgreSQL materialises a raw record column into a tuple or named composite. SQL Server,
+MySQL/MariaDB, SQLite and the in-memory context have no server-side row/composite result type, and
+ClickHouse already reads its native `tuple(...)` column as `System.Tuple<...>`.
 
 ### Multiple result sets
 

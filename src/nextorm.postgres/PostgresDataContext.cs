@@ -225,6 +225,12 @@ public class PostgresDataContext : DataContext
     }
 
     /// <summary>
+    /// True: PostgreSQL can surface an anonymous <c>ROW(...)</c> record column or a caller-registered
+    /// named composite as a single raw result-set column (#194).
+    /// </summary>
+    protected override bool SupportsRawRowColumns => true;
+
+    /// <summary>
     /// Materializes a projected <see cref="Range{T}"/> column from the driver's
     /// <c>NpgsqlRange&lt;T&gt;</c> through the typed <c>GetFieldValue</c> accessor, converting it to the
     /// provider-agnostic range. Every other column is mapped by the base implementation.

@@ -156,10 +156,15 @@ result can be projected like a scalar column.
 > constructor is accepted only as a **direct comparison operand** in `WHERE`/`HAVING`/`JOIN ON` — in
 > `Select`/`ORDER BY`/`GROUP BY` or as a function argument it throws `NotSupportedException` at
 > preparation. SQL Server and the in-memory provider reject the surface. Tuple `IN`/`Contains` over a value
-> list and materialising a raw `ROW(...)` are not translated yet
-> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193),
-> [#194](https://github.com/AlexeyShirshov/nextorm/issues/194)). `untuple` is not supported because it
-> changes the result column set rather than producing a scalar.
+> list is not translated yet ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)).
+> Materialising a raw `ROW(...)` is shipped on PostgreSQL
+> ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): a single `ROW(...)` (arity 1..7) or a
+> caller-registered named composite result column materialises into the matching
+> `System.Tuple<...>`/named type (see
+> [Raw SQL](../guide/12-raw-sql.md#postgresql-raw-rows-and-composites)); `ValueTuple`, arity ≥8, a
+> nested/empty `ROW`, several or mixed record columns, an unregistered named composite and a composite
+> declared as `System.Tuple` remain guarded with `NotSupportedException`. `untuple` is not supported
+> because it changes the result column set rather than producing a scalar.
 
 > The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
 > for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`

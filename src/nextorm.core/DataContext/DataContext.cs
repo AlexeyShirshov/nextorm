@@ -667,6 +667,19 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // this internal seam, which still virtual-dispatches to the provider override.
     internal bool SupportsTypedColumn(SelectExpression column) => SupportsTypedColumnMapping(column);
 
+    /// <summary>
+    /// True when the provider can surface a PostgreSQL-style anonymous record or a caller-registered
+    /// named composite as a single raw result-set column (see <c>RawMapperFactory.GetOrBuild</c>). The
+    /// default is <see langword="false"/> so the PostgreSQL raw-row detection and its diagnostics stay
+    /// confined to the provider that produces such columns; every other provider keeps its existing
+    /// scalar/entity raw path.
+    /// </summary>
+    protected virtual bool SupportsRawRowColumns => false;
+
+    // RawMapperFactory lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal bool RawRowColumnsSupported => SupportsRawRowColumns;
+
     // The CSV terminal lives outside the context type hierarchy, so it reaches the protected hook through
     // this internal seam, which still virtual-dispatches to the provider override.
     internal Expression MapTypedColumn(SelectExpression column, Expression record, Type storageType)

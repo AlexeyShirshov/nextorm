@@ -324,6 +324,31 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 общие (read) CTE — в [Общих табличных выражениях](../08-cte.md). Остальные провайдеры отклоняют
 `With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 
+## Сырые строки и composite-типы
+
+Сырая инструкция, проецирующая одну колонку-запись PostgreSQL — анонимный `ROW(...)` или
+зарегистрированный вызывающим именованный composite, — может быть материализована в соответствующий
+`System.Tuple<...>` или именованный CLR-тип. Это аналог результата `tuple(...)` в ClickHouse; полная
+матрица форм, конфигурация и контракт ошибок — в
+[Сыром SQL](../12-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
+
+```csharp
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring) as r from complex_entity order by id");
+
+var rows = result.Read<System.Tuple<int, string?>>();
+// rows[0].Item1 == 1, rows[0].Item2 == "..."
+```
+
+Анонимному `ROW(...)` регистрация не нужна; именованный composite должен быть зарегистрирован в
+принадлежащем вызывающему `NpgsqlDataSource` (`MapComposite<Point>()`), а контекст создан из
+`dataSource.CreateConnection()`. Поддерживается только одна колонка-запись. Неподдерживаемые формы —
+`ValueTuple`, арность ≥8, вложенный или пустой `ROW`, несколько или смешанные колонки-записи,
+незарегистрированный composite и composite, объявленный как `System.Tuple`, — бросают
+`NotSupportedException`; `NULL` в поле, объявленном non-nullable value-типом, бросает
+`InvalidOperationException` вместо подстановки `default`. См.
+[Сырой SQL](../12-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
+
 ## Динамическая схема записи
 
 `jsonb_to_record`/`jsonb_to_recordset` доступны как табличные функции, схема результата которых
