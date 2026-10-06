@@ -43,7 +43,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`) | **<span style="color:green">Done</span> on SQL providers** (any nesting depth; join-projection outer references included) and on the in-memory provider for depth-one scalar/aggregate/`EXISTS`/`IN` (deeper forms throw `NotSupportedException`) |
 > | 27 | Materialize a query into a table (CTAS: `ToTable`/`ToTempTable`) | **<span style="color:green">Done</span>** on PostgreSQL, SQLite, MySQL, MariaDB, SQL Server (via `SELECT ... INTO`) and ClickHouse (persistent, `ENGINE = MergeTree`); the temporary `ToTempTable` form is on PostgreSQL/SQLite/MySQL/MariaDB only |
 > | 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy` + chunked `VALUES`; `BulkInsertOptions`/`BulkInsertOptionsBuilder`) | **<span style="color:green">Done</span>** |
-> | 29 | Row values (`System.Tuple`/`ValueTuple`) cross-provider (`ROW`/`tupleElement`, comparisons) | **<span style="color:green">Done</span>** on PostgreSQL and ClickHouse; **flat `(a, b)` constructor on MySQL/MariaDB/SQLite** as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; projection/ordering/grouping/function arguments and server-side `.ItemN` rejected). Raw row materialisation shipped on PostgreSQL ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); open: tuple `IN`/`Contains` ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)) |
+> | 29 | Row values (`System.Tuple`/`ValueTuple`) cross-provider (`ROW`/`tupleElement`, comparisons) | **<span style="color:green">Done</span>** on PostgreSQL and ClickHouse; **flat `(a, b)` constructor on MySQL/MariaDB/SQLite** as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; projection/ordering/grouping/function arguments and server-side `.ItemN` rejected). Raw row materialisation shipped on PostgreSQL ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); tuple `IN`/`Contains` ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)) over a flat value list (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite, while SQL Server rejects it; a tuple-typed `QueryCommand` RHS and `Rest`/nested tuples remain deferred |
 > | 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping | **P1+P2+P3 shipped; P4 <span style="color:orange">out of scope</span>** ([EF Core integration](../../advanced/integration-efcore.md)) — `CreateNextOrmContext`/`UseNextOrm` reuse the EF connection/current transaction and map entities from `IModel`; `ToNextOrm` translates a bounded `IQueryable` subset; the opt-in DML bridge (`SaveChanges`) is explicitly out of scope; shared-transaction tests on PostgreSQL/SQL Server/MySQL deferred to [#106](https://github.com/AlexeyShirshov/nextorm/issues/106) |
 > | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core/Dapper/ADO.NET) transaction | **<span style="color:green">Done</span>** on SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse and in-memory reject |
 > | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **<span style="color:green">Done</span>** (PostgreSQL/MySQL/MariaDB/SQL Server; SQLite/ClickHouse/in-memory reject) |
@@ -457,8 +457,15 @@ to the ledger on 2026-09-29.
     direct `==`/`!=` comparison operand in `WHERE`/`HAVING`/`JOIN ON`; in `Select`/`ORDER BY`/`GROUP BY` or as
     a function argument, and for any server-side `.ItemN`, preparation throws `NotSupportedException` naming
     the provider; SQL Server still rejects constructors. `<`/`>`/`<=`/`>=` and relational `ValueTuple`
-    operands are C#-inexpressible (a language boundary, no product gap). Still open: tuple `IN`/`Contains`
-    ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)). Materialising a raw `ROW(...)` on
+    operands are C#-inexpressible (a language boundary, no product gap). Tuple `IN`/`Contains` over a
+    value list of flat `System.Tuple`/`System.ValueTuple` entries of arity 1..7 is **shipped**
+    ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)): PostgreSQL `ROW(a, b) IN (ROW(...), ...)`,
+    ClickHouse `tuple(a, b) IN (tuple(...), ...)` (`GLOBAL IN` for `global_in`), MySQL/MariaDB
+    `(a, b) IN ((...), ...)` and SQLite `(a, b) IN (VALUES (...), ...)`; SQL Server rejects it with
+    `NotSupportedException` (`SQL Server does not support tuple IN/Contains translation.`). An empty list
+    is `1 = 0`, a null collection throws `ArgumentNullException`, rows with null components match via
+    explicit guarded arms, and arity ≥8/`Rest`/nested tuples throw `NotSupportedException`. A tuple-typed
+    `QueryCommand` (subquery) RHS and `Rest`/nested tuples are deferred (not supported yet). Materialising a raw `ROW(...)` on
     PostgreSQL is **shipped**: an anonymous `ROW(...)` (arity 1..7) or a caller-registered named composite
     materialises into the matching `System.Tuple<...>`/named type through a caller-owned
     `NpgsqlDataSource` (tracking issue [#194](https://github.com/AlexeyShirshov/nextorm/issues/194));

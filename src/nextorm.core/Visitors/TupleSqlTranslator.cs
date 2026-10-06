@@ -56,7 +56,7 @@ internal static class TupleSqlTranslator
         if (!node.Expression.Has<ParameterExpression>())
             return false;
 
-        if (TryGetInlineTupleArguments(node.Expression, out var arguments))
+        if (TryGetConstructorArguments(node.Expression, out var arguments))
         {
             if (index < 1 || index > arguments.Count)
                 return false;
@@ -180,9 +180,15 @@ internal static class TupleSqlTranslator
         visitor.Builder!.Append(tuple.RenderConstructor(fields));
     }
 
-    private static bool TryGetInlineTupleArguments(Expression expression, out IReadOnlyList<Expression> arguments)
+    /// <summary>
+    /// Extracts the component arguments of an inline tuple constructor
+    /// (<c>Tuple.Create(a, b, ...)</c>, <c>new Tuple&lt;...&gt;(...)</c> or
+    /// <c>new ValueTuple&lt;...&gt;(...)</c>, possibly under a <c>Convert</c>). Returns <c>false</c> for
+    /// any other expression.
+    /// </summary>
+    internal static bool TryGetConstructorArguments(Expression expression, out IReadOnlyList<Expression> arguments)
     {
-        switch (expression)
+        switch (TypeFacts.UnwrapConvert(expression))
         {
             case NewExpression newExpression when TypeFacts.IsTupleLike(newExpression.Type):
                 arguments = newExpression.Arguments;

@@ -212,6 +212,74 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         r.L.Should().Be("sdf");
     }
 
+    // ------------------------------------------------------------------ D193 tuple value-list IN
+    // The shared suite does not run on ClickHouse, so its tuple execution tests are repeated here.
+
+    [Fact]
+    public void Contains_TupleIn_CapturedList_ShouldFilter()
+    {
+        var tuples = new List<(long Id, int? Int)> { (2, 1) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(2L);
+    }
+
+    [Fact]
+    public void Contains_TupleIn_MismatchedComponents_ShouldReturnEmpty()
+    {
+        var tuples = new List<(long, int?)> { (1, 1), (2, 2) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Contains_TupleIn_Empty_ShouldReturnEmpty()
+    {
+        var tuples = new List<(long, int?)>();
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Contains_TupleIn_NullComponent_ShouldMatchNullRow()
+    {
+        var tuples = new List<(long, int?)> { (1, null) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(1L);
+    }
+
+    [Fact]
+    public void Contains_TupleIn_Negation_ShouldExcludeNullComponentMatch()
+    {
+        var tuples = new List<(long, int?)> { (1, null) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => !tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.OrderBy(x => x).Should().Equal(2L, 3L);
+    }
+
     [Fact]
     public void GroupByWithTotals_ShouldExecute()
     {

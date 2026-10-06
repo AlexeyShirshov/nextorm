@@ -113,6 +113,38 @@ internal static class TypeFacts
     internal static bool IsTupleLike(Type type) => IsTupleType(type) || IsValueTupleType(type);
 
     /// <summary>
+    /// True for any arity of the <see cref="System.Tuple"/> / <see cref="System.ValueTuple"/> families,
+    /// including the 8-element <c>Rest</c> form that <see cref="IsTupleLike"/> deliberately excludes, and
+    /// for a <see cref="Nullable{T}"/> wrapping a value-tuple (the recognisable nullable tuple shape; a
+    /// nullable <see cref="System.Tuple"/> is not legal CLR). Used to route a tuple-valued value list to
+    /// the tuple translator so an unsupported arity or a nullable element is rejected with an explicit
+    /// message instead of falling through to the scalar value-list path.
+    /// </summary>
+    internal static bool IsTupleFamily(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (!type.IsGenericType)
+            return false;
+
+        var name = type.GetGenericTypeDefinition().FullName;
+        return name is not null
+            && (name.StartsWith("System.Tuple`", StringComparison.Ordinal)
+                || name.StartsWith("System.ValueTuple`", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The number of components of a tuple type in the <see cref="Tuple"/>/<see cref="ValueTuple"/>
+    /// family (arities 1..7 are supported by the tuple value-list renderer; the 8-element <c>Rest</c>
+    /// form is out of scope), or <c>0</c> for any other type. A <see cref="Nullable{T}"/> wrapper is
+    /// unwrapped so a nullable value-tuple reports the arity of its underlying tuple.
+    /// </summary>
+    internal static int TupleArity(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        return IsTupleFamily(type) ? type.GetGenericArguments().Length : 0;
+    }
+
+    /// <summary>
     /// True when a numeric CLR conversion actually changes the type and therefore has to be emitted
     /// as <c>cast(...)</c>; dropping it would silently change the SQL semantics.
     /// </summary>

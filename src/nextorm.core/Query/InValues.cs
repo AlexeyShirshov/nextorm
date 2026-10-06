@@ -1,21 +1,51 @@
 using System.Collections;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
 /// <summary>
+/// The evaluated rows of a tuple-valued <c>in</c>/<c>Contains</c> node: the shared tuple arity and the
+/// component values of every row in source order. A SQL-null component is preserved as a null cell so the
+/// renderer can emit the explicit <c>IS NULL</c>/guarded-equality arms.
+/// </summary>
+internal readonly struct InValuesTuplePartition
+{
+    public readonly int Arity;
+    public readonly List<object?[]> Rows;
+
+    public InValuesTuplePartition(int arity, List<object?[]> rows)
+    {
+        Arity = arity;
+        Rows = rows;
+    }
+}
+
+/// <summary>
 /// The evaluated (and partitioned) values of one <c>in</c>/<c>Contains</c> node: the non-null values
-/// in source order plus whether the source also contained a null.
+/// in source order plus whether the source also contained a null. For a tuple-valued node
+/// <see cref="Tuple"/> carries the per-row component values instead and <see cref="NonNull"/> is empty.
 /// </summary>
 internal readonly struct InValuesPartition
 {
+    private static readonly List<object?> Empty = [];
+
     public readonly List<object?> NonNull;
     public readonly bool HasNull;
+    public readonly InValuesTuplePartition? Tuple;
 
     public InValuesPartition(List<object?> nonNull, bool hasNull)
     {
         NonNull = nonNull;
         HasNull = hasNull;
+        Tuple = null;
+    }
+
+    internal InValuesPartition(InValuesTuplePartition tuple)
+    {
+        NonNull = Empty;
+        HasNull = false;
+        Tuple = tuple;
     }
 }
 
@@ -33,6 +63,47 @@ internal readonly struct InValuesPartition
 /// </summary>
 internal static class InValues
 {
+    /// <summary>
+    /// The single pinned rejection message for a provider that has no row-value constructor (SQL
+    /// Server). Shared by the preparation-time provider preflight and the render-time defensive guard so
+    /// both emit exactly the same text.
+    /// </summary>
+    internal const string SqlServerTupleInNotSupportedMessage = "SQL Server does not support tuple IN/Contains translation.";
+
+    /// <summary>
+    /// The single pinned rejection message for a nullable tuple element
+    /// (<see cref="Nullable{T}"/> wrapping a value tuple), which has no null-safe row shape.
+    /// </summary>
+    internal const string NullableTupleElementNotSupportedMessage = "Tuple IN/Contains does not support nullable tuple elements; use a non-nullable value tuple.";
+
+    /// <summary>
+    /// Metadata-only probe: true when <paramref name="expression"/> contains a tuple-valued
+    /// <c>IN</c>/<c>Contains</c> node. It never evaluates or enumerates the collection, so it is safe to
+    /// call before <see cref="PartitionTuple"/> (for example to reject an unsupported provider before a
+    /// null collection would surface an <see cref="ArgumentNullException"/>).
+    /// </summary>
+    internal static bool ContainsTupleInValues(Expression expression)
+    {
+        var probe = new TupleInValuesProbe();
+        probe.Visit(expression);
+        return probe.Found;
+    }
+
+    private sealed class TupleInValuesProbe : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (!Found
+                && TryGetArguments(node, out _, out _, out var elementType, out _)
+                && TypeFacts.IsTupleFamily(elementType))
+                Found = true;
+
+            return base.VisitMethodCall(node);
+        }
+    }
+
     /// <summary>
     /// True when the value an expression folds to is fully determined by the expression shape, i.e.
     /// it cannot change between two executions of a cached plan. Only inline arrays of immutable
@@ -165,8 +236,70 @@ internal static class InValues
         return true;
     }
 
-    public static InValuesPartition EvaluatePartition(Expression valuesExp, IQueryRegistry queryProvider)
-        => Partition(InValuesEvaluator.Evaluate(valuesExp, queryProvider));
+    public static InValuesPartition EvaluatePartition(Expression valuesExp, IQueryRegistry queryProvider, Type? elementType = null)
+    {
+        var value = InValuesEvaluator.Evaluate(valuesExp, queryProvider);
+
+        return elementType is not null && TypeFacts.IsTupleFamily(elementType)
+            ? PartitionTuple(value, elementType)
+            : Partition(value);
+    }
+
+    /// <summary>
+    /// Evaluates a tuple-valued value list into its rows. Rejects a null collection
+    /// (<see cref="ArgumentNullException"/>), a nullable tuple element, an arity outside the flat renderer
+    /// scope (1..7, including the 8-element <c>Rest</c> form), tuple-valued nested components and a null
+    /// reference-tuple entry, so an unsupported shape never silently degrades into an all-null row or a
+    /// single opaque tuple parameter.
+    /// </summary>
+    public static InValuesPartition PartitionTuple(object? value, Type elementType)
+    {
+        // A nullable value-tuple element is recognisable as a tuple family (so it routes away from the
+        // scalar path), but the renderer has no null-safe row shape for it: reject it explicitly instead
+        // of silently treating the whole row as one opaque scalar/null.
+        if (Nullable.GetUnderlyingType(elementType) is not null)
+            throw new NotSupportedException(NullableTupleElementNotSupportedMessage);
+
+        if (!TypeFacts.IsTupleLike(elementType))
+            throw new NotSupportedException(
+                $"Tuple IN/Contains supports flat System.Tuple/System.ValueTuple collections of arity 1..7; '{elementType.Name}' is not supported.");
+
+        var componentTypes = elementType.GetGenericArguments();
+        for (var i = 0; i < componentTypes.Length; i++)
+        {
+            if (TypeFacts.IsTupleFamily(componentTypes[i]))
+                throw new NotSupportedException("Tuple IN/Contains does not support tuple-valued nested components.");
+        }
+
+        if (value is null)
+            throw new ArgumentNullException(nameof(value), "The tuple collection of an IN/Contains predicate must not be null.");
+
+        if (value is not IEnumerable enumerable)
+            throw new NotSupportedException("A tuple IN/Contains requires an enumerable collection of tuples.");
+
+        var arity = componentTypes.Length;
+        var rows = value is ICollection collection ? new List<object?[]>(collection.Count) : [];
+        foreach (var item in enumerable)
+            rows.Add(ExtractTupleRow(item, arity));
+
+        return new InValuesPartition(new InValuesTuplePartition(arity, rows));
+    }
+
+    private static object?[] ExtractTupleRow(object? item, int arity)
+    {
+        if (item is null)
+            throw new NotSupportedException(
+                "A null tuple entry in a tuple IN/Contains collection is not supported; use a non-null tuple entry or filter it out.");
+
+        if (item is not ITuple tuple || tuple.Length != arity)
+            throw new NotSupportedException("A tuple IN/Contains collection must contain tuples of the same arity as the left-hand side.");
+
+        var row = new object?[arity];
+        for (var i = 0; i < arity; i++)
+            row[i] = tuple[i];
+
+        return row;
+    }
 
     public static InValuesPartition Partition(object? value)
     {
@@ -228,13 +361,32 @@ internal static class InValues
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
-            if (TryGetArguments(node, out _, out var valuesExp, out _, out _))
+            if (TryGetArguments(node, out _, out var valuesExp, out var elementType, out _))
             {
-                var partition = EvaluatePartition(valuesExp, command);
+                var partition = EvaluatePartition(valuesExp, command, elementType);
                 Partitions ??= new Dictionary<Expression, InValuesPartition>(ReferenceEqualityComparer.Instance);
                 Partitions[valuesExp] = partition;
-                _hash.Add(partition.NonNull.Count);
-                _hash.Add(partition.HasNull);
+
+                // A tuple value list is shaped by its arity, row count and per-cell null layout (never by
+                // the runtime values), so two collections that produce the same SQL share a plan while a
+                // changed null layout re-keys it.
+                if (partition.Tuple is { } tuple)
+                {
+                    _hash.Add(tuple.Arity);
+                    _hash.Add(tuple.Rows.Count);
+                    for (var r = 0; r < tuple.Rows.Count; r++)
+                    {
+                        var row = tuple.Rows[r];
+                        for (var c = 0; c < row.Length; c++)
+                            _hash.Add(row[c] is null);
+                    }
+                }
+                else
+                {
+                    _hash.Add(partition.NonNull.Count);
+                    _hash.Add(partition.HasNull);
+                }
+
                 HasMatch = true;
             }
 

@@ -633,6 +633,14 @@ public interface ITupleRenderer
     /// <see langword="null"/>, an inline constructor's element access is folded to the argument instead.
     /// </summary>
     string? RenderElement(string row, int oneBasedIndex);
+
+    /// <summary>
+    /// Renders the right-hand value list of a row membership test from the already-rendered row
+    /// constructors, including the wrapping parentheses. The default is the ANSI row list
+    /// <c>((...), (...))</c> used by MySQL/MariaDB/PostgreSQL/ClickHouse; SQLite overrides it with the
+    /// <c>(VALUES (...), (...))</c> grammar.
+    /// </summary>
+    string RenderInValues(IReadOnlyList<string> rows) => "(" + string.Join(", ", rows) + ")";
 }
 
 /// <summary>

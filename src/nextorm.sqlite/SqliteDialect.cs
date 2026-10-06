@@ -378,6 +378,9 @@ internal sealed class SqliteTupleRenderer : ITupleRenderer
     public string RenderConstructor(IReadOnlyList<string> fields) => "(" + string.Join(", ", fields) + ")";
 
     public string? RenderElement(string row, int oneBasedIndex) => null;
+
+    // SQLite's row membership grammar requires the VALUES keyword: (a, b) IN (VALUES (@p0, @p1), ...).
+    public string RenderInValues(IReadOnlyList<string> rows) => "(VALUES " + string.Join(", ", rows) + ")";
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer

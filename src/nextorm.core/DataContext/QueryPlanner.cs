@@ -565,6 +565,14 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
         else queryCommand.RefreshInValuesShape();
 
+        // A tuple value list in a clause whose shape is not part of the plan key (HAVING / JOIN ON /
+        // SELECT / a nested subquery) renders a SQL/parameter shape that follows the captured collection.
+        // Suppress the call-local cache for this call rather than mutating the sticky QueryCommand.Cache
+        // flag, which would disable plan caching for a shared command (the context-wide Any/Count command)
+        // on every later query. Both the lookup and store gates below test storeInCache, so they skip.
+        if (queryCommand.HasUnkeyedTupleInValues)
+            storeInCache = false;
+
         // A row enumeration that projects a live Stream/TextReader member needs the same sequential
         // access as the single-column LOB terminals: the SQL gains the dialect locator (SQLite rowid),
         // the reader behavior carries SequentialAccess and the compiled mapper reads GetStream/

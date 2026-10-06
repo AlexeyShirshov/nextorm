@@ -131,6 +131,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// stale cached plan.
     /// </summary>
     internal bool ShapeScanned;
+    /// <summary>
+    /// Whether a tuple-valued <c>IN</c>/<c>Contains</c> appears in a clause whose captured-collection
+    /// shape is <b>not</b> folded into the plan key (HAVING, a JOIN condition, a SELECT column or a
+    /// subquery nested in one of those). The rendered SQL of such a clause depends on the collection's
+    /// current shape, so reusing a cached plan built for another shape would be wrong; the planner reads
+    /// this flag and suppresses the call-local cache instead of mutating the sticky <see cref="Cache"/>
+    /// flag. A false positive only forgoes caching (harmless); a false negative would be a wrong result.
+    /// </summary>
+    internal bool HasUnkeyedTupleInValues;
     private QueryPlanEqualityComparer? _queryPlanComparer;
     private ExpressionPlanEqualityComparer? _expressionPlanComparer;
     private SelectExpressionPlanEqualityComparer? _selectExpressionPlanComparer;
@@ -831,6 +840,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         HasTopLevelInValues = false;
         LookupPartitions = null;
         ShapeScanned = false;
+        HasUnkeyedTupleInValues = false;
         _whereBasePlanHash = 0;
         // Correlated subqueries and outer references are registered while preparing (#148-B: the
         // navigation collection terminals add one referenced command per terminal). A re-preparation

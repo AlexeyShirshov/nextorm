@@ -32,6 +32,7 @@ public partial class QueryCommand
         dst.InValuesShapeHash = InValuesShapeHash;
         dst.LookupPartitions = LookupPartitions;
         dst.ShapeScanned = ShapeScanned;
+        dst.HasUnkeyedTupleInValues = HasUnkeyedTupleInValues;
         dst.ResultPlanHash = ResultPlanHash;
         dst.GroupingPlanHash = GroupingPlanHash;
         // From/Union/ReferencedQueries hashes must travel with the clone too: QueryPlanEqualityComparer
