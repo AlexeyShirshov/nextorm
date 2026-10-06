@@ -217,10 +217,14 @@ must already have the `jsonb` column. See
 
 Bare CLR JSON values are handled at the boundary, differently from a mapped column:
 
-* A `JsonDocument` or `JsonElement` value materializes from a `json`/`jsonb` column, and a parameter of
-  either type binds as `jsonb`.
-* A `JsonNode` parameter also binds as `jsonb`, but a bare `JsonNode` *column* is not read (Npgsql has no
-  typed reader for it) — map the property with `[JsonColumn]`, or read it as a `JsonDocument`/`JsonElement`.
+* A `JsonDocument` or `JsonElement` value materializes from a `json`/`jsonb` column in a named projection,
+  and a parameter of either type binds as `jsonb`.
+* A bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`) reads a
+  native `json`/`jsonb` column: the text is read and parsed, covering object, array and scalar roots, in both
+  scalar (`Select(x => x.Data)`) and composite projections. A SQL `NULL` and a JSON literal `null` both become
+  CLR `null`. Declared `JsonObject`/`JsonArray` properties, and a bare `JsonDocument`/`JsonElement` *scalar*
+  projection, are outside this support — map those with `[JsonColumn]` or project them in a named shape. A
+  `JsonNode` parameter still binds as `jsonb`.
 * A plain `string` maps to `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`.
 
 On ClickHouse the same section header applies to the native `JSON` column, but through a different

@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Text.Json.Nodes;
 
 namespace NextORM.Core;
 
@@ -60,7 +61,9 @@ internal static class TypeFacts
 
     /// <summary>
     /// True for a type a projection maps to a single column: the primitives, strings, dates, decimals,
-    /// GUIDs and nullables, plus an array (<c>T[]</c>, covering binary <c>byte[]</c>). A tuple is
+    /// GUIDs and nullables, plus an array (<c>T[]</c>, covering binary <c>byte[]</c>). A bare
+    /// <see cref="JsonNode"/> is included by exact type (the native <c>json</c>/<c>jsonb</c> read path);
+    /// the derived <c>JsonObject</c>/<c>JsonArray</c>/<c>JsonValue</c> are not. A tuple is
     /// deliberately excluded because <c>new Tuple&lt;...&gt;(a, b)</c> is a multi-column constructor
     /// projection; a native <c>Tuple(...)</c> column is recognised separately by
     /// <see cref="IsTupleType"/> at the non-<c>NewExpression</c> call site.
@@ -73,6 +76,7 @@ internal static class TypeFacts
         || type == typeof(TimeSpan)
         || type == typeof(decimal)
         || type == typeof(Guid)
+        || type == typeof(JsonNode)
         || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
         || type.IsArray;
 

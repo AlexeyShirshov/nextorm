@@ -608,3 +608,64 @@ prepared arm `Prepared_ToList` is **unchanged** at **76.14 KB / 780 B/op** acros
 The allocation gate that enforces these budgets is `eng/perf/iteration14_gate.py` together with
 `eng/perf/iteration14-budgets.json`; the warm CTE reuse rows (`Cte_Warm_Reused`,
 `RecursiveCte_Warm_Reused`) must be **0 B/op** after warm-up.
+
+## Results 2026-10-06 — issue #197 (D197: bare `JsonNode` native read)
+
+D197 adds a per-row accessor in `RowMapperFactory.GetReaderAccessor` for an exact `JsonNode` projection:
+the native `json`/`jsonb` column text is read with `DbDataReader.GetFieldValue<string>` and parsed with
+`JsonNode.Parse`. This touches the materialization path, so the seven-case acceptance suite was re-run on
+the baseline host/config/case set (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401,
+.NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`),
+plus a focused `D197JsonRead` micro-benchmark for the new parse-on-read cost.
+
+### Acceptance run
+
+**7** cases selected, **0** failures, exit **0**. External shell wall clock **53.87 s**; BDN
+`Global total time` **44.69 s** (`executed benchmarks: 7`) — both under the 4 min budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.658 ms | 334.38 KB | -8.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 81.58 ms | 50.05 MB | +33.8% (high-variance row) |
+| `Nextorm_Cached` | 2.813 ms | 558.65 KB | +58.7% (high-variance row) |
+| `Prepared_ToList` | 1,154.5 us | 76.14 KB | +25.0% (host-noise-inflated) |
+| `Cached_ToList` | 2,273.4 us | 551.95 KB | +31.6% (host-noise-inflated) |
+| `Cached_PlanOnly_Param` | 687.4 us | 475.8 KB | +32.6% (host-noise-inflated) |
+| `Nextorm_Cached_ToListAsync` | 2.295 ms | 576.44 KB | +7.4% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.97** — vs documented
+baseline **1.87** (**+5.3%**), far below the **20%** investigation threshold; the corresponding
+allocated ratio is **7.25** (baseline **7.42**, **-2.3%**), unchanged. Absolute means are inflated
+across the board (including the prepared arm, `+25%`), i.e. a noisy host, so no individual row delta is
+read as a regression; the tracked within-run ratio is the only comparison and it is within noise.
+**Verdict: no regression.**
+
+### Targeted `D197JsonRead` micro-benchmark
+
+Command `--anyCategories=D197JsonRead` (category on `JsonNodeReadBenchmark`), **9** executed benchmarks
+(3 methods × 3 payloads), **0** failures, exit 0; BDN `Global total time` **63.02 s**. The payload text is
+built once in `GlobalSetup` (outside the measured region); `MemoryDiagnoser` on. `JsonDocument_Parse` is
+the driver-native baseline, `JsonNode_Parse` the requested DOM, and
+`CompiledAccessor_GetFieldValueString_JsonNodeParse` a delegate compiled once (no per-row reflection) that
+composes the reader string getter with the parse — the same shape the fix emits. No numeric SLA is
+asserted; sub-noise deltas are not reported as regressions.
+
+| Payload | Method | Mean | Allocated |
+|---------|--------|------|-----------|
+| 128 B | `JsonDocument_Parse` | 1.146 us | 72 B |
+| 128 B | `JsonNode_Parse` | 1.298 us | 848 B |
+| 128 B | `CompiledAccessor_...` | 1.285 us | 848 B |
+| 4 KiB | `JsonDocument_Parse` | 26.130 us | 72 B |
+| 4 KiB | `JsonNode_Parse` | 27.039 us | 16,816 B |
+| 4 KiB | `CompiledAccessor_...` | 29.731 us | 16,816 B |
+| 64 KiB | `JsonDocument_Parse` | 329.435 us | 74 B |
+| 64 KiB | `JsonNode_Parse` | 485.406 us | 219,287 B |
+| 64 KiB | `CompiledAccessor_...` | 468.359 us | 219,287 B |
+
+**Reading.** `JsonNode.Parse` materializes the full mutable DOM, so its allocation scales with the
+payload (848 B → 16.8 KB → 219 KB) while `JsonDocument` keeps the pooled ~72 B; the parse is
+~1.0–1.5× the `JsonDocument` Mean across sizes. The compiled accessor adds **no measurable overhead** over
+the bare `JsonNode.Parse` call: 1.285 vs 1.298 us (128 B), 29.7 vs 27.0 us (4 KiB, `Error` 53 us), and
+468 vs 485 us (64 KiB, `Error` 291 us) — the differences are inside `ShortRun` noise and have no
+consistent direction, confirming no per-row reflection and no extra allocation beyond the DOM itself.
+Raw log: `artifacts/pdca/D197/perf-jsonnode.log`; acceptance log: `artifacts/pdca/D197/perf-acceptance.log`.

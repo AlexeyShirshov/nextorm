@@ -234,8 +234,13 @@ ctx.From<IComplexEntity>()
 ```
 
 A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. A
-bare `JsonNode` *column* is not read (Npgsql has no typed reader for it): map the property with
-`[JsonColumn]`, or read it as a `JsonDocument`/`JsonElement`. The full
+bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`) reads a
+native `json`/`jsonb` column: the column text is read and parsed for object, array and scalar roots, in both
+scalar (`Select(x => x.Data)`) and composite projections. A SQL `NULL` and a JSON literal `null` both
+materialize as CLR `null`. Declared `JsonObject`/`JsonArray` properties and a bare
+`JsonDocument`/`JsonElement` *scalar* projection are outside this support (map them with `[JsonColumn]`, or
+project a `JsonDocument`/`JsonElement` in a named shape). `[JsonColumn]` mapping and JSON parameter binding
+are unchanged, and nextorm generates no column DDL. The full
 surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...) is documented
 in [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.

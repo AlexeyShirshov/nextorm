@@ -110,8 +110,11 @@ var rows = dataContext.From<IReservation>()
 PostgreSQL is the only provider with native `json`/`jsonb` types. JSON operands are native JSON columns
 (a `[JsonColumn]` property maps a CLR object to `jsonb` on read and write), other JSON functions, or
 parameters whose runtime value is a `JsonDocument`/`JsonElement`/`JsonNode` (which Npgsql binds as
-`jsonb`). A bare `JsonNode` column cannot be read — map it through `[JsonColumn]` or read
-`JsonDocument`/`JsonElement`. The `jsonb_*` family covers construction, extraction, containment and
+`jsonb`). A bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`)
+reads a native `json`/`jsonb` column for object, array and scalar roots, in scalar and composite
+projections; SQL `NULL` and a JSON literal `null` both become CLR `null`. Declared `JsonObject`/`JsonArray`
+properties and a bare `JsonDocument`/`JsonElement` *scalar* projection remain outside this support. The
+`jsonb_*` family covers construction, extraction, containment and
 aggregation, for example `jsonb_build_object`, `jsonb_agg`, `json_get_text`, `json_cast`, `->`, `->>`.
 
 ```csharp

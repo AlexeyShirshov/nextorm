@@ -236,8 +236,13 @@ ctx.From<IComplexEntity>()
 ```
 
 Обычная строка с JSON привязывается как `text`; для разбора используйте `SqlFunctions.Postgres.json_cast(value)`.
-«Голая» *колонка* `JsonNode` не читается (у Npgsql нет для неё типизированного reader'а): отображайте
-свойство через `[JsonColumn]` или читайте как `JsonDocument`/`JsonElement`.
+«Голое» свойство `JsonNode`/`JsonNode?` (объявленное ровно как `JsonNode`, не `JsonObject`/`JsonArray`)
+читает нативную колонку `json`/`jsonb`: текст читается и разбирается для корней-объектов, массивов и
+скаляров, как в скалярной (`Select(x => x.Data)`), так и в составной проекции. SQL `NULL` и JSON-литерал
+`null` оба материализуются в CLR `null`. Объявленные свойства `JsonObject`/`JsonArray` и «голая»
+*скалярная* проекция `JsonDocument`/`JsonElement` в эту поддержку не входят (отображайте их через
+`[JsonColumn]` или проецируйте `JsonDocument`/`JsonElement` в именованной форме). Отображение
+`[JsonColumn]` и привязка JSON-параметров не меняются, DDL колонок nextorm не генерирует.
 Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
 описана в разделе [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.

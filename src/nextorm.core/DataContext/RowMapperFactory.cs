@@ -4,6 +4,8 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -27,6 +29,8 @@ internal static class RowMapperFactory
     private static readonly MethodInfo FromStorageMI = typeof(DurationStorage).GetMethod(nameof(DurationStorage.FromStorage), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ConvertFromProviderMI = typeof(IPropertyValueConverter).GetMethod(nameof(IPropertyValueConverter.ConvertFromProvider))!;
     private static readonly MethodInfo DynamicColumnsReadMI = typeof(DynamicColumns).GetMethod(nameof(DynamicColumns.Read))!;
+    private static readonly MethodInfo GetFieldValueStringMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!.MakeGenericMethod(typeof(string));
+    private static readonly MethodInfo JsonNodeParseMI = typeof(JsonNode).GetMethod(nameof(JsonNode.Parse), [typeof(string), typeof(JsonNodeOptions?), typeof(JsonDocumentOptions)])!;
     private static readonly ConcurrentDictionary<Type, MethodInfo?> TypedFromProviderMethods = new();
 
     /// <summary>
@@ -113,6 +117,24 @@ internal static class RowMapperFactory
 
     private static Expression GetReaderAccessor(SelectExpression column, Expression param, Type readType)
     {
+        if (readType == typeof(JsonNode))
+        {
+            // A bare System.Text.Json.Nodes.JsonNode is not a driver-readable type (Npgsql exposes
+            // json/jsonb as JsonDocument/JsonElement): read the JSON text with the generic typed
+            // getter and parse it with default options. Only the exact JsonNode type is special-cased;
+            // declared JsonObject/JsonArray properties are not supported. Both MethodInfos are resolved
+            // once into static fields, so a cached mapper performs no reflection per row.
+            var text = Expression.Call(
+                Expression.Convert(param, typeof(DbDataReader)),
+                GetFieldValueStringMI,
+                Expression.Constant(column.Index));
+            return Expression.Call(
+                JsonNodeParseMI,
+                text,
+                Expression.Constant(null, typeof(JsonNodeOptions?)),
+                Expression.Constant(default(JsonDocumentOptions), typeof(JsonDocumentOptions)));
+        }
+
         var method = column.GetDataRecordMethod(readType);
         var accessor = method.DeclaringType == typeof(IDataRecord)
             ? param

@@ -109,8 +109,11 @@ var rows = dataContext.From<IReservation>()
 PostgreSQL — единственный провайдер с нативными типами `json`/`jsonb`. JSON-операнды — это нативные
 JSON-колонки (свойство `[JsonColumn]` отображает CLR-объект на `jsonb` на чтение и запись), другие
 JSON-функции или параметры, чьё значение во время выполнения — `JsonDocument`/`JsonElement`/`JsonNode`
-(Npgsql биндит их как `jsonb`). «Голая» колонка `JsonNode` не читается — отображайте её через
-`[JsonColumn]` или читайте `JsonDocument`/`JsonElement`. Семейство `jsonb_*` покрывает построение,
+(Npgsql биндит их как `jsonb`). «Голое» свойство `JsonNode`/`JsonNode?` (объявленное ровно как `JsonNode`,
+не `JsonObject`/`JsonArray`) читает нативную колонку `json`/`jsonb` для корней-объектов, массивов и
+скаляров, в скалярной и составной проекциях; SQL `NULL` и JSON-литерал `null` оба становятся CLR `null`.
+Объявленные свойства `JsonObject`/`JsonArray` и «голая» *скалярная* проекция `JsonDocument`/`JsonElement`
+в эту поддержку не входят. Семейство `jsonb_*` покрывает построение,
 извлечение, вложенность и агрегацию: `jsonb_build_object`, `jsonb_agg`, `json_get_text`,
 `json_cast`, операторы `->`, `->>`.
 
