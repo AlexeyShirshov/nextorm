@@ -92,8 +92,24 @@ public sealed class DeleteReturningBuilder<TEntity, TResult> : IOutputIntoMutati
     public OutputIntoBuilder OutputInto(string targetTable)
     {
         ArgumentException.ThrowIfNullOrEmpty(targetTable);
-        return new OutputIntoBuilder(this, targetTable);
+        return new OutputIntoBuilder(this, new OutputIntoClause(targetTable, _returningColumns));
     }
+
+    /// <summary>
+    /// Writes the removed rows into a table variable through SQL Server's <c>OUTPUT ... INTO</c> clause
+    /// (the removed row is read through the <c>deleted</c> alias) instead of returning it to the client.
+    /// The batch declares the variable from <paramref name="columnDefinitions"/>, writes the selected
+    /// output columns into it and reads them back:
+    /// <c>DECLARE @t TABLE (&lt;definitions&gt;); DELETE ... OUTPUT ... INTO @t (...); SELECT ... FROM @t;</c>.
+    /// Providers without <c>OUTPUT INTO</c> reject the statement with <see cref="NotSupportedException"/>
+    /// when it renders.
+    /// </summary>
+    /// <param name="variableName">The table-variable name, including the leading <c>@</c>; never bracketed or quoted.</param>
+    /// <param name="columnDefinitions">The trusted column-definition text of the <c>DECLARE @t TABLE (...)</c> declaration; embedded verbatim and never parameterised.</param>
+    /// <returns>An output-into terminal whose <c>Execute</c> writes the rows and returns the affected-row count.</returns>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable name, or <paramref name="columnDefinitions"/> is null or empty.</exception>
+    public OutputIntoBuilder OutputIntoTableVariable(string variableName, string columnDefinitions)
+        => new(this, new OutputIntoClause(variableName, columnDefinitions, _returningColumns));
 
     /// <summary>
     /// Writes the removed rows into <paramref name="targetTable"/> and also returns them to the client
@@ -129,8 +145,8 @@ public sealed class DeleteReturningBuilder<TEntity, TResult> : IOutputIntoMutati
         return _delete.BuildReturningCommand(_returningColumns, outputInto);
     }
 
-    MutationCommand IOutputIntoMutation.BuildOutputIntoCommand(string targetTable)
-        => _delete.BuildOutputIntoCommand(_returningColumns, targetTable);
+    MutationCommand IOutputIntoMutation.BuildOutputIntoCommand(OutputIntoClause outputInto)
+        => _delete.BuildOutputIntoCommand(outputInto);
 
     IDataContext IOutputIntoMutation.DataContext => _delete.DataContext;
 

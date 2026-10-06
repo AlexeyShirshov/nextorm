@@ -67,6 +67,8 @@ internal static class SqlMutationBuilder
             if (command.KeepIdentity && dialect.RequiresIdentityInsertToggle)
                 sql = dialect.MakeIdentityInsertOn(table, keywordCase) + "; " + sql + "; " + dialect.MakeIdentityInsertOff(table, keywordCase);
 
+            sql = WrapTableVariableReadBack(sql, dialect, quoteIdentifiers, namingConvention, command.OutputInto, keywordCase);
+
             return (sql, parameters);
         }
         finally
@@ -321,7 +323,8 @@ internal static class SqlMutationBuilder
             if (dialect.MakeDeleteSuffix(keywordCase) is { } suffix)
                 writer.Append(suffix);
 
-            return (writer.ToString(), parameters);
+            var deleteSql = WrapTableVariableReadBack(writer.ToString(), dialect, quoteIdentifiers, namingConvention, command.OutputInto, keywordCase);
+            return (deleteSql, parameters);
         }
         finally
         {
@@ -412,7 +415,8 @@ internal static class SqlMutationBuilder
             if (dialect.MakeUpdateSuffix(keywordCase) is { } suffix)
                 writer.Append(suffix);
 
-            return (writer.ToString(), parameters);
+            var updateSql = WrapTableVariableReadBack(writer.ToString(), dialect, quoteIdentifiers, namingConvention, command.OutputInto, keywordCase);
+            return (updateSql, parameters);
         }
         finally
         {
@@ -1036,7 +1040,11 @@ internal static class SqlMutationBuilder
                 throw new NotSupportedException("OUTPUT ... INTO needs at least one output column.");
 
             var intoColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, outputInto.Columns);
-            var target = quoteIdentifiers ? dialect.QuoteIdentifier(outputInto.TableName) : outputInto.TableName;
+            // A table variable is addressed by its bare @name and must never be identifier-quoted; only an
+            // existing target table goes through the dialect's quoting.
+            var target = outputInto.IsTableVariable
+                ? outputInto.VariableName!
+                : quoteIdentifiers ? dialect.QuoteIdentifier(outputInto.TableName!) : outputInto.TableName!;
             writer.Append(deleted
                 ? dialect.MakeDeletedOutputInto(intoColumns, target, intoColumns, keywordCase)
                 : dialect.MakeOutputInto(intoColumns, target, intoColumns, keywordCase));
@@ -1048,6 +1056,31 @@ internal static class SqlMutationBuilder
                 ? dialect.MakeDeletedOutput(returningColumns, keywordCase)
                 : dialect.MakeOutput(returningColumns, keywordCase));
         }
+    }
+
+    // A table-variable OUTPUT INTO target lives only inside its declaring batch, so the statement is
+    // wrapped as DECLARE @t TABLE (<defs>); <DML> OUTPUT ... INTO @t (...); SELECT <cols> FROM @t.
+    // The declaration text is caller-supplied trusted SQL (never parameterised); the read-back selects
+    // the same mapped columns that were written, never SELECT *.
+    private static string WrapTableVariableReadBack(
+        string sql,
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        OutputIntoClause? outputInto,
+        KeywordCase keywordCase)
+    {
+        if (outputInto is not { IsTableVariable: true } target)
+            return sql;
+
+        var variable = target.VariableName!;
+        var columns = string.Join(", ", RenderColumns(dialect, quoteIdentifiers, namingConvention, target.Columns));
+        var declare = SqlKeywords.Of(keywordCase, "declare ") + variable
+            + SqlKeywords.Of(keywordCase, " table (") + target.ColumnDefinitions + "); ";
+        var readBack = SqlKeywords.Of(keywordCase, "; select ") + columns
+            + SqlKeywords.Of(keywordCase, " from ") + variable;
+
+        return declare + sql + readBack;
     }
 
     // One "(<values>)" tuple per row, separated by ", " (without the leading VALUES keyword).

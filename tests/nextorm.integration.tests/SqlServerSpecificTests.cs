@@ -1907,6 +1907,240 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         }
     }
 
+    // --- OUTPUT ... INTO a table variable (issue #127) ---------------------------------------------
+    //
+    // A table variable lives only inside the batch (and connection) that declares it, so a single batch
+    // runs DECLARE + DML(OUTPUT ... INTO @t) + SELECT ... FROM @t; the read-back below would fail with
+    // "Must declare the table variable @t" if the statements were split across commands. The DECLARE text
+    // is the caller-supplied trusted column definitions and declares ordinary storage columns: no
+    // IDENTITY/computed marker is copied from the source, the generated identity value is simply stored
+    // into the plain declared column.
+
+    [Fact]
+    public void OutputIntoTableVariable_Insert_ShouldDeclareStorageColumnsAndReadBackIdentity()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "tvar_" + Guid.NewGuid().ToString("N");
+
+        var builder = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, marker)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)");
+
+        var sql = builder.ToSql();
+
+        sql.Should().StartWith("declare @t table (id bigint, name nvarchar(100));");
+        sql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
+        sql.Should().EndWith("; select id, name from @t");
+        sql.Should().NotContainEquivalentOf("identity");
+
+        var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("p0", marker));
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().BeGreaterThan(0);
+        rows[0].Name.Should().Be(marker);
+
+        // a nullable reference value round-trips as SQL NULL through an ordinary declared column
+        var nullSql = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, (string?)null)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql();
+
+        var nullRows = ExecuteTableVariableBatch(ctx, nullSql, new ProcedureParameter("p0", null, DbType: DbType.String));
+
+        nullRows.Should().ContainSingle();
+        nullRows[0].Id.Should().BeGreaterThan(0);
+        nullRows[0].Name.Should().BeNull();
+    }
+
+    [Fact]
+    public void OutputIntoTableVariable_Update_ShouldReadBackUpdatedRowsAndEmptySet()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeTestKey();
+        var missingId = MergeTestKey();
+        var marker = "tvar_" + Guid.NewGuid().ToString("N");
+
+        ctx.CreateInsertBuilder<IMergeEntity>()
+            .Values(new MergeEntity { Id = id, Name = "before", Age = 1 })
+            .Insert();
+
+        var sql = ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == id)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ToSql();
+
+        sql.Should().StartWith("declare @t table (id int, name nvarchar(100));");
+        sql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
+        sql.Should().EndWith("; select id, name from @t");
+
+        var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("p0", marker), new ProcedureParameter("id", id));
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(id);
+        rows[0].Name.Should().Be(marker);
+
+        // empty read-back: a DML whose predicate matches no row leaves the table variable empty
+        var emptySql = ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == missingId)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t2", "id int, name nvarchar(100)")
+            .ToSql();
+
+        ExecuteTableVariableBatch(ctx, emptySql, new ProcedureParameter("p0", marker), new ProcedureParameter("missingId", missingId))
+            .Should().BeEmpty();
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => x.Name).ToList()
+            .Should().ContainSingle().Which.Should().Be(marker);
+    }
+
+    [Fact]
+    public void OutputIntoTableVariable_Delete_ShouldReadBackRemovedRowsAndEmptySet()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeTestKey();
+        var missingId = MergeTestKey();
+
+        ctx.CreateInsertBuilder<IMergeEntity>()
+            .Values(new MergeEntity { Id = id, Name = "gone", Age = 2 })
+            .Insert();
+
+        var sql = ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == id)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ToSql();
+
+        sql.Should().StartWith("declare @t table (id int, name nvarchar(100));");
+        sql.Should().Contain("output deleted.id, deleted.name into @t (id, name)");
+        sql.Should().EndWith("; select id, name from @t");
+
+        // the captured predicate local is bound under its source name (@id), not as a positional @pN
+        var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("id", id));
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(id);
+        rows[0].Name.Should().Be("gone");
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => x.Id).ToList().Should().BeEmpty();
+
+        var emptySql = ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == missingId)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t2", "id int, name nvarchar(100)")
+            .ToSql();
+
+        ExecuteTableVariableBatch(ctx, emptySql, new ProcedureParameter("missingId", missingId)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Insert_ExecuteAndExecuteAsync_ShouldRunBatch()
+    {
+        var ctx = _sut.DataProvider;
+        var syncMarker = "tvar_sync_" + Guid.NewGuid().ToString("N");
+        var asyncMarker = "tvar_async_" + Guid.NewGuid().ToString("N");
+
+        var syncAffected = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, syncMarker)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .Execute();
+
+        var asyncAffected = await ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, asyncMarker)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ExecuteAsync(TestContext.Current.CancellationToken);
+
+        syncAffected.Should().Be(1);
+        asyncAffected.Should().Be(1);
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == syncMarker || x.Name == asyncMarker)
+            .Select(x => x.Name).ToList()
+            .Should().BeEquivalentTo(new[] { syncMarker, asyncMarker });
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Update_ExecuteAndExecuteAsync_ShouldRunBatch()
+    {
+        var ctx = _sut.DataProvider;
+        var id1 = MergeTestKey();
+        var id2 = MergeTestKey();
+        var marker = "tvar_" + Guid.NewGuid().ToString("N");
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id1, Name = "before", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id2, Name = "before", Age = 1 }).Insert();
+
+        var syncAffected = ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == id1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .Execute();
+
+        var asyncAffected = await ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == id2)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ExecuteAsync(TestContext.Current.CancellationToken);
+
+        syncAffected.Should().Be(1);
+        asyncAffected.Should().Be(1);
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id1 || x.Id == id2).Select(x => x.Name).ToList()
+            .Should().AllBe(marker);
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Delete_ExecuteAndExecuteAsync_ShouldRunBatch()
+    {
+        var ctx = _sut.DataProvider;
+        var id1 = MergeTestKey();
+        var id2 = MergeTestKey();
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id1, Name = "gone1", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id2, Name = "gone2", Age = 1 }).Insert();
+
+        var syncAffected = ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == id1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .Execute();
+
+        var asyncAffected = await ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == id2)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ExecuteAsync(TestContext.Current.CancellationToken);
+
+        syncAffected.Should().Be(1);
+        asyncAffected.Should().Be(1);
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id1 || x.Id == id2).Select(x => x.Id).ToList().Should().BeEmpty();
+    }
+
+    private static IReadOnlyList<OutputIntoRow> ExecuteTableVariableBatch(
+        IDataContext ctx, string sql, params ProcedureParameter[] parameters)
+    {
+        using var result = ctx.ExecuteRaw(sql, parameters);
+        return result.Read<OutputIntoRow>();
+    }
+
+    [SqlTable("output_into_row")]
+    private sealed class OutputIntoRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("name")]
+        public string? Name { get; set; }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

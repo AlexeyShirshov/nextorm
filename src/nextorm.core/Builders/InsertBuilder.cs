@@ -608,11 +608,10 @@ public sealed partial class InsertBuilder<TEntity>
         => BuildCommand(null, returningColumns, outputInto);
 
     /// <summary>Builds the command for an <c>OUTPUT ... INTO</c>-only terminal: the rows are written into the target and nothing is returned to the client.</summary>
-    /// <param name="outputColumns">The mapped columns written into the target.</param>
-    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <param name="outputInto">The output-into target (an existing table or a table variable) carrying the mapped output columns.</param>
     /// <returns>The insert command carrying the output-into target.</returns>
-    internal InsertCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
-        => BuildCommand(null, null, new OutputIntoClause(targetTable, outputColumns));
+    internal InsertCommand BuildOutputIntoCommand(OutputIntoClause outputInto)
+        => BuildCommand(null, null, outputInto);
 
     /// <summary>Builds the command carrying a single generated column for the identity/key terminals.</summary>
     /// <param name="identityColumn">The identity/key column to return.</param>
