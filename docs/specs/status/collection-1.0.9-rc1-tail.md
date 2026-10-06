@@ -11,7 +11,7 @@
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | in-progress |
+| G1 | D161, D197, D140, D134, D194, D150, D193, D198, D195, D196 | D161 → D197 → D140 → D134 → D194 → D150 → D193 → D198 → D195 → D196 | current worktree | 1.0.9-rc1 | done |
 
 Single group ⇒ no group/task worktrees or branches are created; authorized commits go to the current branch `1.0.9-rc1`; no `git merge --no-ff`. The already-made commits (D161 b06784c8, D197 95849d38) stay on `1.0.9-rc1` — no auto-rollback on stop.
 
@@ -28,7 +28,7 @@ Single group ⇒ no group/task worktrees or branches are created; authorized com
 | D193 | G1 | 1.0.9-rc1 | done | issue #193 — tuple `IN`/`Contains` over a flat value list of `System.Tuple`/`System.ValueTuple` (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite; SQL Server rejects every tuple form up front; W1–W4 + F1/F7/F10/F12/F14 fixed/verified, none open; CHECK evidence-completeness objection accepted by escalate (rv1 re-gather budget exhausted, no product defect); EN+RU docs + gap-analysis; commit e19d751a | docs/specs/status/rc1-tail-193-tuple-in-1.md |
 | D198 | G1 | 1.0.9-rc1 | done | issue #198 — ClickHouse native JSON integrated into the core `[JsonColumn]` model (`SupportsJson` storage-only split, new DIM `SupportsPostgresJsonSql`/`NativeJsonProviderType`, `JsonObject`/`JsonDocument`/`JsonElement` native transport, legacy `Object('json')` measured-unsupported); CHECK PASS r=3/n=1/3/rv=3; commit b179dc7f | docs/specs/status/rc1-tail-198-ch-native-json-1.md |
 | D195 | G1 | 1.0.9-rc1 | done | issue #195 complete — FTS5 maintenance command surface; CHECK PASS r=1 n=2/3; commit 79d50db3 | docs/specs/status/rc1-tail-195-fts5-maintenance-1.md |
-| D196 | G1 | 1.0.9-rc1 | pending | re-armed to pending after blocker resolution (not yet executed) | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
+| D196 | G1 | 1.0.9-rc1 | done | issue #196 — FTS5 maintenance verification; real-SQLite + rejection tests + EN/RU docs; CHECK PASS r=1 n=1/3; commit e474bbfa | docs/specs/status/rc1-tail-196-fts5-tests-docs-1.md |
 
 ## Decisions
 
@@ -54,12 +54,12 @@ CHECK re-gather budget: at most 2 targeted evidence requests per collection CHEC
 - Verification state: **unverified**.
 - Defect id and history: F140-SCOPE resolved via author option A (D140 done); D134 complete; D193 defects (W1–W4, F1/F7/F10/F12/F14) all fixed/verified, none open; no open defect.
 - Related corrective-task status file: —.
-- Next allowed step: D196 next (binds to FC195-1/rv=1).
+- Next allowed step: lane complete (single group); HEAD/commit `e474bbfa` (D196) — no C-E04 merge path.
 - Notice: host has no todowrite tool for subagents; task status files carry the progress log instead.
 
 ## Done / Verified / Incomplete
 
-- Done: D161, D197, D140, D134, D194, D150, D193, D198, D195.
+- Done: D161, D197, D140, D134, D194, D150, D193, D198, D195, D196.
 - Verified: —.
 - Incomplete: —.
 

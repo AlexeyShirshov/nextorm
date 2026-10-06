@@ -513,15 +513,15 @@ Final counters: **N=1 · r=1 · n=1/3 · rv=1**.
 
 - Finalized D196: header `status:` → `done`; D196.5 executed.
 - Commit 1 — `#196 Verify FTS5 maintenance and finish EN/RU documentation`: two test files + six EN/RU
-  public doc pages + this status file → `PENDING_COMMIT1_SHA`.
+  public doc pages + this status file → `e474bbfa83464e6dc353dabcaef44c7ca9839d46`.
 - Commit 2 — `#196 Update collection register: D196 and G1 done`: collection register + this status file.
 - Collection register updated: D196 `pending` → `done`, G1 `in-progress` → `done`.
-- Issue #196 closed on GitHub (`PENDING_ISSUE_RESULT`). **No `git push`.**
+- Issue #196 closed on GitHub after commit 2 (ACT step 5; result in the cycle report). **No `git push`.**
 
 ### ACT progress log
 
 - 2026-10-07T01:50Z | ACT | r=1 | iteration n=1/3 | CHECK PASS r=1 n=1/3 rv=1 recorded; D196.5 finalized header `done`; EC196-15 fulfilled | this file
-- 2026-10-07T01:50Z | ACT | r=1 | iteration n=1/3 | commit 1 `#196 Verify FTS5 maintenance and finish EN/RU documentation` = PENDING_COMMIT1_SHA | this file
+- 2026-10-07T01:50Z | ACT | r=1 | iteration n=1/3 | commit 1 `#196 Verify FTS5 maintenance and finish EN/RU documentation` = e474bbfa83464e6dc353dabcaef44c7ca9839d46 | this file
 - 2026-10-07T01:50Z | ACT | r=1 | iteration n=1/3 | collection register D196 → done, G1 → done; issue #196 closed; no push | docs/specs/status/collection-1.0.9-rc1-tail.md
 
 ## Done / Verified
