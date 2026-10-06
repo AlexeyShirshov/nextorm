@@ -75,9 +75,11 @@ Run evidence: `artifacts/d127/test-sqlserver.log:4-8` (697 total / 697 succeeded
 `artifacts/d127/sqlserver-class.log:22-23` (`Total: 87, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0`, `EXIT=0`);
 `artifacts/d127/integration.log:437-439` (`Total: 3191, Errors: 0, Failed: 0, Skipped: 193, Not Run: 0`, `EXIT=0`).
 
-**Correction note:** the earlier `done` claim is **not verified against the full frozen criteria** while
-D127-E08 and D127-E09 remain open gaps. D127 is **not** marked superseded; the two gaps are open residual
-criteria, not a replacement of scope.
+**Correction note:** the earlier `done` claim was **not verified against the full frozen criteria** while
+D127-E08 and D127-E09 were open gaps; both were subsequently **closed by `8ed865b4`** with real
+integration tests (`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:2130/2174/2221/2277`;
+`rc1-127-computed-empty-1.md:70-71`), so the full frozen D127 criteria are now verified. D127 is **not**
+marked superseded; the two former gaps were residual criteria, not a replacement of scope.
 
 Observation only: `examples/README.md` links fall outside the `docs/**` + `readme.md` public→specs rule and
 outside this cycle's scope; no public doc link audit violation was found in the rule's scope.

@@ -1,6 +1,6 @@
 # PostgreSQL native json/jsonb column mapping — task D131 / issue #131
 
-- status: DO complete (plan r=1, n=1/3) — awaiting CHECK
+- status: done — CHECK PASS (rv1); ACT done (cycle N=1, revision r=1, attempt n=1/3)
 - task: D131
 - issue: #131 (https://github.com/AlexeyShirshov/nextorm/issues/131)
 - collection: 1.0.9-rc1

@@ -6,7 +6,8 @@
 - Attempt: `n = 3/3`
 - Evidence contract revision: `rv = CEvidence.ContractA.1`
 - Status: **done** — ACT complete; CHECK PASS (r=1, n=3/3); corrective documentation scope only
-- Branch: `1.0.9-rc1`; HEAD: `36e540e2`
+- Branch: `1.0.9-rc1`; cycle-time HEAD: `36e540e2`; this corrective task's commit: `1327166b`
+- Reconciliation: D127-E08/E09, recorded below as open product-test gaps at this cycle, were subsequently closed by `8ed865b4` with real integration tests (`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:2130/2174/2221/2277`; `rc1-127-computed-empty-1.md:70-71`).
 - Mode: autonomous; auto-commit **authorized** by the collection (ACT commits later; this DO task performs **no commit/push**)
 - Hard constraint: **docs-only** — touch ONLY `docs/specs/status/**`. If any step appears to require a `src/`/`tests/`/config change, STOP and report it as a defect.
 - Allowed commit paths: `docs/specs/status/**` only.

@@ -259,7 +259,7 @@ Per-provider (parsed from `integration.xml`; all five providers executed):
   (`SqlServerSpecificTests.cs`), defect `rc1-127-param-indexer-name` (1 fix, test-only).
 - Disposition: residual E08/E09 criteria are satisfied by the new real-server integration tests; no plan
   change (r=1, n=1), no rejected candidate, no supersession of the parent D127 scope.
-- Commit sha: see git log.
+- Commit sha: `8ed865b4`.
 - Evidence pointers: `artifacts/d127/rc1-127-computed-empty-1/` (`build.log`, `test-sqlserver.log`,
   `test-sqlite.log`, `test-postgres.log`, `test-mysql.log`, `sqlserver-class.log`, `sqlserver-class.xml`,
   `integration.log`, `integration.xml`); class run exit 0 Total 91 / Passed 91 / Failed 0 / Skipped 0;

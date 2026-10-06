@@ -80,7 +80,7 @@ parity.
 
 - BenchmarkDotNet micro-benchmark of the buffered numeric read (candidate vs baseline) with paired ABBA
   rounds; judge on `Allocated B/op` (must drop) and time median (≤1.05, no round >1.20, ≥2/3 rule).
-- Deferred to the next stream; **D168-R9 stays pending**.
+- Deferred to the next stream; **D168-R9 satisfied** — perf gate PASS (allocations 464→0 B/row, numeric-source boxing 9→0, paired ABBA median ratio 0.3382, no round > 1.20; see the `Acceptance perf verdict (D4)` section).
 
 ### Recon decision
 
