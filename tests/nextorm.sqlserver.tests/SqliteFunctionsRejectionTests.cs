@@ -106,4 +106,45 @@ public class SqliteFunctionsRejectionTests
             .Select(r => r.Id));
         act.Should().Throw<NotSupportedException>();
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // FTS5 maintenance/control (#195): the SQLite-only control-interface surface is rejected by a
+    // provider without FTS5 from ToSql/Execute/ExecuteAsync, before any connection I/O.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_ToSql_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateSqliteFts5CommandBuilder("docs_fts").Optimize().ToSql();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("SqlServerDialect does not support SQLite FTS5 maintenance commands.");
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_Execute_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateSqliteFts5CommandBuilder("docs_fts").Rebuild().Execute();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("SqlServerDialect does not support SQLite FTS5 maintenance commands.");
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public async Task Fts5Maintenance_ExecuteAsync_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateSqliteFts5CommandBuilder("docs_fts").IntegrityCheck().ExecuteAsync();
+
+        await act.Should().ThrowAsync<NotSupportedException>()
+            .WithMessage("SqlServerDialect does not support SQLite FTS5 maintenance commands.");
+    }
 }

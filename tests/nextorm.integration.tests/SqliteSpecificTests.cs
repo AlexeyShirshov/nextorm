@@ -1724,6 +1724,278 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
             "the apostrophe must reach FTS5 as bound data, not break the SQL text");
     }
 
+    // =============================================================================================
+    // FTS5 maintenance/control interface (#195): the operation is an INSERT through the FTS5 control
+    // interface; on a real table the six operations must run, Rebuild must repair a stale
+    // external-content index and the native SQLite errors must propagate unchanged.
+    // =============================================================================================
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_AllOperations_ShouldExecuteAndKeepIndexQueryable()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello").Should().Equal(1L, 3L);
+
+        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").AutoMerge(4).Execute().Should().BeGreaterThanOrEqualTo(0);
+        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").CrisisMerge(2).Execute();
+        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Merge(8).Execute();
+        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").IntegrityCheck().Execute();
+        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Optimize().Execute();
+        ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Rebuild().Execute();
+
+        // The maintenance operations must not change the rows the index selects.
+        NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello").Should().Equal(1L, 3L);
+        NativeRowIds(ctx, "fts5_docs", "fts5_docs", "fox").Should().Equal(1L, 2L);
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public async Task Fts5Maintenance_AllOperations_ShouldExecuteAsyncAndKeepIndexQueryable()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").AutoMerge(4).ExecuteAsync(cancellationToken);
+        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").CrisisMerge(2).ExecuteAsync(cancellationToken);
+        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Merge(8).ExecuteAsync(cancellationToken);
+        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").IntegrityCheck().ExecuteAsync(cancellationToken);
+        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Optimize().ExecuteAsync(cancellationToken);
+        await ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Rebuild().ExecuteAsync(cancellationToken);
+
+        NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello").Should().Equal(1L, 3L);
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_Rebuild_ShouldRepairStaleExternalContentIndex()
+    {
+        var ctx = _sut.DataProvider;
+        CreateExternalContentFts(ctx, "ext_fts", "ext_content");
+
+        // Fresh: the index was built from the content table.
+        NativeRowIds(ctx, "ext_fts", "ext_fts", "hello").Should().Equal(1L);
+
+        // Mutating the content table behind the index makes the index stale.
+        Execute(ctx, "update ext_content set title = 'changed text' where id = 1");
+        NativeRowIds(ctx, "ext_fts", "ext_fts", "hello").Should().Equal(new long[] { 1L }, "the stale index still reports the old token");
+        NativeRowIds(ctx, "ext_fts", "ext_fts", "changed").Should().BeEmpty();
+
+        ctx.CreateSqliteFts5CommandBuilder("ext_fts").Rebuild().Execute();
+
+        NativeRowIds(ctx, "ext_fts", "ext_fts", "hello").Should().BeEmpty("rebuild refreshed the index from the content table");
+        NativeRowIds(ctx, "ext_fts", "ext_fts", "changed").Should().Equal(1L);
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_IntegrityCheck_OmittedAndFalse_ShouldSucceed_TrueOnStale_ShouldThrowNative()
+    {
+        var ctx = _sut.DataProvider;
+        CreateExternalContentFts(ctx, "ic_fts", "ic_content");
+
+        ctx.CreateSqliteFts5CommandBuilder("ic_fts").IntegrityCheck().Execute();
+        ctx.CreateSqliteFts5CommandBuilder("ic_fts").IntegrityCheck(false).Execute();
+
+        Execute(ctx, "update ic_content set title = 'changed text' where id = 1");
+
+        var ours = Attempt(() => ctx.CreateSqliteFts5CommandBuilder("ic_fts").IntegrityCheck(true).Execute());
+        var native = Attempt(() =>
+        {
+            Execute(ctx, "insert into ic_fts(ic_fts, rank) values('integrity-check', 1)");
+            return 0;
+        });
+
+        ours.Success.Should().BeFalse("integrity-check 1 compares the index against the content table");
+        ours.ErrorCode.Should().Be(native.ErrorCode, "the native result code must be propagated unchanged");
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_RebuildOnContentlessTable_ShouldThrowNativeError()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists cl_fts");
+        Execute(ctx, "create virtual table cl_fts using fts5(title, content='')");
+        Execute(ctx, "insert into cl_fts(rowid, title) values (1, 'hello')");
+
+        try
+        {
+            var act = () => ctx.CreateSqliteFts5CommandBuilder("cl_fts").Rebuild().Execute();
+
+            act.Should().Throw<SqliteException>().WithMessage("*contentless*", "the native SQLite error propagates unchanged");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists cl_fts");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_MissingTable_ShouldThrowNativeError()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists no_such_fts");
+
+        var ours = Attempt(() => ctx.CreateSqliteFts5CommandBuilder("no_such_fts").Optimize().Execute());
+        var native = Attempt(() =>
+        {
+            Execute(ctx, "insert into no_such_fts(no_such_fts) values('optimize')");
+            return 0;
+        });
+
+        ours.Success.Should().BeFalse();
+        ours.ErrorCode.Should().Be(native.ErrorCode, "the native result code must be propagated unchanged");
+        ours.ErrorCode.Should().Be(1, "SQLITE_ERROR (1) is SQLite's primary code for a missing table");
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public void Fts5Maintenance_NonFtsTable_ShouldThrowNativeError()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists plain_table");
+        Execute(ctx, "create table plain_table (id integer primary key)");
+
+        try
+        {
+            // The control command renders against a regular table, so SQLite rejects it as an insert
+            // into a table lacking the control column; the native error must propagate, not be swallowed.
+            var ours = Attempt(() => ctx.CreateSqliteFts5CommandBuilder("plain_table").Optimize().Execute());
+            var native = Attempt(() =>
+            {
+                Execute(ctx, "insert into plain_table(plain_table) values('optimize')");
+                return 0;
+            });
+
+            ours.Success.Should().BeFalse();
+            ours.ErrorCode.Should().Be(native.ErrorCode, "the native result code must be propagated unchanged");
+            ours.ErrorCode.Should().Be(1, "SQLITE_ERROR (1) is SQLite's primary code for a column that does not exist");
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists plain_table");
+        }
+    }
+
+    [Fact]
+    [Trait("Issue", "195")]
+    public async Task Fts5Maintenance_PreCancelledToken_ShouldNotExecute()
+    {
+        var ctx = _sut.DataProvider;
+        ResetFtsTables(ctx);
+        var before = NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello");
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = () => ctx.CreateSqliteFts5CommandBuilder("fts5_docs").Optimize().ExecuteAsync(cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        NativeRowIds(ctx, "fts5_docs", "fts5_docs", "hello").Should().Equal(before);
+    }
+
+    [Theory]
+    [Trait("Issue", "195")]
+    [InlineData(int.MinValue, "-2147483648")]
+    [InlineData(int.MaxValue, "2147483647")]
+    public void Fts5Maintenance_ExtremeMergeValue_ShouldMatchCanonicalDirectSql(int pages, string literal)
+    {
+        var ctx = _sut.DataProvider;
+        CreateFtsProbe(ctx, "mnt_a");
+        CreateFtsProbe(ctx, "mnt_b");
+
+        try
+        {
+            var builder = ctx.CreateSqliteFts5CommandBuilder("mnt_a").Merge(pages);
+            builder.ToSql().Should().Be(
+                $"insert into \"mnt_a\" (\"mnt_a\", \"rank\") values ('merge', {literal})",
+                "the rendered SQL must match the canonical FTS5 control form byte-for-byte");
+
+            var ours = Attempt(() => builder.Execute());
+            var native = Attempt(() =>
+            {
+                Execute(ctx, $"insert into mnt_b (mnt_b, rank) values('merge', {literal})");
+                return 0;
+            });
+
+            ours.Success.Should().Be(native.Success, "the extreme merge value must have the same outcome as the canonical direct SQL");
+            if (!ours.Success)
+                ours.ErrorCode.Should().Be(native.ErrorCode);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists mnt_a");
+            Execute(ctx, "drop table if exists mnt_b");
+        }
+    }
+
+    [Theory]
+    [Trait("Issue", "195")]
+    [InlineData(int.MaxValue, "2147483647")]
+    public void Fts5Maintenance_ExtremeCrisisMergeValue_ShouldMatchCanonicalDirectSql(int value, string literal)
+    {
+        var ctx = _sut.DataProvider;
+        CreateFtsProbe(ctx, "cm_a");
+        CreateFtsProbe(ctx, "cm_b");
+
+        try
+        {
+            var builder = ctx.CreateSqliteFts5CommandBuilder("cm_a").CrisisMerge(value);
+            builder.ToSql().Should().Be(
+                $"insert into \"cm_a\" (\"cm_a\", \"rank\") values ('crisismerge', {literal})",
+                "the rendered SQL must match the canonical FTS5 control form byte-for-byte");
+
+            var ours = Attempt(() => builder.Execute());
+            var native = Attempt(() =>
+            {
+                Execute(ctx, $"insert into cm_b (cm_b, rank) values('crisismerge', {literal})");
+                return 0;
+            });
+
+            ours.Success.Should().Be(native.Success, "the extreme crisismerge value must have the same outcome as the canonical direct SQL");
+            if (!ours.Success)
+                ours.ErrorCode.Should().Be(native.ErrorCode);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists cm_a");
+            Execute(ctx, "drop table if exists cm_b");
+        }
+    }
+
+    private static void CreateExternalContentFts(IDataContext ctx, string ftsTable, string contentTable)
+    {
+        Execute(ctx, $"drop table if exists {ftsTable}");
+        Execute(ctx, $"drop table if exists {contentTable}");
+        Execute(ctx, $"create table {contentTable} (id integer primary key, title text, body text)");
+        Execute(ctx, $"create virtual table {ftsTable} using fts5(title, body, content='{contentTable}', content_rowid='id')");
+        Execute(ctx, $"insert into {contentTable}(id, title, body) values (1, 'hello world', 'the quick brown fox')");
+        Execute(ctx, $"insert into {ftsTable}({ftsTable}) values('rebuild')");
+    }
+
+    private static void CreateFtsProbe(IDataContext ctx, string table)
+    {
+        Execute(ctx, $"drop table if exists {table}");
+        Execute(ctx, $"create virtual table {table} using fts5(title, body)");
+        Execute(ctx, $"insert into {table}(title, body) values ('hello world', 'the quick brown fox')");
+    }
+
+    private static (bool Success, int ErrorCode) Attempt(Func<int> action)
+    {
+        try
+        {
+            action();
+            return (true, 0);
+        }
+        catch (SqliteException exception)
+        {
+            return (false, exception.SqliteErrorCode);
+        }
+    }
+
     private static void ConfigureFts5Rank(IDataContext ctx, string rankExpression)
         => Execute(ctx, $"insert into fts5_docs(fts5_docs, rank) values('rank', '{rankExpression}')");
 

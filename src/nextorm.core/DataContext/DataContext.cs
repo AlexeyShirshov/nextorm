@@ -1113,6 +1113,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             DeleteCommand delete => BuildDeleteSql(delete),
             DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
             TruncateCommand truncate => BuildTruncateSql(truncate),
+            SqliteFts5Command sqliteFts5 => BuildSqliteFts5Sql(sqliteFts5),
             CreateTableAsCommand createTableAs => BuildCreateTableAsSql(createTableAs),
             DropTableCommand dropTable => BuildDropTableSql(dropTable),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
@@ -1193,6 +1194,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase), []);
     }
+
+    private (string Sql, List<Parameter> Parameters) BuildSqliteFts5Sql(SqliteFts5Command command)
+        => SqlMutationBuilder.MakeSqliteFts5(Dialect, command, KeywordCase);
 
     private (string Sql, List<Parameter> Parameters) BuildCreateTableAsSql(CreateTableAsCommand command)
     {

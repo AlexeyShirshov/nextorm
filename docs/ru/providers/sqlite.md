@@ -129,10 +129,14 @@ ctx.From<IComplexEntity>()
 
 ### Полнотекстовый поиск (FTS3/FTS4/FTS5)
 
-Члены FTS выполняют запрос к виртуальной таблице FTS; nextorm её не создаёт и не обслуживает.
-Поддержка запросов существует только когда сборка SQLite содержит соответствующий модуль
-(поставляемая сборка включает `fts3`, `fts4` и `fts5`). Это отдельная поверхность от
-кросс-провайдерных предикатов `SqlFunctions.Sql.contains`/`freetext`: они по-прежнему гейтятся
+Члены FTS выполняют запрос к виртуальной таблице FTS, а поверхность команд обслуживания, специфичная
+для SQLite (фабрика `IDataContext.CreateSqliteFts5CommandBuilder(tableName)`, возвращающая
+`SqliteFts5CommandBuilder`), её настраивает; nextorm никогда не создаёт саму таблицу. Поддержка
+запросов существует только когда сборка SQLite содержит соответствующий модуль (поставляемая сборка
+включает `fts3`, `fts4` и `fts5`). Скалярно-табличная поверхность запросов FTS находится на
+`SqlFunctions.Sqlite`; команды обслуживания — отдельная поверхность command-builder'а, а не члены
+`SqlFunctions.Sqlite`. И то и другое отдельно от кросс-провайдерных предикатов
+`SqlFunctions.Sql.contains`/`freetext`: они по-прежнему гейтятся
 [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), который на SQLite равен
 `false`, поэтому бросают `NotSupportedException`. Каждый член FTS — SQL-only: in-memory провайдер
 бросает `NotSupportedException`.
@@ -225,12 +229,40 @@ var scores = ctx.From<Article>()
     .ToList();
 ```
 
-Создание, наполнение и настройка индекса остаются вне поверхности запросов: функции
-обслуживания/управления FTS5 (`AutoMerge`, `CrisisMerge`, `Merge`, `Optimize`, `Rebuild`,
-`IntegrityCheck`) отложены в follow-up
-[#195](https://github.com/AlexeyShirshov/nextorm/issues/195) и
-[#196](https://github.com/AlexeyShirshov/nextorm/issues/196); создавайте виртуальную таблицу сырым
-SQL.
+Создание и наполнение индекса остаются вне поверхности запросов (создавайте виртуальную таблицу
+сырым SQL), но команды обслуживания/управления FTS5 доступны через специфичный для SQLite command
+builder `IDataContext.CreateSqliteFts5CommandBuilder(tableName)`:
+
+| Операция | Рендерящиеся значения | Примечание |
+|---|---|---|
+| `AutoMerge(value)` | `('automerge', value)` | `value` — 0..16; другие значения бросают |
+| `CrisisMerge(value)` | `('crisismerge', value)` | `value` должен быть неотрицательным; `0`/`1` проходят без изменений |
+| `Merge(pages)` | `('merge', pages)` | любое знаковое `int`, передаётся без изменений |
+| `Optimize()` | `('optimize')` | одноколоночная форма |
+| `Rebuild()` | `('rebuild')` | одноколоночная форма; недоступна для contentless-таблиц FTS5 |
+| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` / `('integrity-check', 0\|1)` | одноколоночная, когда флаг опущен; при `true` проверяется и внешнее содержимое |
+
+Каждая операция возвращает новый неизменяемый builder; терминалы — `ToSql()` (рендерит, не
+обращаясь к базе), `Execute()` (`int` затронутых строк) и `ExecuteAsync(CancellationToken = default)`
+(`Task<int>`). Вызов терминала до выбора операции бросает `InvalidOperationException`.
+Двухколоночная форма `"rank"` используется для `automerge`/`crisismerge`/`merge`, одноколоночная —
+для `optimize`/`rebuild` (и для `integrity-check` с опущенным флагом). Это инструкции поверхности
+команд — не скалярные и не табличные функции и не часть `SqlFunctions.Sqlite`. Имя таблицы
+отклоняется, если оно null, пустое, состоит из пробелов или содержит символ NUL.
+
+```csharp
+var builder = ctx.CreateSqliteFts5CommandBuilder("article_fts");
+var sql = builder.AutoMerge(4).ToSql();
+// INSERT INTO "article_fts" ("article_fts", "rank") VALUES ('automerge', 4)
+var affected = builder.Optimize().Execute();
+```
+
+Builder — SQLite-only: на любом другом провайдере поверхность бросает
+`NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
+до любого доступа к базе. `Execute`/`ExecuteAsync` возвращают `int` затронутых строк драйвера без
+изменений (не число страниц и не счётчики восстановления); нативные ошибки SQLite пробрасываются.
+`Rebuild` недоступна для contentless-таблиц FTS5, а `IntegrityCheck(true)` проверяет и внешнее
+содержимое.
 
 Полный список, нативное написание в SQLite и требования к версии/опциям сборки — в разделе
 [Специфичный для SQLite SQL](../guide/provider-specific/sqlite.md).
@@ -256,7 +288,7 @@ await ctx.From<ISimpleEntity>()
 
 Многоколоночный терминал `ToDataReader`/`ToDataReaderAsync` в SQLite **поддерживается**. Он идёт через отдельный шов без локатора (per-call буферизованная подготовка `storeInCache: false`, а не LOB-путь с `SequentialAccess`): локатор `rowid` не добавляется, поэтому `FieldCount` равен числу колонок проекции, а ordinals соответствуют `Select`. Reader **буферизованный**, а не чанковый — колонка `byte[]`/`string` внутри многоколоночной проекции читается целиком в managed-память, — поэтому для одной большой LOB-колонки предпочитайте `ToStream`/`ToTextReader`. Возвращённый reader принадлежит вызывающему: освободите его, чтобы освободить provider-reader и per-call команду; контекст остаётся живым и пригодным.
 
-Собственная поверхность полнотекстового поиска SQLite (`FTS3/FTS4/FTS5`) доступна (см. [Полнотекстовый поиск](#полнотекстовый-поиск-fts3fts4fts5)); за её пределами остаются только кросс-провайдерные предикаты `SqlFunctions.Sql.contains`/`freetext` (гейт [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), на SQLite `false`) и обслуживание FTS-индекса (отложено в [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)).
+Собственная поверхность полнотекстового поиска SQLite (`FTS3/FTS4/FTS5`) доступна (см. [Полнотекстовый поиск](#полнотекстовый-поиск-fts3fts4fts5)), как и специфичный для SQLite command builder обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`); за её пределами остаются только кросс-провайдерные предикаты `SqlFunctions.Sql.contains`/`freetext` (гейт [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), на SQLite `false`). Поверхность обслуживания отклоняется на любом не-SQLite провайдере через `NotSupportedException`, а `Rebuild` недоступна для contentless-таблиц FTS5.
 
 ## Различия провайдеров
 
@@ -274,7 +306,7 @@ await ctx.From<ISimpleEntity>()
 | Псевдоним TVF | не требуется |
 | `*ALL` | не поддерживается |
 | Подзапросы `ANY`/`ALL` | отклоняются базой данных при выполнении |
-| Полнотекстовый поиск | поверхность запросов FTS3/FTS4/FTS5 через `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, помощники FTS3/4, табличный `MatchTable` FTS5; FTS3/4 `Rank` требует зарегистрированной на соединении UDF `rank`); кросс-провайдерные `contains`/`freetext` бросают |
+| Полнотекстовый поиск | поверхность запросов FTS3/FTS4/FTS5 через `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, помощники FTS3/4, табличный `MatchTable` FTS5; FTS3/4 `Rank` требует зарегистрированной на соединении UDF `rank`); плюс специфичный для SQLite command builder обслуживания FTS5 (`CreateSqliteFts5CommandBuilder`: `AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`, sync/async терминалы, возвращающие `int` затронутых строк); кросс-провайдерные `contains`/`freetext` бросают |
 | Потоковое чтение LOB (`ToStream`/`ToTextReader`) | поддерживается (`blob` / `text`; источник должен раскрывать `rowid` — на `view`/`WITHOUT ROWID` падает с `SqliteException: no such column: rowid`) |
 | Многоколоночный reader (`ToDataReader`/`ToDataReaderAsync`) | поддерживается (буферизованный, без локатора; LOB не чанками; не-LOB проекции и LOB-колонка внутри многоколоночного select) |
 | Session/info-функции | `version()` → `sqlite_version()` (нет информации о пользователе/схеме/БД) |

@@ -162,9 +162,9 @@ select pi() as 'Pi', degrees(pi()) as 'Degrees', log2(8) as 'Log2' from complex_
 ## Полнотекстовый поиск (FTS3/FTS4/FTS5)
 
 Полнотекстовый поиск SQLite живёт в модулях виртуальных таблиц `fts3`, `fts4` и `fts5`. nextorm
-предоставляет только сторону **запросов** через [`SqlFunctions.Sqlite`](xref:NextORM.Core.SqliteFunctions);
-он не создаёт и не обслуживает виртуальную таблицу, поэтому создайте её сырым SQL (или собственной
-миграцией):
+предоставляет сторону **запросов** через [`SqlFunctions.Sqlite`](xref:NextORM.Core.SqliteFunctions)
+и отдельный SQLite-only command builder **обслуживания**; он не создаёт виртуальную таблицу,
+поэтому создайте её сырым SQL (или собственной миграцией):
 
 ```sql
 create virtual table article_fts using fts5(title, body);
@@ -242,6 +242,48 @@ var rows = dataContext
 select rowid, title from "article_fts"($query) where rowid > 0 order by rowid
 ```
 
+### Команды обслуживания FTS5
+
+Инструкции обслуживания/управления FTS5 (`automerge`, `crisismerge`, `merge`, `optimize`, `rebuild`,
+`integrity-check`) доступны через специфичный для SQLite command builder, возвращаемый
+`IDataContext.CreateSqliteFts5CommandBuilder(tableName)`. Вызов `AutoMerge`/`CrisisMerge`/`Merge`
+рендерит двухколоночную форму `"rank"`, а `Optimize`/`Rebuild` (и `IntegrityCheck` с опущенным
+флагом) — одноколоночную:
+
+| Метод | Рендерящиеся значения | Примечание |
+|---|---|---|
+| `AutoMerge(value)` | `('automerge', value)` | `value` — 0..16; другие значения бросают |
+| `CrisisMerge(value)` | `('crisismerge', value)` | `value` неотрицателен; `0`/`1` проходят без изменений |
+| `Merge(pages)` | `('merge', pages)` | любое знаковое `int`, передаётся без изменений |
+| `Optimize()` | `('optimize')` | одноколоночная форма |
+| `Rebuild()` | `('rebuild')` | одноколоночная форма; недоступна для contentless-таблиц FTS5 |
+| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` или `('integrity-check', 0\|1)` | флаг опущен → одноколоночная форма; `true` проверяет и внешнее содержимое |
+
+Builder неизменяемый — каждая операция возвращает новый builder, — а его терминалы: `ToSql()`
+(рендерит, не обращаясь к базе), `Execute()` (`int` затронутых строк) и
+`ExecuteAsync(CancellationToken = default)` (`Task<int>`):
+
+```csharp
+var builder = ctx.CreateSqliteFts5CommandBuilder("article_fts");
+
+// Рендерит, не обращаясь к базе.
+var statement = builder.AutoMerge(4).ToSql();
+// INSERT INTO "article_fts" ("article_fts", "rank") VALUES ('automerge', 4)
+
+// Выполнение: возвращает int затронутых строк драйвера (не число страниц/восстановлений).
+int affected = builder.Optimize().Execute();
+await builder.IntegrityCheck(checkExternalContent: true).ExecuteAsync(cancellationToken);
+```
+
+Имя таблицы валидируется (null, пустое, из пробелов или с символом NUL отклоняется). Вызов
+терминала до выбора операции бросает `InvalidOperationException`. Builder — SQLite-only: на любом
+другом провайдере он бросает
+`NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
+до любого доступа к базе. `Execute`/`ExecuteAsync` возвращают `int` затронутых строк драйвера без
+изменений, а нативные ошибки SQLite пробрасываются; `Rebuild` недоступна для contentless-таблиц
+FTS5, а `IntegrityCheck(true)` проверяет и внешнее содержимое. Эти инструкции — поверхность команд,
+а не скалярные/табличные функции и не часть `SqlFunctions.Sqlite`.
+
 ### FTS3 / FTS4
 
 | C# | SQLite |
@@ -294,11 +336,9 @@ var rows = dataContext.From<Article>()
 Первый аргумент вспомогательных функций (и токен таблицы у `Match`) — доверенная константа,
 подставляемая как quoted-идентификатор; никогда не строите её из пользовательского ввода.
 
-Создание, наполнение и настройка индекса остаются вне поверхности запросов: функции
-обслуживания/управления FTS5 (`AutoMerge`, `CrisisMerge`, `Merge`, `Optimize`, `Rebuild`,
-`IntegrityCheck`) отложены в follow-up
-[#195](https://github.com/AlexeyShirshov/nextorm/issues/195) и
-[#196](https://github.com/AlexeyShirshov/nextorm/issues/196). Пока выполняйте эти операторы сырым
-SQL.
+Команды обслуживания/управления FTS5 (`AutoMerge`, `CrisisMerge`, `Merge`, `Optimize`, `Rebuild`,
+`IntegrityCheck`) покрыты специфичным для SQLite command builder'ом в разделе
+[Команды обслуживания FTS5](#команды-обслуживания-fts5); создание и наполнение самой виртуальной
+таблицы остаются вне поверхности запросов.
 
 Сводка на уровне провайдера — в разделе [Провайдер SQLite](../../providers/sqlite.md).

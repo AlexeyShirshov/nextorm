@@ -129,12 +129,16 @@ ctx.From<IComplexEntity>()
 
 ### Full-text search (FTS3/FTS4/FTS5)
 
-The FTS members query an FTS virtual table; nextorm does not create or maintain it. Query support
-exists only when the SQLite build includes the module (the bundled provider ships `fts3`, `fts4` and
-`fts5`). This is separate from the cross-provider `SqlFunctions.Sql.contains`/`freetext` predicates:
-those stay gated by [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), which is
-`false` on SQLite, so they throw `NotSupportedException`. Every FTS member is SQL-only — the in-memory
-provider throws `NotSupportedException`.
+The FTS members query an FTS virtual table, and the SQLite-only maintenance command surface (the
+`IDataContext.CreateSqliteFts5CommandBuilder(tableName)` factory, returning `SqliteFts5CommandBuilder`)
+tunes it; nextorm never creates the table. Query support exists only when the SQLite build includes
+the module (the bundled provider ships `fts3`, `fts4` and `fts5`). The scalar/table-valued FTS query
+API lives on `SqlFunctions.Sqlite`; the maintenance commands are a separate command-builder surface,
+not members of `SqlFunctions.Sqlite`. Both are separate from the cross-provider
+`SqlFunctions.Sql.contains`/`freetext` predicates: those stay gated by
+[`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), which is `false` on SQLite, so
+they throw `NotSupportedException`. Every FTS member is SQL-only — the in-memory provider throws
+`NotSupportedException`.
 
 | C# | SQLite | Module |
 |---|---|---|
@@ -223,12 +227,39 @@ var scores = ctx.From<Article>()
     .ToList();
 ```
 
-Creating, populating and tuning the index stays outside the query surface: the FTS5
-maintenance/control functions (`AutoMerge`, `CrisisMerge`, `Merge`, `Optimize`, `Rebuild`,
-`IntegrityCheck`) are deferred to follow-ups
-[#195](https://github.com/AlexeyShirshov/nextorm/issues/195) and
-[#196](https://github.com/AlexeyShirshov/nextorm/issues/196); create the virtual table with raw SQL
-in the meantime.
+Creating and populating the index stays outside the query surface (create the virtual table with raw
+SQL), but the FTS5 maintenance/control commands are available through the SQLite-only command builder
+`IDataContext.CreateSqliteFts5CommandBuilder(tableName)`:
+
+| Operation | Rendered values | Notes |
+|---|---|---|
+| `AutoMerge(value)` | `('automerge', value)` | `value` is 0..16; other values throw |
+| `CrisisMerge(value)` | `('crisismerge', value)` | `value` must be nonnegative; `0`/`1` pass through unchanged |
+| `Merge(pages)` | `('merge', pages)` | any signed `int`, passed through unchanged |
+| `Optimize()` | `('optimize')` | one-column form |
+| `Rebuild()` | `('rebuild')` | one-column form; unavailable for contentless FTS5 tables |
+| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` / `('integrity-check', 0\|1)` | one-column when the flag is omitted; with `true` also verifies external content |
+
+Each operation returns a new immutable builder; the terminals are `ToSql()` (renders without touching
+the database), `Execute()` (`int` affected rows) and `ExecuteAsync(CancellationToken = default)`
+(`Task<int>`). Calling a terminal before selecting an operation throws `InvalidOperationException`.
+The two-column `"rank"` form is used by `automerge`/`crisismerge`/`merge`, the one-column form by
+`optimize`/`rebuild` (and by `integrity-check` with the flag omitted). These are command-surface
+statements — not scalar or table-valued functions and not part of `SqlFunctions.Sqlite`. The table name
+is rejected if it is null, empty, whitespace or contains a NUL character.
+
+```csharp
+var builder = ctx.CreateSqliteFts5CommandBuilder("article_fts");
+var sql = builder.AutoMerge(4).ToSql();
+// INSERT INTO "article_fts" ("article_fts", "rank") VALUES ('automerge', 4)
+var affected = builder.Optimize().Execute();
+```
+
+The builder is SQLite-only: on every other provider the surface throws
+`NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
+before any database access. `Execute`/`ExecuteAsync` return the driver's affected-row `int` unchanged
+(not page or repair counts); native SQLite errors propagate. `Rebuild` is unavailable for contentless
+FTS5 tables, and `IntegrityCheck(true)` also verifies external content.
 
 See [SQLite-specific SQL](../guide/provider-specific/sqlite.md) for the full list, the native SQLite
 spelling and the version/build-option requirements.
@@ -254,7 +285,7 @@ The LOB streaming terminals (`ToStream`/`ToTextReader`) are supported for a sing
 
 The multi-column `ToDataReader`/`ToDataReaderAsync` terminal **is** supported on SQLite. It goes through a separate, locator-free seam (the per-call `storeInCache: false` buffered preparation, not the `SequentialAccess` LOB path): the `rowid` locator is never appended, so `FieldCount` equals the projection column count and the ordinals match `Select`. The reader is **buffered**, not chunked — a `byte[]`/`string` column inside a multi-column projection is read whole into managed memory — so for a single large LOB column prefer `ToStream`/`ToTextReader`. The returned reader is caller-owned: dispose it to release the provider reader and the per-call command; the context stays alive and usable.
 
-SQLite's own FTS3/FTS4/FTS5 query surface is available (see [Full-text search](#full-text-search-fts3fts4fts5)); only the cross-provider `SqlFunctions.Sql.contains`/`freetext` predicates (gated by [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), `false` on SQLite) and FTS index maintenance (deferred to [#195](https://github.com/AlexeyShirshov/nextorm/issues/195)/[#196](https://github.com/AlexeyShirshov/nextorm/issues/196)) stay outside it.
+SQLite's own FTS3/FTS4/FTS5 query surface is available (see [Full-text search](#full-text-search-fts3fts4fts5)), as is the SQLite-only FTS5 maintenance command builder (`CreateSqliteFts5CommandBuilder`); only the cross-provider `SqlFunctions.Sql.contains`/`freetext` predicates (gated by [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), `false` on SQLite) stay outside it. The maintenance surface is rejected on every non-SQLite provider with `NotSupportedException`, and `Rebuild` is unavailable for contentless FTS5 tables.
 
 ## Provider differences
 
@@ -272,7 +303,7 @@ SQLite's own FTS3/FTS4/FTS5 query surface is available (see [Full-text search](#
 | TVF alias | not required |
 | `*ALL` | not supported |
 | `ANY`/`ALL` subqueries | rejected by the database at execution |
-| Full-text search | FTS3/FTS4/FTS5 query surface via `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, FTS3/4 helpers, FTS5 table-valued `MatchTable`; FTS3/4 `Rank` needs a connection-registered `rank` UDF); cross-provider `contains`/`freetext` throw |
+| Full-text search | FTS3/FTS4/FTS5 query surface via `SqlFunctions.Sqlite` (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/`Rank`, FTS3/4 helpers, FTS5 table-valued `MatchTable`; FTS3/4 `Rank` needs a connection-registered `rank` UDF); plus the SQLite-only FTS5 maintenance command builder (`CreateSqliteFts5CommandBuilder`: `AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`, sync/async terminals returning the affected-row `int`); cross-provider `contains`/`freetext` throw |
 | LOB streaming (`ToStream`/`ToTextReader`) | supported (`blob` / `text`; the source must expose `rowid` — a `view`/`WITHOUT ROWID` source fails with `SqliteException: no such column: rowid`) |
 | Multi-column reader (`ToDataReader`/`ToDataReaderAsync`) | supported (buffered, locator-free; no chunked LOB; non-LOB projections and a LOB column inside a multi-column select) |
 | Session/info functions | `version()` → `sqlite_version()` (no user/schema/database information) |

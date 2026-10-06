@@ -989,6 +989,29 @@ public static class DataContextExtensions
     }
 
     /// <summary>
+    /// Starts a SQLite FTS5 maintenance/control command over a raw FTS5 table name. The returned builder
+    /// selects one operation (<c>automerge</c>, <c>crisismerge</c>, <c>merge</c>, <c>optimize</c>,
+    /// <c>rebuild</c> or <c>integrity-check</c>) and then renders or executes it through the FTS5 control
+    /// interface; providers without FTS5 reject it with <see cref="NotSupportedException"/>. The table name
+    /// is preserved verbatim (no trimming or splitting; a dot is a literal character).
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="tableName">The raw FTS5 table name; must be non-null and not empty/whitespace, and must not contain a NUL character.</param>
+    /// <returns>A builder for the FTS5 maintenance command.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="dataContext"/> or <paramref name="tableName"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="tableName"/> is empty, all whitespace, or contains a NUL character.</exception>
+    public static SqliteFts5CommandBuilder CreateSqliteFts5CommandBuilder(this IDataContext dataContext, string tableName)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(tableName);
+
+        if (string.IsNullOrWhiteSpace(tableName) || tableName.Contains('\0'))
+            throw new ArgumentException("The FTS5 table name must be a non-empty identifier without NUL characters.", nameof(tableName));
+
+        return new SqliteFts5CommandBuilder(dataContext, tableName);
+    }
+
+    /// <summary>
     /// Starts a query over the mapping of <typeparamref name="T"/> and returns its fluent builder.
     /// The type's metadata is resolved lazily and cached per process; <paramref name="configEntity"/>
     /// therefore runs only on the first call for <typeparamref name="T"/>.

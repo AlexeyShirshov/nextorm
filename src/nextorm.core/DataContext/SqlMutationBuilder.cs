@@ -467,6 +467,94 @@ internal static class SqlMutationBuilder
     }
 
     /// <summary>
+    /// Renders a SQLite FTS5 maintenance/control command through the FTS5 control interface
+    /// (<c>INSERT INTO &lt;table&gt;(...) VALUES(...)</c>). The raw table name is preserved verbatim and always
+    /// quoted with <see cref="ISqlDialect.QuoteIdentifier"/> (exactly like <see cref="MakeDropTableIfExists"/>
+    /// when quoting is enabled); the special <c>rank</c> column is an identifier and is quoted the same way.
+    /// Quoting is unconditional: the caller-supplied name is never emitted verbatim, so unusual names and
+    /// SQL-injection attempts cannot escape the identifier. SQLite is the only provider with the FTS5
+    /// surface, so a dialect without it is rejected before any SQL is produced. The operation and its
+    /// integer argument are inline literals, so the returned parameter list is always empty.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="command">The FTS5 maintenance command to render.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered SQL and an empty parameter list.</returns>
+    /// <exception cref="NotSupportedException">The dialect does not support SQLite FTS5.</exception>
+    internal static (string Sql, List<Parameter> Parameters) MakeSqliteFts5(
+        ISqlDialect dialect,
+        SqliteFts5Command command,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        // FTS5 is the SQLite full-text module: gate on the same capability pair the table-valued FTS5
+        // search uses, never on SupportsFullText (a different, cross-provider surface).
+        if (dialect.SqliteFunctions is null || !dialect.SupportsTableFunction("fts5"))
+            throw new NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.");
+
+        // Identifiers are always quoted (FC195-1): the FTS5 control interface takes no binds for the table
+        // or the hidden `rank` column, so an unquoted verbatim name would allow identifier/SQL injection.
+        var table = dialect.QuoteIdentifier(command.TableName);
+        var rank = dialect.QuoteIdentifier("rank");
+
+        var writer = StringBuilderPool.Shared.Get();
+        try
+        {
+            writer.Append(SqlKeywords.Of(keywordCase, "insert into ")).Append(table);
+
+            switch (command.Operation)
+            {
+                case SqliteFts5Operation.AutoMerge:
+                case SqliteFts5Operation.CrisisMerge:
+                case SqliteFts5Operation.Merge:
+                    AppendFts5RankValues(writer, keywordCase, table, rank, Fts5OperationName(command.Operation), RequireFts5Value(command));
+                    break;
+                case SqliteFts5Operation.Optimize:
+                    AppendFts5Control(writer, keywordCase, table, "optimize");
+                    break;
+                case SqliteFts5Operation.Rebuild:
+                    AppendFts5Control(writer, keywordCase, table, "rebuild");
+                    break;
+                case SqliteFts5Operation.IntegrityCheck:
+                    if (command.Value is { } rankValue)
+                        AppendFts5RankValues(writer, keywordCase, table, rank, "integrity-check", rankValue);
+                    else
+                        AppendFts5Control(writer, keywordCase, table, "integrity-check");
+                    break;
+                default:
+                    throw new NotSupportedException($"Unsupported SQLite FTS5 operation {command.Operation}.");
+            }
+
+            return (writer.ToString(), []);
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(writer);
+        }
+    }
+
+    // The single-column FTS5 control form: INSERT INTO <table> (<table>) VALUES ('<argument>').
+    private static void AppendFts5Control(StringBuilder writer, KeywordCase keywordCase, string table, string argument)
+        => writer.Append(" (").Append(table).Append(") ")
+            .Append(SqlKeywords.Of(keywordCase, "values")).Append(" ('").Append(argument).Append("')");
+
+    // The two-column FTS5 control form: INSERT INTO <table> (<table>, <rank>) VALUES ('<argument>', <value>).
+    private static void AppendFts5RankValues(StringBuilder writer, KeywordCase keywordCase, string table, string rank, string argument, int value)
+        => writer.Append(" (").Append(table).Append(", ").Append(rank).Append(") ")
+            .Append(SqlKeywords.Of(keywordCase, "values")).Append(" ('").Append(argument).Append("', ")
+            .Append(value.ToString(System.Globalization.CultureInfo.InvariantCulture)).Append(')');
+
+    private static string Fts5OperationName(SqliteFts5Operation operation) => operation switch
+    {
+        SqliteFts5Operation.AutoMerge => "automerge",
+        SqliteFts5Operation.CrisisMerge => "crisismerge",
+        SqliteFts5Operation.Merge => "merge",
+        _ => throw new NotSupportedException($"Unsupported SQLite FTS5 operation {operation}."),
+    };
+
+    private static int RequireFts5Value(SqliteFts5Command command)
+        => command.Value ?? throw new NotSupportedException($"{command.Operation} requires an integer argument.");
+
+    /// <summary>
     /// Validates a materialisation command against the dialect's capability flags, resolves the quoted
     /// target and column list, and — for a dialect that renders <c>SELECT ... INTO</c> — returns the
     /// <c>INTO</c> clause to inject into the top-level select list (otherwise <see langword="null"/>).
