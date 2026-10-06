@@ -327,6 +327,7 @@ public sealed record ExtremeRowRenderRequest
         bool isMax,
         IReadOnlyList<string> payloadAliases,
         IReadOnlyList<string> keyAliases,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns,
         IReadOnlyList<string> groupAliases,
         KeywordCase keywordCase)
     {
@@ -334,6 +335,7 @@ public sealed record ExtremeRowRenderRequest
         IsMax = isMax;
         PayloadAliases = payloadAliases;
         KeyAliases = keyAliases;
+        KeyColumns = keyColumns;
         GroupAliases = groupAliases;
         KeywordCase = keywordCase;
     }
@@ -352,6 +354,13 @@ public sealed record ExtremeRowRenderRequest
 
     /// <summary>The aliases of the extreme-key components, in selector order.</summary>
     public IReadOnlyList<string> KeyAliases { get; }
+
+    /// <summary>
+    /// The shape facts of the extreme-key components, positionally aligned with
+    /// <see cref="KeyAliases"/>. A renderer whose key emission depends on the component type (for
+    /// example ClickHouse's floating-key NaN adaptation) reads this instead of re-deriving it.
+    /// </summary>
+    public IReadOnlyList<ExtremeRowRenderColumn> KeyColumns { get; }
 
     /// <summary>The aliases of the group-by components, in selector order; empty for the global form.</summary>
     public IReadOnlyList<string> GroupAliases { get; }

@@ -77,14 +77,15 @@ public class ExtremeRowPayloadLazinessTests
     [Fact]
     public void IneligibleKey_ShouldDeclineBeforeReadingThePayload()
     {
-        // A floating-point key is rejected by AreIntegralDirectColumns(Keys); the && chain short-circuits
-        // before AreSupportedPayloadColumns reads the payload, so the eligibility pass stays free of the
-        // payload projection on this rejected native candidate.
+        // A string key is rejected by AreSupportedKeyColumns(Keys); the && chain short-circuits before
+        // AreSupportedPayloadColumns reads the payload, so the eligibility pass stays free of the
+        // payload projection on this rejected native candidate. Floating keys are now eligible, so the
+        // string key carries the "rejected before the payload" guard.
         using var real = ClickHouseTestContext.Create();
-        var realSql = SqlOf(real, real.From<IFloatNativeEntity>().SelectWhereMax(x => x.D, x => new { x.Id }));
+        var realSql = SqlOf(real, real.From<IStringKeyNativeEntity>().SelectWhereMax(x => x.Name, x => new { x.Id }));
 
         using var ctx = new CapturingClickHouseDataContext(PlaceholderConnectionString);
-        var sql = SqlOf(ctx, ctx.From<IFloatNativeEntity>().SelectWhereMax(x => x.D, x => new { x.Id }));
+        var sql = SqlOf(ctx, ctx.From<IStringKeyNativeEntity>().SelectWhereMax(x => x.Name, x => new { x.Id }));
 
         sql.Should().Be(realSql);
         ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
