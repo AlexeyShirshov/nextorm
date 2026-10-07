@@ -107,6 +107,15 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         isEnabledByDefault: true,
         description: "The consumer assembly name must contain at least one usable character and normalize to a valid C# identifier.");
 
+    private static readonly DiagnosticDescriptor AliasExtensionCollision = new(
+        DiagnosticIdPrefix + "007",
+        "Join alias extension signature collision",
+        "Two distinct join-alias chains emit extension signature '{0}' with different bodies",
+        DiagnosticCategory,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A generated extension signature must identify exactly one body; a same-signature/different-body pair would mask a chain-specific difference (issue #206 class) and must fail loudly instead of being silently merged.");
+
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -492,7 +501,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
         AppendAliasMarker(emitter, generatedNamespace, aliasNames.Where(alias => !suppressedAliases.Contains(alias)).ToList());
         AppendTypes(emitter, generatedNamespace, sequences);
-        AppendExtensions(emitter, generatedNamespace, validChains);
+        AppendExtensions(emitter, generatedNamespace, validChains, diagnostics);
 
         emitter.AppendLine("}");
         context.AddSource("JoinAlias.g.cs", SourceText.From(emitter.ToString(), Encoding.UTF8));
@@ -659,81 +668,122 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         }
     }
 
-    private static void AppendExtensions(StringBuilder emitter, string generatedNamespace, List<ChainModel> validChains)
+    private static void AppendExtensions(
+        StringBuilder emitter,
+        string generatedNamespace,
+        List<ChainModel> validChains,
+        List<Diagnostic> diagnostics)
     {
-        emitter.AppendLine("    public static class JoinAliasExtensions");
-        emitter.AppendLine("    {");
+        // #159 C1: two distinct chains can legitimately emit the same extension method when they differ
+        // only in an intermediate step's source kind (`EntityBuilder<T>` vs `Cte<T>`). That kind is not
+        // part of the emitted signature: the receiver type already fixes the accumulated schema and the
+        // last step's joined type is the method's own `TJoin`. Render every method in full, collapse the
+        // byte-identical duplicates to one, and reject a same-signature/different-body pair instead of
+        // silently masking a chain-specific difference (the issue #206 class of divergence).
+        var seenSignatures = new Dictionary<string, string>(StringComparer.Ordinal);
+        var methods = new List<string>();
 
         foreach (var chain in validChains.OrderBy(static c => ChainKey(c), StringComparer.Ordinal))
         {
-            var steps = chain.Steps;
-            var count = steps.Count;
-            var aliases = new string[count];
-            for (var i = 0; i < count; i++) aliases[i] = steps[i].Alias;
-            var suffix = string.Join("_", aliases);
-            var last = steps[count - 1];
+            var rendered = new StringBuilder();
+            var signature = RenderExtension(rendered, generatedNamespace, chain);
+            var method = rendered.ToString();
 
-            // The first alias join starts from the plain entity source; every later one extends a
-            // previously generated AliasJoin_* builder. Aliases are a self-contained chained API: a
-            // positional prefix is never part of a chain.
-            string receiverType;
-            string conditionArgumentType;
-            if (count == 1)
+            if (seenSignatures.TryGetValue(signature, out var existing))
             {
-                receiverType = "global::NextORM.Core.EntityBuilder<" + chain.BaseType + ">";
-                conditionArgumentType = chain.BaseType;
-            }
-            else
-            {
-                var receiverSuffix = string.Join("_", aliases.Take(count - 1));
-                var receiverArguments = new List<string> { chain.BaseType };
-                for (var i = 0; i < count - 1; i++) receiverArguments.Add(steps[i].JoinedType);
-                var receiverArgumentsText = string.Join(", ", receiverArguments);
-                receiverType = generatedNamespace + ".AliasJoin_" + receiverSuffix + "<" + receiverArgumentsText + ">";
-                conditionArgumentType = generatedNamespace + ".AliasProjection_" + receiverSuffix + "<" + receiverArgumentsText + ">";
+                if (!string.Equals(existing, method, StringComparison.Ordinal))
+                {
+                    diagnostics.Add(Diagnostic.Create(AliasExtensionCollision, Location.None, signature));
+                }
+
+                continue;
             }
 
-            var returnArguments = new List<string> { chain.BaseType };
-            for (var i = 0; i < count - 1; i++) returnArguments.Add(steps[i].JoinedType);
-            returnArguments.Add("TJoin");
-            var returnArgumentsText = string.Join(", ", returnArguments);
-            var returnType = generatedNamespace + ".AliasJoin_" + suffix + "<" + returnArgumentsText + ">";
-            var projectionType = generatedNamespace + ".AliasProjection_" + suffix + "<" + returnArgumentsText + ">";
-            var markerType = generatedNamespace + ".Alias." + last.Alias + "Marker";
-            var joinType = "global::NextORM.Core.JoinType." + JoinTypeName(last.Operator);
-            // #159: a typed CTE source emits an overload taking the descriptor and forwards to the CTE
-            // alias seam; the generated call itself is otherwise identical to the EntityBuilder form.
-            var sourceIsCte = last.IsCte;
-
-            emitter.AppendLine("        public static " + returnType + " " + last.Operator + "<TJoin>(");
-            emitter.AppendLine("            this " + receiverType + " self,");
-            if (sourceIsCte)
-            {
-                emitter.AppendLine("            global::NextORM.Core.Cte<TJoin> cte,");
-            }
-            else
-            {
-                emitter.AppendLine("            global::NextORM.Core.EntityBuilder<TJoin> _,");
-            }
-
-            if (!last.Conditionless)
-            {
-                emitter.AppendLine("            global::System.Linq.Expressions.Expression<global::System.Func<" + conditionArgumentType + ", TJoin, bool>> condition,");
-            }
-
-            emitter.AppendLine("            " + markerType + " marker)");
-            emitter.AppendLine("            => self.JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
-            emitter.AppendLine("                static dc => new " + returnType + "(dc),");
-            emitter.AppendLine(sourceIsCte ? "                cte," : "                _,");
-            if (!last.Conditionless)
-            {
-                emitter.AppendLine("                condition,");
-            }
-
-            emitter.AppendLine("                " + joinType + ");");
+            seenSignatures[signature] = method;
+            methods.Add(method);
         }
 
+        emitter.AppendLine("    public static class JoinAliasExtensions");
+        emitter.AppendLine("    {");
+
+        foreach (var method in methods) emitter.Append(method);
+
         emitter.AppendLine("    }");
+    }
+
+    /// <summary>
+    /// Renders one alias extension method into <paramref name="emitter"/> and returns its C# signature
+    /// (operator, generic arity, receiver/source/condition/marker parameter types and return type). The
+    /// signature is used to collapse byte-identical duplicates and to detect a same-signature pair whose
+    /// bodies differ. A positional prefix is never part of a chain: the first alias join starts from the
+    /// plain entity source and every later one extends a previously generated <c>AliasJoin_*</c> builder.
+    /// </summary>
+    private static string RenderExtension(StringBuilder emitter, string generatedNamespace, ChainModel chain)
+    {
+        var steps = chain.Steps;
+        var count = steps.Count;
+        var aliases = new string[count];
+        for (var i = 0; i < count; i++) aliases[i] = steps[i].Alias;
+        var suffix = string.Join("_", aliases);
+        var last = steps[count - 1];
+
+        string receiverType;
+        string conditionArgumentType;
+        if (count == 1)
+        {
+            receiverType = "global::NextORM.Core.EntityBuilder<" + chain.BaseType + ">";
+            conditionArgumentType = chain.BaseType;
+        }
+        else
+        {
+            var receiverSuffix = string.Join("_", aliases.Take(count - 1));
+            var receiverArguments = new List<string> { chain.BaseType };
+            for (var i = 0; i < count - 1; i++) receiverArguments.Add(steps[i].JoinedType);
+            var receiverArgumentsText = string.Join(", ", receiverArguments);
+            receiverType = generatedNamespace + ".AliasJoin_" + receiverSuffix + "<" + receiverArgumentsText + ">";
+            conditionArgumentType = generatedNamespace + ".AliasProjection_" + receiverSuffix + "<" + receiverArgumentsText + ">";
+        }
+
+        var returnArguments = new List<string> { chain.BaseType };
+        for (var i = 0; i < count - 1; i++) returnArguments.Add(steps[i].JoinedType);
+        returnArguments.Add("TJoin");
+        var returnArgumentsText = string.Join(", ", returnArguments);
+        var returnType = generatedNamespace + ".AliasJoin_" + suffix + "<" + returnArgumentsText + ">";
+        var projectionType = generatedNamespace + ".AliasProjection_" + suffix + "<" + returnArgumentsText + ">";
+        var markerType = generatedNamespace + ".Alias." + last.Alias + "Marker";
+        var joinType = "global::NextORM.Core.JoinType." + JoinTypeName(last.Operator);
+        // #159: a typed CTE source emits an overload taking the descriptor and forwards to the CTE
+        // alias seam; the generated call itself is otherwise identical to the EntityBuilder form.
+        var sourceIsCte = last.IsCte;
+        var sourceParameterType = sourceIsCte
+            ? "global::NextORM.Core.Cte<TJoin>"
+            : "global::NextORM.Core.EntityBuilder<TJoin>";
+        var conditionParameterType = "global::System.Linq.Expressions.Expression<global::System.Func<"
+            + conditionArgumentType + ", TJoin, bool>>";
+
+        emitter.AppendLine("        public static " + returnType + " " + last.Operator + "<TJoin>(");
+        emitter.AppendLine("            this " + receiverType + " self,");
+        emitter.AppendLine("            " + sourceParameterType + (sourceIsCte ? " cte," : " _,"));
+
+        if (!last.Conditionless)
+        {
+            emitter.AppendLine("            " + conditionParameterType + " condition,");
+        }
+
+        emitter.AppendLine("            " + markerType + " marker)");
+        emitter.AppendLine("            => self.JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
+        emitter.AppendLine("                static dc => new " + returnType + "(dc),");
+        emitter.AppendLine(sourceIsCte ? "                cte," : "                _,");
+        if (!last.Conditionless)
+        {
+            emitter.AppendLine("                condition,");
+        }
+
+        emitter.AppendLine("                " + joinType + ");");
+
+        return last.Operator + "<TJoin>(" + receiverType + ", " + sourceParameterType + ", "
+            + (last.Conditionless ? string.Empty : conditionParameterType + ", ")
+            + markerType + ") -> " + returnType;
     }
 
     /// <summary>Operator-to-<c>NextORM.Core.JoinType</c> mapping for the seven projection operators.</summary>

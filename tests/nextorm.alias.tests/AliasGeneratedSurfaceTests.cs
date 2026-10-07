@@ -97,6 +97,58 @@ public class AliasGeneratedSurfaceTests
         }
     }
 
+    [Fact]
+    public void Generated_extension_methods_have_unique_signatures_and_keep_the_frozen_baseline()
+    {
+        // #159 C1 regression freeze: distinct chains may share an emitted method (they differ only in an
+        // intermediate step's source kind, which the signature does not carry), so the generator now
+        // renders each method in full and collapses byte-identical duplicates. That must never rename or
+        // drop a previously emitted member: every signature present before the change is still emitted,
+        // and no two methods share a signature (the duplicate-signature CS0111 class).
+        var extensions = typeof(Alias).Assembly.GetType(GeneratedNamespace + ".JoinAliasExtensions")!;
+        var methods = extensions.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Where(method => JoinOperators.Contains(method.Name))
+            .Select(Signature)
+            .ToArray();
+
+        methods.Should().OnlyHaveUniqueItems();
+        methods.Should().Contain(FrozenExtensionSignatures);
+    }
+
+    private static string Signature(MethodInfo method)
+    {
+        var parameters = string.Join(", ", method.GetParameters().Select(parameter => FormatType(parameter.ParameterType)));
+        return FormatType(method.ReturnType) + " " + method.Name + "`" + method.GetGenericArguments().Length + "(" + parameters + ")";
+    }
+
+    private static string FormatType(Type type)
+    {
+        if (type.IsGenericParameter) return type.Name;
+        if (type.IsGenericType)
+        {
+            var name = type.GetGenericTypeDefinition().FullName!;
+            name = name[..name.IndexOf('`')];
+            return name + "<" + string.Join(", ", type.GetGenericArguments().Select(FormatType)) + ">";
+        }
+
+        return type.FullName ?? type.Name;
+    }
+
+    // Captured on r1/n3 before the C1 regression chains were added; all of these must survive the dedup.
+    private static readonly string[] FrozenExtensionSignatures =
+    [
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> CrossApply`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> CrossJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> FullJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.Cte<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> LeftJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> OuterApply`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> RightJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Person, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Person>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Person, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer_Approver<NextORM.AliasTests.Order, NextORM.AliasTests.Person, TJoin> Join`1(NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, NextORM.AliasTests.Person>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.Generated.nextorm_alias_tests.AliasProjection_Buyer<NextORM.AliasTests.Order, NextORM.AliasTests.Person>, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+ApproverMarker)",
+    ];
+
     private static void AssertMarker(Type marker, string alias)
     {
         var markerType = marker.GetNestedType(alias + "Marker", BindingFlags.Public);

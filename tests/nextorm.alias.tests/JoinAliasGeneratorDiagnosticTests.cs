@@ -132,6 +132,53 @@ public class JoinAliasGeneratorDiagnosticTests
     }
 
     [Fact]
+    public void Explicit_generic_joined_type_is_independent_of_the_source_CTE_kind()
+    {
+        // C6 (D159 r1/n2 probe, promoted to a permanent test): an explicit generic <Person> whose source
+        // actually carries Other (EntityBuilder<Other> or Cte<Other>) still selects the emitted step-1
+        // overload by the SOURCE expression's CTE kind, not by the explicit type argument. The explicit
+        // joined type is not part of a single-step emitted signature (the method is generic over TJoin),
+        // so the mismatch stays a call-site CS1503 and never becomes a generator crash or a
+        // silently-merged method. Closes C6 with its observed outcome.
+        const string source =
+            "using NextORM.Core;\n" +
+            "using NextORM.Generated.AliasHarness;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class Other { public int Id { get; set; } }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Other> others, Cte<Other> otherCte)\n" +
+            "    {\n" +
+            "        _ = orders.Join<Person>(others, (a, b) => true, Alias.X);\n" +
+            "        _ = orders.Join<Person>(otherCte, (a, b) => true, Alias.Y);\n" +
+            "    }\n" +
+            "}\n";
+
+        var compilation = CSharpCompilation.Create(
+            "AliasHarness",
+            [CSharpSyntaxTree.ParseText(source, path: "Harness.cs", cancellationToken: TestContext.Current.CancellationToken)],
+            References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out _, TestContext.Current.CancellationToken);
+        var run = driver.GetRunResult();
+
+        // The generator itself is clean: no NORMGEN diagnostic, one source, both step-1 overload forms.
+        run.Diagnostics.Should().BeEmpty();
+        run.GeneratedTrees.Should().HaveCount(1);
+        var generated = run.GeneratedTrees[0].ToString();
+        generated.Should().Contain("AliasJoin_X").And.Contain("AliasJoin_Y");
+        generated.Should().Contain("global::NextORM.Core.EntityBuilder<TJoin> _,");
+        generated.Should().Contain("global::NextORM.Core.Cte<TJoin> cte,");
+
+        // The explicit <Person> vs actual <Other> mismatch remains a normal compile error at the call site.
+        output.GetDiagnostics(TestContext.Current.CancellationToken).Should().Contain(diagnostic => diagnostic.Id == "CS1503");
+    }
+
+    [Fact]
     public void Valid_snippet_emits_one_source_without_diagnostics()
     {
         var harness = RunDiagnosticCase(

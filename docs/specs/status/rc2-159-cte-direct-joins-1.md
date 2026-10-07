@@ -296,3 +296,34 @@ Evidence root: `TestResults/pdca/D159/r1/n1/` (alias `$E`).
 - **C6 — unobservable:** masked by compiler rejection (the C1 `CS0111`/`CS0121` stops the build before C6 can be exercised).
 
 Evidence root n=2: `TestResults/pdca/D159/r1/n2/` (alias `$E2`).
+
+## 15. Progress log — escalation-ordered C1 fix (attempt n=3, last)
+
+**Durable state:** Current cycle **N=1**; Plan revision **r=1** (unchanged — escalate-decided remediation inside the existing plan, no replan); Attempt **n=3/3** (last attempt, no 4th); event phase **DO**; `tier=cheap`; HEAD `09cedf1a` + uncommitted fix-round edits.
+**Defect history:** **2 applied fixes** at r1; no CHECK failure, no loop-back. Key `cte-symbol-identity-chainkey` → observed r1 n1, fixed r1 n2 (fix 1), resolved. Key `C1-alias-step-signature-collision` → observed r1 n2 (probe), fixed r1 n3 (fix 2), resolved. Key `C6-explicit-generic-iscte-vs-joined` → observed r1 n2 (masked), promoted + closed r1 n3. Follow-up #206 remains open for the remaining last-step-`JoinedType` class only.
+
+| UTC time | phase | revision | iteration | event | evidence pointer |
+|---|---|---|---|---|---|
+| 2026-10-07T17:21Z | DO | r1 | n3/3 | **C1 fix:** `JoinAliasGenerator.AppendExtensions` now renders each extension method in full (`RenderExtension`) and collapses byte-identical duplicates; same-signature/different-body pairs raise new `NORMGEN007` instead of merging. Not keyed by `ChainKey` for the dedup. | `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs`; `AnalyzerReleases.Unshipped.md` NORMGEN007 |
+| 2026-10-07T17:20Z | DO | r1 | n3/3 | **C1 regression (red→green):** the C1 chains `Order→A:EntityBuilder<Person>→B` and `Order→A:Cte<Person>→B` now compile in one assembly (pre-fix they emitted the step-2 method twice → CS0111). Both branches render identical SQL and bind the same slots (named + anonymous tail). | `$E/C-ALIAS-n3.log` 45/45; `tests/nextorm.alias.tests/TypedCteAliasTests.cs` two new tests |
+| 2026-10-07T17:20Z | DO | r1 | n3/3 | **Generated-surface unchanged:** pre-change surface `$E/surface-before.txt` (10 signatures) vs post-change `$E/surface-after.txt` (11 — one intentional new anonymous-tail CTE overload); all 10 pre-existing signatures retained, all methods unique. Frozen by `AliasGeneratedSurfaceTests.Generated_extension_methods_have_unique_signatures_and_keep_the_frozen_baseline`. No public generated type-name/arity change. | `$E/surface-before.txt`, `$E/surface-after.txt`, `$E/C-ALIAS-n3.log` |
+| 2026-10-07T17:20Z | DO | r1 | n3/3 | **C6 promoted + closed:** explicit-generic `Join<Person>` over `EntityBuilder<Other>`/`Cte<Other>` — generator is clean (both step-1 forms emitted) and the explicit-vs-actual mismatch stays a call-site `CS1503`. Permanent test added. | `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs` `Explicit_generic_joined_type_is_independent_of_the_source_CTE_kind`; `$E/C-ALIAS-n3.log` |
+| 2026-10-07T17:21Z | DO | r1 | n3/3 | Boundary gates green: Debug 0/0; core `TypedCteTests` 96/96; sqlite `TypedCteTests` 49/49; alias 45/45; providers sqlite 8, postgres 18, sqlserver 18, mysql 18, mariadb 18, clickhouse 18, all 0 failed/0 skipped | `$E/C-BUILD-debug-n3.log`, `$E/C-CORE-typedcte-n3.log`, `$E/C-SQLITE-typedcte-n3.log`, `$E/C-ALIAS-n3.log`, `$E/C-PROVIDER-*-n3.log` |
+| 2026-10-07T17:24Z | DO | r1 | n3/3 | Container integration green (5 containers started, no provider skipped for missing socket): Total 3337, Errors 0, Failed 0, Skipped 197, Not Run 0, exit 0 | `$E/C-INTEGRATION-n3.log` |
+| 2026-10-07T17:25Z | DO | r1 | n3/3 | #206 updated: C1 (intermediate-step source-kind collision) CLOSED in D159 by full-text dedup; #206 now scopes only to the remaining last-step-`JoinedType`-absent-from-signature class (guarded by NORMGEN007) | https://github.com/AlexeyShirshov/nextorm/issues/206#issuecomment-6043152229 |
+| 2026-10-07T17:25Z | DO | r1 | n3/3 | Coverage/perf **not re-run**: change is source-generator-only (compile-time; not in `coverage.settings.xml` assemblies and not on the runtime query/cached path), so the n1 coverage (core line 87.8% / branch 80.4%) and perf (7 cases, ratio 2.2412) numbers stand. | reasoning; no new query-path code |
+| — | DO | r1 | n3/3 | Fix round complete; NOT marked done (CHECK-3 next); commit pending in this log line | — |
+
+### Per-criterion mapping (r1/n3)
+
+- **R159-06 met (unchanged):** `TypedCte_TableAliasReceiver_AllFourteenOverloads_CompileAndBuild` — 14/14.
+- **R159-10 met (extended):** symbol-identity negative retained; C1 chains now compile and bind on both branches (named + anonymous tail); C6 explicit-generic-vs-source-kind case pinned.
+- **R159-14:** prior coverage/mutation/perf evidence stands — generator-only change adds no runtime branch; new generator branches are covered by the four new alias tests.
+
+### C1 / C6 closure (r1/n3)
+
+- **C1 — CLOSED.** `Join`/extension emission now deduplicates by the **full emitted method text** (not `ChainKey`); byte-identical step-2 methods from `Order→A:EntityBuilder<Person>→B` and `Order→A:Cte<Person>→B` collapse to one. Regression: `TypedCteAliasTests.Shared_two_step_chain_with_entity_and_cte_intermediate_compiles_and_binds_both_branches`, `…_with_anonymous_cte_tail_binds_both_branches`; surface freeze in `AliasGeneratedSurfaceTests`.
+- **C6 — CLOSED (observed outcome).** Explicit-generic `joined` and source-derived `isCte` are independent; for a single-step chain the explicit joined type is not part of the emitted signature (the method is generic over `TJoin`), so `Join<Person>(EntityBuilder<Other>|Cte<Other>)` emits the normal step-1 overloads and the mismatch remains a call-site `CS1503`. Permanent test `Explicit_generic_joined_type_is_independent_of_the_source_CTE_kind`.
+- **#206 remaining class — guarded, not fixed:** same signature with **different** body now raises `NORMGEN007` (`Join alias extension signature collision`), so the last-step-`JoinedType`-absent-from-signature divergence can never be silently merged.
+
+Evidence root n=3: `TestResults/pdca/D159/r1/n3/` (alias `$E`).

@@ -231,6 +231,106 @@ public class TypedCteAliasTests
         }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // #159 C1 regression: two chains with the SAME base, alias sequence, operators and joined types
+    // that differ only in an INTERMEDIATE step's source kind (EntityBuilder<Person> vs Cte<Person>)
+    // previously emitted the tail method twice (CS0111). Both branches must now compile in this one
+    // assembly, bind the same alias slots and render identical SQL.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Shared_two_step_chain_with_entity_and_cte_intermediate_compiles_and_binds_both_branches()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var orders = ctx.From<Order>(b => b.Table("orders"));
+            var buyersCte = ctx.From<Person>(b => b.Table("person")).Where(p => p.Id < 20).ToCommand().AsCte("buyers_cte");
+            var approversCte = ctx.From<Person>(b => b.Table("person")).Where(p => p.Id > 10).ToCommand().AsCte("approvers_cte");
+
+            // Branch 1: the intermediate Buyer step joins the converted builder (EntityBuilder<Person>).
+            var entityIntermediate = orders
+                .Join<Person>(ctx.From(buyersCte), (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+                .Join<Person>(ctx.From(approversCte), (a, p) => a.Item1.ApproverId == p.Id, Alias.Approver)
+                .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, ApproverId = p.Approver.Id })
+                .ToList();
+
+            var entitySql = sql.Statements[^1];
+
+            // Branch 2: the intermediate Buyer step joins the descriptor directly (Cte<Person>). Its
+            // emitted tail method is byte-identical to branch 1's - the C1 collision shape.
+            var cteIntermediate = orders
+                .Join<Person>(buyersCte, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+                .Join<Person>(ctx.From(approversCte), (a, p) => a.Item1.ApproverId == p.Id, Alias.Approver)
+                .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, ApproverId = p.Approver.Id })
+                .ToList();
+
+            var cteSql = sql.Statements[^1];
+
+            cteIntermediate.Should().Equal(entityIntermediate);
+            entityIntermediate.Should().ContainSingle();
+            entityIntermediate[0].BuyerId.Should().Be(AliasSqliteDatabase.BuyerId);
+            entityIntermediate[0].ApproverId.Should().Be(AliasSqliteDatabase.ApproverId);
+
+            cteSql.Should().Be(entitySql);
+            entitySql.Should().Contain("buyers_cte as (").And.Contain("approvers_cte as (");
+            entitySql.Should().Contain("join buyers_cte as 't2'").And.Contain("join approvers_cte as 't3'");
+            entitySql.Should().NotContain("join (select");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Shared_two_step_chain_with_anonymous_cte_tail_binds_both_branches()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var orders = ctx.From<Order>(b => b.Table("orders"));
+            var buyersCte = ctx.From<Person>(b => b.Table("person")).Where(p => p.Id < 20).ToCommand().AsCte("buyers_cte");
+            // Anonymous CTE projection: the tail joined type is inferred and becomes the method's own TJoin.
+            var approversAnon = ctx.From<Person>(b => b.Table("person"))
+                .Where(p => p.Id > 10)
+                .Select(p => new { p.Id, p.Name })
+                .AsCte("approvers_anon");
+
+            var entityIntermediate = orders
+                .Join<Person>(ctx.From(buyersCte), (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+                .Join(approversAnon, (a, p) => a.Item1.ApproverId == p.Id, Alias.Approver)
+                .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, ApproverName = p.Approver.Name })
+                .ToList();
+
+            var entitySql = sql.Statements[^1];
+
+            var cteIntermediate = orders
+                .Join<Person>(buyersCte, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+                .Join(approversAnon, (a, p) => a.Item1.ApproverId == p.Id, Alias.Approver)
+                .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, ApproverName = p.Approver.Name })
+                .ToList();
+
+            var cteSql = sql.Statements[^1];
+
+            cteIntermediate.Should().Equal(entityIntermediate);
+            entityIntermediate.Should().ContainSingle();
+            entityIntermediate[0].BuyerId.Should().Be(AliasSqliteDatabase.BuyerId);
+            entityIntermediate[0].ApproverName.Should().Be("Approver");
+
+            cteSql.Should().Be(entitySql);
+            entitySql.Should().Contain("buyers_cte as (").And.Contain("approvers_anon as (");
+            entitySql.Should().Contain("join buyers_cte as 't2'").And.Contain("join approvers_anon as 't3'");
+            entitySql.Should().NotContain("join (select");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     private static int CountOccurrences(string text, string value)
     {
         var count = 0;
