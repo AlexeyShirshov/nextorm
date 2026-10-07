@@ -1,0 +1,14 @@
+dotnet-coverage v18.11.2.0 [linux-x64 - .NET 10.0.12]
+
+SessionId: 11c7969b-bc63-4108-ad19-e01ea371e975
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (10s 929ms)
+
+Test run summary: Passed!
+  total: 1726
+  failed: 0
+  succeeded: 1726
+  skipped: 0
+  duration: 11s 227ms
+Code coverage results: TestResults/rc2-154-1/coverage-core.cobertura.xml.
+exit=0

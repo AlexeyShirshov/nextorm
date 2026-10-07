@@ -769,6 +769,7 @@ internal readonly struct SqlBuilder
 
         var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entitySelectList);
         var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
+            default(ExtremeRowTrustedConstruction),
             sourceSql,
             cmd.ExtremeRow!.Kind == ExtremeKind.Max,
             payloadAliases,

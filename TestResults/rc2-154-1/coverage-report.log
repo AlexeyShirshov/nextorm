@@ -1,0 +1,13 @@
+2026-10-07T19:56:33: Arguments
+2026-10-07T19:56:33:  -reports:TestResults/rc2-154-1/coverage-core.cobertura.xml;TestResults/rc2-154-1/coverage-mariadb.cobertura.xml
+2026-10-07T19:56:33:  -targetdir:TestResults/rc2-154-1/coverage-report
+2026-10-07T19:56:33:  -reporttypes:TextSummary;Cobertura
+2026-10-07T19:56:36: Writing report file 'TestResults/rc2-154-1/coverage-report/Cobertura.xml'
+2026-10-07T19:56:36: Writing report file 'TestResults/rc2-154-1/coverage-report/Summary.txt'
+2026-10-07T19:56:36: Report generation took 2.7 seconds
+exit=0
+
+=== nextorm.core coverage (core+mariadb runs) ===
+  Line coverage: 65.2%
+  Branch coverage: 59.4% (17725 of 29797)
+nextorm.core: line 65.2% / branch 59.4% (thresholds 85/75; hard on main only; warning on 1.0.9-rc2)

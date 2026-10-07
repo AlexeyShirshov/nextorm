@@ -12,6 +12,10 @@ namespace NextORM.Core.Tests;
 /// </summary>
 public class ExtremeRowDescriptionLazinessTests
 {
+    private readonly InMemoryRepository _sut;
+
+    public ExtremeRowDescriptionLazinessTests(InMemoryRepository sut) => _sut = sut;
+
     private static ExtremeRowRenderColumn Column()
         => new(typeof(int), isNullable: false, isDirectMappedColumn: true, usesConverter: false);
 
@@ -120,4 +124,44 @@ public class ExtremeRowDescriptionLazinessTests
         calls.Should().Be(1);
         copy.IsMax.Should().BeTrue("the copy carries the exposed values");
     }
+
+    [Fact]
+    public void ThrowingFactory_ShouldNotBeReachedAtConstructionOrByShapeReads()
+    {
+        var description = new ExtremeRowDescription(
+            isMax: true,
+            keys: [Column()],
+            groups: [],
+            payloadFactory: () => throw new InvalidOperationException("the payload factory must not run at construction"));
+
+        // Construction and the non-payload shape reads must never invoke the factory.
+        description.Keys.Should().ContainSingle();
+        description.Groups.Should().BeEmpty();
+
+        var act = () => _ = description.Payload;
+        act.Should().Throw<InvalidOperationException>("only an explicit Payload read forces the factory");
+    }
+
+    [Fact]
+    public void ValueTypeEntity_ShouldFlowThroughTheExtremePathInBothDirections()
+    {
+        var source = _sut.DataProvider.From<ExtremeRowValueEntity>();
+        source.WithData(
+        [
+            new ExtremeRowValueEntity { Id = 1, Score = 5 },
+            new ExtremeRowValueEntity { Id = 2, Score = 9 },
+            new ExtremeRowValueEntity { Id = 3, Score = 2 },
+        ]);
+
+        source.SelectWhereMax(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
+        source.SelectWhereMin(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(3);
+    }
+}
+
+/// <summary>A value-type (struct) entity exercised through the extreme-row core path.</summary>
+public record struct ExtremeRowValueEntity
+{
+    public int Id { get; set; }
+
+    public int? Score { get; set; }
 }

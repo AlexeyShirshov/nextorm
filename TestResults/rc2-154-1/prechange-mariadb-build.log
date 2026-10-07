@@ -1,0 +1,40 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.mysql -> /home/alex/sources/nextorm/src/nextorm.mysql/bin/linux/Debug/net10.0/nextorm.mysql.dll
+  nextorm.mariadb -> /home/alex/sources/nextorm/src/nextorm.mariadb/bin/linux/Debug/net10.0/nextorm.mariadb.dll
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(17,12): error CS1729: 'ExtremeRowRenderColumn' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(26,12): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(36,12): error CS1729: 'ExtremeRowRenderRequest' does not contain a constructor that takes 7 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(84,36): error CS1729: 'ExtremeRowRenderColumn' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(93,27): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(94,27): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(95,27): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(123,42): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(124,42): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(125,39): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(126,40): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(270,31): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(284,27): error CS1729: 'ExtremeRowRenderRequest' does not contain a constructor that takes 7 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+
+Build FAILED.
+
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(17,12): error CS1729: 'ExtremeRowRenderColumn' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(26,12): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(36,12): error CS1729: 'ExtremeRowRenderRequest' does not contain a constructor that takes 7 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(84,36): error CS1729: 'ExtremeRowRenderColumn' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(93,27): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(94,27): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(95,27): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(123,42): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(124,42): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(125,39): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(126,40): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(270,31): error CS1729: 'ExtremeRowDescription' does not contain a constructor that takes 4 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs(284,27): error CS1729: 'ExtremeRowRenderRequest' does not contain a constructor that takes 7 arguments [/home/alex/sources/nextorm/tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj]
+    0 Warning(s)
+    13 Error(s)
+
+Time Elapsed 00:00:11.99
+exit=1

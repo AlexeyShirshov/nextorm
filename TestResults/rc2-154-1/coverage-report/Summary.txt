@@ -1,0 +1,541 @@
+Summary
+  Generated on: 10/07/2026 - 19:56:36
+  Parser: MultiReport (2x Cobertura)
+  Assemblies: 1
+  Classes: 520
+  Files: 311
+  Line coverage: 65.2%
+  Covered lines: 34132
+  Uncovered lines: 18186
+  Coverable lines: 52318
+  Total lines: 86302
+  Branch coverage: 59.4% (17725 of 29797)
+  Covered branches: 17725
+  Total branches: 29797
+  Method coverage: 56.6% (3926 of 6930)
+  Full method coverage: 41.2% (2859 of 6930)
+  Covered methods: 3926
+  Fully covered methods: 2859
+  Total methods: 6930
+
+nextorm.core                                                                      65.2%
+  NextORM.Core.AdvancedAggregateTranslator                                         3.2%
+  NextORM.Core.AggregateFilter                                                    10.2%
+  NextORM.Core.AggregateTerminalRewriter                                          50.9%
+  NextORM.Core.AliasFromProjectionVisitor                                         16.6%
+  NextORM.Core.AliasResolver                                                      71.4%
+  NextORM.Core.ArgumentFlattener                                                  55.5%
+  NextORM.Core.ArrayJoinProjection<TEntity, TElement>                                0%
+  NextORM.Core.ArraySqlTranslator                                                  4.7%
+  NextORM.Core.BaseExpressionVisitor                                                60%
+  NextORM.Core.BaseExpressionVisitor.UnstableConstantRewriter                      100%
+  NextORM.Core.BatchBuilder                                                       36.5%
+  NextORM.Core.BatchBuilder<TResult>                                              36.5%
+  NextORM.Core.BatchExtensions                                                     100%
+  NextORM.Core.BatchPlan                                                          94.4%
+  NextORM.Core.BatchQuery<TResult>                                                   0%
+  NextORM.Core.BatchResult                                                           0%
+  NextORM.Core.BatchResult<T>                                                        0%
+  NextORM.Core.BatchResultMaterializer<TResult>                                      0%
+  NextORM.Core.BatchResultMaterializer<TResult>                                      0%
+  NextORM.Core.BatchResultSpec                                                     100%
+  NextORM.Core.BatchRunner                                                         7.6%
+  NextORM.Core.BatchRunner<TResult>                                                7.6%
+  NextORM.Core.BatchStatement                                                      100%
+  NextORM.Core.BatchStepSpec                                                       100%
+  NextORM.Core.BuildSqlCommandException                                           33.3%
+  NextORM.Core.BuiltinFunctionTranslator                                          10.6%
+  NextORM.Core.BulkBatchOptions                                                      0%
+  NextORM.Core.BulkCopyFlags                                                      15.3%
+  NextORM.Core.BulkInsertBuilder<TEntity>                                           23%
+  NextORM.Core.BulkInsertBuilder<TEntity>                                         68.6%
+  NextORM.Core.BulkInsertCommand                                                   100%
+  NextORM.Core.BulkInsertOptions                                                  84.2%
+  NextORM.Core.BulkInsertOptionsBuilder                                           57.6%
+  NextORM.Core.BulkInsertReturningBuilder<TEntity, TResult>                          0%
+  NextORM.Core.BulkInsertReturningBuilder<TEntity, TResult>                       19.7%
+  NextORM.Core.ClickHouseFunctions                                                   0%
+  NextORM.Core.ClickHouseFunctions.MultiIfBranch<T>                                  0%
+  NextORM.Core.ClickHouseNativeFunctionTranslator                                  1.8%
+  NextORM.Core.CollationAttribute                                                  100%
+  NextORM.Core.CommandReaderOwner                                                 74.1%
+  NextORM.Core.CommonFunctions                                                    10.5%
+  NextORM.Core.CompositeFormat                                                       0%
+  NextORM.Core.ContextEnvironment                                                   70%
+  NextORM.Core.CorrelatedQueryExpressionVisitor                                   82.8%
+  NextORM.Core.CorrelatedQueryExpressionVisitor.NavigationCountNarrowingProbe      100%
+  NextORM.Core.CorrelatedQueryExpressionVisitor.NestedSubqueryDetector               0%
+  NextORM.Core.CorrelatedQueryExpressionVisitor.OuterReferenceDetector             100%
+  NextORM.Core.CorrelatedQueryExpressionVisitor.OuterRefMarkerDetector             100%
+  NextORM.Core.CorrelatedQueryExpressionVisitor.OuterScope                         100%
+  NextORM.Core.CorrelatedQueryExpressionVisitor.ReplaceParametersByValueVisitor    100%
+  NextORM.Core.CreateTableAsCommand                                                100%
+  NextORM.Core.CreateTableOptions                                                 83.3%
+  NextORM.Core.CreateTableOptionsBuilder                                           100%
+  NextORM.Core.CrossProviderScalarTranslator                                      88.2%
+  NextORM.Core.CsvColumn                                                           100%
+  NextORM.Core.CsvDialect                                                         97.5%
+  NextORM.Core.CsvFieldPolicy                                                      100%
+  NextORM.Core.CsvPlan                                                             100%
+  NextORM.Core.CsvRowBuffer                                                       92.8%
+  NextORM.Core.CsvStreamOptions                                                    100%
+  NextORM.Core.CsvStreamWriter                                                    88.4%
+  NextORM.Core.CsvStreamWriter.ObjectReaderDetector                                100%
+  NextORM.Core.CsvValueFormatter                                                  90.9%
+  NextORM.Core.Cte<TResult>                                                       76.9%
+  NextORM.Core.CteDefinition                                                       100%
+  NextORM.Core.CteHoister                                                         93.3%
+  NextORM.Core.CteHoister.Walker                                                  87.8%
+  NextORM.Core.CteMerge                                                           96.7%
+  NextORM.Core.CteMutation                                                        66.6%
+  NextORM.Core.CteQuery                                                           88.2%
+  NextORM.Core.CteReference                                                        100%
+  NextORM.Core.CteReference<TResult>                                               100%
+  NextORM.Core.DataContext                                                        50.2%
+  NextORM.Core.DataContext<TResult>                                               50.2%
+  NextORM.Core.DataContextBuilder                                                 64.5%
+  NextORM.Core.DataContextCache                                                   97.6%
+  NextORM.Core.DataContextException                                               33.3%
+  NextORM.Core.DataContextExtensions                                              70.9%
+  NextORM.Core.DateConversionSqlTranslator                                         6.5%
+  NextORM.Core.DateTimeFunctionTranslator                                            0%
+  NextORM.Core.DbConnectionManager                                                32.7%
+  NextORM.Core.DbPreparedQueryCommand<TResult>                                    78.6%
+  NextORM.Core.DecimalPrecisionAttribute                                           100%
+  NextORM.Core.DecimalPrecisionRules                                               100%
+  NextORM.Core.DefaultAliasProvider                                                 60%
+  NextORM.Core.DefaultColumnsProvider                                               90%
+  NextORM.Core.DefaultParameterProvider                                            100%
+  NextORM.Core.DeleteBuilder<TEntity>                                             73.4%
+  NextORM.Core.DeleteCommand                                                       100%
+  NextORM.Core.DeleteJoinBuilder<TProjection>                                      100%
+  NextORM.Core.DeleteJoinCommand                                                   100%
+  NextORM.Core.DeleteJoinReturningBuilder<TProjection, TResult>                      0%
+  NextORM.Core.DeleteJoinReturningBuilder<TProjection, TResult>                   73.8%
+  NextORM.Core.DeleteReturningBuilder<TEntity, TResult>                              0%
+  NextORM.Core.DeleteReturningBuilder<TEntity, TResult>                           41.5%
+  NextORM.Core.DictionaryLookup                                                     54%
+  NextORM.Core.DictionaryLookupTranslator                                         83.8%
+  NextORM.Core.DictionarySqlTranslator                                               0%
+  NextORM.Core.DistinctOnClause                                                    100%
+  NextORM.Core.DropTableCommand                                                      0%
+  NextORM.Core.DurationAttribute                                                  57.1%
+  NextORM.Core.DurationStorage                                                    70.3%
+  NextORM.Core.DynamicColumns                                                     97.8%
+  NextORM.Core.DynamicColumnSet                                                   91.7%
+  NextORM.Core.DynamicColumnsTypeFacts                                             100%
+  NextORM.Core.EagerLoadJoinIntoSpec<TEntity, TChild, TKey>                       97.6%
+  NextORM.Core.EagerLoadSpec<TEntity, TChild, TKey>                               96.9%
+  NextORM.Core.EagerLoadSpec<TEntity, TChild, TKey>                               95.4%
+  NextORM.Core.EntityBuilder                                                      14.9%
+  NextORM.Core.EntityBuilder.RebaseAliasProjectionVisitor<TEntity>                   0%
+  NextORM.Core.EntityBuilder.ReplaceTargetParameterVisitor<TEntity>                100%
+  NextORM.Core.EntityBuilder<TEntity>                                             14.9%
+  NextORM.Core.EntityBuilder<TEntity>                                               84%
+  NextORM.Core.EntityBuilderEagerLoading                                           100%
+  NextORM.Core.EntityBuilderEagerLoading<TEntity>                                  100%
+  NextORM.Core.EntityBuilderExtensions                                              58%
+  NextORM.Core.EntityBuilderExtensions<TEntity>                                     58%
+  NextORM.Core.EntityExtensions                                                      0%
+  NextORM.Core.EntityMetadata                                                      100%
+  NextORM.Core.EntityMetadataBuilder.RelationshipDeclaration<T>                    100%
+  NextORM.Core.EntityMetadataBuilder<T>                                            100%
+  NextORM.Core.EntityMetadataBuilder<T>                                           88.6%
+  NextORM.Core.EntityPropertyBuilder<T>                                           87.7%
+  NextORM.Core.EntitySelectListBuilder                                              53%
+  NextORM.Core.EnumToStringConverter<TEnum>                                        100%
+  NextORM.Core.ExpressionExtensions                                               62.5%
+  NextORM.Core.ExpressionKey                                                      78.5%
+  NextORM.Core.ExpressionPlanEqualityComparer                                     94.6%
+  NextORM.Core.ExpressionPlanEqualityComparer.ExpressionComparer                  91.5%
+  NextORM.Core.ExpressionPlanEqualityComparer.ParameterScope                      96.8%
+  NextORM.Core.ExpressionPlanEqualityComparer.QueryCommandKey                     85.7%
+  NextORM.Core.ExpressionPlanEqualityComparer.Visitor                             96.9%
+  NextORM.Core.ExpressionValueConverter<TModel, TProvider>                         100%
+  NextORM.Core.ExtendedScalarFunctionTranslator                                   31.7%
+  NextORM.Core.ExtremeRowClause                                                    100%
+  NextORM.Core.ExtremeRowCompatibility                                            72.2%
+  NextORM.Core.ExtremeRowCompatibility.WindowFunctionDetector                     92.8%
+  NextORM.Core.ExtremeRowDescription                                               100%
+  NextORM.Core.ExtremeRowRenderColumn                                              100%
+  NextORM.Core.ExtremeRowRenderRequest                                              59%
+  NextORM.Core.ExtremeRowValidation                                                100%
+  NextORM.Core.FromExpression                                                     96.2%
+  NextORM.Core.FromExpression.EntityBinding                                        100%
+  NextORM.Core.FromExpressionPlanEqualityComparer                                 64.2%
+  NextORM.Core.FromOptions                                                          75%
+  NextORM.Core.HigherOrderLambdaVisitor                                              0%
+  NextORM.Core.IColumnsProvider                                                      0%
+  NextORM.Core.IConnectionInterceptor                                                0%
+  NextORM.Core.IContextEnvironment                                                66.6%
+  NextORM.Core.IEntityMetadata                                                      25%
+  NextORM.Core.IEqualityComparerExtensions                                         100%
+  NextORM.Core.IJoinIntoSpec<TEntity>                                              100%
+  NextORM.Core.ILockRenderer                                                       100%
+  NextORM.Core.InMemoryAggregates                                                 83.8%
+  NextORM.Core.InMemoryAggregates.DoubleConverter<T>                               100%
+  NextORM.Core.InMemoryAggregates<TEntity, TResult, TValue>                       83.8%
+  NextORM.Core.InMemoryCommandBuilderExtensions                                    100%
+  NextORM.Core.InMemoryCompiledQuery<TResult, TEntity>                             100%
+  NextORM.Core.InMemoryConditionFactory                                            100%
+  NextORM.Core.InMemoryCorrelatedEvaluator                                          80%
+  NextORM.Core.InMemoryCorrelatedEvaluator.OuterReferenceMarkerDetector             80%
+  NextORM.Core.InMemoryCorrelatedEvaluator.ParameterPlaceholderDetector             80%
+  NextORM.Core.InMemoryCorrelatedEvaluator.QueryRegistryLambdaDetector              80%
+  NextORM.Core.InMemoryCorrelatedEvaluator<TInner>                                  80%
+  NextORM.Core.InMemoryCorrelatedPlan                                               65%
+  NextORM.Core.InMemoryCorrelatedSubqueryRewriter                                 81.3%
+  NextORM.Core.InMemoryCorrelatedSubqueryRewriter.ReferencedQueryIndexFinder      88.8%
+  NextORM.Core.InMemoryDataContext                                                76.5%
+  NextORM.Core.InMemoryDataContext.CreateEnumeratorPayload                           0%
+  NextORM.Core.InMemoryDataContext.CreateMainEnumeratorPayload                       0%
+  NextORM.Core.InMemoryDistinct                                                    100%
+  NextORM.Core.InMemoryEnumerator<TResult, TEntity>                               89.1%
+  NextORM.Core.InMemoryEnumeratorAdapter<TResult, TEntity>                        94.4%
+  NextORM.Core.InMemoryEnumeratorAdapter<TResult, TEntity>                        72.7%
+  NextORM.Core.InMemoryExtremeRow                                                 95.1%
+  NextORM.Core.InMemoryExtremeRow<TResult, TEntity>                               95.1%
+  NextORM.Core.InMemoryGroupAggregateVisitor<TEntity>                               82%
+  NextORM.Core.InMemoryGrouping                                                   89.8%
+  NextORM.Core.InMemoryJoin                                                       91.5%
+  NextORM.Core.InMemoryLinqSource                                                   88%
+  NextORM.Core.InMemoryLinqSource<TOuter, TCollection, TResult>                     88%
+  NextORM.Core.InMemoryLinqSource<TOuter, TInner, TKey, TResult>                    88%
+  NextORM.Core.InMemoryLinqSource<TResult>                                          88%
+  NextORM.Core.InMemoryListEnumerator<T>                                          76.9%
+  NextORM.Core.InMemoryNavigationChainEvaluator                                   87.7%
+  NextORM.Core.InMemoryOrdering                                                   96.4%
+  NextORM.Core.InMemoryOrdering<TEntity>                                          96.4%
+  NextORM.Core.InMemoryOrdering<TResult>                                          96.4%
+  NextORM.Core.InMemoryPreparedQueryCommand<TResult>                               100%
+  NextORM.Core.InMemoryProjectionFactory                                            92%
+  NextORM.Core.InMemoryQueryBuilder                                               89.1%
+  NextORM.Core.InMemoryQueryBuilder<TEntity>                                      89.1%
+  NextORM.Core.InMemoryQueryBuilder<TResult, TEntity>                             89.1%
+  NextORM.Core.InMemoryQueryExecutor                                              79.6%
+  NextORM.Core.InMemoryQueryExecutor.EnumeratorEnumerable<TResult>                   0%
+  NextORM.Core.InMemoryQueryExecutor<TResult>                                     79.6%
+  NextORM.Core.InMemoryRowMaterializer                                            96.1%
+  NextORM.Core.InMemoryRowMaterializer<TEntity>                                   96.1%
+  NextORM.Core.InMemoryRowMaterializer<TResult, TEntity>                          96.1%
+  NextORM.Core.InMemoryScalarEnumerator<T>                                        88.2%
+  NextORM.Core.InMemoryScalarFunctionRewriter                                     97.2%
+  NextORM.Core.InMemoryScalarFunctions                                            78.2%
+  NextORM.Core.InMemoryScalarFunctions<T>                                         78.2%
+  NextORM.Core.InMemorySetOperations                                              91.7%
+  NextORM.Core.InsertBuilder.ColumnValidationSnapshot<TEntity>                      75%
+  NextORM.Core.InsertBuilder<TEntity, TSource, TResult>                           41.6%
+  NextORM.Core.InsertBuilder<TEntity>                                             41.6%
+  NextORM.Core.InsertBuilder<TEntity>                                             54.9%
+  NextORM.Core.InsertColumn                                                        100%
+  NextORM.Core.InsertCommand                                                       100%
+  NextORM.Core.InsertReturningBuilder<TEntity, TResult>                              0%
+  NextORM.Core.InsertReturningBuilder<TEntity, TResult>                             46%
+  NextORM.Core.InsertValue                                                          80%
+  NextORM.Core.InterceptorHooks                                                   12.9%
+  NextORM.Core.InValues                                                           83.3%
+  NextORM.Core.InValues.ScalarInValuesProbe                                       87.5%
+  NextORM.Core.InValues.ShapeVisitor                                              97.9%
+  NextORM.Core.InValues.TupleInValuesProbe                                         100%
+  NextORM.Core.InValuesEvaluator                                                    95%
+  NextORM.Core.InValuesEvaluator.CaptureCollector                                 93.7%
+  NextORM.Core.InValuesEvaluator.ReplaceInstanceConstantVisitor                    100%
+  NextORM.Core.InValuesPartition                                                   100%
+  NextORM.Core.InValuesTranslator                                                 56.3%
+  NextORM.Core.InValuesTuplePartition                                              100%
+  NextORM.Core.IOutputIntoMutation                                                   0%
+  NextORM.Core.IPreparedQueryCommand<TResult>                                        0%
+  NextORM.Core.IPropertyMetadata                                                    25%
+  NextORM.Core.IQueryFilterMetadata                                                  0%
+  NextORM.Core.IQueryInterceptor                                                     0%
+  NextORM.Core.IRawCommandExecutor                                                 100%
+  NextORM.Core.IRelationshipMetadata                                                 0%
+  NextORM.Core.IRowReaderFactory                                                  26.6%
+  NextORM.Core.IRowReaderFactory<TResult>                                         26.6%
+  NextORM.Core.ISqlDialect                                                           0%
+  NextORM.Core.ITransactionManager                                                 100%
+  NextORM.Core.ITupleRenderer                                                      100%
+  NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>                81.2%
+  NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>                    74.4%
+  NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>                        74.4%
+  NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4, T5>                            74.4%
+  NextORM.Core.JoinedEntityBuilder<T1, T2, T3, T4>                                74.4%
+  NextORM.Core.JoinedEntityBuilder<T1, T2, T3>                                    74.4%
+  NextORM.Core.JoinedEntityBuilder<T1, T2>                                          80%
+  NextORM.Core.JoinedMutationSource                                               93.7%
+  NextORM.Core.JoinedReturningProjection                                          81.9%
+  NextORM.Core.JoinExpression                                                      100%
+  NextORM.Core.JoinExpressionPlanEqualityComparer                                   84%
+  NextORM.Core.JoinIntoIdentity                                                   95.4%
+  NextORM.Core.JoinIntoKey                                                           0%
+  NextORM.Core.JoinIntoLink<TParentKey, TChildKey>                                   0%
+  NextORM.Core.JoinIntoManyToManyRow<TParent>                                      100%
+  NextORM.Core.JoinIntoManyToManySpec.ManyToManyLinkKey<TEntity, TChild>           100%
+  NextORM.Core.JoinIntoManyToManySpec<TEntity, TChild>                            96.9%
+  NextORM.Core.JoinIntoManyToManySpec<TEntity, TChild>                            93.3%
+  NextORM.Core.JoinIntoProjectionFactory                                           100%
+  NextORM.Core.JoinIntoReferenceSpec<TEntity, TChild>                              100%
+  NextORM.Core.JoinIntoReferenceSpec<TEntity, TChild>                             94.3%
+  NextORM.Core.JoinIntoSpec<TEntity, TChild, TKey>                                77.7%
+  NextORM.Core.JoinIntoSpec<TEntity, TChild, TKey>                                96.1%
+  NextORM.Core.JoinIntoSpec<TEntity, TChild>                                      96.8%
+  NextORM.Core.JoinIntoSpec<TEntity, TChild>                                      77.7%
+  NextORM.Core.JoinIntoSpecHelpers                                                86.6%
+  NextORM.Core.JoinIntoSpecHelpers.TargetParameterReplacer                         100%
+  NextORM.Core.JoinIntoStitcher                                                   96.6%
+  NextORM.Core.JoinIntoStitcher<TEntity>                                          96.6%
+  NextORM.Core.JoinOptions                                                        94.3%
+  NextORM.Core.JoinSlotAttribute                                                   100%
+  NextORM.Core.JoinSourceResolver                                                  100%
+  NextORM.Core.JsonColumnAttribute                                                 100%
+  NextORM.Core.JsonColumnAutoConverter<TModel>                                    53.1%
+  NextORM.Core.JsonColumnConverter<TModel, TProvider>                               95%
+  NextORM.Core.JsonColumnConverterFactory                                          100%
+  NextORM.Core.JsonColumnOptions                                                   100%
+  NextORM.Core.JsonExtractSqlTranslator                                              0%
+  NextORM.Core.JsonRowWriterFactory                                                  0%
+  NextORM.Core.JsonShapeColumn                                                       0%
+  NextORM.Core.JsonShapePlan                                                         0%
+  NextORM.Core.JsonSqlTranslator                                                     2%
+  NextORM.Core.JsonStreamOptions                                                   100%
+  NextORM.Core.JsonStreamWriter                                                      0%
+  NextORM.Core.JunctionChildFilter                                                 100%
+  NextORM.Core.JunctionLinkSourceFactory                                          87.7%
+  NextORM.Core.KeyValue                                                            100%
+  NextORM.Core.LimitByClause                                                       100%
+  NextORM.Core.LobDataReader                                                      61.3%
+  NextORM.Core.LobStream                                                           100%
+  NextORM.Core.LobTextReader                                                      96.1%
+  NextORM.Core.LockClause                                                          100%
+  NextORM.Core.LookupEntry                                                         100%
+  NextORM.Core.MapperCache                                                         100%
+  NextORM.Core.MathFunctionTranslator                                             48.8%
+  NextORM.Core.MemberExpressionVisitor                                             100%
+  NextORM.Core.MemberInfoExtensions                                               95.2%
+  NextORM.Core.MemberTranslator                                                   72.5%
+  NextORM.Core.MergeAliasProvider                                                   75%
+  NextORM.Core.MergeBranch                                                         100%
+  NextORM.Core.MergeBuilder.MissingSourceColumnFinder<TEntity>                    92.1%
+  NextORM.Core.MergeBuilder<TEntity>                                              90.9%
+  NextORM.Core.MergeBuilder<TEntity>                                              76.7%
+  NextORM.Core.MergeCommand                                                        100%
+  NextORM.Core.MergeMatchedBuilder<TEntity>                                       77.7%
+  NextORM.Core.MergeNotMatchedBuilder<TEntity>                                      75%
+  NextORM.Core.MergeNotMatchedBySourceBuilder<TEntity>                               0%
+  NextORM.Core.MergeReturningBuilder<TEntity, TResult>                               0%
+  NextORM.Core.MergeReturningBuilder<TEntity, TResult>                               0%
+  NextORM.Core.MutationCommand                                                     100%
+  NextORM.Core.MutationCteQuery<TResult>                                          50.8%
+  NextORM.Core.MySqlFunctions                                                        0%
+  NextORM.Core.MySqlFunctionTranslator                                            82.1%
+  NextORM.Core.NamedWindowOrderKey                                                 100%
+  NextORM.Core.NavigationExpansion                                                65.5%
+  NextORM.Core.NavigationExpansion.ExpansionState                                   68%
+  NextORM.Core.NavigationExpansion.JoinEntry                                       100%
+  NextORM.Core.NavigationExpansion.NavigationNullabilityVisitor                   30.3%
+  NextORM.Core.NavigationExpansion.RewriteVisitor                                 55.7%
+  NextORM.Core.NavigationPathResolver                                             95.6%
+  NextORM.Core.NavigationResolutionScope                                           100%
+  NextORM.Core.NavigationSourceBinding                                             100%
+  NextORM.Core.NormParam                                                           100%
+  NextORM.Core.NormSqlTranslator                                                  43.3%
+  NextORM.Core.OuterReferenceToParameterVisitor                                   85.7%
+  NextORM.Core.OuterRefMarker<T>                                                     0%
+  NextORM.Core.OutputIntoBuilder                                                     0%
+  NextORM.Core.OutputIntoClause                                                      0%
+  NextORM.Core.Paging                                                              100%
+  NextORM.Core.ParamCollectorVisitor                                              90.9%
+  NextORM.Core.Parameter                                                           100%
+  NextORM.Core.ParameterBinderVisitor                                             87.5%
+  NextORM.Core.ParamLocalSubstitutionVisitor                                      77.7%
+  NextORM.Core.ParamNameCache                                                      100%
+  NextORM.Core.ParamRefreshRecipe                                                   77%
+  NextORM.Core.ParamRefreshRecipe.Capture                                          100%
+  NextORM.Core.ParamRefreshRecipe.Collector                                        100%
+  NextORM.Core.PivotExpression                                                    72.7%
+  NextORM.Core.PivotValue                                                          100%
+  NextORM.Core.PooledStreamBufferWriter                                              0%
+  NextORM.Core.PortableBulkInsertExecutor                                         22.5%
+  NextORM.Core.PostgresFunctions                                                     0%
+  NextORM.Core.PostgresRangeSqlTranslator                                          6.8%
+  NextORM.Core.PredicateExpressionVisitor<T>                                      46.6%
+  NextORM.Core.PredicateTranslator                                                34.9%
+  NextORM.Core.PreparedQueryCommand<TResult, TRecord>                              100%
+  NextORM.Core.ProcedureParameter                                                  100%
+  NextORM.Core.ProcedureResult                                                       0%
+  NextORM.Core.ProcedureResult<T>                                                    0%
+  NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7, T8>                          100%
+  NextORM.Core.Projection<T1, T2, T3, T4, T5, T6, T7>                              100%
+  NextORM.Core.Projection<T1, T2, T3, T4, T5, T6>                                  100%
+  NextORM.Core.Projection<T1, T2, T3, T4, T5>                                      100%
+  NextORM.Core.Projection<T1, T2, T3, T4>                                          100%
+  NextORM.Core.Projection<T1, T2, T3>                                              100%
+  NextORM.Core.Projection<T1, T2>                                                  100%
+  NextORM.Core.ProjectionAliasCache                                               97.5%
+  NextORM.Core.ProjectionEntityItem                                                100%
+  NextORM.Core.QueryCache                                                          100%
+  NextORM.Core.QueryCommand                                                       83.5%
+  NextORM.Core.QueryCommand.QueryPreparer                                         82.5%
+  NextORM.Core.QueryCommand.QueryPreparer.FilterColumnDependencyVisitor           98.5%
+  NextORM.Core.QueryCommand.QueryPreparer.ProjectionSortRewriter                  84.6%
+  NextORM.Core.QueryCommand.QueryPreparer.ReplaceParameterInstanceVisitor          100%
+  NextORM.Core.QueryCommand<TResult, TKey>                                        83.5%
+  NextORM.Core.QueryCommand<TResult>                                              83.5%
+  NextORM.Core.QueryCommand<TResult>                                              71.9%
+  NextORM.Core.QueryCommandExtensions                                             34.4%
+  NextORM.Core.QueryCommandExtensions<TResult>                                    34.4%
+  NextORM.Core.QueryDefinition                                                       0%
+  NextORM.Core.QueryExecutor                                                       3.4%
+  NextORM.Core.QueryExecutor<TResult>                                              3.4%
+  NextORM.Core.QueryFilterContext                                                  100%
+  NextORM.Core.QueryFilterContextAccessor                                         29.9%
+  NextORM.Core.QueryFilterContextAccessor.ContextAccessReplacer                      0%
+  NextORM.Core.QueryFilterContextAccessor.IdentityCollector                          0%
+  NextORM.Core.QueryFilterContextAccessor.OwnerGetterFinder                         30%
+  NextORM.Core.QueryFilterException                                               33.3%
+  NextORM.Core.QueryFilterExpectations                                            13.5%
+  NextORM.Core.QueryFilterExpectations.ExpectedEntity                                0%
+  NextORM.Core.QueryFilterExpectations.ExpectedFilters                               0%
+  NextORM.Core.QueryFilterFunc                                                      91%
+  NextORM.Core.QueryFilterFunc.FilterFuncCaptureVisitor                           90.4%
+  NextORM.Core.QueryFilterFunc.PurityState<TEntity>                                100%
+  NextORM.Core.QueryFilterMetadata                                                 100%
+  NextORM.Core.QueryFilterResolver                                                 100%
+  NextORM.Core.QueryFilterScope                                                   94.9%
+  NextORM.Core.QueryFilterScope.KeyTypeClause                                      100%
+  NextORM.Core.QueryFilterValidator                                               80.8%
+  NextORM.Core.QueryFilterValidator.ColumnSubstitutionVisitor                      100%
+  NextORM.Core.QueryFilterValidator.ConcreteMemberRewriteVisitor                   100%
+  NextORM.Core.QueryFilterValidator.ParameterReferenceFinder                       100%
+  NextORM.Core.QueryFilterValidator.ReplaceParameterVisitor                        100%
+  NextORM.Core.QueryFilterValidator.ResultMemberRewriteVisitor                    87.5%
+  NextORM.Core.QueryFilterValidator<TEntity, TResult>                             80.8%
+  NextORM.Core.QueryFilterValidator<TEntity>                                      80.8%
+  NextORM.Core.QueryPlan                                                          97.9%
+  NextORM.Core.QueryPlanEqualityComparer                                          77.5%
+  NextORM.Core.QueryPlanner                                                       81.6%
+  NextORM.Core.QueryPlanStore                                                      100%
+  NextORM.Core.QueryPreparationException                                          33.3%
+  NextORM.Core.Range<T>                                                           95.8%
+  NextORM.Core.RangeColumnPairs                                                   76.9%
+  NextORM.Core.RangeColumnsAttribute                                               100%
+  NextORM.Core.RangeColumnsMetadata                                                100%
+  NextORM.Core.RangeColumnsSqlTranslator                                           1.3%
+  NextORM.Core.RangeColumnsSqlTranslator.Bound                                       0%
+  NextORM.Core.RangeColumnsSqlTranslator.RangeAccessors                              0%
+  NextORM.Core.RangeColumnsSqlTranslator.RangeOperand                                0%
+  NextORM.Core.RangeTypeFacts                                                       75%
+  NextORM.Core.RawMapperFactory                                                   78.3%
+  NextORM.Core.RawMapperFactory<T>                                                78.3%
+  NextORM.Core.RawRowValue                                                        92.6%
+  NextORM.Core.RawSqlSourceExpression                                              100%
+  NextORM.Core.RawValueConverter                                                    68%
+  NextORM.Core.RecursiveCteScope                                                  88.8%
+  NextORM.Core.RegexSqlTranslator                                                   45%
+  NextORM.Core.RelationshipJunctionMetadata                                        100%
+  NextORM.Core.RelationshipMetadata                                                100%
+  NextORM.Core.RelationshipMetadata.ResolvedKeys                                   100%
+  NextORM.Core.RelationshipResolver                                               92.9%
+  NextORM.Core.ReplaceConstantExpressionVisitor                                    100%
+  NextORM.Core.ReplaceConstantsExpressionVisitor                                  68.1%
+  NextORM.Core.ReplaceParameterExpressionVisitor                                  88.8%
+  NextORM.Core.ResolvedNavigationHop                                               100%
+  NextORM.Core.ResolvedNavigationLeg                                               100%
+  NextORM.Core.ResolvedNavigationPath                                              100%
+  NextORM.Core.ResultSet                                                             0%
+  NextORM.Core.ResultSetAsyncEnumerable<TResult>                                   100%
+  NextORM.Core.ResultSetEnumerator<TResult>                                          0%
+  NextORM.Core.ResultSetEnumerator<TResult>                                       25.1%
+  NextORM.Core.ResultSetNavigator                                                    0%
+  NextORM.Core.ReturningProjection                                                  95%
+  NextORM.Core.RowMapperFactory                                                   79.9%
+  NextORM.Core.RowMapperFactory<TResult>                                          79.9%
+  NextORM.Core.RowMaterializerBuilder                                             63.9%
+  NextORM.Core.ScalarFunctionTranslator                                           45.7%
+  NextORM.Core.SelectExpression                                                   91.7%
+  NextORM.Core.SelectExpressionPlanEqualityComparer                               97.9%
+  NextORM.Core.ServiceCollectionExtensions                                        83.3%
+  NextORM.Core.ServiceCollectionExtensions<T>                                     83.3%
+  NextORM.Core.SessionInfoFunctionTranslator                                        50%
+  NextORM.Core.SnakeCaseNamingConvention                                          96.6%
+  NextORM.Core.Sorting                                                             100%
+  NextORM.Core.SortingExpressionPlanEqualityComparer                              53.3%
+  NextORM.Core.SqlBuildContext                                                     100%
+  NextORM.Core.SqlBuilder                                                         53.2%
+  NextORM.Core.SqlDefault                                                            0%
+  NextORM.Core.SqlDialectBase                                                     33.8%
+  NextORM.Core.SqlFunctionAttribute                                                  0%
+  NextORM.Core.SqlFunctions                                                       22.2%
+  NextORM.Core.SqliteFts5Command                                                   100%
+  NextORM.Core.SqliteFts5CommandBuilder                                           98.1%
+  NextORM.Core.SqliteFunctions                                                       0%
+  NextORM.Core.SqliteFunctionTranslator                                            6.7%
+  NextORM.Core.SqlKeywords                                                         100%
+  NextORM.Core.SqlLiteral                                                         44.4%
+  NextORM.Core.SqlMutationBuilder                                                   71%
+  NextORM.Core.SqlOperandTranslator                                                  0%
+  NextORM.Core.SqlServerFunctions                                                    0%
+  NextORM.Core.SqlServerScalarFunctionTranslator                                  53.5%
+  NextORM.Core.SqlSourceRenderer                                                  58.3%
+  NextORM.Core.SqlTableAttribute                                                   100%
+  NextORM.Core.SqlTableFunctionAttribute                                           100%
+  NextORM.Core.StringBuilderPool                                                   100%
+  NextORM.Core.StringFormatTranslator                                             20.8%
+  NextORM.Core.StringFunctionTranslator                                           24.4%
+  NextORM.Core.SyncToAsyncEnumerable.Enumerator<T>                                   0%
+  NextORM.Core.SyncToAsyncEnumerable<T>                                              0%
+  NextORM.Core.TableAlias                                                         12.9%
+  NextORM.Core.TableAliasAccessors                                                95.2%
+  NextORM.Core.TableColumn                                                           0%
+  NextORM.Core.TableFunctionExpression                                            87.1%
+  NextORM.Core.TableParameterBinder                                                100%
+  NextORM.Core.TableParameterColumn                                                100%
+  NextORM.Core.TableParameterValue                                                79.1%
+  NextORM.Core.TableSampleClause                                                   100%
+  NextORM.Core.TableValuedParameter<T>                                            90.9%
+  NextORM.Core.TemporalClause                                                     62.5%
+  NextORM.Core.TempTableExtensions                                                37.9%
+  NextORM.Core.TempTableExtensions<TResult>                                       37.9%
+  NextORM.Core.TempTableSource<TResult>                                            100%
+  NextORM.Core.TestSpecialMethodCallVisitor                                        100%
+  NextORM.Core.TextJsonSqlTranslator                                                13%
+  NextORM.Core.TimedDictionary.Entry<TKey, TValue>                                 100%
+  NextORM.Core.TimedDictionary<TKey, TValue>                                        75%
+  NextORM.Core.TimedDictionary<TKey, TValue>                                        75%
+  NextORM.Core.TruncateBuilder<TEntity>                                           59.2%
+  NextORM.Core.TruncateCommand                                                     100%
+  NextORM.Core.TupleSqlTranslator                                                 77.7%
+  NextORM.Core.TypeExpressionVisitor<T>                                            100%
+  NextORM.Core.TypeExpressionVisitor<T1, T2>                                      94.1%
+  NextORM.Core.TypeExtensions                                                     56.2%
+  NextORM.Core.TypeFacts                                                          96.2%
+  NextORM.Core.UnpivotColumn                                                       100%
+  NextORM.Core.UpdateAssignment                                                   90.9%
+  NextORM.Core.UpdateBuilder<TEntity>                                             67.5%
+  NextORM.Core.UpdateCommand                                                       100%
+  NextORM.Core.UpdateJoinAssignment                                                100%
+  NextORM.Core.UpdateJoinBuilder<TProjection>                                     64.2%
+  NextORM.Core.UpdateJoinCommand                                                   100%
+  NextORM.Core.UpdateJoinReturningBuilder<TProjection, TResult>                      0%
+  NextORM.Core.UpdateJoinReturningBuilder<TProjection, TResult>                   67.5%
+  NextORM.Core.UpdateReturningBuilder<TEntity, TResult>                              0%
+  NextORM.Core.UpdateReturningBuilder<TEntity, TResult>                           52.8%
+  NextORM.Core.UuidFunctionTranslator                                               90%
+  NextORM.Core.ValueConverter<TModel, TProvider>                                   100%
+  NextORM.Core.ValueConverterAttribute                                            88.2%
+  NextORM.Core.ValueConverterReflection                                            100%
+  NextORM.Core.ValueList<T>                                                       68.4%
+  NextORM.Core.ValueList3<T>                                                      47.3%
+  NextORM.Core.VisitorOptions                                                      100%
+  NextORM.Core.WhereExpressionVisitor                                             46.1%
+  NextORM.Core.WideCountNarrowing                                                  100%
+  NextORM.Core.WindowDefinition                                                    100%
+  NextORM.Core.WindowFrame                                                        86.6%
+  NextORM.Core.WindowFrameBound                                                    100%
+  NextORM.Core.WindowFunction<T>                                                   100%
+  NextORM.Core.WindowFunctionTranslator                                             70%
+  NextORM.Core.WindowOrder                                                         100%
+  NextORM.Core.WindowSql                                                          49.6%
+  NextORM.Core.XmlNodesExpression                                                 83.3%
+  NextORM.Core.XmlSqlTranslator                                                     27%
+  NextORM.Core.XxHash32                                                            100%

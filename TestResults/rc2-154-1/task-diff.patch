@@ -1,0 +1,804 @@
+diff --git a/docs/advanced/api-reference.md b/docs/advanced/api-reference.md
+index d5c6766d..ed634129 100644
+--- a/docs/advanced/api-reference.md
++++ b/docs/advanced/api-reference.md
+@@ -107,7 +107,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
+ | [`IIifRenderer`](xref:NextORM.Core.IIifRenderer), [`ISessionInfoFunctions`](xref:NextORM.Core.ISessionInfoFunctions), [`IUuidGenerators`](xref:NextORM.Core.IUuidGenerators), [`ILimitByRenderer`](xref:NextORM.Core.ILimitByRenderer) | Dialect capability objects exposed by [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`Iif`, `SessionInfoFunctions`, `UuidGenerators`, `LimitBy`). The object's presence is the capability, so support and rendering come from a single fact and can never diverge; the legacy `Supports*`/`Make*` members were removed in favour of the objects. |
+ | [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions), [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions), [`IXmlFunctions`](xref:NextORM.Core.IXmlFunctions), [`ISequenceAggregateRenderer`](xref:NextORM.Core.ISequenceAggregateRenderer), [`IUniqAggregateRenderer`](xref:NextORM.Core.IUniqAggregateRenderer), [`IQuantileAggregateRenderer`](xref:NextORM.Core.IQuantileAggregateRenderer), [`ITopKAggregateRenderer`](xref:NextORM.Core.ITopKAggregateRenderer), [`IMultiIfRenderer`](xref:NextORM.Core.IMultiIfRenderer), [`IDistinctOnRenderer`](xref:NextORM.Core.IDistinctOnRenderer), [`ITableSampleMethods`](xref:NextORM.Core.ITableSampleMethods), [`IPivotRenderer`](xref:NextORM.Core.IPivotRenderer), [`IArrayJoinRenderer`](xref:NextORM.Core.IArrayJoinRenderer), [`IDateConversionRenderer`](xref:NextORM.Core.IDateConversionRenderer), [`IStringSplitRenderer`](xref:NextORM.Core.IStringSplitRenderer), [`ILockRenderer`](xref:NextORM.Core.ILockRenderer) | The remaining dialect capability objects exposed by [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`ScalarFunctions`, `SqlServerFunctions`, `XmlFunctions`, `SequenceAggregates`, `UniqAggregates`, `QuantileAggregates`, `TopKAggregates`, `MultiIf`, `DistinctOn`, `TableSample`, `Pivot`, `ArrayJoinClause`, `DateConversion`, `StringSplit`, `Lock`). Each nullable object is the single source of the capability and its renderer, so the XML/sequence/uniq/quantile/topK/multiIf/distinct-on/tablesample/PIVOT/unpivot/array-join/date-conversion/split/lock capabilities can never be "declared but unimplemented". |
+ | [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) | Optional native renderer for the `SelectWhereMax`/`SelectWhereMin` row selection with [`ExtremeRowTies.One`](xref:NextORM.Core.ExtremeRowTies.One), exposed by [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) and [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) (both default to `null`, which keeps the portable window-function lowering). `CanRender(ExtremeRowDescription)` is a side-effect-free decision taken before any SQL, alias or parameter is built; only a positive answer dispatches to `Render(ExtremeRowRenderRequest)`, and `Render` has no late fallback. PostgreSQL and ClickHouse implement it; both dialects are deliberately non-`sealed` and keep their public constructors, `Instance` and the virtual `ExtremeRowRenderer` hook, so an external assembly can subclass them and install its own public `IExtremeRowRenderer` (returning `null` from the `ExtremeRowRenderer` override — or returning `false` from `CanRender` — keeps the portable lowering). The built-in renderers are `internal`. See [Native extreme-row strategies](select-where-extrema-native.md). |
+-| [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription), [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) | Shape-only inputs of the native extreme-row contract: `ExtremeRowRenderColumn` (`ClrType`, `IsNullable`, `IsDirectMappedColumn`, `UsesConverter`), `ExtremeRowDescription` (`IsMax`, `Keys`, `Groups`, `Payload`; an empty `Groups` means the global form) handed to `CanRender`, and `ExtremeRowRenderRequest` (`SourceSql`, `IsMax`, `PayloadAliases`, `KeyAliases`, `KeyColumns` (the key shape facts positionally aligned with `KeyAliases`), `GroupAliases`, `KeywordCase`) handed to `Render`. See [Native extreme-row strategies](select-where-extrema-native.md). |
++| [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription), [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) | Shape-only inputs of the native extreme-row contract: `ExtremeRowRenderColumn` (`ClrType`, `IsNullable`, `IsDirectMappedColumn`, `UsesConverter`), `ExtremeRowDescription` (`IsMax`, `Keys`, `Groups`, `Payload`; an empty `Groups` means the global form) handed to `CanRender`, and `ExtremeRowRenderRequest` (`SourceSql`, `IsMax`, `PayloadAliases`, `KeyAliases`, `KeyColumns` (the key shape facts positionally aligned with `KeyAliases`), `GroupAliases`, `KeywordCase`) handed to `Render`. Each DTO also exposes a **public eager constructor** so a non-friend assembly can build one and drive its own renderer; construction validates references and collection elements but performs no SQL/provider/security validation and never reads the payload, and the collections are borrowed (no copy or immutability). See [Native extreme-row strategies](select-where-extrema-native.md). |
+ | [`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions) | Provider-independent helpers: [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})), [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)), CTE entry points ([`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))) and prepared-command terminals. |
+ 
+ ### Mapping attributes
+diff --git a/docs/advanced/select-where-extrema-native.md b/docs/advanced/select-where-extrema-native.md
+index d9ea6820..6d75f3f8 100644
+--- a/docs/advanced/select-where-extrema-native.md
++++ b/docs/advanced/select-where-extrema-native.md
+@@ -110,6 +110,7 @@ The native strategy is a public dialect capability, not a hard-coded provider br
+ - [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) is the optional renderer, declared as a default interface member returning `null`; [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) overrides it virtually with the same default. `null` means no native strategy.
+ - [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) exposes `CanRender(`[`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription)`)`, a side-effect-free decision taken before any SQL is assembled, and `Render(`[`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest)`)`, which returns the winning-row source. Only a positive `CanRender` leads to `Render`, and `Render` has no late fallback to the portable path.
+ - [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription) and [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) carry only shape facts (CLR type, nullability, direct-mapped/converter flags, and the prepared source/aliases), never the expression or build context. See the [API quick reference](api-reference.md).
++- Each of the three DTOs also exposes a **public eager constructor**, so an assembly without friend access can build them and drive its own [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer). Construction validates references and collection elements immediately and structurally: a required reference that is `null` throws `ArgumentNullException`; a `null` element, an empty-string alias element or a `SourceSql` that is empty/whitespace-only throws `ArgumentException`; an undeclared `KeywordCase` value throws `ArgumentException`. It performs **no** SQL parsing or provider-type/security validation, adds no minimum-count, cross-list cardinality or alias-disjointness rule (empty shapes and overlapping aliases are allowed), never reads `ExtremeRowDescription.Payload`, and never calls `CanRender`/`Render`. The collections are **borrowed**, not copied and not made immutable: the same instance is observed through the property, and a caller must not mutate it while the DTO is in use, including from a concurrent caller. The core's internal lazy payload/candidate-preparation path (and the unvalidated trusted request construction used on the hot path) remains an implementation detail and is **not** public API.
+ 
+ `PostgresDialect` and `ClickHouseDialect` are deliberately **not `sealed`**: keeping them inheritable, together with their public constructors (`PostgresDialect()`, `PostgresDialect(Version?)`, `ClickHouseDialect()`), the shared `Instance` singleton and the virtual `ExtremeRowRenderer` hook, is the supported external extension boundary — a public compatibility commitment, not a test detail. A custom dialect can derive from either provider dialect, override the hook and install its own public [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) implementation; the built-in renderers (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) are `internal` and are not part of that contract. Returning `null` from the override — or installing a renderer whose `CanRender` answers `false` — keeps the portable window-function lowering, and the provider defaults and constructors are unchanged.
+ 
+diff --git a/docs/ru/advanced/api-reference.md b/docs/ru/advanced/api-reference.md
+index aeefb3a8..b761c15a 100644
+--- a/docs/ru/advanced/api-reference.md
++++ b/docs/ru/advanced/api-reference.md
+@@ -107,7 +107,7 @@
+ | [`IIifRenderer`](xref:NextORM.Core.IIifRenderer), [`ISessionInfoFunctions`](xref:NextORM.Core.ISessionInfoFunctions), [`IUuidGenerators`](xref:NextORM.Core.IUuidGenerators), [`ILimitByRenderer`](xref:NextORM.Core.ILimitByRenderer) | Capability-объекты диалекта, доступные через [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`Iif`, `SessionInfoFunctions`, `UuidGenerators`, `LimitBy`). Наличие объекта и есть поддержка, поэтому поддержка и рендеринг исходят из одного факта и не могут разойтись; устаревшие пары `Supports*`/`Make*` удалены в пользу объектов. |
+ | [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions), [`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions), [`IXmlFunctions`](xref:NextORM.Core.IXmlFunctions), [`ISequenceAggregateRenderer`](xref:NextORM.Core.ISequenceAggregateRenderer), [`IUniqAggregateRenderer`](xref:NextORM.Core.IUniqAggregateRenderer), [`IQuantileAggregateRenderer`](xref:NextORM.Core.IQuantileAggregateRenderer), [`ITopKAggregateRenderer`](xref:NextORM.Core.ITopKAggregateRenderer), [`IMultiIfRenderer`](xref:NextORM.Core.IMultiIfRenderer), [`IDistinctOnRenderer`](xref:NextORM.Core.IDistinctOnRenderer), [`ITableSampleMethods`](xref:NextORM.Core.ITableSampleMethods), [`IPivotRenderer`](xref:NextORM.Core.IPivotRenderer), [`IArrayJoinRenderer`](xref:NextORM.Core.IArrayJoinRenderer), [`IDateConversionRenderer`](xref:NextORM.Core.IDateConversionRenderer), [`IStringSplitRenderer`](xref:NextORM.Core.IStringSplitRenderer), [`ILockRenderer`](xref:NextORM.Core.ILockRenderer) | Остальные capability-объекты диалекта, доступные через [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`ScalarFunctions`, `SqlServerFunctions`, `XmlFunctions`, `SequenceAggregates`, `UniqAggregates`, `QuantileAggregates`, `TopKAggregates`, `MultiIf`, `DistinctOn`, `TableSample`, `Pivot`, `ArrayJoinClause`, `DateConversion`, `StringSplit`, `Lock`). Каждый nullable-объект — единый источник поддержки и рендерера, поэтому возможности XML/sequence/uniq/quantile/topK/multiIf/distinct-on/tablesample/PIVOT/unpivot/array-join/date-conversion/split/lock не могут быть «объявлены, но не реализованы». |
+ | [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) | Необязательный нативный рендерер выбора строк `SelectWhereMax`/`SelectWhereMin` с [`ExtremeRowTies.One`](xref:NextORM.Core.ExtremeRowTies.One), доступный через [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) и [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) (оба по умолчанию `null`, что сохраняет переносимое понижение до оконной функции). `CanRender(ExtremeRowDescription)` — решение без побочных эффектов, принимаемое до построения любого SQL, алиаса или параметра; только положительный ответ ведёт к `Render(ExtremeRowRenderRequest)`, и у `Render` нет позднего отката. Его реализуют PostgreSQL и ClickHouse; оба диалекта намеренно не `sealed` и сохраняют публичные конструкторы, `Instance` и виртуальный хост `ExtremeRowRenderer`, поэтому внешняя сборка может наследоваться от них и поставить собственную публичную реализацию `IExtremeRowRenderer` (возврат `null` из переопределения `ExtremeRowRenderer` — или возврат `false` из `CanRender` — сохраняет переносимый путь). Встроенные рендереры `internal`. См. [Нативные стратегии выбора экстремальной строки](select-where-extrema-native.md). |
+-| [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription), [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) | Входные данные нативного контракта, несущие только факты формы: `ExtremeRowRenderColumn` (`ClrType`, `IsNullable`, `IsDirectMappedColumn`, `UsesConverter`), `ExtremeRowDescription` (`IsMax`, `Keys`, `Groups`, `Payload`; пустой `Groups` означает глобальную форму), передаваемый в `CanRender`, и `ExtremeRowRenderRequest` (`SourceSql`, `IsMax`, `PayloadAliases`, `KeyAliases`, `KeyColumns` (факты формы ключа, позиционно выровненные с `KeyAliases`), `GroupAliases`, `KeywordCase`), передаваемый в `Render`. См. [Нативные стратегии выбора экстремальной строки](select-where-extrema-native.md). |
++| [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription), [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) | Входные данные нативного контракта, несущие только факты формы: `ExtremeRowRenderColumn` (`ClrType`, `IsNullable`, `IsDirectMappedColumn`, `UsesConverter`), `ExtremeRowDescription` (`IsMax`, `Keys`, `Groups`, `Payload`; пустой `Groups` означает глобальную форму), передаваемый в `CanRender`, и `ExtremeRowRenderRequest` (`SourceSql`, `IsMax`, `PayloadAliases`, `KeyAliases`, `KeyColumns` (факты формы ключа, позиционно выровненные с `KeyAliases`), `GroupAliases`, `KeywordCase`), передаваемый в `Render`. Каждый DTO также предоставляет **публичный eager-конструктор**, поэтому сборка без friend-доступа может его создать и управлять своим рендерером; конструирование проверяет ссылки и элементы коллекций, но не выполняет проверок SQL/провайдера/безопасности и никогда не читает payload, а коллекции заимствуются (без копирования и неизменяемости). См. [Нативные стратегии выбора экстремальной строки](select-where-extrema-native.md). |
+ | [`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions) | Независимые от провайдера помощники: [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})), [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)), точки входа CTE ([`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32}))) и терминалы подготовленных команд. |
+ 
+ ### Атрибуты отображения
+diff --git a/docs/ru/advanced/select-where-extrema-native.md b/docs/ru/advanced/select-where-extrema-native.md
+index 69f93285..52676cb0 100644
+--- a/docs/ru/advanced/select-where-extrema-native.md
++++ b/docs/ru/advanced/select-where-extrema-native.md
+@@ -110,6 +110,7 @@ from (
+ - [`ISqlDialect.ExtremeRowRenderer`](xref:NextORM.Core.ISqlDialect.ExtremeRowRenderer) — необязательный рендерер, объявленный default-членом интерфейса, возвращающим `null`; [`SqlDialectBase.ExtremeRowRenderer`](xref:NextORM.Core.SqlDialectBase.ExtremeRowRenderer) переопределяет его виртуально с тем же значением по умолчанию. `null` означает отсутствие нативной стратегии.
+ - [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) предоставляет `CanRender(`[`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription)`)` — решение без побочных эффектов, принимаемое до сборки любого SQL, — и `Render(`[`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest)`)`, возвращающий источник строки-победителя. Только положительный `CanRender` ведёт к `Render`, и у `Render` нет позднего отката к переносимому пути.
+ - [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription) и [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) несут только факты формы (CLR-тип, nullable, признаки прямой отображённости и конвертера, а также подготовленный источник и алиасы), но никогда — выражение или контекст построения. См. [Краткий справочник API](api-reference.md).
++- Каждый из трёх DTO также предоставляет **публичный eager-конструктор**, поэтому сборка без friend-доступа может их создать и управлять своим [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer). Конструирование немедленно и структурно проверяет ссылки и элементы коллекций: обязательная ссылка `null` даёт `ArgumentNullException`; элемент `null`, пустой строковый элемент алиаса или `SourceSql`, пустой/состоящий только из пробелов, даёт `ArgumentException`; необъявленное значение `KeywordCase` даёт `ArgumentException`. Оно **не** выполняет разбор SQL и не проверяет типы провайдера/безопасность, не добавляет правил о минимальном количестве, согласованности размеров списков или непересечении алиасов (пустые формы и перекрывающиеся алиасы допустимы), никогда не читает `ExtremeRowDescription.Payload` и никогда не вызывает `CanRender`/`Render`. Коллекции **заимствуются**, не копируются и не делаются неизменяемыми: через свойство наблюдается тот же экземпляр, и вызывающий не должен изменять его, пока DTO используется, в том числе из конкурентного вызова. Внутренний ленивый путь подготовки payload/кандидата (и невалидируемое trusted-конструирование запроса на горячем пути) остаётся деталью реализации и **не** является публичным API.
+ 
+ `PostgresDialect` и `ClickHouseDialect` намеренно **не `sealed`**: их наследуемость вместе с публичными конструкторами (`PostgresDialect()`, `PostgresDialect(Version?)`, `ClickHouseDialect()`), общим синглтоном `Instance` и виртуальным хостом `ExtremeRowRenderer` — это и есть поддерживаемая внешняя граница расширяемости, публичное обещание совместимости, а не тестовая деталь. Пользовательский диалект может наследоваться от любого из них, переопределить хост и вернуть собственную публичную реализацию [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer); встроенные рендереры (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) `internal` и в этот контракт не входят. Возврат `null` из переопределения — или рендерер, чей `CanRender` отвечает `false`, — сохраняет переносимое понижение до оконной функции; значения по умолчанию провайдера и конструкторы не меняются.
+ 
+diff --git a/docs/specs/design/API-NAMING-REVIEW.md b/docs/specs/design/API-NAMING-REVIEW.md
+index 4a38bbfc..a86df01b 100644
+--- a/docs/specs/design/API-NAMING-REVIEW.md
++++ b/docs/specs/design/API-NAMING-REVIEW.md
+@@ -5599,3 +5599,16 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
+ | N153-2 | ℹ️ (naming/контракт) | `DialectCapabilities.cs:372-399`; `SqlDialectBase.cs:240`; `ISqlDialect.cs:1284` | Контракт опирается на уже публичный интерфейс и default-члены `ExtremeRowRenderer => null` (DIM, чтобы существующие внешние реализации `ISqlDialect` продолжали компилироваться) и виртуальный хост `SqlDialectBase`, чей `null` возвращает переносимый путь. Новой публичной поверхности нет; имя `ExtremeRowRenderer` согласовано с `SupportsSelectWhereMinMax` | Без изменений; контракт считать зафиксированным |
+ 
+ ℹ️ **Наблюдения.** (1) **P0 — нет; новых P1 по именам нет.** (2) Наследуемость, установка собственного публичного `IExtremeRowRenderer` через подкласс и форсирование переносимого пути возвратом `null` покрыты новой сборкой-потребителем `tests/nextorm.publicextensibility.tests` **без `InternalsVisibleTo`** (guard по метаданным трёх production-сборок + runtime-проверки PG/CH accept/decline/null). (3) Встроенные рендереры (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) остаются `internal` и в публичный контракт не входят; их внутренняя реализация — не обещание стабильности. (4) Публичные доки EN+RU (`advanced/select-where-extrema-native.md`, `advanced/api-reference.md` + RU) синхронны, ссылок на `docs/specs/**` нет. (5) XML-doc двух диалектов дополнен (класс, `Instance`, конструкторы, хост `ExtremeRowRenderer`): наследование, переопределение, `null → переносимый путь`, неизменные значения по умолчанию. (6) Пересчёт baseline недокументированных типов и правка Приложения A **не выполнялись** (границы #153). (7) Кодовая сторона/приёмка — статус `rc2-153-public-extensibility-1.md`; production-diff — XML-comment/docs only.
++
++---
++
++## Аудит 07.10.2026 — issue #154: публичные eager-конструкторы extreme-row DTO (ветка `1.0.9-rc2`; P0 — нет; P1 по именам — нет; P2 — N154-1; ℹ️ — N154-2)
++
++**Область.** #154 делает публичными три существующих eager-конструктора DTO нативного контракта extreme-row: `ExtremeRowRenderColumn(Type, bool, bool, bool)`, `ExtremeRowDescription(bool, IReadOnlyList<ExtremeRowRenderColumn>, IReadOnlyList<ExtremeRowRenderColumn>, IReadOnlyList<ExtremeRowRenderColumn>)` и `ExtremeRowRenderRequest(string, bool, IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<ExtremeRowRenderColumn>, IReadOnlyList<string>, KeywordCase)` (`DataContext/Dialect/DialectCapabilities.cs`). Они нужны, чтобы сборка-потребитель без `InternalsVisibleTo` (хост `tests/nextorm.mariadb.tests`) могла строить DTO и управлять собственным `IExtremeRowRenderer`. Внутренний ленивый конструктор описания (`Func<...> payloadFactory`) и внутренний trusted-конструктор запроса, различаемый internal-маркером `ExtremeRowTrustedConstruction`, **остаются internal** и в публичную поверхность не входят; ядро (`SqlBuilder.cs` — построение `ExtremeRowRenderRequest`) ходит через trusted-путь. Публичная дельта — **+3 публичных конструктора**, новых публичных типов нет. Валидация — construction-time, без чтения payload и без SQL/provider/security-проверок.
++
++| # | Ур. | Место | Оценка | Рекомендация |
++|---|-----|-------|--------|--------------|
++| N154-1 | **P2 (BC / Шаг 5)** | `DataContext/Dialect/DialectCapabilities.cs` (`ExtremeRowRenderColumn`, `ExtremeRowDescription`, `ExtremeRowRenderRequest`) | Три ранее `internal` eager-конструктора стали `public` — аддитивно (source-compatible расширение видимости; в метаданных появляются публичные записи). Обратная операция — сужение до `internal` или удаление — станет breaking для внешних потребителей, собирающих DTO руками. `find -name 'PublicAPI*.txt'` — **0**; `PublicApiAnalyzers`/ApiCompat/API-approval-теста нет (Шаг 5, issue #53) | При заморозке внести 3 публичных конструктора в дельту релиза как совместимую поверхность; в release notes отметить, что DTO можно конструировать снаружи, коллекции заимствуются, а внутренние lazy/trusted-конструкторы остаются деталью реализации |
++| N154-2 | ℹ️ (naming/контракт) | `DialectCapabilities.cs`; тест-хост `tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs` | Сигнатуры совпадают с уже публичными свойствами DTO; новых имён нет, `KeywordCase` — существующий enum. Публичная форма проверяется сборкой-потребителем без `InternalsVisibleTo` и reflection-ассертом «ровно один публичный eager-конструктор на тип, без `Func`/`Lazy`». Валидация не вводит правил о количестве/размерах/непересечении, допускает пустые формы и перекрывающиеся алиасы | Без изменений; контракт считать зафиксированным; встроенные рендереры и internal-пути в публичную поверхность не вносить |
++
++ℹ️ **Наблюдения.** (1) **P0 — нет; новых P1 по именам нет.** (2) XML-doc 100 %: у всех трёх публичных конструкторов есть `<summary>`/`<param>`/`<exception>`; `GenerateDocumentationFile=true` + `TreatWarningsAsErrors=true`, `NoWarn` — 0, build `nextorm.slnx` Debug `0/0` ⇒ `CS1591` гейтится. (3) Публичные доки EN+RU (`advanced/select-where-extrema-native.md`, `advanced/api-reference.md` + RU) синхронны, ссылок на `docs/specs/**` нет. (4) Коллекции заимствуются (`ReferenceEquals` через свойства, включая eager payload); валидация — только construction-time, payload не читается, `CanRender`/`Render` не вызываются. (5) Кодовая сторона/приёмка — статус `rc2-154-dto-public-ctors-1.md`.
+diff --git a/src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs b/src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
+index a9bc115c..51fdeadf 100644
+--- a/src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
++++ b/src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs
+@@ -202,13 +202,26 @@ public interface IDistinctOnRenderer
+ /// <remarks>
+ /// This is a read-only input constructed by the core and handed to an external
+ /// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
+-/// <see cref="IExtremeRowRenderer.CanRender"/>; the constructor is intentionally not part of the public
+-/// contract, so no external code needs to (or can) construct one.
++/// <see cref="IExtremeRowRenderer.CanRender"/>. The eager constructor is part of the public contract:
++/// an external assembly without <c>InternalsVisibleTo</c> can construct one directly. Validation
++/// happens at construction - a null <c>clrType</c> throws <see cref="ArgumentNullException"/>. There
++/// is no SQL, provider, security or cardinality validation, and nothing calls
++/// <see cref="IExtremeRowRenderer.CanRender"/> or <see cref="IExtremeRowRenderer.Render"/>.
+ /// </remarks>
+ public sealed record ExtremeRowRenderColumn
+ {
+-    internal ExtremeRowRenderColumn(Type clrType, bool isNullable, bool isDirectMappedColumn, bool usesConverter)
++    /// <summary>
++    /// Creates a shape fact for one prepared extreme-row column. Exposed so an external
++    /// <see cref="IExtremeRowRenderer"/> can be exercised without a host that has internals access.
++    /// </summary>
++    /// <param name="clrType">The CLR type of the value produced by the column. Must not be <see langword="null"/>.</param>
++    /// <param name="isNullable">Whether <paramref name="clrType"/> can hold <c>null</c>.</param>
++    /// <param name="isDirectMappedColumn">Whether the column is a direct access to a mapped entity property.</param>
++    /// <param name="usesConverter">Whether a value converter is attached to the mapped property.</param>
++    /// <exception cref="ArgumentNullException"><paramref name="clrType"/> is <see langword="null"/>.</exception>
++    public ExtremeRowRenderColumn(Type clrType, bool isNullable, bool isDirectMappedColumn, bool usesConverter)
+     {
++        ArgumentNullException.ThrowIfNull(clrType);
+         ClrType = clrType;
+         IsNullable = isNullable;
+         IsDirectMappedColumn = isDirectMappedColumn;
+@@ -240,8 +253,13 @@ public sealed record ExtremeRowRenderColumn
+ /// <remarks>
+ /// This is a read-only input constructed by the core and handed to an external
+ /// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
+-/// <see cref="IExtremeRowRenderer.CanRender"/>; the constructor is intentionally not part of the public
+-/// contract, so no external code needs to (or can) construct one.
++/// <see cref="IExtremeRowRenderer.CanRender"/>. The eager constructor is part of the public contract:
++/// an external assembly without <c>InternalsVisibleTo</c> can construct one directly. Validation
++/// happens at construction - a null collection reference throws <see cref="ArgumentNullException"/>
++/// and a null element throws <see cref="ArgumentException"/>; <see cref="Payload"/> is never read to
++/// validate it. There is no SQL, provider, security or cardinality validation, and nothing calls
++/// <see cref="IExtremeRowRenderer.CanRender"/> or <see cref="IExtremeRowRenderer.Render"/>. The
++/// internal lazy factory constructor remains non-public and is the path core preparation uses.
+ /// </remarks>
+ public sealed record ExtremeRowDescription
+ {
+@@ -251,13 +269,27 @@ public sealed record ExtremeRowDescription
+     // from the record's value semantics (see Equals/GetHashCode below).
+     private Lazy<IReadOnlyList<ExtremeRowRenderColumn>>? _payload;
+ 
+-    internal ExtremeRowDescription(
++    /// <summary>
++    /// Creates an eager description from already-materialized payload columns. Exposed so an external
++    /// <see cref="IExtremeRowRenderer"/> can be exercised without a host that has internals access.
++    /// The collections are borrowed, not copied.
++    /// </summary>
++    /// <param name="isMax"><see langword="true"/> for a maximum, <see langword="false"/> for a minimum.</param>
++    /// <param name="keys">The extreme-key components in selector order. Must not be <see langword="null"/>.</param>
++    /// <param name="groups">The group-by components in selector order; empty for the global form. Must not be <see langword="null"/>.</param>
++    /// <param name="payload">The source payload columns. Must not be <see langword="null"/> and is not read during construction.</param>
++    /// <exception cref="ArgumentNullException">A collection reference is <see langword="null"/>.</exception>
++    /// <exception cref="ArgumentException">A collection contains a <see langword="null"/> element.</exception>
++    public ExtremeRowDescription(
+         bool isMax,
+         IReadOnlyList<ExtremeRowRenderColumn> keys,
+         IReadOnlyList<ExtremeRowRenderColumn> groups,
+         IReadOnlyList<ExtremeRowRenderColumn> payload)
+         : this(isMax, keys, groups, () => payload)
+     {
++        ExtremeRowValidation.RequireColumns(keys, nameof(keys));
++        ExtremeRowValidation.RequireColumns(groups, nameof(groups));
++        ExtremeRowValidation.RequireColumns(payload, nameof(payload));
+     }
+ 
+     internal ExtremeRowDescription(
+@@ -317,12 +349,68 @@ public sealed record ExtremeRowDescription
+ /// <remarks>
+ /// This is a read-only input constructed by the core and handed to an external
+ /// <see cref="IExtremeRowRenderer"/>. Implementing a renderer means receiving instances through
+-/// <see cref="IExtremeRowRenderer.Render"/>; the constructor is intentionally not part of the public
+-/// contract, so no external code needs to (or can) construct one.
++/// <see cref="IExtremeRowRenderer.Render"/>. The eager constructor is part of the public contract:
++/// an external assembly without <c>InternalsVisibleTo</c> can construct one directly. Validation
++/// happens at construction - a null reference throws <see cref="ArgumentNullException"/>, while an
++/// empty or whitespace-only <c>sourceSql</c>, a null or empty collection element, or an undeclared
++/// <see cref="KeywordCase"/> throws <see cref="ArgumentException"/> (a whitespace-only alias is
++/// accepted). There is no SQL, provider, security or cardinality validation, and nothing calls
++/// <see cref="IExtremeRowRenderer.CanRender"/> or <see cref="IExtremeRowRenderer.Render"/>.
+ /// </remarks>
+ public sealed record ExtremeRowRenderRequest
+ {
++    /// <summary>
++    /// Creates the prepared inputs of one native extreme-row render. Exposed so an external
++    /// <see cref="IExtremeRowRenderer"/> can be exercised without a host that has internals access.
++    /// Every collection is borrowed, not copied; the renderer must not mutate a collection while the
++    /// request is in use, including from a concurrent caller.
++    /// </summary>
++    /// <param name="sourceSql">The prepared filtered source SQL. Must not be <see langword="null"/>, empty or whitespace-only.</param>
++    /// <param name="isMax"><see langword="true"/> for a maximum, <see langword="false"/> for a minimum.</param>
++    /// <param name="payloadAliases">The canonical payload aliases, in order. Must not be <see langword="null"/>; elements must not be <see langword="null"/> or empty (whitespace-only is accepted).</param>
++    /// <param name="keyAliases">The aliases of the extreme-key components, in selector order. Must not be <see langword="null"/>; elements must not be <see langword="null"/> or empty (whitespace-only is accepted).</param>
++    /// <param name="keyColumns">The shape facts aligned with <paramref name="keyAliases"/>. Must not be <see langword="null"/>; elements must not be <see langword="null"/>.</param>
++    /// <param name="groupAliases">The aliases of the group-by components; empty for the global form. Must not be <see langword="null"/>; elements must not be <see langword="null"/> or empty (whitespace-only is accepted).</param>
++    /// <param name="keywordCase">The keyword casing; must be a declared <see cref="KeywordCase"/> value.</param>
++    /// <exception cref="ArgumentNullException">A required reference is <see langword="null"/>.</exception>
++    /// <exception cref="ArgumentException"><paramref name="sourceSql"/> is empty or whitespace-only, a collection contains a <see langword="null"/> or empty element, or <paramref name="keywordCase"/> is not a declared value.</exception>
++    public ExtremeRowRenderRequest(
++        string sourceSql,
++        bool isMax,
++        IReadOnlyList<string> payloadAliases,
++        IReadOnlyList<string> keyAliases,
++        IReadOnlyList<ExtremeRowRenderColumn> keyColumns,
++        IReadOnlyList<string> groupAliases,
++        KeywordCase keywordCase)
++    {
++        ArgumentNullException.ThrowIfNull(sourceSql);
++        if (string.IsNullOrWhiteSpace(sourceSql))
++            throw new ArgumentException("The prepared source SQL must not be empty or whitespace-only.", nameof(sourceSql));
++
++        ExtremeRowValidation.RequireAliases(payloadAliases, nameof(payloadAliases));
++        ExtremeRowValidation.RequireAliases(keyAliases, nameof(keyAliases));
++        ExtremeRowValidation.RequireColumns(keyColumns, nameof(keyColumns));
++        ExtremeRowValidation.RequireAliases(groupAliases, nameof(groupAliases));
++
++        if (!Enum.IsDefined(keywordCase))
++            throw new ArgumentException($"'{keywordCase}' is not a declared {nameof(KeywordCase)} value.", nameof(keywordCase));
++
++        SourceSql = sourceSql;
++        IsMax = isMax;
++        PayloadAliases = payloadAliases;
++        KeyAliases = keyAliases;
++        KeyColumns = keyColumns;
++        GroupAliases = groupAliases;
++        KeywordCase = keywordCase;
++    }
++
++    /// <summary>
++    /// The core's trusted construction path: the inputs are already structurally valid, so the public
++    /// collection scans are skipped. Distinguished from the public constructor by an internal marker so
++    /// no external caller can opt out of validation.
++    /// </summary>
+     internal ExtremeRowRenderRequest(
++        ExtremeRowTrustedConstruction _,
+         string sourceSql,
+         bool isMax,
+         IReadOnlyList<string> payloadAliases,
+@@ -674,3 +762,46 @@ public interface ISqliteFunctions
+     /// </summary>
+     string Render(string name, IReadOnlyList<string> args);
+ }
++
++/// <summary>
++/// Internal marker that distinguishes the core's trusted, already-validated
++/// <see cref="ExtremeRowRenderRequest"/> construction from the validated public constructor. It is
++/// deliberately not public, so no external caller can bypass validation.
++/// </summary>
++internal readonly struct ExtremeRowTrustedConstruction
++{
++}
++
++/// <summary>Construction-time validation shared by the public eager extreme-row constructors.</summary>
++internal static class ExtremeRowValidation
++{
++    /// <summary>
++    /// Requires a non-null column collection whose elements are all non-null. The collection is
++    /// borrowed as-is, not copied, and is never read as a payload.
++    /// </summary>
++    internal static void RequireColumns(IReadOnlyList<ExtremeRowRenderColumn>? columns, string paramName)
++    {
++        ArgumentNullException.ThrowIfNull(columns, paramName);
++        for (var i = 0; i < columns.Count; i++)
++        {
++            if (columns[i] is null)
++                throw new ArgumentException($"The '{paramName}' collection contains a null element at index {i}.", paramName);
++        }
++    }
++
++    /// <summary>
++    /// Requires a non-null alias collection whose elements are all non-null and non-empty. A
++    /// whitespace-only element is accepted; the rule is non-empty, not non-whitespace.
++    /// </summary>
++    internal static void RequireAliases(IReadOnlyList<string>? aliases, string paramName)
++    {
++        ArgumentNullException.ThrowIfNull(aliases, paramName);
++        for (var i = 0; i < aliases.Count; i++)
++        {
++            if (aliases[i] is null)
++                throw new ArgumentException($"The '{paramName}' collection contains a null element at index {i}.", paramName);
++            if (aliases[i].Length == 0)
++                throw new ArgumentException($"The '{paramName}' collection contains an empty element at index {i}.", paramName);
++        }
++    }
++}
+diff --git a/src/nextorm.core/DataContext/SqlBuilder.cs b/src/nextorm.core/DataContext/SqlBuilder.cs
+index 0c10905a..e6cd173e 100644
+--- a/src/nextorm.core/DataContext/SqlBuilder.cs
++++ b/src/nextorm.core/DataContext/SqlBuilder.cs
+@@ -769,6 +769,7 @@ internal readonly struct SqlBuilder
+ 
+         var (payloadAliases, keyAliases, groupAliases) = MakeExtremeRowAliases(cmd, entitySelectList);
+         var winnerSql = renderer.Render(new ExtremeRowRenderRequest(
++            default(ExtremeRowTrustedConstruction),
+             sourceSql,
+             cmd.ExtremeRow!.Kind == ExtremeKind.Max,
+             payloadAliases,
+diff --git a/tests/nextorm.clickhouse.tests/ExtremeRowPayloadLazinessTests.cs b/tests/nextorm.clickhouse.tests/ExtremeRowPayloadLazinessTests.cs
+index 7b6d7ebc..3091c1b2 100644
+--- a/tests/nextorm.clickhouse.tests/ExtremeRowPayloadLazinessTests.cs
++++ b/tests/nextorm.clickhouse.tests/ExtremeRowPayloadLazinessTests.cs
+@@ -1,3 +1,5 @@
++using System.ComponentModel.DataAnnotations;
++using System.ComponentModel.DataAnnotations.Schema;
+ using System.Data.Common;
+ using System.Reflection;
+ using FluentAssertions;
+@@ -94,6 +96,26 @@ public class ExtremeRowPayloadLazinessTests
+         sql.Should().Contain("row_number()");
+     }
+ 
++    [Fact]
++    public void ValueTypePayload_GlobalNative_ShouldMaterializeExactlyOnceAndMemoize()
++    {
++        // #154 value/reference coverage: a value-type-only payload must still be materialized exactly
++        // once by the ClickHouse eligibility decision (which reads Payload) and memoized for later reads.
++        using var real = ClickHouseTestContext.Create();
++        var realSql = SqlOf(real, real.From<ExtremeValuePayloadEntity>().SelectWhereMax(x => x.K1).ToCommand());
++
++        using var ctx = new CapturingClickHouseDataContext(PlaceholderConnectionString);
++        var sql = SqlOf(ctx, ctx.From<ExtremeValuePayloadEntity>().SelectWhereMax(x => x.K1).ToCommand());
++
++        sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
++        ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
++        var description = ctx.CapturingDialect.Renderer.Description!;
++        IsPayloadMaterialized(description).Should()
++            .BeTrue("the ClickHouse renderer reads the payload to decide tuple eligibility");
++        ReferenceEquals(description.Payload, description.Payload).Should()
++            .BeTrue("repeated reads must keep returning the single memoized payload");
++    }
++
+     /// <summary>Transparent wrapper around the stock ClickHouse renderer that captures the description.</summary>
+     internal sealed class CapturingExtremeRowRenderer(IExtremeRowRenderer inner) : IExtremeRowRenderer
+     {
+@@ -134,3 +156,21 @@ public class ExtremeRowPayloadLazinessTests
+         public override ISqlDialect Dialect => CapturingDialect;
+     }
+ }
++
++/// <summary>
++/// A native-eligible entity (#154 coverage) whose key and payload are both value types, used to drive
++/// the value-type payload branch through the ClickHouse eligibility decision.
++/// </summary>
++[SqlTable("extreme_value_payload_entity")]
++public class ExtremeValuePayloadEntity
++{
++    [Key]
++    [Column("id")]
++    public int Id { get; set; }
++
++    [Column("k1")]
++    public int? K1 { get; set; }
++
++    [Column("payload")]
++    public int? Payload { get; set; }
++}
+diff --git a/tests/nextorm.core.tests/ExtremeRowDescriptionLazinessTests.cs b/tests/nextorm.core.tests/ExtremeRowDescriptionLazinessTests.cs
+index dcdbfd84..9c87a9a9 100644
+--- a/tests/nextorm.core.tests/ExtremeRowDescriptionLazinessTests.cs
++++ b/tests/nextorm.core.tests/ExtremeRowDescriptionLazinessTests.cs
+@@ -12,6 +12,10 @@ namespace NextORM.Core.Tests;
+ /// </summary>
+ public class ExtremeRowDescriptionLazinessTests
+ {
++    private readonly InMemoryRepository _sut;
++
++    public ExtremeRowDescriptionLazinessTests(InMemoryRepository sut) => _sut = sut;
++
+     private static ExtremeRowRenderColumn Column()
+         => new(typeof(int), isNullable: false, isDirectMappedColumn: true, usesConverter: false);
+ 
+@@ -120,4 +124,44 @@ public class ExtremeRowDescriptionLazinessTests
+         calls.Should().Be(1);
+         copy.IsMax.Should().BeTrue("the copy carries the exposed values");
+     }
++
++    [Fact]
++    public void ThrowingFactory_ShouldNotBeReachedAtConstructionOrByShapeReads()
++    {
++        var description = new ExtremeRowDescription(
++            isMax: true,
++            keys: [Column()],
++            groups: [],
++            payloadFactory: () => throw new InvalidOperationException("the payload factory must not run at construction"));
++
++        // Construction and the non-payload shape reads must never invoke the factory.
++        description.Keys.Should().ContainSingle();
++        description.Groups.Should().BeEmpty();
++
++        var act = () => _ = description.Payload;
++        act.Should().Throw<InvalidOperationException>("only an explicit Payload read forces the factory");
++    }
++
++    [Fact]
++    public void ValueTypeEntity_ShouldFlowThroughTheExtremePathInBothDirections()
++    {
++        var source = _sut.DataProvider.From<ExtremeRowValueEntity>();
++        source.WithData(
++        [
++            new ExtremeRowValueEntity { Id = 1, Score = 5 },
++            new ExtremeRowValueEntity { Id = 2, Score = 9 },
++            new ExtremeRowValueEntity { Id = 3, Score = 2 },
++        ]);
++
++        source.SelectWhereMax(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(2);
++        source.SelectWhereMin(it => it.Score).ToList().Should().ContainSingle().Which.Id.Should().Be(3);
++    }
++}
++
++/// <summary>A value-type (struct) entity exercised through the extreme-row core path.</summary>
++public record struct ExtremeRowValueEntity
++{
++    public int Id { get; set; }
++
++    public int? Score { get; set; }
+ }
+diff --git a/tests/nextorm.postgres.tests/ExtremeRowPayloadLazinessTests.cs b/tests/nextorm.postgres.tests/ExtremeRowPayloadLazinessTests.cs
+index ae1873d4..65ebfdd5 100644
+--- a/tests/nextorm.postgres.tests/ExtremeRowPayloadLazinessTests.cs
++++ b/tests/nextorm.postgres.tests/ExtremeRowPayloadLazinessTests.cs
+@@ -1,3 +1,5 @@
++using System.ComponentModel.DataAnnotations;
++using System.ComponentModel.DataAnnotations.Schema;
+ using System.Data.Common;
+ using System.Reflection;
+ using FluentAssertions;
+@@ -86,6 +88,25 @@ public class ExtremeRowPayloadLazinessTests
+         sql.Should().Contain("row_number()");
+     }
+ 
++    [Fact]
++    public void ReferenceTypePayload_GlobalNative_ShouldRenderIdenticalSqlWithoutForcingThePayload()
++    {
++        // #154 value/reference coverage: an integral (value-type) key with a reference-type payload
++        // column still dispatches natively; PostgreSQL's CanRender reads only Keys/Groups, so the
++        // factory-backed payload must stay unmaterialized through the SQL pass.
++        using var real = PostgresTestContext.Create();
++        var realSql = SqlOf(real, real.From<ExtremeRefPayloadEntity>().SelectWhereMax(x => x.Id).ToCommand());
++
++        using var ctx = new CapturingPostgresDataContext(PlaceholderConnectionString);
++        var sql = SqlOf(ctx, ctx.From<ExtremeRefPayloadEntity>().SelectWhereMax(x => x.Id).ToCommand());
++
++        sql.Should().Be(realSql, "the transparent wrapper must not change the native SQL");
++        sql.Should().Contain("limit 1", "an integral key keeps the native strategy");
++        ctx.CapturingDialect.Renderer.CanRenderCalls.Should().Be(1);
++        IsPayloadMaterialized(ctx.CapturingDialect.Renderer.Description!).Should()
++            .BeFalse("the PostgreSQL renderer never reads Payload, including a reference-type one");
++    }
++
+     /// <summary>
+     /// A transparent wrapper around the stock PostgreSQL renderer (reached through
+     /// <c>base.ExtremeRowRenderer</c>) that captures the production-built description and counts how many
+@@ -130,3 +151,18 @@ public class ExtremeRowPayloadLazinessTests
+         public override ISqlDialect Dialect => CapturingDialect;
+     }
+ }
++
++/// <summary>
++/// A native-eligible entity (#154 coverage) with an integral value-type key and a reference-type
++/// payload column, used to drive the reference-type payload branch without materializing it.
++/// </summary>
++[SqlTable("extreme_ref_payload_entity")]
++public class ExtremeRefPayloadEntity
++{
++    [Key]
++    [Column("id")]
++    public int Id { get; set; }
++
++    [Column("name")]
++    public string? Name { get; set; }
++}
+diff --git a/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs b/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs
+new file mode 100644
+index 00000000..d13e1d1b
+--- /dev/null
++++ b/tests/nextorm.mariadb.tests/ExtremeRowPublicConstructionTests.cs
+@@ -0,0 +1,344 @@
++using System.Reflection;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.MariaDb.Tests;
++
++/// <summary>
++/// External (no <c>InternalsVisibleTo</c>) contract for #154: an assembly that references
++/// <c>nextorm.core</c> directly can construct the three extreme-row DTOs through public eager
++/// constructors, rely on immediate construction-time validation, and drive its own
++/// <see cref="IExtremeRowRenderer"/>. Reflection pins the public surface; the collection-identity
++/// assertions pin the borrowed (non-copying) ownership.
++/// </summary>
++public class ExtremeRowPublicConstructionTests
++{
++    private static ExtremeRowRenderColumn Column(Type? clrType = null)
++        => new(clrType ?? typeof(int), isNullable: false, isDirectMappedColumn: true, usesConverter: false);
++
++    private static ExtremeRowRenderColumn[] Columns(params ExtremeRowRenderColumn[] columns) => columns;
++
++    private static ExtremeRowDescription Description(
++        bool isMax = true,
++        IReadOnlyList<ExtremeRowRenderColumn>? keys = null,
++        IReadOnlyList<ExtremeRowRenderColumn>? groups = null,
++        IReadOnlyList<ExtremeRowRenderColumn>? payload = null)
++        => new(isMax, keys ?? [Column()], groups ?? [], payload ?? [Column()]);
++
++    private static ExtremeRowRenderRequest Request(
++        string sourceSql = "select * from t",
++        bool isMax = true,
++        IReadOnlyList<string>? payloadAliases = null,
++        IReadOnlyList<string>? keyAliases = null,
++        IReadOnlyList<ExtremeRowRenderColumn>? keyColumns = null,
++        IReadOnlyList<string>? groupAliases = null,
++        KeywordCase keywordCase = KeywordCase.Lower)
++        => new(
++            sourceSql,
++            isMax,
++            payloadAliases ?? ["p"],
++            keyAliases ?? ["k"],
++            keyColumns ?? [Column()],
++            groupAliases ?? [],
++            keywordCase);
++
++    // --- AC-01: public surface -----------------------------------------------------------------
++
++    [Fact]
++    public void AllThreeDtos_ShouldBeConstructibleFromThisNonFriendAssembly()
++    {
++        var column = Column();
++        var description = Description(keys: [column]);
++        var request = Request(keyColumns: [column]);
++
++        column.ClrType.Should().Be(typeof(int));
++        description.Keys.Should().ContainSingle();
++        request.KeyColumns.Should().ContainSingle();
++    }
++
++    [Fact]
++    public void PublicEagerConstructors_ShouldBeTheOnlyPublicConstructors()
++    {
++        AssertSinglePublicEagerCtor(typeof(ExtremeRowRenderColumn), 4);
++        AssertSinglePublicEagerCtor(typeof(ExtremeRowDescription), 4);
++        AssertSinglePublicEagerCtor(typeof(ExtremeRowRenderRequest), 7);
++    }
++
++    private static void AssertSinglePublicEagerCtor(Type type, int parameterCount)
++    {
++        var ctors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
++        ctors.Should().ContainSingle($"{type.Name} must expose exactly one public eager constructor");
++        ctors[0].GetParameters().Should().HaveCount(parameterCount);
++        ctors[0].GetParameters().Should().OnlyContain(
++            p => !typeof(Delegate).IsAssignableFrom(p.ParameterType)
++                 && !(p.ParameterType.IsGenericType
++                      && p.ParameterType.GetGenericTypeDefinition() == typeof(Lazy<>)),
++            "no public factory/lazy overload may be introduced");
++    }
++
++    // --- AC-02: required references ------------------------------------------------------------
++
++    [Fact]
++    public void Column_NullClrType_ShouldThrowArgumentNullException()
++    {
++        Action act = () => _ = new ExtremeRowRenderColumn(null!, false, false, false);
++        act.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("clrType");
++    }
++
++    [Fact]
++    public void Description_NullCollections_ShouldEachThrowWithTheRightParamName()
++    {
++        Action?[] acts =
++        [
++            () => _ = new ExtremeRowDescription(true, null!, [], [Column()]),
++            () => _ = new ExtremeRowDescription(true, [Column()], null!, [Column()]),
++            () => _ = new ExtremeRowDescription(true, [Column()], [], null!),
++        ];
++        string[] names = ["keys", "groups", "payload"];
++        for (var i = 0; i < acts.Length; i++)
++            acts[i]!.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be(names[i]);
++    }
++
++    [Fact]
++    public void Request_NullReferences_ShouldEachThrowWithTheRightParamName()
++    {
++        Action?[] acts =
++        [
++            () => _ = new ExtremeRowRenderRequest(null!, true, ["p"], ["k"], [Column()], [], KeywordCase.Lower),
++            () => _ = new ExtremeRowRenderRequest("s", true, null!, ["k"], [Column()], [], KeywordCase.Lower),
++            () => _ = new ExtremeRowRenderRequest("s", true, ["p"], null!, [Column()], [], KeywordCase.Lower),
++            () => _ = new ExtremeRowRenderRequest("s", true, ["p"], ["k"], null!, [], KeywordCase.Lower),
++            () => _ = new ExtremeRowRenderRequest("s", true, ["p"], ["k"], [Column()], null!, KeywordCase.Lower),
++        ];
++        string[] names = ["sourceSql", "payloadAliases", "keyAliases", "keyColumns", "groupAliases"];
++        for (var i = 0; i < acts.Length; i++)
++            acts[i]!.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be(names[i]);
++    }
++
++    // --- AC-03: null collection elements -------------------------------------------------------
++
++    [Fact]
++    public void Description_NullElement_ShouldThrowArgumentExceptionWithParamAndIndex()
++    {
++        Action keysFirst = () => _ = new ExtremeRowDescription(true, [null!, Column()], [], [Column()]);
++        Action keysLater = () => _ = new ExtremeRowDescription(true, [Column(), null!], [], [Column()]);
++        Action groups = () => _ = new ExtremeRowDescription(true, [Column()], [null!], [Column()]);
++        Action payload = () => _ = new ExtremeRowDescription(true, [Column()], [], [null!]);
++
++        keysFirst.Should().Throw<ArgumentException>().WithParameterName("keys").WithMessage("*index 0*");
++        keysLater.Should().Throw<ArgumentException>().WithParameterName("keys").WithMessage("*index 1*");
++        groups.Should().Throw<ArgumentException>().WithParameterName("groups").WithMessage("*index 0*");
++        payload.Should().Throw<ArgumentException>().WithParameterName("payload").WithMessage("*index 0*");
++    }
++
++    [Fact]
++    public void Request_NullElement_ShouldThrowArgumentExceptionWithParamAndIndex()
++    {
++        Action payloadAliases = () => _ = Request(payloadAliases: new string[] { "a", null! });
++        Action keyAliases = () => _ = Request(keyAliases: new string[] { null!, "k" });
++        Action keyColumns = () => _ = Request(keyColumns: new ExtremeRowRenderColumn[] { Column(), null! });
++        Action groupAliases = () => _ = Request(groupAliases: new string[] { null! });
++
++        payloadAliases.Should().Throw<ArgumentException>().WithParameterName("payloadAliases").WithMessage("*index 1*");
++        keyAliases.Should().Throw<ArgumentException>().WithParameterName("keyAliases").WithMessage("*index 0*");
++        keyColumns.Should().Throw<ArgumentException>().WithParameterName("keyColumns").WithMessage("*index 1*");
++        groupAliases.Should().Throw<ArgumentException>().WithParameterName("groupAliases").WithMessage("*index 0*");
++    }
++
++    // --- AC-04: source SQL, aliases, enum ------------------------------------------------------
++
++    [Fact]
++    public void Request_SourceSql_ShouldDistinguishNullEmptyWhitespaceAndOrdinary()
++    {
++        Action nullSql = () => _ = Request(sourceSql: null!);
++        Action emptySql = () => _ = Request(sourceSql: string.Empty);
++        Action whitespaceSql = () => _ = Request(sourceSql: "   ");
++
++        nullSql.Should().Throw<ArgumentNullException>().Which.ParamName.Should().Be("sourceSql");
++        emptySql.Should().Throw<ArgumentException>().WithParameterName("sourceSql");
++        whitespaceSql.Should().Throw<ArgumentException>().WithParameterName("sourceSql");
++
++        Request(sourceSql: "select 1").SourceSql.Should().Be("select 1");
++    }
++
++    [Fact]
++    public void Request_Aliases_ShouldRejectNullAndEmptyButAcceptWhitespaceOnly()
++    {
++        Action nullElement = () => _ = Request(payloadAliases: new string[] { "a", null! });
++        Action emptyElement = () => _ = Request(payloadAliases: new string[] { "a", string.Empty });
++        Action whitespaceOnly = () => _ = Request(payloadAliases: ["   "]);
++
++        nullElement.Should().Throw<ArgumentException>().WithParameterName("payloadAliases");
++        emptyElement.Should().Throw<ArgumentException>().WithParameterName("payloadAliases").WithMessage("*index 1*");
++        whitespaceOnly.Should().NotThrow("whitespace-only is non-empty and therefore accepted");
++
++        Request(payloadAliases: ["a", "b"]).PayloadAliases.Should().Equal("a", "b");
++    }
++
++    [Fact]
++    public void Request_KeywordCase_ShouldAcceptEveryDeclaredValueAndRejectUndefined()
++    {
++        foreach (var value in Enum.GetValues<KeywordCase>())
++            Request(keywordCase: value).KeywordCase.Should().Be(value);
++
++        Action undefined = () => _ = Request(keywordCase: (KeywordCase)99);
++        undefined.Should().Throw<ArgumentException>().WithParameterName("keywordCase");
++    }
++
++    // --- AC-05: shapes without invented rules --------------------------------------------------
++
++    public static TheoryData<bool, bool> ShapeAndDirection()
++    {
++        var data = new TheoryData<bool, bool>();
++        foreach (var isMax in new[] { true, false })
++            foreach (var shape in new[] { false, true })
++                data.Add(isMax, shape);
++        return data;
++    }
++
++    [Theory]
++    [MemberData(nameof(ShapeAndDirection))]
++    public void EveryShape_ShouldConstructThroughDescriptionAndRequestInBothDirections(bool isMax, bool composite)
++    {
++        var key1 = Column();
++        var key2 = Column(typeof(string));
++        var groupKey = Column(typeof(int));
++
++        // Global shape; grouped shape; composite-overlap (group repeats a key, payload overlaps a key); empty shape.
++        ExtremeRowDescription[] descriptions = composite
++            ?
++            [
++                Description(isMax),
++                Description(isMax, keys: [key1], groups: [groupKey]),
++                Description(isMax, keys: [key1, key2], groups: [key1], payload: [key1, key2]),
++                Description(isMax, keys: [], groups: [], payload: []),
++            ]
++            :
++            [
++                Description(isMax, keys: [key1], groups: [], payload: [key2]),
++                Description(isMax, keys: [key1], groups: [groupKey], payload: [key2]),
++                Description(isMax, keys: [key1], groups: [], payload: []),
++                Description(isMax, keys: [], groups: [], payload: []),
++            ];
++
++        foreach (var description in descriptions)
++            description.IsMax.Should().Be(isMax);
++
++        ExtremeRowRenderRequest[] requests = composite
++            ?
++            [
++                Request(isMax: isMax),
++                Request(isMax: isMax, keyAliases: ["k1"], groupAliases: ["g1"]),
++                Request(isMax: isMax, payloadAliases: ["k1", "k2"], keyAliases: ["k1"], keyColumns: [key1, key2], groupAliases: ["k1"]),
++                Request(isMax: isMax, payloadAliases: [], keyAliases: [], keyColumns: [], groupAliases: []),
++            ]
++            :
++            [
++                Request(isMax: isMax, payloadAliases: ["p"], keyAliases: ["k1"], keyColumns: [key1], groupAliases: []),
++                Request(isMax: isMax, payloadAliases: ["p"], keyAliases: ["k1"], keyColumns: [key1], groupAliases: ["g1"]),
++                Request(isMax: isMax, payloadAliases: [], keyAliases: ["k1"], keyColumns: [key1], groupAliases: []),
++                Request(isMax: isMax, payloadAliases: [], keyAliases: [], keyColumns: [], groupAliases: []),
++            ];
++
++        foreach (var request in requests)
++            request.IsMax.Should().Be(isMax);
++
++        requests[^1].PayloadAliases.Should().BeEmpty();
++        requests[^1].KeyAliases.Should().BeEmpty();
++        requests[^1].GroupAliases.Should().BeEmpty();
++    }
++
++    [Fact]
++    public void CompositeOverlapAcrossLists_ShouldBeAccepted()
++    {
++        var key = Column();
++        var description = Description(keys: [key], groups: [key], payload: [key]);
++        var request = Request(payloadAliases: ["x"], keyAliases: ["x"], keyColumns: [key], groupAliases: ["x"]);
++
++        description.Keys.Should().ContainSingle();
++        request.KeyAliases.Should().ContainSingle();
++    }
++
++    // --- AC-06: borrowed identity --------------------------------------------------------------
++
++    [Fact]
++    public void Description_ShouldBorrowEveryCollectionIncludingEagerPayload()
++    {
++        var keys = new List<ExtremeRowRenderColumn> { Column() };
++        var groups = new List<ExtremeRowRenderColumn> { Column() };
++        var payload = new List<ExtremeRowRenderColumn> { Column() };
++        var description = new ExtremeRowDescription(true, keys, groups, payload);
++
++        ReferenceEquals(description.Keys, keys).Should().BeTrue();
++        ReferenceEquals(description.Groups, groups).Should().BeTrue();
++        ReferenceEquals(description.Payload, payload).Should().BeTrue("the eager payload must not be copied or wrapped");
++    }
++
++    [Fact]
++    public void Request_ShouldBorrowEveryCollection()
++    {
++        var payloadAliases = new List<string> { "p" };
++        var keyAliases = new List<string> { "k" };
++        var keyColumns = new List<ExtremeRowRenderColumn> { Column() };
++        var groupAliases = new List<string> { "g" };
++        var request = new ExtremeRowRenderRequest("select 1", true, payloadAliases, keyAliases, keyColumns, groupAliases, KeywordCase.Upper);
++
++        ReferenceEquals(request.PayloadAliases, payloadAliases).Should().BeTrue();
++        ReferenceEquals(request.KeyAliases, keyAliases).Should().BeTrue();
++        ReferenceEquals(request.KeyColumns, keyColumns).Should().BeTrue();
++        ReferenceEquals(request.GroupAliases, groupAliases).Should().BeTrue();
++    }
++
++    // --- AC-08: capability independence --------------------------------------------------------
++
++    [Fact]
++    public void ValidDto_WithDecliningRenderer_ShouldRejectIndependentlyOfConstruction()
++    {
++        var renderer = new StubRenderer(canRender: false);
++        var description = Description();
++        var request = Request();
++
++        renderer.CanRender(description).Should().BeFalse("CanRender is a separate decision");
++        renderer.RenderCalls.Should().Be(0);
++        renderer.CanRenderCalls.Should().Be(1);
++
++        // Construction must not have consulted the renderer at all.
++        renderer.CanRenderCalls.Should().Be(1);
++        request.SourceSql.Should().Be("select * from t");
++    }
++
++    [Fact]
++    public void SupportedDto_ShouldRenderThroughACustomRendererWithoutConstructionCalls()
++    {
++        var renderer = new StubRenderer(canRender: true);
++
++        var description = Description(isMax: false);
++        var request = Request(sourceSql: "select * from t where k is not null", isMax: false);
++
++        renderer.CanRenderCalls.Should().Be(0, "constructing a DTO must not call CanRender");
++        renderer.RenderCalls.Should().Be(0, "constructing a DTO must not call Render");
++
++        renderer.CanRender(description).Should().BeTrue();
++        renderer.Render(request).Should().Be("native(select * from t where k is not null)");
++        renderer.RenderCalls.Should().Be(1);
++    }
++
++    private sealed class StubRenderer(bool canRender) : IExtremeRowRenderer
++    {
++        public int CanRenderCalls { get; private set; }
++
++        public int RenderCalls { get; private set; }
++
++        public bool CanRender(ExtremeRowDescription description)
++        {
++            CanRenderCalls++;
++            return canRender;
++        }
++
++        public string Render(ExtremeRowRenderRequest request)
++        {
++            RenderCalls++;
++            return "native(" + request.SourceSql + ")";
++        }
++    }
++}
