@@ -7,7 +7,7 @@
 >
 > **Статус: подготовка в работе; публикация (§4) — за владельцем репозитория.**
 
-- **Milestone:** [1.0.9-rc1](https://github.com/AlexeyShirshov/nextorm/milestone/19) — 23 issues, все закрыты (open=0, closed=23).
+- **Milestone:** [1.0.9-rc1](https://github.com/AlexeyShirshov/nextorm/milestone/19) — 25 issues, все закрыты (open=0, closed=25).
 - **Тег:** `v1.0.9-rc1` (планируется)
 - **Ветка релиза:** `1.0.9-rc1` (синхронна с `origin/1.0.9-rc1`)
 - **База:** тег `v1.0.9-b` (`815e0127`); HEAD до подготовки — `f6bd8fa0`, 58 коммитов от `v1.0.9-b`.
@@ -44,6 +44,8 @@
 | [#163](https://github.com/AlexeyShirshov/nextorm/issues/163) | ClickHouse: `reference→collection` навигация — принятое ограничение провайдера (явный gate) |
 | [#199](https://github.com/AlexeyShirshov/nextorm/issues/199) | `InValuesTranslator`: скалярный путь больше не выставляет sticky `QueryCommand.Cache=false` (отравление plan-cache) |
 | [#200](https://github.com/AlexeyShirshov/nextorm/issues/200) | Perf: снижены аллокации свежего cached-пути CTE/RecursiveCTE (fast-path `CteHoister.Hoist`) |
+| [#202](https://github.com/AlexeyShirshov/nextorm/issues/202) | Fix: PostgreSQL `hstore`/`ltree` raw-колонки на чистом type-каталоге больше не диагностируются как named composite (CI-фикс) |
+| [#203](https://github.com/AlexeyShirshov/nextorm/issues/203) | PostgreSQL raw-row: авторитетная классификация composite на чистом type-каталоге; единый путь для single-/multi-column |
 
 Новых страниц документации в этом релизе нет — только правки существующих страниц EN + RU
 (`guide/03`, `guide/11`, `guide/12`, `guide/14`, `guide/15`, `guide/26`, `guide/28`,
@@ -85,7 +87,7 @@
 ### 3.2. `docs/index.md`
 
 - `## Status` — `1.0.9-b` → `1.0.9-rc1`.
-- `## Releases` — добавлен раздел `### 1.0.9-rc1` (issues #126–#200).
+- `## Releases` — добавлен раздел `### 1.0.9-rc1` (issues #126–#203).
 
 ### 3.3. `docs/ru/index.md`
 
@@ -121,7 +123,7 @@
 - [ ] Тег `v1.0.9-rc1` запушен; CI отправил 7 пакетов на nuget.org.
 - [ ] GitHub Release (prerelease) с заполненным описанием.
 - [ ] Docs EN/RU задеплоены; якорь `#109-rc1` доступен.
-- [ ] Milestone 1.0.9-rc1 и issues #126–#200 закрыты.
+- [ ] Milestone 1.0.9-rc1 и issues #126–#203 закрыты.
 
 ## 6. Открытые вопросы
 

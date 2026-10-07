@@ -160,6 +160,8 @@ its limitations are covered in the [Query reuse guide](infrastructure/01-query-r
 - [SQL Server: `MapColumnExpression` больше не боксит числовые значения](https://github.com/AlexeyShirshov/nextorm/issues/168)
 - [Fix: скалярный путь `InValuesTranslator` больше не отравляет plan-cache общего `QueryCommand` (sticky `Cache=false`)](https://github.com/AlexeyShirshov/nextorm/issues/199)
 - [Perf: снижены аллокации свежего cached-пути CTE/RecursiveCTE](https://github.com/AlexeyShirshov/nextorm/issues/200)
+- [Fix: PostgreSQL `hstore`/`ltree` raw-колонки на чистом type-каталоге больше не диагностируются как named composite](https://github.com/AlexeyShirshov/nextorm/issues/202)
+- [PostgreSQL raw-row: авторитетная классификация composite на чистом type-каталоге; единый путь для single-/multi-column](https://github.com/AlexeyShirshov/nextorm/issues/203)
 
 ### 1.0.9-b
 
