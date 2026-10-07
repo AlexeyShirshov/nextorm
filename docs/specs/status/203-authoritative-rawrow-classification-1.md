@@ -343,7 +343,7 @@ Flow complete: the single #203 cycle is done and issue #203 is closed. No furthe
 | `docs/specs/design/code-smells-review.md` | register entry #203 |
 | `docs/specs/status/203-authoritative-rawrow-classification-1.md` | this status file (deliverable; retained) |
 
-**Pointers.** Deliverable commit: `<PENDING_SHA>` (branch `1.0.9-rc1`, local, not pushed); the status-bookkeeping commit records the SHA. Evidence artifact root: `/tmp/nextorm-203/r1-n2/`.
+**Pointers.** Deliverable commit: **`53c38a705c8bdff2ce2c06535cf22a3cdf4925aa`** (short `53c38a70`; branch `1.0.9-rc1`, local, not pushed). Issue #203 closed (2026-10-07). Evidence artifact root: `/tmp/nextorm-203/r1-n2/`.
 
 **Deviations.**
 - Status file retained (not deleted). Default single-cycle closure deletes the status file; the user explicitly requested this path as a deliverable and the CHECK evidence ledger lives here, so it is kept.
@@ -376,3 +376,6 @@ Flow complete: the single #203 cycle is done and issue #203 is closed. No furthe
 2026-10-07T14:51:43Z | DO | r=1 | n=2/3 | C7 docfx exit 0 captured | real process exit 0 -> /tmp/nextorm-203/r1-n2/d5b-docfx.exit; log terminal "Build succeeded with warning. 2 warning(s), 0 error(s)" -> /tmp/nextorm-203/r1-n2/d5b-docfx.log; captured as `cmd > log 2>&1; echo $?`, no pipe masking status; docs/_site + docs/api are gitignored/untracked, git status --porcelain byte-identical pre/post, no cleanup needed | /tmp/nextorm-203/r1-n2/d5b-docfx.log
 2026-10-07T09:54:12Z | CHECK | r=1 | n=2/3 | check verdict PASS — AC1–AC5 and P1-01..P1-08 met; T01–T14 closed; rv=1 E203-01..12 ledger complete | /tmp/nextorm-203/r1-n2/; docs/specs/status/203-authoritative-rawrow-classification-1.md
 2026-10-07T09:54:12Z | ACT | r=1 | n=2/3 | status finalized (Done/Verified, Next plan, Changed files, deviations) | docs/specs/status/203-authoritative-rawrow-classification-1.md
+2026-10-07T09:54:58Z | ACT | r=1 | n=2/3 | scoped commit 53c38a70 "#203 Authoritative raw-row composite classification: one provider predicate; clean-catalog hstore/ltree are no longer misdiagnosed as named composites" — 14 files changed (+1045/−116) | git log -1 --oneline; git show --stat 53c38a70
+2026-10-07T09:54:58Z | ACT | r=1 | n=2/3 | issue #203 closed (gh exit 0) -> https://github.com/AlexeyShirshov/nextorm/issues/203 | gh issue close 203 --comment …
+2026-10-07T09:54:58Z | ACT | r=1 | n=2/3 | no push performed; branch 1.0.9-rc1 local only | git status --porcelain
