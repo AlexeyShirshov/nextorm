@@ -120,4 +120,82 @@ public abstract partial class CommonTestSuite
         AliasJoin_P1_A2_Buyer<AliasOrder, AliasPerson> builder,
         EntityBuilder<AliasPerson> person)
         => builder.Join<AliasPerson>(person, (p, a) => p.Item1.ApproverId == a.Id, Alias.Approver);
+
+    // ---------------------------------------------------------------------------------------------
+    // Root alias (.WithAlias(Alias.Root)) and free positional/alias mixing (issue #160, Phase 2).
+    // These were exercised only against SQLite in the alias suite; they must also run for real on
+    // every container provider (R160-09).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Root_alias_inner_join_returns_matched_rows()
+    {
+        var ids = _sut.AliasOrder
+            .WithAlias(Alias.Root)
+            .Join<AliasPerson>(_sut.AliasPerson, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer)
+            .Select(p => p.Buyer.Id)
+            .ToList()
+            .OrderBy(id => id)
+            .ToList();
+
+        ids.Should().Equal(10, 20);
+    }
+
+    [Fact]
+    public void Root_alias_item1_and_root_name_resolve_to_the_same_slot()
+    {
+        var rooted = _sut.AliasOrder
+            .WithAlias(Alias.Root)
+            .Join<AliasPerson>(_sut.AliasPerson, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer);
+
+        var rootIds = rooted.Select(p => p.Root.Id).ToList().OrderBy(id => id).ToList();
+        var item1Ids = rooted.Select(p => p.Item1.Id).ToList().OrderBy(id => id).ToList();
+
+        rootIds.Should().Equal(1, 2);
+        item1Ids.Should().Equal(rootIds);
+    }
+
+    [Fact]
+    public void Root_alias_supports_a_positional_join_after_it()
+    {
+        var ids = _sut.AliasOrder
+            .WithAlias(Alias.Root)
+            .Join(_sut.AliasPerson, (o, p) => o.Root.BuyerId == p.Id)
+            .Select(p => p.Item2.Id)
+            .ToList()
+            .OrderBy(id => id)
+            .ToList();
+
+        ids.Should().Equal(10, 20);
+    }
+
+    [Fact]
+    public void Mixed_alias_then_positional_join_executes_and_keeps_slot_identity()
+    {
+        var chained = _sut.AliasOrder
+            .Join<AliasPerson>(_sut.AliasPerson, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+            .Join(_sut.AliasPerson, (p, x) => p.Item2.Id == x.Id);
+
+        var rows = chained
+            .Select(p => new { Alias = p.Buyer.Id, Positional = p.Item3.Id })
+            .ToList();
+
+        rows.Should().HaveCount(2);
+        rows.Should().OnlyContain(r => r.Alias == r.Positional);
+    }
+
+    [Fact]
+    public void Mixed_positional_then_alias_join_executes_and_keeps_slot_identity()
+    {
+        var chained = _sut.AliasOrder
+            .Join(_sut.AliasPerson, (o, p) => o.BuyerId == p.Id)
+            .Join<AliasPerson>(_sut.AliasPerson, (p, a) => p.Item2.Id == a.Id, Alias.Approver);
+
+        var rows = chained
+            .Select(p => new { Positional = p.Item2.Id, Alias = p.Approver.Id })
+            .ToList();
+
+        rows.Should().HaveCount(2);
+        rows.Should().OnlyContain(r => r.Positional == r.Alias);
+    }
 }
