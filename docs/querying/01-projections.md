@@ -328,7 +328,8 @@ select id, Calc from (select id, (somestring + somestring) as [Calc] from comple
 
 ## Named join aliases
 
-A joined query can name its slots instead of addressing them positionally:
+A joined query can name its slots instead of addressing them positionally, and the two styles can be
+mixed in one chain:
 
 ```csharp
 var rows = await dataContext.From<Order>(b => b.Table("orders"))
@@ -337,7 +338,34 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
     .ToListAsync();
 ```
 
-`p.Buyer` is an ordinary projection member generated for the `Alias.Buyer` slot, so `p.Buyer.Id` can
-be used anywhere a positional `p.Item2.Id` would be — in `Select`, `Where` and later joins. See
+`p.Buyer` is the **same slot** as the positional `p.Item2`, so `p.Buyer.Id` can be used anywhere a
+positional `p.Item2.Id` would be — in `Select`, `Where` and later joins. Alias members are
+**expression-only**: they exist so that a `Select`/`Where` expression tree can name the joined table,
+and reading one outside an expression tree (for example materialising `p.Buyer` directly) throws
+`NotSupportedException`; the positional `ItemN` members stay ordinary properties. The generator emits
+one `public` projection/builder pair per used slot schema with slot-encoded names (`P{slot}` for a
+positional step, `A{slot}_{name}` for an aliased one), so the same alias names in a different
+positional placement get a different type — for example
+`AliasProjection_P1_A2_Buyer_A3_Approver<Order, Person, Person>`. The chain is capped at eight slots;
+`As<T>` lifts the cap exactly as for positional joins. See
 [Joins](../guide/02-joins.md#named-join-aliases).
+
+### Naming the root source
+
+The root source can be named too with `.WithAlias(Alias.<Name>)`, which binds slot 1 and produces a
+dimension-1 projection (`Projection<T1>` with the retained `Item1` plus the named member). The call is
+root-only and SQL-provider only; the in-memory provider fails closed with `NotSupportedException`.
+
+```csharp
+var rooted = dataContext.From<Order>(b => b.Table("orders")).WithAlias(Alias.Root);
+
+var rows = await rooted.Select(p => new { p.Root.Id, p.Item1.Id }).ToListAsync();
+```
+
+```sql
+select Id, Id from orders
+```
+
+A derived root source (`FromSql`, `From(builder)`, `From(QueryCommand<T>)`) is preserved when it is
+aliased — it stays a derived table `(select …) as 't1'` — and `p.Root` is the same slot as `p.Item1`.
 

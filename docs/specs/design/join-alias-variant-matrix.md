@@ -1,9 +1,11 @@
-# Join-alias variant matrix (issue #113, Block A)
+# Join-alias variant matrix (issue #113, Block A; extended by issue #160)
 
-Evidence map for the join-alias feature (milestone `1.0.9-b`): every behavioural variant of the
-alias chain is tied to the test or the runtime guard that proves it, with `file:line`. Scope is the
-owner-decided surface: **alias-only** chains (no positional mixing), `JoinInto` excluded, SQL
-providers only (in-memory fails closed). Public API surface is frozen by
+Evidence map for the join-alias feature (milestone `1.0.9-b`; #160 targets `1.0.9-rc2`): every
+behavioural variant of the alias chain is tied to the test or the runtime guard that proves it, with
+`file:line`. `#113` scope was the owner-decided **alias-only** surface (no positional mixing);
+**#160 supersedes that restriction** with free mixing of positional and alias steps plus the root
+alias (`.WithAlias`), still with `JoinInto` excluded and SQL providers only (in-memory fails closed).
+The #160 variants and their evidence are in §9 below. Public API surface is frozen by
 `tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs`; API-naming register is
 `docs/specs/design/API-NAMING-REVIEW.md`.
 
@@ -107,16 +109,39 @@ Common suite runs once per provider (`Postgres`/`SqlServer`/`MySql`/`MariaDb`/`S
 | Buyer/Approver (same CLR type) resolve to distinct ids | T | `CommonTestSuite.JoinAlias.cs:87` | covered |
 | Alias chain across a method boundary that names generated types | T | `CommonTestSuite.JoinAlias.cs:104` (`:119`) | covered |
 
+## 9. Issue #160 — free mixing + root alias (rv=3)
+
+| Variant | Evidence | Location | Status |
+|---|---|---|---|
+| Alias→positional transition; alias slot == `ItemK`; distinct SQL slots | T | `tests/nextorm.alias.tests/MixedJoinChainTests.cs:16` | covered |
+| Positional→alias transition binds the alias to the next slot | T | `MixedJoinChainTests.cs:51` | covered |
+| Alternating alias/positional/alias assigns slots in chain order | T | `MixedJoinChainTests.cs:82` | covered |
+| Mixed chain parity with the equivalent positional chain | T | `MixedJoinChainTests.cs:117` | covered |
+| Digit-ending alias (`Buyer2`) is a name, not a slot number | T | `MixedJoinChainTests.cs:173` | covered |
+| Mixed alias chain fails closed in-memory; pure positional is not refused | T+G | `MixedJoinChainTests.cs:147`, `:160` | covered |
+| Root `.WithAlias` + alias join maps slot 1 to `t1`; `Root` == `Item1` | T | `tests/nextorm.alias.tests/RootAliasTests.cs:107` | covered |
+| Root alias alone keeps the physical source (`select Id from orders`) | T | `RootAliasTests.cs:134` | covered |
+| Positional join after a root alias (generated `new` instance transition) | T | `RootAliasTests.cs:154` | covered |
+| Root `.WithAlias` on a raw table source | T | `RootAliasTests.cs:175` | covered |
+| Derived roots preserved under root alias: `FromSql` / `From(builder)` / `From(QueryCommand<T>)` | T | `RootAliasTests.cs:196`, `:248`, `:220` | covered |
+| dim-1 root projection plans; `Extend` yields slot 2 preserving `Item1` | T | `RootAliasTests.cs:62`, `:88` | covered |
+| Root alias fails closed in-memory; hand-written `AliasRoot` refused after a join | T+G | `RootAliasTests.cs:293`, `:304`; seam `src/nextorm.core/Builders/EntityBuilder.cs:3096` (in-memory `:3101`, join/projection `:3105`–`:3111`) | covered |
+| `.WithAlias` after a join / repeated `WithAlias` → `NORMGEN008` | T | `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs:102`, `:111` | covered |
+| Slot-encoded generated names incl. root/positional (`P{slot}`/`A{slot}_{name}`) frozen | T | `AliasGeneratedSurfaceTests.cs:24` (`JoinAlias_P1_A2_Buyer`, `…_A1_Root…`) | covered |
+| Generated naming mechanism (suffix from ordered slots) | source | `src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs:748` (`BuildSchema`, `:763`/`:768`) | covered |
+| Alias members expression-only | T | `AliasExpressionOnlyContractTests.cs:17`, `:36` | covered |
+
 ## Gaps (tracked)
 
-1. **Positional-after-alias guard is untested** — `EntityBuilder.cs:3137` has no direct test. Add a
-   test asserting `NotSupportedException` when a positional `Join`/`Apply` is applied to an alias
-   projection builder.
+1. ~~**Positional-after-alias guard is untested**~~ — **closed by #160**: positional-after-alias is
+   now a supported generated `new` instance transition (§9), covered by
+   `MixedJoinChainTests.cs:16`, `:51`, `:117`; the base `EntityBuilder.cs:3137` guard remains only as
+   a failsafe for the non-generated receiver.
 2. **Correlated `CrossApply`/`OuterApply` alias has no positive SQL test** — only the in-memory
    refusal and the generated-surface check. Add a SQLite e2e (and, if supported, an integration case)
    exercising `AliasJoinApply` (`EntityBuilder.cs:2799`).
-3. **`TryParseItemPosition` digit-edge is untested** — a generated alias whose name ends in digits
-   (e.g. `Buyer2`) must resolve via `JoinSlotAttribute`, not be misread as `ItemN`
-   (`ProjectionAliasCache.cs:61`). Add a focused test.
+3. ~~**`TryParseItemPosition` digit-edge is untested**~~ — **closed by #160**:
+   `MixedJoinChainTests.cs:173` (`Digit_ending_alias_is_a_name_and_does_not_shift_the_slot`) resolves
+   `Buyer2` via `JoinSlotAttribute`, not as `ItemN`.
 
 These gaps are evidence backlog, not functional blockers; each maps to a single small test.

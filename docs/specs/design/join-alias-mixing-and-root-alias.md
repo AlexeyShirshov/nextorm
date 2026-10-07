@@ -98,9 +98,12 @@
 
 - *алиасный шаг* — как сейчас: `Join<TJoin>(this AliasJoin_<S>…, …, Alias.XMarker)` →
   `self.JoinAlias<AliasJoin_<S'>, AliasProjection_<S'>, TJoin>(…)`;
-- *позиционный шаг* — `new`-extension `Join<TJoin>(this AliasJoin_<S>…, EntityBuilder<TJoin>, Expression<…>,
-  JoinOptions?)` → **тот же** `JoinAlias` seam, но `S'` добавляет только `ItemN` (без имени). Затеняет базовый
-  `EntityBuilder.Join`, поэтому guard `3137` не срабатывает.
+- *позиционный шаг* — сгенерированный `new` **instance**-метод `Join<TJoin>(EntityBuilder<TJoin>,
+  Expression<…>, JoinOptions?)` на `AliasJoin_<S>…` → **тот же** `JoinAlias` seam, но `S'` добавляет
+  только `ItemN` (без имени). Extension-метод C# не может затенять применимый instance-метод, поэтому
+  переход эмитится именно как `new` instance-метод на сгенерированном приёмнике (тот же приём для
+  позиционного шага после корневого `.WithAlias`); guard `3137` базового `EntityBuilder.Join` не
+  срабатывает.
 
 **Позиционный префикс:** генератор резолвит core-типы как позиционные шаги — `EntityBuilder<T>` = база;
 `JoinedEntityBuilder<T1..Tn>` = база + `n-1` позиционных шагов (снятие текущего запрета
@@ -110,7 +113,12 @@
 `WithAlias<T>(this EntityBuilder<T> self, Alias.RootMarker marker)` → `AliasJoin_A1_Root<T>`. Внутри — core-seam
 `AliasRoot<TNext,TNextEntity>(create)` (аналог `CreateAliasJoined` без join'а: state через `ApplyJoinStateTo`,
 `_joins` пуст). Root-only гарантируется runtime-guard'ом в seam'е (builder уже с джойнами/alias-state →
-`NotSupportedException`) и синтаксической диагностикой генератора.
+`NotSupportedException`) и синтаксической диагностикой генератора (`NORMGEN008` — `.WithAlias` не на
+простом корне). На сгенерированном корневом приёмнике генератор дополнительно сеет позиционные
+`new` instance-переходы, чтобы `.Join(...)` после `.WithAlias` не уходил в базовый
+`EntityBuilder.Join`. Производный корень (`From(builder)` / `From(QueryCommand<T>)`) материализуется
+`AliasRoot` в явный derived-table `FromExpression` один раз (с очисткой `_query`), поэтому сохраняется
+и получает псевдоним `t1`, как `FromSql`; guard проекции в `ResolveJoinBase` не меняется.
 
 ## 6. Рантайм, SQL-алиасы, in-memory, план-кэш
 

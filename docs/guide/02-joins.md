@@ -107,13 +107,15 @@ side, list each of them explicitly.
 
 ## Named join aliases
 
-The positional addressing above is unchanged and always available for purely positional queries. When
-two joined sources share the same CLR type — for example a buyer and an approver are both `Person` —
-positional members cannot tell them apart. Named aliases are a **separate, self-contained chained
-API**: once the first `Alias.<Name>` argument is used, every join in that chain must be aliased, and an
-alias chain must never be mixed with positional joins. Every join operator accepts an optional trailing
-`Alias.<Name>` argument that names the new slot, and the generated projection exposes that name as a
-typed property:
+The positional addressing above is always available for purely positional queries. When two joined
+sources share the same CLR type — for example a buyer and an approver are both `Person` — positional
+members cannot tell them apart. Named aliases add a name to a slot **without removing the positional
+one**, and the two styles may be **freely mixed in one chain**: an alias is optional at every step, and
+`p.ItemK` and the alias of slot K are always the **same** slot. Every join operator accepts an optional
+trailing `Alias.<Name>` argument that names the new slot; a step without it is positional, so
+positional → alias, alias → positional and alternating chains are all valid (within the eight-slot cap,
+see [Chained joins and arity 2..8](#chained-joins-and-arity-28)). The generated projection exposes the
+alias name as a typed property:
 
 ```csharp
 using NextORM.Generated.MyAssembly; // Alias lives in NextORM.Generated.<your assembly name>
@@ -131,14 +133,34 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
 select t2.id as 'Buyer', t3.id as 'Approver' from orders as 't1' join person as 't2' on t1.buyerid = t2.id join person as 't3' on t1.approverid = t3.id
 ```
 
+An aliased step can be followed by a positional one (or the reverse) in the same chain; the slots keep
+their order and the SQL aliases still match it:
+
+```csharp
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join<Person>(people, (o, buyer) => o.BuyerId == buyer.Id, Alias.Buyer)  // slot 2, alias
+    .Join(people, (p, other) => p.Item2.Id == other.Id)                      // slot 3, positional
+    .Select(p => new { Buyer = p.Buyer.Id, Third = p.Item3.Id })
+    .ToListAsync();
+```
+
+```sql
+select t2.id as 'Buyer', t3.id as 'Third' from orders as 't1' join person as 't2' on t1.buyerid = t2.id join person as 't3' on t2.id = t3.id
+```
+
 `Alias.<Name>` is a compile-time marker. The source generator that ships inside the `nextorm` package
-as a Roslyn analyzer (no additional package or reference is needed) emits, for every discovered alias
-chain, a `public` projection type `AliasProjection_<aliases>` with one property per alias and a
-`public` builder type `AliasJoin_<aliases>` that mirrors the join operators. All of it lands in the
-reserved namespace `NextORM.Generated.<assembly name>`, so no projection has to be pre-declared. The
-generated properties carry [`JoinSlot(n)`](xref:NextORM.Core.JoinSlotAttribute), the 1-based entity
-position in the chain: the first alias is slot `2`, the next is `3`, and so on. Because the slot is
-explicit, two aliases of the same CLR type resolve to different tables.
+as a Roslyn analyzer (no additional package or reference is needed) emits, for every used chain, a
+`public` projection type `AliasProjection_<suffix>` with one property per alias and a `public` builder
+type `AliasJoin_<suffix>` that mirrors the join operators. The suffix encodes **every** slot in order —
+`P{slot}` for a positional step and `A{slot}_{name}` for an aliased one — so the same alias names in a
+different positional placement get different generated types (for example
+`AliasProjection_P1_A2_Buyer_A3_Approver<Order, Person, Person>` and its builder
+`AliasJoin_P1_A2_Buyer_A3_Approver<Order, Person, Person>`). All of it lands in the reserved namespace
+`NextORM.Generated.<assembly name>`, so no projection has to be pre-declared. The generated properties
+carry [`JoinSlot(n)`](xref:NextORM.Core.JoinSlotAttribute), the 1-based entity position in the chain
+(the first alias is slot `2`, the next is `3`, and so on), so two aliases of the same CLR type resolve
+to different tables. The legacy alias-only generated names (`AliasProjection_Buyer_Approver`) are not
+preserved — the pre-release surface was renamed to the slot-encoded form.
 
 The generated alias members are **expression-only**: they exist so that a `Select`/`Where`
 expression tree can name the joined table of the slot, and the translator rewrites them to that
@@ -158,14 +180,14 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
     .ToListAsync();
 ```
 
-Within one alias chain the generated projection still retains the positional `ItemN` members: after
-`Alias.Buyer` was used, `p.Buyer` and `p.Item2` are the same slot. The two APIs must not be mixed,
-however: a positional join applied after an aliased one is rejected at construction, and an aliased
-join applied after a positional one is not generated, so a query is either entirely positional or
-entirely aliased. An alias must be a valid C# identifier without `_` (reserved for composing the
-generated type names); a reserved keyword is emitted escaped (`@class`). The marker class is the only
-approved alias argument form — `Alias.Buyer<int>` or `Alias.Buyer.Approver` is rejected. The arity is
-capped at eight slots by `Projection<T1..T8>`.
+Within one chain the generated projection retains the positional `ItemN` members alongside the alias
+names: after `Alias.Buyer`, `p.Buyer` and `p.Item2` are the same slot, so a later step may address the
+same table either way and mixing is free in both directions. An alias must be a valid C# identifier
+without `_` (reserved for composing the generated type names); a reserved keyword is emitted escaped
+(`@class`). The marker class is the only approved alias argument form — `Alias.Buyer<int>` or
+`Alias.Buyer.Approver` is rejected. The chain is capped at eight slots by `Projection<T1..T8>`; a ninth
+step is a compile-time error, and the cap can be lifted with
+[`As`](#naming-an-intermediate-projection-as) exactly as for positional joins.
 
 The generated alias overloads also accept a typed CTE descriptor directly — a [`Cte<T>`](xref:NextORM.Core.Cte`1) in place of
 the [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) source. The joined type is inferred from the descriptor, so the explicit
@@ -192,16 +214,48 @@ cross a method boundary, but the method must name the generated builder type in 
 that type is generated and cannot be inferred from a hand-written name:
 
 ```csharp
-private static AliasJoin_Buyer_Approver<Order, Person, Person> AddApprover(
-    AliasJoin_Buyer<Order, Person> builder,
+private static AliasJoin_P1_A2_Buyer_A3_Approver<Order, Person, Person> AddApprover(
+    AliasJoin_P1_A2_Buyer<Order, Person> builder,
     EntityBuilder<Person> people)
     => builder.Join<Person>(people, (o, a) => o.Item1.ApproverId == a.Id, Alias.Approver);
 ```
 
-The generator reports `NORMGEN001`–`NORMGEN006` (a duplicate alias; an alias colliding with a generated
-member; an invalid identifier; an arity over eight; an argument that is not in the `Alias.<Name>` form;
-and an assembly name that cannot be normalised to a namespace). See
-[Limitations](../advanced/limitations.md).
+The generator reports `NORMGEN001`–`NORMGEN008` (a duplicate alias; an alias colliding with a
+generated member; an invalid identifier; an arity over eight; an argument that is not in the
+`Alias.<Name>` form; an assembly name that cannot be normalised to a namespace; and a `.WithAlias` that
+is not applied to a plain root source). See [Limitations](../advanced/limitations.md).
+
+### Naming the root source: `WithAlias`
+
+The **root** source can claim a lexical name for slot 1 with the chained `.WithAlias(Alias.<Name>)`
+call. It is root-only: it must be the first alias step on a plain root source — `From<T>`,
+`From("table")`/`CreateQueryBuilder`, `FromSql`, `From(Cte<T>)`, a temp-table source,
+`FromTableFunction<T>`, `From(QueryCommand<T>)`, `From(builder)` and the `CreateQueryBuilder*`
+factories — and never after a join or a second `WithAlias` (a compile-time `NORMGEN008` error, with the
+same root-only guard kept at runtime as a failsafe). The named root member is the same slot 1 as the
+retained `p.Item1`:
+
+```csharp
+var rooted = dataContext.From<Order>(b => b.Table("orders")).WithAlias(Alias.Root);
+var people = dataContext.From<Person>(b => b.Table("person"));
+
+var rows = await rooted
+    .Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer)
+    .Select(p => new { p.Root.Id, p.Item1.Id, BuyerId = p.Buyer.Id })
+    .ToListAsync();
+```
+
+```sql
+select t1.Id, t1.Id, t2.Id as 'BuyerId' from orders as 't1' join person as 't2' on t1.BuyerId = t2.Id
+```
+
+`p.Root` and `p.Item1` are the same slot, and after the join the chain may continue positionally or
+with another alias. A derived root source is **preserved** when it is aliased: `FromSql`,
+`From(builder)` and `From(QueryCommand<T>)` stay a derived table (`(select …) as 't1'`) instead of
+being flattened to the physical table. As with join aliases, the named path is SQL-provider only: the
+in-memory provider throws `NotSupportedException` at the alias step, while purely positional chains in
+memory are unchanged, and the eight-slot cap is lifted by
+[`As`](#naming-an-intermediate-projection-as).
 
 ## Outer joins
 

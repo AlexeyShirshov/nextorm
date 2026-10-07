@@ -135,7 +135,7 @@ Sequential, in one tree, inside the assigned collection worktree if it already e
 - `docs/querying/01-projections.md` + RU: dim-1 root, slot-encoded names, expression-only, arity/`As<T>`.
 - `docs/advanced/limitations.md` + RU: root-only, in-memory fail-closed, `JoinInto` out of scope.
 - Relevant `toc.yml`: check; change only on real structural change. Do not move pages.
-- Spec: replace the wrong `docs/guide/01-projections.md` with the real path.
+- Spec: the projections page path is `docs/querying/01-projections.md` (the real path; there is no `docs/guide/01-projections.md`).
 - Public docs must not link to internal specs.
 
 ## Performance decision
@@ -235,6 +235,8 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | 2026-10-07T20:00:43Z | DO | r2 | n1/3 | ONE broad boundary sweep: `dotnet test tests/nextorm.alias.tests -c Debug` exit 0, selected 71 / passed 71 / failed 0 | rc2-160-evidence/E160-01/alias-boundary.log |
 | 2026-10-07T20:00:43Z | DO | r2 | n1/3 | E160-12 validator: `brief` exit 0 (amendment added for `FullyQualifiedName~MixedJoinChainTests`, validated before run); `report` exit 0 (1 inner build + 9 inner filtered + 1 boundary sweep + 1 boundary solution build) | rc2-160-evidence/brief.json, rc2-160-evidence/report.json |
 | 2026-10-07T20:00:43Z | DO | r2 | n1/3 | D:160-03 root-alias DO scope now closed on all six providers (SQL) + alias/core suites; REMAINING (DO→CHECK/final): E160-08 integration (`DOCKER_HOST`; MariaDB `mariadb:11.4`), E160-09 acceptance benchmarks, E160-10 coverage 85/75, E160-11 EN/RU docs, E160-13 six reversible mutations, E160-24 docs/API-NAMING register | this file §DO ledger |
+| 2026-10-07T20:06:34Z | DO | r2 | n1/3 | E160-11 / R160-10 docs stream (EN+RU) done: free alias↔positional mixing (`ItemK` == slot-K alias), root `.WithAlias`, expression-only members, in-memory fail-closed, arity/`As<T>` overflow, preserved `FromSql`/`From(builder)`/`From(QueryCommand<T>)` derived roots; obsolete alias-only wording and legacy generated names removed; `dotnet docfx docs/docfx.json` exit 0 (2 pre-existing AnalyzerReleases duplicate warnings, 0 errors); `git diff --check` clean on all touched paths; CRLF on every edited file | docs/guide/02-joins.md, docs/ru/guide/02-joins.md, docs/querying/01-projections.md, docs/ru/querying/01-projections.md, docs/advanced/limitations.md, docs/ru/advanced/limitations.md; /tmp/opencode/rc2-160-docs/docfx.log |
+| 2026-10-07T20:06:34Z | DO | r2 | n1/3 | E160-24 / R160-10 API-NAMING register (D:160-04) done: generated slot-encoded rename recorded as mechanism-required (`JoinAliasGenerator.cs:748,763,768,929,932,943,1077,1195`), no unnecessary rename found (nothing reverted), additive core `Projection<T1>`/`EntityBuilder.AliasRoot` noted; spec path fixed to `docs/querying/01-projections.md`; stale `AGENTS.md` source-generator note corrected | docs/specs/design/API-NAMING-REVIEW.md §#160; docs/specs/status/rc2-160-join-alias-mixing-1.md; docs/specs/design/join-alias-mixing-and-root-alias.md; docs/specs/design/join-alias-variant-matrix.md; AGENTS.md |
 
 ### Inherited collection evidence rows (verbatim; do not invent/ N/A except C-E04 single-group)
 - **C-E01 / truthful admission** — check: "Validate admission snapshot for milestone `1.0.9-rc2`: 26 open issues, 24 admitted `ready`, D171/D172 excluded-gap and still OPEN in the milestone." — owner: collection CHECK — applicability: "at admission; re-check exclusions at completion".
@@ -273,7 +275,7 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | E160-08 | R09 | pending DO→CHECK (integration, MariaDB config sealed) | |
 | E160-09 | R07 | pending DO→CHECK (acceptance benchmarks) | |
 | E160-10 | R08 | pending DO→CHECK (coverage 85/75) | |
-| E160-11 | R10 | pending DO→CHECK (EN/RU docs + register) | |
+| E160-11 | R10 | green (EN+RU docs synced; docfx exit 0) | `docs/guide/02-joins.md`+RU, `docs/querying/01-projections.md`+RU, `docs/advanced/limitations.md`+RU; `dotnet docfx docs/docfx.json` exit 0 (2 pre-existing warnings / 0 errors) `/tmp/opencode/rc2-160-docs/docfx.log`; `git diff --check` clean on touched paths |
 | E160-12 | R01..R11 | green this session (brief + report) | `validate_inner_loop.py brief …→exit 0; report …→exit 0` (1 inner build + 9 inner filtered + 1 boundary sweep + 1 boundary solution build); `rc2-160-evidence/{brief,report}.json` |
 | E160-13 | R01,R04,R06,R07,R11 | pending (six reversible mutations at boundary) | |
 | E160-14 | R03,R04 | green (spike closed; boundary K pending) | `dotnet build tests/nextorm.alias.tests -c Debug` exit 0; `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 3 / passed 3 / failed 0; log `rc2-160-evidence/E160-14/spike.log` |
@@ -286,7 +288,7 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | E160-21 | R11 | pending (overload shadowing audit, D:160-04) | |
 | E160-22 | R11 | green (Phase-1 partial; diagnostic suite) | |
 | E160-23 | R03 | green (DO scope: alias `RootAliasTests` 13/13 + `MixedJoinChainTests` 7/7; six-provider root-alias SQL green; repeated/invalid root alias rejection covered) | `rc2-160-evidence/E160-05/`, `rc2-160-evidence/E160-02/`, `rc2-160-evidence/E160-25/`, `rc2-160-evidence/E160-26/` |
-| E160-24 | R10 | pending (docs/API-NAMING register, D:160-04) | |
+| E160-24 | R10 | green (D:160-04 register entry complete) | `docs/specs/design/API-NAMING-REVIEW.md` §#160 (N160-1/N160-2; kept rename mechanism-required `JoinAliasGenerator.cs:748,763,768,929,932,943,1077,1195`; nothing reverted); spec-path + AGENTS.md fixes |
 | E160-25 | R03 | green (rv=3) | `From(builder)` root `.WithAlias` preserves derived source; `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 13 / passed 13 / failed 0; SQL `select t2.Id from (select Id, BuyerId, ApproverId from orders) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; logs `rc2-160-evidence/E160-25/` |
 | E160-26 | R03 | green (rv=3) | `From(QueryCommand<T>)` root `.WithAlias` preserves derived query; same filtered run exit 0, 13/13; SQL `select t2.Id from (select Id, BuyerId, ApproverId from orders where Id = 1) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; logs `rc2-160-evidence/E160-26/` |
 

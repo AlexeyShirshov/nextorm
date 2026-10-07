@@ -25,7 +25,7 @@
 
 ## Layout
 - `src/nextorm.core` is the engine: query builder/plan cache, expression visitors (`Visitors/`), dialects, in-memory context. Providers reference it: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.clickhouse`; `nextorm.mariadb` builds on `nextorm.mysql`.
-- `src/nextorm.core.sourcegenerator` is an empty `IIncrementalGenerator` stub — in the solution but referenced by no project, so it generates nothing today.
+- `src/nextorm.core.sourcegenerator` is a real incremental source generator (`JoinAliasGenerator`, `netstandard2.0`) that emits the join-alias projection/builder types in `NextORM.Generated.<normalized-assembly-name>`. It is referenced build-only as a Roslyn analyzer (`OutputItemType="Analyzer"`, `ReferenceOutputAssembly="false"`) by `nextorm.core` (for packaging) and by the provider/test projects that write `Alias.*` chains, and it is packed into the `nextorm` package under `analyzers/dotnet/cs` so consumers get it automatically.
 - `tests/nextorm.<provider>.tests` are dialect/SQL-generation tests using placeholder connection strings; they need no database. Only `tests/nextorm.integration.tests` talks to real databases, through `ProviderTestSuite` + `CommonTestSuite.*.cs` (a test added there runs against every provider; provider-only behavior belongs in `*SpecificTests.cs`).
 
 ## Shared query commands & plan cache
