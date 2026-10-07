@@ -31,7 +31,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | task | issue | group | branch | status | plan_state | selected_variant | cycle_id | plan_revision | status file | reason + patch |
 |---|---|---|---|---|---|---|---|---|---|---|
 | D151 | #151 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-151-stryker-mutation-1.md | Stryker re-run native extreme-row |
-| D153 | #153 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-153-public-extensibility-1.md | closed #153 |
+| D153 | #153 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-153-public-extensibility-1.md | closed #153 (8401ca51) |
 | D154 | #154 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-154-dto-public-ctors-1.md | ExtremeRow DTO public ctors |
 | D157 | #157 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-157-register-finding-25-1.md | Reconcile register finding 25 |
 | D159 | #159 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | CTE direct join overloads + alias API |
@@ -86,6 +86,6 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 ## Done / Verified / Incomplete
 
-- Done: D153 (#153, commit sha recorded in the task status file).
+- Done: D153 (#153, commit 8401ca51).
 - Verified: no.
 - Incomplete: none. Excluded-gap: D171, D172 (issues OPEN, milestone unchanged).

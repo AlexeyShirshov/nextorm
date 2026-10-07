@@ -216,3 +216,4 @@ complete" is provisional and never marks a D done without CHECK.
 - 2026-10-07T14:37Z | DO | revision r=1 | iteration n=2/3 | DO n=2 pointer-accuracy fix: N153-1 Место anchors updated to current post-XML-doc lines (PG 18,27,39,52,418; CH 20,26,37,297); stable SqlDialectBase.cs:240 / ISqlDialect.cs:1284 unchanged; N153-2/observations untouched | docs/specs/design/API-NAMING-REVIEW.md
 - 2026-10-07T14:40Z | CHECK | revision r=1 | iteration n=2/3 | CHECK r=1 n=2 PASS (AC-01..AC-06 met; all EV rows closed) | TestResults/rc2-153-1/check-findings.md
 - 2026-10-07T14:40Z | ACT | revision r=1 | iteration n=2/3 | ACT D153: CHECK passed, committing the D153 footprint to 1.0.9-rc2 (autocommit lane; no push) | git
+- 2026-10-07T14:41Z | ACT | revision r=1 | iteration n=2/3 | D153 done; commit 8401ca51; issue #153 closed (gh exit 0) | TestResults/rc2-153-1/
