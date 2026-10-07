@@ -49,4 +49,41 @@ public class AliasPlanCacheTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void Root_alias_storeInCache_false_keeps_the_command_and_shared_any_command_cacheable()
+    {
+        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders")).WithAlias(Alias.Root);
+            var people = ctx.From<Person>(b => b.Table("person"));
+            var command = rooted
+                .Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer)
+                .Select(p => p.Buyer.Id);
+            command.Cache.Should().BeTrue();
+
+            // Establish the context-shared Any command so the invariance below observes the shared
+            // instance rather than a fresh one.
+            ctx.From<Order>(b => b.Table("orders")).Any().Should().BeTrue();
+            var shared = ctx.AnyCommand!.Value;
+            shared.Cache.Should().BeTrue();
+
+            // Preparing the root-alias command without caching must not flip its sticky _dontCache flag.
+            _ = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken);
+            command.Cache.Should().BeTrue("storeInCache:false must not set the sticky _dontCache flag");
+            ctx.AnyCommand!.Value.Should().BeSameAs(shared);
+            shared.Cache.Should().BeTrue("a root-alias preparation must not poison the shared Any command");
+
+            // The shared plan cache still stores and reuses the root-alias command afterwards.
+            var first = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+            var second = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, TestContext.Current.CancellationToken);
+            second.Should().BeSameAs(first);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }

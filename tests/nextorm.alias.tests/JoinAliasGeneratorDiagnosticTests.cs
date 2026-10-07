@@ -303,9 +303,53 @@ public class JoinAliasGeneratorDiagnosticTests
         generated.Should().NotMatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(2\)\]\s+public T2 Buyer2 =>");
     }
 
+    [Fact]
+    public void Distinct_root_aliases_emit_one_WithAlias_each_and_duplicates_are_deduped()
+    {
+        // `JoinAliasGenerator.cs:666-671` collects the distinct root-alias names, so the loop at
+        // `:1053` emits exactly one generic `WithAlias<T>` per name. The `continue` guard at `:1057`
+        // is unreachable for valid input: each name yields a distinct signature (its own marker type),
+        // so no root alias is ever skipped as an already-seen signature.
+        var distinct = RunDiagnosticCase(
+            "var q1 = orders.WithAlias(Alias.First);" +
+            "var q2 = people.WithAlias(Alias.Second);");
+
+        distinct.Run.Diagnostics.Should().BeEmpty();
+        distinct.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = distinct.Run.GeneratedTrees[0].ToString();
+        CountOccurrences(generated, "WithAlias<T>(").Should().Be(2);
+        generated.Should().Contain("AliasJoin_A1_First<T>");
+        generated.Should().Contain("AliasJoin_A1_Second<T>");
+
+        // The same root-alias name in two independent chains is deduped to a single method by the
+        // `Distinct` at `:669`, not emitted twice (which would be the collision `:1057` guards on).
+        var duplicate = RunDiagnosticCase(
+            "var q1 = orders.WithAlias(Alias.Root);" +
+            "var q2 = people.WithAlias(Alias.Root);");
+
+        duplicate.Run.Diagnostics.Should().BeEmpty();
+        duplicate.Run.GeneratedTrees.Should().HaveCount(1);
+        var generatedDuplicate = duplicate.Run.GeneratedTrees[0].ToString();
+        CountOccurrences(generatedDuplicate, "WithAlias<T>(").Should().Be(1);
+        generatedDuplicate.Should().Contain("AliasJoin_A1_Root<T>");
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Harness plumbing.
     // ---------------------------------------------------------------------------------------------
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
 
     private static Harness RunDiagnosticCase(string body)
     {

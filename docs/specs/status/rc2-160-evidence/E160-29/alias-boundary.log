@@ -1,0 +1,9 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (4s 008ms)
+
+Test run summary: Passed!
+  total: 95
+  failed: 0
+  succeeded: 95
+  skipped: 0
+  duration: 4s 219ms

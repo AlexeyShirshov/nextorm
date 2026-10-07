@@ -56,6 +56,24 @@ public class RootProjectionTests
         public T2 Buyer => throw new NotSupportedException();
     }
 
+    /// <summary>Parent with a declared collection navigation, used for the JoinInto root guard.</summary>
+    private sealed class Parent
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public ICollection<Child> Children { get; } = new List<Child>();
+    }
+
+    /// <summary>Child of <see cref="Parent"/>.</summary>
+    private sealed class Child
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int ParentId { get; set; }
+    }
+
     private static EntityBuilder<RootProjection<Order>> Rooted(TestContext ctx) =>
         ctx.From<Order>().AliasRoot<EntityBuilder<RootProjection<Order>>, RootProjection<Order>>(
             static dc => new EntityBuilder<RootProjection<Order>>(dc));
@@ -173,6 +191,46 @@ public class RootProjectionTests
         act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
     }
 
+    [Fact]
+    public void Alias_root_is_refused_after_a_join_into()
+    {
+        using var ctx = new TestContext();
+        var joinedInto = ctx.From<Parent>(b => b.HasMany(p => p.Children, c => c.ParentId))
+            .JoinInto(ctx.From<Child>(), (p, c) => p.Id == c.ParentId, p => p.Children);
+
+        // Finding B: the generated '.WithAlias' only binds on a plain EntityBuilder<T>, but the
+        // hand-written seam must keep the same root-only guard (JoinInto is already a join).
+        Action act = () => joinedInto.AliasRoot<EntityBuilder<RootProjection<Parent>>, RootProjection<Parent>>(
+            static dc => new EntityBuilder<RootProjection<Parent>>(dc));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
+    }
+
+    [Fact]
+    public void Pre_alias_where_is_rebased_onto_the_root_slot_when_a_join_follows()
+    {
+        using var ctx = new TestContext();
+        var people = ctx.From<Person>();
+
+        // Finding D (C2/C4): a Where written before '.WithAlias' is typed over the plain root; after a
+        // join it must be rebased onto the root slot t1 (the C1 fix), not dropped and not left bare.
+        var rooted = ctx.From<Order>()
+            .Where(o => o.BuyerId == o.Id)
+            .AliasRoot<EntityBuilder<RootProjection<Order>>, RootProjection<Order>>(
+                static dc => new EntityBuilder<RootProjection<Order>>(dc));
+
+        var joined = rooted.JoinAlias<EntityBuilder<RootJoinProjection<Order, Person>>, RootJoinProjection<Order, Person>, Person>(
+            static dc => new EntityBuilder<RootJoinProjection<Order, Person>>(dc),
+            people,
+            (a, b) => a.Root.BuyerId == b.Id);
+
+        var sql = SqlOf(ctx, joined.Select(p => p.Buyer.Id));
+        // The predicate is preserved and rebased onto the root slot (`t1`), qualified (not bare
+        // `orders`/`buyer_id`); the int→long projection item cast is orthogonal to the rebasing.
+        sql.Should().Contain("where t1.buyer_id =");
+        sql.Should().Contain("cast(t1.Id as bigint)");
+    }
+
     // ------------------------------------------------------------------ in-memory refusal ---------
 
     [Fact]
@@ -210,6 +268,24 @@ public class RootProjectionTests
 
         second.Should().BeSameAs(first);
         command.Cache.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Preparing_a_root_projection_with_storeInCache_false_keeps_the_command_cacheable()
+    {
+        using var ctx = new TestContext();
+        var command = Rooted(ctx).Select(p => p.Root.Id);
+        command.Cache.Should().BeTrue();
+
+        // Finding C: the non-caching preparation path must not touch the command's sticky flag.
+        _ = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, CancellationToken.None);
+        command.Cache.Should().BeTrue("storeInCache:false must not set the sticky _dontCache flag");
+
+        // It must not poison the shared plan cache either: a later cached preparation still stores and
+        // reuses the same entry.
+        var first = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, CancellationToken.None);
+        var second = ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: true, CancellationToken.None);
+        second.Should().BeSameAs(first);
     }
 
     [Fact]
