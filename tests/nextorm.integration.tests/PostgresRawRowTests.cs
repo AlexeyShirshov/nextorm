@@ -10,6 +10,14 @@ using Npgsql;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
+/// Serializes <see cref="PostgresRawRowTests"/> against every other integration collection: its
+/// clean-catalog limitation tests drop and recreate PostgreSQL type extensions and reload the
+/// process-wide implicit Npgsql data source, which must not race a concurrent PostgreSQL read.
+/// </summary>
+[CollectionDefinition("PostgresRawRow", DisableParallelization = true)]
+public sealed class PostgresRawRowCollection;
+
+/// <summary>
 /// Container-backed execution tests for the PostgreSQL raw <c>ROW(...)</c>/composite materialization
 /// (issue #194, D194.3). These tests really execute against PostgreSQL: a run where PostgreSQL is
 /// <c>skipped</c> is not passing evidence (see <c>.opencode/skills/running-integration-tests</c>).
@@ -19,6 +27,7 @@ namespace NextORM.Integration.Tests;
 /// through a caller-owned <see cref="NpgsqlDataSource"/> passed to the existing external-connection
 /// <see cref="PostgresDataContext"/> ctor. The NULL and guard matrices mirror the core unit tests.
 /// </summary>
+[Collection("PostgresRawRow")]
 public sealed class PostgresRawRowTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => PostgresTestProvider.Instance;
@@ -507,9 +516,12 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
     {
         // An ordinary entity no-match read over an unmapped column type (hstore) must keep the
         // "None of the result-set columns ..." error, never a misleading named-composite diagnostic.
-        // The extension is created on a separate connection so the read connection's type catalog
-        // resolves hstore (it is not a genuine composite).
+        // The extension is created on a separate connection, then the shared implicit data source is
+        // reloaded so the read connection resolves hstore (public.hstore / PostgresBaseType) instead of
+        // leaving it unresolved; hstore is not a genuine composite either way.
         ExecuteDdl(PostgresContainer.ConnectionString, "create extension if not exists hstore");
+        WarmPostgresTypeCatalog();
+        AssertFixtureCatalogWarm("select 'a=>1'::hstore as v", "public.hstore");
         using var ctx = Provider.CreateContext();
 
         var act = () =>
@@ -526,11 +538,14 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
     [Fact]
     public void UnmappedLtreeColumn_OrdinaryNoMatchRead_ShouldKeepTheEntityError()
     {
-        // ltree is schema-qualified (public.ltree) but is not a composite; without EnableLTree the driver
-        // cannot resolve it. The exception shape (NotSupportedException), not the dotted name, is the
-        // discriminator, so the read keeps the established "None of the result-set columns ..." error and
-        // never surfaces a misleading named-composite diagnostic.
+        // ltree is schema-qualified (public.ltree) but is not a composite; the exception shape
+        // (NotSupportedException), not the dotted name, is the discriminator, so the read keeps the
+        // established "None of the result-set columns ..." error and never surfaces a misleading
+        // named-composite diagnostic. The extension is created on a separate connection, then the shared
+        // implicit data source is reloaded so the read connection resolves ltree.
         ExecuteDdl(PostgresContainer.ConnectionString, "create extension if not exists ltree");
+        WarmPostgresTypeCatalog();
+        AssertFixtureCatalogWarm("select 'a.b.c'::ltree as v", "public.ltree");
         using var ctx = Provider.CreateContext();
 
         var act = () =>
@@ -542,6 +557,108 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
         act.Should().Throw<InvalidOperationException>()
             .WithMessage("None of the result-set columns*")
             .Which.Message.Should().NotContain("named composite");
+    }
+
+    [Fact]
+    public void UnmappedHstoreColumn_OnCleanCatalogConnection_ThrowsWithoutPinningTheException()
+    {
+        // Documents the driver limitation behind #202: when a type catalog is loaded *before* the
+        // extension exists, the driver cannot resolve hstore from metadata and the read takes the
+        // (incorrect) named-composite rejection path. The shared implicit data source may already be warm,
+        // so this test isolates itself on a distinct connection string — a distinct Npgsql data source
+        // whose catalog is deliberately loaded while hstore is absent (a genuinely clean catalog; see the
+        // D-PROBE note on A1/A2 in the status file). It asserts the limitation's documented cold-state
+        // observable — the masked read surfaces the named-composite diagnostic rather than the ordinary
+        // "None of the result-set columns" error — without pinning the exception class or full message.
+        var connectionString = PostgresContainer.ConnectionString;
+        try
+        {
+            ExecuteDdl(connectionString, "drop extension if exists hstore cascade");
+
+            var cleanConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+            {
+                ApplicationName = "nextorm_clean_catalog_hstore_" + Guid.NewGuid().ToString("N")[..10]
+            }.ConnectionString;
+
+            // Opening the clean data source now loads its type catalog while hstore is absent.
+            using (var clean = new NpgsqlConnection(cleanConnectionString))
+            {
+                clean.Open();
+            }
+
+            ExecuteDdl(connectionString, "create extension if not exists hstore");
+
+            // Setup precondition: hstore is present on the server, yet the connection under test still
+            // uses the intended cold catalog (not the warm shared implicit data source).
+            AssertExtensionPresent(connectionString, "hstore");
+            AssertFixtureCatalogCold(cleanConnectionString, "select 'a=>1'::hstore as v");
+
+            using var ctx = new PostgresDataContext(cleanConnectionString, new DataContextBuilder());
+            var act = () =>
+            {
+                using var result = ctx.ExecuteRaw("select 'a=>1'::hstore as v, 5::integer as n");
+                result.Read<ScalarPairDto>();
+            };
+
+            var ex = Record.Exception(act);
+            Assert.NotNull(ex);
+            ex!.Message.Should().Contain("named composite");
+            ex.Message.Should().NotContain("None of the result-set columns");
+        }
+        finally
+        {
+            // Restore hstore (with a fresh OID) and reload the shared catalog for the other tests.
+            ExecuteDdl(connectionString, "create extension if not exists hstore");
+            WarmPostgresTypeCatalog();
+        }
+    }
+
+    [Fact]
+    public void UnmappedLtreeColumn_OnCleanCatalogConnection_ThrowsWithoutPinningTheException()
+    {
+        // Cold-state counterpart of the warm ltree test: a catalog loaded before ltree exists leaves the
+        // driver unable to classify public.ltree, so the read takes the same (incorrect) named-composite
+        // path as hstore on a clean catalog. This mirrors the hstore clean-limitation test (same isolation,
+        // same observable assertion shape), so ltree is not evidenced only by the warm state.
+        var connectionString = PostgresContainer.ConnectionString;
+        try
+        {
+            ExecuteDdl(connectionString, "drop extension if exists ltree cascade");
+
+            var cleanConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+            {
+                ApplicationName = "nextorm_clean_catalog_ltree_" + Guid.NewGuid().ToString("N")[..10]
+            }.ConnectionString;
+
+            // Opening the clean data source now loads its type catalog while ltree is absent.
+            using (var clean = new NpgsqlConnection(cleanConnectionString))
+            {
+                clean.Open();
+            }
+
+            ExecuteDdl(connectionString, "create extension if not exists ltree");
+
+            AssertExtensionPresent(connectionString, "ltree");
+            AssertFixtureCatalogCold(cleanConnectionString, "select 'a.b.c'::ltree as v");
+
+            using var ctx = new PostgresDataContext(cleanConnectionString, new DataContextBuilder());
+            var act = () =>
+            {
+                using var result = ctx.ExecuteRaw("select 'a.b.c'::ltree as v, 5::integer as n");
+                result.Read<ScalarPairDto>();
+            };
+
+            var ex = Record.Exception(act);
+            Assert.NotNull(ex);
+            ex!.Message.Should().Contain("named composite");
+            ex.Message.Should().NotContain("None of the result-set columns");
+        }
+        finally
+        {
+            // Restore ltree (with a fresh OID) and reload the shared catalog for the other tests.
+            ExecuteDdl(connectionString, "create extension if not exists ltree");
+            WarmPostgresTypeCatalog();
+        }
     }
 
     // ---------------------------------------------------------------- S7 / S8 / S13
@@ -584,6 +701,87 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
         => AssertGuard<Tuple<int, JsonDocument>>("select row(1::integer, '{\"a\":1}'::jsonb) as v");
 
     // ---------------------------------------------------------------- helpers
+
+    /// <summary>
+    /// Warms the shared implicit Npgsql data source's type catalog after an extension is created on a
+    /// separate connection. Context connections use the same connection string, hence the same implicit
+    /// data source, so the reload makes the newly created types resolvable for subsequent reads.
+    /// </summary>
+    private static void WarmPostgresTypeCatalog()
+    {
+        using var warm = new NpgsqlConnection(PostgresContainer.ConnectionString);
+        warm.Open();
+        warm.ReloadTypes();
+    }
+
+    /// <summary>
+    /// Precondition guard: verifies the shared type catalog actually resolves the fixture type, so a cold
+    /// catalog is reported as "fixture catalog not warm" instead of the misleading named-composite verdict.
+    /// </summary>
+    private static void AssertFixtureCatalogWarm(string sql, string expectedDataTypeName)
+    {
+        using var connection = new NpgsqlConnection(PostgresContainer.ConnectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        using var reader = command.ExecuteReader();
+        Assert.True(reader.Read());
+
+        var resolved = false;
+        try
+        {
+            resolved = reader.GetDataTypeName(0) == expectedDataTypeName
+                && reader.GetPostgresType(0) is Npgsql.PostgresTypes.PostgresBaseType;
+        }
+        catch (Exception)
+        {
+            // The driver could not classify the column at all: a cold catalog, handled by the assertion.
+        }
+
+        Assert.True(resolved, "fixture catalog not warm");
+    }
+
+    /// <summary>
+    /// Precondition guard for the clean-catalog limitation tests: verifies the fixture type really exists
+    /// on the server (so a failure cannot be blamed on the extension not being created).
+    /// </summary>
+    private static void AssertExtensionPresent(string connectionString, string typeName)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"select to_regtype('{typeName}') is not null";
+        Assert.True((bool)command.ExecuteScalar()!, $"fixture type {typeName} not present on the server");
+    }
+
+    /// <summary>
+    /// Precondition guard for the clean-catalog limitation tests: verifies the connection string's
+    /// implicit Npgsql data source still cannot classify the fixture type because its catalog was loaded
+    /// before the extension existed, so the read genuinely exercises the intended cold catalog rather than
+    /// a warm one.
+    /// </summary>
+    private static void AssertFixtureCatalogCold(string connectionString, string sql)
+    {
+        using var connection = new NpgsqlConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        using var reader = command.ExecuteReader();
+        Assert.True(reader.Read());
+
+        var cold = false;
+        try
+        {
+            cold = reader.GetPostgresType(0) is Npgsql.PostgresTypes.UnknownBackendType;
+        }
+        catch (Exception)
+        {
+            // The driver could not classify the column at all: still a cold catalog.
+            cold = true;
+        }
+
+        Assert.True(cold, "fixture catalog unexpectedly warm");
+    }
 
     private T ReadSingle<T>(string sql)
     {

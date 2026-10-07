@@ -345,6 +345,8 @@ Only a single record column is supported. Unsupported shapes — a `ValueTuple`,
 throws `InvalidOperationException` instead of substituting `default`. See
 [Raw SQL](../12-raw-sql.md#postgresql-raw-rows-and-composites).
 
+Any PostgreSQL type absent from the loaded Npgsql type catalog can produce a misleading named-composite diagnostic, even when it is not a composite type. nextorm contexts share a process-wide implicit Npgsql data source keyed by connection string; a type reload must target the source associated with the same connection string used by the context.
+
 ## Dynamic record schema
 
 `jsonb_to_record`/`jsonb_to_recordset` are exposed as table-valued functions whose result schema is

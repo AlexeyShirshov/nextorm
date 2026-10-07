@@ -401,6 +401,8 @@ IReadOnlyList<System.Tuple<int, string?>> rows =
     result.Read<System.Tuple<int, string?>>();
 ```
 
+Any PostgreSQL type absent from the loaded Npgsql type catalog can produce a misleading named-composite diagnostic, even when it is not a composite type. nextorm contexts share a process-wide implicit Npgsql data source keyed by connection string; a type reload must target the source associated with the same connection string used by the context.
+
 NULL semantics:
 
 * SQL `NULL` for the whole record column ⇒ CLR `null` (for a nullable/reference declared type); the
