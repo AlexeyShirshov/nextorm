@@ -77,4 +77,31 @@ public class DirectCteJoinTests
             directEx!.Message.Should().Be(convertedEx.Message);
         }
     }
+
+    [Fact]
+    public void Direct_typed_cte_join_forwards_the_options_callback()
+    {
+        // E159-07/R159-07 (CHECK round 2): the explicit-options Cte<T> overload must invoke the same
+        // options callback as its non-CTE sibling. WithJoinHint is a directly observable option --
+        // SQL Server renders it in the join keyword -- so a dropped callback leaves the hint out of the
+        // produced SQL. The no-options baseline distinguishes real forwarding from unconditional output.
+        using var ctx = SqlServerTestContext.Create();
+
+        var left = ctx.From<IComplexEntity>().Where(c => c.Id > 1L).Select(c => new { c.Id }).AsCte("l");
+        var right = ctx.From<IComplexEntity>().Select(c => new { c.Id }).AsCte("r");
+
+        var direct = Prepare(ctx, ctx.From(left)
+            .Join(right, (a, b) => a.Id == b.Id, o => o.WithJoinHint("loop"))
+            .Select(p => p.Item1.Id)).Sql;
+        var converted = Prepare(ctx, ctx.From(left)
+            .Join(ctx.From(right), (a, b) => a.Id == b.Id, o => o.WithJoinHint("loop"))
+            .Select(p => p.Item1.Id)).Sql;
+        var withoutOptions = Prepare(ctx, ctx.From(left)
+            .Join(right, (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1.Id)).Sql;
+
+        direct.Should().Contain("loop join");
+        direct.Should().Be(converted);
+        withoutOptions.Should().NotContain("loop join");
+    }
 }
