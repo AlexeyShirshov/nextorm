@@ -205,8 +205,9 @@ public class RootAliasTests
 
             joined.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
             var last = sql.Statements[^1];
-            last.Should().Contain("select Id, BuyerId from orders");
-            last.Should().Contain("orders as 't1'");
+            // The derived FromSql source must stay a derived table aliased to the root slot ('t1'), not be
+            // unwrapped to the physical table (issue #160, D:160-03, rv=3).
+            last.Should().Contain("(select Id, BuyerId from orders) as 't1'");
         }
         finally
         {
@@ -228,7 +229,13 @@ public class RootAliasTests
             var joined = rooted.Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer);
 
             joined.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
-            sql.Statements[^1].Should().Contain("orders as 't1'");
+            var last = sql.Statements[^1];
+            // The derived QueryCommand source must stay a derived table aliased to the root slot ('t1'),
+            // not be unwrapped to the physical table (issue #160, D:160-03, rv=3).
+            last.Should().Contain("from orders");
+            last.Should().Contain("where Id = 1");
+            last.Should().Contain(") as 't1'");
+            last.Should().NotContain("orders as 't1'");
         }
         finally
         {
@@ -250,7 +257,11 @@ public class RootAliasTests
             var joined = rooted.Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer);
 
             joined.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
-            sql.Statements[^1].Should().Contain("orders as 't1'");
+            var last = sql.Statements[^1];
+            // The derived builder source must stay a derived table aliased to the root slot ('t1'), not be
+            // unwrapped to the physical table (issue #160, D:160-03, rv=3).
+            last.Should().Contain("(select Id, BuyerId, ApproverId from orders) as 't1'");
+            last.Should().NotContain("orders as 't1'");
         }
         finally
         {

@@ -6,10 +6,10 @@
 - selected_variant: pdca-dotnet
 - cycle_id: 1
 - plan_revision: 2
-- contract_revision: rv=2
+- contract_revision: rv=3
 - attempt: n=1/3
 - phase: DO
-- plan_state: r=2 revision issued by planner; DO executing Phase 1 to a green committed checkpoint. All acceptance criteria R160-01..11 preserved; no rows/obligations weakened.
+- plan_state: r=2 revision issued by planner; rv=2 superseded by rv=3 (P:160-ROOT-CONTRACT sealed to bounded in-scope fix (iii)). All acceptance criteria R160-01..11 preserved; no rows/obligations weakened.
 - provenance: collection `docs/specs/status/collection-1.0.9-rc2.md` task D160; brief `/tmp/opencode/rc2/briefs.md` §#160; design `docs/specs/design/join-alias-mixing-and-root-alias.md`
 - no commits / no push / no worktree (collection P phase)
 
@@ -220,6 +220,12 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | 2026-10-08T00:40:00Z | DO | r2 | n1/3 | P:160-ROOT-CONTRACT comparative evidence recorded (facts only): FromSql aliased works at runtime (derived source preserved as `(select …) as 't1'`, test over-strict on `orders as 't1'`); From(builder) and QueryCommand aliased throw `NotSupportedException` at `EntityBuilder.cs:3465`; all three unaliased baselines return `ids=[10]`; option (i)/(ii)/(iii) NOT selected | rc2-160-evidence/E160-ROOT-CONTRACT/comparative.md |
 | 2026-10-08T00:40:00Z | DO | r2 | n1/3 | D:160-03 remaining: derived-root root-contract decision (From(builder)/QueryCommand) + docs/API-NAMING register (E160-24) + six-provider SQL, integration, coverage, benchmarks deferred to later sessions; core `EntityBuilder.cs:3464-3466` guard kept unchanged | this file §Root-receiver binding and §P:160-ROOT-CONTRACT |
 | 2026-10-08T00:42:15Z | DO | r2 | n1/3 | checkpoint commit of D:160-03 root-receiver generator + alias tests + status + E160-ROOT-CONTRACT evidence; re-verified build exit 0 (0 warnings/0 errors) and alias suite exit 2, selected 71 / passed 68 / failed 3 — the 3 derived-root tests (`Generated_root_alias_on_a_fromsql_source_keeps_the_derived_source`, `Generated_root_alias_on_a_builder_source_keeps_the_source`, `Generated_root_alias_on_a_query_command_source_keeps_the_derived_query`) are intentionally UNRESOLVED pending the planner decision | rc2-160-evidence/E160-ROOT-CONTRACT/checkpoint-build.log, rc2-160-evidence/E160-ROOT-CONTRACT/checkpoint-alias-tests.log |
+| 2026-10-08T00:49:00Z | DO | r2 | n1/3 | P:160-ROOT-CONTRACT decision (iii) sealed: contract `rv=2` explicitly superseded by `rv=3`; E160-01..E160-24, C-E01..C-E04, obligations/priorities/owners preserved and not weakened; E160-02/E160-23 corrected to expect the preserved FromSql derived source `(select …) as 't1'`; new stable rows E160-25 (`From(builder)`) and E160-26 (`From(QueryCommand<T>)`) added | this file §Contract revision rv=3 |
+| 2026-10-08T00:49:00Z | DO | r2 | n1/3 | bounded fix: `EntityBuilder.AliasRoot` now materializes a derived root `_query` into an explicit derived-table `FromExpression` (clears `_query`); `ResolveJoinBase` projection guard `:3464-3466` left unchanged; no public API change, no flattening, no per-row work, no shared-command/cache contamination. `dotnet build nextorm.slnx -c Debug` exit 0, 0 warnings / 0 errors | rc2-160-evidence/E160-25/build.log, rc2-160-evidence/E160-26/build.log |
+| 2026-10-08T00:49:00Z | DO | r2 | n1/3 | inner `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 13, passed 13, failed 0 (derived-root variants green); FromSql/builder/QueryCommand SQL expectations corrected to the preserved derived source | rc2-160-evidence/E160-25/root-alias-filtered-green.log, rc2-160-evidence/E160-26/root-alias-filtered-green.log |
+| 2026-10-08T00:49:00Z | DO | r2 | n1/3 | ONE broad boundary sweep `dotnet test tests/nextorm.alias.tests -c Debug` exit 0, selected 71, passed 71, failed 0 | rc2-160-evidence/E160-25/alias-boundary.log, rc2-160-evidence/E160-26/alias-boundary.log |
+| 2026-10-08T00:49:00Z | DO | r2 | n1/3 | Derived-root SQL captured: builder `select t2.Id from (select Id, BuyerId, ApproverId from orders) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; QueryCommand `select t2.Id from (select Id, BuyerId, ApproverId from orders where Id = 1) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; unaliased both return `ids=[10]` | rc2-160-evidence/E160-25/, rc2-160-evidence/E160-26/ |
+| 2026-10-08T00:49:00Z | DO | r2 | n1/3 | D:160-03 criteria: derived-root root-contract (FromSql/From(builder)/From(QueryCommand<T>)) CLOSED at DO scope; REMAINING: docs/API-NAMING register (E160-24), six-provider SQL, integration, coverage, benchmarks, six mutations, EN/RU docs — deferred to later sessions (not weakening R160-03) | this file §Contract revision rv=3 |
 
 ### Inherited collection evidence rows (verbatim; do not invent/ N/A except C-E04 single-group)
 - **C-E01 / truthful admission** — check: "Validate admission snapshot for milestone `1.0.9-rc2`: 26 open issues, 24 admitted `ready`, D171/D172 excluded-gap and still OPEN in the milestone." — owner: collection CHECK — applicability: "at admission; re-check exclusions at completion".
@@ -249,7 +255,7 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | row | req | status | commands / artifacts |
 |---|---|---|---|
 | E160-01 | R01,R02,R11 | green (Phase-1 partial; boundary pending) | inner `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~MixedJoinChainTests` exit 0, selected 7; boundary `dotnet test tests/nextorm.alias.tests -c Debug` exit 0, selected 53; logs `rc2-160-evidence/E160-15/mixed-filtered2.log`, `rc2-160-evidence/E160-01/alias-boundary.log` |
-| E160-02 | R03 | pending (Phase 2, D:160-03) | |
+| E160-02 | R03 | partial (rv=3: derived-root FromSql preserved + test expectation corrected; full root matrix / six-provider SQL deferred) | `RootAliasTests` exit 0, 13/13; `rc2-160-evidence/E160-25/`, `rc2-160-evidence/E160-26/` |
 | E160-03 | R04 | pending (DO→CHECK boundary K; D:160-02 spike closed green) | |
 | E160-04 | R05,R06 | pending (full boundary) | |
 | E160-05 | R01,R11 | green (Phase-1 partial) | naming/digit/collision/diagnostic cases in alias suite |
@@ -270,8 +276,10 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | E160-20 | R11 | green (Phase-1 partial) | receiver static-type binding negative; `dotnet test … --filter FullyQualifiedName~AliasProjectionShapeTests` exit 0, selected 3; `shape-filtered.log` |
 | E160-21 | R11 | pending (overload shadowing audit, D:160-04) | |
 | E160-22 | R11 | green (Phase-1 partial; diagnostic suite) | |
-| E160-23 | R03 | pending (Phase 2, D:160-03) | |
+| E160-23 | R03 | partial (rv=3: derived-root root alias From(builder)/QueryCommand green; repeated/invalid root alias + six-provider deferred) | `RootAliasTests` exit 0, 13/13; `rc2-160-evidence/E160-25/`, `rc2-160-evidence/E160-26/` |
 | E160-24 | R10 | pending (docs/API-NAMING register, D:160-04) | |
+| E160-25 | R03 | green (rv=3) | `From(builder)` root `.WithAlias` preserves derived source; `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 13 / passed 13 / failed 0; SQL `select t2.Id from (select Id, BuyerId, ApproverId from orders) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; logs `rc2-160-evidence/E160-25/` |
+| E160-26 | R03 | green (rv=3) | `From(QueryCommand<T>)` root `.WithAlias` preserves derived query; same filtered run exit 0, 13/13; SQL `select t2.Id from (select Id, BuyerId, ApproverId from orders where Id = 1) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; logs `rc2-160-evidence/E160-26/` |
 
 ### D:160-02 dim-1 spike — closed green (resolved-by-AliasRoot; for CHECK)
 - Result: 3/3 `RootAliasTests` green; dim-1 `Projection<T1>` plans, root slot 1 maps to `t1`, `Extend` yields `Projection<T1,T2>` preserving `Item1`.
@@ -297,17 +305,19 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 - Evidence: `rc2-160-evidence/E160-ROOT-CONTRACT/positional-after-root-alias.log` (green),
   `root-alias-tests.log` (13 selected / 10 passed / 3 expected derived-root failures).
 
-### P:160-ROOT-CONTRACT — derived-root comparative evidence (facts only; no option selected)
+### P:160-ROOT-CONTRACT — derived-root comparative evidence (facts; decision (iii) sealed in rv=3)
 
 - Full comparative record: `rc2-160-evidence/E160-ROOT-CONTRACT/comparative.md`.
 - Summary: unaliased baselines for `FromSql` / `From(builder)` / `From(QueryCommand<T>)` all work
   (`ids=[10]`). With `.WithAlias(Alias.Root)`:
-  - `FromSql` works at runtime and preserves the derived source; the red test is over-strict on the
+  - `FromSql` works at runtime and preserves the derived source; the red test was over-strict on the
     SQL substring (`orders as 't1'` vs the correct `(select …) as 't1'`).
-  - `From(builder)` and `From(QueryCommand<T>)` throw `NotSupportedException` at
+  - `From(builder)` and `From(QueryCommand<T>)` threw `NotSupportedException` at
     `EntityBuilder.cs:3465` (`ResolveJoinBase`, guard `:3464-3466`).
-- Core guard `EntityBuilder.cs:3464-3466` kept unchanged; the four derived-root test expectations were
-  NOT changed this session. Option (i)/(ii)/(iii) selection is the next planner decision.
+- **Resolution (rv=3, planner decision (iii), bounded in-scope fix):** `AliasRoot` normalizes a derived root
+  `_query` into an explicit derived-table `FromExpression` (clearing `_query`), so all three derived roots are
+  preserved and aliased `t1`. Core guard `EntityBuilder.cs:3464-3466` is kept unchanged. See
+  §Contract revision rv=3 and evidence `rc2-160-evidence/E160-25/`, `rc2-160-evidence/E160-26/`.
 
 ### DO→CHECK boundary gate commands (must actually run at the DO→CHECK boundary; NOT run at this Phase-1 checkpoint)
 - B (done green at checkpoint): `dotnet build nextorm.slnx -c Debug` → E160-07.
@@ -372,3 +382,43 @@ full log at `docs/specs/status/rc2-160-evidence/<row-ID>/`, tree identity, rv=2.
 - Kept rename obligations (deferred to CHECK): EN/RU docs pages in the docs plan + API-NAMING register
   entry for the generated `AliasJoin_*`/`AliasProjection_*` public surface. Owner `coder` (docs) / `check`
   (verdict).
+
+---
+
+## Contract revision rv=3 (supersedes rv=2)
+
+- **Classification:** P:160-ROOT-CONTRACT decided by the planner as **(iii) bounded in-scope fix**. This is a
+  contract-revision refinement only: **plan revision stays `r=2`, attempt `n=1/3`**; no task/dependency change.
+- **Explicit supersession:** `rv=2` is **explicitly superseded by `rv=3`**. Row IDs **E160-01..E160-24** and
+  **C-E01..C-E04**, their requirement IDs, priorities, predicates, exact invocations, exit/log obligations,
+  artifacts and owners are carried forward verbatim. rv=3 does not delete or lower any rv=2 obligation.
+- **Decision binding:** `From(builder)` and `From(QueryCommand<T>)` derived-root sources must be **preserved**
+  when root-aliased with `.WithAlias(Alias.Root)`, exactly like `FromSql` — the derived root renders as
+  `(select …) as 't1'`, **not** `orders as 't1'`. No R160 criterion is weakened; the derived root is neither
+  flattened nor unwrapped. The `EntityBuilder.cs:3464-3466` projection guard is **kept** (not globally removed).
+
+### Corrected expectations carried into existing rows (not weakened)
+
+- **E160-02 / R03 (corrected expectation):** for the `FromSql` root, `.WithAlias(Alias.Root)` preserves the
+  derived source; the correct SQL is `… from (select Id, BuyerId from orders) as 't1' join …`, **not**
+  `orders as 't1'`. The former red test was over-strict on the SQL substring. Applicability and owner unchanged.
+- **E160-23 / R03 (corrected expectation):** the Phase-2 root matrix accepts the preserved derived source
+  `(select …) as 't1'` for `FromSql` (and, per this revision, for `From(builder)`/`From(QueryCommand<T>)`).
+  Repeated/invalid root alias is still rejected; the runtime guard is not removed. Owner unchanged.
+
+### rv=3 new rows (stable IDs; same scoring slots as E160-15..E160-24)
+
+| row | req | scenario (positive) | evidence kind/source | exact invocation + exit/result/log | artifact | owner | applicability |
+|---|---|---|---|---|---|---|---|
+| E160-25 | R160-03 | `From(builder)` root `.WithAlias(Alias.Root)` succeeds and **preserves** the source (derived root aliased `t1`) + unaliased regression | `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests`; captured SQL/plan | exit/result + selected_count + full log recorded at artifact dir | `docs/specs/status/rc2-160-evidence/E160-25/` | coder creates / check verifies | D:160-03 |
+| E160-26 | R160-03 | `From(QueryCommand<T>)` root `.WithAlias(Alias.Root)` succeeds and **preserves** the derived query (aliased `t1`) + unaliased regression | same | exit/result + selected_count + full log recorded at artifact dir | `docs/specs/status/rc2-160-evidence/E160-26/` | coder creates / check verifies | D:160-03 |
+
+**Evidence kind/source for every rv=3 row:** exact invocation (argument array), exit/result, selected_count,
+full log at the artifact dir, tree identity, `rv=3`. Missing evidence is `unknown/missing`, not PASS.
+
+### CHECK re-gather budget (preserved)
+
+- Owner `check`; at most **2 targeted scout calls** and **1 repeat proving-command run** per CHECK, no
+  implementation edits. The two new rows get **one additional evidence package**, owner `check`. On a further
+  revision: explicit `rv=k superseded by rv=k+1`, preserve IDs/obligations; new variants get new IDs. `r`
+  increases only when tasks/dependencies/remediation actions change.

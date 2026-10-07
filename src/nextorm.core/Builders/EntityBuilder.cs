@@ -3124,7 +3124,19 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         // the mapped root's physical source once, without touching the planner: every other root kind
         // already carries an explicit source (table name, FromExpression or derived Query).
         if (rooted.SourceFrom is null && rooted.Query is null && string.IsNullOrEmpty(rooted.Table))
+        {
             rooted.SourceFrom = _dataProvider.GetFrom(_sourceEntityType ?? typeof(TEntity), null);
+        }
+        // A derived root source (From(builder) / From(QueryCommand<T>)) is carried as _query. After
+        // re-rooting, the projection type would make ResolveJoinBase treat it as a joined projection that
+        // cannot be joined again, even though the physical source is a derived query. Materialize it once
+        // as an explicit derived-table FromExpression and clear _query, so the derived root is preserved
+        // and aliased 't1', exactly like FromSql. The projection guard in ResolveJoinBase is not touched.
+        else if (rooted.Query is not null)
+        {
+            rooted.SourceFrom = new FromExpression(rooted.Query);
+            rooted.Query = null;
+        }
 
         // A Where written before WithAlias is over the plain root entity; move it onto the projection's
         // Item1 so it keeps pointing at the same table after re-rooting.
