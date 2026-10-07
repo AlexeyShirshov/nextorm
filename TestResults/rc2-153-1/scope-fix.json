@@ -1,0 +1,11 @@
+{
+  "unit": "D153 public-extensibility docs loop-back fix",
+  "scope": {
+    "projects": ["tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj"],
+    "selectors": ["FullyQualifiedName~ExternalDialectExtensibility"],
+    "files": ["docs/advanced/api-reference.md", "docs/ru/advanced/api-reference.md", "docs/advanced/select-where-extrema-native.md", "docs/ru/advanced/select-where-extrema-native.md"],
+    "rebuild": "none",
+    "boundary": "docfx build + link guard + provider-filtered container integration runs (re-verification of the unchanged code) after the docs fix",
+    "rationale": "the loop-back fix is documentation-only; no compiled input changed, so no rebuild/unit rerun is required; the boundary re-verifies docs rendering and the unchanged native regressions on both providers"
+  }
+}

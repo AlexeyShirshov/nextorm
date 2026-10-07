@@ -7,12 +7,23 @@ namespace NextORM.Postgres;
 /// PostgreSQL dialect: <c>||</c> concatenation, <c>@name</c> parameters, double-quoted identifiers,
 /// <c>limit/offset</c> paging and the aggregate name mapping (<c>stdev</c> -> <c>stddev</c>, ...).
 /// </summary>
+/// <remarks>
+/// The type is deliberately not <see langword="sealed"/>. Subclassing it and overriding
+/// <see cref="ExtremeRowRenderer"/> is the supported external extension boundary (a public
+/// compatibility commitment), so an assembly without <c>InternalsVisibleTo</c> can install its own
+/// public <see cref="IExtremeRowRenderer"/>. The built-in renderer is <c>internal</c> and is not part
+/// of that contract. The public constructors and the shared <see cref="Instance"/> are preserved;
+/// returning <see langword="null"/> from an override keeps the portable window-function lowering.
+/// </remarks>
 public class PostgresDialect : SqlDialectBase
 {
     // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
     private static readonly Version AggregatesFilterMinVersion = new(9, 4);
 
-    /// <summary>Gets the shared PostgreSQL dialect instance.</summary>
+    /// <summary>
+    /// Gets the shared PostgreSQL dialect instance. Subclassing the dialect does not change this
+    /// instance; a derived dialect is created through the public constructors instead.
+    /// </summary>
     public static readonly PostgresDialect Instance = new();
 
     private readonly Version? _version;
@@ -21,6 +32,10 @@ public class PostgresDialect : SqlDialectBase
     /// Creates an unversioned PostgreSQL dialect: every supported form (including the ANSI aggregate
     /// <c>FILTER</c> clause) is emitted. Equivalent to the shared <see cref="Instance"/>.
     /// </summary>
+    /// <remarks>
+    /// The constructor is public so an external assembly can derive a custom dialect from
+    /// <see cref="PostgresDialect"/>.
+    /// </remarks>
     public PostgresDialect()
     {
     }
@@ -30,6 +45,10 @@ public class PostgresDialect : SqlDialectBase
     /// the ANSI aggregate <c>FILTER</c> clause; <see langword="null"/> is the unversioned form.
     /// </summary>
     /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
+    /// <remarks>
+    /// The constructor is public so an external assembly can derive a custom dialect from
+    /// <see cref="PostgresDialect"/>; passing <see langword="null"/> equals the parameterless form.
+    /// </remarks>
     public PostgresDialect(Version? serverVersion) => _version = serverVersion;
 
     /// <inheritdoc/>
@@ -390,7 +409,12 @@ public class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL supports the <c>SELECT DISTINCT ON (expr, ...)</c> modifier.</summary>
     public override IDistinctOnRenderer DistinctOn => PostgresDistinctOnRenderer.Instance;
 
-    /// <summary>PostgreSQL renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>DISTINCT ON</c>/<c>ORDER BY ... LIMIT 1</c>; the rest falls back to the portable window function.</summary>
+    /// <summary>
+    /// PostgreSQL renders eligible <c>SelectWhereMax</c>/<c>SelectWhereMin</c> with <c>DISTINCT ON</c>/<c>ORDER BY ... LIMIT 1</c>; the rest falls back to the portable window function.
+    /// The property is <see langword="virtual"/> so a derived dialect can override it with a custom
+    /// <see cref="IExtremeRowRenderer"/>; returning <see langword="null"/> keeps the portable
+    /// window-function lowering. The built-in renderer is <c>internal</c> and is not a public contract.
+    /// </summary>
     public override IExtremeRowRenderer? ExtremeRowRenderer => PostgresExtremeRowRenderer.Instance;
 
     /// <summary>PostgreSQL supports the <c>SelectWhereMax</c>/<c>SelectWhereMin</c> feature (native or portable).</summary>

@@ -1,0 +1,30 @@
+{
+  "unit": "D153 public-extensibility",
+  "scope": {
+    "projects": [
+      "tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj",
+      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+      "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~ExternalDialectExtensibility",
+      "FullyQualifiedName~ExtremeRow"
+    ],
+    "files": [
+      "tests/nextorm.publicextensibility.tests/nextorm.publicextensibility.tests.csproj",
+      "tests/nextorm.publicextensibility.tests/ExternalDialectExtensibilityTests.cs",
+      "docs/specs/design/API-NAMING-REVIEW.md",
+      "docs/specs/status/rc2-153-public-extensibility-1.md",
+      "docs/advanced/select-where-extrema-native.md",
+      "docs/ru/advanced/select-where-extrema-native.md",
+      "docs/advanced/api-reference.md",
+      "docs/ru/advanced/api-reference.md",
+      "src/nextorm.postgres/PostgresDialect.cs",
+      "src/nextorm.clickhouse/ClickHouseDialect.cs",
+      "nextorm.slnx"
+    ],
+    "rebuild": "affected",
+    "boundary": "run the new consumer project full suite + filtered ExtremeRow tests in postgres/clickhouse test projects, then the PG/CH extreme-row container integration tests",
+    "rationale": "the change is docs/XML-comment plus one new non-friend consumer assembly; the affected behavior is dialect subclassing + renderer selection, covered by the new consumer tests and the existing ExtremeRow native/portable regression suites"
+  }
+}

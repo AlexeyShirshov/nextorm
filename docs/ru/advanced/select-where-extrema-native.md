@@ -111,7 +111,39 @@ from (
 - [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer) предоставляет `CanRender(`[`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription)`)` — решение без побочных эффектов, принимаемое до сборки любого SQL, — и `Render(`[`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest)`)`, возвращающий источник строки-победителя. Только положительный `CanRender` ведёт к `Render`, и у `Render` нет позднего отката к переносимому пути.
 - [`ExtremeRowRenderColumn`](xref:NextORM.Core.ExtremeRowRenderColumn), [`ExtremeRowDescription`](xref:NextORM.Core.ExtremeRowDescription) и [`ExtremeRowRenderRequest`](xref:NextORM.Core.ExtremeRowRenderRequest) несут только факты формы (CLR-тип, nullable, признаки прямой отображённости и конвертера, а также подготовленный источник и алиасы), но никогда — выражение или контекст построения. См. [Краткий справочник API](api-reference.md).
 
-`PostgresDialect` и `ClickHouseDialect` не `sealed`, поэтому пользовательский диалект может наследоваться от них и переопределять рендерер (например, чтобы изменить условия пригодности), не трогая общий построитель.
+`PostgresDialect` и `ClickHouseDialect` намеренно **не `sealed`**: их наследуемость вместе с публичными конструкторами (`PostgresDialect()`, `PostgresDialect(Version?)`, `ClickHouseDialect()`), общим синглтоном `Instance` и виртуальным хостом `ExtremeRowRenderer` — это и есть поддерживаемая внешняя граница расширяемости, публичное обещание совместимости, а не тестовая деталь. Пользовательский диалект может наследоваться от любого из них, переопределить хост и вернуть собственную публичную реализацию [`IExtremeRowRenderer`](xref:NextORM.Core.IExtremeRowRenderer); встроенные рендереры (`PostgresExtremeRowRenderer`, `ClickHouseExtremeRowRenderer`) `internal` и в этот контракт не входят. Возврат `null` из переопределения — или рендерер, чей `CanRender` отвечает `false`, — сохраняет переносимое понижение до оконной функции; значения по умолчанию провайдера и конструкторы не меняются.
+
+```csharp
+// Сборка-потребитель без friend-доступа наследует диалект провайдера и ставит свой рендерер.
+public sealed class MyPostgresDialect : PostgresDialect
+{
+    public override IExtremeRowRenderer? ExtremeRowRenderer => MyRenderer.Instance;
+}
+
+// Нативно обрабатывается только глобальная (несгруппированная) форма с одним ключом; любая
+// другая форма уходит на переносимый путь, потому что CanRender отвечает false.
+public sealed class MyRenderer : IExtremeRowRenderer
+{
+    public static readonly MyRenderer Instance = new();
+
+    public bool CanRender(ExtremeRowDescription description)
+        => description.Groups.Count == 0 && description.Keys.Count == 1;
+
+    public string Render(ExtremeRowRenderRequest request)
+    {
+        var direction = request.IsMax ? "desc" : "asc";
+        return request.SourceSql
+            + " order by \"" + request.KeyAliases[0] + "\" " + direction + " limit 1";
+    }
+}
+
+// Второй пример: возврат null из переопределения принудительно включает переносимое
+// понижение до оконной функции для каждого запроса, без установки рендерера.
+public sealed class PortablePostgresDialect : PostgresDialect
+{
+    public override IExtremeRowRenderer? ExtremeRowRenderer => null;
+}
+```
 
 ## См. также
 
