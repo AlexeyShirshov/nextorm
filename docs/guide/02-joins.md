@@ -464,6 +464,13 @@ var mixed = dataContext
     .ToList();
 ```
 
+A raw-table (`TableAlias`) join now honours an explicit source on the joined builder. When the joined
+side is a raw SQL source (`FromSql`), a table override (`b => b.Table("...")` / `WithTableName`), a
+derived query (`From(query)`), a table-valued function (`FromTableFunction`), or a typed CTE
+(`Cte<T>`), that source is used as the join's `FROM` instead of the entity metadata. A plain mapped
+entity with no explicit source keeps the metadata fallback. `SemiJoin`/`AntiJoin` are unaffected: the
+joined type still resolves through its entity metadata.
+
 ## Chained joins and arity 2..8
 
 Each chained call adds one table. The condition receives the projection accumulated so far and the

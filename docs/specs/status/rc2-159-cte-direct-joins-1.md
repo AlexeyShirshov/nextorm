@@ -38,7 +38,7 @@
 - **R159-09 Providers/APPLY:** supported operations retain SQL/results; unsupported ones retain the full-form capability rejection. Negative: no masking, fallback expansion, skipped-provider "pass," or newly supported correlated APPLY.
 - **R159-10 Alias:** first/subsequent marker joins support all seven operators and infer named and anonymous CTE projections. Negative: no need to read descriptor internals or accidentally recognize an unrelated type named `Cte`.
 - **R159-11 Guards:** required reference arguments fail explicitly and before source/factory work. Negative: no delayed null dereference; optional nullable options remain accepted.
-- **R159-12 Boundaries:** flat positional/alias slots stop at eight; positional-after-alias rejection and existing source restrictions remain. Negative: no `Item9`, new CteReference overload, or changed legacy fallback semantics.
+- **R159-12 Boundaries (rv=1 — SUPERSEDED by R159-12' in §18):** flat positional/alias slots stop at eight; positional-after-alias rejection and existing source restrictions remain. Negative: no `Item9`, new CteReference overload, or changed legacy fallback semantics. **[superseded r=2]** the "no changed legacy fallback semantics" negative is replaced by R159-12': a TableAlias join is authorized to resolve an explicit joined source through `JoinSourceResolver`, while a plain mapped entity keeps the metadata fallback. Historical text retained unweakened; see §18.
 - **R159-13 Documentation/build:** EN+RU examples, XML docs, registry, warning-free build, and CRLF are complete. Negative: no CS1591, mixed endings, public links to internal specs, or unrecorded public addition.
 - **R159-14 Verification:** branch-delta, mutation, red→green, container-backed integration, and measured coverage obligations pass. Negative: absent/stale reports, zero selected tests, surviving non-equivalent P1 mutants, and provider skips do not count.
 
@@ -358,9 +358,57 @@ Evidence root n=3: `TestResults/pdca/D159/r1/n3/` (alias `$E`).
 |---|---|---|---|---|---|
 | 2026-10-07T18:07Z | ACT | r1 | n3/3 | **Footprint KEEP decision:** both temporary fixtures are inside the D159 plan footprint — §5 lists `tests/nextorm.alias.tests/{…,AliasProjectionShapeTests,…}.cs` and `tests/nextorm.{postgres,sqlserver,mysql,mariadb,clickhouse}.tests/DirectCteJoinTests.cs`; both kept as permanent regression tests, no revert | plan §5 |
 | 2026-10-07T18:07Z | ACT | r1 | n3/3 | **E159-07 / R159-07 closed + kept:** observable `JoinOptions.WithJoinHint("loop")` forwarded through `EntityBuilder.cs:2579-2584` → `JoinCore`; red exit 2 (dropped delegate) → green exit 0 (hint rendered, converted form identical); fixture `DirectCteJoinTests.Direct_typed_cte_join_forwards_the_options_callback` made permanent | `$E/E159-07-options.json`, `$E/E159-07-options-red.log`, `$E/E159-07-options.log` |
-| 2026-10-07T18:07Z | ACT | r1 | n3/3 | **E159-12 / R159-12 closed + kept:** positional-after-alias guard `EntityBuilder.cs:3341-3349` rejects at construction; boundary sweep 4/4 pass (`AliasProjectionShapeTests` 3/3 + ninth-slot NORMGEN004 1/1); fixture `Positional_join_cannot_follow_an_alias_join` made permanent | `$E/E159-12-boundaries.json`, `$E/E159-12-guard.log`, `$E/E159-12-boundaries.log` |
+| 2026-10-07T18:07Z | ACT | r1 | n3/3 | **E159-12 / R159-12 closed + kept:** positional-after-alias guard `EntityBuilder.cs:3341-3349` rejects at construction; boundary sweep 4/4 pass (`AliasProjectionShapeTests` 3/3 + ninth-slot NORMGEN004 1/1); fixture `Positional_join_cannot_follow_an_alias_join` made permanent. **[superseded r=2]** the rv=1 "no changed legacy fallback semantics" closure is superseded by **R159-12'** (§18): explicit joined sources are authorized via `JoinSourceResolver` (raw SQL / Table override / derived / TVF / `Cte<T>`), a plain mapped entity keeps the metadata fallback. | `$E/E159-12-boundaries.json`, `$E/E159-12-guard.log`, `$E/E159-12-boundaries.log` |
 | 2026-10-07T18:07Z | ACT | r1 | n3/3 | **E159-01 / R159-01 equivalence recorded:** direct==converted delegation map (`EntityBuilder.cs:2570-2712`/`:4303-4360`/`:2885-2897`, generator), counts core **13/0**, sqlite **6/0**, sqlserver **7/0**, integration **16/0** | `$E/E159-01-equivalence.json`, `$E/E159-01-{core,sqlite,sqlserver,integration}.log` |
 | 2026-10-07T18:07Z | ACT | r1 | n3/3 | **E159-20 not-impacted (semantic):** no streaming-terminal file in the D159 diff scope (`EntityBuilder.cs`, `JoinedEntityBuilder.cs`, `JoinAliasGenerator.cs`, `AnalyzerReleases.Unshipped.md`); applicability audit observes no changed streaming terminal | `$E/E159-09-capabilities.json` |
 | 2026-10-07T18:07Z | ACT | r1 | n3/3 | Committed only the intended footprint files (two permanent tests + this status doc) with `#159 add options-forwarding and positional-after-alias regressions`; no `-A`, no push | commit sha in §17 note |
 
 **Commit:** `#159 add options-forwarding and positional-after-alias regressions` — kept tests `tests/nextorm.sqlserver.tests/DirectCteJoinTests.cs` + `tests/nextorm.alias.tests/AliasProjectionShapeTests.cs` and this status file only; `git status --short -- src tests` empty afterwards.
+
+## 18. Replan r=2 (supersedes rv=1)
+
+**Durable state:** Current cycle **N=1**; Plan revision **r=2**; Attempt **n=1/3** (revision reset — r=1/n=3 was exhausted; r=2 starts n=1); event phase **DO**; `tier=cheap`; HEAD `6b1eb9ef` (branch `1.0.9-rc2`).
+**Defect history (carried; r=2 never resets it):** `cte-symbol-identity-chainkey` observed r1 n1, fixed r1 n2 (fix 1), resolved. `C1-alias-step-signature-collision` observed r1 n2 (probe), fixed r1 n3 (fix 2), resolved. `C6-explicit-generic-iscte-vs-joined` observed r1 n2 (masked), promoted + closed r1 n3. Follow-up **#206** open for the last-step-`JoinedType` class only. r=2 applies no fix and records no new defect: the rv=1→rv=2 delta is a **contract revision**, not a product defect.
+
+### 18.1 Supersession statement
+
+r=2 replaces **only** acceptance criterion **R159-12** with **R159-12'**. Every other R159 criterion, every obligation and every evidence-row ID (`E159-01`…`E159-21`) is **retained unchanged and unweakened**, re-bound to contract revision **rv=2**. Supersession does not discard r=1 DO work or unfinished acceptance criteria. **No product `src` change is authorized in r=2:** `src/**` is frozen at HEAD `6b1eb9ef`; r=2 touches only tests, EN/RU docs and this status file.
+
+- **R159-12' (supersedes R159-12; rv=2, P1):** "TableAlias-join uses `JoinSourceResolver` (as `JoinedEntityBuilder`); explicit sources (raw SQL / Table override / derived / TVF / `Cte<T>`) are resolved faithfully; plain mapped entity keeps the metadata fallback. Boundaries unchanged: slot ceiling 8, no `Item9`, no `CteReference` overload."
+
+### 18.2 Row closures and re-binding
+
+- **E159-12 / R159-12 → closed via R159-12' (rv=2).** The "changed legacy fallback semantics" negative is withdrawn: legacy fallback **is** the mapped fallback (with no explicit source the joined type resolves through `QueryPlanner.GetFrom` metadata). The pre-r=2 behaviour ignored explicit sources and threw for CTE projections at `QueryPlanner.cs:831` (unregistered type). Explicit sources are now resolved faithfully through `JoinSourceResolver.Resolve` (`EntityBuilder.cs:4478`). Boundary negatives retained unchanged: slot ceiling 8, no `Item9`, no `CteReference` overload (Finding B).
+- **E159-20 / R159-C03 → closed (rv=2), applicability observed at r=2.** The join-`From` affects join SQL/column binding only (`QueryCommand.QueryPreparer.cs:1153` `PrepareFrom(join.From, …)`; `:1384-1422` `InjectJoinFilters`). The streaming/buffering path is chosen at the **call terminal**, not by the join source — terminals `ToAsyncEnumerable` (`QueryCommand.TResult.cs:114,120`), `Pipeline` (`:92,101`), `ToStreamAsync` (`QueryCommandExtensions.cs:124`) — and r=2 leaves them untouched. Recorded predicate: no streaming-terminal file is in the r=2 footprint, so no streaming-specific check is triggered; the applicability audit itself is recorded.
+- **E159-17 / R159-01..14 → closed as dependent (rv=2).** Its completeness gate is satisfied by this r=2 contract reconciliation, which depends on the E159-12 and E159-20 closures above; the reconciliation ledger is re-bound to rv=2.
+- **All other rows (`E159-01..E159-11`, `E159-13..E159-16`, `E159-18`, `E159-19`, `E159-21`) → retained rv=2, obligations/priorities unchanged.** r=1 evidence stays valid where the tested bytes are unchanged (the r1→r2 HEAD delta is doc/test-only: `6b1eb9ef` changed only tests + this status file on top of the r1/n3-covered `9bc57ad1`).
+
+### 18.3 New r=2 rows (rv=2, all P1)
+
+| Row ID / requirement ID | Required check/scenario; evidence kinds/sources | Invocation and required result | Additional artifacts | Owner | Observable applicability predicate |
+|---|---|---|---|---|---|
+| E159-R2-SA / R159-12' | TableAlias-receiver `SemiJoin`/`AntiJoin` stay on `GetFrom(typeof(TJoinEntity))` (`EntityBuilder.cs:4448,4462`) and do **not** route the joined builder's explicit source through `JoinSourceResolver`; an explicit/derived joined source is ignored and the mapped table is joined | C-CORE filtered: `TypedCte_TableAliasReceiver_SemiAntiJoin_ShouldKeepEntityMetadataFallback`; exit 0, 1 test, 0 failed | `$E2/D-r2-1-sa-tvf.log` | core | **Unconditional**; observed = each Semi/Anti join `From` has no `SubQuery`/`TableFunction` and `Table` = mapped table |
+| E159-R2-TVF / R159-12' | TableAlias-receiver generic `Join` resolves a TVF `_from` via `JoinSourceResolver` (`JoinSourceResolver.cs:11-14`, `EntityBuilder.cs:4478`); the join's `From.TableFunction` is the TVF, not metadata | C-CORE filtered: `TypedCte_TableAliasReceiver_TableValuedFunctionSource_ShouldUseJoinedSource`; exit 0, 1 test, 0 failed | `$E2/D-r2-1-sa-tvf.log` | core | **Unconditional**; observed = join `From.TableFunction.Name` = `typed_cte_tvf` |
+
+### 18.4 r=2 DO units
+
+- **D:r2-1 — characterizing tests, test-only.** Roslyn/text-check whether SA/TVF characterizing tests already exist; add the missing E159-R2-SA / E159-R2-TVF tests in the existing `tests/nextorm.core.tests/TypedCteTests.cs` C3 regression area; run filtered. If a test reveals an actual changed Semi/Anti or TVF behaviour, **STOP** — fixing product code is a new milestone-1.0.9-rc2 slice, not r=2.
+- **D:r2-2 — docs.** EN+RU `docs/guide/02-joins.md`: "TableAlias join now honours an explicit source" / «TableAlias join теперь учитывает явно заданный источник», naming the supported explicit sources (raw SQL / Table override / derived / TVF / `Cte<T>`) and the mapped fallback. No public `docs/specs` links.
+- **D:r2-3 — status.** Mark historical R159-12 superseded (near §2 `:41`) and point the r=1 E159-12/R159-12 closure (near `:361`) at R159-12' + the mapped-fallback/explicit-source distinction.
+
+### 18.5 V2 verification
+
+- **C-V2:** `dotnet test tests/nextorm.{core,sqlite,sqlserver,postgres,mysql,clickhouse,alias}.tests -c Debug`, each **exit 0**, **0 failed**; logs under `TestResults/pdca/D159/r2/`.
+- No coverage/perf re-run: r=2 changes tests, docs and this status file only; `src/**` is byte-identical to the r=1/n3-covered `9bc57ad1` (`git diff --stat 9bc57ad1..6b1eb9ef -- src` empty).
+
+### 18.6 r=2 progress log
+
+| UTC time | phase | revision | iteration | event | evidence pointer |
+|---|---|---|---|---|---|
+| 2026-10-07T18:19Z | PLAN | r2 | n1/3 | r=2 persisted: §18 added; durable state N=1 r=2 n=1/3; supersession of rv=1 (only R159-12 → R159-12'); E159-12/E159-20/E159-17 closed; new E159-R2-SA/E159-R2-TVF | this section |
+| 2026-10-07T18:19Z | DO | r2 | n1/3 | D:r2-1 tests: no prior SA/TVF characterizing test found; both added to `TypedCteTests.cs`; filtered run exit 0, 2 total / 0 failed / 0 skipped (no changed Semi/Anti or TVF behaviour observed) | `$E2/D-r2-1-sa-tvf.log` |
+| 2026-10-07T18:19Z | DO | r2 | n1/3 | D:r2-2 docs: EN `guide/02-joins.md` + RU mirror note "TableAlias join honours an explicit source"; no public specs links | `git diff --stat` |
+| 2026-10-07T18:19Z | DO | r2 | n1/3 | D:r2-3 status: historical R159-12 marked superseded near `:41`; r=1 closure near `:361` pointed at R159-12' + mapped-fallback/explicit-source distinction | this section |
+| 2026-10-07T18:20Z | DO | r2 | n1/3 | **V2 verification green:** core 1756/0, sqlite 1159/0 (1 skipped pre-existing), sqlserver 723/0, postgres 801/0, mysql 302/0, clickhouse 590/0, alias 46/0 — all exit 0, 0 failed | `$E2/V2-*.log` |
+
+Evidence root r=2: `TestResults/pdca/D159/r2/` (alias `$E2`).

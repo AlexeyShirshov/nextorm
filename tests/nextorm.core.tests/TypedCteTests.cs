@@ -1106,6 +1106,9 @@ public class TypedCteTests
         public long Id { get; set; }
     }
 
+    [SqlTableFunction("typed_cte_tvf")]
+    private static IQueryable<TypedCteEntity> TypedCteRows() => throw new NotSupportedException();
+
     [Fact]
     public void TypedCte_TableAliasReceiver_PlainTypedJoin_ShouldUseEntityMetadata()
     {
@@ -1166,6 +1169,58 @@ public class TypedCteTests
             .Select(p => p.Item2.Id));
 
         sql.Should().Contain("typed_cte_ta_override");
+    }
+
+    // E159-R2-TVF: the TableAlias receiver's generic JoinCore resolves the joined builder's explicit
+    // `_from` through JoinSourceResolver, so a table-valued function source reaches the join instead of
+    // being replaced by entity metadata (JoinSourceResolver.cs:11-14, EntityBuilder.cs:4478).
+    [Fact]
+    public void TypedCte_TableAliasReceiver_TableValuedFunctionSource_ShouldUseJoinedSource()
+    {
+        using var ctx = new TestContext();
+
+        var tvf = ctx.FromTableFunction(() => TypedCteRows());
+
+        var cmd = ctx.From("typed_cte_entity")
+            .Join(tvf, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(p => p.Item2.Id);
+
+        cmd.PrepareCommand(false, CancellationToken.None);
+        var join = cmd.Joins.Should().ContainSingle().Subject;
+        join.From.Should().NotBeNull();
+        join.From!.TableFunction.Should().NotBeNull();
+        join.From!.TableFunction!.Name.Should().Be("typed_cte_tvf");
+    }
+
+    // E159-R2-SA: Semi/Anti on the TableAlias receiver stay on the metadata fallback
+    // (`GetFrom(typeof(TJoinEntity))` - EntityBuilder.cs:4448,4462) and do not route the joined
+    // builder's explicit source through JoinSourceResolver. A derived-query source used as the joined
+    // builder is therefore ignored by Semi/Anti: the join reads the mapped table, not the subquery.
+    [Fact]
+    public void TypedCte_TableAliasReceiver_SemiAntiJoin_ShouldKeepEntityMetadataFallback()
+    {
+        using var ctx = new TestContext();
+
+        var derived = ctx.From<TypedCteEntity>().Where(x => x.Id > 0).ToCommand();
+        var bound = ctx.From(derived);
+
+        var semi = ctx.From("typed_cte_entity")
+            .SemiJoin(bound, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(t => t.GetInt64("Id"));
+        var anti = ctx.From("typed_cte_entity")
+            .AntiJoin(bound, (t, b) => t.GetInt64("Id") == b.Id)
+            .Select(t => t.GetInt64("Id"));
+
+        semi.PrepareCommand(false, CancellationToken.None);
+        anti.PrepareCommand(false, CancellationToken.None);
+
+        foreach (var join in new[] { semi.Joins.Should().ContainSingle().Subject, anti.Joins.Should().ContainSingle().Subject })
+        {
+            join.From.Should().NotBeNull();
+            join.From!.SubQuery.Should().BeNull();
+            join.From!.TableFunction.Should().BeNull();
+            join.From!.Table.Should().Be("typed_cte_entity");
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
