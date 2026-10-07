@@ -1,71 +1,166 @@
 {
   "unit": "D160",
   "scope": {
-    "projects": ["tests/nextorm.alias.tests"],
+    "projects": [
+      "tests/nextorm.alias.tests",
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests"
+    ],
     "selectors": [
       "FullyQualifiedName~JoinAlias",
       "FullyQualifiedName~Alias",
-      "FullyQualifiedName~RootAlias"
+      "FullyQualifiedName~RootAlias",
+      "FullyQualifiedName~RootProjectionTests",
+      "FullyQualifiedName~JoinAliasSqlGenerationTests"
     ],
     "files": [
       "src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs",
       "src/nextorm.core/Builders/Projection.cs",
       "src/nextorm.core/Builders/EntityBuilder.cs",
       "tests/nextorm.alias.tests/MixedJoinChainTests.cs",
-      "tests/nextorm.alias.tests/RootAliasTests.cs"
+      "tests/nextorm.alias.tests/RootAliasTests.cs",
+      "tests/nextorm.core.tests/RootProjectionTests.cs",
+      "tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs"
     ],
     "rebuild": "affected",
     "boundary": "DO\u2192CHECK: full `dotnet test tests/nextorm.alias.tests -c Debug`; full `tests/nextorm.core.tests`; six provider SQL test projects; integration via DOCKER_HOST; acceptance benchmarks",
-    "rationale": "Modified generator/core alias behavior is exercised by the alias test project; mixed-chain/root scenarios are the changed behavior."
+    "rationale": "D160 session 2 adds core projection (Projection<T1> dim-1/Extend/arity-8-cap/in-memory) tests and six-provider root-alias (.WithAlias(Alias.Root)) SQL cases; modified generator/core alias behavior is exercised by the alias project boundary sweep."
   },
   "amendments": [
     {
-      "reason": "r=2 Phase-1 checkpoint: the affected mixed-chain class is the changed behavior; added before running and validated by this report.",
-      "added_selectors": ["FullyQualifiedName~MixedJoinChainTests"],
+      "reason": "Session 2 adds tests/nextorm.core.tests/RootProjectionTests.cs and root-alias rows to the six providers' JoinAliasSqlGenerationTests.cs; their selectors are validated before the first run.",
+      "added_selectors": [
+        "FullyQualifiedName~RootProjectionTests",
+        "FullyQualifiedName~JoinAliasSqlGenerationTests"
+      ],
       "validated_before_run": true
     },
     {
-      "reason": "r=2 Phase-1 checkpoint: the receiver static-type binding negative lives in AliasProjectionShapeTests; added before running and validated by this report.",
-      "added_selectors": ["FullyQualifiedName~AliasProjectionShapeTests"],
+      "reason": "Session 2 verification re-runs the mixed positional/alias chain surface (the Phase-1 changed behavior) filtered before the single broad alias boundary sweep; selector validated before the first run.",
+      "added_selectors": [
+        "FullyQualifiedName~MixedJoinChainTests"
+      ],
       "validated_before_run": true
     }
   ],
   "executions": [
     {
-      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
-      "phase": "boundary",
-      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
-      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "command": ["dotnet", "build", "tests/nextorm.core.tests", "-c", "Debug"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
       "exit_code": 0,
       "selected_count": 1,
-      "log": "docs/specs/status/rc2-160-evidence/E160-07/build.log"
+      "log": "docs/specs/status/rc2-160-evidence/E160-03/core-build.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--filter", "FullyQualifiedName~RootProjectionTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 11,
+      "log": "docs/specs/status/rc2-160-evidence/E160-03/core-filtered.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 13,
+      "log": "docs/specs/status/rc2-160-evidence/E160-02/sqlite-join-alias.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-160-evidence/E160-02/postgres-join-alias.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-160-evidence/E160-02/sqlserver-join-alias.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-160-evidence/E160-02/mysql-join-alias.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-160-evidence/E160-02/mariadb-join-alias.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-160-evidence/E160-02/clickhouse-join-alias.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--filter", "FullyQualifiedName~RootAlias"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 13,
+      "log": "docs/specs/status/rc2-160-evidence/E160-05/root-alias-filtered.log"
     },
     {
       "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--filter", "FullyQualifiedName~MixedJoinChainTests"],
       "phase": "inner",
-      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
-      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
       "exit_code": 0,
       "selected_count": 7,
-      "log": "docs/specs/status/rc2-160-evidence/E160-15/mixed-filtered2.log"
-    },
-    {
-      "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--filter", "FullyQualifiedName~AliasProjectionShapeTests"],
-      "phase": "inner",
-      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
-      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
-      "exit_code": 0,
-      "selected_count": 3,
-      "log": "docs/specs/status/rc2-160-evidence/E160-20/shape-filtered.log"
+      "log": "docs/specs/status/rc2-160-evidence/E160-05/mixed-filtered.log"
     },
     {
       "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug"],
       "phase": "boundary",
-      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
-      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
       "exit_code": 0,
-      "selected_count": 53,
+      "selected_count": 71,
       "log": "docs/specs/status/rc2-160-evidence/E160-01/alias-boundary.log"
+    },
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@15b431b9+dirty",
+      "artifact_revision": "1.0.9-rc2@15b431b9+dirty",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "docs/specs/status/rc2-160-evidence/E160-07/build.log"
     }
   ]
 }
