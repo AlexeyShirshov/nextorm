@@ -215,6 +215,11 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | 2026-10-08T00:05:36Z | DO | r2 | n1/3 | D:160-01 closed to green checkpoint; D:160-04(partial: audit + binding/shadowing/collision evidence) closed; remaining: E160-02/03/06/08/09/10/11/13/14/21/23/24 at DO→CHECK boundary + Phase 2 | this file §DO ledger |
 | 2026-10-08T00:17:03Z | DO | r2 | n1/3 | D:160-02 dim-1 spike closed green: `dotnet build tests/nextorm.alias.tests -c Debug` exit 0, 0 warnings/0 errors; `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 3, passed 3, failed 0; root slot 1→t1; zero-join SQL `select Id from orders`; root+join SQL `select t2.Id from orders as 't1' join person as 't2' on t1.BuyerId = t2.Id`; Extend dim-1→`Projection<T1,T2>` | rc2-160-evidence/E160-14/spike.log |
 | 2026-10-08T00:17:03Z | DO | r2 | n1/3 | zero-join planner finding recorded as resolved-by-AliasRoot for CHECK (`QueryPlanner.GetFrom` unwraps `Item1` only when `Joins.Length > 0`; AliasRoot materializes the mapped root's explicit FromExpression) — not a DO→PLAN blocker; D:160-03 root-alias NOT started this session | this file §D:160-02 dim-1 spike |
+| 2026-10-08T00:40:00Z | DO | r2 | n1/3 | root-receiver positional binding: generator seeds generated `new` instance transition methods on the root-alias receiver (`AliasJoin_A1_X<T>`) for all seven operators, mirroring the Phase-1 mechanism; `Generated_root_alias_supports_a_positional_join_after_it` green (filter selected 1, passed 1, exit 0); full RootAliasTests filter selected 13, passed 10, failed 3 (the three derived-root tests, expected red) | rc2-160-evidence/E160-ROOT-CONTRACT/positional-after-root-alias.log, rc2-160-evidence/E160-ROOT-CONTRACT/root-alias-tests.log |
+| 2026-10-08T00:40:00Z | DO | r2 | n1/3 | solution build `dotnet build nextorm.slnx -c Debug` exit 0, 0 warnings / 0 errors; alias suite `dotnet test tests/nextorm.alias.tests -c Debug` exit 2, selected 71, passed 68, failed 3 (only the expected derived-root tests); frozen generated-surface baseline updated for the new root-alias types (A1_Root, A1_Root_A2_Buyer, A1_Root_P2) | rc2-160-evidence/E160-ROOT-CONTRACT/ |
+| 2026-10-08T00:40:00Z | DO | r2 | n1/3 | P:160-ROOT-CONTRACT comparative evidence recorded (facts only): FromSql aliased works at runtime (derived source preserved as `(select …) as 't1'`, test over-strict on `orders as 't1'`); From(builder) and QueryCommand aliased throw `NotSupportedException` at `EntityBuilder.cs:3465`; all three unaliased baselines return `ids=[10]`; option (i)/(ii)/(iii) NOT selected | rc2-160-evidence/E160-ROOT-CONTRACT/comparative.md |
+| 2026-10-08T00:40:00Z | DO | r2 | n1/3 | D:160-03 remaining: derived-root root-contract decision (From(builder)/QueryCommand) + docs/API-NAMING register (E160-24) + six-provider SQL, integration, coverage, benchmarks deferred to later sessions; core `EntityBuilder.cs:3464-3466` guard kept unchanged | this file §Root-receiver binding and §P:160-ROOT-CONTRACT |
+| 2026-10-08T00:42:15Z | DO | r2 | n1/3 | checkpoint commit of D:160-03 root-receiver generator + alias tests + status + E160-ROOT-CONTRACT evidence; re-verified build exit 0 (0 warnings/0 errors) and alias suite exit 2, selected 71 / passed 68 / failed 3 — the 3 derived-root tests (`Generated_root_alias_on_a_fromsql_source_keeps_the_derived_source`, `Generated_root_alias_on_a_builder_source_keeps_the_source`, `Generated_root_alias_on_a_query_command_source_keeps_the_derived_query`) are intentionally UNRESOLVED pending the planner decision | rc2-160-evidence/E160-ROOT-CONTRACT/checkpoint-build.log, rc2-160-evidence/E160-ROOT-CONTRACT/checkpoint-alias-tests.log |
 
 ### Inherited collection evidence rows (verbatim; do not invent/ N/A except C-E04 single-group)
 - **C-E01 / truthful admission** — check: "Validate admission snapshot for milestone `1.0.9-rc2`: 26 open issues, 24 admitted `ready`, D171/D172 excluded-gap and still OPEN in the milestone." — owner: collection CHECK — applicability: "at admission; re-check exclusions at completion".
@@ -274,6 +279,35 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 - Root+join: `select t2.Id from orders as 't1' join person as 't2' on t1.BuyerId = t2.Id`.
 - Classification: **resolved-by-AliasRoot**, not a DO→PLAN blocker. CHECK treats D:160-02 as closed.
 - Evidence: `docs/specs/status/rc2-160-evidence/E160-14/spike.log`.
+
+### Root-receiver positional binding (session 2026-10-08T00:40Z)
+
+- `JoinAliasGenerator.cs` now seeds generated positional transitions for every root alias
+  (`rootAliases`), reusing the Phase-1 `RenderPositionalMethods` mechanism. For each root alias the
+  generator emits `new` instance `Join/LeftJoin/RightJoin/FullJoin/CrossJoin/CrossApply/OuterApply`
+  methods on `AliasJoin_A1_<X><T>` (plus the `A1_<X>_P2` projection/builder pair) so that a positional
+  `.Join(...)` after `.WithAlias(Alias.X)` binds to the generated receiver and routes through the
+  `JoinAlias` seam instead of the inherited `EntityBuilder<TEntity>.Join` (`EntityBuilder.cs:2499`,
+  which throws at `EntityBuilder.cs:3412-3414`). Names/signatures of existing generated methods are
+  unchanged; the addition is a new, intended public-surface expansion.
+- `AliasGeneratedSurfaceTests.Generated_public_type_set_is_frozen` updated with the six new names
+  (`AliasJoin_A1_Root`/`AliasJoin_A1_Root_A2_Buyer`/`AliasJoin_A1_Root_P2` and projections), and the
+  over-specified `Contain("Item1")` assertion in the diagnostic harness replaced by the real generated
+  contract (`[JoinSlot(1)] public T1 Root => throw …`); `Item1` is inherited from `Projection<T1>`.
+- Evidence: `rc2-160-evidence/E160-ROOT-CONTRACT/positional-after-root-alias.log` (green),
+  `root-alias-tests.log` (13 selected / 10 passed / 3 expected derived-root failures).
+
+### P:160-ROOT-CONTRACT — derived-root comparative evidence (facts only; no option selected)
+
+- Full comparative record: `rc2-160-evidence/E160-ROOT-CONTRACT/comparative.md`.
+- Summary: unaliased baselines for `FromSql` / `From(builder)` / `From(QueryCommand<T>)` all work
+  (`ids=[10]`). With `.WithAlias(Alias.Root)`:
+  - `FromSql` works at runtime and preserves the derived source; the red test is over-strict on the
+    SQL substring (`orders as 't1'` vs the correct `(select …) as 't1'`).
+  - `From(builder)` and `From(QueryCommand<T>)` throw `NotSupportedException` at
+    `EntityBuilder.cs:3465` (`ResolveJoinBase`, guard `:3464-3466`).
+- Core guard `EntityBuilder.cs:3464-3466` kept unchanged; the four derived-root test expectations were
+  NOT changed this session. Option (i)/(ii)/(iii) selection is the next planner decision.
 
 ### DO→CHECK boundary gate commands (must actually run at the DO→CHECK boundary; NOT run at this Phase-1 checkpoint)
 - B (done green at checkpoint): `dotnet build nextorm.slnx -c Debug` → E160-07.

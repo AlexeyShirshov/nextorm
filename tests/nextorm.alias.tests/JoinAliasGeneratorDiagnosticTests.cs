@@ -81,6 +81,59 @@ public class JoinAliasGeneratorDiagnosticTests
     }
 
     [Fact]
+    public void Root_alias_emits_a_dim1_projection_and_a_withalias_extension()
+    {
+        var harness = RunDiagnosticCase("var q = orders.WithAlias(Alias.Root);");
+
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+        generated.Should().Contain("class AliasProjection_A1_Root<T1> : global::NextORM.Core.Projection<T1>");
+        generated.Should().Contain("AliasJoin_A1_Root<T1>");
+        generated.Should().Contain("WithAlias<T>");
+        generated.Should().Contain("AliasRoot<");
+        // The root alias names slot 1; Item1 is inherited from Projection<T1> and the generated alias
+        // member is expression-only (slot 1), so the generated text carries the slot attribute + member.
+        generated.Should().Contain("[global::NextORM.Core.JoinSlot(1)]");
+        generated.Should().Contain("public T1 Root => throw new global::System.NotSupportedException();");
+    }
+
+    [Fact]
+    public void WithAlias_after_a_join_reports_NORMGEN008()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer).WithAlias(Alias.Root);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN008", "Alias.Root");
+    }
+
+    [Fact]
+    public void Repeated_WithAlias_reports_NORMGEN008_on_the_second_root_alias()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.WithAlias(Alias.First).WithAlias(Alias.Second);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN008", "Alias.Second");
+    }
+
+    [Fact]
+    public void Root_alias_colliding_with_a_retained_ItemN_reports_NORMGEN002()
+    {
+        var harness = RunDiagnosticCase("var q = orders.WithAlias(Alias.Item1);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN002", "Alias.Item1");
+    }
+
+    [Fact]
+    public void Root_alias_duplicating_a_join_alias_reports_NORMGEN001()
+    {
+        var harness = RunDiagnosticCase(
+            "var q = orders.WithAlias(Alias.X).Join<Person>(people, (a, b) => true, Alias.X);");
+
+        AssertSingleDiagnostic(harness, "NORMGEN001", "Alias.X");
+    }
+
+    [Fact]
     public void Non_normalizable_assembly_name_reports_NORMGEN006()
     {
         const string body = "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer);";

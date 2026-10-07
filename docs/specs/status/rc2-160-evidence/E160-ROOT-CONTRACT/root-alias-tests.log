@@ -1,0 +1,46 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+failed NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_fromsql_source_keeps_the_derived_source (317ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Expected last "select t2.Id from (select Id, BuyerId from orders) as 't1' join person as 't2' on t1.BuyerId = cast(t2.Id as bigint)" to contain "orders as 't1'".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_fromsql_source_keeps_the_derived_source() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/RootAliasTests.cs:209
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_builder_source_keeps_the_source (23ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.NotSupportedException : A derived query as the primary FROM source can be joined only once; add further joins to the derived query instead.
+    at NextORM.Core.EntityBuilder`1.ResolveJoinBase() in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:3465
+    at NextORM.Core.EntityBuilder`1.ResolveAliasJoinBase() in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:3487
+    at NextORM.Core.EntityBuilder`1.JoinAliasEntity[TNext,TNextEntity,TJoinEntity](Func`2 create, EntityBuilder`1 _, LambdaExpression joinCondition, JoinType joinType, Action`1 options) in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:3001
+    at NextORM.Core.EntityBuilder`1.JoinAlias[TNext,TNextEntity,TJoinEntity](Func`2 create, EntityBuilder`1 _, Expression`1 joinCondition, JoinType joinType, Action`1 options) in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:2837
+    at NextORM.Generated.nextorm_alias_tests.JoinAliasExtensions.Join[TJoin](AliasJoin_A1_Root`1 self, EntityBuilder`1 _, Expression`1 condition, BuyerMarker marker) in /home/alex/sources/nextorm/tests/nextorm.alias.tests/obj/linux/Debug/net10.0/nextorm.core.sourcegenerator/NextORM.Core.SourceGenerator.JoinAliasGenerator/JoinAlias.g.cs:279
+    at NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_builder_source_keeps_the_source() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/RootAliasTests.cs:250
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_query_command_source_keeps_the_derived_query (19ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.NotSupportedException : A derived query as the primary FROM source can be joined only once; add further joins to the derived query instead.
+    at NextORM.Core.EntityBuilder`1.ResolveJoinBase() in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:3465
+    at NextORM.Core.EntityBuilder`1.ResolveAliasJoinBase() in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:3487
+    at NextORM.Core.EntityBuilder`1.JoinAliasEntity[TNext,TNextEntity,TJoinEntity](Func`2 create, EntityBuilder`1 _, LambdaExpression joinCondition, JoinType joinType, Action`1 options) in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:3001
+    at NextORM.Core.EntityBuilder`1.JoinAlias[TNext,TNextEntity,TJoinEntity](Func`2 create, EntityBuilder`1 _, Expression`1 joinCondition, JoinType joinType, Action`1 options) in /home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs:2837
+    at NextORM.Generated.nextorm_alias_tests.JoinAliasExtensions.Join[TJoin](AliasJoin_A1_Root`1 self, EntityBuilder`1 _, Expression`1 condition, BuyerMarker marker) in /home/alex/sources/nextorm/tests/nextorm.alias.tests/obj/linux/Debug/net10.0/nextorm.core.sourcegenerator/NextORM.Core.SourceGenerator.JoinAliasGenerator/JoinAlias.g.cs:279
+    at NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_query_command_source_keeps_the_derived_query() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/RootAliasTests.cs:228
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) failed with 3 error(s) (1s 180ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 13
+  failed: 3
+  succeeded: 10
+  skipped: 0
+  duration: 1s 441ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

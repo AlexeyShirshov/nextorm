@@ -24,9 +24,12 @@ public class AliasGeneratedSurfaceTests
     public void Generated_public_type_set_is_frozen()
     {
         // The alias test assembly writes Alias.Buyer / Alias.Approver / Alias.Buyer2 across alias-only and
-        // mixed (alias/positional) chains, so the generator's whole public surface (one marker class, one
-        // builder/projection pair per discovered slot schema, one extension class) is fully deterministic.
+        // mixed (alias/positional) chains, plus the root alias Alias.Root (issue #160 Phase 2), so the
+        // generator's whole public surface (one marker class, one builder/projection pair per discovered
+        // slot schema, one extension class) is fully deterministic.
         // r=2: mixed chains add the P-encoded schemas; the digit alias proves names are not parsed as slots.
+        // Phase 2: the root alias adds A1_Root (root only), A1_Root_A2_Buyer (alias join after it) and
+        // A1_Root_P2 (a generated positional instance transition after the root alias).
         var names = typeof(Alias).Assembly.GetTypes()
             .Where(type => type.Namespace == GeneratedNamespace && !type.IsNested)
             .Where(type => type.Name == "Alias"
@@ -39,12 +42,18 @@ public class AliasGeneratedSurfaceTests
 
         names.Should().Equal(
             "Alias",
+            "AliasJoin_A1_Root_A2_Buyer`2",
+            "AliasJoin_A1_Root_P2`2",
+            "AliasJoin_A1_Root`1",
             "AliasJoin_P1_A2_Buyer2`2",
             "AliasJoin_P1_A2_Buyer_A3_Approver`3",
             "AliasJoin_P1_A2_Buyer_P3_A4_Approver`4",
             "AliasJoin_P1_A2_Buyer_P3`3",
             "AliasJoin_P1_A2_Buyer`2",
             "AliasJoin_P1_P2_A3_Approver`3",
+            "AliasProjection_A1_Root_A2_Buyer`2",
+            "AliasProjection_A1_Root_P2`2",
+            "AliasProjection_A1_Root`1",
             "AliasProjection_P1_A2_Buyer2`2",
             "AliasProjection_P1_A2_Buyer_A3_Approver`3",
             "AliasProjection_P1_A2_Buyer_P3_A4_Approver`4",

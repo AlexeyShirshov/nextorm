@@ -54,6 +54,16 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         "Join", "LeftJoin", "RightJoin", "FullJoin", "CrossJoin", "CrossApply", "OuterApply"
     };
 
+    /// <summary>
+    /// The seven join operators in a stable emission order. A <see cref="HashSet{T}"/> iteration order is
+    /// not a contract, and the synthetic root-alias positional transitions must generate identical output
+    /// for identical inputs (deterministic incremental output), so they are iterated through this array.
+    /// </summary>
+    private static readonly string[] JoinOperatorOrder =
+    {
+        "Join", "LeftJoin", "RightJoin", "FullJoin", "CrossJoin", "CrossApply", "OuterApply"
+    };
+
     private static readonly HashSet<string> ConditionlessOperators = new(StringComparer.Ordinal)
     {
         "CrossJoin", "CrossApply", "OuterApply"
@@ -122,6 +132,15 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         isEnabledByDefault: true,
         description: "A generated extension signature must identify exactly one body; a same-signature/different-body pair would mask a chain-specific difference (issue #206 class) and must fail loudly instead of being silently merged.");
 
+    private static readonly DiagnosticDescriptor WithAliasNotRoot = new(
+        DiagnosticIdPrefix + "008",
+        "WithAlias applied to a non-root source",
+        "WithAlias names the root source (slot 1); the alias '{0}' is applied after a join or a previous root alias",
+        DiagnosticCategory,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "WithAlias is root-only: it must be the first alias step on a plain root source (From<T>, From(string), FromSql, From(Cte<T>), temp table, table function, From(QueryCommand<T>) or a builder), never after a join or a second WithAlias.");
+
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -151,10 +170,16 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
     {
         if (node is not InvocationExpressionSyntax invocation) return false;
         if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess) return false;
-        if (memberAccess.Name is not SimpleNameSyntax name || !JoinOperators.Contains(name.Identifier.ValueText)) return false;
-        if (name is GenericNameSyntax generic && generic.TypeArgumentList.Arguments.Count != 1) return false;
+        if (memberAccess.Name is not SimpleNameSyntax name) return false;
 
         var arguments = invocation.ArgumentList.Arguments;
+
+        if (string.Equals(name.Identifier.ValueText, "WithAlias", StringComparison.Ordinal))
+            return arguments.Count == 1 && IsAliasRootedMemberAccess(arguments[0].Expression);
+
+        if (!JoinOperators.Contains(name.Identifier.ValueText)) return false;
+        if (name is GenericNameSyntax generic && generic.TypeArgumentList.Arguments.Count != 1) return false;
+
         if (arguments.Count is < 1 or > 4) return false;
 
         if (IsAliasRootedMemberAccess(arguments[arguments.Count - 1].Expression)) return true;
@@ -185,6 +210,23 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         var arguments = invocation.ArgumentList.Arguments;
         var lastExpression = arguments[arguments.Count - 1].Expression;
         var location = ToAliasLocation(lastExpression.GetLocation());
+
+        if (string.Equals(operation, "WithAlias", StringComparison.Ordinal))
+        {
+            // Root alias (issue #160, Phase 2): '.WithAlias(Alias.X)' names slot 1 on a plain root
+            // source. The receiver must be a bare root builder; any join or previous root alias is a
+            // misuse reported as NORMGEN008 (the runtime seam keeps the same guard as a failsafe).
+            if (!TryReadAliasArgument(lastExpression, out var rootAlias))
+                return new Candidate(false, string.Empty, null, location);
+
+            var rootReceiver = ResolveChain(memberAccess.Expression, semanticModel, ct);
+            if (rootReceiver is null) return null;
+
+            if (rootReceiver.RootAlias is not null || rootReceiver.Steps.Count > 0)
+                return new Candidate(true, rootAlias, null, location, RootMisuse: true);
+
+            return new Candidate(true, rootAlias, rootReceiver with { RootAlias = rootAlias }, location);
+        }
 
         if (IsAliasRootedMemberAccess(lastExpression))
         {
@@ -242,6 +284,13 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
                 return ResolveChain(parenthesized.Expression, semanticModel, ct);
 
             case InvocationExpressionSyntax invocation:
+                if (TryReadRootAlias(invocation, out var rootReceiver, out var rootAlias))
+                {
+                    var rooted = ResolveChain(rootReceiver, semanticModel, ct);
+                    if (rooted is null || rooted.RootAlias is not null || rooted.Steps.Count > 0) return null;
+                    return rooted with { RootAlias = rootAlias };
+                }
+
                 if (TryReadStep(invocation, semanticModel, ct, out var receiver, out var step))
                 {
                     var previous = ResolveChain(receiver, semanticModel, ct);
@@ -289,6 +338,28 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Reads a root-alias step (<c>.WithAlias(Alias.X)</c>) from an invocation, returning the receiver
+    /// expression and the alias name. Unlike a join step it carries no operator or joined type: it names
+    /// the existing slot 1, so the chain model stores it as <see cref="ChainModel.RootAlias"/>.
+    /// </summary>
+    private static bool TryReadRootAlias(InvocationExpressionSyntax invocation, out ExpressionSyntax receiver, out string alias)
+    {
+        receiver = null!;
+        alias = string.Empty;
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess) return false;
+        if (memberAccess.Name is not SimpleNameSyntax name
+            || !string.Equals(name.Identifier.ValueText, "WithAlias", StringComparison.Ordinal)) return false;
+
+        var arguments = invocation.ArgumentList.Arguments;
+        if (arguments.Count != 1) return false;
+        if (!TryReadAliasArgument(arguments[0].Expression, out alias)) return false;
+
+        receiver = memberAccess.Expression;
+        return true;
     }
 
     /// <summary>Reads one slot step (alias or positional) from an invocation, returning its receiver.</summary>
@@ -526,6 +597,12 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         foreach (var candidate in candidates)
         {
             if (candidate is null) continue;
+            if (candidate.RootMisuse)
+            {
+                diagnostics.Add(Diagnostic.Create(WithAliasNotRoot, ToLocation(candidate.Location), candidate.Alias));
+                continue;
+            }
+
             if (!candidate.Approved)
             {
                 diagnostics.Add(Diagnostic.Create(UnapprovedAliasArgument, ToLocation(candidate.Location)));
@@ -574,8 +651,24 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             }
 
             if (usesSuppressedAlias) continue;
+
+            // A root alias colliding with a retained ItemN member (for example Alias.Item1) is the same
+            // class of collision as for a join alias and is rejected with NORMGEN002.
+            if (chain.RootAlias is not null && IsItemAlias(chain.RootAlias, chain.Steps.Count + 1))
+            {
+                diagnostics.Add(Diagnostic.Create(AliasCollision, ToLocation(aliasLocations[chain.RootAlias]), chain.RootAlias, chain.RootAlias));
+                continue;
+            }
+
             if (ValidateChain(chain, diagnostics)) validChains.Add(chain);
         }
+
+        var rootAliases = validChains
+            .Where(static c => c.RootAlias is not null)
+            .Select(static c => c.RootAlias!)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static a => a, StringComparer.Ordinal)
+            .ToList();
 
         // Collect every used schema (root + prefixes up to the full chain) and every observed transition.
         var schemas = new Dictionary<string, SchemaInfo>(StringComparer.Ordinal);
@@ -610,6 +703,32 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             }
         }
 
+        // Root alias (Phase 2): '.WithAlias(Alias.X)' names slot 1 on a plain root. A subsequent
+        // positional join carries no marker to select a generated extension, and the inherited
+        // EntityBuilder<TEntity>.Join/Apply instance method is applicable, so it must be hidden by a
+        // generated 'new' instance method on the root receiver. Unlike a join-anchored positional step,
+        // the call site cannot be observed when the receiver is stored in a variable, so the full
+        // operator set is emitted for every root alias. This keeps one positional-after-alias mechanism
+        // (RenderPositionalMethods) for both an alias step and a root alias.
+        foreach (var rootAlias in rootAliases)
+        {
+            var rootChain = new ChainModel(string.Empty, rootAlias, EquatableArray<ChainStep>.Empty);
+            var rootSchema = BuildSchema(rootChain, 0);
+            schemas[rootSchema.Suffix] = rootSchema;
+
+            foreach (var operation in JoinOperatorOrder)
+            {
+                var conditionless = ConditionlessOperators.Contains(operation);
+                var step = new ChainStep(StepKind.Positional, string.Empty, string.Empty, operation, conditionless, false, default);
+                var nextSchema = BuildSchema(Append(rootChain, step), 1);
+                schemas[nextSchema.Suffix] = nextSchema;
+
+                var key = rootSchema.Suffix + ">>P:" + operation + ":" + (conditionless ? "1" : "0");
+                if (!positionalTransitions.ContainsKey(key))
+                    positionalTransitions[key] = new PositionalTransition(rootSchema, step);
+            }
+        }
+
         var emitter = new StringBuilder();
         emitter.AppendLine("// <auto-generated />");
         emitter.AppendLine("#nullable disable");
@@ -619,7 +738,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
         AppendAliasMarker(emitter, generatedNamespace, aliasNames.Where(alias => !suppressedAliases.Contains(alias)).ToList());
         AppendTypes(emitter, generatedNamespace, schemas, positionalTransitions);
-        AppendExtensions(emitter, generatedNamespace, aliasTransitions, diagnostics);
+        AppendExtensions(emitter, generatedNamespace, aliasTransitions, rootAliases, diagnostics);
 
         emitter.AppendLine("}");
         context.AddSource("JoinAlias.g.cs", SourceText.From(emitter.ToString(), Encoding.UTF8));
@@ -897,6 +1016,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         StringBuilder emitter,
         string generatedNamespace,
         Dictionary<string, AliasTransition> aliasTransitions,
+        List<string> rootAliases,
         List<Diagnostic> diagnostics)
     {
         // #159 C1: two distinct chains can legitimately emit the same extension method when they differ
@@ -926,12 +1046,51 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             methods.Add(method);
         }
 
+        // Root alias: one generic extension per root name. It is generic over the entity type, so a
+        // single method covers every root source (mapped entity, raw table, FromSql, CTE, temp table,
+        // table function, QueryCommand, builder) uniformly; the runtime AliasRoot seam preserves the
+        // source state. Emitted after the join overloads; signatures are unique per root name.
+        foreach (var rootAlias in rootAliases)
+        {
+            var rendered = new StringBuilder();
+            var signature = RenderWithAliasExtension(rendered, generatedNamespace, rootAlias);
+            if (seenSignatures.ContainsKey(signature)) continue;
+            var method = rendered.ToString();
+            seenSignatures[signature] = method;
+            methods.Add(method);
+        }
+
         emitter.AppendLine("    public static class JoinAliasExtensions");
         emitter.AppendLine("    {");
 
         foreach (var method in methods) emitter.Append(method);
 
         emitter.AppendLine("    }");
+    }
+
+    /// <summary>
+    /// Renders the generic root-alias extension <c>WithAlias&lt;T&gt;(this EntityBuilder&lt;T&gt;, Alias.XMarker)</c>
+    /// and returns its signature. The generated <c>WithAlias</c> is generic over the receiver's entity type, so
+    /// one method covers every root source; the core <c>AliasRoot</c> seam does the state-preserving re-root and
+    /// keeps the in-memory/root-only guards. A <c>null</c>/<c>default</c> marker is rejected immediately.
+    /// </summary>
+    private static string RenderWithAliasExtension(StringBuilder emitter, string generatedNamespace, string alias)
+    {
+        var builderType = generatedNamespace + ".AliasJoin_A1_" + alias + "<T>";
+        var projectionType = generatedNamespace + ".AliasProjection_A1_" + alias + "<T>";
+        var markerType = generatedNamespace + ".Alias." + alias + "Marker";
+
+        emitter.AppendLine("        public static " + builderType + " WithAlias<T>(");
+        emitter.AppendLine("            this global::NextORM.Core.EntityBuilder<T> self,");
+        emitter.AppendLine("            " + markerType + " marker)");
+        emitter.AppendLine("        {");
+        emitter.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(self);");
+        emitter.AppendLine("            global::System.ArgumentNullException.ThrowIfNull(marker);");
+        emitter.AppendLine("            return self.AliasRoot<" + builderType + ", " + projectionType + ">(");
+        emitter.AppendLine("                static dc => new " + builderType + "(dc));");
+        emitter.AppendLine("        }");
+
+        return "WithAlias<T>(" + markerType + ") -> " + builderType;
     }
 
     /// <summary>
@@ -1134,7 +1293,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     private sealed record PositionalTransition(SchemaInfo Receiver, ChainStep Step);
 
-    private sealed record Candidate(bool Approved, string Alias, ChainModel? Chain, AliasLocation Location);
+    private sealed record Candidate(bool Approved, string Alias, ChainModel? Chain, AliasLocation Location, bool RootMisuse = false);
 
     /// <summary>Immutable array wrapper with structural equality (ImmutableArray uses reference equality).</summary>
     private readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>

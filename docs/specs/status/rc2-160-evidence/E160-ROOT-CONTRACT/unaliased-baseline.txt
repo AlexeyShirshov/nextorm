@@ -1,0 +1,3 @@
+FromSql unaliased: OK ids=[10]
+From(builder) unaliased: OK ids=[10]
+QueryCommand unaliased: OK ids=[10]
