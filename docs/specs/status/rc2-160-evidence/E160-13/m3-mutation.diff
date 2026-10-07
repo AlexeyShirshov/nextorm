@@ -1,0 +1,15 @@
+diff --git a/src/nextorm.core/Builders/EntityBuilder.cs b/src/nextorm.core/Builders/EntityBuilder.cs
+index b2fbde28..dc72ae76 100644
+--- a/src/nextorm.core/Builders/EntityBuilder.cs
++++ b/src/nextorm.core/Builders/EntityBuilder.cs
+@@ -3098,10 +3098,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     {
+         ArgumentNullException.ThrowIfNull(create);
+ 
+-        if (_dataProvider is InMemoryDataContext)
+-            throw new NotSupportedException(
+-                "Named alias projections are not supported by the in-memory provider; run the query against a SQL provider.");
+-
+         if (_joins is { Count: > 0 } || _joinIntos is { Count: > 0 })
+             throw new NotSupportedException(
+                 "WithAlias names the root source (slot 1) and must be applied before any Join/JoinInto.");

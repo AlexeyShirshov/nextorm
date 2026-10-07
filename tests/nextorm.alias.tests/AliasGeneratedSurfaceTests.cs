@@ -28,6 +28,8 @@ public class AliasGeneratedSurfaceTests
         // generator's whole public surface (one marker class, one builder/projection pair per discovered
         // slot schema, one extension class) is fully deterministic.
         // r=2: mixed chains add the P-encoded schemas; the digit alias proves names are not parsed as slots.
+        // E160-13 F1: Buyer2 in slot 3 (P1_P2_A3_Buyer2) discriminates a trailing-digit slot parse, where
+        // Buyer2 in slot 2 (P1_A2_Buyer2) cannot.
         // Phase 2: the root alias adds A1_Root (root only), A1_Root_A2_Buyer (alias join after it) and
         // A1_Root_P2 (a generated positional instance transition after the root alias).
         var names = typeof(Alias).Assembly.GetTypes()
@@ -51,6 +53,7 @@ public class AliasGeneratedSurfaceTests
             "AliasJoin_P1_A2_Buyer_P3`3",
             "AliasJoin_P1_A2_Buyer`2",
             "AliasJoin_P1_P2_A3_Approver`3",
+            "AliasJoin_P1_P2_A3_Buyer2`3",
             "AliasProjection_A1_Root_A2_Buyer`2",
             "AliasProjection_A1_Root_P2`2",
             "AliasProjection_A1_Root`1",
@@ -60,6 +63,7 @@ public class AliasGeneratedSurfaceTests
             "AliasProjection_P1_A2_Buyer_P3`3",
             "AliasProjection_P1_A2_Buyer`2",
             "AliasProjection_P1_P2_A3_Approver`3",
+            "AliasProjection_P1_P2_A3_Buyer2`3",
             "JoinAliasExtensions");
     }
 

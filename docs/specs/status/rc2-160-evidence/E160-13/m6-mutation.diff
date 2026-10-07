@@ -1,0 +1,19 @@
+diff --git a/src/nextorm.core/Builders/Projection.cs b/src/nextorm.core/Builders/Projection.cs
+index a36d6c22..83d803dc 100644
+--- a/src/nextorm.core/Builders/Projection.cs
++++ b/src/nextorm.core/Builders/Projection.cs
+@@ -44,10 +44,11 @@ public class Projection<T1> : IExtendableProjection
+     /// <inheritdoc/>
+     public IProjection Extend<T>(T newItem)
+     {
+-        return new Projection<T1, T>
++        // MUTATION: dim-1 Extend does not advance the slot (returns the same dim-1 projection).
++        _ = newItem;
++        return new Projection<T1>
+         {
+-            Item1 = Item1,
+-            Item2 = newItem
++            Item1 = Item1
+         };
+     }
+ }

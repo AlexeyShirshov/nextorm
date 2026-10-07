@@ -1,0 +1,15 @@
+diff --git a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+index a4d4699a..98286097 100644
+--- a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
++++ b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+@@ -761,7 +761,9 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             if (step.Kind == StepKind.Alias)
+             {
+                 tokens.Add("A" + slot + "_" + step.Alias);
+-                members.Add(new AliasMember(step.Alias, slot));
++                var lastChar = step.Alias[step.Alias.Length - 1];
++                var aliasSlot = char.IsDigit(lastChar) ? lastChar - '0' : slot;
++                members.Add(new AliasMember(step.Alias, aliasSlot));
+             }
+             else
+             {

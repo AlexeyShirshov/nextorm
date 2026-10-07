@@ -192,4 +192,38 @@ public class MixedJoinChainTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void Digit_ending_alias_in_a_non_matching_slot_resolves_to_its_actual_slot()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var orders = ctx.From<Order>(b => b.Table("orders"));
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            // R160-01 / D:160-03 discriminating negative for the F1 gap (E160-13 M4): 'Buyer2' is a name,
+            // and here it occupies slot 3 while its trailing digit is 2, so digit and slot differ. A
+            // generator that read the trailing digit as the slot would bind Buyer2 to t2 (the positional
+            // join) instead of t3. The slot-2 positional join resolves to Buyer (10); the slot-3 alias
+            // join resolves to Approver (20), so a mis-bound Buyer2 cannot pass by multiset coincidence.
+            var chained = orders
+                .Join(people, (o, p) => o.BuyerId == p.Id)                                 // slot 2, positional -> Buyer (10)
+                .Join<Person>(people, (p, a) => p.Item1.ApproverId == a.Id, Alias.Buyer2); // slot 3, alias -> Approver (20)
+
+            // Buyer2 is slot 3: it must resolve to the approver, not to the slot-2 buyer.
+            chained.Select(p => p.Buyer2.Id).ToList().Should().Equal(AliasSqliteDatabase.ApproverId);
+            chained.Select(p => p.Buyer2.Name).ToList().Should().Equal("Approver");
+
+            // And no slot shifts: Item3 is the same table as the Buyer2 alias.
+            chained.Select(p => p.Buyer2.Id).ToList()
+                .Should().Equal(chained.Select(p => p.Item3.Id).ToList());
+            sql.Statements[^1].Should().Contain("person as 't3'");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }

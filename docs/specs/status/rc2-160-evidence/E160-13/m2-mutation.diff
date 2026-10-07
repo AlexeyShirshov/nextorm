@@ -1,0 +1,19 @@
+diff --git a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+index a4d4699a..b0d757a5 100644
+--- a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
++++ b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+@@ -983,11 +983,12 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         emitter.AppendLine("            global::NextORM.Core.EntityBuilder<TJoin> _,");
+         if (!conditionless) emitter.AppendLine("            " + conditionType + " condition,");
+         emitter.AppendLine("            global::System.Action<global::NextORM.Core.JoinOptions> options = null)");
+-        emitter.AppendLine("            => JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
++        emitter.AppendLine("            => new " + returnType + "(_dataProvider); // MUTATION bypass JoinAlias seam");
++        emitter.AppendLine("            /* JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
+         emitter.AppendLine("                static dc => new " + returnType + "(dc),");
+         emitter.AppendLine("                _,");
+         if (!conditionless) emitter.AppendLine("                condition,");
+-        emitter.AppendLine("                " + joinType + ", options);");
++        emitter.AppendLine("                " + joinType + ", options); */");
+ 
+         // Cte<TJoin> source. The parameterless-options form is emitted separately so it also hides the
+         // inherited one-argument CTE overload.

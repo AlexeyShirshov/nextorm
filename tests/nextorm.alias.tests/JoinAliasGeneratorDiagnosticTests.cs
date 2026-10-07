@@ -281,6 +281,28 @@ public class JoinAliasGeneratorDiagnosticTests
         outputs.Should().OnlyContain(output => output.Reason == IncrementalStepRunReason.Cached);
     }
 
+    [Fact]
+    public void Digit_ending_alias_at_a_later_slot_keeps_its_positional_slot()
+    {
+        // R160-01 / D:160-03 harness negative for the F1 gap (E160-13 M4): 'Buyer2' is a name whose
+        // trailing digit is 2, but here it occupies slot 3 (a positional join takes slot 2), so the
+        // digit and the slot differ. The emitted slot attribute and the property's generic index must
+        // be the positional slot 3; a generator that derived the slot from the trailing digit would
+        // emit JoinSlot(2) on a T2 property instead.
+        var harness = RunDiagnosticCase(
+            "var q = orders" +
+            ".Join<Person>(people, (a, b) => true)" +
+            ".Join<Person>(people, (a, b) => true, Alias.Buyer2);");
+
+        harness.Run.Diagnostics.Should().BeEmpty();
+        harness.Run.GeneratedTrees.Should().HaveCount(1);
+        var generated = harness.Run.GeneratedTrees[0].ToString();
+
+        generated.Should().Contain("class AliasProjection_P1_P2_A3_Buyer2");
+        generated.Should().MatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(3\)\]\s+public T3 Buyer2 =>");
+        generated.Should().NotMatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(2\)\]\s+public T2 Buyer2 =>");
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Harness plumbing.
     // ---------------------------------------------------------------------------------------------

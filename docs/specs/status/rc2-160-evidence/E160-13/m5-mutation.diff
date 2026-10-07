@@ -1,0 +1,12 @@
+diff --git a/src/nextorm.core/DataContext/QueryPlanner.cs b/src/nextorm.core/DataContext/QueryPlanner.cs
+index 5598191a..21b4fab6 100644
+--- a/src/nextorm.core/DataContext/QueryPlanner.cs
++++ b/src/nextorm.core/DataContext/QueryPlanner.cs
+@@ -551,6 +551,7 @@ internal sealed class QueryPlanner : IQueryPlanner
+ 
+     internal IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, bool sequentialAccess, bool streamingRowsRequested, CancellationToken cancellationToken)
+     {
++        queryCommand.Cache = false; // MUTATION: sticky cache flag on the shared command
+         // A data-modifying CTE makes the whole statement side-effecting, so its plan must never be
+         // shared: the mutation's shape (row count, target columns) is not captured by the CTE query.
+         // Clear the call-local storeInCache rather than queryCommand.Cache, which is sticky and would

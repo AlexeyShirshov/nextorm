@@ -1,0 +1,13 @@
+diff --git a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+index a4d4699a..7c94aed8 100644
+--- a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
++++ b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+@@ -933,7 +933,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             emitter.AppendLine("    {");
+             foreach (var member in schema.AliasMembers)
+             {
+-                emitter.AppendLine("        [global::NextORM.Core.JoinSlot(" + member.Slot + ")]");
++                emitter.AppendLine("        [global::NextORM.Core.JoinSlot(" + (member.Slot + 1) + ")]");
+                 emitter.AppendLine("        public T" + member.Slot + " " + Escape(member.Name) + " => throw new global::System.NotSupportedException();");
+             }
+ 
