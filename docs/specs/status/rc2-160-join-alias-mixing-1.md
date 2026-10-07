@@ -213,6 +213,8 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | 2026-10-08T00:05:36Z | DO | r2 | n1/3 | ONE broad boundary sweep `dotnet test tests/nextorm.alias.tests -c Debug` exit 0, selected 53, 0 failed | rc2-160-evidence/E160-01/alias-boundary.log |
 | 2026-10-08T00:05:36Z | DO | r2 | n1/3 | validator `brief` exit 0; `report` exit 0 (1 boundary build, 2 inner filtered, 1 broad boundary sweep) | rc2-160-evidence/brief.json, report.json |
 | 2026-10-08T00:05:36Z | DO | r2 | n1/3 | D:160-01 closed to green checkpoint; D:160-04(partial: audit + binding/shadowing/collision evidence) closed; remaining: E160-02/03/06/08/09/10/11/13/14/21/23/24 at DO→CHECK boundary + Phase 2 | this file §DO ledger |
+| 2026-10-08T00:17:03Z | DO | r2 | n1/3 | D:160-02 dim-1 spike closed green: `dotnet build tests/nextorm.alias.tests -c Debug` exit 0, 0 warnings/0 errors; `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 3, passed 3, failed 0; root slot 1→t1; zero-join SQL `select Id from orders`; root+join SQL `select t2.Id from orders as 't1' join person as 't2' on t1.BuyerId = t2.Id`; Extend dim-1→`Projection<T1,T2>` | rc2-160-evidence/E160-14/spike.log |
+| 2026-10-08T00:17:03Z | DO | r2 | n1/3 | zero-join planner finding recorded as resolved-by-AliasRoot for CHECK (`QueryPlanner.GetFrom` unwraps `Item1` only when `Joins.Length > 0`; AliasRoot materializes the mapped root's explicit FromExpression) — not a DO→PLAN blocker; D:160-03 root-alias NOT started this session | this file §D:160-02 dim-1 spike |
 
 ### Inherited collection evidence rows (verbatim; do not invent/ N/A except C-E04 single-group)
 - **C-E01 / truthful admission** — check: "Validate admission snapshot for milestone `1.0.9-rc2`: 26 open issues, 24 admitted `ready`, D171/D172 excluded-gap and still OPEN in the milestone." — owner: collection CHECK — applicability: "at admission; re-check exclusions at completion".
@@ -243,7 +245,7 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 |---|---|---|---|
 | E160-01 | R01,R02,R11 | green (Phase-1 partial; boundary pending) | inner `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~MixedJoinChainTests` exit 0, selected 7; boundary `dotnet test tests/nextorm.alias.tests -c Debug` exit 0, selected 53; logs `rc2-160-evidence/E160-15/mixed-filtered2.log`, `rc2-160-evidence/E160-01/alias-boundary.log` |
 | E160-02 | R03 | pending (Phase 2, D:160-03) | |
-| E160-03 | R04 | pending (D:160-02 spike) | |
+| E160-03 | R04 | pending (DO→CHECK boundary K; D:160-02 spike closed green) | |
 | E160-04 | R05,R06 | pending (full boundary) | |
 | E160-05 | R01,R11 | green (Phase-1 partial) | naming/digit/collision/diagnostic cases in alias suite |
 | E160-06 | R07 | pending (cache tests at boundary) | |
@@ -254,7 +256,7 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | E160-11 | R10 | pending DO→CHECK (EN/RU docs + register) | |
 | E160-12 | R01..R11 | green (brief + report) | `validate_inner_loop.py brief …→exit 0; report …→exit 0`; `rc2-160-evidence/{brief,report}.json` |
 | E160-13 | R01,R04,R06,R07,R11 | pending (six reversible mutations at boundary) | |
-| E160-14 | R03,R04 | pending (dim-1 spike) | |
+| E160-14 | R03,R04 | green (spike closed; boundary K pending) | `dotnet build tests/nextorm.alias.tests -c Debug` exit 0; `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 3 / passed 3 / failed 0; log `rc2-160-evidence/E160-14/spike.log` |
 | E160-15 | R01 | green (Phase-1 partial) | alias→positional + digit-alias negative; `mixed-filtered2.log` selected 7 |
 | E160-16 | R01 | green (Phase-1 partial) | positional→alias in `MixedJoinChainTests` |
 | E160-17 | R01 | green (Phase-1 partial) | alternation in `MixedJoinChainTests` |
@@ -265,6 +267,13 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | E160-22 | R11 | green (Phase-1 partial; diagnostic suite) | |
 | E160-23 | R03 | pending (Phase 2, D:160-03) | |
 | E160-24 | R10 | pending (docs/API-NAMING register, D:160-04) | |
+
+### D:160-02 dim-1 spike — closed green (resolved-by-AliasRoot; for CHECK)
+- Result: 3/3 `RootAliasTests` green; dim-1 `Projection<T1>` plans, root slot 1 maps to `t1`, `Extend` yields `Projection<T1,T2>` preserving `Item1`.
+- Zero-join planner finding: `QueryPlanner.GetFrom(Type srcType, QueryCommand? queryCommand)` unwraps `Item1` only when `queryCommand.Joins.Length > 0`; a zero-join root projection is not a registered entity, so `GetFrom(projectionType)` would throw `BuildSqlCommandException`. `AliasRoot` materializes the mapped root's explicit FromExpression once into `SourceFrom`, so the zero-join path uses the physical source and renders `select Id from orders`.
+- Root+join: `select t2.Id from orders as 't1' join person as 't2' on t1.BuyerId = t2.Id`.
+- Classification: **resolved-by-AliasRoot**, not a DO→PLAN blocker. CHECK treats D:160-02 as closed.
+- Evidence: `docs/specs/status/rc2-160-evidence/E160-14/spike.log`.
 
 ### DO→CHECK boundary gate commands (must actually run at the DO→CHECK boundary; NOT run at this Phase-1 checkpoint)
 - B (done green at checkpoint): `dotnet build nextorm.slnx -c Debug` → E160-07.

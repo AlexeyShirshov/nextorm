@@ -1,0 +1,41 @@
+D160 / E160-14 — dim-1 root-projection spike (task D:160-02)
+tree: branch 1.0.9-rc2 @ 2e3e96a1 + uncommitted Phase-2 spike (Projection<T1>, AliasRoot, RootAliasTests)
+date: 2026-10-08T00:16Z
+
+command (build, run before the test so no stale artifacts):
+  dotnet build tests/nextorm.alias.tests -c Debug
+exit_code: 0  (Build succeeded. 0 Warning(s) 0 Error(s))
+
+command (test, argument array):
+  ["dotnet","test","tests/nextorm.alias.tests","-c","Debug","--filter","FullyQualifiedName~RootAliasTests"]
+exit_code: 0
+selected: 3  passed: 3  failed: 0  skipped: 0
+
+observations (spike success = SQL/slot/Extend, not merely "no exception"):
+1. dim-1 root, zero joins -> rendered SQL: `select Id from orders`
+   Root slot 1 (Item1) resolves to the mapped root's physical column; no derived/nested projection
+   (`select * from (` absent), so the single-table root source is preserved.
+2. root + one join -> rendered SQL: `select t2.Id from orders as 't1' join person as 't2' on t1.BuyerId = t2.Id`
+   Root slot 1 -> t1, join slot 2 -> t2; [JoinSlot(1)]/[JoinSlot(2)] map to the correct table aliases.
+3. IExtendableProjection dim-1 -> Extend yields Projection<T1,T2> with Item1 preserved (test #3).
+
+planner finding (zero-join path; resolved by AliasRoot, NOT a DO->PLAN blocker):
+  QueryPlanner.GetFrom(Type srcType, QueryCommand? queryCommand) unwraps `Item1` (mapping the projection's
+  root to the underlying entity) ONLY when `queryCommand.Joins?.Length > 0`. For a zero-join root
+  projection the projection type is not a registered entity, so the unwrap branch is skipped and
+  `GetFrom(projectionType)` throws BuildSqlCommandException ("Table name is not registered for type ...").
+  Resolution: AliasRoot materializes the mapped root's explicit FromExpression once into
+  `rooted.SourceFrom` (`_dataProvider.GetFrom(_sourceEntityType ?? typeof(TEntity), null)`), so the
+  zero-join planner path uses the physical source and renders `select Id from orders`. No planner edit is
+  required. This closes the D:160-02 success criterion; CHECK should treat it as resolved-by-AliasRoot.
+
+--- raw run output ---
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) passed (703ms)
+
+Test run summary: Passed!
+  total: 3
+  failed: 0
+  succeeded: 3
+  skipped: 0
+  duration: 904ms

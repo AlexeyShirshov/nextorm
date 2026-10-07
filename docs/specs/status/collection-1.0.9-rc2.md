@@ -35,7 +35,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D154 | #154 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-154-dto-public-ctors-1.md | closed #154 (5d72a79) |
 | D157 | #157 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-157-register-finding-25-1.md | closed #157 (5978556f) |
 | D159 | #159 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | closed #159 (078a7a2d) |
-| D160 | #160 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | Join alias mixing + root alias |
+| D160 | #160 | G1 | 1.0.9-rc2 | in-progress | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | Join alias mixing + root alias |
 | D161 | - | - | - | - | - | - | - | - | - | (reference only: #130/#161 hint APIs already shipped) |
 | D162 | #162 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md | V32 navigation temp/TVP fail-closed |
 | D167 | #167 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-167-csv-chunked-read-1.md | CSV chunked read for byte[] (P0 validator prerequisite) |

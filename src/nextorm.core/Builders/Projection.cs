@@ -32,6 +32,27 @@ public interface IExtendableProjection : IProjection
 }
 
 /// <summary>
+/// Accumulated result of a single-table (root-only) source; the item is exposed as <c>Item1</c>.
+/// A generated root-alias projection derives from this type to name slot 1 lexically, and it is the
+/// only projection with dimension 1. It can absorb one more item through <see cref="IExtendableProjection"/>.
+/// </summary>
+public class Projection<T1> : IExtendableProjection
+{
+    /// <summary>The value contributed by the root table.</summary>
+    public T1 Item1 { get; init; } = default!;
+
+    /// <inheritdoc/>
+    public IProjection Extend<T>(T newItem)
+    {
+        return new Projection<T1, T>
+        {
+            Item1 = Item1,
+            Item2 = newItem
+        };
+    }
+}
+
+/// <summary>
 /// Accumulated result of a two-table join; items are exposed as <c>Item1</c> and <c>Item2</c>.
 /// </summary>
 public class Projection<T1, T2> : IExtendableProjection

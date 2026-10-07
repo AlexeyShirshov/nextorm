@@ -3079,6 +3079,71 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
 
     /// <summary>
+    /// Root-alias seam (issue #160, Phase 2): re-roots a plain source builder into a caller-created
+    /// builder whose projection shape names the root slot 1 lexically (for example
+    /// <c>AliasProjection_A1_Order&lt;Order&gt;</c>), preserving the source's query state (physical table
+    /// or derived source, CTE declarations, overrides, source options and hints). The generated
+    /// <c>.WithAlias(Alias.X)</c> extension supplies <paramref name="create"/>. It is root-only: a
+    /// builder that already carries a join, <c>JoinInto</c> or a projection shape is rejected, and the
+    /// in-memory provider fails closed because it cannot project named aliases.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the root alias.</typeparam>
+    /// <typeparam name="TNextEntity">The root-alias projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's source state and no joins.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases, or the receiver is not the root source.</exception>
+    public TNext AliasRoot<TNext, TNextEntity>(Func<IDataContext, TNext> create)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "Named alias projections are not supported by the in-memory provider; run the query against a SQL provider.");
+
+        if (_joins is { Count: > 0 } || _joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "WithAlias names the root source (slot 1) and must be applied before any Join/JoinInto.");
+
+        if (typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "WithAlias must be applied to a plain root source, not to a join or alias projection.");
+
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        EnsureNoEagerLoadState("WithAlias");
+
+        var rooted = create(_dataProvider);
+        ApplyJoinStateTo(rooted, Query);
+
+        // A mapped-entity root carries no explicit FROM source (it is resolved from entity metadata by
+        // the planner from the query's source type). After re-rooting, that source type is the projection,
+        // which is not a registered entity, so the projection's slot 1 could not be resolved. Materialize
+        // the mapped root's physical source once, without touching the planner: every other root kind
+        // already carries an explicit source (table name, FromExpression or derived Query).
+        if (rooted.SourceFrom is null && rooted.Query is null && string.IsNullOrEmpty(rooted.Table))
+            rooted.SourceFrom = _dataProvider.GetFrom(_sourceEntityType ?? typeof(TEntity), null);
+
+        // A Where written before WithAlias is over the plain root entity; move it onto the projection's
+        // Item1 so it keeps pointing at the same table after re-rooting.
+        if (_condition is not null)
+        {
+            var sourceParameter = _condition.Parameters[0];
+            var param = Expression.Parameter(typeof(TNextEntity), sourceParameter.Name);
+            var item1 = typeof(TNextEntity).GetProperty(nameof(Projection<TEntity, object>.Item1), BindingFlags.Public | BindingFlags.Instance)
+                ?? throw new NotSupportedException(
+                    $"WithAlias requires the root projection '{typeof(TNextEntity)}' to derive from a Projection type exposing Item1.");
+            var item1Access = Expression.Property(param, item1);
+            var body = new ReplaceTargetParameterVisitor(sourceParameter, item1Access).Visit(_condition.Body);
+            rooted.Condition = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+        }
+
+        return rooted;
+    }
+
+    /// <summary>
     /// Copies the query state a join builder carries onto <paramref name="target"/>, which may have a
     /// different projection type. Shared by the positional <see cref="CreateJoined{TJoinEntity}"/> and
     /// the alias <see cref="CreateAliasJoined{TNext,TNextEntity}"/> so both observe the same
