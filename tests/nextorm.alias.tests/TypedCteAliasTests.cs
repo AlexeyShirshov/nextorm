@@ -49,6 +49,40 @@ public class TypedCteAliasTests
     }
 
     [Fact]
+    public void Direct_typed_cte_joined_as_alias_slot_gets_its_own_alias_and_binds_columns()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var orders = ctx.From<Order>(b => b.Table("orders"));
+            var peopleCte = ctx.From<Person>(b => b.Table("person")).ToCommand().AsCte("people_cte");
+
+            // #159: the descriptor is passed straight to the generated alias overload.
+            var rows = orders
+                .Join<Person>(peopleCte, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+                .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, BuyerName = p.Buyer.Name })
+                .ToList();
+
+            rows.Should().ContainSingle();
+            rows[0].OrderId.Should().Be(1);
+            rows[0].BuyerId.Should().Be(AliasSqliteDatabase.BuyerId);
+            rows[0].BuyerName.Should().Be("Buyer");
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("with people_cte as (");
+            last.Should().Contain("join people_cte as 't2'");
+            last.Should().Contain("t2.Id");
+            last.Should().Contain("t2.Name");
+            last.Should().NotContain("join (select");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Self_join_of_same_typed_cte_uses_two_aliases_and_one_declaration()
     {
         var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();

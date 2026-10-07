@@ -167,6 +167,26 @@ generated type names); a reserved keyword is emitted escaped (`@class`). The mar
 approved alias argument form — `Alias.Buyer<int>` or `Alias.Buyer.Approver` is rejected. The arity is
 capped at eight slots by `Projection<T1..T8>`.
 
+The generated alias overloads also accept a typed CTE descriptor directly — a [`Cte<T>`](xref:NextORM.Core.Cte`1) in place of
+the [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) source. The joined type is inferred from the descriptor, so the explicit
+`<T>` type argument and the conversion (`dataContext.From(cte)`) can both be omitted:
+
+```csharp
+var peopleCte = dataContext.From<Person>(b => b.Table("person"))
+    .ToCommand()
+    .AsCte("people_cte");
+
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(peopleCte, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+    .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, BuyerName = p.Buyer.Name })
+    .ToListAsync();
+```
+
+```sql
+-- SQLite: the CTE is joined by name, never wrapped in a derived (select ...) table
+... join people_cte as 't2' on t1.buyerid = t2.Id
+```
+
 The named path is SQL-provider only: the in-memory provider throws `NotSupportedException`. A query may
 cross a method boundary, but the method must name the generated builder type in its signature, because
 that type is generated and cannot be inferred from a hand-written name:
@@ -375,6 +395,11 @@ var rows = await dataContext.From<ISimpleEntity>()
 select t1.id, t2.requiredstring from simple_entity as 't1' join (select id, requiredstring, b as 'Boolean' from complex_entity where id = 3) as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
+A typed CTE is **not** a subquery: pass a [`Cte<T>`](xref:NextORM.Core.Cte`1) straight to the same seven operators and it
+is joined by name — no derived `(select ...)` wrapper — exactly as if you had converted it with
+`dataContext.From(cte)` first. See
+[Joining a typed CTE directly](08-cte.md#joining-a-typed-cte-directly).
+
 ## Joining a derived query as the primary source
 
 A `QueryCommand<T>` can also be the **primary** `FROM` source, with the joined table written second:
@@ -480,6 +505,12 @@ var sql = e[0]
     .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id,
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
+
+The direct [`Cte<T>`](xref:NextORM.Core.Cte`1) overloads are also available at every continuation: each
+[`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) (receiver arities 2–7) takes a typed CTE in place of
+the `EntityBuilder<T>` source for all seven operators, so a CTE can be joined at any step. The
+projection still stops at eight slots — arity eight exposes no further join, and a `Cte<T>` does not
+lift that cap.
 
 ## Naming an intermediate projection: `As`
 

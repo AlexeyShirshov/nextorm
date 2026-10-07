@@ -295,4 +295,109 @@ public abstract partial class CommonTestSuite
 
         rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // #159 direct Cte<T> join operators: a descriptor passed straight to the join family must execute
+    // exactly like converting it with the receiving context first (ctx.From(cte)). Shared across every
+    // provider suite; unsupported provider/operator pairs are exercised in the provider-specific tests.
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>An inner join accepts a typed CTE descriptor directly and returns the converted form's rows.</summary>
+    [Fact]
+    public void Cte_Typed_DirectJoin_ShouldMatchConvertedForm()
+    {
+        var ctx = _sut.DataProvider;
+
+        var left = ctx.From<IComplexEntity>()
+            .Where(c => c.Id > 1)
+            .Select(c => new { c.Id, c.RequiredString })
+            .AsCte("typed_direct_l");
+        var right = ctx.From<IComplexEntity>()
+            .Select(c => new { c.Id })
+            .AsCte("typed_direct_r");
+
+        var direct = ctx.From(left)
+            .Join(right, (a, b) => a.Id == b.Id)
+            .Select(p => new { p.Item1.Id, p.Item1.RequiredString })
+            .ToList();
+        var converted = ctx.From(left)
+            .Join(ctx.From(right), (a, b) => a.Id == b.Id)
+            .Select(p => new { p.Item1.Id, p.Item1.RequiredString })
+            .ToList();
+
+        direct.Should().BeEquivalentTo(converted);
+        // Left body keeps ids 2 and 3; the join is on the same id, so both survive.
+        direct.Select(r => r.Id).OrderBy(id => id).Should().Equal(2, 3);
+    }
+
+    /// <summary>A left join accepts a typed CTE descriptor directly and keeps the left rows.</summary>
+    [Fact]
+    public void Cte_Typed_DirectLeftJoin_ShouldMatchConvertedForm()
+    {
+        var ctx = _sut.DataProvider;
+
+        var left = ctx.From<IComplexEntity>().Select(c => new { c.Id }).AsCte("typed_left_l");
+        var right = ctx.From<IComplexEntity>()
+            .Where(c => c.Id == 2)
+            .Select(c => new { c.Id, c.RequiredString })
+            .AsCte("typed_left_r");
+
+        var direct = ctx.From(left)
+            .LeftJoin(right, (a, b) => a.Id == b.Id)
+            .Select(p => new { p.Item1.Id, Name = p.Item2.RequiredString })
+            .ToList();
+        var converted = ctx.From(left)
+            .LeftJoin(ctx.From(right), (a, b) => a.Id == b.Id)
+            .Select(p => new { p.Item1.Id, Name = p.Item2.RequiredString })
+            .ToList();
+
+        direct.Should().BeEquivalentTo(converted);
+        direct.Select(r => r.Id).OrderBy(id => id).Should().Equal(1, 2, 3);
+        direct.Single(r => r.Id == 2).Name.Should().Be("asdfgoi");
+    }
+
+    /// <summary>A cross join accepts a typed CTE descriptor directly and returns the converted form's rows.</summary>
+    [Fact]
+    public void Cte_Typed_DirectCrossJoin_ShouldMatchConvertedForm()
+    {
+        var ctx = _sut.DataProvider;
+
+        var left = ctx.From<IComplexEntity>().Select(c => new { c.Id }).AsCte("typed_cross_l");
+        var right = ctx.From<IComplexEntity>().Select(c => new { c.Id }).AsCte("typed_cross_r");
+
+        var direct = ctx.From(left)
+            .CrossJoin(right)
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
+            .ToList();
+        var converted = ctx.From(left)
+            .CrossJoin(ctx.From(right))
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
+            .ToList();
+
+        direct.Should().BeEquivalentTo(converted);
+        direct.Should().HaveCount(9);
+    }
+
+    /// <summary>
+    /// A direct join over a filtered typed CTE keeps the filter inside the defining body only; the
+    /// outer read and join continuation do not re-apply or duplicate it.
+    /// </summary>
+    [Fact]
+    public void Cte_Typed_DirectJoin_FilteredBody_ShouldKeepFilterInsideBody()
+    {
+        var ctx = _sut.DataProvider;
+
+        var filtered = ctx.From<IComplexEntity>()
+            .Where(c => c.Id > 1)
+            .Select(c => new { c.Id })
+            .AsCte("typed_direct_filtered");
+        var all = ctx.From<IComplexEntity>().Select(c => new { c.Id }).AsCte("typed_direct_all");
+
+        var rows = ctx.From(all)
+            .Join(filtered, (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1.Id)
+            .ToList();
+
+        rows.OrderBy(id => id).Should().Equal(2, 3);
+    }
 }

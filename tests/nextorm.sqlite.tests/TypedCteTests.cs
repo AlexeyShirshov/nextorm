@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data.Common;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
@@ -990,6 +991,174 @@ public class TypedCteTests
 
             act.Should().Throw<InvalidOperationException>()
                 .WithMessage("*'nums'*anchor projects 2 column(s)*step projects 1*");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // #159: a Cte<T> descriptor passed straight to the seven join operators must render exactly like
+    // converting it with the receiving context first (ctx.From(cte)): same SQL, bound parameters and
+    // materialized shape. The descriptor carries its own dependency/filter state across the boundary.
+    // ---------------------------------------------------------------------------------------------
+
+    private static (string Sql, object?[] Parameters) Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
+    {
+        var prepared = (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+        var parameters = prepared.DbCommand.Parameters.Cast<DbParameter>().Select(p => p.Value).ToArray();
+        return (Normalize(prepared.DbCommand.CommandText), parameters);
+    }
+
+    [Theory]
+    [InlineData("Join")]
+    [InlineData("LeftJoin")]
+    [InlineData("RightJoin")]
+    [InlineData("FullJoin")]
+    public void DirectTypedCte_ConditionalOperators_ShouldMatchConvertedSqlAndParameters(string operation)
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // A captured value makes both forms bind the same parameter inside the CTE body.
+            var minId = 1L;
+            var left = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Id > minId)
+                .Select(p => new { p.Id })
+                .AsCte("l");
+            var right = ctx.From<ITypedCtePerson>()
+                .Select(p => new { p.Id, p.Total })
+                .AsCte("r");
+
+            QueryCommand<long> Direct() => operation switch
+            {
+                "Join" => ctx.From(left).Join(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                "LeftJoin" => ctx.From(left).LeftJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                "RightJoin" => ctx.From(left).RightJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                "FullJoin" => ctx.From(left).FullJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                _ => throw new NotSupportedException(),
+            };
+            QueryCommand<long> Converted() => operation switch
+            {
+                "Join" => ctx.From(left).Join(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                "LeftJoin" => ctx.From(left).LeftJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                "RightJoin" => ctx.From(left).RightJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                "FullJoin" => ctx.From(left).FullJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+                _ => throw new NotSupportedException(),
+            };
+
+            var direct = Prepare(ctx, Direct());
+            var converted = Prepare(ctx, Converted());
+
+            direct.Sql.Should().Be(converted.Sql);
+            direct.Parameters.Should().Equal(converted.Parameters);
+            direct.Sql.Should().Contain("with l as (").And.Contain(", r as (").And.Contain("join r as");
+            // The body predicate stays inside the CTE declaration; the outer read never re-applies it.
+            direct.Sql.Should().NotContain("t2.Id >");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void DirectTypedCte_CrossJoin_ShouldMatchConvertedSqlAndParameters()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var left = ctx.From<ITypedCtePerson>().Select(p => new { p.Id }).AsCte("l");
+            var right = ctx.From<ITypedCtePerson>().Select(p => new { p.Id }).AsCte("r");
+
+            var direct = Prepare(ctx, ctx.From(left).CrossJoin(right).Select(p => p.Item1.Id));
+            var converted = Prepare(ctx, ctx.From(left).CrossJoin(ctx.From(right)).Select(p => p.Item1.Id));
+
+            direct.Sql.Should().Be(converted.Sql);
+            direct.Parameters.Should().Equal(converted.Parameters);
+            direct.Sql.Should().Contain("cross join r as");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData("CrossApply")]
+    [InlineData("OuterApply")]
+    public void DirectTypedCte_Apply_UnsupportedDialect_ShouldMatchConvertedRejection(string operation)
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var left = ctx.From<ITypedCtePerson>().Select(p => new { p.Id }).AsCte("l");
+            var right = ctx.From<ITypedCtePerson>().Select(p => new { p.Id }).AsCte("r");
+
+            QueryCommand<long> Direct = operation == "CrossApply"
+                ? ctx.From(left).CrossApply(right).Select(p => p.Item1.Id)
+                : ctx.From(left).OuterApply(right).Select(p => p.Item1.Id);
+            QueryCommand<long> Converted = operation == "CrossApply"
+                ? ctx.From(left).CrossApply(ctx.From(right)).Select(p => p.Item1.Id)
+                : ctx.From(left).OuterApply(ctx.From(right)).Select(p => p.Item1.Id);
+
+            // SQLite has no lateral source: the direct form must keep the exact full-form rejection.
+            var directEx = Record.Exception(() => Prepare(ctx, Direct));
+            var convertedEx = Record.Exception(() => Prepare(ctx, Converted));
+
+            directEx.Should().BeOfType<NotSupportedException>();
+            convertedEx.Should().BeOfType<NotSupportedException>();
+            directEx!.Message.Should().Be(convertedEx!.Message);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void DirectTypedCte_Join_ShouldMaterializeSameShapeAsConverted()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var left = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Total >= 20)
+                .Select(p => new { p.Id, p.Total })
+                .AsCte("l");
+            var right = ctx.From<ITypedCtePerson>()
+                .Select(p => new { p.Id, p.Name })
+                .AsCte("r");
+
+            var direct = ctx.From(left)
+                .Join(right, (a, b) => a.Id == b.Id)
+                .Select(p => new { p.Item1.Id, p.Item1.Total, p.Item2.Name })
+                .ToList();
+            var converted = ctx.From(left)
+                .Join(ctx.From(right), (a, b) => a.Id == b.Id)
+                .Select(p => new { p.Item1.Id, p.Item1.Total, p.Item2.Name })
+                .ToList();
+
+            direct.Should().BeEquivalentTo(converted);
+            // 'l' keeps ids 2 and 3; binding by source slot (not shared CLR type) preserves each side.
+            direct.Select(r => r.Id).OrderBy(id => id).Should().Equal(2, 3);
+            direct.Single(r => r.Id == 2).Total.Should().Be(20);
+            direct.Single(r => r.Id == 3).Name.Should().Be("c");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void DirectTypedCte_FilteredBody_ShouldKeepFilterOnlyInsideBody()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var scoped = ctx.From<TypedCteScopedPerson>(b => b.HasQueryFilter(e => e.TenantId == 7))
+                .ToCommand()
+                .AsCte("scoped");
+            var plain = ctx.From<TypedCteScopedPerson>().Select(p => new { p.Id, p.TenantId }).AsCte("plain");
+
+            var direct = Prepare(ctx, ctx.From(plain)
+                .Join(scoped, (a, b) => a.Id == b.Id)
+                .Select(p => p.Item1.Id));
+            var converted = Prepare(ctx, ctx.From(plain)
+                .Join(ctx.From(scoped), (a, b) => a.Id == b.Id)
+                .Select(p => p.Item1.Id));
+
+            direct.Sql.Should().Be(converted.Sql);
+            direct.Sql.Should().Contain("where tenant_id = 7");
+            // The entity filter is not re-injected through the join continuation.
+            direct.Sql.Should().NotContain("t2.tenant_id = 7");
         }
         finally { ctx.Dispose(); File.Delete(path); }
     }

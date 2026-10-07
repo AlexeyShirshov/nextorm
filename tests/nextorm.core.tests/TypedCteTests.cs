@@ -765,6 +765,201 @@ public class TypedCteTests
     }
 
     // ---------------------------------------------------------------------------------------------
+    // #159 direct Cte<T> join overloads: a descriptor passed straight to the seven operators must
+    // behave exactly like converting it with the receiving context first (ctx.From(cte)).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void TypedCte_DirectJoin_ShouldMatchConvertedForm()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Where(x => x.Id > 1).Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Where(x => x.Id < 9).Select(x => new { x.Id }).AsCte("r");
+
+        var direct = SqlOf(ctx, ctx.From(left)
+            .Join(right, (a, b) => a.Id == b.Id)
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id }));
+        var converted = SqlOf(ctx, ctx.From(left)
+            .Join(ctx.From(right), (a, b) => a.Id == b.Id)
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id }));
+
+        direct.Should().Be(converted);
+        direct.Should().Contain("with l as (");
+        direct.Should().Contain(", r as (");
+        direct.Should().Contain("join r as");
+    }
+
+    [Theory]
+    [InlineData("Join")]
+    [InlineData("LeftJoin")]
+    [InlineData("RightJoin")]
+    [InlineData("FullJoin")]
+    public void TypedCte_DirectConditionalOperators_ShouldMatchConvertedForm(string operation)
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct() => operation switch
+        {
+            "Join" => ctx.From(left).Join(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "LeftJoin" => ctx.From(left).LeftJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "RightJoin" => ctx.From(left).RightJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "FullJoin" => ctx.From(left).FullJoin(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            _ => throw new NotSupportedException(),
+        };
+        QueryCommand<long> Converted() => operation switch
+        {
+            "Join" => ctx.From(left).Join(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "LeftJoin" => ctx.From(left).LeftJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "RightJoin" => ctx.From(left).RightJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            "FullJoin" => ctx.From(left).FullJoin(ctx.From(right), (a, b) => a.Id == b.Id).Select(p => p.Item1.Id),
+            _ => throw new NotSupportedException(),
+        };
+
+        SqlOf(ctx, Direct()).Should().Be(SqlOf(ctx, Converted()));
+    }
+
+    [Fact]
+    public void TypedCte_DirectCrossJoin_ShouldMatchConvertedForm()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct = ctx.From(left).CrossJoin(right).Select(p => p.Item1.Id);
+        QueryCommand<long> Converted = ctx.From(left).CrossJoin(ctx.From(right)).Select(p => p.Item1.Id);
+
+        SqlOf(ctx, Direct).Should().Be(SqlOf(ctx, Converted));
+    }
+
+    [Theory]
+    [InlineData("CrossApply")]
+    [InlineData("OuterApply")]
+    public void TypedCte_DirectApply_UnsupportedDialect_ShouldMatchConvertedRejection(string operation)
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        QueryCommand<long> Direct = operation switch
+        {
+            "CrossApply" => ctx.From(left).CrossApply(right).Select(p => p.Item1.Id),
+            _ => ctx.From(left).OuterApply(right).Select(p => p.Item1.Id),
+        };
+        QueryCommand<long> Converted = operation switch
+        {
+            "CrossApply" => ctx.From(left).CrossApply(ctx.From(right)).Select(p => p.Item1.Id),
+            _ => ctx.From(left).OuterApply(ctx.From(right)).Select(p => p.Item1.Id),
+        };
+
+        // Unsupported APPLY must keep the exact full-form capability rejection.
+        var directEx = Record.Exception(() => SqlOf(ctx, Direct));
+        var convertedEx = Record.Exception(() => SqlOf(ctx, Converted));
+        directEx.Should().BeOfType<NotSupportedException>();
+        convertedEx.Should().BeOfType<NotSupportedException>();
+        directEx!.Message.Should().Be(convertedEx!.Message);
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_WithExplicitOptions_ShouldMatchConvertedForm()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("l");
+        var right = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("r");
+
+        var direct = SqlOf(ctx, ctx.From(left)
+            .Join(right, (a, b) => a.Id == b.Id, o => o.SuppressCartesianWarning())
+            .Select(p => p.Item1.Id));
+        var converted = SqlOf(ctx, ctx.From(left)
+            .Join(ctx.From(right), (a, b) => a.Id == b.Id, o => o.SuppressCartesianWarning())
+            .Select(p => p.Item1.Id));
+
+        direct.Should().Be(converted);
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_NullCte_ShouldFailBeforeSourceWork()
+    {
+        using var ctx = new TestContext();
+
+        var other = ctx.From<TypedCteEntity>().ToCommand().AsCte("b");
+        Cte<TypedCteEntity>? missing = null;
+
+        var act = () => ctx.From(other).Join(missing!, (a, b) => a.Id == b.Id);
+
+        act.Should().Throw<ArgumentNullException>().Where(e => e.ParamName == "cte");
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_NullPredicate_ShouldFailBeforeSourceWork()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().ToCommand().AsCte("a");
+        var right = ctx.From<TypedCteEntity>().ToCommand().AsCte("b");
+        System.Linq.Expressions.Expression<Func<TypedCteEntity, TypedCteEntity, bool>>? predicate = null;
+
+        var act = () => ctx.From(left).Join(right, predicate!);
+
+        act.Should().Throw<ArgumentNullException>().Where(e => e.ParamName == "joinCondition");
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_ShouldPreserveDependencyOrder()
+    {
+        using var ctx = new TestContext();
+
+        var dependency = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("dep");
+        var consumer = ctx.From(dependency).Select(x => new { x.Id }).AsCte("consumer");
+        var root = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("root");
+
+        var sql = SqlOf(ctx, ctx.From(root)
+            .Join(consumer, (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1.Id));
+
+        sql.Should().Contain("with root as (");
+        sql.Should().Contain("dep as (");
+        sql.Should().Contain("consumer as (");
+        // Dependency-before-consumer: the transitive dependency is declared before its consumer.
+        sql.IndexOf("dep as (", StringComparison.Ordinal).Should().BeLessThan(sql.IndexOf("consumer as (", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TypedCte_DirectSelfJoin_ShouldEmitDefinitionOnce()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>().Select(x => new { x.Id }).AsCte("s");
+
+        var sql = SqlOf(ctx, ctx.From(cte)
+            .Join(cte, (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1.Id));
+
+        Occurrences(sql, "s as (").Should().Be(1);
+        sql.Should().Contain("join s as 't2'");
+    }
+
+    [Fact]
+    public void TypedCte_DirectJoin_ShouldNotMutateSharedCommandCacheFlag()
+    {
+        using var ctx = new TestContext();
+
+        var left = ctx.From<TypedCteEntity>().ToCommand().AsCte("a");
+        var right = ctx.From<TypedCteEntity>().ToCommand().AsCte("b");
+        var command = ctx.From(left).Join(right, (a, b) => a.Id == b.Id).Select(p => p.Item1.Id);
+
+        command.Cache.Should().BeTrue();
+        SqlOf(ctx, command);
+        command.Cache.Should().BeTrue();
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // §9 / D5 lifecycle: cloning and shared command flags.
     // ---------------------------------------------------------------------------------------------
 

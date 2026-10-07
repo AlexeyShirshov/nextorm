@@ -131,4 +131,57 @@ public class JoinAliasSqlGenerationTests
 
         alias.Should().Contain(" left join complex_entity").And.Contain(" on true");
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // #159: a generated alias slot over a typed CTE descriptor. The generator must recognise a
+    // Cte<T> source (named or anonymous projection) and emit a CTE-form overload that renders the
+    // same SQL as the converted ctx.From(cte) alias form.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Direct_typed_cte_alias_join_infers_named_projection_and_matches_converted()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var named = ctx.From<IComplexEntity>().Where(c => c.Id > 1).ToCommand().AsCte("cte_buyer");
+
+        var positional = SqlOf(ctx, simple.Join(ctx.From(named), (s, c) => s.Id == c.Id).Select(p => p.Item2.Id));
+        var cteAlias = SqlOf(ctx, simple.Join<IComplexEntity>(named, (s, c) => s.Id == c.Id, Alias.Buyer).Select(p => p.Buyer.Id));
+
+        cteAlias.Should().Be(positional);
+        cteAlias.Should().Contain("cte_buyer as (").And.Contain("cte_buyer");
+        cteAlias.Should().NotContain("join (select");
+    }
+
+    [Fact]
+    public void Direct_typed_cte_alias_join_infers_anonymous_projection()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var anon = ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id, c.Int }).AsCte("cte_anon");
+
+        var positional = SqlOf(ctx, simple.Join(ctx.From(anon), (s, c) => s.Id == c.Id).Select(p => p.Item2.Id));
+        var cteAlias = SqlOf(ctx, simple.Join(anon, (s, c) => s.Id == c.Id, Alias.Anon).Select(p => p.Anon.Id));
+
+        cteAlias.Should().Be(positional);
+        cteAlias.Should().Contain("cte_anon as (").And.Contain("cte_anon");
+        cteAlias.Should().NotContain("join (select");
+    }
+
+    [Fact]
+    public void Direct_typed_cte_alias_join_subsequent_slot_infers_projection()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var first = ctx.From<IComplexEntity>().Where(c => c.Id > 1).ToCommand().AsCte("cte_first");
+        var second = ctx.From<IComplexEntity>().Select(c => new { c.Id, c.Int }).AsCte("cte_second");
+
+        var chained = simple
+            .Join<IComplexEntity>(first, (s, c) => s.Id == c.Id, Alias.First)
+            .Join(second, (a, c) => a.Item1.Id == c.Id, Alias.Second);
+
+        var sql = SqlOf(ctx, chained.Select(p => p.Second.Id));
+        sql.Should().Contain("cte_first as (").And.Contain("cte_second as (");
+        sql.Should().Contain("cte_first").And.Contain("cte_second");
+    }
 }

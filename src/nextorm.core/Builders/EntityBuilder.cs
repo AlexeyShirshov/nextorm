@@ -2555,6 +2555,157 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <returns>A builder over the applied projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _, Action<JoinOptions>? options = null)
         => JoinCore(_, JoinType.OuterApply, null, options);
+    // -----------------------------------------------------------------------------------------------
+    // #159 direct Cte<T> overloads. The descriptor is converted with THIS builder's context
+    // (DataProvider.From(cte)) and routed through the existing EntityBuilder-source overload, so CTE
+    // declaration propagation, source resolution, filters, state and caching match ctx.From(cte).
+    // -----------------------------------------------------------------------------------------------
+
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>; identical to <see cref="Join{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, Action{JoinOptions}?)"/> with this builder's context.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => Join(cte, joinCondition, null);
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return Join(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => LeftJoin(cte, joinCondition, null);
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return LeftJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => RightJoin(cte, joinCondition, null);
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return RightJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => FullJoin(cte, joinCondition, null);
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return FullJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossJoin(cte, null);
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return CrossJoin(_dataProvider.From(cte), options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return CrossApply(_dataProvider.From(cte), options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => OuterApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return OuterApply(_dataProvider.From(cte), options);
+    }
+
     /// <summary>
     /// Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/> and returns this builder
     /// unchanged in shape: only the left-hand columns survive, and a left-hand row is kept once when at
@@ -2712,6 +2863,62 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         ArgumentNullException.ThrowIfNull(_);
 
         return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _, null, joinType, options);
+    }
+
+    /// <summary>
+    /// Alias-join seam over a typed CTE for the conditional operators. The descriptor is converted with
+    /// this builder's context and forwarded to
+    /// <see cref="JoinAlias{TNext, TNextEntity, TJoinEntity}(Func{IDataContext, TNext}, EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}}, JoinType, Action{JoinOptions}?)"/>,
+    /// so the CTE declaration set and the join source match the converted form.
+    /// </summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">A predicate relating the current projection to the joined entity.</param>
+    /// <param name="joinType">The kind of join to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/>, <paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Cte<TJoinEntity> cte,
+        Expression<Func<TEntity, TJoinEntity, bool>> joinCondition,
+        JoinType joinType = JoinType.Inner,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From(cte), joinCondition, joinType, options);
+    }
+
+    /// <summary>Alias-join seam over a typed CTE for the conditionless operators; see the conditional counterpart.</summary>
+    /// <typeparam name="TNext">The generated builder type that receives the join chain.</typeparam>
+    /// <typeparam name="TNextEntity">The projection type <typeparamref name="TNext"/> is built over.</typeparam>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="create">Creates an empty <typeparamref name="TNext"/> bound to this builder's data context.</param>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinType">The conditionless join kind to add.</param>
+    /// <param name="options">Optional per-join configuration.</param>
+    /// <returns>A new <typeparamref name="TNext"/> carrying this builder's joins plus the new one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> or <paramref name="cte"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The in-memory provider cannot project named aliases.</exception>
+    public TNext JoinAlias<TNext, TNextEntity, TJoinEntity>(
+        Func<IDataContext, TNext> create,
+        Cte<TJoinEntity> cte,
+        JoinType joinType,
+        Action<JoinOptions>? options = null)
+        where TNext : EntityBuilder<TNextEntity>
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        ArgumentNullException.ThrowIfNull(cte);
+
+        return JoinAliasEntity<TNext, TNextEntity, TJoinEntity>(create, _dataProvider.From(cte), null, joinType, options);
     }
 
     /// <summary>
@@ -4083,6 +4290,154 @@ public class EntityBuilder : ICloneable
     /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.OuterApply, null);
+    // #159 direct Cte<T> overloads for the named-table (TableAlias) receiver. The descriptor is
+    // converted with this builder's context and routed through the generic EntityBuilder-source
+    // overloads, so the source resolution and CTE propagation match ctx.From(cte).
+
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => Join(cte, joinCondition, null);
+    /// <summary>Adds an inner join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> Join<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return Join(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => LeftJoin(cte, joinCondition, null);
+    /// <summary>Adds a left outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> LeftJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return LeftJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => RightJoin(cte, joinCondition, null);
+    /// <summary>Adds a right outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> RightJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return RightJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => FullJoin(cte, joinCondition, null);
+    /// <summary>Adds a full outer join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> or <paramref name="joinCondition"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> FullJoin<TJoinEntity>(Cte<TJoinEntity> cte, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        ArgumentNullException.ThrowIfNull(joinCondition);
+        return FullJoin(_dataProvider.From(cte), joinCondition, options);
+    }
+
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossJoin(cte, null);
+    /// <summary>Adds a cross join over the typed CTE <paramref name="cte"/> with per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the joined projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossJoin<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return JoinCore(_dataProvider.From(cte), JoinType.Cross, null, options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => CrossApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>CROSS APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return JoinCore(_dataProvider.From(cte), JoinType.CrossApply, null, options);
+    }
+
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte)
+        => OuterApply(cte, null);
+    /// <summary>Applies the typed CTE <paramref name="cte"/> with <c>OUTER APPLY</c> and per-join <paramref name="options"/>.</summary>
+    /// <typeparam name="TJoinEntity">The CTE's projection type.</typeparam>
+    /// <param name="cte">The CTE descriptor, converted with this builder's context.</param>
+    /// <param name="options">Per-join configuration.</param>
+    /// <returns>A builder over the applied projection.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cte"/> is <see langword="null"/>.</exception>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(Cte<TJoinEntity> cte, Action<JoinOptions>? options)
+    {
+        ArgumentNullException.ThrowIfNull(cte);
+        return JoinCore(_dataProvider.From(cte), JoinType.OuterApply, null, options);
+    }
     /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}}, Action{JoinOptions})"/>
     internal EntityBuilder SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition, Action<JoinOptions>? options = null)
     {
@@ -4120,7 +4475,7 @@ public class EntityBuilder : ICloneable
         options?.Invoke(opts);
         var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType)
         {
-            From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!,
+            From = JoinSourceResolver.Resolve(_dataProvider, _),
             EntityType = joinCondition is null ? typeof(TJoinEntity) : null,
             Strictness = opts.Strictness ?? JoinStrictness.Default,
             IsGlobal = opts.IsGlobal,

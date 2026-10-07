@@ -174,14 +174,14 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             var conditionless = ConditionlessOperators.Contains(operation);
             if (conditionless ? arguments.Count != 2 : arguments.Count != 3) return null;
 
-            if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined)) return null;
+            if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined, out var isCte)) return null;
 
             var receiver = ResolveChain(memberAccess.Expression, semanticModel, ct);
             if (receiver is null) return null;
 
             var steps = new AliasStep[receiver.Steps.Count + 1];
             for (var i = 0; i < receiver.Steps.Count; i++) steps[i] = receiver.Steps[i];
-            steps[receiver.Steps.Count] = new AliasStep(alias, Display(joined), operation, conditionless, aliasLocation);
+            steps[receiver.Steps.Count] = new AliasStep(alias, Display(joined), operation, conditionless, isCte, aliasLocation);
             return new Candidate(true, alias, new ChainModel(receiver.BaseType, new EquatableArray<AliasStep>(steps)), aliasLocation);
         }
 
@@ -261,10 +261,10 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
         var aliasExpression = arguments[arguments.Count - 1].Expression;
         if (!TryReadAliasArgument(aliasExpression, out var alias)) return false;
-        if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined)) return false;
+        if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined, out var isCte)) return false;
 
         receiver = memberAccess.Expression;
-        step = new AliasStep(alias, Display(joined), operation, conditionless, ToAliasLocation(aliasExpression.GetLocation()));
+        step = new AliasStep(alias, Display(joined), operation, conditionless, isCte, ToAliasLocation(aliasExpression.GetLocation()));
         return true;
     }
 
@@ -305,7 +305,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             for (var i = 0; i < aliases.Length; i++)
             {
                 if (semanticModel.GetTypeInfo(typeArguments[i + 1], ct).Type is not INamedTypeSymbol joined) return null;
-                steps[i] = new AliasStep(aliases[i], Display(joined), "Join", false, default);
+                steps[i] = new AliasStep(aliases[i], Display(joined), "Join", false, false, default);
             }
 
             return new ChainModel(Display(baseType), new EquatableArray<AliasStep>(steps));
@@ -328,16 +328,23 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Resolves the joined entity type: from the explicit generic type argument when present, otherwise
-    /// from an <c>EntityBuilder&lt;T&gt;</c> source argument (type-argument inference at the call site).
+    /// from an <c>EntityBuilder&lt;T&gt;</c> or typed CTE <c>Cte&lt;T&gt;</c> source argument (type-argument
+    /// inference at the call site). <paramref name="isCte"/> reports whether the joined source is a typed
+    /// CTE descriptor, so the emitted alias overload forwards to the CTE alias seam.
     /// </summary>
     private static bool TryGetJoinedType(
         InvocationExpressionSyntax invocation,
         SimpleNameSyntax name,
         SemanticModel semanticModel,
         CancellationToken ct,
-        out ITypeSymbol joined)
+        out ITypeSymbol joined,
+        out bool isCte)
     {
         joined = null!;
+        isCte = false;
+
+        var arguments = invocation.ArgumentList.Arguments;
+        if (arguments.Count == 0) return false;
 
         if (name is GenericNameSyntax generic)
         {
@@ -345,21 +352,27 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             var explicitType = semanticModel.GetTypeInfo(generic.TypeArgumentList.Arguments[0], ct).Type;
             if (explicitType is null) return false;
             joined = explicitType;
+            isCte = IsCteSource(arguments[0].Expression, semanticModel, ct);
             return true;
         }
 
-        var arguments = invocation.ArgumentList.Arguments;
-        if (arguments.Count == 0) return false;
         if (semanticModel.GetTypeInfo(arguments[0].Expression, ct).Type is INamedTypeSymbol source
-            && source.Name == "EntityBuilder"
-            && source.TypeArguments.Length == 1)
+            && source.TypeArguments.Length == 1
+            && (source.Name == "EntityBuilder" || source.Name == "Cte"))
         {
             joined = source.TypeArguments[0];
+            isCte = source.Name == "Cte";
             return true;
         }
 
         return false;
     }
+
+    /// <summary>True when the joined source argument is a typed CTE descriptor <c>Cte&lt;T&gt;</c>.</summary>
+    private static bool IsCteSource(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken ct)
+        => semanticModel.GetTypeInfo(expression, ct).Type is INamedTypeSymbol named
+            && named.Name == "Cte"
+            && named.TypeArguments.Length == 1;
 
     /// <summary>Reads the approved <c>Alias.&lt;identifier&gt;</c> argument form.</summary>
     private static bool TryReadAliasArgument(ExpressionSyntax expression, out string alias)
@@ -676,10 +689,21 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             var projectionType = generatedNamespace + ".AliasProjection_" + suffix + "<" + returnArgumentsText + ">";
             var markerType = generatedNamespace + ".Alias." + last.Alias + "Marker";
             var joinType = "global::NextORM.Core.JoinType." + JoinTypeName(last.Operator);
+            // #159: a typed CTE source emits an overload taking the descriptor and forwards to the CTE
+            // alias seam; the generated call itself is otherwise identical to the EntityBuilder form.
+            var sourceIsCte = last.IsCte;
 
             emitter.AppendLine("        public static " + returnType + " " + last.Operator + "<TJoin>(");
             emitter.AppendLine("            this " + receiverType + " self,");
-            emitter.AppendLine("            global::NextORM.Core.EntityBuilder<TJoin> _,");
+            if (sourceIsCte)
+            {
+                emitter.AppendLine("            global::NextORM.Core.Cte<TJoin> cte,");
+            }
+            else
+            {
+                emitter.AppendLine("            global::NextORM.Core.EntityBuilder<TJoin> _,");
+            }
+
             if (!last.Conditionless)
             {
                 emitter.AppendLine("            global::System.Linq.Expressions.Expression<global::System.Func<" + conditionArgumentType + ", TJoin, bool>> condition,");
@@ -688,7 +712,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
             emitter.AppendLine("            " + markerType + " marker)");
             emitter.AppendLine("            => self.JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
             emitter.AppendLine("                static dc => new " + returnType + "(dc),");
-            emitter.AppendLine("                _,");
+            emitter.AppendLine(sourceIsCte ? "                cte," : "                _,");
             if (!last.Conditionless)
             {
                 emitter.AppendLine("                condition,");
@@ -722,7 +746,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
         for (var i = 0; i < chain.Steps.Count; i++)
         {
             var step = chain.Steps[i];
-            builder.Append('|').Append(step.Operator).Append(':').Append(step.Alias).Append(':').Append(step.JoinedType);
+            builder.Append('|').Append(step.Operator).Append(':').Append(step.Alias).Append(':').Append(step.JoinedType).Append(':').Append(step.IsCte ? 'c' : 'e');
         }
 
         return builder.ToString();
@@ -785,7 +809,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
     private readonly record struct AliasLocation(string FilePath, TextSpan Span, LinePositionSpan LineSpan);
 
-    private sealed record AliasStep(string Alias, string JoinedType, string Operator, bool Conditionless, AliasLocation Location);
+    private sealed record AliasStep(string Alias, string JoinedType, string Operator, bool Conditionless, bool IsCte, AliasLocation Location);
 
     /// <summary>
     /// One ordered alias chain: the base entity type and the alias steps. Aliases are a self-contained

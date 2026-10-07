@@ -171,6 +171,26 @@ var rows = await dataContext.From<Order>(b => b.Table("orders"))
 псевдонима: `Alias.Buyer<int>` или `Alias.Buyer.Approver` отклоняются. Арность ограничена восемью
 слотами через `Projection<T1..T8>`.
 
+Сгенерированные перегрузки с псевдонимами принимают и типизированный дескриптор CTE — [`Cte<T>`](xref:NextORM.Core.Cte`1)
+вместо источника [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1). Присоединяемый тип выводится из дескриптора, поэтому явный
+аргумент типа `<T>` и преобразование (`dataContext.From(cte)`) можно опустить:
+
+```csharp
+var peopleCte = dataContext.From<Person>(b => b.Table("person"))
+    .ToCommand()
+    .AsCte("people_cte");
+
+var rows = await dataContext.From<Order>(b => b.Table("orders"))
+    .Join(peopleCte, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
+    .Select(p => new { OrderId = p.Item1.Id, BuyerId = p.Buyer.Id, BuyerName = p.Buyer.Name })
+    .ToListAsync();
+```
+
+```sql
+-- SQLite: CTE присоединяется по имени, без обёртки в производную (select ...) таблицу
+... join people_cte as 't2' on t1.buyerid = t2.Id
+```
+
 Именованный путь доступен только на SQL-провайдерах: провайдер in-memory бросает
 `NotSupportedException`. Запрос может пересекать границу метода, но метод обязан назвать в своей
 сигнатуре сгенерированный тип построителя, потому что этот тип генерируется и не может быть выведен
@@ -377,6 +397,11 @@ var rows = await dataContext.From<ISimpleEntity>()
 select t1.id, t2.requiredstring from simple_entity as 't1' join (select id, requiredstring, b as 'Boolean' from complex_entity where id = 3) as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
+Типизированный CTE — **не** подзапрос: передайте [`Cte<T>`](xref:NextORM.Core.Cte`1) прямо в те же семь операторов, и он
+присоединяется по имени — без обёртки в производную `(select ...)` — ровно как если бы вы преобразовали
+его через `dataContext.From(cte)`. См.
+[Прямое соединение типизированного CTE](08-cte.md#прямое-соединение-типизированного-cte).
+
 ## Производный запрос как первичный источник
 
 `QueryCommand<T>` может быть и **первичным** источником `FROM`, а присоединяемая таблица пишется второй:
@@ -484,6 +509,12 @@ var sql = e[0]
     .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id,
                        E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id });
 ```
+
+Прямые перегрузки [`Cte<T>`](xref:NextORM.Core.Cte`1) доступны и на каждом продолжении: каждый
+[`JoinedEntityBuilder<T1..Tn>`](xref:NextORM.Core.JoinedEntityBuilder`2) (арности приёмника 2–7) принимает типизированный CTE вместо
+источника `EntityBuilder<T>` для всех семи операторов, поэтому CTE можно присоединить на любом шаге.
+Проекция при этом по-прежнему ограничена восемью слотами — восьмая арность не предоставляет
+дальнейшего соединения, и `Cte<T>` не поднимает этот потолок.
 
 ## Именование промежуточной проекции: `As`
 
