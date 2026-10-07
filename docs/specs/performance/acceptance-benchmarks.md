@@ -669,3 +669,32 @@ the bare `JsonNode.Parse` call: 1.285 vs 1.298 us (128 B), 29.7 vs 27.0 us (4 Ki
 468 vs 485 us (64 KiB, `Error` 291 us) — the differences are inside `ShortRun` noise and have no
 consistent direction, confirming no per-row reflection and no extra allocation beyond the DOM itself.
 Raw log: `artifacts/pdca/D197/perf-jsonnode.log`; acceptance log: `artifacts/pdca/D197/perf-acceptance.log`.
+
+## Results 2026-10-08 — issue #160 (D160: join-alias mixing / root alias)
+
+D160 touches the query builder/planner seam (`JoinAlias`) and adds a dim-1 root projection
+(`EntityBuilder.AliasRoot`, `Projection<T1>`), so the seven-case acceptance suite was re-run on the
+baseline host/config/case set (`Job.ShortRun`, `InProcessEmitToolchain`, `Categories=acceptance`).
+
+### Acceptance run
+
+**7** cases selected, **0** failures, exit **0**. External shell wall clock **51 s**; BDN
+`Global total time` **44.48 s** (`executed benchmarks: 7`) — both under the 4 min budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.166 ms | 374.22 KB | -25.7% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 58.70 ms | 50.1 MB | -3.7% |
+| `Nextorm_Cached` | 1.983 ms | 609.45 KB | +11.9% (high-variance row) |
+| `Prepared_ToList` | 902.0 us | 76.14 KB | -2.4% |
+| `Cached_ToList` | 1,840.1 us | 583.19 KB | +6.5% |
+| `Cached_PlanOnly_Param` | 550.2 us | 507.05 KB | +6.2% (no-database micro, not comparable) |
+| `Nextorm_Cached_ToListAsync` | 2.035 ms | 607.69 KB | -4.8% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.040** — vs documented
+baseline **1.87** (**+9.1%**), below the **20%** investigation threshold (absolute gate **2.244**).
+The corresponding allocated ratio is **7.66** (baseline **7.42**, **+3.2%**), unchanged within noise.
+No individual row delta is read as a regression beyond noise; the tracked within-run ratio is the only
+comparison. **Verdict: no regression, no investigation trigger.**
+
+Raw log: `docs/specs/status/rc2-160-evidence/E160-09/acceptance.log`.
