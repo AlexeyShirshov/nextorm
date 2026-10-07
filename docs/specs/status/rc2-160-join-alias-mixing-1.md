@@ -261,6 +261,12 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | 2026-10-08T02:02:00Z | DO | r2 | n2/3 | alias plan-cache C case added (`AliasPlanCacheTests.Root_alias_storeInCache_false_keeps_the_command_and_shared_any_command_cacheable`): root-alias `storeInCache:false` keeps the command and the shared `AnyCommand` cacheable; generator harness test added (`JoinAliasGeneratorDiagnosticTests.Distinct_root_aliases_emit_one_WithAlias_each_and_duplicates_are_deduped`) documenting `JoinAliasGenerator.cs:666-671`/`:1053`/`:1057`: one `WithAlias<T>` per distinct root name, duplicates deduped, `:1057` `continue` unreachable for valid input; filtered `AliasPlanCacheTests|JoinAliasGeneratorDiagnosticTests` exit 0, selected 20 / passed 20 / failed 0 | rc2-160-evidence/E160-29/alias-filtered-new.log |
 | 2026-10-08T02:02:00Z | DO | r2 | n2/3 | full project sweeps after C/D: alias `dotnet test tests/nextorm.alias.tests -c Debug` exit 0, selected 95 / passed 95 / failed 0; core `dotnet test tests/nextorm.core.tests -c Debug` exit 0, selected 1770 / passed 1770 / failed 0 | rc2-160-evidence/E160-29/alias-boundary.log, rc2-160-evidence/E160-29/core-boundary.log |
 | 2026-10-08T02:02:00Z | DO | r2 | n2/3 | solution builds re-verified after C/D: `dotnet build nextorm.slnx -c Debug` exit 0, 0 warnings / 0 errors; `dotnet build nextorm.slnx -c Release` exit 0, 0 warnings / 0 errors | rc2-160-evidence/E160-29/solution-debug.log, rc2-160-evidence/E160-29/solution-release.log |
+| 2026-10-08T02:03:00Z | DO | r2 | n2/3 | STEP-3 boundary re-run started: the C1 core fix (`SqlBuilder.MakeSelect` / `EntityBuilder` alias-state rebasing, commit `9d6a9f59`, plus E160-28/E160-29) changed compiled sources after the n=1 boundary run, so the n=1 E160-08/E160-09/E160-10 evidence (tree `69ed192d`) is invalidated; re-running integration, acceptance and coverage on the current tree `4e2f43b2` | this file §STEP-3 boundary re-run (post-C1) |
+| 2026-10-08T02:04:00Z | DO | r2 | n2/3 | E160-08 STEP-3 integration re-run: `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` exit 0, Total 3357 / Errors 0 / Failed 0 / Skipped 197 / Not Run 0 (43.117s); supporting `-result-xml results-step3.xml` exit 0 same summary (33.463s); six providers executed, 20/20 D160 root-alias/mixed cases pass | rc2-160-evidence/E160-08/integration-step3.log, integration-results-step3.log, provider-inventory-step3.txt, results-step3.xml |
+| 2026-10-08T02:06:00Z | DO | r2 | n2/3 | E160-10 STEP-3 coverage re-run: `dotnet build --no-restore` exit 0, 0 warnings / 0 errors; `dotnet-coverage collect …` exit 0, total 9216 / failed 0 / succeeded 9018 / skipped 198; `reportgenerator …` exit 0; line **88.1%** (48348/54834), branch **80.2%** (25956/32355) — both ≥ 85/75 | rc2-160-evidence/E160-10/{build.log,coverage-collect.log,coverage-report.log,Summary.txt,coverage.cobertura.xml,assembly-coverage.txt} |
+| 2026-10-08T02:08:00Z | DO | r2 | n2/3 | E160-09 STEP-3 acceptance re-run: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` exit 0, 7/7 cases 0 failures; external wall 52 s, BDN `Global total time` 45.08 s; ratio `Cached_ToList/Prepared_ToList` **2.081** vs baseline 1.87 (+11.3%), below the 2.244 gate; alloc ratio 7.66 vs 7.42 (+3.2%) | rc2-160-evidence/E160-09/step3-acceptance.log, README.md; docs/specs/performance/acceptance-benchmarks.md §2026-10-08 (STEP-3 re-run) |
+| 2026-10-08T02:09:00Z | DO | r2 | n2/3 | E160-12 STEP-3 inner-loop report regenerated on the current tree (`4e2f43b2+dirty`): 1 inner build + 9 inner filtered (core `RootProjectionTests` 14/14; six-provider `JoinAliasSqlGenerationTests` 13/16/16/16/16/16; alias `RootAlias` 31/31; `MixedJoinChainTests` 8/8) + exactly ONE broad boundary sweep (`dotnet test tests/nextorm.alias.tests -c Debug`, selected 95 / passed 95) + one boundary solution build (Debug, 0/0); `brief` exit 0, `report` exit 0 | rc2-160-evidence/report.json, rc2-160-evidence/E160-STEP3/validator-report.log |
+| 2026-10-08T02:10:00Z | DO | r2 | n2/3 | E160-11 STEP-3 docs re-check: `dotnet docfx docs/docfx.json` exit 0 (2 pre-existing AnalyzerReleases duplicate warnings / 0 errors); `git diff --check` exit 0 (clean; regenerated BDN line trailing-whitespace stripped) | rc2-160-evidence/E160-STEP3/docfx.log |
 
 ### C1 — defect D160-C1 (pre-`.WithAlias` query state preservation) — FIXED (r=2, n=2/3)
 
@@ -352,6 +358,32 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | E160-28 | R03,R10 | green (finding B: root matrix + docs) | `RootAlias` filtered 31/31, alias build 0/0; EN/RU guide + design specs synced; logs `rc2-160-evidence/E160-28/` |
 | E160-29 | R04,R06,R07,R11 | green (findings C/D + generator classification) | core `RootProjectionTests` 14/14, alias filtered `AliasPlanCacheTests|JoinAliasGeneratorDiagnosticTests` 20/20, alias full 95/95, core full 1770/1770; solution Debug+Release 0/0; logs `rc2-160-evidence/E160-29/` |
 | E160-27 | R03,R07,R08 | green (n=2/3; D160-C1 fixed) | pre-`.WithAlias` state preserved: C1 filtered exit 0, 5/5 (`c1-tests-green.log`); alias boundary exit 0, 80/80 (`alias-suite-final.log`); renderer regression sweep core 1767 (0 failed), sqlite 1166 (0 failed), postgres 806 (0 failed), sqlserver 728 (0 failed), mysql 307 (0 failed), mariadb 233 (0 failed), clickhouse 595 (0 failed) exit 0 (`*-tests2.log`); build Debug+Release exit 0, 0/0 (`solution-{debug,release}.log`); full detail §C1 | `docs/specs/status/rc2-160-evidence/E160-27/` |
+| E160-08 (STEP-3) | R09 | green (post-C1 boundary re-run; supersedes the n=1 row above) | `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` exit 0, Total 3357 / Errors 0 / Failed 0 / Skipped 197 / Not Run 0; supporting XML run exit 0; six providers executed; 20/20 D160 root-alias/mixed cases pass | `rc2-160-evidence/E160-08/{integration-step3.log,integration-results-step3.log,provider-inventory-step3.txt,results-step3.xml}` |
+| E160-09 (STEP-3) | R07 | green (post-C1) | `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance` exit 0, **7/7** cases, 0 failures; wall 52 s / BDN `Global total time` 45.08 s; ratio `Cached_ToList/Prepared_ToList` **2.081** vs baseline 1.87 (<2.244); alloc ratio 7.66 | `rc2-160-evidence/E160-09/step3-acceptance.log`, `E160-09/README.md` |
+| E160-10 (STEP-3) | R08 | green (post-C1) | `dotnet-coverage collect …` exit 0 (total 9216 / failed 0 / succeeded 9018 / skipped 198); `reportgenerator …` exit 0; line **88.1%** (48348/54834), branch **80.2%** (25956/32355); canonical artifacts refreshed in place (build/collect/report logs + Summary + cobertura + assembly table) | `rc2-160-evidence/E160-10/` |
+| E160-12 (STEP-3) | R01..R11 | green (post-C1) | `validate_inner_loop.py brief` exit 0; `report` exit 0 (1 inner build + 9 inner filtered + 1 boundary sweep 95/95 + 1 boundary solution build 0/0; revision `4e2f43b2+dirty`) | `rc2-160-evidence/report.json`, `rc2-160-evidence/E160-STEP3/validator-report.log` |
+| E160-11 (STEP-3) | R10 | green (post-C1) | `dotnet docfx docs/docfx.json` exit 0, 2 pre-existing warnings / 0 errors; `git diff --check` exit 0 | `rc2-160-evidence/E160-STEP3/docfx.log` |
+
+### STEP-3 boundary re-run (post-C1)
+
+- **Trigger:** the C1 core fix (`SqlBuilder.MakeSelect` alias-aware `dontNeedAlias` + `EntityBuilder`
+  pre-`.WithAlias` state rebasing, commit `9d6a9f59`) and its follow-ups (E160-28 `18a401d0`,
+  E160-29 `4e2f43b2`) changed compiled sources after the n=1 boundary run. The n=1 E160-08
+  integration (tree `69ed192d`), E160-09 acceptance and E160-10 coverage evidence are therefore
+  **invalidated** and this STEP-3 pass is the re-run on the current tree.
+- **Defect history:** `D160-C1` (pre-`.WithAlias` state preservation) — first observed n=1, fixed in
+  n=2 (1 applied fix); resolved, no open defect. This STEP-3 pass adds no new defect key.
+- **E160-08:** fresh container-backed run `integration-step3.log` (exit 0, Total 3357 / Failed 0 /
+  Skipped 197) + `integration-results-step3.log` / `results-step3.xml` / `provider-inventory-step3.txt`;
+  the n=1 raw local inputs (`results.xml`, `tests-discovered.txt`) were removed as superseded.
+- **E160-10:** canonical `Summary.txt` / `coverage.cobertura.xml` / `build.log` /
+  `coverage-collect.log` / `coverage-report.log` / `assembly-coverage.txt` updated in place to the
+  fresh run (line 88.1% / branch 80.2%).
+- **E160-09:** appended to `docs/specs/performance/acceptance-benchmarks.md` (2026-10-08 STEP-3
+  sub-section) and to `E160-09/README.md`; ratio 2.081 < 2.244.
+- **E160-12:** `report.json` regenerated at revision `4e2f43b2+dirty`; `brief`/`report` validator both
+  exit 0.
+- **E160-11:** docfx exit 0 (2 pre-existing warnings / 0 errors); `git diff --check` clean.
 
 ### D:160-02 dim-1 spike — closed green (resolved-by-AliasRoot; for CHECK)
 - Result: 3/3 `RootAliasTests` green; dim-1 `Projection<T1>` plans, root slot 1 maps to `t1`, `Extend` yields `Projection<T1,T2>` preserving `Item1`.

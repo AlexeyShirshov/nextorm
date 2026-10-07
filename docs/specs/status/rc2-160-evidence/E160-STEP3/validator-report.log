@@ -1,0 +1,7 @@
+# D160 STEP-3 inner-loop validator (report) — 2026-10-07T21:10:08Z
+$ python3 /home/alex/.config/opencode/skills/pdca-dotnet/scripts/validate_inner_loop.py report docs/specs/status/rc2-160-evidence/report.json
+exit_code=0
+
+# brief
+$ ... validate_inner_loop.py brief docs/specs/status/rc2-160-evidence/brief.json
+exit_code=0

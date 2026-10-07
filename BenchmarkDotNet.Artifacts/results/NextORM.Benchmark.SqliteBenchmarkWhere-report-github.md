@@ -7,9 +7,9 @@ AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical
 
 Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
 LaunchCount=1  WarmupCount=3  Categories=acceptance  
-Error=0.0433 ms  StdDev=0.0024 ms  
+Error=0.1210 ms  StdDev=0.0066 ms
 
 ```
 | Method                     | Mean     | Gen0    | Allocated |
 |--------------------------- |---------:|--------:|----------:|
-| Nextorm_Cached_ToListAsync | 2.035 ms | 74.2188 | 607.69 KB |
+| Nextorm_Cached_ToListAsync | 2.032 ms | 74.2188 | 607.69 KB |

@@ -1,24 +1,24 @@
 Summary
-  Generated on: 10/08/2026 - 01:18:06
+  Generated on: 10/08/2026 - 02:06:44
   Parser: Cobertura
   Assemblies: 4
   Classes: 563
   Files: 324
   Line coverage: 88.1%
-  Covered lines: 48262
-  Uncovered lines: 6483
-  Coverable lines: 54745
-  Total lines: 91843
-  Branch coverage: 80.1% (25884 of 32287)
-  Covered branches: 25884
-  Total branches: 32287
-  Method coverage: 78.7% (5964 of 7578)
-  Full method coverage: 64.7% (4910 of 7578)
-  Covered methods: 5964
-  Fully covered methods: 4910
-  Total methods: 7578
+  Covered lines: 48348
+  Uncovered lines: 6486
+  Coverable lines: 54834
+  Total lines: 91981
+  Branch coverage: 80.2% (25956 of 32355)
+  Covered branches: 25956
+  Total branches: 32355
+  Method coverage: 78.7% (5968 of 7582)
+  Full method coverage: 64.7% (4913 of 7582)
+  Covered methods: 5968
+  Fully covered methods: 4913
+  Total methods: 7582
 
-nextorm.core                                                                      87.9%
+nextorm.core                                                                        88%
   NextORM.Core.AdvancedAggregateTranslator                                        86.4%
   NextORM.Core.AggregateFilter                                                    87.1%
   NextORM.Core.AggregateTerminalRewriter                                          90.1%
@@ -131,7 +131,7 @@ nextorm.core                                                                    
   NextORM.Core.EntityBuilder.RebaseAliasProjectionVisitor<TEntity>                81.2%
   NextORM.Core.EntityBuilder.ReplaceTargetParameterVisitor<TEntity>                100%
   NextORM.Core.EntityBuilder<TEntity>                                             92.7%
-  NextORM.Core.EntityBuilder<TEntity>                                             91.5%
+  NextORM.Core.EntityBuilder<TEntity>                                             91.1%
   NextORM.Core.EntityBuilderEagerLoading                                           100%
   NextORM.Core.EntityBuilderEagerLoading<TEntity>                                  100%
   NextORM.Core.EntityBuilderExtensions                                            91.7%
@@ -375,13 +375,13 @@ nextorm.core                                                                    
   NextORM.Core.ProjectionAliasCache                                               97.5%
   NextORM.Core.ProjectionEntityItem                                                100%
   NextORM.Core.QueryCache                                                          100%
-  NextORM.Core.QueryCommand                                                       92.4%
+  NextORM.Core.QueryCommand                                                       92.6%
   NextORM.Core.QueryCommand.QueryPreparer                                         91.3%
   NextORM.Core.QueryCommand.QueryPreparer.FilterColumnDependencyVisitor           98.5%
   NextORM.Core.QueryCommand.QueryPreparer.ProjectionSortRewriter                  84.6%
   NextORM.Core.QueryCommand.QueryPreparer.ReplaceParameterInstanceVisitor          100%
-  NextORM.Core.QueryCommand<TResult, TKey>                                        92.4%
-  NextORM.Core.QueryCommand<TResult>                                              92.4%
+  NextORM.Core.QueryCommand<TResult, TKey>                                        92.6%
+  NextORM.Core.QueryCommand<TResult>                                              92.6%
   NextORM.Core.QueryCommand<TResult>                                              91.3%
   NextORM.Core.QueryCommandExtensions                                             88.5%
   NextORM.Core.QueryCommandExtensions<TResult>                                    88.5%
@@ -462,7 +462,7 @@ nextorm.core                                                                    
   NextORM.Core.Sorting                                                             100%
   NextORM.Core.SortingExpressionPlanEqualityComparer                               100%
   NextORM.Core.SqlBuildContext                                                     100%
-  NextORM.Core.SqlBuilder                                                         91.9%
+  NextORM.Core.SqlBuilder                                                           92%
   NextORM.Core.SqlDefault                                                          100%
   NextORM.Core.SqlDialectBase                                                     86.4%
   NextORM.Core.SqlFunctionAttribute                                                100%

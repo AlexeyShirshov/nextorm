@@ -8,6 +8,15 @@
 - skill: `.opencode/skills/running-integration-tests/SKILL.md` loaded first; Podman socket present
   (`/mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`, server 5.8.6 / API 1.44)
 
+> **STEP-3 re-run (post-C1).** The C1 core fix (`SqlBuilder.MakeSelect` / `EntityBuilder` alias-state
+> rebasing, commit `9d6a9f59`) changed compiled sources after the n=1 integration run below
+> (tree `69ed192d`), so the whole container-backed boundary was re-executed on the current tree
+> (`4e2f43b2` + D160 evidence). Fresh evidence: `integration-step3.log` and
+> `integration-results-step3.log` (both exit **0**, same summary **Total 3357 / Errors 0 / Failed 0 /
+> Skipped 197 / Not Run 0**), with `provider-inventory-step3.txt` + `results-step3.xml` as the fresh
+> machine-readable per-test proof. The sections below describe the superseded n=1 run and are kept
+> for history.
+
 ## Exact invocation (required command, argument array)
 
 ```
@@ -34,8 +43,9 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 - exit_code: `0`; same summary: **Total 3357, Errors 0, Failed 0, Skipped 197, Not Run 0, Time 34.062s**
 - committed: `integration-results.log` (full output) and `provider-inventory.txt` (per-provider + D160
   per-case table extracted from the raw XML)
-- raw local inputs (not committed, present in the worktree for CHECK): `results.xml` (xUnit v3 per-test
-  outcomes) and `tests-discovered.txt` (`-list tests`)
+- the n=1 raw XML (`results.xml`) and its discovery inventory (`tests-discovered.txt`) were local,
+  uncommitted inputs and are superseded by the STEP-3 `results-step3.xml` + `provider-inventory-step3.txt`
+  committed in this package (the n=1 run used `-result-xml …/results.xml`)
 
 ## Per-provider executed / passed / failed / skipped
 
@@ -74,7 +84,7 @@ Five provider-agnostic cases now execute through every provider that inherits `C
 | `Mixed_alias_then_positional_join_executes_and_keeps_slot_identity` | alias slot ≡ subsequent `Item3` positional slot |
 | `Mixed_positional_then_alias_join_executes_and_keeps_slot_identity` | positional `Item2` ≡ trailing `Alias.Approver` slot |
 
-Result: `results.xml` — every case `Pass`, `type` = `NextORM.Integration.Tests.{Postgres,SqlServer,MySql,Sqlite}IntegrationTests`.
+Result: `results-step3.xml` — every case `Pass`, `type` = `NextORM.Integration.Tests.{Postgres,SqlServer,MySql,Sqlite}IntegrationTests` (the n=1 `results.xml` covered the same 20 executions).
 
 ### Coverage boundary (explicit, not silently absent)
 
@@ -95,5 +105,5 @@ skipped; this is a suite-membership boundary, recorded for CHECK, not a provider
 
 - `integration.log` — full output of the exact required command (exit 0)
 - `integration-results.log` — full output of the supporting `-result-xml` run (exit 0)
-- `results.xml` — xUnit v3 per-test outcomes (per-provider + D160 case proof)
-- `tests-discovered.txt` — discovery inventory (`-list tests`)
+- `results-step3.xml` — xUnit v3 per-test outcomes (per-provider + D160 case proof; STEP-3 re-run)
+- `provider-inventory-step3.txt` — per-provider + D160 per-case table extracted from `results-step3.xml`
