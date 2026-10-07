@@ -1848,19 +1848,38 @@ capability-проверки, а не вернёт «нет».
 - **Проверка:** build 0/0; SQL-gen-тесты SQL Server `Tablesample_Bernoulli_ShouldThrow…` не меняются
   (`SupportsTablesample`-ветка бросает раньше method-ветки).
 
-### 🟡 Находка 25 — `WITH TIES` не гейтится с `DISTINCT`/`DISTINCT ON` (ОТКРЫТА)
+### ✅ Находка 25 (актуализация 07.10.2026) — `WITH TIES` гейтится с `DISTINCT`/`DISTINCT ON` при генерации SQL
 
-`EntityBuilder` гейтит пару `DISTINCT`↔`DISTINCT ON` (`:477-504`), но `WithTies()` (`:570-576`) не
-проверяет ни `IsDistinct`, ни `_distinctOn`; `SqlBuilder` для `WITH TIES` проверяет только диалект и
-положительный лимит (`SqlBuilder.cs:66-70`). PostgreSQL и SQL Server не сочетают `WITH TIES` с
-`DISTINCT` (PostgreSQL — и с `DISTINCT ON`), поэтому `.Distinct().Limit(n).WithTies()` доходит до
-сервера как недопустимый SQL. Рантайм-эффект на живом сервере в этом проходе не перепроверялся
-(аналог Находки 19).
+Устаревшее утверждение «`WITH TIES` не гейтится, недопустимый SQL доходит до сервера» — **CLOSED**:
+guard существует и срабатывает на этапе генерации SQL. `SqlBuilder.cs:81-82` —
+`if (cmd.Paging.HasWithTies && (cmd.IsDistinct || cmd.DistinctOn is not null)) throw new
+BuildSqlCommandException("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");` — покрывает
+оба модификатора; исключение объявлено в `BuildSqlCommandException.cs:12` (`public : DataContextException`).
+Вызов падает до построения SQL, поэтому рантайм-эффект «недопустимый SQL доходит до сервера» не
+воспроизводится. Принятое поведение — оценка при генерации, отсутствие раннего fluent-guard'а в
+`WithTies()` **не является отдельным долгом**.
 
-- **Стало:** зеркальный guard в `WithTies()` (как `Distinct()`/`DistinctOn()`) либо явная оговорка в
-  XML-доке, что `WITH TIES` несовместим с `DISTINCT`/`DISTINCT ON`.
-- **Проверка:** unit-тест `.Distinct().Limit(2).WithTies()` → `InvalidOperationException` (или
-  закреплённая документированная комбинация); живой сервер — по возможности.
+- **Историческое (оставлено как история):** прежнее утверждение, что `WithTies()` (`:570-576`) не
+  проверяет `IsDistinct`/`_distinctOn`, и предложение «зеркальный guard в `WithTies()`» с ожиданием
+  `InvalidOperationException` (старые, ныне неактуальные диапазоны `EntityBuilder.cs:477-504,570-576`,
+  `SqlBuilder.cs:66-70`) относились к варианту раннего fluent-guard'а; он не выбран.
+- **Проверка:** новые теории обоих порядков вызова: PostgreSQL
+  `WithTies_WithDistinct_InBothCallOrders_ShouldRejectCombination` (`tests/nextorm.postgres.tests/SqlGenerationTests.cs:3845`)
+  и `WithTies_WithDistinctOn_InBothCallOrders_ShouldRejectCombination` (`:3863`); SQL Server
+  `WithTies_WithDistinct_InBothCallOrders_ShouldRejectCombination`
+  (`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2675`). Запрос строится вне `Assert.Throws`,
+  внутри — только генерация SQL; проверены тип `BuildSqlCommandException` и точное сообщение (раннее
+  fluent-исключение неприемлемо). Существующие позитивные/offset/без-лимита тесты `WITH TIES`
+  остались зелёными (AC4).
+- **Доказательства:** C1 `dotnet build -c Debug` exit 0 (0 warnings / 0 errors);
+  C2 `dotnet test tests/nextorm.postgres.tests -c Debug --filter FullyQualifiedName~NextORM.Postgres.Tests.SqlGenerationTests.WithTies`
+  exit 0 (7 passed / 0 skipped; 6 rejection-кейсов: 2 DISTINCT + 2 DISTINCT ON + 2 SQL Server);
+  C3 `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter FullyQualifiedName~NextORM.SqlServer.Tests.SqlGenerationTests.WithTies`
+  exit 0 (5 passed / 0 skipped); C4/C5 полные прогоны обоих проектов exit 0 (791 и 712 passed / 0 skipped).
+  Логи: `/tmp/nextorm-D157-r1/build.log`, `postgres-withties.log`, `sqlserver-withties.log`,
+  `postgres-project.log`, `sqlserver-project.log`.
+- **Провенанс:** долг 6 задачи #144 (`native-extreme-row-144-1.md:303`; исходный issue цитировал
+  `:302`), маппинг долга на `:314` → **#157**.
 
 ### 🟡 Находка 26 — мусорный артефакт `SqlGenerationTests.cs.dump` (ОТКРЫТА)
 

@@ -3839,6 +3839,42 @@ public class SqlGenerationTests
         act.Should().Throw<BuildSqlCommandException>();
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WithTies_WithDistinct_InBothCallOrders_ShouldRejectCombination(bool withTiesFirst)
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var query = withTiesFirst
+            ? e.Limit(2).WithTies().Distinct().OrderBy(x => x.Id).Select(x => x.Id)
+            : e.Limit(2).Distinct().WithTies().OrderBy(x => x.Id).Select(x => x.Id);
+
+        var act = () => SqlOf(ctx, query);
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WithTies_WithDistinctOn_InBothCallOrders_ShouldRejectCombination(bool withTiesFirst)
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var query = withTiesFirst
+            ? e.Limit(2).WithTies().DistinctOn(x => x.Id).OrderBy(x => x.Id).Select(x => new { x.Id })
+            : e.Limit(2).DistinctOn(x => x.Id).WithTies().OrderBy(x => x.Id).Select(x => new { x.Id });
+
+        var act = () => SqlOf(ctx, query);
+
+        act.Should().Throw<BuildSqlCommandException>()
+            .WithMessage("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");
+    }
+
     [Fact]
     public void ForUpdate_ShouldEmitForUpdate()
     {

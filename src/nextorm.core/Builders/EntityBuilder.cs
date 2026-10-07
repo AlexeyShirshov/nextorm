@@ -2162,7 +2162,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <summary>
     /// Marks the page request as <c>WITH TIES</c>: the result keeps every row tied with the last row of
     /// the page by the <c>ORDER BY</c>. Requires a positive page limit and a dialect that supports it
-    /// (see <see cref="ISqlDialect.SupportsWithTies"/>).
+    /// (see <see cref="ISqlDialect.SupportsWithTies"/>). Cannot be combined with <see cref="Distinct"/>
+    /// or <see cref="DistinctOn{TResult}"/>: this combination is rejected during SQL generation with
+    /// <see cref="BuildSqlCommandException"/>; validation is not performed by the <c>WithTies</c>
+    /// fluent call itself.
     /// </summary>
     public EntityBuilder<TEntity> WithTies()
     {
