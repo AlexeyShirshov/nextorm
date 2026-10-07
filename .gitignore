@@ -4,6 +4,7 @@ obj
 bin
 TestResults
 coverage
+artifacts/
 *.log
 
 # DocFX output
