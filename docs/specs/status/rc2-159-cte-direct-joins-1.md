@@ -267,3 +267,32 @@ Two alias joins that reuse the same `Alias.X` with **different projection types*
 Verified: direct CTE receivers arities **2–7** yield result arities **3–8**; slot ceiling **8**; there is **no** 8→9 continuation and **no** `CteReference` overload. Matches R159-12 boundaries and the plan's flat-slot intent. **No code change needed.**
 
 Evidence root: `TestResults/pdca/D159/r1/n1/` (alias `$E`).
+
+## 14. Progress log — DO fix round (attempt n=2)
+
+**Durable state:** Current cycle **N=1**; Plan revision **r=1**; Attempt **n=2/3**; event phase **DO**; `tier=cheap`; HEAD `00a7c0e6` + uncommitted fix-round edits.
+**Defect history:** **1 applied fix** at r1/n2; no CHECK failure, no loop-back. Key `cte-symbol-identity-chainkey` → observed r1 n1, fixed r1 n2 (1 fix applied), evidence `TestResults/pdca/D159/r1/n2/`, result resolved. Finding A `CS0111` (same-alias/different-projection) remains follow-up **#206**.
+
+| UTC time | phase | revision | iteration | event | evidence pointer |
+|---|---|---|---|---|---|
+| 2026-10-07T16:38Z | DO | r1 | n2/3 | Item 1: CTE symbol-identity fix (intermediate-step source kind now encoded) + compile-negative test; intended red first (1 failed / 16 total) then green (16/16) | `$E2/C-ALIAS-item1-red.log`, `$E2/C-ALIAS-item1.log` |
+| 2026-10-07T16:41Z | DO | r1 | n2/3 | Item 2: `TypedCte_TableAliasReceiver_AllFourteenOverloads_CompileAndBuild` added; all 14 overloads compile and build | `$E2/inner-tablealias.log`, `$E2/inner-tablealias2.log` |
+| 2026-10-07T16:52Z | DO | r1 | n2/3 | Item 3: C3 pinning tests pass, no regression; full `nextorm.alias.tests` 41/41 | `$E2/C-ALIAS-full-n2.log` |
+| 2026-10-07T16:53Z | DO | r1 | n2/3 | Item 4: 90 doc-line fixes in `JoinedEntityBuilder.cs` (XML docs / line normalization) | `git diff --numstat` (90/90) |
+| 2026-10-07T16:53Z | DO | r1 | n2/3 | C1: new `CS0111` reproduced — intermediate-step `ChainKey` CTE-ness (`IsCte` `e`/`c`) not encoded in the emitted step signature; repro comment prepared for follow-up #206 | `$E2/C1C6/c1c6-report.txt`, `generated.JoinAlias.g.cs`, `C1-repro-snippet.cs` |
+| 2026-10-07T16:55Z | DO | r1 | n2/3 | gh comment on #206 **blocked** (GraphQL error, exit 1; retried twice) — noted, work continues | gh stderr this session |
+| 2026-10-07T16:53Z | DO | r1 | n2/3 | C6: masked by compiler rejection (unobservable) | `$E2/C1C6/c1c6-report.txt` |
+| 2026-10-07T16:53Z | DO | r1 | n2/3 | Boundary sweep n=2 green: Debug 0/0; core `TypedCteTests` 96/96; sqlite 49/49; alias 41/41; providers sqlite 8, pg 18, ss 18, mysql 18, mariadb 18, clickhouse 18, all 0 skipped | `$E2/*.log` |
+| — | DO | r1 | n2/3 | Fix round complete; NOT marked done (CHECK next); no commit/push in this log line | — |
+
+### Per-criterion mapping (r1/n2)
+
+- **R159-06 met:** `TypedCte_TableAliasReceiver_AllFourteenOverloads_CompileAndBuild` — all **14/14** TableAlias receiver overloads compile and build.
+- **R159-10 met:** symbol-identity fix + compile-negative test (intended rejection retained for unrelated same-name types).
+
+### C1 / C6 (r1/n2)
+
+- **C1 — new `CS0111` reproduced:** intermediate-step `ChainKey` CTE-ness (`IsCte`) is not encoded in the emitted step extension-method signature, so two chains sharing base type, alias sequence, operators and joined types collide. Repro comment intended for follow-up **#206** (append blocked by GitHub GraphQL error this session).
+- **C6 — unobservable:** masked by compiler rejection (the C1 `CS0111`/`CS0121` stops the build before C6 can be exercised).
+
+Evidence root n=2: `TestResults/pdca/D159/r1/n2/` (alias `$E2`).

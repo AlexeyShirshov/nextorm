@@ -358,21 +358,33 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
 
         if (semanticModel.GetTypeInfo(arguments[0].Expression, ct).Type is INamedTypeSymbol source
             && source.TypeArguments.Length == 1
-            && (source.Name == "EntityBuilder" || source.Name == "Cte"))
+            && (IsCteSource(source, semanticModel) || source.Name == "EntityBuilder"))
         {
             joined = source.TypeArguments[0];
-            isCte = source.Name == "Cte";
+            isCte = IsCteSource(source, semanticModel);
             return true;
         }
 
         return false;
     }
 
-    /// <summary>True when the joined source argument is a typed CTE descriptor <c>Cte&lt;T&gt;</c>.</summary>
+    /// <summary>
+    /// True when the joined source argument is a typed CTE descriptor <c>Cte&lt;T&gt;</c> by symbol identity.
+    /// A simple name match would misrecognize an unrelated user type named <c>Cte</c> (R159-10 negative).
+    /// </summary>
     private static bool IsCteSource(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken ct)
         => semanticModel.GetTypeInfo(expression, ct).Type is INamedTypeSymbol named
-            && named.Name == "Cte"
-            && named.TypeArguments.Length == 1;
+            && IsCteSource(named, semanticModel);
+
+    /// <summary>
+    /// True when <paramref name="type"/> is the <c>NextORM.Core.Cte&lt;T&gt;</c> descriptor, compared by
+    /// symbol identity rather than its simple name.
+    /// </summary>
+    private static bool IsCteSource(INamedTypeSymbol type, SemanticModel semanticModel)
+        => type.TypeArguments.Length == 1
+            && SymbolEqualityComparer.Default.Equals(
+                type.ConstructedFrom,
+                semanticModel.Compilation.GetTypeByMetadataName("NextORM.Core.Cte`1"));
 
     /// <summary>Reads the approved <c>Alias.&lt;identifier&gt;</c> argument form.</summary>
     private static bool TryReadAliasArgument(ExpressionSyntax expression, out string alias)

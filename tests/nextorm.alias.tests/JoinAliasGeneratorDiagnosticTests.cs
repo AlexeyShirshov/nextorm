@@ -100,6 +100,38 @@ public class JoinAliasGeneratorDiagnosticTests
     }
 
     [Fact]
+    public void Unrelated_user_type_named_Cte_is_not_recognized_as_a_Nextorm_CTE()
+    {
+        // R159-10 negative: a user type that merely shares the simple name 'Cte' must not be treated as a
+        // NextORM CTE descriptor. With symbol-identity recognition no alias surface is generated for it
+        // (the pre-fix simple-name match emitted an overload taking NextORM.Core.Cte<TJoin>).
+        const string source =
+            "using NextORM.Core;\n" +
+            "namespace Harness;\n" +
+            "public sealed class Order { public int Id { get; set; } }\n" +
+            "public sealed class Person { public int Id { get; set; } }\n" +
+            "public sealed class Cte<T> { }\n" +
+            "public static class Cases\n" +
+            "{\n" +
+            "    public static void Run(EntityBuilder<Order> orders, Cte<Person> cte)\n" +
+            "    {\n" +
+            "        _ = orders.Join(cte, (a, b) => true, Alias.Buyer);\n" +
+            "    }\n" +
+            "}\n";
+
+        var compilation = CSharpCompilation.Create(
+            "AliasHarness",
+            [CSharpSyntaxTree.ParseText(source, path: "Harness.cs", cancellationToken: TestContext.Current.CancellationToken)],
+            References,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out _, out _, TestContext.Current.CancellationToken);
+
+        driver.GetRunResult().GeneratedTrees.Should().BeEmpty();
+    }
+
+    [Fact]
     public void Valid_snippet_emits_one_source_without_diagnostics()
     {
         var harness = RunDiagnosticCase(
