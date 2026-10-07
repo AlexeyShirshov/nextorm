@@ -142,18 +142,62 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 
 > Поверхность row-значений (кортежей) кросс-провайдерная и строится на `System.Tuple.Create` /
 > `new Tuple<...>` / `System.Tuple<...>.ItemN`: конструктор рендерится через row-конструктор диалекта —
-> `tuple(a, b)` в ClickHouse, `ROW(a, b)` в PostgreSQL — а доступ к элементу *серверного* row рендерится
-> через позиционный доступ диалекта (`tupleElement(pair, 1)` в ClickHouse, `(pair).f1` в PostgreSQL).
-> Доступ к элементу *inline*-конструктора (`Tuple.Create(a, b).Item1`,
-> `new ValueTuple<...>(a, b).Item2`) сворачивается в сам аргумент, поэтому работает на любом диалекте,
+> `tuple(a, b)` в ClickHouse, `ROW(a, b)` в PostgreSQL и плоский ANSI `(a, b)` в MySQL/MariaDB/SQLite — а
+> доступ к элементу *серверного* row рендерится через позиционный доступ диалекта
+> (`tupleElement(pair, 1)` в ClickHouse, `(pair).f1` в PostgreSQL). В MySQL/MariaDB/SQLite серверного
+> доступа к элементу нет, поэтому `System.Tuple<...>.ItemN` на серверном row бросает
+> `NotSupportedException`. Доступ к элементу *inline*-конструктора (`Tuple.Create(a, b).Item1`,
+> `new ValueTuple<...>(a, b).Item2`) сворачивается в сам аргумент и работает на любом диалекте,
 > умеющем выразить конструктор. `System.Tuple<,> ==` (в C# — ссылочное равенство) переинтерпретируется
 > как SQL-сравнение row-значений (`Tuple.Create(x.A, x.B) == Tuple.Create(1, 'a')` →
-> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` в дереве выражений недостижим. Требуется провайдер с
-> нативным row-типом (см. [`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
-> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple); PostgreSQL и ClickHouse); SQL Server,
-> MySQL, MariaDB, SQLite и провайдер in-memory отклоняют эту поверхность, а tuple `IN`/`Contains` по
-> списку значений пока не транслируется. `untuple` не поддерживается, так как меняет набор колонок
-> результата, а не даёт скаляр.
+> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` в дереве выражений недостижим. В PostgreSQL и ClickHouse
+> поверхность — это нативный row-тип ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
+> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple)); в MySQL/MariaDB/SQLite плоский конструктор
+> `(a, b)` принимается только как **прямой операнд сравнения** в `WHERE`/`HAVING`/`JOIN ON` — в
+> `Select`/`ORDER BY`/`GROUP BY` или как аргумент функции он бросает `NotSupportedException` при
+> подготовке. SQL Server и провайдер in-memory отклоняют эту поверхность row-конструктора/сравнения
+> строк; при этом in-memory вычисляет список значений tuple `IN`/`Contains` in-process (не отклоняет).
+> Tuple `IN`/`Contains` по
+> списку значений плоских `System.Tuple`/`System.ValueTuple` арности 1..7 — реализован
+> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)); точные формы провайдеров и семантика
+> описаны в блоке tuple `IN` ниже.
+> Материализация «сырого» `ROW(...)` — реализована в PostgreSQL
+> ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): одна колонка-запись `ROW(...)`
+> (арность 1..7) или зарегистрированный вызывающим именованный composite материализуется в
+> соответствующий `System.Tuple<...>`/именованный тип (см.
+> [Сырой SQL](../guide/12-raw-sql.md#сырые-postgresql-строки-и-composite-типы)); `ValueTuple`,
+> арность ≥8, вложенный/пустой `ROW`, несколько или смешанные колонки-записи, незарегистрированный
+> именованный composite и composite, объявленный как `System.Tuple`, остаются под гардом
+> `NotSupportedException`. `untuple` не поддерживается, так как меняет набор колонок результата,
+> а не даёт скаляр.
+
+> Tuple `IN`/`Contains` транслирует список значений плоских `System.Tuple<...>`/`System.ValueTuple<...>`
+> арности **1..7** (`SqlFunctions.Sql.@in`, `SqlFunctions.ClickHouse.global_in` или
+> `Enumerable.Contains`) в проверку принадлежности строки, построенную на row-конструкторе диалекта, а
+> компоненты идут отдельными параметрами по порядку (никогда не один непрозрачный параметр-кортеж).
+> Точные формы провайдеров:
+>
+> | Провайдер | SQL tuple `IN` |
+> |---|---|
+> | SQLite | `(a, b) IN (VALUES (@p0, @p1), (@p2, @p3))` |
+> | MySQL / MariaDB | `(a, b) IN ((@p0, @p1), (@p2, @p3))` |
+> | PostgreSQL | `ROW(a, b) IN (ROW(@p0, @p1), ROW(@p2, @p3))` |
+> | ClickHouse | `tuple(a, b) IN (tuple(@p0, @p1), tuple(@p2, @p3))` (`global_in` рендерит `GLOBAL IN`) |
+> | SQL Server | не поддерживается — **любая** форма кортежа бросает `NotSupportedException` с `SQL Server does not support tuple IN/Contains translation.`, до вычисления коллекции (null-коллекция, null-элемент ссылочного кортежа, арность ≥8 и вложенный кортеж дают именно это сообщение, а не ошибку вычисления) |
+> | In-memory | вычисляется in-process (SQL не рендерится; `Enumerable.Contains` выполняется по строкам in-memory) |
+>
+> Пустая (не-null) коллекция рендерится как `1 = 0`. На провайдерах, поддерживающих эту поверхность,
+> null-коллекция бросает `ArgumentNullException`, `default`-кортеж значения — обычная строка, а
+> **nullable-элемент кортежа** (`List<(int, int)?>`) бросает `NotSupportedException`. Принадлежность
+> двузначна, поэтому null-компонент совпадает с другим null-компонентом: строки, у которых все ячейки
+> не-null, используют нативный список строк провайдера с гардом `IS NOT NULL` на каждом
+> nullable-компоненте слева, а строка, содержащая null, рендерится явной OR-of-AND-ветвью
+> (`c1 IS NULL` / `c1 IS NOT NULL AND c1 = @p`), потому что обычный row `IN` никогда не совпадает с SQL
+> `NULL`. Null-элемент ссылочного кортежа (`null` внутри коллекции) бросает `NotSupportedException`, а не
+> вырождается в строку из одних null; арность ≥8, форма `Rest` и вложенные компоненты-кортежи бросают
+> `NotSupportedException`; на SQL Server всё это вместо этого даёт отклонение провайдера выше. Отложено
+> в текущем milestone: tuple-типизированный `QueryCommand` (подзапрос) в правой части и
+> `Rest`/вложенные кортежи — **пока не поддерживаются**; обещания будущего milestone нет.
 
 > Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
 > например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.

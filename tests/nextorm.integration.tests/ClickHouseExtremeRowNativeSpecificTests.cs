@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
@@ -560,6 +561,465 @@ public sealed class ClickHouseExtremeRowNativeSpecificTests : ProviderTestSuite
         rows[0].DerivedAlias.Should().Be(7);
         rows[0].SourceAlias.Should().Be(2);
         rows[0].TupleAlias.Should().Be(2);
+    }
+
+    // --- issue #150 D150.4: floating-key native vs forced-portable parity ----------------------
+
+    private static EntityBuilder<ExtremeRowFloatEntity> FloatSource(IDataContext context)
+        => context.From<ExtremeRowFloatEntity>();
+
+    private static (int Id, int? Grp, float F32, double F64, float? F32n, double? F64n, int I1, int I2, string? Payload)
+        WholeFloat(ExtremeRowFloatEntity e)
+        => (e.Id, e.Grp, e.F32, e.F64, e.F32n, e.F64n, e.I1, e.I2, e.Payload);
+
+    private static EntityBuilder<ExtremeRowDecimalEntity> DecimalSource(IDataContext context)
+        => context.From<ExtremeRowDecimalEntity>();
+
+    private static (int Id, decimal? Dec, string? Payload) WholeDecimal(ExtremeRowDecimalEntity e)
+        => (e.Id, e.Dec, e.Payload);
+
+    private static int FloatGroupKey(int? grp) => grp ?? 0;
+
+    private static int ScalarInt(DataContext context, string sql)
+        => (int)Query(context, sql).Single()[0]!;
+
+    /// <summary>
+    /// Runs the same dataset through the native whole-row selection and the forced-portable oracle
+    /// (whose <c>All</c> form is the winner set) and requires every native winner to be a real whole
+    /// source row. An empty oracle (all-NULL or empty input) requires an empty native result.
+    /// </summary>
+    private void AssertGlobalParity<TKey>(string dataset, bool isMax, Expression<Func<ExtremeRowFloatEntity, TKey>> key)
+    {
+        using var portable = Portable();
+        var oracle = (isMax
+                ? FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.All)
+                : FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.All))
+            .ToList()
+            .Select(WholeFloat)
+            .ToHashSet();
+
+        var native = (isMax
+                ? FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.One)
+                : FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.One))
+            .ToList()
+            .Select(WholeFloat)
+            .ToList();
+
+        if (oracle.Count == 0)
+        {
+            native.Should().BeEmpty($"{dataset} has no winning row on either path");
+            return;
+        }
+
+        native.Should().NotBeEmpty($"{dataset} must yield a winner");
+        native.Should().ContainSingle($"{dataset} native One form must return exactly one winner");
+        foreach (var row in native)
+            oracle.Should().Contain(row, $"{dataset} native winner must be a real whole row");
+    }
+
+    /// <summary>
+    /// Per-group form of <see cref="AssertGlobalParity{TKey}"/>: the native <c>One</c> pick of every
+    /// group must be a member of the portable <c>All</c> winner set of that same group, and both paths
+    /// must expose the same group keys (including a NULL group).
+    /// </summary>
+    private void AssertGroupedParity<TKey>(string dataset, bool isMax, Expression<Func<ExtremeRowFloatEntity, TKey>> key)
+    {
+        Expression<Func<ExtremeRowFloatEntity, object?>> group = e => new { e.Grp };
+
+        using var portable = Portable();
+        var oracle = (isMax
+                ? FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.All, group)
+                : FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.All, group))
+            .ToList();
+        var native = (isMax
+                ? FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMax(key, ExtremeRowTies.One, group)
+                : FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMin(key, ExtremeRowTies.One, group))
+            .ToList();
+
+        var oracleByGroup = oracle.GroupBy(e => FloatGroupKey(e.Grp))
+            .ToDictionary(g => g.Key, g => g.Select(WholeFloat).ToHashSet());
+        var nativeByGroup = native.GroupBy(e => FloatGroupKey(e.Grp))
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        nativeByGroup.Keys.Should().BeEquivalentTo(oracleByGroup.Keys, $"{dataset} must expose the same groups");
+        foreach (var (groupKey, rows) in nativeByGroup)
+        {
+            rows.Should().ContainSingle();
+            oracleByGroup[groupKey].Should().Contain(WholeFloat(rows[0]));
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_SingleFloat64Global_MinAndMax_AcrossDatasets()
+    {
+        foreach (var dataset in new[] { "finite", "mixednan", "allnan", "inf", "zeros", "nanfirst", "nanlast", "naninf" })
+        {
+            AssertGlobalParity(dataset, isMax: true, e => e.F64);
+            AssertGlobalParity(dataset, isMax: false, e => e.F64);
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_NullableFloat64Global_MinAndMax_AcrossDatasets()
+    {
+        foreach (var dataset in new[] { "nulls", "allnull" })
+        {
+            AssertGlobalParity(dataset, isMax: true, e => e.F64n);
+            AssertGlobalParity(dataset, isMax: false, e => e.F64n);
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_SingleFloat32Global_MinAndMax_AcrossDatasets()
+    {
+        foreach (var dataset in new[] { "f32", "nanfirst", "nanlast", "mixednan" })
+        {
+            AssertGlobalParity(dataset, isMax: true, e => e.F32);
+            AssertGlobalParity(dataset, isMax: false, e => e.F32);
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_NullableFloat32Global_MinAndMax_AcrossDatasets()
+    {
+        foreach (var dataset in new[] { "nulls", "allnull" })
+        {
+            AssertGlobalParity(dataset, isMax: true, e => e.F32n);
+            AssertGlobalParity(dataset, isMax: false, e => e.F32n);
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_CompositeAndThreeComponentGlobal_MinAndMax_ShouldMatchPortable()
+    {
+        AssertGlobalParity("composite", isMax: true, e => new { e.I1, e.F64 });
+        AssertGlobalParity("composite", isMax: false, e => new { e.I1, e.F64 });
+        AssertGlobalParity("compfloat", isMax: true, e => new { e.F64, e.I1 });
+        AssertGlobalParity("compfloat", isMax: false, e => new { e.F64, e.I1 });
+        // The floating component must adapt in every position, not only trailing: leading and middle.
+        AssertGlobalParity("threecomp", isMax: true, e => new { e.I1, e.I2, e.F64 });
+        AssertGlobalParity("threecomp", isMax: false, e => new { e.I1, e.I2, e.F64 });
+        AssertGlobalParity("threecomp", isMax: true, e => new { e.F64, e.I1, e.I2 });
+        AssertGlobalParity("threecomp", isMax: false, e => new { e.F64, e.I1, e.I2 });
+        AssertGlobalParity("threecomp", isMax: true, e => new { e.I1, e.F64, e.I2 });
+        AssertGlobalParity("threecomp", isMax: false, e => new { e.I1, e.F64, e.I2 });
+    }
+
+    [Fact]
+    public void FloatNativeParity_GroupedSingleFloat64_MinAndMax_AcrossDatasets()
+    {
+        foreach (var dataset in new[] { "finite", "mixednan", "nanfirst", "nanlast", "allnan", "inf", "zeros" })
+        {
+            AssertGroupedParity(dataset, isMax: true, e => e.F64);
+            AssertGroupedParity(dataset, isMax: false, e => e.F64);
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_GroupedNullableFloatingKeys_MinAndMax_AcrossDatasets()
+    {
+        foreach (var dataset in new[] { "nulls", "allnull" })
+        {
+            AssertGroupedParity(dataset, isMax: true, e => e.F64n);
+            AssertGroupedParity(dataset, isMax: false, e => e.F64n);
+            AssertGroupedParity(dataset, isMax: true, e => e.F32n);
+            AssertGroupedParity(dataset, isMax: false, e => e.F32n);
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_GroupedFloat32Widening_MinAndMax_AcrossDatasets()
+    {
+        foreach (var dataset in new[] { "f32", "nanfirst", "nanlast", "mixednan" })
+        {
+            AssertGroupedParity(dataset, isMax: true, e => e.F32);
+            AssertGroupedParity(dataset, isMax: false, e => e.F32);
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_GroupedCompositeAndThreeComponent_MinAndMax_ShouldMatchPortable()
+    {
+        AssertGroupedParity("composite", isMax: true, e => new { e.I1, e.F64 });
+        AssertGroupedParity("composite", isMax: false, e => new { e.I1, e.F64 });
+        AssertGroupedParity("compfloat", isMax: true, e => new { e.F64, e.I1 });
+        AssertGroupedParity("compfloat", isMax: false, e => new { e.F64, e.I1 });
+        AssertGroupedParity("threecomp", isMax: true, e => new { e.I1, e.I2, e.F64 });
+        AssertGroupedParity("threecomp", isMax: false, e => new { e.I1, e.I2, e.F64 });
+        AssertGroupedParity("threecomp", isMax: true, e => new { e.F64, e.I1, e.I2 });
+        AssertGroupedParity("threecomp", isMax: false, e => new { e.F64, e.I1, e.I2 });
+        AssertGroupedParity("threecomp", isMax: true, e => new { e.I1, e.F64, e.I2 });
+        AssertGroupedParity("threecomp", isMax: false, e => new { e.I1, e.F64, e.I2 });
+    }
+
+    [Fact]
+    public void FloatNativeParity_UniqueGlobal_ShouldReturnTheSameWinnerOnBothPaths()
+    {
+        var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
+
+        using var portable = Portable();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
+
+        native.Should().ContainSingle();
+        forced.Should().ContainSingle();
+        native.Select(WholeFloat).Should().Equal(forced.Select(WholeFloat));
+
+        // The unique finite maximum is 2.5 (id 12); the NaN (id 11) must never win.
+        native[0].Id.Should().Be(12);
+        native[0].F64.Should().Be(2.5);
+    }
+
+    [Fact]
+    public void FloatNativeParity_TiedGlobal_One_ShouldReturnOneWholeWinnerFromTheValidSet()
+    {
+        using var portable = Portable();
+
+        // The finite maximum f64=10 ties ids 3 and 5; the minimum -12.75 ties ids 4 and 7.
+        var maxSet = FloatSource(portable).Where(e => e.Dataset == "finite").SelectWhereMax(e => e.F64, ExtremeRowTies.All).ToList();
+        maxSet.Select(e => e.Id).Should().BeEquivalentTo(new[] { 3, 5 });
+        var minSet = FloatSource(portable).Where(e => e.Dataset == "finite").SelectWhereMin(e => e.F64, ExtremeRowTies.All).ToList();
+        minSet.Select(e => e.Id).Should().BeEquivalentTo(new[] { 4, 7 });
+
+        var nativeMax = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite").SelectWhereMax(e => e.F64).ToList();
+        var nativeMin = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite").SelectWhereMin(e => e.F64).ToList();
+        nativeMax.Should().ContainSingle();
+        nativeMin.Should().ContainSingle();
+        maxSet.Select(WholeFloat).Should().Contain(WholeFloat(nativeMax[0]));
+        minSet.Select(WholeFloat).Should().Contain(WholeFloat(nativeMin[0]));
+
+        // All-NaN and both signed zeros are ties too: every row is a valid whole winner.
+        foreach (var (dataset, expectedIds) in new (string, int[])[]
+        {
+            ("allnan", [20, 21]),
+            ("zeros", [40, 41])
+        })
+        {
+            var oracle = FloatSource(portable).Where(e => e.Dataset == dataset).SelectWhereMax(e => e.F64, ExtremeRowTies.All).ToList();
+            var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == dataset).SelectWhereMax(e => e.F64).ToList();
+            oracle.Select(e => e.Id).Should().BeEquivalentTo(expectedIds);
+            native.Should().ContainSingle();
+            oracle.Select(WholeFloat).Should().Contain(WholeFloat(native[0]));
+        }
+    }
+
+    [Fact]
+    public void FloatNativeParity_NullablePayloadAndNullGroup_ShouldBePreserved()
+    {
+        var native = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nullgrp").SelectWhereMax(e => e.F64).ToList();
+
+        using var portable = Portable();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "nullgrp").SelectWhereMax(e => e.F64).ToList();
+
+        // The unique maximum f64=5 (id 141) carries a NULL payload that must survive the tuple.
+        native.Should().ContainSingle().Which.Id.Should().Be(141);
+        native[0].Payload.Should().BeNull();
+        forced.Should().ContainSingle().Which.Id.Should().Be(141);
+        native.Select(WholeFloat).Should().Equal(forced.Select(WholeFloat));
+
+        // Grouped: the NULL group is its own group (id 140) and group 10 keeps the NULL-payload winner.
+        var nativeGrouped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nullgrp")
+            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+        var forcedGrouped = FloatSource(portable).Where(e => e.Dataset == "nullgrp")
+            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+        var nativeByGroup = nativeGrouped.ToDictionary(e => FloatGroupKey(e.Grp));
+        var forcedByGroup = forcedGrouped.ToDictionary(e => FloatGroupKey(e.Grp));
+
+        nativeByGroup.Keys.Should().BeEquivalentTo(forcedByGroup.Keys);
+        nativeByGroup[0].Id.Should().Be(140);
+        nativeByGroup[10].Id.Should().Be(141);
+        nativeByGroup[10].Payload.Should().BeNull();
+        nativeByGroup[0].Should().BeEquivalentTo(forcedByGroup[0]);
+        nativeByGroup[10].Should().BeEquivalentTo(forcedByGroup[10]);
+
+        // Min over the same dataset: the NULL group keeps id 140 (f64=3) and group 10 moves to the
+        // minimum id 142 (f64=1). Only the Max direction was pinned before.
+        var nativeMin = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nullgrp")
+            .SelectWhereMin(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+        var forcedMin = FloatSource(portable).Where(e => e.Dataset == "nullgrp")
+            .SelectWhereMin(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+        var nativeMinByGroup = nativeMin.ToDictionary(e => FloatGroupKey(e.Grp));
+        var forcedMinByGroup = forcedMin.ToDictionary(e => FloatGroupKey(e.Grp));
+
+        nativeMinByGroup.Keys.Should().BeEquivalentTo(forcedMinByGroup.Keys);
+        nativeMinByGroup[0].Id.Should().Be(140);
+        nativeMinByGroup[10].Id.Should().Be(142);
+        nativeMinByGroup[0].Should().BeEquivalentTo(forcedMinByGroup[0]);
+        nativeMinByGroup[10].Should().BeEquivalentTo(forcedMinByGroup[10]);
+    }
+
+    [Fact]
+    public void FloatNativeParity_EmptyGlobalAndGrouped_ShouldReturnZeroRows()
+    {
+        var nativeGlobal = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "empty").SelectWhereMax(e => e.F64).ToList();
+        var nativeGrouped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "empty")
+            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+        nativeGlobal.Should().BeEmpty();
+        nativeGrouped.Should().BeEmpty();
+
+        using var portable = Portable();
+        var forcedGlobal = FloatSource(portable).Where(e => e.Dataset == "empty").SelectWhereMax(e => e.F64).ToList();
+        var forcedGrouped = FloatSource(portable).Where(e => e.Dataset == "empty")
+            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.Grp }).ToList();
+        forcedGlobal.Should().BeEmpty();
+        forcedGrouped.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FloatNativeParity_ScalarAndObjectProjections_ShouldMatchPortable()
+    {
+        var nativeScalar = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan")
+            .SelectWhereMax(e => e.F64, e => e.Payload).ToList();
+        var nativeObject = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan")
+            .SelectWhereMax(e => e.F64, e => new { e.Id, e.Payload, e.F64 }).ToList();
+
+        using var portable = Portable();
+        var forcedScalar = FloatSource(portable).Where(e => e.Dataset == "mixednan")
+            .SelectWhereMax(e => e.F64, e => e.Payload).ToList();
+        var forcedObject = FloatSource(portable).Where(e => e.Dataset == "mixednan")
+            .SelectWhereMax(e => e.F64, e => new { e.Id, e.Payload, e.F64 }).ToList();
+
+        nativeScalar.Should().Equal(forcedScalar).And.Equal(["m3"]);
+        nativeObject.Should().BeEquivalentTo(forcedObject);
+        nativeObject.Should().ContainSingle().Which.Id.Should().Be(12);
+    }
+
+    [Fact]
+    public void Counterexample_DirectArgMaxOnFloatingKey_ShouldDiverge_WhileShippedAdaptationMatchesPortable()
+    {
+        var context = Context();
+
+        // C0: direct argMax seeds with the first row and x > NaN is false, so a leading NaN is never
+        // replaced. nanfirst nan(id 90) is a finite-minimum row, yet direct argMax keeps it over id 92.
+        // These assertions pin ClickHouse's observed aggregate seeding / NaN-comparison semantics on
+        // server 25.8.33.6; a version bump must re-run this class before the adaptation is trusted.
+        ScalarInt(context,
+                "select tupleElement(argMax(tuple(id, payload), f64), 1) from extreme_float_150 where dataset = 'nanfirst'")
+            .Should().Be(90);
+        // naninf: the leading NaN (id 100) survives the direct aggregate over +inf (id 101).
+        ScalarInt(context,
+                "select tupleElement(argMax(tuple(id, payload), f64), 1) from extreme_float_150 where dataset = 'naninf'")
+            .Should().Be(100);
+        // Float32: NaN (id 80) beats +inf (id 82) under the direct aggregate.
+        ScalarInt(context,
+                "select tupleElement(argMax(tuple(id, payload), f32), 1) from extreme_float_150 where dataset = 'f32'")
+            .Should().Be(80);
+
+        // The shipped direction-aware adaptation ignores NaN and matches the forced-portable winner.
+        using var portable = Portable();
+        var shipped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nanfirst").SelectWhereMax(e => e.F64).ToList();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "nanfirst").SelectWhereMax(e => e.F64).ToList();
+        shipped.Should().ContainSingle().Which.Id.Should().Be(92);
+        forced.Should().ContainSingle().Which.Id.Should().Be(92);
+        shipped.Select(WholeFloat).Should().Equal(forced.Select(WholeFloat));
+
+        var shippedF32 = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
+        var forcedF32 = FloatSource(portable).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
+        shippedF32.Should().ContainSingle().Which.Id.Should().Be(82);
+        forcedF32.Should().ContainSingle().Which.Id.Should().Be(82);
+    }
+
+    [Fact]
+    public void Counterexample_DirectArgMinOnFloatingKey_ShouldDiverge_WhileShippedAdaptationMatchesPortable()
+    {
+        var context = Context();
+
+        // These assertions pin the observed ClickHouse 25.8.33.6 aggregate seeding semantics (same as
+        // the C0 Max guard above); re-run this class after a server-version bump.
+        // nanfirst argMin(nanfirst) -> 90 (NaN) vs the portable minimum 91.
+        ScalarInt(context,
+                "select tupleElement(argMin(tuple(id, payload), f64), 1) from extreme_float_150 where dataset = 'nanfirst'")
+            .Should().Be(90);
+        // naninf argMin -> 100 (leading NaN) vs the portable minimum -inf (id 102).
+        ScalarInt(context,
+                "select tupleElement(argMin(tuple(id, payload), f64), 1) from extreme_float_150 where dataset = 'naninf'")
+            .Should().Be(100);
+
+        using var portable = Portable();
+        var shipped = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "nanfirst").SelectWhereMin(e => e.F64).ToList();
+        var forced = FloatSource(portable).Where(e => e.Dataset == "nanfirst").SelectWhereMin(e => e.F64).ToList();
+        shipped.Should().ContainSingle().Which.Id.Should().Be(91);
+        forced.Should().ContainSingle().Which.Id.Should().Be(91);
+        shipped.Select(WholeFloat).Should().Equal(forced.Select(WholeFloat));
+
+        var shippedNanInf = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "naninf").SelectWhereMin(e => e.F64).ToList();
+        var forcedNanInf = FloatSource(portable).Where(e => e.Dataset == "naninf").SelectWhereMin(e => e.F64).ToList();
+        shippedNanInf.Should().ContainSingle().Which.Id.Should().Be(102);
+        forcedNanInf.Should().ContainSingle().Which.Id.Should().Be(102);
+    }
+
+    [Fact]
+    public void Counterexample_NaiveC1AndWideningOnly_ShouldDiverge_WhileShippedAdaptationMatchesPortable()
+    {
+        var context = Context();
+
+        // C1 naive (isNaN(k), k) applied to Max makes NaN the largest, so mixednan's NaN (id 11) beats
+        // the portable finite maximum id 12; the shipped Max flag is (isNaN(k) = 0), which ranks NaN
+        // last. Observed on ClickHouse 25.8.33.6 (see the C0/C2 version note above).
+        ScalarInt(context,
+                "select tupleElement(argMax(tuple(id, payload), (isNaN(f64), f64)), 1) from extreme_float_150 where dataset = 'mixednan'")
+            .Should().Be(11);
+
+        // C2 widening alone: toFloat64(f32) still seeds on the leading Float32 NaN (id 80) over +inf
+        // id 82, so the flag is required in addition to the widening.
+        ScalarInt(context,
+                "select tupleElement(argMax(tuple(id, payload), toFloat64(f32)), 1) from extreme_float_150 where dataset = 'f32'")
+            .Should().Be(80);
+
+        using var portable = Portable();
+        var shippedMixed = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
+        var forcedMixed = FloatSource(portable).Where(e => e.Dataset == "mixednan").SelectWhereMax(e => e.F64).ToList();
+        shippedMixed.Should().ContainSingle().Which.Id.Should().Be(12);
+        forcedMixed.Should().ContainSingle().Which.Id.Should().Be(12);
+
+        var shippedF32 = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
+        var forcedF32 = FloatSource(portable).Where(e => e.Dataset == "f32").SelectWhereMax(e => e.F32).ToList();
+        shippedF32.Should().ContainSingle().Which.Id.Should().Be(82);
+        forcedF32.Should().ContainSingle().Which.Id.Should().Be(82);
+    }
+
+    [Fact]
+    public void NegativeRecheck_FloatingGroupWideFloatingAndDecimalKeys_ShouldRefuseNativeAndMatchPortable()
+    {
+        using var portable = Portable();
+
+        // Floating group key: only integral group keys are in the native allowlist, so the renderer must
+        // refuse and keep the portable window lowering, executed and matched against the oracle.
+        var floatingGroupCommand = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite")
+            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToCommand();
+        SqlOf(_sut.DataProvider, floatingGroupCommand).Should().Contain("row_number()").And.NotContain("argMax");
+
+        var floatingGroupNative = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "finite")
+            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToList();
+        var floatingGroupPortable = FloatSource(portable).Where(e => e.Dataset == "finite")
+            .SelectWhereMax(e => e.F64, ExtremeRowTies.One, e => new { e.F64 }).ToList();
+        floatingGroupNative.Select(WholeFloat).Should().BeEquivalentTo(floatingGroupPortable.Select(WholeFloat));
+
+        // Arity > 3 with a floating component: the floating key cap is a deferred shape, so the
+        // integral-only 4-component key is native but this one must stay portable.
+        var wideKeyCommand = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "threecomp")
+            .SelectWhereMax(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload });
+        SqlOf(_sut.DataProvider, wideKeyCommand).Should().Contain("row_number()").And.NotContain("argMax");
+
+        var wideKeyNative = FloatSource(_sut.DataProvider).Where(e => e.Dataset == "threecomp")
+            .SelectWhereMax(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload }).ToList();
+        var wideKeyPortable = FloatSource(portable).Where(e => e.Dataset == "threecomp")
+            .SelectWhereMax(e => new { e.Id, e.I1, e.I2, e.F64 }, e => new { e.Payload }).ToList();
+        wideKeyNative.Should().BeEquivalentTo(wideKeyPortable);
+
+        // Decimal key: outside the allowlist, must stay portable and match on the real server.
+        var decimalCommand = DecimalSource(_sut.DataProvider).SelectWhereMax(e => e.Dec).ToCommand();
+        SqlOf(_sut.DataProvider, decimalCommand).Should().Contain("row_number()").And.NotContain("argMax");
+
+        var decimalNative = DecimalSource(_sut.DataProvider).SelectWhereMax(e => e.Dec).ToList();
+        var decimalPortable = DecimalSource(portable).SelectWhereMax(e => e.Dec).ToList();
+        decimalNative.Select(WholeDecimal).Should().Equal(decimalPortable.Select(WholeDecimal));
+        decimalNative.Should().ContainSingle().Which.Id.Should().Be(2);
+
+        // Float16 (CLR Half) has no ClickHouse column mapping at all, so only the SQL refusal is
+        // verifiable; the portable query cannot be executed because there is no physical Half column to
+        // create or read back. This is an intentional documented restriction, not a silent demotion.
+        var half = _sut.DataProvider.From<ExtremeRowHalfEntity>().SelectWhereMax(e => e.H, x => new { x.Id });
+        SqlOf(_sut.DataProvider, half).Should().Contain("row_number()").And.NotContain("argMax");
     }
 }
 

@@ -153,7 +153,26 @@ public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutati
     {
         ArgumentException.ThrowIfNullOrEmpty(targetTable);
         EnsureOutputColumns();
-        return new OutputIntoBuilder(this, targetTable);
+        return new OutputIntoBuilder(this, new OutputIntoClause(targetTable, _returningColumns));
+    }
+
+    /// <summary>
+    /// Writes the inserted rows into a table variable through SQL Server's <c>OUTPUT ... INTO</c> clause
+    /// instead of returning them to the client. The batch declares the variable from
+    /// <paramref name="columnDefinitions"/>, writes the selected output columns into it and reads them back:
+    /// <c>DECLARE @t TABLE (&lt;definitions&gt;); INSERT ... OUTPUT ... INTO @t (...); SELECT ... FROM @t;</c>.
+    /// Providers without <c>OUTPUT INTO</c> reject the statement with <see cref="NotSupportedException"/>
+    /// when it renders.
+    /// </summary>
+    /// <param name="variableName">The table-variable name, including the leading <c>@</c>; never bracketed or quoted.</param>
+    /// <param name="columnDefinitions">The trusted column-definition text of the <c>DECLARE @t TABLE (...)</c> declaration; embedded verbatim and never parameterised.</param>
+    /// <returns>An output-into terminal whose <c>Execute</c> writes the rows and returns the affected-row count.</returns>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable name, or <paramref name="columnDefinitions"/> is null or empty.</exception>
+    /// <exception cref="NotSupportedException">The builder has no explicit output columns (the identity-function form).</exception>
+    public OutputIntoBuilder OutputIntoTableVariable(string variableName, string columnDefinitions)
+    {
+        EnsureOutputColumns();
+        return new OutputIntoBuilder(this, new OutputIntoClause(variableName, columnDefinitions, _returningColumns));
     }
 
     /// <summary>
@@ -220,8 +239,8 @@ public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutati
         return _insert.BuildReturningCommand(_returningColumns, outputInto);
     }
 
-    MutationCommand IOutputIntoMutation.BuildOutputIntoCommand(string targetTable)
-        => _insert.BuildOutputIntoCommand(_returningColumns, targetTable);
+    MutationCommand IOutputIntoMutation.BuildOutputIntoCommand(OutputIntoClause outputInto)
+        => _insert.BuildOutputIntoCommand(outputInto);
 
     void IOutputIntoMutation.ValidateFilters() => _insert.ValidateFilters();
 

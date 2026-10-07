@@ -30,7 +30,7 @@ construct.
 | Raw SQL (whole query, composable source, and raw commands with parameters/output parameters/multiple result sets) | yes | yes | yes |
 | Multiple result sets from one batch (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`) | yes (PostgreSQL, SQL Server, MySQL, MariaDB, SQLite) | yes | no |
 | Stored procedures (`ExecuteProcedure`, `CommandType.StoredProcedure`) | yes (SQL Server, PostgreSQL, MySQL/MariaDB) | yes | yes |
-| Result-set streaming (LOB stream, `ToDataReader`) | yes | yes | partial (raw reader) |
+| Result-set streaming (LOB stream, `ToDataReader`) | yes (sequential LOB streaming on PostgreSQL/SQL Server; the SQLite `ToDataReader` is buffered and locator-free; MySQL/MariaDB/ClickHouse and in-memory reject) | yes | partial (raw reader) |
 | Result-set export to a stream (JSON, CSV) | yes | partial (client serialization) | partial (client serialization) |
 
 ## Types and mapping
@@ -43,7 +43,7 @@ construct.
 | Duration / interval columns | yes | yes | partial (provider interval mapping) |
 | Native JSON documents | yes on PostgreSQL | partial (type + `@>`/`#>>`/`Json.Value`; not the full `jsonb_*` library) | partial (JSON column mapping + Npgsql `EF.Functions.Json*`) |
 | Arrays and higher-order array functions | yes on PostgreSQL and ClickHouse | partial (PostgreSQL array operators) | partial |
-| Row values / tuples | yes on PostgreSQL and ClickHouse | yes | partial |
+| Row values / tuples | yes — PostgreSQL `ROW`/`(row).fN` and ClickHouse `tuple`/`tupleElement`; flat `(a, b)` comparison operand on MySQL/MariaDB/SQLite | yes | partial |
 | Range types and range-over-scalar-columns | yes | partial | partial |
 | Collation and ordinal string semantics | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
 | Naming conventions (e.g. snake_case) | yes (opt-in, built-in) | partial | partial |

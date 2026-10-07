@@ -281,6 +281,20 @@ public class ClickHouseDialect : SqlDialectBase
     public override bool SupportsWindowFrameGroups => true;
 
     /// <summary>
+    /// ClickHouse has a native <c>JSON</c> type and stores a mapped JSON column as it. This is the
+    /// storage capability only: the PostgreSQL JSON functions/operators surface stays opt-out, because
+    /// ClickHouse has no <c>json_agg</c>/<c>-&gt;</c>/<c>@&gt;</c> and its own JSON surface is
+    /// <see cref="SupportsJsonExtract"/>.
+    /// </summary>
+    public override bool SupportsJson => true;
+
+    /// <summary>
+    /// ClickHouse materializes and binds its native <c>JSON</c> type as a
+    /// <see cref="System.Text.Json.Nodes.JsonObject"/> (the driver's object-root DOM).
+    /// </summary>
+    public override Type NativeJsonProviderType => typeof(System.Text.Json.Nodes.JsonObject);
+
+    /// <summary>
     /// ClickHouse implements the <c>JSONExtract*</c>/<c>JSONHas</c>/<c>visitParamExtract*</c> string-JSON
     /// family and the JSONPath scalars <c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>.
     /// </summary>
@@ -479,11 +493,11 @@ public class ClickHouseDialect : SqlDialectBase
     };
 
     // ClickHouse quotes identifiers with backticks; single-quoted aliases are syntax errors.
-    /// <summary>ClickHouse quotes aliases with backticks (single-quoted aliases are syntax errors).</summary>
-    public override string Escape(string keyword) => "`" + keyword + "`";
+    /// <summary>ClickHouse quotes aliases with backticks (single-quoted aliases are syntax errors), escaping an embedded backslash or backtick. <see langword="null"/> yields the empty quoted identifier.</summary>
+    public override string Escape(string keyword) => QuoteIdentifier(keyword ?? string.Empty);
 
-    /// <summary>ClickHouse quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
-    public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
+    /// <summary>ClickHouse quotes a physical identifier with backticks, escaping an embedded backslash or backtick.</summary>
+    public override string QuoteIdentifier(string name) => "`" + name.Replace("\\", "\\\\").Replace("`", "``") + "`";
 
     /// <summary>ClickHouse qualifies a table with a database name (<c>`db`.`table`</c>); there is no separate schema level.</summary>
     public override bool SupportsCrossDatabase => true;

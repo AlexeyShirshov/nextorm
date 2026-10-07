@@ -42,7 +42,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = _sut.DataProvider;
         var dialect = ((DataContext)ctx).Dialect;
-        var dataType = dialect.SupportsJson ? "jsonb" : ProbeTextType(dialect);
+        var dataType = ProbeJsonColumnType(dialect, JsonColumnStorage.Auto);
         var engine = dialect.GetType().Name.Contains("ClickHouse", StringComparison.Ordinal) ? " engine = Memory" : string.Empty;
 
         ExecuteJsonColumn(ctx, "drop table if exists json_column_probe");
@@ -95,7 +95,7 @@ public abstract partial class CommonTestSuite
 
         var ctx = _sut.DataProvider;
         var dialect = ((DataContext)ctx).Dialect;
-        var dataType = dialect.SupportsJson ? "jsonb" : ProbeTextType(dialect);
+        var dataType = ProbeJsonColumnType(dialect, JsonColumnStorage.Auto);
         var engine = dialect.GetType().Name.Contains("ClickHouse", StringComparison.Ordinal) ? " engine = Memory" : string.Empty;
 
         ExecuteJsonColumn(ctx, "drop table if exists json_column_probe");
@@ -122,7 +122,7 @@ public abstract partial class CommonTestSuite
     {
         var ctx = _sut.DataProvider;
         var dialect = ((DataContext)ctx).Dialect;
-        var dataType = dialect.SupportsJson ? "jsonb" : ProbeTextType(dialect);
+        var dataType = ProbeJsonColumnType(dialect, JsonColumnStorage.Auto);
         var engine = dialect.GetType().Name.Contains("ClickHouse", StringComparison.Ordinal) ? " engine = Memory" : string.Empty;
 
         ExecuteJsonColumn(ctx, "drop table if exists json_column_probe");
@@ -159,5 +159,30 @@ public abstract partial class CommonTestSuite
         ((DataContext)ctx).EnsureConnectionOpen();
         using var cmd = ((DataContext)ctx).CreateCommand(sql);
         cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// The physical DDL type for a JSON column on the active dialect. A text storage keeps each
+    /// provider's existing text type; a native storage maps to the provider's native JSON type. A
+    /// native dialect with no known type fails the test explicitly instead of silently emitting a type
+    /// the server cannot create (for example the PostgreSQL <c>jsonb</c> on ClickHouse).
+    /// </summary>
+    private static string ProbeJsonColumnType(ISqlDialect dialect, JsonColumnStorage storage)
+    {
+        var effective = storage == JsonColumnStorage.Auto
+            ? (dialect.SupportsJson ? JsonColumnStorage.Native : JsonColumnStorage.Text)
+            : storage;
+
+        if (effective == JsonColumnStorage.Text)
+            return ProbeTextType(dialect);
+
+        var name = dialect.GetType().Name;
+        if (name.Contains("Postgres", StringComparison.Ordinal))
+            return "jsonb";
+        if (name.Contains("ClickHouse", StringComparison.Ordinal))
+            return "JSON";
+
+        throw new InvalidOperationException(
+            $"No native JSON column type is known for dialect {dialect.GetType().Name}; add it to ProbeJsonColumnType.");
     }
 }

@@ -22,4 +22,19 @@ internal static class MariaDbTestContext
 
     public static MariaDbDataContext CreateMariaDb() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
+
+    /// <summary>
+    /// Creates a version-aware MariaDB context. MariaDB has no per-context-type version guard, so the
+    /// same concrete <see cref="MariaDbDataContext"/> type may be used with any version.
+    /// </summary>
+    /// <param name="serverVersion">The MariaDB server version, or <see langword="null"/> for unset.</param>
+    /// <returns>A version-aware MariaDB context.</returns>
+    public static IDataContext Create(Version? serverVersion) =>
+        new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder(), serverVersion);
+
+    /// <summary>Creates a version-aware <see cref="MariaDbDataContext"/> (no type guard applies).</summary>
+    /// <param name="serverVersion">The MariaDB server version, or <see langword="null"/> for unset.</param>
+    /// <returns>A version-aware MariaDB context.</returns>
+    public static MariaDbDataContext CreateMariaDb(Version? serverVersion) =>
+        new(PlaceholderConnectionString, new DataContextBuilder(), serverVersion);
 }

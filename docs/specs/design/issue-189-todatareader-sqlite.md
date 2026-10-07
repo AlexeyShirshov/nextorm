@@ -5,13 +5,24 @@ Tracking: [GitHub issue #189](https://github.com/AlexeyShirshov/nextorm/issues/1
 Branch: `1.0.9-b`.
 Связано: разблокирует item 10 в [#188](https://github.com/AlexeyShirshov/nextorm/issues/188).
 
+> **Implementation notice (2026-10-06).** Implemented for task **D134** (issue #134) in collection
+> `1.0.9-rc1-tail`, milestone **`1.0.9-rc1`**, as the approved **variant A**: the locator dialect (SQLite)
+> is routed to the existing locator-free buffered `OpenResultReader`/`PrepareResultCommand` seam
+> (`storeInCache: false`), PostgreSQL/SQL Server keep the sequential `OpenLobReader` path, and
+> MySQL/MariaDB, ClickHouse and the in-memory provider stay fail-closed naming `ToDataReader`. The
+> milestone `1.0.9-rc2` recorded above is a historical discrepancy (per the `nextorm-pdca` overlay
+> invariant 8) and is **not** moved. Cycle record: `docs/specs/status/rc1-tail-134-sqlite-datareader-1.md`.
+
 ## 1. Проблема
 
-`ToDataReader` / `ToDataReaderAsync` сейчас бросают `NotSupportedException` на SQLite, хотя SQLite объявляет `SupportsSequentialAccess => true` (`src/nextorm.sqlite/SqliteDialect.cs:15`). Отказ мотивирован тем, что на SQLite в потоковую проекцию добавляется колонка-локатор `rowid`, которая попала бы наружу в ordinals вызывающего.
+> **Pre-implementation description (historical) — superseded by the implementation notice above.**
+> Раздел сохранён как история согласования: описанное ниже поведение относится к состоянию **до** реализации и больше не актуально.
 
-Регистр `code-smells-review.md:8071-8072` держит это как открытую фичу `P2`: «SQLite locator-backed multi-column `ToDataReader` (P2, фича). Нужна отдельная модель скрытия `rowid` + доказательство порядка чтения. Триггер: конкретный пользовательский сценарий». Этот issue — конкретный триггер (cross-library zero-materialization бенчмарк в #188).
+**До реализации:** `ToDataReader` / `ToDataReaderAsync` бросали `NotSupportedException` на SQLite, хотя SQLite объявляет `SupportsSequentialAccess => true` (`src/nextorm.sqlite/SqliteDialect.cs:15`). Отказ мотивирован тем, что на SQLite в потоковую проекцию добавляется колонка-локатор `rowid`, которая попала бы наружу в ordinals вызывающего.
 
-## 2. Текущий контракт и причина отказа
+Регистр `code-smells-review.md:8071-8072` держал это как открытую фичу `P2`: «SQLite locator-backed multi-column `ToDataReader` (P2, фича). Нужна отдельная модель скрытия `rowid` + доказательство порядка чтения. Триггер: конкретный пользовательский сценарий». Этот issue — конкретный триггер (cross-library zero-materialization бенчмарк в #188).
+
+## 2. Контракт до реализации и причина отказа
 
 - Locator добавляется в SELECT **только** на стриминговом пути: `SqlBuilder.cs:527` под `_ctx.SequentialAccess` и `_ctx.Dialect.LobLocatorColumn` (`SqliteDialect.LobLocatorColumn => "rowid"`, `SqliteDialect.cs:18`).
 - `ToDataReader`/`ToDataReaderAsync` идут через `OpenLobReader` → `PrepareLobCommand` (`DataContext.cs:394-417`) — это стриминговый путь с `SequentialAccess`, поэтому на SQLite в SQL попадает `rowid`.

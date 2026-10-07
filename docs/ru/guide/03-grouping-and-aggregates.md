@@ -462,7 +462,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Наиболее частые (top-K) | `SqlFunctions.ClickHouse.top_k(3, x)`, `top_k_weighted(2, x, w)` | `topK(3)(x)`, `topKWeighted(2)(x, w)` | [`TopKAggregates`](xref:NextORM.Core.ISqlDialect.TopKAggregates) | ClickHouse |
 | Произвольное значение | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
-| С фильтром | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL, SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
+| С фильтром | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL (9.4+), SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
@@ -541,7 +541,10 @@ from event_entity
 работает у всех провайдеров; способ записи выбирает
 [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle). PostgreSQL и SQLite
 генерируют ANSI-предложение `filter (where ...)`, ClickHouse — комбинатор `-If`; MySQL/MariaDB и
-SQL Server отклоняют вызов через `NotSupportedException`, потому что у них нет ни того, ни другого.
+SQL Server отклоняют вызов через `NotSupportedException`, потому что у них нет ни того, ни другого. В
+PostgreSQL ANSI-форма требует версии сервера 9.4 или новее: диалект, настроенный на более старую
+`Version`, отклоняет вызов через `NotSupportedException`, а незаданная версия предполагает 9.4+ (см.
+[провайдер PostgreSQL](../providers/postgres.md#версия-сервера)).
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

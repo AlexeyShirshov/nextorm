@@ -142,18 +142,60 @@ result can be projected like a scalar column.
 
 > The row-value (tuple) surface is cross-provider and built from `System.Tuple.Create` /
 > `new Tuple<...>` / `System.Tuple<...>.ItemN`: a constructor renders through the dialect's row
-> constructor — `tuple(a, b)` on ClickHouse, `ROW(a, b)` on PostgreSQL — and access to an element of a
-> *server-side* row renders through the dialect's positional access (`tupleElement(pair, 1)` on
-> ClickHouse, `(pair).f1` on PostgreSQL). Access to an element of an *inline* constructor
-> (`Tuple.Create(a, b).Item1`, `new ValueTuple<...>(a, b).Item2`) folds to the argument, so it works on
-> every dialect that can express the constructor. `System.Tuple<,> ==` (reference equality in C#) is
+> constructor — `tuple(a, b)` on ClickHouse, `ROW(a, b)` on PostgreSQL, and the flat ANSI `(a, b)` on
+> MySQL/MariaDB/SQLite — and access to an element of a *server-side* row renders through the dialect's
+> positional access (`tupleElement(pair, 1)` on ClickHouse, `(pair).f1` on PostgreSQL). MySQL/MariaDB/SQLite
+> have no server-side element access, so `System.Tuple<...>.ItemN` on a server row throws
+> `NotSupportedException` there. Access to an element of an *inline* constructor
+> (`Tuple.Create(a, b).Item1`, `new ValueTuple<...>(a, b).Item2`) folds to the argument and works on every
+> dialect that can express the constructor. `System.Tuple<,> ==` (reference equality in C#) is
 > reinterpreted as a SQL row-value comparison (`Tuple.Create(x.A, x.B) == Tuple.Create(1, 'a')` →
-> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` cannot appear in an expression tree. Requires a provider
-> with a native row type (see [`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
-> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple); PostgreSQL and ClickHouse); SQL Server,
-> MySQL, MariaDB, SQLite and the in-memory provider reject the surface, and tuple `IN`/`Contains` over a
-> value list is not translated yet. `untuple` is not supported because it changes the result column set
-> rather than producing a scalar.
+> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` cannot appear in an expression tree. On PostgreSQL and
+> ClickHouse the surface is the native row type ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
+> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple)); on MySQL/MariaDB/SQLite the flat `(a, b)`
+> constructor is accepted only as a **direct comparison operand** in `WHERE`/`HAVING`/`JOIN ON` — in
+> `Select`/`ORDER BY`/`GROUP BY` or as a function argument it throws `NotSupportedException` at
+> preparation. SQL Server and the in-memory provider reject that **row-constructor/row-comparison**
+> surface; the in-memory provider still evaluates a tuple `IN`/`Contains` value list in process (it is
+> not rejected). Tuple `IN`/`Contains` over a
+> **value list** of flat `System.Tuple`/`System.ValueTuple` entries of arity 1..7 is shipped
+> ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)); the exact provider forms and semantics
+> are documented in the tuple `IN` block below.
+> Materialising a raw `ROW(...)` is shipped on PostgreSQL
+> ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)): a single `ROW(...)` (arity 1..7) or a
+> caller-registered named composite result column materialises into the matching
+> `System.Tuple<...>`/named type (see
+> [Raw SQL](../guide/12-raw-sql.md#postgresql-raw-rows-and-composites)); `ValueTuple`, arity ≥8, a
+> nested/empty `ROW`, several or mixed record columns, an unregistered named composite and a composite
+> declared as `System.Tuple` remain guarded with `NotSupportedException`. `untuple` is not supported
+> because it changes the result column set rather than producing a scalar.
+
+> Tuple `IN`/`Contains` translates a value list of flat `System.Tuple<...>`/`System.ValueTuple<...>`
+> entries of arity **1..7** (`SqlFunctions.Sql.@in`, `SqlFunctions.ClickHouse.global_in` or
+> `Enumerable.Contains`) into a row membership test built from the dialect's row constructor, with the
+> ordered components as separate parameters (never one opaque tuple parameter). The exact provider forms:
+>
+> | Provider | Tuple `IN` SQL |
+> |---|---|
+> | SQLite | `(a, b) IN (VALUES (@p0, @p1), (@p2, @p3))` |
+> | MySQL / MariaDB | `(a, b) IN ((@p0, @p1), (@p2, @p3))` |
+> | PostgreSQL | `ROW(a, b) IN (ROW(@p0, @p1), ROW(@p2, @p3))` |
+> | ClickHouse | `tuple(a, b) IN (tuple(@p0, @p1), tuple(@p2, @p3))` (`global_in` renders `GLOBAL IN`) |
+> | SQL Server | not supported — **every** tuple form throws `NotSupportedException` with `SQL Server does not support tuple IN/Contains translation.`, raised before the collection is evaluated (a null collection, a null reference-tuple entry, arity ≥8 or a nested tuple all surface this message, never an evaluation error) |
+> | In-memory | evaluated in process (no SQL is rendered; `Enumerable.Contains` runs against the in-memory rows) |
+>
+> An empty (non-null) collection renders `1 = 0`. On the providers that support the surface, a null
+> collection throws `ArgumentNullException`, a `default` value tuple is an ordinary row, and a
+> **nullable tuple element** (`List<(int, int)?>`) throws `NotSupportedException`. Membership is
+> two-valued, so a null component matches another null component: rows whose cells are all non-null use
+> the provider's native row list, guarded with `IS NOT NULL` on every nullable left-hand component, while
+> a row that contains a null is rendered as an explicit OR-of-AND arm (`c1 IS NULL` /
+> `c1 IS NOT NULL AND c1 = @p`), because a plain row `IN` can never match SQL `NULL`. A null
+> reference-tuple entry (`null` inside the collection) throws `NotSupportedException` rather than
+> degrading into an all-null row, and arity ≥8, the `Rest` form and nested tuple components throw
+> `NotSupportedException`; on SQL Server all of these surface the provider rejection above instead.
+> Deferred in the current milestone: a tuple-typed `QueryCommand` (subquery) right-hand side and
+> `Rest`/nested tuples are **not supported yet**; no future milestone is promised.
 
 > The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
 > for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`

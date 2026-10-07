@@ -91,6 +91,10 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <inheritdoc/>
     public virtual bool SupportsJson => false;
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL renders the JSON functions/operators surface.</summary>
+    public virtual bool SupportsPostgresJsonSql => false;
+    /// <summary>Defaults to <see cref="System.Text.Json.JsonElement"/>; ClickHouse uses <c>JsonObject</c>.</summary>
+    public virtual Type NativeJsonProviderType => typeof(System.Text.Json.JsonElement);
     /// <inheritdoc/>
     public virtual bool SupportsTextJson => false;
     /// <summary>Defaults to <c>null</c>; only SQL Server opts into the postfix XML data-type methods.</summary>
@@ -243,6 +247,14 @@ public abstract class SqlDialectBase : ISqlDialect
     /// unsigned <c>numbers</c> column to a type the row reader supports.
     /// </summary>
     public virtual string WrapTableFunction(string name, string call) => call;
+
+    /// <summary>
+    /// Wraps the rendered table-function call with its structured, already-rendered arguments, or
+    /// returns it unchanged. The default forwards to <see cref="WrapTableFunction(string, string)"/>;
+    /// SQLite overrides it so the FTS5 table token is quoted as one identifier without reparsing the
+    /// serialized call text.
+    /// </summary>
+    public virtual string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => WrapTableFunction(name, call);
 
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>FINAL</c> modifier.</summary>
     public virtual bool SupportsFinal => false;
@@ -861,6 +873,8 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into the <c>RETURNING</c> clause.</summary>
     public virtual bool SupportsReturning => false;
+    /// <summary>Defaults to <see cref="SupportsReturning"/>; MariaDB gates <c>UPDATE ... RETURNING</c> on server version 13.0+.</summary>
+    public virtual bool SupportsUpdateReturning => SupportsReturning;
     /// <summary>Defaults to <c>false</c>; SQL Server opts into the <c>OUTPUT</c> clause.</summary>
     public virtual bool SupportsOutput => false;
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB opt into <c>LAST_INSERT_ID()</c>.</summary>

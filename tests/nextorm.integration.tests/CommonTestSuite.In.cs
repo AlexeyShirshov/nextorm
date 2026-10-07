@@ -130,4 +130,100 @@ public abstract partial class CommonTestSuite
 
         query.ToList().OrderBy(x => x).Should().Equal(2L, 3L);
     }
+
+    // ------------------------------------------------------------------ D193 tuple value-list IN
+
+    private ISqlDialect TupleInDialect => ((DataContext)_sut.DataProvider).Dialect;
+
+    [Fact]
+    public void Contains_TupleIn_CapturedList_ShouldFilter()
+    {
+        Assert.SkipUnless(TupleInDialect.Tuple is not null, "This provider has no row-value constructor.");
+
+        var tuples = new List<(long Id, int? Int)> { (2, 1) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(2L);
+    }
+
+    [Fact]
+    public void Contains_TupleIn_MismatchedComponents_ShouldReturnEmpty()
+    {
+        Assert.SkipUnless(TupleInDialect.Tuple is not null, "This provider has no row-value constructor.");
+
+        var tuples = new List<(long, int?)> { (1, 1), (2, 2) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Contains_TupleIn_Empty_ShouldReturnEmpty()
+    {
+        Assert.SkipUnless(TupleInDialect.Tuple is not null, "This provider has no row-value constructor.");
+
+        var tuples = new List<(long, int?)>();
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Contains_TupleIn_NullComponent_ShouldMatchNullRow()
+    {
+        Assert.SkipUnless(TupleInDialect.Tuple is not null, "This provider has no row-value constructor.");
+
+        var tuples = new List<(long, int?)> { (1, null) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        // id 1 has a null nullableint; a null tuple component must match it deterministically.
+        ids.Should().Equal(1L);
+    }
+
+    [Fact]
+    public void Contains_TupleIn_Negation_ShouldExcludeNullComponentMatch()
+    {
+        Assert.SkipUnless(TupleInDialect.Tuple is not null, "This provider has no row-value constructor.");
+
+        var tuples = new List<(long, int?)> { (1, null) };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => !tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.OrderBy(x => x).Should().Equal(2L, 3L);
+    }
+
+    [Fact]
+    public void Contains_TupleIn_OnProviderWithoutRowConstructor_ShouldReject()
+    {
+        Assert.SkipUnless(TupleInDialect.Tuple is null, "This provider supports tuple IN/Contains.");
+
+        var tuples = new List<(long, int?)> { (2, 1) };
+
+        var act = () => _sut.ComplexEntity
+            .Where(e => tuples.Contains(new ValueTuple<long, int?>(e.Id, e.Int)))
+            .Select(e => e.Id)
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>()
+            .WithMessage("SQL Server does not support tuple IN/Contains translation.");
+    }
 }

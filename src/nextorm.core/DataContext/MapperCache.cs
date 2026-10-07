@@ -17,12 +17,39 @@ namespace NextORM.Core;
 internal readonly record struct MapperCacheKey(Type ProviderType, Type ResultType, string Sql, int ColumnsSignature, bool OneColumn, bool Streaming);
 
 /// <summary>
+/// The record/composite shape a raw mapper was built for. <see cref="None"/> is every ordinary
+/// scalar/entity raw mapping; it is part of the key so adding the raw-row branch never changes an
+/// existing key's identity.
+/// </summary>
+internal enum RawRowKind
+{
+    /// <summary>An ordinary scalar or mapped-entity raw mapping.</summary>
+    None = 0,
+
+    /// <summary>An anonymous PostgreSQL <c>ROW(...)</c> materialized into a <see cref="System.Tuple"/>.</summary>
+    AnonymousTuple = 1,
+
+    /// <summary>A caller-registered named composite materialized into its declared CLR type.</summary>
+    NamedComposite = 2,
+}
+
+/// <summary>
 /// Key for a raw-command (<c>ExecuteRaw</c>) row mapper. Unlike <see cref="MapperCacheKey"/> it does
 /// <b>not</b> contain the SQL text: raw commands accept arbitrary text, so keying by it would grow the
 /// cache without bound. The shape is the ordered reader column names (the entity projection binds by
 /// name), the provider type, the result type and whether the projection is a single scalar column.
+/// <see cref="RecordKind"/> and <see cref="RecordSignature"/> discriminate a single-record-column raw
+/// mapping from an ordinary one for the same column-key: the record shape (tuple arity/item types) is
+/// not otherwise represented by the column-name string.
 /// </summary>
-internal readonly record struct RawMapperCacheKey(Type ProviderType, Type ResultType, bool OneColumn, string Columns, Type? NamingConventionType);
+internal readonly record struct RawMapperCacheKey(
+    Type ProviderType,
+    Type ResultType,
+    bool OneColumn,
+    string Columns,
+    Type? NamingConventionType,
+    RawRowKind RecordKind,
+    string? RecordSignature);
 
 /// <summary>
 /// Process-wide cache of compiled row mappers. Mirrors linq2db (materializers are cached in a static

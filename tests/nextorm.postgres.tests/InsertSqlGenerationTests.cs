@@ -668,6 +668,20 @@ public class InsertSqlGenerationTests
         act.Should().Throw<NotSupportedException>();
     }
 
+    [Fact]
+    public void OutputIntoTableVariable_OnPostgres_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id })
+            .OutputIntoTableVariable("@t", "id bigint")
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
 

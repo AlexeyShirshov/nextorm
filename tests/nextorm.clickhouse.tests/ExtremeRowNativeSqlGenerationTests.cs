@@ -254,6 +254,19 @@ public class ExtremeRowNativeSqlGenerationTests
     }
 
     [Fact]
+    public void SelectWhereMax_SpecialCharacterNames_ShouldEscapeNativeAliases()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IExtremeSpecialNativeEntity>();
+
+        var sql = SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Payload }));
+
+        sql.Should().Contain(@"`k\\ey`");
+        sql.Should().Contain(@"`pay``load`");
+        sql.Should().NotContain(@"`k\ey`");
+    }
+
+    [Fact]
     public void SelectWhereMax_Global_ShouldRespectUppercaseKeywordCase()
     {
         using var ctx = ClickHouseTestContext.CreateUppercase();
@@ -293,27 +306,275 @@ public class ExtremeRowNativeSqlGenerationTests
         norm.Should().NotContain("argMax");
     }
 
+    // --- floating keys: direction-aware NaN adaptation ----------------------------------------
+
     [Fact]
-    public void SelectWhereMax_FloatKey_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMax_FloatKey_ShouldRenderArgMaxWithNaNAdaptation()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
         var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.D, x => new { x.Id })));
 
-        norm.Should().Contain("row_number() over (order by d desc)");
-        norm.Should().NotContain("argMax");
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (isNaN(d) = 0, d))");
+        norm.Should().Contain("d is not null");
+        norm.Should().Contain("having count() > 0");
+        norm.Should().NotContain("row_number()");
+        norm.Should().NotContain("toFloat64");
     }
 
     [Fact]
-    public void SelectWhereMax_CompositeFloatingKey_ShouldKeepPortableWindowLowering()
+    public void SelectWhereMin_FloatKey_ShouldRenderArgMinWithReversedNaNAdaptation()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IFloatNativeEntity>();
 
-        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.D, x.Id }, x => new { x.Id })));
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.D, x => new { x.Id })));
 
-        norm.Should().Contain("row_number() over (order by d desc, id desc)");
+        norm.Should().Contain("argMin(tuple(");
+        norm.Should().Contain(", (isNaN(d), d))");
+        norm.Should().NotContain("argMax");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_NullableFloatKey_ShouldRenderArgMaxWithNaNAdaptation()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Dn, x => new { x.Id })));
+
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (isNaN(dn) = 0, dn))");
+        norm.Should().Contain("dn is not null");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Float32Key_ShouldWidenToFloat64WithNaNAdaptation()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.F, x => new { x.Id })));
+
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (isNaN(f) = 0, toFloat64(f)))");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMin_NullableFloat32Key_ShouldWidenToFloat64WithReversedNaNAdaptation()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Fn, x => new { x.Id })));
+
+        norm.Should().Contain("argMin(tuple(");
+        norm.Should().Contain(", (isNaN(fn), toFloat64(fn)))");
+        norm.Should().NotContain("argMax");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CompositeIntegralThenFloat_ShouldInsertFlagBeforeFloatComponent()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K, x.D }, x => new { x.Id })));
+
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (k, isNaN(d) = 0, d))");
+        norm.Should().Contain("k is not null and d is not null");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_CompositeFloatThenIntegral_ShouldInsertFlagBeforeLeadingFloatComponent()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.D, x.K }, x => new { x.Id })));
+
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (isNaN(d) = 0, d, k))");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_ThreeComponentKeyWithTrailingFloat_ShouldAdaptOnlyTheFloatComponent()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K, x.Id, x.D }, x => new { x.Id })));
+
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (k, id, isNaN(d) = 0, d))");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_GroupedFloatKey_ShouldRenderAdaptedKeyPerGroup()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.D, x => new { x.Id }, ExtremeRowTies.One, x => new { x.K })));
+
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (isNaN(d) = 0, d))");
+        norm.Should().Contain("group by k");
+        norm.Should().NotContain("having count()");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_IntegralKeyWithFloatingPayload_ShouldKeepPortableWindowLowering()
+    {
+        // C1: float/double payload carriers are admitted only for a floating extreme key. An integral
+        // key with a mapped float/double payload must restore the pre-D150 behavior and stay portable,
+        // not flip to native just because the payload type is now tuple-representable.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatingPayloadIntegralKeyNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.K, x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by k desc)");
+        norm.Should().NotContain("argMax");
+        norm.Should().NotContain("having count()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_FourComponentIntegralKey_ShouldStayNative()
+    {
+        // C2: the arity cap applies only to keys with a floating component. A purely integral composite
+        // was never capped (it renders a plain lexicographic tuple), so a 4-component integral key must
+        // remain native rather than being silently demoted to portable.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ExtremeNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.Id, x.K1, x.K2, x.Flag }, x => new { x.Payload })));
+
+        norm.Should().Contain("argMax(tuple(");
+        norm.Should().Contain(", (id, k1, k2, flag))");
+        norm.Should().NotContain("row_number()");
+    }
+
+    [Fact]
+    public void SelectWhereMax_IntegralWidthKeys_ShortAndLong_ShouldStayNative()
+    {
+        // Branch coverage: the IsIntegralKeyType short/long (and nullable) arms had no dedicated test.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IIntegralWidthKeyNativeEntity>();
+
+        Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.S, x => new { x.Id })))
+            .Should().Contain("argMax(tuple(").And.Contain(", s)");
+        Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.L, x => new { x.Id })))
+            .Should().Contain("argMin(tuple(").And.Contain(", l)").And.NotContain("argMax");
+        Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Sn, x => new { x.Id })))
+            .Should().Contain("argMax(tuple(").And.Contain(", sn)");
+        Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Ln, x => new { x.Id })))
+            .Should().Contain("argMin(tuple(").And.Contain(", ln)");
+    }
+
+    [Fact]
+    public void SelectWhereMax_ConverterKey_ShouldKeepPortableWindowLowering()
+    {
+        // Branch coverage: the key UsesConverter rejection (the existing test only covers a converter
+        // payload). A converter-backed key is not a plain mapped column, so the portable lowering stays.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IConverterKeyNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.ConvertedKey, x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by");
+        norm.Should().NotContain("argMax");
+    }
+
+    // --- still-unsupported: a floating component qualifies as a key only, not as a group/expression ---
+
+    [Fact]
+    public void SelectWhereMax_FloatingGroupKey_ShouldKeepPortableWindowLowering()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.Id, x => new { x.Id }, ExtremeRowTies.One, x => new { x.D })));
+
+        norm.Should().Contain("row_number() over (partition by d order by id desc)");
+        norm.Should().NotContain("argMax");
+    }
+
+    [Fact]
+    public void SelectWhereMax_FloatingExpressionKey_ShouldKeepPortableWindowLowering()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.D + 1, x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by");
+        norm.Should().NotContain("argMax");
+    }
+
+    [Fact]
+    public void SelectWhereMax_FourComponentFloatingKey_ShouldKeepPortableWindowLowering()
+    {
+        // The frozen allowlist was proven for single/two/three-component keys only; arity > 3 is a
+        // deferred shape and must keep the portable lowering even though every component is an allowed
+        // direct mapped column.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IFloatNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => new { x.K, x.Id, x.D, x.Dn }, x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by");
+        norm.Should().NotContain("argMax");
+    }
+
+    [Fact]
+    public void SelectWhereMax_Float16Key_ShouldKeepPortableWindowLowering()
+    {
+        // Float16 is outside the approved matrix; even a direct mapped Half column must not be rendered
+        // through the NaN adaptation.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IUnsupportedFloatingKeyNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.H, x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by");
+        norm.Should().NotContain("argMax");
+    }
+
+    [Fact]
+    public void SelectWhereMin_DecimalKey_ShouldKeepPortableWindowLowering()
+    {
+        // Decimal is outside the approved matrix (neither integral nor float/double); it keeps the
+        // portable lowering.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IUnsupportedFloatingKeyNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMin(x => x.Dec, x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by");
+        norm.Should().NotContain("argMin");
+    }
+
+    [Fact]
+    public void SelectWhereMax_NullableDecimalKey_ShouldKeepPortableWindowLowering()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IUnsupportedFloatingKeyNativeEntity>();
+
+        var norm = Dequoted(SqlOf(ctx, e.SelectWhereMax(x => x.DecN, x => new { x.Id })));
+
+        norm.Should().Contain("row_number() over (order by");
         norm.Should().NotContain("argMax");
     }
 
@@ -571,7 +832,10 @@ public class ExtremeNativeEntity
     public int? Flag { get; set; }
 }
 
-/// <summary>A floating-point key whose payload is otherwise tuple-supported.</summary>
+/// <summary>
+/// A floating-point key matrix whose payload is tuple-supported (the floating key columns are carried
+/// in the payload tuple and now admissible there).
+/// </summary>
 [SqlTable("float_native_entity")]
 public interface IFloatNativeEntity
 {
@@ -580,7 +844,25 @@ public interface IFloatNativeEntity
     int Id { get; set; }
 
     [Column("d")]
-    double? D { get; set; }
+    double D { get; set; }
+
+    [Column("dn")]
+    double? Dn { get; set; }
+
+    [Column("f")]
+    float F { get; set; }
+
+    [Column("fn")]
+    float? Fn { get; set; }
+
+    [Column("k")]
+    int? K { get; set; }
+
+    [Column("g")]
+    string? G { get; set; }
+
+    [Column("payload")]
+    string? Payload { get; set; }
 }
 
 /// <summary>A string key whose payload is tuple-supported.</summary>
@@ -595,12 +877,102 @@ public interface IStringKeyNativeEntity
     string? Name { get; set; }
 }
 
+/// <summary>
+/// Key shapes outside the proven floating allowlist: a Float16 (CLR <see cref="Half"/>) and a decimal
+/// key. Neither is integral nor float/double, so the native renderer must decline and leave the
+/// portable lowering in place.
+/// </summary>
+[SqlTable("unsupported_float_native_entity")]
+public interface IUnsupportedFloatingKeyNativeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("h")]
+    Half H { get; set; }
+
+    [Column("dec")]
+    decimal Dec { get; set; }
+
+    [Column("decn")]
+    decimal? DecN { get; set; }
+
+    [Column("payload")]
+    string? Payload { get; set; }
+}
+
 /// <summary>Converts an <see cref="int"/> payload column to text, so the tuple strategy must decline.</summary>
 public sealed class IntToTextConverter : ValueConverter<int, string>
 {
     public override string? ConvertToProvider(int model) => model.ToString(CultureInfo.InvariantCulture);
 
     public override int ConvertFromProvider(string? provider) => int.Parse(provider!, CultureInfo.InvariantCulture);
+}
+
+/// <summary>
+/// An integral direct key whose payload carries mapped <c>float</c>/<c>double</c> columns. The payload
+/// types are tuple-representable only as carriers of a floating extreme key, so with an integral key the
+/// native renderer must decline and keep the portable lowering (the pre-D150 payload behavior).
+/// </summary>
+[SqlTable("floating_payload_integral_key_native_entity")]
+public interface IFloatingPayloadIntegralKeyNativeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("k")]
+    int? K { get; set; }
+
+    [Column("f")]
+    float F { get; set; }
+
+    [Column("d")]
+    double D { get; set; }
+}
+
+/// <summary>
+/// Integral extreme keys of every supported width (<see cref="short"/>/<see cref="long"/> and their
+/// nullable forms), none of which had a dedicated eligibility test.
+/// </summary>
+[SqlTable("integral_width_key_native_entity")]
+public interface IIntegralWidthKeyNativeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("s")]
+    short S { get; set; }
+
+    [Column("l")]
+    long L { get; set; }
+
+    [Column("sn")]
+    short? Sn { get; set; }
+
+    [Column("ln")]
+    long? Ln { get; set; }
+
+    [Column("payload")]
+    string? Payload { get; set; }
+}
+
+/// <summary>An integral extreme key that itself carries a value converter, so the native path declines.</summary>
+[SqlTable("converter_key_native_entity")]
+public interface IConverterKeyNativeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("converted_key")]
+    [ValueConverter(typeof(IntToTextConverter))]
+    int ConvertedKey { get; set; }
+
+    [Column("payload")]
+    string? Payload { get; set; }
 }
 
 /// <summary>An integral direct key with a converter-backed payload column.</summary>
@@ -653,4 +1025,19 @@ public class ExtremeAliasNativeEntity
 
     [Column("k")]
     public int? K { get; set; }
+}
+
+/// <summary>A native extreme-row shape whose mapped key/payload names carry a backtick and a backslash.</summary>
+[SqlTable("extreme_special_native_entity")]
+public interface IExtremeSpecialNativeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("k\\ey")]
+    int? K { get; set; }
+
+    [Column("pay`load")]
+    string? Payload { get; set; }
 }

@@ -43,6 +43,8 @@ internal sealed class SqliteTestProvider : ITestProvider
     public bool SupportsTransactions => true;
     public bool SupportsRegex => true;
     public bool SupportsLobStreaming => true;
+    // The locator-free result path returns a buffered (non-sequential) reader without the rowid column.
+    public bool SupportsLobDataReader => true;
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 

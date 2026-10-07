@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace NextORM.Core;
 
@@ -9,11 +10,13 @@ namespace NextORM.Core;
 public enum JsonColumnStorage
 {
     /// <summary>
-    /// Resolve per dialect: a native JSON type (<c>jsonb</c>) where the provider supports it
-    /// (<see cref="ISqlDialect.SupportsJson"/>), otherwise a text column.
+    /// Resolve per dialect: a native JSON type where the provider supports it
+    /// (<see cref="ISqlDialect.SupportsJson"/>), otherwise a text column. The native representation is
+    /// <see cref="ISqlDialect.NativeJsonProviderType"/> (<c>JsonElement</c> on PostgreSQL,
+    /// <c>JsonObject</c> on ClickHouse).
     /// </summary>
     Auto,
-    /// <summary>A provider-native JSON type (<c>jsonb</c>); requires <see cref="ISqlDialect.SupportsJson"/>.</summary>
+    /// <summary>A provider-native JSON type; requires <see cref="ISqlDialect.SupportsJson"/>.</summary>
     Native,
     /// <summary>A text column holding the JSON document.</summary>
     Text,
@@ -53,14 +56,19 @@ public sealed class JsonColumnOptions
 
 /// <summary>
 /// Serializes a property of <typeparamref name="TModel"/> to a JSON column. The
-/// <typeparamref name="TProvider"/> must be <see cref="string"/> (a text column) or
-/// <see cref="JsonElement"/> (a provider-native JSON column). Named to avoid the
+/// <typeparamref name="TProvider"/> must be <see cref="string"/> (a text column),
+/// <see cref="JsonElement"/> (a provider-native JSON column exposed as an element) or
+/// <see cref="JsonObject"/> (ClickHouse's native <c>JSON</c> object-root transport). Named to avoid the
 /// <c>System.Text.Json.Serialization.JsonConverter&lt;T&gt;</c> collision.
 /// </summary>
 /// <typeparam name="TModel">The CLR type stored in the column.</typeparam>
-/// <typeparam name="TProvider">The provider representation: <see cref="string"/> or <see cref="JsonElement"/>.</typeparam>
+/// <typeparam name="TProvider">The provider representation: <see cref="string"/>, <see cref="JsonElement"/> or <see cref="JsonObject"/>.</typeparam>
 public sealed class JsonColumnConverter<TModel, TProvider> : ValueConverter<TModel, TProvider>
 {
+    private const string ObjectRootOnlyMessage =
+        "A native JSON column accepts object-root values only; the value does not serialize to a JSON object. "
+        + "Use JsonColumnStorage.Text for a non-object root.";
+
     private readonly JsonSerializerOptions? _options;
 
     /// <summary>Creates a converter using the default serializer options.</summary>
@@ -80,6 +88,8 @@ public sealed class JsonColumnConverter<TModel, TProvider> : ValueConverter<TMod
 
     private static bool IsElement => typeof(TProvider) == typeof(JsonElement);
 
+    private static bool IsObject => typeof(TProvider) == typeof(JsonObject);
+
     /// <inheritdoc/>
     public override TProvider? ConvertToProvider(TModel? model)
     {
@@ -93,8 +103,10 @@ public sealed class JsonColumnConverter<TModel, TProvider> : ValueConverter<TMod
         }
         if (IsElement)
             return (TProvider)(object)JsonSerializer.SerializeToElement(model, _options);
+        if (IsObject)
+            return (TProvider)(object)SerializeToObject(model);
 
-        throw new NotSupportedException($"A JSON column provider type must be {typeof(string)} or {typeof(JsonElement)}; {typeof(TProvider)} is not supported.");
+        throw new NotSupportedException($"A JSON column provider type must be {typeof(string)}, {typeof(JsonElement)} or {typeof(JsonObject)}; {typeof(TProvider)} is not supported.");
     }
 
     /// <inheritdoc/>
@@ -107,8 +119,22 @@ public sealed class JsonColumnConverter<TModel, TProvider> : ValueConverter<TMod
             return JsonSerializer.Deserialize<TModel>(text, _options);
         if (provider is JsonElement element)
             return element.Deserialize<TModel>(_options);
+        if (provider is JsonObject jsonObject)
+            return jsonObject.Deserialize<TModel>(_options);
 
-        throw new NotSupportedException($"A JSON column provider type must be {typeof(string)} or {typeof(JsonElement)}; {typeof(TProvider)} is not supported.");
+        throw new NotSupportedException($"A JSON column provider type must be {typeof(string)}, {typeof(JsonElement)} or {typeof(JsonObject)}; {typeof(TProvider)} is not supported.");
+    }
+
+    // ClickHouse's native JSON is object-rooted: a JSON array/primitive/string/null root (and an
+    // undefined JsonElement) cannot be stored, so the mismatch is surfaced here instead of producing a
+    // document the server rejects.
+    private JsonObject SerializeToObject(TModel model)
+    {
+        if (model is JsonElement element && element.ValueKind != JsonValueKind.Object)
+            throw new NotSupportedException(ObjectRootOnlyMessage);
+
+        return JsonSerializer.SerializeToNode(model, _options) as JsonObject
+            ?? throw new NotSupportedException(ObjectRootOnlyMessage);
     }
 }
 
@@ -147,6 +173,7 @@ internal sealed class JsonColumnAutoConverter<TModel> : IPropertyValueConverter,
     private readonly JsonColumnOptions _options;
     private readonly JsonColumnConverter<TModel, string> _text;
     private readonly JsonColumnConverter<TModel, JsonElement> _native;
+    private JsonColumnConverter<TModel, JsonObject>? _nativeObject;
 
     public JsonColumnAutoConverter(JsonColumnOptions options)
     {
@@ -183,9 +210,25 @@ internal sealed class JsonColumnAutoConverter<TModel> : IPropertyValueConverter,
             case JsonColumnStorage.Native:
                 if (!dialect.SupportsJson)
                     throw new NotSupportedException($"{dialect.GetType().Name} does not support a native JSON column; use {nameof(JsonColumnStorage.Text)}.");
-                return _native;
+                return ResolveNative(dialect);
             default:
-                return dialect.SupportsJson ? _native : _text;
+                return dialect.SupportsJson ? ResolveNative(dialect) : _text;
         }
+    }
+
+    // The dialect advertises which CLR type its native JSON representation materializes as. PostgreSQL
+    // uses JsonElement (Npgsql) and ClickHouse uses JsonObject (the driver's object-root DOM), so the
+    // resolved native converter is selected from NativeJsonProviderType rather than fixed at construction.
+    private IPropertyValueConverter ResolveNative(ISqlDialect dialect)
+    {
+        var providerType = dialect.NativeJsonProviderType;
+        if (providerType == typeof(JsonObject))
+            return _nativeObject ??= new JsonColumnConverter<TModel, JsonObject>(_options);
+        if (providerType == typeof(JsonElement))
+            return _native;
+
+        throw new NotSupportedException(
+            $"{dialect.GetType().Name} advertises native JSON storage with provider type {providerType}, "
+            + $"but the supported native representations are {typeof(JsonElement)} and {typeof(JsonObject)}.");
     }
 }

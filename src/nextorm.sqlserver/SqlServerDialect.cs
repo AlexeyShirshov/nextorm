@@ -954,9 +954,13 @@ internal sealed class SqlServerScalarFunctions : IScalarFunctions
 /// Renders the SQL Server-only T-SQL scalar functions of <see cref="SqlServerFunctions"/>: the string
 /// functions (<c>PATINDEX</c>, <c>QUOTENAME</c>, <c>SOUNDEX</c>, <c>DIFFERENCE</c>,
 /// <c>STRING_ESCAPE</c>, <c>UNICODE</c>, <c>NCHAR</c>, <c>FORMAT</c>), the trigonometric functions,
-/// the date functions (<c>DATENAME</c>, <c>DATE_BUCKET</c>), the binary/system functions
-/// (<c>HASHBYTES</c>, <c>NEWSEQUENTIALID</c>) and the SQL/JSON constructors, aggregates and
-/// predicates. The date part names are emitted unquoted (the T-SQL convention), the alternating
+/// the date functions (<c>DATENAME</c>, <c>DATE_BUCKET</c>, the clock/offset/<c>*FROMPARTS</c>
+/// family), the binary/system functions (<c>HASHBYTES</c>, <c>NEWSEQUENTIALID</c>, <c>CHECKSUM</c>,
+/// <c>COMPRESS</c>, <c>DECOMPRESS</c>), the <c>RAND</c>/<c>STUFF</c> scalars, the metadata
+/// functions (<c>COL_LENGTH</c>, <c>OBJECT_ID</c>, <c>DB_ID</c>, <c>SCHEMA_NAME</c>, <c>FILE_ID</c>,
+/// <c>ISDATE</c>, <c>STR</c>, <c>FORMATMESSAGE</c> and the rest of the metadata A–D families) and
+/// the SQL/JSON constructors, aggregates and predicates. The date part names are emitted unquoted
+/// (the T-SQL convention), the alternating
 /// <c>json_object</c>/<c>json_objectagg</c> arguments are joined with the <c>:</c> key separator.
 /// </summary>
 internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
@@ -969,7 +973,19 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or
         "square" or "datename" or "date_bucket" or "hashbytes" or
         "newsequentialid" or "json_array" or "json_object" or "json_arrayagg" or "json_objectagg" or
-        "json_contains" or "json_path_exists";
+        "json_contains" or "json_path_exists" or
+        "sysdatetime" or "sysdatetimeoffset" or "sysutcdatetime" or "switchoffset" or
+        "todatetimeoffset" or "timefromparts" or "smalldatetimefromparts" or "datetimefromparts" or
+        "datetime2fromparts" or "datetimeoffsetfromparts" or
+        "checksum" or "binary_checksum" or "compress" or "decompress" or
+        "rand" or "stuff" or
+        "col_length" or "col_name" or "ident_incr" or "ident_seed" or "index_col" or
+        "object_definition" or "object_id" or "object_name" or "object_schema_name" or "stats_date" or
+        "db_id" or "db_name" or "original_db_name" or "schema_id" or "schema_name" or
+        "type_id" or "type_name" or
+        "filegroup_id" or "filegroup_name" or "file_id" or "file_idex" or "file_name" or
+        "current_timezone" or "current_timezone_id" or "formatmessage" or "getansinull" or
+        "isdate" or "isnumeric" or "parsename" or "publishingservername" or "str";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -999,6 +1015,59 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "json_objectagg" => $"json_objectagg({args[0]} : {args[1]})",
         "json_contains" => $"json_contains({args[0]}, {args[1]}, {args[2]})",
         "json_path_exists" => $"json_path_exists({args[0]}, {args[1]})",
+        "sysdatetime" => "sysdatetime()",
+        "sysdatetimeoffset" => "sysdatetimeoffset()",
+        "sysutcdatetime" => "sysutcdatetime()",
+        "switchoffset" => $"switchoffset({args[0]}, {args[1]})",
+        "todatetimeoffset" => $"todatetimeoffset({args[0]}, {args[1]})",
+        "timefromparts" => $"timefromparts({string.Join(", ", args)})",
+        "smalldatetimefromparts" => $"smalldatetimefromparts({string.Join(", ", args)})",
+        "datetimefromparts" => $"datetimefromparts({string.Join(", ", args)})",
+        "datetime2fromparts" => $"datetime2fromparts({string.Join(", ", args)})",
+        "datetimeoffsetfromparts" => $"datetimeoffsetfromparts({string.Join(", ", args)})",
+        "checksum" => $"checksum({string.Join(", ", args)})",
+        "binary_checksum" => $"binary_checksum({string.Join(", ", args)})",
+        "compress" => $"compress({args[0]})",
+        "decompress" => $"decompress({args[0]})",
+        "rand" => args.Count == 0 ? "rand()" : $"rand({args[0]})",
+        "stuff" => $"stuff({args[0]}, {args[1]}, {args[2]}, {args[3]})",
+        "col_length" => $"col_length({args[0]}, {args[1]})",
+        "col_name" => $"col_name({args[0]}, {args[1]})",
+        "ident_incr" => $"ident_incr({args[0]})",
+        "ident_seed" => $"ident_seed({args[0]})",
+        "index_col" => $"index_col({args[0]}, {args[1]}, {args[2]})",
+        "object_definition" => $"object_definition({args[0]})",
+        "object_id" => args.Count == 2
+            ? $"object_id({args[0]}, {args[1]})"
+            : $"object_id({args[0]})",
+        "object_name" => args.Count == 2
+            ? $"object_name({args[0]}, {args[1]})"
+            : $"object_name({args[0]})",
+        "object_schema_name" => args.Count == 2
+            ? $"object_schema_name({args[0]}, {args[1]})"
+            : $"object_schema_name({args[0]})",
+        "stats_date" => $"stats_date({args[0]}, {args[1]})",
+        "db_id" => args.Count == 0 ? "db_id()" : $"db_id({args[0]})",
+        "db_name" => args.Count == 0 ? "db_name()" : $"db_name({args[0]})",
+        "original_db_name" => "original_db_name()",
+        "schema_id" => args.Count == 0 ? "schema_id()" : $"schema_id({args[0]})",
+        "schema_name" => args.Count == 0 ? "schema_name()" : $"schema_name({args[0]})",
+        "type_id" => $"type_id({args[0]})",
+        "type_name" => $"type_name({args[0]})",
+        "filegroup_id" => $"filegroup_id({args[0]})",
+        "filegroup_name" => $"filegroup_name({args[0]})",
+        "file_id" => $"file_id({args[0]})",
+        "file_idex" => $"file_idex({args[0]})",
+        "file_name" => $"file_name({args[0]})",
+        "current_timezone" => "current_timezone()",
+        "current_timezone_id" => "current_timezone_id()",
+        "formatmessage" => $"formatmessage({string.Join(", ", args)})",
+        "getansinull" => args.Count == 0 ? "getansinull()" : $"getansinull({args[0]})",
+        "isdate" => $"isdate({args[0]})",
+        "isnumeric" => $"isnumeric({args[0]})",
+        "parsename" => $"parsename({args[0]}, {args[1]})",
+        "publishingservername" => "publishingservername()",
+        "str" => $"str({string.Join(", ", args)})",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
     };
 

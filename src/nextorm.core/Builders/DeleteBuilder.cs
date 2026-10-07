@@ -257,16 +257,15 @@ public sealed class DeleteBuilder<TEntity>
     }
 
     /// <summary>Builds the delete command for an <c>OUTPUT ... INTO</c>-only terminal: the removed rows are written into the target and nothing is returned to the client.</summary>
-    /// <param name="outputColumns">The mapped columns written into the target.</param>
-    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <param name="outputInto">The output-into target (an existing table or a table variable) carrying the mapped output columns.</param>
     /// <returns>The delete command carrying the output-into target.</returns>
-    internal DeleteCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
+    internal DeleteCommand BuildOutputIntoCommand(OutputIntoClause outputInto)
     {
         if (_filter is null && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
         var condition = _filter is null ? null : ApplyFilterScope(_filter).ToCommand();
-        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, null, new OutputIntoClause(targetTable, outputColumns));
+        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, null, outputInto);
     }
 
     // Applies the builder's selective filter scope to the source command that carries the DELETE's

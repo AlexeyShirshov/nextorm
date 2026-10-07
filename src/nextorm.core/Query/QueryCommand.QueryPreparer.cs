@@ -92,6 +92,18 @@ public partial class QueryCommand
             PrepareCtes(cmd, dontCalculateHash, cancellationToken);
             PrepareHints(cmd, dontCalculateHash);
 
+            // A tuple value list renders a parameter/SQL shape that follows the captured collection, but
+            // only the WHERE/PREWHERE shape is folded into the plan key. A tuple membership in HAVING, a
+            // JOIN ON, a SELECT column or a nested subquery is therefore not keyed: flag the command so
+            // the planner suppresses the call-local cache instead of reusing a stale plan.
+            cmd.HasUnkeyedTupleInValues = ScanUnkeyedTupleInValues(cmd);
+
+            // A scalar (non-tuple) captured value list has the same shape-follows-the-collection property.
+            // Its WHERE/PREWHERE shape is folded into the plan key, but a list in HAVING, a JOIN ON, a
+            // SELECT column, a nested subquery or a descendant condition swapped into a shared command is
+            // not keyed, so flag the command for the planner's call-local cache suppression.
+            cmd.HasUnkeyedScalarInValues = ScanUnkeyedScalarInValues(cmd);
+
             cmd._isPrepared = true;
             cmd._selectList = selectList ?? [];
             cmd._groupingList = groupingList ?? [];
@@ -163,6 +175,11 @@ public partial class QueryCommand
                 // through the cache, so its shape was never folded in. Do it now, once, before the normal
                 // refresh path: otherwise a captured-collection lookup inside the condition would not be
                 // in LookupPartitions and would be refused as sitting outside the condition.
+                //
+                // A provider without a row-value constructor must reject a tuple value list here as well,
+                // before its shape is evaluated (same pinned message as the prepare-time preflight).
+                EnsureProviderSupportsTupleInValues(cmd, cmd.PreparedCondition);
+                EnsureProviderSupportsTupleInValues(cmd, cmd.PreparedPreWhere);
                 cmd.LookupPartitions = null;
                 Dictionary<Expression, InValuesPartition>? initial = null;
 
@@ -623,6 +640,20 @@ public partial class QueryCommand
                         }
 
 
+                    }
+                    // A bare top-level DOM scalar projection (x => x.Doc where Doc is a bare
+                    // JsonObject/JsonDocument/JsonElement property with no [JsonColumn] converter) is
+                    // not handled by any projection shape: the single-column branch only recognizes the
+                    // exact JsonNode type, so no branch matches and the select list would stay empty
+                    // (the row mapper then fails with an opaque "Incorrect number of arguments for
+                    // constructor"). Fail early with a clear message instead. The wrapped form
+                    // (Select(x => new { x.Doc })) expands through the NewExpression branch above and an
+                    // attributed [JsonColumn] DOM property carries a converter, so neither is affected.
+                    else if (TypeFacts.UnwrapConvert(cmd._exp.Body) is MemberExpression domMember
+                        && TypeFacts.IsBareDomScalar(domMember.Type))
+                    {
+                        throw new NotSupportedException(
+                            $"The bare top-level scalar projection '{domMember.Type}' at Select position 0 is not supported; project it inside a named shape (for example Select(x => new {{ x.Doc }}) or a DTO) instead.");
                     }
                 }
                 else
@@ -1837,6 +1868,496 @@ public partial class QueryCommand
             }
         }
 
+        /// <summary>
+        /// Metadata-only provider preflight for a tuple value list. When <paramref name="condition"/>
+        /// contains a tuple <c>IN</c>/<c>Contains</c> and the bound dialect has no row-value constructor
+        /// (SQL Server), throws the pinned <see cref="NotSupportedException"/> before the collection is
+        /// evaluated. The dialect is resolved through the concrete <see cref="DataContext"/>; when it is
+        /// unavailable the render-time translator guard remains the backstop.
+        /// </summary>
+        private static void EnsureProviderSupportsTupleInValues(QueryCommand cmd, Expression? condition)
+        {
+            if (condition is null || !InValues.ContainsTupleInValues(condition))
+                return;
+
+            if ((cmd._dataContext as DataContext)?.Dialect is { } dialect && dialect.Tuple is null)
+                throw new NotSupportedException(InValues.SqlServerTupleInNotSupportedMessage);
+        }
+
+        /// <summary>
+        /// Scans every clause whose captured-collection shape is <b>not</b> folded into the plan key for a
+        /// tuple <c>IN</c>/<c>Contains</c> and returns <see langword="true"/> when one exists. The SELECT
+        /// projection, HAVING, JOIN conditions and derived join sources, GROUP BY, ORDER BY, ARRAY JOIN,
+        /// LIMIT BY / DISTINCT ON / extreme-row selectors, named windows, outer references, the FROM
+        /// derived table / PIVOT source, set-operation operands, CTE bodies and recursively referenced
+        /// subqueries are all unkeyed; only WHERE and PREWHERE fold <c>InValuesShapeHash</c> into the key
+        /// and are deliberately excluded. A false positive only forgoes caching (harmless); a false
+        /// negative would reuse a plan rendered for another collection shape (a wrong result).
+        /// </summary>
+        private static bool ScanUnkeyedTupleInValues(QueryCommand cmd)
+        {
+            var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
+            return ScanUnkeyedTupleInValues(cmd, visited);
+        }
+
+        private static bool ScanUnkeyedTupleInValues(QueryCommand cmd, HashSet<QueryCommand> visited)
+        {
+            if (!visited.Add(cmd))
+                return false;
+
+            if (cmd._exp is { } projection && InValues.ContainsTupleInValues(projection))
+                return true;
+
+            if (cmd._having is { } having && InValues.ContainsTupleInValues(having))
+                return true;
+
+            if (cmd._groupExp is { } grouping && InValues.ContainsTupleInValues(grouping))
+                return true;
+
+            if (cmd._joins is { } joins)
+            {
+                for (var i = 0; i < joins.Length; i++)
+                {
+                    if (joins[i].JoinCondition is { } joinCondition && InValues.ContainsTupleInValues(joinCondition))
+                        return true;
+
+                    if (ScanUnkeyedTupleInFrom(joins[i].From, visited))
+                        return true;
+                }
+            }
+
+            // ORDER BY keys are not shape-keyed: a tuple value list there renders a shape-dependent SQL.
+            if (cmd._sorting is { } sorting)
+            {
+                for (var i = 0; i < sorting.Length; i++)
+                {
+                    if (sorting[i].SortExpression is { } sortExpression && InValues.ContainsTupleInValues(sortExpression))
+                        return true;
+
+                    if (sorting[i].PreparedExpression is { } preparedExpression && InValues.ContainsTupleInValues(preparedExpression))
+                        return true;
+                }
+            }
+
+            // ClickHouse ARRAY JOIN expressions; the prepared array is what the renderer consumes.
+            if (cmd._preparedArrayJoin is { } preparedArrayJoin)
+            {
+                for (var i = 0; i < preparedArrayJoin.Length; i++)
+                {
+                    if (InValues.ContainsTupleInValues(preparedArrayJoin[i]))
+                        return true;
+                }
+            }
+            else if (cmd._arrayJoins is { } arrayJoins)
+            {
+                for (var i = 0; i < arrayJoins.Length; i++)
+                {
+                    if (InValues.ContainsTupleInValues(arrayJoins[i]))
+                        return true;
+                }
+            }
+
+            if (cmd.LimitBy?.Expression is { } limitBy && InValues.ContainsTupleInValues(limitBy))
+                return true;
+
+            if (cmd.DistinctOn?.Expression is { } distinctOn && InValues.ContainsTupleInValues(distinctOn))
+                return true;
+
+            if (cmd.ExtremeRow is { } extremeRow)
+            {
+                if (InValues.ContainsTupleInValues(extremeRow.ValueSelector))
+                    return true;
+
+                if (extremeRow.GroupBy is { } extremeGroupBy && InValues.ContainsTupleInValues(extremeGroupBy))
+                    return true;
+
+                if (extremeRow.Projection is { } extremeProjection && InValues.ContainsTupleInValues(extremeProjection))
+                    return true;
+            }
+
+            // Named windows (WINDOW ... AS (PARTITION BY ... ORDER BY ...)) are not shape-keyed.
+            if (cmd._windows is { Count: > 0 } windows)
+            {
+                for (var i = 0; i < windows.Count; i++)
+                {
+                    var window = windows[i];
+
+                    for (var p = 0; p < window.PartitionBy.Count; p++)
+                    {
+                        if (InValues.ContainsTupleInValues(window.PartitionBy[p]))
+                            return true;
+                    }
+
+                    for (var o = 0; o < window.OrderBy.Count; o++)
+                    {
+                        if (InValues.ContainsTupleInValues(window.OrderBy[o].Expression))
+                            return true;
+                    }
+                }
+            }
+
+            // Correlated outer references render against this statement and are not shape-keyed.
+            if (cmd._outerRefs is { Count: > 0 } outerRefs)
+            {
+                for (var i = 0; i < outerRefs.Count; i++)
+                {
+                    if (InValues.ContainsTupleInValues(outerRefs[i]))
+                        return true;
+                }
+            }
+
+            // A derived table / PIVOT inner source / TVF argument renders inline in this statement.
+            if (ScanUnkeyedTupleInFrom(cmd._from, visited))
+                return true;
+
+            // A set-operation operand renders with this statement's provider and its own plan key does
+            // not fold the captured-collection shape.
+            if (cmd._union is { } union && ScanUnkeyedTupleInValues(union, visited))
+                return true;
+
+            // Hoisted CTE bodies render in the same statement.
+            if (cmd._ctes is { Count: > 0 } ctes)
+            {
+                for (var i = 0; i < ctes.Count; i++)
+                {
+                    if (ScanUnkeyedTupleInValues(ctes[i].Query, visited))
+                        return true;
+
+                    // A data-modifying CTE body carries the mutation's nested query (the INSERT ... SELECT
+                    // source, the UPDATE/DELETE predicate, or a joined source); it renders inside this
+                    // statement's WITH, so an unkeyed tuple value list there is a false negative. The
+                    // statement is side-effecting and never cached, but the scan stays exhaustive.
+                    if (ctes[i].Mutation is { Source: { } mutationSource } && ScanUnkeyedTupleInValues(mutationSource, visited))
+                        return true;
+                }
+            }
+
+            // A nested subquery (or a correlated apply/CTE body) renders inside this statement, so an
+            // unkeyed tuple value list there also makes this command's cached plan unsafe.
+            if (cmd._referencedQueries is { Count: > 0 } referenced)
+            {
+                for (var i = 0; i < referenced.Count; i++)
+                {
+                    if (ScanUnkeyedTupleInValues(referenced[i], visited))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Scans a FROM source's rendered subqueries, commands and arguments for an unkeyed tuple value
+        /// list, recursing through nested sources: a derived table, a PIVOT inner source, a table-valued
+        /// function call, a data-modifying CTE read's column-shape command, a lazy temporary table's
+        /// materialisation source, an in-memory LINQ source's commands and lambdas, and a SQL Server
+        /// <c>xml.nodes()</c> operand. WHERE/PREWHERE nested inside a subquery are still excluded: the
+        /// subquery's own plan key folds that shape, and the derived source's plan hash includes it.
+        /// </summary>
+        private static bool ScanUnkeyedTupleInFrom(FromExpression? from, HashSet<QueryCommand> visited)
+        {
+            if (from is null)
+                return false;
+
+            if (from.SubQuery is { } subQuery && ScanUnkeyedTupleInValues(subQuery, visited))
+                return true;
+
+            // A data-modifying CTE read carries the mutation's RETURNING shape command, which supplies the
+            // readable columns of this source and renders through the same statement's WITH.
+            if (from.ColumnShape is { } columnShape && ScanUnkeyedTupleInValues(columnShape, visited))
+                return true;
+
+            // A lazy temporary table renders its source query as CREATE TEMPORARY TABLE ... AS SELECT in
+            // the same batch as this read, so an unkeyed tuple value list there is rendered too.
+            if (from.TempTable is { } tempTable && ScanUnkeyedTupleInValues(tempTable.Source, visited))
+                return true;
+
+            // An in-memory LINQ source holds the outer/inner commands and the operator lambdas. The SQL
+            // providers reject the source, but the in-memory provider evaluates the lambdas, so scan all
+            // of them; a false positive only forgoes caching.
+            if (from.LinqSource is { } linqSource)
+            {
+                if (ScanUnkeyedTupleInValues(linqSource.OuterCommand, visited))
+                    return true;
+
+                if (linqSource.InnerCommand is { } innerCommand && ScanUnkeyedTupleInValues(innerCommand, visited))
+                    return true;
+
+                if (linqSource.CollectionSelector is { } collectionSelector && InValues.ContainsTupleInValues(collectionSelector))
+                    return true;
+
+                if (linqSource.ResultSelector is { } resultSelector && InValues.ContainsTupleInValues(resultSelector))
+                    return true;
+
+                if (linqSource.OuterKeySelector is { } outerKeySelector && InValues.ContainsTupleInValues(outerKeySelector))
+                    return true;
+
+                if (linqSource.InnerKeySelector is { } innerKeySelector && InValues.ContainsTupleInValues(innerKeySelector))
+                    return true;
+            }
+
+            // A SQL Server xml.nodes() rowset renders its operand as the correlated XML column expression.
+            if (from.XmlNodes is { } xmlNodes && InValues.ContainsTupleInValues(xmlNodes.Operand))
+                return true;
+
+            if (from.Pivot is { } pivot)
+            {
+                if (pivot.AggregateColumn is { } aggregateColumn && InValues.ContainsTupleInValues(aggregateColumn))
+                    return true;
+
+                if (pivot.ForColumn is { } forColumn && InValues.ContainsTupleInValues(forColumn))
+                    return true;
+
+                if (ScanUnkeyedTupleInFrom(pivot.Inner, visited))
+                    return true;
+            }
+
+            if (from.TableFunction is { } tableFunction && InValues.ContainsTupleInValues(tableFunction.Call))
+                return true;
+
+            return false;
+        }
+
+        /// <summary>
+        /// Scans every clause whose captured-collection shape is <b>not</b> folded into the plan key for a
+        /// scalar (non-tuple) <c>IN</c>/<c>Contains</c> and returns <see langword="true"/> when one exists.
+        /// It mirrors <see cref="ScanUnkeyedTupleInValues(QueryCommand)"/> over the SELECT projection, HAVING, JOIN
+        /// conditions and sources, GROUP BY, ORDER BY, ARRAY JOIN, LIMIT BY / DISTINCT ON / extreme-row
+        /// selectors, named windows, outer references, FROM sources, set-operation operands, CTE bodies and
+        /// referenced subqueries. Unlike the tuple scan, a <b>descendant</b> command's WHERE/PREWHERE is
+        /// also scanned: a scalar list captured there is not re-keyed when the query is swapped into the
+        /// context-shared <c>Any</c>/<c>Count</c> command, so the owner must flag it. The root's own
+        /// WHERE/PREWHERE is excluded because its shape is folded into its own plan key. A false positive
+        /// only forgoes caching (harmless); a false negative would reuse a plan rendered for another
+        /// collection shape (a wrong result).
+        /// </summary>
+        internal static bool ScanUnkeyedScalarInValues(QueryCommand cmd)
+        {
+            var visited = new HashSet<QueryCommand>(ReferenceEqualityComparer.Instance);
+            return ScanUnkeyedScalarInValues(cmd, visited, true);
+        }
+
+        private static bool ScanUnkeyedScalarInValues(QueryCommand cmd, HashSet<QueryCommand> visited, bool isRoot)
+        {
+            if (!visited.Add(cmd))
+                return false;
+
+            // A descendant's condition belongs to the owner's rendered statement: the swap into a shared
+            // command does not re-key the owner from the referenced query's WHERE shape, so scan it. The
+            // root's own WHERE/PREWHERE is shape-keyed and deliberately excluded.
+            if (!isRoot && HasUnkeyedScalarInCondition(cmd))
+                return true;
+
+            if (cmd._exp is { } projection && InValues.ContainsScalarInValues(projection))
+                return true;
+
+            if (cmd._having is { } having && InValues.ContainsScalarInValues(having))
+                return true;
+
+            if (cmd._groupExp is { } grouping && InValues.ContainsScalarInValues(grouping))
+                return true;
+
+            if (cmd._joins is { } joins)
+            {
+                for (var i = 0; i < joins.Length; i++)
+                {
+                    if (joins[i].JoinCondition is { } joinCondition && InValues.ContainsScalarInValues(joinCondition))
+                        return true;
+
+                    if (ScanUnkeyedScalarInFrom(joins[i].From, visited))
+                        return true;
+                }
+            }
+
+            // ORDER BY keys are not shape-keyed: a scalar value list there renders a shape-dependent SQL.
+            if (cmd._sorting is { } sorting)
+            {
+                for (var i = 0; i < sorting.Length; i++)
+                {
+                    if (sorting[i].SortExpression is { } sortExpression && InValues.ContainsScalarInValues(sortExpression))
+                        return true;
+
+                    if (sorting[i].PreparedExpression is { } preparedExpression && InValues.ContainsScalarInValues(preparedExpression))
+                        return true;
+                }
+            }
+
+            // ClickHouse ARRAY JOIN expressions; the prepared array is what the renderer consumes.
+            if (cmd._preparedArrayJoin is { } preparedArrayJoin)
+            {
+                for (var i = 0; i < preparedArrayJoin.Length; i++)
+                {
+                    if (InValues.ContainsScalarInValues(preparedArrayJoin[i]))
+                        return true;
+                }
+            }
+            else if (cmd._arrayJoins is { } arrayJoins)
+            {
+                for (var i = 0; i < arrayJoins.Length; i++)
+                {
+                    if (InValues.ContainsScalarInValues(arrayJoins[i]))
+                        return true;
+                }
+            }
+
+            if (cmd.LimitBy?.Expression is { } limitBy && InValues.ContainsScalarInValues(limitBy))
+                return true;
+
+            if (cmd.DistinctOn?.Expression is { } distinctOn && InValues.ContainsScalarInValues(distinctOn))
+                return true;
+
+            if (cmd.ExtremeRow is { } extremeRow)
+            {
+                if (InValues.ContainsScalarInValues(extremeRow.ValueSelector))
+                    return true;
+
+                if (extremeRow.GroupBy is { } extremeGroupBy && InValues.ContainsScalarInValues(extremeGroupBy))
+                    return true;
+
+                if (extremeRow.Projection is { } extremeProjection && InValues.ContainsScalarInValues(extremeProjection))
+                    return true;
+            }
+
+            // Named windows (WINDOW ... AS (PARTITION BY ... ORDER BY ...)) are not shape-keyed.
+            if (cmd._windows is { Count: > 0 } windows)
+            {
+                for (var i = 0; i < windows.Count; i++)
+                {
+                    var window = windows[i];
+
+                    for (var p = 0; p < window.PartitionBy.Count; p++)
+                    {
+                        if (InValues.ContainsScalarInValues(window.PartitionBy[p]))
+                            return true;
+                    }
+
+                    for (var o = 0; o < window.OrderBy.Count; o++)
+                    {
+                        if (InValues.ContainsScalarInValues(window.OrderBy[o].Expression))
+                            return true;
+                    }
+                }
+            }
+
+            // Correlated outer references render against this statement and are not shape-keyed.
+            if (cmd._outerRefs is { Count: > 0 } outerRefs)
+            {
+                for (var i = 0; i < outerRefs.Count; i++)
+                {
+                    if (InValues.ContainsScalarInValues(outerRefs[i]))
+                        return true;
+                }
+            }
+
+            // A derived table / PIVOT inner source / TVF argument renders inline in this statement.
+            if (ScanUnkeyedScalarInFrom(cmd._from, visited))
+                return true;
+
+            // A set-operation operand renders with this statement's provider and its own plan key does
+            // not fold the captured-collection shape.
+            if (cmd._union is { } union && ScanUnkeyedScalarInValues(union, visited, false))
+                return true;
+
+            // Hoisted CTE bodies render in the same statement.
+            if (cmd._ctes is { Count: > 0 } ctes)
+            {
+                for (var i = 0; i < ctes.Count; i++)
+                {
+                    if (ScanUnkeyedScalarInValues(ctes[i].Query, visited, false))
+                        return true;
+
+                    if (ctes[i].Mutation is { Source: { } mutationSource } && ScanUnkeyedScalarInValues(mutationSource, visited, false))
+                        return true;
+                }
+            }
+
+            // A nested subquery (or a correlated apply/CTE body) renders inside this statement, so a
+            // scalar value list there also makes this command's cached plan unsafe. Its WHERE/PREWHERE is
+            // scanned because the owner's plan key does not fold the referenced query's shape on a swap.
+            if (cmd._referencedQueries is { Count: > 0 } referenced)
+            {
+                for (var i = 0; i < referenced.Count; i++)
+                {
+                    if (ScanUnkeyedScalarInValues(referenced[i], visited, false))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// True when a descendant command's own WHERE/PREWHERE (raw or prepared) contains a scalar captured
+        /// collection. Scanning both forms is conservative: after preparation the query parameter may no
+        /// longer be a <see cref="ParameterExpression"/>, so the raw lambda remains the reliable probe.
+        /// </summary>
+        private static bool HasUnkeyedScalarInCondition(QueryCommand cmd)
+            => (cmd._condition is { } condition && InValues.ContainsScalarInValues(condition))
+            || (cmd._preWhere is { } preWhere && InValues.ContainsScalarInValues(preWhere))
+            || (cmd.PreparedCondition is { } preparedCondition && InValues.ContainsScalarInValues(preparedCondition))
+            || (cmd.PreparedPreWhere is { } preparedPreWhere && InValues.ContainsScalarInValues(preparedPreWhere));
+
+        /// <summary>
+        /// Scans a FROM source's rendered subqueries, commands and arguments for an unkeyed scalar value
+        /// list, recursing through nested sources and including their WHERE/PREWHERE conditions (the owner
+        /// does not re-key from a derived source's shape on a shared-command swap).
+        /// </summary>
+        private static bool ScanUnkeyedScalarInFrom(FromExpression? from, HashSet<QueryCommand> visited)
+        {
+            if (from is null)
+                return false;
+
+            if (from.SubQuery is { } subQuery && ScanUnkeyedScalarInValues(subQuery, visited, false))
+                return true;
+
+            if (from.ColumnShape is { } columnShape && ScanUnkeyedScalarInValues(columnShape, visited, false))
+                return true;
+
+            if (from.TempTable is { } tempTable && ScanUnkeyedScalarInValues(tempTable.Source, visited, false))
+                return true;
+
+            if (from.LinqSource is { } linqSource)
+            {
+                if (ScanUnkeyedScalarInValues(linqSource.OuterCommand, visited, false))
+                    return true;
+
+                if (linqSource.InnerCommand is { } innerCommand && ScanUnkeyedScalarInValues(innerCommand, visited, false))
+                    return true;
+
+                if (linqSource.CollectionSelector is { } collectionSelector && InValues.ContainsScalarInValues(collectionSelector))
+                    return true;
+
+                if (linqSource.ResultSelector is { } resultSelector && InValues.ContainsScalarInValues(resultSelector))
+                    return true;
+
+                if (linqSource.OuterKeySelector is { } outerKeySelector && InValues.ContainsScalarInValues(outerKeySelector))
+                    return true;
+
+                if (linqSource.InnerKeySelector is { } innerKeySelector && InValues.ContainsScalarInValues(innerKeySelector))
+                    return true;
+            }
+
+            if (from.XmlNodes is { } xmlNodes && InValues.ContainsScalarInValues(xmlNodes.Operand))
+                return true;
+
+            if (from.Pivot is { } pivot)
+            {
+                if (pivot.AggregateColumn is { } aggregateColumn && InValues.ContainsScalarInValues(aggregateColumn))
+                    return true;
+
+                if (pivot.ForColumn is { } forColumn && InValues.ContainsScalarInValues(forColumn))
+                    return true;
+
+                if (ScanUnkeyedScalarInFrom(pivot.Inner, visited))
+                    return true;
+            }
+
+            if (from.TableFunction is { } tableFunction && InValues.ContainsScalarInValues(tableFunction.Call))
+                return true;
+
+            return false;
+        }
+
         private static int PrepareWhere(QueryCommand cmd, LambdaExpression? condition, bool noHash, CancellationToken cancellationToken)
         {
             int wherePlanHash = 7;
@@ -1844,6 +2365,11 @@ public partial class QueryCommand
             {
                 var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
                 cmd.PreparedCondition = innerQueryVisitor.Visit(condition);
+
+                // Reject a tuple value list on a provider without a row-value constructor before the
+                // shape is evaluated: the pinned message must win over the evaluation-time failures
+                // (null collection, null entry, arity/nested shapes) and no SQL is ever submitted.
+                EnsureProviderSupportsTupleInValues(cmd, cmd.PreparedCondition);
 
                 if (!cmd._dontCache && !noHash) unchecked
                     {
@@ -1873,6 +2399,10 @@ public partial class QueryCommand
 
             var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
             cmd.PreparedPreWhere = innerQueryVisitor.Visit(cmd._preWhere);
+
+            // Same provider-first rejection as WHERE: a tuple value list must be refused before its
+            // shape is evaluated.
+            EnsureProviderSupportsTupleInValues(cmd, cmd.PreparedPreWhere);
 
             if (!cmd._dontCache && !noHash)
             {

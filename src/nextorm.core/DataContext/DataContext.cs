@@ -16,6 +16,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
+    private readonly Version? _serverVersion;
     private readonly QueryCache _queryCache;
     private readonly DbConnectionManager _connectionManager;
     private readonly QueryExecutor _executor;
@@ -110,6 +111,19 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             _interceptors);
     }
 
+    /// <summary>
+    /// Creates a context as <see cref="DataContext(string?, DbConnection?, DataContextBuilder)"/> and
+    /// snapshots the provider server <paramref name="serverVersion"/> once. A version-aware provider
+    /// passes it here and builds its dialect from <see cref="ServerVersion"/>.
+    /// </summary>
+    /// <param name="connectionString">Connection string used to create a context-owned connection, or <see langword="null"/>.</param>
+    /// <param name="providedConnection">An already-created connection owned by the caller, or <see langword="null"/>.</param>
+    /// <param name="optionsBuilder">The options collected from <c>DataContextBuilder</c>.</param>
+    /// <param name="serverVersion">The provider server version to snapshot, or <see langword="null"/> for unset.</param>
+    protected DataContext(string? connectionString, DbConnection? providedConnection, DataContextBuilder optionsBuilder, Version? serverVersion)
+        : this(connectionString, providedConnection, optionsBuilder)
+        => _serverVersion = serverVersion;
+
     private readonly Func<DbCommand, string, object?, DbParameter> _createParam;
     private readonly Func<string, object?, DbParameter> _createParamSimple;
     private readonly Func<DbCommand, ProcedureParameter, DbParameter> _createProcedureParam;
@@ -132,6 +146,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// interface rather than on the context itself.
     /// </summary>
     public abstract ISqlDialect Dialect { get; }
+
+    /// <summary>
+    /// The provider server version this context was configured for, or <see langword="null"/> when the
+    /// provider is version-agnostic (the default). Snapshotted once at construction and immutable for
+    /// the context's lifetime; a version-aware provider builds its dialect from it.
+    /// </summary>
+    protected Version? ServerVersion => _serverVersion;
 
     /// <summary>Logger for the context's own diagnostic messages, or <see langword="null"/> when no logger factory was configured.</summary>
     public ILogger? Logger => _environment.Logger;
@@ -391,27 +412,34 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return prepared;
     }
 
-    internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    internal CommandReaderOwner OpenLobReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenLobReader(prepared, @params);
     }
 
-    internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    internal async Task<CommandReaderOwner> OpenLobReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string? terminalName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareLobCommand(queryCommand, cancellationToken);
+        var prepared = PrepareLobCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenLobReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
 
-    private DbPreparedQueryCommand<TResult> PrepareLobCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    private DbPreparedQueryCommand<TResult> PrepareLobCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken, string? terminalName = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
 
         if (!Dialect.SupportsSequentialAccess)
             throw new NotSupportedException(
                 $"Streaming LOB terminals (ToStream/ToTextReader) are not supported by the {Dialect.GetType().Name} provider; they require sequential-access support (PostgreSQL, SQL Server or SQLite).");
+
+        // The streaming LOB path cannot run a lazy temporary-table source for the same reason as the
+        // result seam: the source is a batch (DROP + CREATE TEMPORARY TABLE AS + read) that must share one
+        // session, not a lone SELECT. Only the multi-column reader (ToDataReader) opts into this guard by
+        // naming its terminal; the ToStream/ToTextReader callers keep their previous behavior.
+        if (terminalName is not null && queryCommand.HasTemporaryTableSource())
+            throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, false, false, true, cancellationToken);
     }
@@ -421,21 +449,23 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // SQLite, whose rowid locator would otherwise be appended). The plan is prepared per call with
     // storeInCache: false and without touching QueryCommand.Cache, so a shared command (for example
     // the context-cached AnyCommand) is never mutated and no plan is promoted into the plan cache.
-    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    internal CommandReaderOwner OpenResultReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return _executor.OpenResultReader(prepared, @params);
     }
 
-    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    internal async Task<CommandReaderOwner> OpenResultReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, string terminalName = CsvTerminalName)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var prepared = PrepareResultCommand(queryCommand, cancellationToken);
+        var prepared = PrepareResultCommand(queryCommand, cancellationToken, terminalName);
         return await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
     }
 
-    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    private const string CsvTerminalName = "WriteCsv/WriteCsvAsync";
+
+    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken, string terminalName)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
 
@@ -444,10 +474,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // session, and it is consumed through the batch-aware enumerable/scalar terminals. Preparing the
         // read here would strip the batch and execute a lone SELECT against a table that was never
         // created, surfacing the provider's raw "table does not exist" error. Fail closed instead, before
-        // the CSV terminal writes the header.
+        // the calling terminal writes its header.
         if (queryCommand.HasTemporaryTableSource())
-            throw new NotSupportedException(
-                "The CSV terminal (WriteCsv/WriteCsvAsync) does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be streamed as CSV. Materialise the query first (for example ToList) and write the rows yourself.");
+            throw new NotSupportedException(LazyTemporaryTableMessage(terminalName));
 
         return (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(
             queryCommand,
@@ -457,6 +486,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             streamingRowsRequested: false,
             cancellationToken);
     }
+
+    // The message names the calling terminal so ToDataReader does not surface CSV wording, while the CSV
+    // terminal keeps its exact text.
+    private static string LazyTemporaryTableMessage(string terminalName) => terminalName == CsvTerminalName
+        ? "The CSV terminal (WriteCsv/WriteCsvAsync) does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be streamed as CSV. Materialise the query first (for example ToList) and write the rows yourself."
+        : $"The {terminalName} terminal does not support a query that reads a lazy temporary table (AsTempTable): the DROP + CREATE TABLE + read batch it requires cannot be executed through a single forward-only reader. Materialise the query first (for example ToList) and read the rows from there.";
 
     internal bool IsDisposed => _disposed;
 
@@ -632,6 +667,37 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // this internal seam, which still virtual-dispatches to the provider override.
     internal bool SupportsTypedColumn(SelectExpression column) => SupportsTypedColumnMapping(column);
 
+    /// <summary>
+    /// True when the provider can surface a PostgreSQL-style anonymous record or a caller-registered
+    /// named composite as a single raw result-set column (see <c>RawMapperFactory.GetOrBuild</c>). The
+    /// default is <see langword="false"/> so the PostgreSQL raw-row detection and its diagnostics stay
+    /// confined to the provider that produces such columns; every other provider keeps its existing
+    /// scalar/entity raw path.
+    /// </summary>
+    protected virtual bool SupportsRawRowColumns => false;
+
+    // RawMapperFactory lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal bool RawRowColumnsSupported => SupportsRawRowColumns;
+
+    /// <summary>
+    /// Reports whether the provider authoritatively identifies the reader column at
+    /// <paramref name="ordinal"/> as a genuine composite (a PostgreSQL named or struct composite) rather
+    /// than a scalar or a provider struct. The default is <see langword="false"/>: without authoritative
+    /// metadata no column is classified as a composite, so a dotted data type name or a metadata-probe
+    /// exception never produces a composite verdict. The raw-row mapper consults this as its sole
+    /// composite-identification source.
+    /// </summary>
+    /// <param name="reader">The reader whose current result set is being classified.</param>
+    /// <param name="ordinal">The zero-based column ordinal.</param>
+    /// <returns><see langword="true"/> when the provider identifies the column as a genuine composite.</returns>
+    protected virtual bool IsGenuineCompositeColumn(DbDataReader reader, int ordinal) => false;
+
+    // RawMapperFactory lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal bool IsGenuineCompositeRawRowColumn(DbDataReader reader, int ordinal)
+        => IsGenuineCompositeColumn(reader, ordinal);
+
     // The CSV terminal lives outside the context type hierarchy, so it reaches the protected hook through
     // this internal seam, which still virtual-dispatches to the provider override.
     internal Expression MapTypedColumn(SelectExpression column, Expression record, Type storageType)
@@ -739,7 +805,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     IReadOnlyList<TResult> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn)
     {
-        EnsureReturningSupported();
+        EnsureReturningSupported(command);
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
@@ -748,7 +814,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
     {
-        EnsureReturningSupported();
+        EnsureReturningSupported(command);
         EnsureReturningMaterializable<TResult>(oneColumn);
         var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
@@ -1065,6 +1131,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             DeleteCommand delete => BuildDeleteSql(delete),
             DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
             TruncateCommand truncate => BuildTruncateSql(truncate),
+            SqliteFts5Command sqliteFts5 => BuildSqliteFts5Sql(sqliteFts5),
             CreateTableAsCommand createTableAs => BuildCreateTableAsSql(createTableAs),
             DropTableCommand dropTable => BuildDropTableSql(dropTable),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
@@ -1145,6 +1212,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase), []);
     }
+
+    private (string Sql, List<Parameter> Parameters) BuildSqliteFts5Sql(SqliteFts5Command command)
+        => SqlMutationBuilder.MakeSqliteFts5(Dialect, command, KeywordCase);
 
     private (string Sql, List<Parameter> Parameters) BuildCreateTableAsSql(CreateTableAsCommand command)
     {
@@ -1355,9 +1425,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return _planner.RenderUpdateJoin(command);
     }
 
-    private void EnsureReturningSupported()
+    private void EnsureReturningSupported(MutationCommand command)
     {
-        if (!Dialect.SupportsReturning && !Dialect.SupportsOutput)
+        // A single-table UPDATE may have its own RETURNING gate (MariaDB 13.0+) distinct from the
+        // INSERT/DELETE form, so the command shape participates in the capability check.
+        var supported = Dialect.SupportsReturning || Dialect.SupportsOutput
+            || (command is UpdateCommand && Dialect.SupportsUpdateReturning);
+        if (!supported)
             throw new NotSupportedException(
                 $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form.");
     }
@@ -1379,7 +1453,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (command.OutputInto is not null)
             EnsureOutputIntoSupported();
         if (command.ReturningColumns is { Count: > 0 })
-            EnsureReturningSupported();
+            EnsureReturningSupported(command);
     }
 
     private void EnsureOutputIntoSupported()

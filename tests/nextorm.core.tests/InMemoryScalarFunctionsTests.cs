@@ -94,6 +94,80 @@ public class InMemoryScalarFunctionsTests
     }
 
     [Fact]
+    public void SqlServerOnlyFunctions182_ShouldThrowBecauseNotSupported()
+    {
+        // Every one of the 47 SQL Server-only functions added for #182 must fail in memory with a
+        // clear NotSupportedException rather than fabricating a value.
+        var cases = new (string Name, Action Act)[]
+        {
+            // Date (10)
+            ("sysdatetime", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.sysdatetime() }).ToList()),
+            ("sysdatetimeoffset", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.sysdatetimeoffset() }).ToList()),
+            ("sysutcdatetime", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.sysutcdatetime() }).ToList()),
+            ("switchoffset", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.switchoffset(SqlFunctions.SqlServer.sysdatetimeoffset(), 480) }).ToList()),
+            ("todatetimeoffset", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.todatetimeoffset(null, -120) }).ToList()),
+            ("timefromparts", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 7) }).ToList()),
+            ("smalldatetimefromparts", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.smalldatetimefromparts(2020, 1, 2, 3, 4) }).ToList()),
+            ("datetimefromparts", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.datetimefromparts(2020, 1, 2, 3, 4, 5, 6) }).ToList()),
+            ("datetime2fromparts", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.datetime2fromparts(2020, 1, 2, 3, 4, 5, 6, 3) }).ToList()),
+            ("datetimeoffsetfromparts", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.datetimeoffsetfromparts(2020, 1, 2, 3, 4, 5, 6, 7, -30, 3) }).ToList()),
+
+            // Binary (4)
+            ("checksum", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.checksum(1) }).ToList()),
+            ("binary_checksum", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.binary_checksum(1) }).ToList()),
+            ("compress", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.compress("x") }).ToList()),
+            ("decompress", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.decompress(new byte[] { 1, 2, 3 }) }).ToList()),
+
+            // Other (2)
+            ("rand", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.rand() }).ToList()),
+            ("stuff", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.stuff("abc", 1, 2, "x") }).ToList()),
+
+            // Metadata A (10)
+            ("col_length", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.col_length("t", "c") }).ToList()),
+            ("col_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.col_name(1, 2) }).ToList()),
+            ("ident_incr", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.ident_incr("t") }).ToList()),
+            ("ident_seed", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.ident_seed("t") }).ToList()),
+            ("index_col", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.index_col("t", 1, 2) }).ToList()),
+            ("object_definition", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.object_definition(1) }).ToList()),
+            ("object_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.object_id("t") }).ToList()),
+            ("object_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.object_name(1) }).ToList()),
+            ("object_schema_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.object_schema_name(1) }).ToList()),
+            ("stats_date", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.stats_date(1, 2) }).ToList()),
+
+            // Metadata B (7)
+            ("db_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.db_id() }).ToList()),
+            ("db_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.db_name() }).ToList()),
+            ("original_db_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.original_db_name() }).ToList()),
+            ("schema_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.schema_id() }).ToList()),
+            ("schema_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.schema_name() }).ToList()),
+            ("type_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.type_id("t") }).ToList()),
+            ("type_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.type_name(1) }).ToList()),
+
+            // Metadata C (5)
+            ("filegroup_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.filegroup_id("fg") }).ToList()),
+            ("filegroup_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.filegroup_name(1) }).ToList()),
+            ("file_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.file_id("f") }).ToList()),
+            ("file_idex", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.file_idex("f") }).ToList()),
+            ("file_name", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.file_name(1) }).ToList()),
+
+            // Metadata D (9)
+            ("current_timezone", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.current_timezone() }).ToList()),
+            ("current_timezone_id", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.current_timezone_id() }).ToList()),
+            ("formatmessage", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.formatmessage("m") }).ToList()),
+            ("getansinull", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.getansinull() }).ToList()),
+            ("isdate", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.isdate("x") }).ToList()),
+            ("isnumeric", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.isnumeric("x") }).ToList()),
+            ("parsename", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.parsename("a.b", 1) }).ToList()),
+            ("publishingservername", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.publishingservername() }).ToList()),
+            ("str", () => _sut.SimpleEntity.Select(it => new { V = SqlFunctions.SqlServer.str(1.5) }).ToList())
+        };
+
+        cases.Should().HaveCount(47);
+        foreach (var (name, act) in cases)
+            act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*not supported*");
+    }
+
+    [Fact]
     public void RangeOverlaps_ShouldUsePostgresSemantics()
     {
         var a = new Range<int>(10, 20);

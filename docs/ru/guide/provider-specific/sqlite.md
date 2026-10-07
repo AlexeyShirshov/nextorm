@@ -3,8 +3,8 @@
 > SQLite даёт функции ядра (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`,
 > `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), функции/операторы/
 > агрегаты JSON1 и табличные функции `json_each`/`json_tree`, функции дат (`timediff`, `unixepoch`,
-> `julianday`) и функции математического расширения (`acos`/`asin`/`atan`/`atan2`, гиперболические,
-> `log2`/`log10`, `mod`).
+> `julianday`), функции математического расширения (`acos`/`asin`/`atan`/`atan2`, гиперболические,
+> `log2`/`log10`, `mod`) и поверхность полнотекстового поиска FTS3/FTS4/FTS5.
 
 **Что нужно знать:** [Запросы и проекции](../../querying/index.md) · [Провайдер SQLite](../../providers/sqlite.md)
 
@@ -158,3 +158,188 @@ var rows = dataContext.From<IComplexEntity>()
 ```sql
 select pi() as 'Pi', degrees(pi()) as 'Degrees', log2(8) as 'Log2' from complex_entity
 ```
+
+## Полнотекстовый поиск (FTS3/FTS4/FTS5)
+
+Полнотекстовый поиск SQLite живёт в модулях виртуальных таблиц `fts3`, `fts4` и `fts5`. nextorm
+предоставляет сторону **запросов** через [`SqlFunctions.Sqlite`](xref:NextORM.Core.SqliteFunctions)
+и отдельный SQLite-only command builder **обслуживания**; он не создаёт виртуальную таблицу,
+поэтому создайте её сырым SQL (или собственной миграцией):
+
+```sql
+create virtual table article_fts using fts5(title, body);
+```
+
+Поддержка существует только когда сборка SQLite включает модуль — поставляемая сборка содержит все
+три. Эти члены независимы от кросс-провайдерных предикатов `SqlFunctions.Sql.contains`/`freetext`,
+которые по-прежнему гейтятся [`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText)
+(на SQLite `false`) и потому бросают `NotSupportedException`. Каждый член FTS — SQL-only: in-memory
+провайдер бросает `NotSupportedException`.
+
+### FTS5
+
+| C# | SQLite |
+|---|---|
+| `Match(tableOrColumn, query)` | `tableOrColumn MATCH query` |
+| `MatchTable<TEntity>(table, query)` | `table(query)` как источник `FROM` |
+| `FTS5bm25(table)` / `FTS5bm25(table, weights…)` | `bm25(table[, weights…])` |
+| `Highlight(table, columnIndex, startMatch, endMatch)` | `highlight(...)` |
+| `Snippet(table, columnIndex, startMatch, endMatch, ellipses, tokens)` | `snippet(...)` |
+| `Rank(table)` | `table.rank` (скрытая колонка) |
+
+`Match` принимает первым аргументом либо доверенный константный токен таблицы/алиаса, либо
+выражение mapped-колонки; `query` — это match-выражение FTS5 (`hel*`, `"hello world"`,
+`hello OR goodbye`, …).
+
+```csharp
+var query = "hello";
+
+var rows = dataContext.From<Article>()
+    .Where(x => SqlFunctions.Sqlite.Match("article_fts", query))
+    .OrderBy(x => x.RowId)
+    .Select(x => new
+    {
+        x.RowId,
+        x.Title,
+        Score = SqlFunctions.Sqlite.FTS5bm25("article_fts"),
+        Preview = SqlFunctions.Sqlite.Snippet("article_fts", 1, "[", "]", "...", 8),
+        Marked = SqlFunctions.Sqlite.Highlight("article_fts", 0, "<b>", "</b>")
+    })
+    .ToList();
+```
+
+```sql
+select rowid, title, bm25("article_fts") as 'Score',
+       snippet("article_fts", 1, '[', ']', '...', 8) as 'Preview',
+       highlight("article_fts", 0, '<b>', '</b>') as 'Marked'
+from article_fts
+where "article_fts" match $query
+order by rowid
+```
+
+`Rank(table)` читает скрытую колонку `rank` FTS5 (равна стандартному score `bm25`; меньше — лучшее
+совпадение). Передайте веса в `FTS5bm25`, чтобы оценить конкретную колонку:
+
+```csharp
+var weighted = dataContext.From<Article>()
+    .Where(x => SqlFunctions.Sqlite.Match("article_fts", query))
+    .Select(x => new { x.RowId, Score = SqlFunctions.Sqlite.FTS5bm25("article_fts", 1.0, 2.0) })
+    .ToList();
+```
+
+Табличная форма фильтрует в `FROM`, поэтому композируется с остальным построителем:
+
+```csharp
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.Sqlite.MatchTable<Article>("article_fts", query))
+    .Where(x => x.RowId > 0)
+    .OrderBy(x => x.RowId)
+    .Select(x => new { x.RowId, x.Title })
+    .ToList();
+```
+
+```sql
+select rowid, title from "article_fts"($query) where rowid > 0 order by rowid
+```
+
+### Команды обслуживания FTS5
+
+Инструкции обслуживания/управления FTS5 (`automerge`, `crisismerge`, `merge`, `optimize`, `rebuild`,
+`integrity-check`) доступны через специфичный для SQLite command builder, возвращаемый
+`IDataContext.CreateSqliteFts5CommandBuilder(tableName)`. Вызов `AutoMerge`/`CrisisMerge`/`Merge`
+рендерит двухколоночную форму `"rank"`, а `Optimize`/`Rebuild` (и `IntegrityCheck` с опущенным
+флагом) — одноколоночную:
+
+| Метод | Рендерящиеся значения | Примечание |
+|---|---|---|
+| `AutoMerge(value)` | `('automerge', value)` | `value` — 0..16; другие значения бросают |
+| `CrisisMerge(value)` | `('crisismerge', value)` | `value` неотрицателен; `0`/`1` проходят без изменений |
+| `Merge(pages)` | `('merge', pages)` | любое знаковое `int`, передаётся без изменений (никогда не `abs`) |
+| `Optimize()` | `('optimize')` | одноколоночная форма |
+| `Rebuild()` | `('rebuild')` | одноколоночная форма; недоступна для contentless-таблиц FTS5 |
+| `IntegrityCheck(checkExternalContent = null)` | `('integrity-check')` или `('integrity-check', 0\|1)` | флаг опущен → одноколоночная форма; `false` → `0`, `true` → `1`; `true` проверяет и внешнее содержимое |
+
+Builder неизменяемый — каждая операция возвращает новый builder, — а его терминалы: `ToSql()`
+(рендерит, не обращаясь к базе), `Execute()` (`int` затронутых строк) и
+`ExecuteAsync(CancellationToken = default)` (`Task<int>`):
+
+```csharp
+var builder = ctx.CreateSqliteFts5CommandBuilder("article_fts");
+
+// Рендерит, не обращаясь к базе.
+var statement = builder.AutoMerge(4).ToSql();
+// INSERT INTO "article_fts" ("article_fts", "rank") VALUES ('automerge', 4)
+
+// Выполнение: возвращает int затронутых строк драйвера (не число страниц/восстановлений).
+int affected = builder.Optimize().Execute();
+await builder.IntegrityCheck(checkExternalContent: true).ExecuteAsync(cancellationToken);
+```
+
+Имя таблицы сохраняется дословно (`.` — обычный символ, а не разделитель) и валидируется: null,
+пустое, из пробелов или с символом NUL отклоняется. Вызов терминала до выбора операции бросает
+`InvalidOperationException`. Builder — SQLite-only: на любом другом провайдере он бросает
+`NotSupportedException($"{dialect.GetType().Name} does not support SQLite FTS5 maintenance commands.")`
+до любого доступа к базе. При успехе `Execute`/`ExecuteAsync` возвращают `int` затронутых строк
+драйвера — неотрицательный, без обещания фиксированного числа; `ExecuteAsync` передаёт свой
+`CancellationToken` драйверу; нативные ошибки SQLite пробрасываются; `Rebuild` недоступна для
+contentless-таблиц FTS5, а `IntegrityCheck(true)` проверяет и внешнее содержимое. Эти инструкции —
+поверхность команд, а не скалярные/табличные функции и не часть `SqlFunctions.Sqlite`.
+
+### FTS3 / FTS4
+
+| C# | SQLite |
+|---|---|
+| `Match(tableOrColumn, query)` | `tableOrColumn MATCH query` |
+| `RowId(table)` | `table.rowid` (скрытая колонка) |
+| `FTS3Offsets(table)` | `offsets(table)` |
+| `FTS3MatchInfo(table)` / `FTS3MatchInfo(table, format)` | `matchinfo(table[, format])` |
+| `FTS3Snippet(table)` / `FTS3Snippet(table, …)` | `snippet(table[, …])` |
+| `Rank(matchInfo)` | `rank(matchInfo)` |
+
+У FTS3/4 **нет встроенного `rank`**. `Rank` рендерит `rank(matchinfo(...))` и ожидает SQL UDF с
+именем `rank`, зарегистрированную на соединении (провайдер её не регистрирует); без неё запрос
+падает с `SQLite Error 1: no such function: rank`. У `FTS3Snippet` есть перегрузки для маркеров
+начала/конца, многоточия, индекса колонки (`-1` — все колонки) и числа токенов.
+
+```csharp
+using Microsoft.Data.Sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
+
+// Зарегистрируйте ранжирующую UDF один раз на соединении, которое будет использовать контекст.
+using var connection = new SqliteConnection("Data Source=app.db");
+connection.CreateFunction<byte[]?, long>("rank", static matchInfo =>
+{
+    // Оцените blob matchinfo() (см. документацию SQLite по matchinfo); здесь просто сумма байт.
+    long score = 0;
+    if (matchInfo is not null)
+        foreach (var b in matchInfo)
+            score += b;
+    return score;
+});
+
+using var dataContext = new DataContextBuilder().UseSqlite(connection).CreateDataContext();
+
+var rows = dataContext.From<Article>()
+    .Where(x => SqlFunctions.Sqlite.Match("article_fts", "hello"))
+    .Select(x => new
+    {
+        x.RowId,
+        HiddenRowId = SqlFunctions.Sqlite.RowId("article_fts"),
+        Offsets = SqlFunctions.Sqlite.FTS3Offsets("article_fts"),
+        MatchInfo = SqlFunctions.Sqlite.FTS3MatchInfo("article_fts", "pcx"),
+        Snippet = SqlFunctions.Sqlite.FTS3Snippet("article_fts", "[", "]", "...", 0, 8),
+        Score = SqlFunctions.Sqlite.Rank(SqlFunctions.Sqlite.FTS3MatchInfo("article_fts"))
+    })
+    .ToList();
+```
+
+Первый аргумент вспомогательных функций (и токен таблицы у `Match`) — доверенная константа,
+подставляемая как quoted-идентификатор; никогда не строите её из пользовательского ввода.
+
+Команды обслуживания/управления FTS5 (`AutoMerge`, `CrisisMerge`, `Merge`, `Optimize`, `Rebuild`,
+`IntegrityCheck`) покрыты специфичным для SQLite command builder'ом в разделе
+[Команды обслуживания FTS5](#команды-обслуживания-fts5); создание и наполнение самой виртуальной
+таблицы остаются вне поверхности запросов.
+
+Сводка на уровне провайдера — в разделе [Провайдер SQLite](../../providers/sqlite.md).

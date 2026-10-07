@@ -257,12 +257,28 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 См. [Табличные функции](../11-table-valued-functions.md).
 
+## Нативные JSON-колонки
+
+Нативная колонка `JSON` в ClickHouse имеет корень-**объект** (массивы и скалярные корни отклоняются).
+Свойство `[JsonColumn]` (storage `Auto` или `Native`) отображает POCO с корнем-объектом, `JsonObject`,
+`JsonDocument` или `JsonElement` на неё и на чтение, и на запись; `Text` сохраняет колонку `String`, а
+модель, не сериализующаяся в объект, отклоняется с `NotSupportedException`. «Голые» `JsonObject`/
+`JsonDocument`/`JsonElement` с корнем-объектом тоже отображаются при проекции и как параметры (драйвер
+отдаёт `JSON` как `JsonObject`, а `JsonDocument`/`JsonElement` из него адаптируются). Проецируйте через
+именованную форму (`Select(x => new { x.Doc })` или DTO): «голый» скаляр верхнего уровня
+`Select(x => x.Doc)` не обрабатывается ядровым классификатором проекции. Пустой `{}` остаётся непустым
+значением, а SQL `NULL` в колонке `Nullable(JSON)` остаётся отличным от него (`null`, либо
+`default`/`Undefined` для value-типа `JsonElement`). Чтение «голой» `string` из колонки `JSON` и
+легаси-алиас `Object('json')` не поддерживаются; алиас создаётся только с connection-level параметром
+`allow_experimental_object_type`, который nextorm никогда не выставляет, и даже тогда чтение
+материализуется как `Tuple<SByte,String>`, а не через нативный транспорт `JsonObject`. См.
+[Поддержка JSON](../14-json.md#отобразить-clr-объект-на-нативную-json-колонку).
+
 ## Пока не поддерживается
 
-Нативный тип колонки `JSON` (его reader/type-mapping) пока не отображён. Серверные/кластерные табличные
-функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`, `cluster_all_replicas`) **предобъявлены**
-в `SqlFunctions.ClickHouse` и рендерят свой SQL, но их сквозной прогон на реальном кластере не покрыт и
-остаётся вне области охвата. См.
+Серверные/кластерные табличные функции (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,
+`cluster_all_replicas`) **предобъявлены** в `SqlFunctions.ClickHouse` и рендерят свой SQL, но их сквозной
+прогон на реальном кластере не покрыт и остаётся вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

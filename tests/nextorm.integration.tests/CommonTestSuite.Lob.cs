@@ -6,10 +6,13 @@ namespace NextORM.Integration.Tests;
 
 /// <summary>
 /// Shared coverage for the streaming LOB terminals (<c>ToStream</c>/<c>ToTextReader</c> and their
-/// async twins). Only PostgreSQL and SQL Server implement them: the reader is opened with
+/// async twins). PostgreSQL, SQL Server and SQLite implement them: the reader is opened with
 /// <c>CommandBehavior.SequentialAccess</c> and the returned <see cref="Stream"/>/<see cref="TextReader"/>
-/// owns the reader and the per-call command until it is disposed. SQLite, MySQL/MariaDB, ClickHouse
-/// and the in-memory provider reject the terminal with <see cref="NotSupportedException"/>.
+/// owns the reader and the per-call command until it is disposed. MySQL/MariaDB and ClickHouse reject
+/// the terminal with <see cref="NotSupportedException"/> because their drivers do not provide
+/// memory-bounded LOB streaming (<c>SupportsSequentialAccess</c> is deliberately left false); the
+/// in-memory provider supports the scalar terminals over the materialized value but rejects the
+/// multi-column <c>ToDataReader</c>.
 /// </summary>
 public abstract partial class CommonTestSuite
 {
@@ -776,9 +779,10 @@ public abstract partial class CommonTestSuite
         await act.Should().ThrowAsync<NotSupportedException>();
     }
 
-    // --- Multi-column DbDataReader terminal (issue #27, phase 2). PostgreSQL and SQL Server expose
-    // the reader; SQLite fails closed on its rowid locator and MySQL/MariaDB, ClickHouse and the
-    // in-memory provider have no sequential-access support. ---
+    // --- Multi-column DbDataReader terminal (issue #27, phase 2). PostgreSQL, SQL Server and SQLite
+    // expose the reader; MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access
+    // support. PostgreSQL/SQL Server return a sequential reader; SQLite returns a buffered locator-free
+    // reader, so the shared assertions deliberately avoid chunked/order-dependent LOB reads. ---
 
     private void RequireLobDataReader()
         => Assert.SkipUnless(

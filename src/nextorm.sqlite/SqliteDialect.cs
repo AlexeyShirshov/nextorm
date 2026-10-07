@@ -118,8 +118,30 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite exposes its core scalars, JSON1, date helpers and math-extension functions through <see cref="SqliteFunctions"/>.</summary>
     public override ISqliteFunctions SqliteFunctions => SqliteFunctionRenderer.Instance;
 
-    /// <summary>SQLite's built-in JSON table-valued functions <c>json_each</c>/<c>json_tree</c>.</summary>
-    public override bool SupportsTableFunction(string name) => name is "json_each" or "json_tree";
+    /// <summary>SQLite's built-in JSON table-valued functions <c>json_each</c>/<c>json_tree</c> and the FTS5 table-valued search placeholder.</summary>
+    public override bool SupportsTableFunction(string name) => name is "json_each" or "json_tree" or "fts5";
+
+    // The FTS5 table-valued search is rendered by the generic [SqlTableFunction] pipeline as
+    // fts5(<table>, <query>) (the table token is a verbatim constant argument), then rewritten here to
+    // the native <table>(<query>) form. The table token arrives as its own structured argument and is
+    // echoed as one quoted identifier, so a token carrying commas, quotes, semicolons or comment text
+    // can never split the call or become SQL fragments; the query stays as it was rendered (a bound
+    // parameter for a captured value). This never reparses the serialized call text.
+    /// <inheritdoc/>
+    public override string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments)
+    {
+        if (name != "fts5")
+            return call;
+
+        if (arguments.Count < 2)
+            throw new NotSupportedException("The FTS5 table-valued search requires a table token and a query.");
+
+        var table = arguments[0];
+        if (string.IsNullOrEmpty(table))
+            throw new NotSupportedException("The FTS5 table-valued search requires a non-empty constant table token.");
+
+        return $"{QuoteIdentifier(table)}({arguments[1]})";
+    }
 
     /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
@@ -336,6 +358,29 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite has no <c>DbBatch</c>; the statements are joined with <c>;</c> into one command.</summary>
     public override bool SupportsBatch => true;
+
+    /// <summary>
+    /// SQLite 3.15+ has no server-side row type but supports the flat row constructor <c>(a, b)</c> as an
+    /// operand of a row comparison (<c>(a, b) = (c, d)</c>); element access is not offered.
+    /// </summary>
+    public override ITupleRenderer? Tuple => SqliteTupleRenderer.Instance;
+}
+
+/// <summary>
+/// Renders the SQLite flat row constructor <c>(a, b)</c>. Element access returns <see langword="null"/>:
+/// SQLite has no server-side row field access, so <c>.ItemN</c> is valid only on an inline constructor
+/// (folded by <c>TupleSqlTranslator</c>).
+/// </summary>
+internal sealed class SqliteTupleRenderer : ITupleRenderer
+{
+    public static readonly SqliteTupleRenderer Instance = new();
+
+    public string RenderConstructor(IReadOnlyList<string> fields) => "(" + string.Join(", ", fields) + ")";
+
+    public string? RenderElement(string row, int oneBasedIndex) => null;
+
+    // SQLite's row membership grammar requires the VALUES keyword: (a, b) IN (VALUES (@p0, @p1), ...).
+    public string RenderInValues(IReadOnlyList<string> rows) => "(VALUES " + string.Join(", ", rows) + ")";
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer

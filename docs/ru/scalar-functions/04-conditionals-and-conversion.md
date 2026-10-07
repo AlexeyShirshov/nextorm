@@ -103,3 +103,108 @@ var rows = dataContext.From<IComplexEntity>()
 -- ClickHouse
 select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket` from complex_entity
 ```
+
+## Метаданные, checksum и прочие скаляры SQL Server
+
+Остальные скаляры, специфичные для T-SQL, живут на `SqlFunctions.SqlServer` и гейтятся по имени
+[`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions) (SQL Server — единственный провайдер,
+реализующий флаг, поэтому все остальные бросают `NotSupportedException`). `isdate`/`isnumeric`
+намеренно возвращают нативный T-SQL `int` (1/0), **не** `bit`, поэтому проецируются как обычные
+целочисленные значения и не материализуются в предикат
+`cast(case when ... then 1 else 0 end as bit)`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Rand = SqlFunctions.SqlServer.rand(),
+        Seeded = SqlFunctions.SqlServer.rand(42),
+        Replaced = SqlFunctions.SqlServer.stuff(e.String, 2, 3, "xy"),
+        Check = SqlFunctions.SqlServer.checksum(e.Id, e.String),
+        Zipped = SqlFunctions.SqlServer.compress(e.String),
+        IsDate = SqlFunctions.SqlServer.isdate(e.String),
+        Number = SqlFunctions.SqlServer.str(1.5, 10, 2)
+    })
+    .ToList();
+```
+
+```sql
+select rand() as [Rand], rand(42) as [Seeded], stuff(somestring, 2, 3, 'xy') as [Replaced],
+       checksum(id, somestring) as [Check], compress(somestring) as [Zipped],
+       isdate(somestring) as [IsDate], str(1.5, 10, 2) as [Number]
+from complex_entity
+```
+
+| C# | SQL |
+|---|---|
+| `rand()` / `rand(seed)` | `rand()` / `rand(seed)` |
+| `stuff(value, start, length, newValue)` (строка) | `stuff(...)` |
+| `checksum(values...)` / `binary_checksum(values...)` | `checksum(...)` / `binary_checksum(...)` |
+| `compress(value)` (строка и `byte[]`) / `decompress(value)` | `compress(...)` / `decompress(...)` |
+| `isdate(value)` / `isnumeric(value)` | `isdate(...)` / `isnumeric(...)` |
+| `str(value)` / `str(value, length)` / `str(value, length, decimalPlaces)` | `str(...)` |
+| `formatmessage(message, args...)` / `formatmessage(messageId, args...)` | `formatmessage(...)` |
+
+* `rand` без seed **недетерминирован** и вычисляется сервером; фиксированный целый seed делает
+  последовательность воспроизводимой. `checksum`/`binary_checksum` — некриптографические контрольные
+  суммы для обнаружения изменений, не замена `hashbytes`; им нужен хотя бы один аргумент
+  (`checksum()`/`binary_checksum()` бросают), а форма с подстановочным знаком `checksum(*)` не
+  открыта.
+* `compress`/`decompress` используют GZIP и работают с `varbinary(max)`; `decompress` возвращает
+  `null` для некорректного или обрезанного значения.
+* `str` фиксирует общую длину (по умолчанию 10) и число знаков после запятой (по умолчанию 0);
+  `formatmessage` принимает строку формата или id из `sys.messages` и не более 20 аргументов
+  форматирования (больше — `NotSupportedException`).
+
+### Функции метаданных
+
+Поверхность метаданных — выверенное подмножество каталога метаданных T-SQL, сгруппированное A-D.
+Каждая функция принимает значения (имена столбцов, id, выражения) и возвращает значение; отсутствующий
+объект/столбец/индекс/статистика даёт `null`, как и нативная функция, а метаданные разрешаются
+сервером во время выполнения запроса. Необязательные вторые аргументы (id базы, тип объекта) открыты
+перегрузками.
+
+| C# | SQL | Группа |
+|---|---|---|
+| `col_length(table, column)` | `col_length(...)` | A |
+| `col_name(tableId, columnId)` | `col_name(...)` | A |
+| `ident_incr(table)` / `ident_seed(table)` | `ident_incr(...)` / `ident_seed(...)` | A |
+| `index_col(table, indexId, keyId)` | `index_col(...)` | A |
+| `object_definition(objectId)` | `object_definition(...)` | A |
+| `object_id(name)` / `object_id(name, type)` | `object_id(...)` | A |
+| `object_name(id)` / `object_name(id, databaseId)` | `object_name(...)` | A |
+| `object_schema_name(id)` / `object_schema_name(id, databaseId)` | `object_schema_name(...)` | A |
+| `stats_date(tableId, statsId)` | `stats_date(...)` | A |
+| `db_id()` / `db_id(database)` | `db_id(...)` | B |
+| `db_name()` / `db_name(databaseId)` | `db_name(...)` | B |
+| `original_db_name()` | `original_db_name()` | B |
+| `schema_id()` / `schema_id(schema)` | `schema_id(...)` | B |
+| `schema_name()` / `schema_name(schemaId)` | `schema_name(...)` | B |
+| `type_id(typeName)` / `type_name(typeId)` | `type_id(...)` / `type_name(...)` | B |
+| `filegroup_id(name)` / `filegroup_name(id)` | `filegroup_id(...)` / `filegroup_name(...)` | C |
+| `file_id(name)` / `file_idex(name)` / `file_name(id)` | `file_id(...)` / `file_idex(...)` / `file_name(...)` | C |
+| `current_timezone()` / `current_timezone_id()` | `current_timezone()` / `current_timezone_id()` | D |
+| `getansinull()` / `getansinull(database)` | `getansinull(...)` | D |
+| `parsename(objectName, piece)` | `parsename(...)` | D |
+| `publishingservername()` | `publishingservername()` | D |
+
+`object_definition` возвращает исходный текст T-SQL только при наличии прав (иначе `null`);
+`file_idex` отличается от `file_id` тем, что не ограничен текущей базой данных.
+
+### Не открыто
+
+Десять имён области соединения, сессии или инструкции из того же каталога T-SQL намеренно **не**
+смоделированы: они сообщают состояние соединения или инструкции, а не вычисляют значение на строку,
+поэтому проекция в запросе вводила бы в заблуждение. Они остаются доступными через сырой SQL или
+обёртку `[SqlFunction]`, и у каждого есть триггер пересмотра при появлении конкретного построчного
+применения.
+
+| Функция | Область |
+|---|---|
+| `CURRENT_REQUEST_ID` | соединение / запрос |
+| `CURRENT_TRANSACTION_ID`, `XACT_STATE` | транзакция |
+| `APP_NAME`, `HOST_ID`, `HOST_NAME` | сессия |
+| `IDENT_CURRENT` | сессия / таблица |
+| `MIN_ACTIVE_ROWVERSION` | база / транзакция |
+| `ROWCOUNT_BIG` | инструкция |
+| `SCOPE_IDENTITY` | сессия / область |

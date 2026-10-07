@@ -37,7 +37,10 @@ select group_concat(somestring, ',') from complex_entity
 обычный предикат запроса и может ссылаться на колонки и параметры. Способ записи выбирает
 [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle): PostgreSQL и SQLite
 генерируют ANSI-предложение `filter (where ...)`, ClickHouse — комбинатор `-If` (`countIf`/`sumIf`/...),
-а MySQL/MariaDB и SQL Server отклоняют вызов:
+а MySQL/MariaDB и SQL Server отклоняют вызов. В PostgreSQL ANSI-предложение требует версии сервера 9.4
+или новее; диалект, настроенный на более старую `Version`, отклоняет вызов через
+`NotSupportedException`, а незаданная версия предполагает 9.4+ (см.
+[провайдер PostgreSQL](../providers/postgres.md#версия-сервера)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

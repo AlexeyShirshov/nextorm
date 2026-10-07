@@ -105,13 +105,13 @@ internal delegate void JsonRowWriter(IDataRecord record, Utf8JsonWriter writer);
 
 По столбцу — аналог `RowMapperFactory.MapColumn` (`:34`), но вместо `Expression.New` — вызовы
 `Utf8JsonWriter`. Требуются **одновременно** провайдер-корректная семантика чтения и **нулевой
-боксинг**. Прямое переиспользование `mapColumn`/`MapColumnExpression` само по себе решением **не
-является**: текущая SQL Server-ветка маппера для чисел читает через `GetValue`+`Convert.ChangeType`
-(`src/nextorm.sqlserver/SqlServerDataContext.cs:72-104`) и **боксит**. Прямые типизированные геттеры
-`SelectExpression.GetDataRecordMethod()` тоже не являются гарантированным путём. Типизированный
-эквивалент без боксинга при сохранении провайдерной паритетности — **нерешённый блокер**
-корректности/осуществимости (J1), а не реализованный или утверждённый дизайн; таблица ниже —
-целевая форма, механизм которой ещё предстоит спроектировать:
+боксинг**. Блокер снят в #168: SQL Server-ветка общего буферизованного маппера больше не читает
+числа через `GetValue`+`Convert.ChangeType`, а диспетчеризует по рантайм `GetFieldType` и читает
+storage-типизированным геттером (общий `GetNumericGetter`/`GetTypedConversion` с CSV-хуком), поэтому
+переиспользование `mapColumn`/`MapColumnExpression` теперь даёт zero-boxing для закрытого числового
+набора; бокинг-фолбэк остаётся только для storage-типа вне набора. Прямые типизированные геттеры
+`SelectExpression.GetDataRecordMethod()` по-прежнему не являются гарантированным путём. Таблица ниже —
+целевая форма writer'а:
 
 | CLR тип | чтение/конверсия (provider-aware, to design) | writer |
 |---|---|---|
@@ -283,8 +283,11 @@ naming policy). Компиляция — не чаще одного раза н�
 6. Точная сигнатура роли: sync + async entry paths (J4) — форма sync-метода пока не определена.
 7. Провайдер-специфичные детали конверсии колонок/ридеров (сверх направления J1) и общий
    тип/сообщение исключений валидации (для in-memory зафиксирован `NotSupportedException`).
-8. **Блокер:** SQL Server numeric converter без боксинга + провайдерная паритетность
-   (`GetValue`+`Convert.ChangeType` боксит) — типизированный эквивалент не спроектирован.
+8. ~~**Блокер:** SQL Server numeric converter без боксинга + провайдерная паритетность
+   (`GetValue`+`Convert.ChangeType` боксит) — типизированный эквивалент не спроектирован.~~
+   **Снято в #168**: рантайм-диспетчеризация по `GetFieldType` + storage-типизированные геттеры,
+   нулевой бокинг и провайдерная паритетность подтверждены paired-бенчмарком
+   (`BenchmarkCategory("acceptance")`).
 
 ## Файлы к изменению
 
@@ -314,7 +317,7 @@ naming policy). Компиляция — не чаще одного раза н�
 > кандидат; J5 — направление принято, J7 снят строгим контрактом. Ниже — исторические факты ревью,
 > они не переписываются; пометки «Учтено/Устарело» добавлены только как аннотации.
 
-- **[DRY]/[PERF] 🟡** J1 (корректность) — таблица writer'а (`:96-104`) использует `GetDataRecordMethod()`/типизированные геттеры, обходя провайдерскую политику чтения: SQL Server для чисел читает через `GetValue`+`Convert.ChangeType` (`src/nextorm.sqlserver/SqlServerDataContext.cs:72-104`), а `TimeSpan` без нативного типа требует `DurationStorage.FromStorage` (`RowMapperFactory.cs:39-46`) → `InvalidCastException`/неверные значения. Fix: строить JSON-геттер из того же `mapColumn`/`MapColumnExpression`, что и маппер. **Провайдерная политика учтена концептуально** в разделе «Компилируемый writer», но **zero-boxing-часть не решена**: прямое переиспользование `mapColumn` для SQL Server-чисел боксит (`GetValue`+`Convert.ChangeType`) и потому решением не является; типизированный эквивалент без боксинга — открытый блокер.
+- **[DRY]/[PERF] 🟡** J1 (корректность) — таблица writer'а (`:96-104`) использует `GetDataRecordMethod()`/типизированные геттеры, обходя провайдерскую политику чтения: SQL Server для чисел читает через `GetValue`+`Convert.ChangeType` (`src/nextorm.sqlserver/SqlServerDataContext.cs:72-104`), а `TimeSpan` без нативного типа требует `DurationStorage.FromStorage` (`RowMapperFactory.cs:39-46`) → `InvalidCastException`/неверные значения. Fix: строить JSON-геттер из того же `mapColumn`/`MapColumnExpression`, что и маппер. **Провайдерная политика учтена концептуально** в разделе «Компилируемый writer», но **zero-boxing-часть не решена**: прямое переиспользование `mapColumn` для SQL Server-чисел боксит (`GetValue`+`Convert.ChangeType`) и потому решением не является; типизированный эквивалент без боксинга — открытый блокер. **Снято в #168**: SQL Server-ветка общего маппера переведена на рантайм-диспетчеризацию по `GetFieldType` со storage-типизированными геттерами (общий `GetNumericGetter`/`GetTypedConversion` с CSV-хуком), поэтому `mapColumn`/`MapColumnExpression` больше не боксит закрытый числовой набор.
 - **[DIP]/[ISP] 🟡** J2 — `IJsonStreamWriter`/`JsonRowWriter` заявлены публичными (`:134-140,89-90`), тогда как `IMutationExecutor`/`IBatchExecutor` — **internal** (`Roles/IMutationExecutor.cs:9`, `Roles/IBatchExecutor.cs:15`); сигнатура отдаёт `JsonRowWriter`, собираемый только из внутреннего `SelectList`. Fix: сделать оба `internal`; публичными — при 2-м внешнем потребителе. **Учтено**: роль и делегат переведены в `internal`.
 - **[DRY] 🟡** J3 — параллельный static `ConcurrentDictionary<MapperCacheKey, JsonRowWriter>` (`:150-153`) дублирует ключ и ограничение `MaxEntries` (`MapperCache.cs:15,29-40`); незабондированный второй кэш — утечка. Fix: один bounded-кэш/ключ. **Учтено частично**: требование bounded-кэша сохранено, несбондированный static-словарь запрещён; но само кэширование в #39 не утверждено, `MapperCache` — лишь кандидат/предпочтительный скетч, точная интеграция/ключ не решены.
 - **[contract] 🟡** J4 — роль объявлена только async (`:134-140`), а публичный терминал sync+async (`:59-62`); путь для `WriteJson` не определён (иначе блокировка). Fix: sync-метод роли либо убрать `WriteJson` из фазы 1. **Частично учтено**: sync + async заявлены, точная сигнатура — открытый вопрос.

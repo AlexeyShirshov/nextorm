@@ -101,3 +101,106 @@ var rows = dataContext.From<IComplexEntity>()
 -- ClickHouse
 select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket` from complex_entity
 ```
+
+## SQL Server metadata, checksum and other scalars
+
+The remaining T-SQL-only scalars live on `SqlFunctions.SqlServer` and are gated per name by
+[`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions) (SQL Server is the only provider that
+implements the flag, so every other provider throws `NotSupportedException`). `isdate`/`isnumeric`
+deliberately return the native T-SQL `int` (1/0), **not** a `bit`, so they are projected as ordinary
+integer values and are not materialised into a `cast(case when ... then 1 else 0 end as bit)`
+predicate.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Rand = SqlFunctions.SqlServer.rand(),
+        Seeded = SqlFunctions.SqlServer.rand(42),
+        Replaced = SqlFunctions.SqlServer.stuff(e.String, 2, 3, "xy"),
+        Check = SqlFunctions.SqlServer.checksum(e.Id, e.String),
+        Zipped = SqlFunctions.SqlServer.compress(e.String),
+        IsDate = SqlFunctions.SqlServer.isdate(e.String),
+        Number = SqlFunctions.SqlServer.str(1.5, 10, 2)
+    })
+    .ToList();
+```
+
+```sql
+select rand() as [Rand], rand(42) as [Seeded], stuff(somestring, 2, 3, 'xy') as [Replaced],
+       checksum(id, somestring) as [Check], compress(somestring) as [Zipped],
+       isdate(somestring) as [IsDate], str(1.5, 10, 2) as [Number]
+from complex_entity
+```
+
+| C# | SQL |
+|---|---|
+| `rand()` / `rand(seed)` | `rand()` / `rand(seed)` |
+| `stuff(value, start, length, newValue)` (string) | `stuff(...)` |
+| `checksum(values...)` / `binary_checksum(values...)` | `checksum(...)` / `binary_checksum(...)` |
+| `compress(value)` (string and `byte[]`) / `decompress(value)` | `compress(...)` / `decompress(...)` |
+| `isdate(value)` / `isnumeric(value)` | `isdate(...)` / `isnumeric(...)` |
+| `str(value)` / `str(value, length)` / `str(value, length, decimalPlaces)` | `str(...)` |
+| `formatmessage(message, args...)` / `formatmessage(messageId, args...)` | `formatmessage(...)` |
+
+* `rand` without a seed is **non-deterministic** and evaluated by the server; a fixed integer seed makes
+  the sequence reproducible. `checksum`/`binary_checksum` are non-cryptographic change-detection
+  checksums, not a substitute for `hashbytes`; they require at least one argument (`checksum()`/
+  `binary_checksum()` throw), and the `checksum(*)` wildcard form is not exposed.
+* `compress`/`decompress` use GZIP and produce/consume `varbinary(max)`; `decompress` returns `null` for
+  an invalid or truncated value.
+* `str` fixes the total length (default 10) and decimal places (default 0); `formatmessage` accepts a
+  format string or a `sys.messages` id and at most 20 formatting arguments (more throws
+  `NotSupportedException`).
+
+### Metadata functions
+
+The metadata surface is a curated subset of the T-SQL metadata catalog, grouped A-D. Each function
+takes values (column names, ids, expressions) and returns a value; a missing
+object/column/index/statistic yields `null` exactly as the native function does, and the metadata is
+resolved by the server when the query runs. Optional second arguments (database id, object type) are
+exposed as overloads.
+
+| C# | SQL | Group |
+|---|---|---|
+| `col_length(table, column)` | `col_length(...)` | A |
+| `col_name(tableId, columnId)` | `col_name(...)` | A |
+| `ident_incr(table)` / `ident_seed(table)` | `ident_incr(...)` / `ident_seed(...)` | A |
+| `index_col(table, indexId, keyId)` | `index_col(...)` | A |
+| `object_definition(objectId)` | `object_definition(...)` | A |
+| `object_id(name)` / `object_id(name, type)` | `object_id(...)` | A |
+| `object_name(id)` / `object_name(id, databaseId)` | `object_name(...)` | A |
+| `object_schema_name(id)` / `object_schema_name(id, databaseId)` | `object_schema_name(...)` | A |
+| `stats_date(tableId, statsId)` | `stats_date(...)` | A |
+| `db_id()` / `db_id(database)` | `db_id(...)` | B |
+| `db_name()` / `db_name(databaseId)` | `db_name(...)` | B |
+| `original_db_name()` | `original_db_name()` | B |
+| `schema_id()` / `schema_id(schema)` | `schema_id(...)` | B |
+| `schema_name()` / `schema_name(schemaId)` | `schema_name(...)` | B |
+| `type_id(typeName)` / `type_name(typeId)` | `type_id(...)` / `type_name(...)` | B |
+| `filegroup_id(name)` / `filegroup_name(id)` | `filegroup_id(...)` / `filegroup_name(...)` | C |
+| `file_id(name)` / `file_idex(name)` / `file_name(id)` | `file_id(...)` / `file_idex(...)` / `file_name(...)` | C |
+| `current_timezone()` / `current_timezone_id()` | `current_timezone()` / `current_timezone_id()` | D |
+| `getansinull()` / `getansinull(database)` | `getansinull(...)` | D |
+| `parsename(objectName, piece)` | `parsename(...)` | D |
+| `publishingservername()` | `publishingservername()` | D |
+
+`object_definition` returns the T-SQL source only when the caller has the permission (otherwise
+`null`); `file_idex` differs from `file_id` in that it is not bounded to the current database.
+
+### Not exposed
+
+Ten connection-, session- or statement-scope names from the same T-SQL catalog are intentionally
+**not** modelled: they report the state of the connection or statement rather than compute a per-row
+value, so a query projection would be misleading. They remain reachable through raw SQL or a
+`[SqlFunction]` wrapper, and each has a review trigger if a concrete per-row use appears.
+
+| Function | Scope |
+|---|---|
+| `CURRENT_REQUEST_ID` | connection / request |
+| `CURRENT_TRANSACTION_ID`, `XACT_STATE` | transaction |
+| `APP_NAME`, `HOST_ID`, `HOST_NAME` | session |
+| `IDENT_CURRENT` | session / table |
+| `MIN_ACTIVE_ROWVERSION` | database / transaction |
+| `ROWCOUNT_BIG` | statement |
+| `SCOPE_IDENTITY` | session / scope |

@@ -305,16 +305,15 @@ public sealed class UpdateBuilder<TEntity>
     }
 
     /// <summary>Builds the update command for an <c>OUTPUT ... INTO</c>-only terminal: the updated rows are written into the target and nothing is returned to the client.</summary>
-    /// <param name="outputColumns">The mapped columns written into the target.</param>
-    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <param name="outputInto">The output-into target (an existing table or a table variable) carrying the mapped output columns.</param>
     /// <returns>The update command carrying the output-into target.</returns>
-    internal UpdateCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
+    internal UpdateCommand BuildOutputIntoCommand(OutputIntoClause outputInto)
     {
         if (_assignments.Count == 0 && _dynamicColumns is null)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = FilterSource().ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, new OutputIntoClause(targetTable, outputColumns), _dynamicColumns);
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, outputInto, _dynamicColumns);
     }
 
     // The source command that carries the UPDATE's WHERE and drives the assignments. It always carries

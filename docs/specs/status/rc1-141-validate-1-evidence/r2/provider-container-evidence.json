@@ -1,0 +1,98 @@
+{
+  "unit": "rc1-141-validate-1",
+  "cycle": "rc1-141-validate-1",
+  "plan_revision": "r=2",
+  "attempt": "n=1",
+  "evidence_contract_revision": "rv=2",
+  "source": "E-T11 -- the single comprehensive unfiltered boundary sweep (`dotnet test nextorm.slnx -c Debug --no-build --report-xunit-junit ...`)",
+  "command": ["dotnet", "test", "nextorm.slnx", "-c", "Debug", "--no-build", "--report-xunit-junit", "--results-directory", "docs/specs/status/rc1-141-validate-1-evidence/r2/junit"],
+  "docker_host": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock",
+  "console_log": "docs/specs/status/rc1-141-validate-1-evidence/r2/E-T11.log",
+  "console_log_refs": {
+    "integration_assembly_passed": "E-T11.log:604 and E-T11.log:621",
+    "solution_summary": "E-T11.log:619-628"
+  },
+  "result_artifact": "docs/specs/status/rc1-141-validate-1-evidence/r2/junit/alex_alex-asus_2026-10-06_03_55_03.261383.junit.xml",
+  "extraction_basis": "Parsed ONLY the xunit JUnit artifact produced by E-T11's own integration test assembly (testsuite name .../nextorm.integration.tests.dll); testcases grouped by classname. A provider is 'executed (non-skipped)' where its classes have testcases with no <skipped/> child. No supplemental integration suite was launched. JUnit aggregate tests=8442, failures=0, skipped=194 matches the E-T11 console summary exactly. Container ids are the post-run reuse-container ids reported by the Podman host (reuse is stable across runs); they are secondary context, not the count basis.",
+  "all_five_container_providers_executed": true,
+  "providers": {
+    "PostgreSQL": {
+      "executed_non_skipped": 753,
+      "skipped": 25,
+      "failures": 0,
+      "evidence_source_classes": [
+        "NextORM.Integration.Tests.PostgresIntegrationTests (exec 592, skip 25)",
+        "NextORM.Integration.Tests.PostgresSpecificTests (exec 98)",
+        "NextORM.Integration.Tests.PostgresFunctionsTests (exec 33)",
+        "NextORM.Integration.Tests.PostgresExtremeRowNativeSpecificTests (exec 16)",
+        "NextORM.Integration.Tests.PostgresBuilderTests (exec 6)",
+        "NextORM.Integration.Tests.PostgresJoinAritiesTests (exec 3)",
+        "NextORM.Integration.Tests.PostgresSqlFeaturesTests (exec 3)",
+        "NextORM.Integration.Tests.PostgresJsonColumnTests (exec 2)"
+      ],
+      "container_id": "a1877941aa2e",
+      "container_image": "docker.io/library/postgres:17-alpine"
+    },
+    "SQL Server": {
+      "executed_non_skipped": 675,
+      "skipped": 43,
+      "failures": 0,
+      "evidence_source_classes": [
+        "NextORM.Integration.Tests.SqlServerIntegrationTests (exec 574, skip 43)",
+        "NextORM.Integration.Tests.SqlServerSpecificTests (exec 91)",
+        "NextORM.Integration.Tests.SqlServerForJsonTests (exec 6)",
+        "NextORM.Integration.Tests.SqlServerFeaturesTests (exec 4)"
+      ],
+      "container_id": "4ab2d4542432",
+      "container_image": "mcr.microsoft.com/mssql/server:2025-latest"
+    },
+    "MySQL": {
+      "executed_non_skipped": 579,
+      "skipped": 79,
+      "failures": 0,
+      "evidence_source_classes": [
+        "NextORM.Integration.Tests.MySqlIntegrationTests (exec 538, skip 79)",
+        "NextORM.Integration.Tests.MySqlSpecificTests (exec 41)"
+      ],
+      "container_id": "d703aedb9b21",
+      "container_image": "docker.io/library/mysql:8.4"
+    },
+    "MariaDB": {
+      "executed_non_skipped": 50,
+      "skipped": 0,
+      "failures": 0,
+      "evidence_source_classes": [
+        "NextORM.Integration.Tests.MariaDbFunctionsIntegrationTests (exec 18)",
+        "NextORM.Integration.Tests.MariaDbImplicitNavigationTests (exec 14)",
+        "NextORM.Integration.Tests.MariaDbJsonStreamTests (exec 6)",
+        "NextORM.Integration.Tests.MariaDbRawSourceBindingTests (exec 4)",
+        "NextORM.Integration.Tests.MariaDbTupleExecutionTests (exec 3)",
+        "NextORM.Integration.Tests.MariaDbCsvIntegrationTests (exec 2)",
+        "NextORM.Integration.Tests.MariaDbTypedCteIntegrationTests (exec 2)",
+        "NextORM.Integration.Tests.DynamicColumnsMariaDbContainerTests (exec 1)"
+      ],
+      "container_id": "914f06a0ba5f",
+      "container_image": "docker.io/library/mariadb:11.4"
+    },
+    "ClickHouse": {
+      "executed_non_skipped": 177,
+      "skipped": 0,
+      "failures": 0,
+      "evidence_source_classes": [
+        "NextORM.Integration.Tests.ClickHouseIntegrationTests (exec 107)",
+        "NextORM.Integration.Tests.ClickHouseTableValuedParameterTests (exec 23)",
+        "NextORM.Integration.Tests.ClickHouseExtremeRowNativeSpecificTests (exec 17)",
+        "NextORM.Integration.Tests.ClickHouseImplicitNavigationTests (exec 12)",
+        "NextORM.Integration.Tests.ClickHouseFunctionGapTests (exec 5)",
+        "NextORM.Integration.Tests.ClickHouseQueryFilterTests (exec 5)",
+        "NextORM.Integration.Tests.ClickHouseCsvIntegrationTests (exec 2)",
+        "NextORM.Integration.Tests.ClickHouseMergeTargetFilterRefusalTests (exec 2)",
+        "NextORM.Integration.Tests.ClickHouseScalarFunctionsTests (exec 2)",
+        "NextORM.Integration.Tests.ClickHouseTypedCteIntegrationTests (exec 2)"
+      ],
+      "container_id": "525af9d6a314",
+      "container_image": "docker.io/clickhouse/clickhouse-server:25.8-alpine"
+    }
+  },
+  "gap": "none -- all five container providers show executed (non-skipped) test counts >= 1 and failures == 0 inside E-T11"
+}

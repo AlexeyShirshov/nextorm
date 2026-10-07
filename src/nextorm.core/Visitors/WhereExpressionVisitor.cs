@@ -22,6 +22,13 @@ public class WhereExpressionVisitor(VisitorOptions options)
     {
         if (!_paramMode && node.Type == typeof(bool) && (node.NodeType == ExpressionType.Equal || node.NodeType == ExpressionType.NotEqual))
         {
+            // A row constructor compared to null has no row-value meaning; reject it with the real
+            // reason before the null path below clones and reports a misleading "wrong position".
+            if (node.Left is ConstantExpression { Value: null })
+                TupleSqlTranslator.RejectNullComparisonOfFlatTupleConstructor(this, node.Right);
+            else if (node.Right is ConstantExpression { Value: null })
+                TupleSqlTranslator.RejectNullComparisonOfFlatTupleConstructor(this, node.Left);
+
             // Fast path: when neither operand is a null literal the null-aware "is"/"is not"
             // rewriting cannot apply, so both sides can be rendered straight into this builder.
             // That avoids two cloned visitors (and their intermediate strings) per comparison,

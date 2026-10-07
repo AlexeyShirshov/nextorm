@@ -130,4 +130,18 @@ public class UpdateSqlGenerationTests
             .ToSql()
             .Should().Be("update merge_entity set name = @p0 output inserted.id, inserted.name into audit_log (id, name) output inserted.id, inserted.name where id = 1");
     }
+
+    [Fact]
+    public void Update_OutputIntoTableVariable_ShouldDeclareIntoAndReadBack()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, "a")
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql()
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); update merge_entity set name = @p0 output inserted.id, inserted.name into @t (id, name) where id = 1; select id, name from @t");
+    }
 }

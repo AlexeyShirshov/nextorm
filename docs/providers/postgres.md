@@ -22,11 +22,13 @@
 - `INTERSECT ALL` / `EXCEPT ALL` are supported ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`);
 - arrays are supported ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) is `true`): array parameters with the `any`/`all` quantifiers
   and the array functions;
-- JSON/JSONB is supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson) is `true`): the `json_agg`/`jsonb_agg` aggregates, the
+- JSON/JSONB is supported ([`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) is `true`, PostgreSQL only; native `jsonb` storage is
+  [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)): the `json_agg`/`jsonb_agg` aggregates, the
   construction/access functions and the `->`/`->>`/`@>`/`?` operators, with `JsonDocument`/`JsonElement`/
   `JsonNode` parameters bound as `jsonb`;
 - `greatest`/`least` and the aggregate `FILTER (WHERE ...)` clause are enabled ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) is `true` and
-  [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) is `AnsiFilter`);
+  [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) is `AnsiFilter` when the configured server version is unset or 9.4+; on a version
+  below 9.4 the dialect rejects filtered aggregates with `NotSupportedException`);
 - `date_trunc` is enabled ([`SupportsDateTrunc`](xref:NextORM.Core.ISqlDialect.SupportsDateTrunc) is `true`);
 - date arithmetic is enabled ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) is `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   and the `DateTime.Add*` methods render PostgreSQL interval arithmetic
@@ -89,6 +91,34 @@ using NextORM.Core;
 using NextORM.Postgres;
 
 using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
+```
+
+## Server version
+
+The dialect can be pinned to the server version, which gates version-dependent syntax. Configuration is
+**explicit** — nextorm never probes the live server. Pass the version with the context constructor's
+`Version` parameter; leaving it unset keeps the historical behaviour and assumes PostgreSQL 9.4 or later,
+so the ANSI aggregate `FILTER (WHERE ...)` clause stays enabled. A version below 9.4 disables it: a
+filtered aggregate rejects with `NotSupportedException`.
+
+```csharp
+// Unset: filtered aggregates are enabled (assumed 9.4+).
+using var current = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
+
+// Pin 9.3: the aggregate `FILTER (WHERE ...)` clause is rejected.
+using var legacy = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder(), new Version(9, 3));
+```
+
+The version is immutable and fixed per **concrete context type** for the process lifetime. Two contexts
+of the same concrete type that request different versions throw `InvalidOperationException`; to run
+against several versions in one process, declare a distinct context subclass per version:
+
+```csharp
+public sealed class Postgres93DataContext : PostgresDataContext
+{
+    public Postgres93DataContext(string connectionString, DataContextBuilder builder)
+        : base(connectionString, builder, new Version(9, 3)) { }
+}
 ```
 
 ## Paging
@@ -184,7 +214,9 @@ See [PostgreSQL-specific SQL](../guide/provider-specific/postgresql.md#range-typ
 
 ## JSON and JSONB
 
-PostgreSQL is the only supported provider with `json`/`jsonb`. Passing a `JsonDocument`, `JsonElement`
+PostgreSQL is the only supported provider with `json`/`jsonb`. A `[JsonColumn]` property maps a CLR object
+to a native `jsonb` column on read and write (`Auto` storage; `Native` forces `jsonb`, `Text` forces text),
+so the object round-trips through insert, update and `RETURNING`. Passing a `JsonDocument`, `JsonElement`
 or `JsonNode` parameter binds it as `jsonb`, so the access operators and functions work directly:
 
 ```csharp
@@ -202,7 +234,14 @@ ctx.From<IComplexEntity>()
     .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. The full
+A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. A
+bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`) reads a
+native `json`/`jsonb` column: the column text is read and parsed for object, array and scalar roots, in both
+scalar (`Select(x => x.Data)`) and composite projections. A SQL `NULL` and a JSON literal `null` both
+materialize as CLR `null`. Declared `JsonObject`/`JsonArray` properties and a bare
+`JsonDocument`/`JsonElement` *scalar* projection are outside this support (map them with `[JsonColumn]`, or
+project a `JsonDocument`/`JsonElement` in a named shape). `[JsonColumn]` mapping and JSON parameter binding
+are unchanged, and nextorm generates no column DDL. The full
 surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...) is documented
 in [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.
@@ -272,7 +311,7 @@ using var reader = ctx.From<Document>()
 
 The returned stream owns the reader and the per-call command until it is disposed, and it does not close the context; the projection must be exactly one `byte[]`/`string` column (otherwise `InvalidOperationException`). MySQL/MariaDB, ClickHouse and the in-memory provider reject the terminals with `NotSupportedException`. See [Streaming large objects](../guide/26-large-objects.md).
 
-PostgreSQL also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite rejects it because its streaming projection always carries the `rowid` locator; MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support.
+PostgreSQL also supports the multi-column `ToDataReader`/`ToDataReaderAsync` terminal: it hands the same sequential-access command over as a caller-owned `DbDataReader`, so the caller can read every column and row (or several LOB columns in order) without materialising the result. SQLite supports it too, but via a buffered, locator-free reader (no `rowid`, no `SequentialAccess`, so no chunked LOB); MySQL/MariaDB, ClickHouse and the in-memory provider have no sequential-access support and reject it.
 
 ## Aliases
 
@@ -298,13 +337,14 @@ join complex_entity as "t2" on t1.id = t2.id
 | Derived table / TVF alias | required |
 | `*ALL` | supported |
 | Arrays | supported (`any(@array)`, `cardinality`, ...) |
-| JSON/JSONB | supported (`json_agg`, `->`, ...; `JsonDocument` params bind as `jsonb`) |
+| JSON/JSONB | supported (`json_agg`, `->`, ...; native `json`/`jsonb` columns via `[JsonColumn]`; `JsonDocument`/`JsonElement`/`JsonNode` params bind as `jsonb`) |
 | LOB streaming (`ToStream`/`ToTextReader`, `ToDataReader`) | supported (`SequentialAccess`; single `byte[]`/`string` column, or a multi-column caller-owned reader) |
 | `greatest` / `least` / `date_trunc` | supported (`greatest`/`least` ignore NULL arguments) |
 | Conditional function | `iif(cond, a, b)` → `case when cond then a else b end` |
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported |
 | `date_add` / `end_of_month` / `DateTime.Add*` | interval arithmetic (`x + (n * interval '1 day')`) |
-| `string_agg` / `array_agg` / aggregate `filter` | supported |
+| `string_agg` / `array_agg` / aggregate `filter` | supported (aggregate `filter` requires 9.4+; unset assumes ≥9.4) |
+| Server version | configured explicitly via the context `Version` |
 | Session/info functions | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Table functions | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` |
 | Recursive CTE | `with recursive` (no max-recursion option) |

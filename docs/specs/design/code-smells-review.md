@@ -7969,7 +7969,7 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 - **Тест равенства `ColumnsPlanHash`** — не добавлен; `ColumnsPlanHash`/`SelectExpressionPlanEqualityComparer` не менялись.
 - **Eager `BatchResult` (multi-result)** — не затронуто (скалярный срез).
 
-Открыто и перенесено: SQLite (`rowid`/`SqliteBlob`/`GetBytes`-чанки), MySQL/MariaDB (capability-тест `GetStream`/`GetTextReader`), фазы 2/3 (`ToDataReader`, `Stream`/`TextReader` в проекции), mid-read cancel. Детали — `docs/specs/status/lob-streaming-1.md`.
+Открыто и перенесено: SQLite (`rowid`/`SqliteBlob`/`GetBytes`-чанки), фазы 2/3 (`ToDataReader`, `Stream`/`TextReader` в проекции), mid-read cancel. MySQL/MariaDB (capability-тест `GetStream`/`GetTextReader`) — **закрыто измерением (D133, #133):** `MySqlConnector 2.6.2` и `ClickHouse.Driver 1.4.0` буферизуют LOB (`GetStream`/`GetTextReader` аллоцируют вместе со значением, `SequentialAccess` не меняет аллокации; ClickHouse `GetStream` → `NotImplementedException`), поэтому `SupportsSequentialAccess`/`SupportsLobStreaming` осознанно остаются `false` — capability корректна, не TODO; триггер пересмотра — драйвер с настоящим memory-bounded потоковым чтением. Детали — `docs/specs/status/rc1-133-streaming-lob-1.md`.
 
 ### Цикл #27 — цикл 2 (capability-эксперимент, 2026-09-27)
 
@@ -8068,14 +8068,22 @@ var value = Expression.Lambda<Func<object>>(Expression.Convert(expression, typeo
 
 - **Mid-read cancel (P2, контракт отмены).** Токен действует только на открытие ридера; чтение
   возвращённого `Stream`/`TextReader` не отменяется. Триггер: следующая правка LOB-ридера.
-- **SQLite locator-backed multi-column `ToDataReader` (P2, фича).** Нужна отдельная модель скрытия
-  `rowid` + доказательство порядка чтения. Триггер: конкретный пользовательский сценарий.
+- **SQLite locator-backed multi-column `ToDataReader` (P2, фича) — ЗАКРЫТО (D134/#134, 2026-10-06).**
+  Реализован вариант A из `issue-189-todatareader-sqlite.md`: роутинг locator-диалекта на locator-free
+  буферизованный `OpenResultReader`/`PrepareResultCommand` (`storeInCache: false`). Отвергнутая
+  альтернатива B (скрытие `rowid` + доказательство порядка чтения) не реализовывалась и не нужна —
+  `rowid` вообще не добавляется на буферизованном пути. Статус:
+  `docs/specs/status/rc1-tail-134-sqlite-datareader-1.md`; реестр имён — `API-NAMING-REVIEW.md`, цикл 6.
 - **Двойное освобождение inner reader (ℹ️, корректность).** `LobDataReader.Dispose` +
   `CommandReaderOwner.Dispose` — безвредно (идемпотентно по ADO.NET). Триггер: следующая правка владения.
 - **`GetSchemaTable()` не делегируется (ℹ️).** Триггер: первый потребитель schema-метаданных.
 - **DRY: четыре in-memory-ветки (ℹ️).** См. Наблюдение C цикла 5; триггер — пятый терминал.
 - **`(object[])parameters` async (ℹ️).** См. Наблюдение A цикла 5; триггер — следующий проход по nullable.
 - **Многоколоночный `ToDataReader` на in-memory — ограничение, не TODO** (нет `DbDataReader`).
+- **MySQL/MariaDB/ClickHouse LOB streaming — документированное ограничение, не TODO (D133/#133).**
+  Драйверы буферизуют LOB, `SupportsSequentialAccess`/`SupportsLobStreaming` осознанно `false`;
+  пересматривать только при появлении драйвера с настоящим memory-bounded потоковым чтением.
+  Измерения — `docs/specs/status/rc1-133-streaming-lob-1.md`.
 
 ## Перенесено из удалённых планов (2026-09-29)
 
@@ -8255,3 +8263,31 @@ P0/P1 нет**; обе находки ниже — 🟡 P2, **deferred с три
 **Отложено с триггером (🟡, наблюдённый корень удержания).** `src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs:24` — `[ThreadStatic] private static Visitor? _tlsVisitor` (рядом `_tlsVisitorOwner`, `:25`): закэшированный visitor держит `Visitor._queryProvider` → живой `QueryCommand` → `IDataContext`. `DataContextCache.Clear()` не сбрасывает thread-static visitor, поэтому мост-контекст, отрендеривший запрос, может оставаться достижимым после `Clear()`. Это **не** accessor-кэш: последний host-free по контракту (ключ `string`, значение `Func<IDataContext, object>`, пустой closure `Constants`), подтверждено `AccessorCache_DoesNotRetainLiveContext` (зелёный). `Clear()` мог бы дёшево обнулять `_tlsVisitor`/`_tlsVisitorOwner`, но спекулятивная правка в этом раунде не выполнялась. **Статус: deferred with trigger** — «reopen if a long-lived/high-churn context leak is reproduced». Остаётся в `1.0.9-b`.
 
 **Доказательство.** `dotnet build nextorm.slnx -c Debug` — 0 Warning / 0 Error (`/tmp/opencode/125/r4/build-e.txt`); `dotnet test tests/nextorm.entityframeworkcore.tests -c Debug --no-build` — 125 total / 0 failed / 0 skipped (`/tmp/opencode/125/r4/ef-e.txt`); controlled-revert `MakeMerge`-guard → `DmlRender_FailsClosed_WhenExpectedFiltersMissing` красный («no exception … never unfiltered»), restore byte-identical `cmp` OK → зелёный (`/tmp/opencode/125/r4/dml-red.txt`, `dml-redgreen.txt`). CRLF сохранён; публичные доки EN+RU синхронны, ссылок на `docs/specs/**` нет.
+
+## Предрелизный аудит v1.0.9-rc1 (2026-10-07, diff `v1.0.9-b..HEAD`, 58 коммитов; 🔴 — 0, 🟡 — 1 (Находка 240), ℹ️ — 2)
+
+**База (этот проход).** `dotnet build nextorm.slnx -c Release --no-incremental` — **0 warnings / 0 errors**. Подавления `src/`: **6 `SuppressMessage`** (все с `Justification`) + **5 парных `#pragma warning disable`** = **11/11**; новых в диапазоне — **0** (плюс один `#pragma`, эмитируемый генератором в `JoinAliasGenerator.cs:464`, — не исходное подавление). `NoWarn` — 0 (единственное совпадение — комментарий `Directory.Build.props:37`). Слоп в добавленных строках: `Skip=`/`[Fact(Skip)]` — **0**; пустых `catch` — **0**; `Task.Delay`/`Thread.Sleep`/`async void`/`.Result`/`.Wait(` — **0**. `slopwatch` локально не установлен (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан паттернов **вручную**. `.editorconfig` — те же 7 `dotnet_diagnostic.*.severity = silent` (6 инертных `S*` без `SonarAnalyzer` + `CA2254`; пре-существующее, не переоткрывается). `find -name 'PublicAPI*.txt'` — **0** (Шаг 5). XML-doc: `GenerateDocumentationFile=true` + `TreatWarningsAsErrors=true`, `NoWarn` — 0 ⇒ `CS1591` гейтится; публичных членов без доков нет.
+
+### 🟡 Находка 240 (P2, горячий путь/CPU — полный обход дерева на каждый своп общей команды) — `QueryCommand.ReplaceCommand` пересчитывает `HasUnkeyedScalarInValues` через `ScanUnkeyedScalarInValues(this)`, а `GetAnyCommand` вызывает своп на **каждый** `.Any()`
+
+**Было.** `EntityBuilderExtensions.GetAnyCommand` на каждом `.Any()` (кроме первого создания) вызывает `queryCommand.ReplaceCommand(cmd, 0)`; `ReplaceCommand` (`QueryCommand.cs:871`) после свопа делает `HasUnkeyedScalarInValues = QueryPreparer.ScanUnkeyedScalarInValues(this)` — рекурсивный обход всего графа команд (referenced queries, CTE, FROM-источники, JOIN-условия, окна, ORDER BY, LINQ-лямбды) с `HashSet<QueryCommand>(ReferenceEqualityComparer.Instance)`.
+**Почему пахнет.** Обход идёт на терминал `.Any()`/`.Count()`, а не один раз на форму запроса; для общего `Any`-command это O(размер дерева) на вызов. Корректность требует пересчёта при свопе, но не полного обхода, когда referenced-граф не менялся.
+**Стало (рекомендация).** Кэшировать результат по идентичности referenced-команд (пересчитывать, только если изменился набор/идентичность ссылок) либо ограничить скан поддеревом вставленного `cmd`. Маршрут — `nextorm-design-engineer`; не release-blocker (перф, не корректность).
+**Проверка.** `git grep ReplaceCommand` — определение `QueryCommand.cs:871` и единственный вызов `EntityBuilderExtensions.cs:1302`; `ScanUnkeyedScalarInValues` — `QueryCommand.QueryPreparer.cs`.
+
+### ℹ️ Наблюдения (фикс не требуется)
+- **A. Release-gate вердикт: release-blocking 🔴/P0 и P1 по запахам — нет.** Новых подавлений/пустых `catch`/`Skip=`/`Task.Delay`/`Thread.Sleep` в диапазоне нет.
+- **B. `T? x = null` в добавленных публичных членах — 1:** `SqliteFts5CommandBuilder.IntegrityCheck(bool? checkExternalContent = null)` — genuine-sentinel (`null` = опустить rank-аргумент FTS5, `false` = 0, `true` = 1), значение доменно осмысленно; публичных `*Options`-параметров со сбросом `= null` среди изменений нет. Остальные `= null` — `internal`/`private` (`OpenLobReader(…, string? terminalName = null)`, `FailedRawRow(…, Exception? inner = null)`, `InValues.EvaluatePartition(…, Type? elementType = null)`, `GetOrBuildRaw(…, RawRowKind = None, string? recordSignature = null)`) — не публичная поверхность.
+- **C. `IDisposable`/кэш-ключи.** Дефектов владения в изменённом коде не найдено; `QueryExecutor` (`OpenResultReader*`/`OpenLobReader*`) **улучшен**: локаль `DbCommand? command = compiledQuery.DbCommand` до `GetDbCommand`, поэтому `finally` освобождает команду и при падении открытия соединения. `JsonDocument`, возвращаемый `ClickHouseDataContext.ToJsonDocument`, — фабричное значение (владелец — вызывающий), утечки внутри библиотеки нет; JSON-параметр `JsonElement`/`JsonDocument` перепарсивается в self-contained `JsonNode`, поэтому переживает dispose вызывающего. `RawMapperCacheKey` расширен `RecordKind`/`RecordSignature` (исключает алиасинг record-маппера на обычный), новые флаги `HasUnkeyed*` скопированы в `QueryCommand.Clone`. God-class: `QueryCommand`/`DataContext`/`RawMapperFactory` (+532) остаются крупными — пре-существующий класс, не переоткрывается.
+
+---
+
+## Аудит 07.10.2026 — issue #203: удаление эвристик классификации composite в `RawMapperFactory` (ветка `1.0.9-rc1`; 🔴 — 0, 🟡 — 0, ℹ️ — 1)
+
+**Область.** #203 удаляет две неавторитетные эвристики классификации composite: `IsGenuineCompositeDataTypeName` (вердикт по dotted-имени типа данных) и дискриминатор по форме исключения `InvalidCastException` в пробах метаданных (`reader.GetDataTypeName`/`GetFieldType`). Обе заменены одним констрейнед-предикатом провайдера `DataContext.IsGenuineCompositeColumn` (default `false`; `PostgresDataContext` override через `NpgsqlDataReader.GetPostgresType(ordinal) is PostgresCompositeType`). Вердикт о composite даёт один общий предикат `internal IsGenuineCompositeRawRowColumn`; фактические call sites в `RawMapperFactory`: `:260` (single-column нерезолвимый), `:333` (`IsGenuineNamedComposite`, single-column резолвимый), `:355` (multi-column нерезолвимый). Проверка `FieldType` по-прежнему определяет *резолвимость* колонки, а имя типа данных годится только для диагностики, не для классификации; поведение metadata-rejection (`InvalidCastException`/`NotSupportedException` = «нет вердикта») сохранено.
+
+**Исправлено/принято.** Классификация больше не выводится из текста имени или формы исключения. Один предикат на всех потребителях исключает прежний рассинхрон single/multi-column. На чистых/unknowable метаданных предикат даёт `false`, поэтому некомпозитные `hstore`/`ltree` и холодный genuine composite уходят на обычный путь и его ошибку «None of the result-set columns»; тёплый зарегистрированный composite материализуется, тёплый незарегистрированный сохраняет guard `MapComposite<T>`.
+
+**ℹ️ Наблюдение A. God-class `RawMapperFactory` (Observation C предрелизного аудита v1.0.9-rc1) не переоткрывается.** Проход не расширяет класс, а сужает его: удалены две эвристики вместе с их doc-комментариями (`git diff --numstat` — `RawMapperFactory.cs` +43/−68, net −25), а обе точки классификации сведены к одному вызову провайдерного предиката. Пре-существующая крупность `RawMapperFactory`/`QueryCommand`/`DataContext` констатируется как есть и **не переоткрывается**.
+
+**ℹ️ Наблюдение B. Доказательство — у кодового потока.** Debug build `dotnet build nextorm.slnx -c Debug` exit 0, 0 Warning(s)/0 Error(s) (`/tmp/nextorm-203/r1-n1/d1-build.log`); `dotnet test tests/nextorm.core.tests -c Debug --no-build --filter FullyQualifiedName~RawRowMaterializer` total 52 / succeeded 52 / failed 0 / skipped 0 (`/tmp/nextorm-203/r1-n1/d2-innerloop.log`). Полная приёмка (six-provider suite, coverage, 7-case perf, docfx) и ревизии/попытки — в статусе `203-authoritative-rawrow-classification-1.md`; этот поток docs/registers-only, код не прогонялся.

@@ -4,6 +4,8 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 
 namespace NextORM.Core;
@@ -27,6 +29,8 @@ internal static class RowMapperFactory
     private static readonly MethodInfo FromStorageMI = typeof(DurationStorage).GetMethod(nameof(DurationStorage.FromStorage), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly MethodInfo ConvertFromProviderMI = typeof(IPropertyValueConverter).GetMethod(nameof(IPropertyValueConverter.ConvertFromProvider))!;
     private static readonly MethodInfo DynamicColumnsReadMI = typeof(DynamicColumns).GetMethod(nameof(DynamicColumns.Read))!;
+    private static readonly MethodInfo GetFieldValueStringMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!.MakeGenericMethod(typeof(string));
+    private static readonly MethodInfo JsonNodeParseMI = typeof(JsonNode).GetMethod(nameof(JsonNode.Parse), [typeof(string), typeof(JsonNodeOptions?), typeof(JsonDocumentOptions)])!;
     private static readonly ConcurrentDictionary<Type, MethodInfo?> TypedFromProviderMethods = new();
 
     /// <summary>
@@ -55,7 +59,7 @@ internal static class RowMapperFactory
 
         var converter = ResolveConverter(column.Converter, dialect);
         if (converter is not null)
-            return MapConvertedColumn(column, param, converter);
+            return MapConvertedColumn(column, param, converter, dialect);
 
         Expression getter;
         if (column.IsWideCountNarrowed && realType == typeof(int))
@@ -78,7 +82,7 @@ internal static class RowMapperFactory
         }
         else
         {
-            getter = GetReaderAccessor(column, param, realType);
+            getter = GetReaderAccessor(column, param, realType, dialect);
         }
 
         if (column.Nullable)
@@ -111,8 +115,36 @@ internal static class RowMapperFactory
     private static IPropertyValueConverter? ResolveConverter(IPropertyValueConverter? converter, ISqlDialect? dialect)
         => converter is IJsonColumnConverter json && dialect is not null ? json.Resolve(dialect) : converter;
 
-    private static Expression GetReaderAccessor(SelectExpression column, Expression param, Type readType)
+    private static Expression GetReaderAccessor(SelectExpression column, Expression param, Type readType, ISqlDialect? dialect)
     {
+        if (readType == typeof(JsonObject) && dialect?.NativeJsonProviderType != typeof(JsonObject))
+        {
+            // Only a dialect that materializes its native JSON as System.Text.Json.Nodes.JsonObject
+            // (ClickHouse) may read the typed accessor; elsewhere JsonObject is not a driver type, so
+            // keep the provider-agnostic rejection the column mapper had before this branch existed
+            // instead of emitting a GetFieldValue<JsonObject> a driver cannot satisfy.
+            throw new NotSupportedException(
+                $"Property '{column.PropertyName}' with index ({column.Index}) has type {readType} which is not supported");
+        }
+
+        if (readType == typeof(JsonNode))
+        {
+            // A bare System.Text.Json.Nodes.JsonNode is not a driver-readable type (Npgsql exposes
+            // json/jsonb as JsonDocument/JsonElement): read the JSON text with the generic typed
+            // getter and parse it with default options. Only the exact JsonNode type is special-cased;
+            // declared JsonObject/JsonArray properties are not supported. Both MethodInfos are resolved
+            // once into static fields, so a cached mapper performs no reflection per row.
+            var text = Expression.Call(
+                Expression.Convert(param, typeof(DbDataReader)),
+                GetFieldValueStringMI,
+                Expression.Constant(column.Index));
+            return Expression.Call(
+                JsonNodeParseMI,
+                text,
+                Expression.Constant(null, typeof(JsonNodeOptions?)),
+                Expression.Constant(default(JsonDocumentOptions), typeof(JsonDocumentOptions)));
+        }
+
         var method = column.GetDataRecordMethod(readType);
         var accessor = method.DeclaringType == typeof(IDataRecord)
             ? param
@@ -120,10 +152,10 @@ internal static class RowMapperFactory
         return Expression.Call(accessor, method, Expression.Constant(column.Index));
     }
 
-    private static Expression MapConvertedColumn(SelectExpression column, Expression param, IPropertyValueConverter converter)
+    private static Expression MapConvertedColumn(SelectExpression column, Expression param, IPropertyValueConverter converter, ISqlDialect? dialect)
     {
         var providerType = converter.ProviderType;
-        var getter = GetReaderAccessor(column, param, providerType);
+        var getter = GetReaderAccessor(column, param, providerType, dialect);
         var isDbNull = Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index));
 
         if (converter.ConvertsNulls)
@@ -237,6 +269,14 @@ internal static class RowMapperFactory
     /// <param name="namingConventionType">The naming convention type, when one applies to name matching.</param>
     /// <param name="buildSelectList">Builds the projection; invoked only on a cache miss.</param>
     /// <param name="mapColumn">The provider's column accessor factory.</param>
+    /// <param name="recordKind">
+    /// The raw-row/composite record shape, or <see cref="RawRowKind.None"/> for an ordinary mapping. Part
+    /// of the cache key so a record mapper can never alias an ordinary mapper for the same column key.
+    /// </param>
+    /// <param name="recordSignature">
+    /// The structural record signature (tuple arity/item types), or <see langword="null"/> when the
+    /// result type already captures the shape. Part of the cache key.
+    /// </param>
     /// <returns>The compiled row mapper.</returns>
     public static Func<IDataRecord, TResult> GetOrBuildRaw<TResult>(
         Type providerType,
@@ -245,9 +285,11 @@ internal static class RowMapperFactory
         string columns,
         Type? namingConventionType,
         Func<SelectExpression[]> buildSelectList,
-        Func<SelectExpression, Expression, Expression> mapColumn)
+        Func<SelectExpression, Expression, Expression> mapColumn,
+        RawRowKind recordKind = RawRowKind.None,
+        string? recordSignature = null)
     {
-        var key = new RawMapperCacheKey(providerType, resultType, oneColumn, columns, namingConventionType);
+        var key = new RawMapperCacheKey(providerType, resultType, oneColumn, columns, namingConventionType, recordKind, recordSignature);
         if (MapperCache.TryGetRaw(key, out var cached))
             return (Func<IDataRecord, TResult>)cached;
 

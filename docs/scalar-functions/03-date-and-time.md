@@ -264,6 +264,58 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
 
+## SQL Server clock, offset and `*FROMPARTS`
+
+The clock, offset and `*FROMPARTS` functions live on `SqlFunctions.SqlServer` and are gated per name by
+[`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions); SQL Server is the only provider that
+implements the flag, so every other provider (including the in-memory one) throws
+`NotSupportedException`. `sysdatetime`/`sysutcdatetime` are non-deterministic server-local and UTC
+clocks, so they must not be treated as a fixed value; `switchoffset`/`todatetimeoffset` accept the
+offset either as a constant string (`"-08:00"`) or as signed minutes.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Now = SqlFunctions.SqlServer.sysdatetime(),
+        NowOffset = SqlFunctions.SqlServer.sysdatetimeoffset(),
+        UtcNow = SqlFunctions.SqlServer.sysutcdatetime(),
+        Switched = SqlFunctions.SqlServer.switchoffset(SqlFunctions.SqlServer.sysdatetimeoffset(), "-08:00"),
+        Offset = SqlFunctions.SqlServer.todatetimeoffset(e.Datetime, 120),
+        Time = SqlFunctions.SqlServer.timefromparts(1, 2, 3, 4, 7),
+        Stamp = SqlFunctions.SqlServer.datetime2fromparts(2020, 1, 2, 3, 4, 5, 6, 3)
+    })
+    .ToList();
+```
+
+```sql
+select sysdatetime() as [Now], sysdatetimeoffset() as [NowOffset], sysutcdatetime() as [UtcNow],
+       switchoffset(sysdatetimeoffset(), '-08:00') as [Switched], todatetimeoffset(dt, 120) as [Offset],
+       timefromparts(1, 2, 3, 4, 7) as [Time], datetime2fromparts(2020, 1, 2, 3, 4, 5, 6, 3) as [Stamp]
+from complex_entity
+```
+
+| C# | SQL |
+|---|---|
+| `sysdatetime()` | `sysdatetime()` |
+| `sysdatetimeoffset()` | `sysdatetimeoffset()` |
+| `sysutcdatetime()` | `sysutcdatetime()` |
+| `switchoffset(value, timeZone)` / `switchoffset(value, minutes)` | `switchoffset(value, <offset>)` |
+| `todatetimeoffset(value, timeZone)` / `todatetimeoffset(value, minutes)` | `todatetimeoffset(value, <offset>)` |
+| `timefromparts(h, mi, s, fractions, precision)` | `timefromparts(...)` |
+| `smalldatetimefromparts(y, mo, d, h, mi)` | `smalldatetimefromparts(...)` |
+| `datetimefromparts(y, mo, d, h, mi, s, ms)` | `datetimefromparts(...)` |
+| `datetime2fromparts(y, mo, d, h, mi, s, fractions, precision)` | `datetime2fromparts(...)` |
+| `datetimeoffsetfromparts(y, mo, d, h, mi, s, fractions, hourOffset, minuteOffset, precision)` | `datetimeoffsetfromparts(...)` |
+
+`timefromparts`, `datetime2fromparts` and `datetimeoffsetfromparts` require the trailing precision to
+be a **constant integer in `0..7`**: a non-constant, `null` or out-of-range value throws
+`NotSupportedException` before any SQL is emitted. A `null` in any other part yields a `null` result,
+like the native function. `timefromparts` materialises as a `TimeSpan`, the `smalldatetime`/`datetime`/
+`datetime2` builders as a `DateTime`, and the clock- and offset-returning functions as a `DateTime` /
+`DateTimeOffset` matching the T-SQL result type. This is the date half of the SQL Server-only surface
+described in [Conditional helpers](04-conditionals-and-conversion.md#sql-server-metadata-checksum-and-other-scalars).
+
 ## Date conversion and parts (ClickHouse)
 
 ClickHouse exposes its `to*` date/time functions through `SqlFunctions.ClickHouse`

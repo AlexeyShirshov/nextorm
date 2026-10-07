@@ -79,12 +79,12 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | String / math / date scalar functions, `LIKE`, string concatenation, `NULLIF`, PostgreSQL settings/sequences | yes — portable CLR `string` methods and `+` concatenation on every provider, `SqlFunctions.Sql.nullif`, plus the native string/`regexp_*`/settings/sequence library on PostgreSQL (`SqlFunctions.Postgres`) | yes | `Visitors/ScalarFunctionTranslator.cs`, dialect `Make*` hooks, `SqlFunctions.Sql.nullif`, `SqlFunctions.Postgres` |
 | CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | **yes** — PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; 2019/2022 reject) | partial — open `linq2db#698` (no `Regex.IsMatch` translation) | `Visitors/RegexSqlTranslator.cs`, `ISqlDialect.SupportsRegex`/`MakeRegexMatch`/`MakeRegexReplace` |
 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | yes | `CommonFunctions`, `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField` |
-| Full-text search | yes on SQL Server, PostgreSQL and MySQL/MariaDB | yes (provider) | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText` |
+| Full-text search | yes on SQL Server, PostgreSQL and MySQL/MariaDB (`contains`/`freetext`); plus a SQLite-specific FTS3/FTS4/FTS5 query + FROM surface (`SqlFunctions.Sqlite`; FTS5 maintenance/control deferred to #195/#196) | yes (provider) | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText`; `SqlFunctions.Sqlite` FTS members, `SqliteFunctionRenderer.cs` |
 | Native JSON documents | **yes on PostgreSQL** | partial — the `json`/`jsonb` type plus `JsonContains` (`@>`), `JsonExtractPathText` (`#>>`) and `Json.Value`; not the full `jsonb_*` library | `SupportsJson`, `JsonSqlTranslator` |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes on SQL Server and MySQL/MariaDB | yes | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
 | String JSON + native-JSON + dictionary functions (ClickHouse) | **yes on ClickHouse** (`JSONExtract*`/`JSONAllPaths`/`toJSONString`/`visitParam*`, plus dictionaries) | no dedicated API | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
 | Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | **yes** on PostgreSQL and ClickHouse | partial — PostgreSQL array operators (`PostgreSQLExtensions`); no ClickHouse `Array(T)`/higher-order/`ARRAY JOIN` API | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
-| Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes on PostgreSQL and ClickHouse | yes (`Sql.Row`; emulated where the provider has no native row) | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs` |
+| Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes — PostgreSQL `ROW`/`(row).fN` and ClickHouse `tuple`/`tupleElement`; flat `(a, b)` comparison operand on MySQL/MariaDB/SQLite | yes (`Sql.Row`; emulated where the provider has no native row) | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs`, `nextorm.mysql/MySqlDialect.cs`, `nextorm.sqlite/SqliteDialect.cs` |
 | Native range types + range-over-scalar-pairs (`Range<T>`, `Overlaps`, `range_contains`, bound inspection) | **yes** — native range/multirange types on PostgreSQL; a mapped **pair of scalar columns** (`[RangeColumns]`) on SQL Server/MySQL/MariaDB/SQLite/ClickHouse | partial — provider-native `NpgsqlRange<T>`/multirange mapping on PostgreSQL; no portable `Range<T>`/scalar-pair mapping | `Query/Range.cs`, `RangeColumnsAttribute`, `ISqlDialect.SupportsRanges`/`SupportsRangeColumns`, `SqlFunctions.Postgres` |
 | Conditional functions (`iif`/`choose`/`multi_if`) | **yes** | no | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes on SQL Server | yes (provider) | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
@@ -114,7 +114,7 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | Raw command execution and stored procedures (`ExecuteRaw`/`ExecuteProcedure`, output/return parameters, forward-only cursors) | yes — stored procedures on SQL Server/PostgreSQL/MySQL/MariaDB | yes | `IRawCommandExecutor`, `ProcedureResult`/`ProcedureParameter`, `ISqlDialect.SupportsStoredProcedures` |
 | Table-valued parameters | yes — native SQL Server, array/JSON/`Array(T)`+`arrayJoin` emulation elsewhere | yes (`TableParameterValue`) | `ProcedureParameter.Table<T>`, `ISqlDialect.SupportsTableValuedParameters` |
 | SQL batch (`CreateBatchBuilder`/`BatchQuery<TResult>`/`BatchResult`, typed result sets in one round trip) | **yes** (PostgreSQL/SQL Server/MySQL/MariaDB/SQLite) | partial — batch only for a remote context (`BeginBatch`/`CommitBatch`); no local multi-statement builder | `BatchExtensions`/`BatchBuilder`/`BatchResult`, `ISqlDialect.SupportsBatch` |
-| Result-set streaming consumption (`ToStream`/`ToTextReader`/`ToDataReader`) | **yes** | partial — raw `DbDataReader` (`ExecuteReader`/`DataReaderWrapper`) and materialising `IAsyncEnumerable`; no LOB streaming terminal | `QueryCommandExtensions.ToStream`/`ToTextReader`/`ToDataReader`, `ISqlDialect.LobLocatorColumn`/`SupportsSequentialAccess` |
+| Result-set streaming consumption (`ToStream`/`ToTextReader`/`ToDataReader`) | **yes** — sequential LOB streaming on PostgreSQL/SQL Server; SQLite `ToDataReader` is buffered and locator-free (no chunked LOB) | partial — raw `DbDataReader` (`ExecuteReader`/`DataReaderWrapper`) and materialising `IAsyncEnumerable`; no LOB streaming terminal | `QueryCommandExtensions.ToStream`/`ToTextReader`/`ToDataReader`, `ISqlDialect.LobLocatorColumn`/`SupportsSequentialAccess` |
 | Result-set export to a stream (`WriteJson`/`WriteCsv`) | **yes** | partial (client serialization) | `QueryCommand.WriteJson`/`WriteCsv`, `JsonStreamOptions`/`CsvStreamOptions` |
 | `TRUNCATE` | yes (SQLite/in-memory reject) | yes | `DataContextExtensions.CreateTruncateBuilder` |
 | Query plan cache and `Prepare()` | yes — implicit structural plan cache plus explicit `Prepare()` | yes | `EntityBuilderExtensions.Prepare`, `IPreparedQueryCommand<TResult>`, `DataContextCache` |
@@ -170,9 +170,10 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   `UPDATE`/`DELETE` filters and `INSERT`/`MERGE` validation ([query filters](../../advanced/query-filters.md)).
 * Command/connection interceptors and structured logging over the ADO pipeline
   ([interceptors](../../infrastructure/03-interceptors.md)).
-* Cross-provider row values: `System.Tuple`/`ValueTuple` constructors, element access and row comparison
-  render as `ROW(a, b)`/`(row).fN` on PostgreSQL and `tuple(a, b)`/`tupleElement` on ClickHouse, driven by
-  `ISqlDialect.Tuple`.
+* Cross-provider row values: `System.Tuple` constructors, element access and row comparison render as
+  `ROW(a, b)`/`(row).fN` on PostgreSQL, `tuple(a, b)`/`tupleElement` on ClickHouse, and the flat `(a, b)`
+  comparison operand on MySQL/MariaDB/SQLite, driven by `ISqlDialect.Tuple` (inline `.ItemN` folds;
+  MySQL/MariaDB/SQLite reject projection/ordering/grouping/function positions and server-side `.ItemN`).
 * Range types without a native range column: PostgreSQL maps `Range<T>` natively, while the other
   providers store it as a pair of scalar bounds (`[RangeColumns]`) and translate the whole predicate and
   inspection surface (`overlaps`, `range_contains`/`range_contained_by`, the positional and adjacency
@@ -188,7 +189,10 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   and `string_split`/`openjson`;
   ClickHouse `Array(T)`/`ARRAY JOIN`, `JSONExtract*`, dictionaries, the quantile/`uniq`/`argMin`-`argMax`
   families, `LIMIT BY`, `PREWHERE`/`FINAL`/`SETTINGS` and multi-branch `multiIf`.
-* Full-text search (`contains`/`freetext`) on SQL Server, PostgreSQL and MySQL/MariaDB.
+* Full-text search (`contains`/`freetext`) on SQL Server, PostgreSQL and MySQL/MariaDB, plus the
+  SQLite-specific FTS3/FTS4/FTS5 query/`FROM` surface (`Match`, FTS5 `FTS5bm25`/`Highlight`/`Snippet`/
+  `Rank`, FTS3/4 helpers and the FTS5 table-valued `MatchTable`; FTS5 maintenance/control still open in
+  #195/#196).
 * CLR `Regex` translation (`Regex.IsMatch`/`Regex.Replace`) with a constant pattern on PostgreSQL,
   MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`) — an open
   feature request in linq2db (`linq2db#698`).

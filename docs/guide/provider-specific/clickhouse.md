@@ -253,12 +253,28 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 See [Table-valued functions](../11-table-valued-functions.md).
 
+## Native JSON columns
+
+ClickHouse's native `JSON` column is **object-rooted** (arrays and scalar roots are rejected). A
+`[JsonColumn]` property (`Auto` or `Native` storage) maps an object-root POCO, `JsonObject`,
+`JsonDocument` or `JsonElement` to it for both read and write; `Text` keeps a `String` column, and a
+model that does not serialize to an object fails closed with `NotSupportedException`. Bare object-root
+`JsonObject`/`JsonDocument`/`JsonElement` values also map for projection and parameter (the driver
+surfaces `JSON` as `JsonObject`, and `JsonDocument`/`JsonElement` are adapted from it). Project through
+a named shape (`Select(x => new { x.Doc })` or a DTO): a bare top-level scalar `Select(x => x.Doc)` is
+not handled by the core projection classifier. An empty `{}` stays a non-null value, while SQL `NULL`
+in a `Nullable(JSON)` column stays distinct from it (`null`, or `default`/`Undefined` for the value-type
+`JsonElement`). A bare `string` read over a `JSON` column and the legacy `Object('json')` alias are not
+supported; the alias can be created only with a connection-level `allow_experimental_object_type`, which
+nextorm never sets, and even then reads materialize as `Tuple<SByte,String>` rather than through the
+native `JsonObject` transport. See
+[JSON support](../14-json.md#map-a-clr-object-to-a-native-json-column).
+
 ## Not yet supported
 
-The native `JSON` column type (its reader/type-mapping) is not mapped yet. The server/cluster table
-functions (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`, `cluster_all_replicas`) **are**
-pre-declared on `SqlFunctions.ClickHouse` and render their SQL, but exercising them end-to-end against a
-real cluster is not covered and stays out of scope. See
+The server/cluster table functions (`url`, `s3`, `file`, `remote`, `remote_secure`, `cluster`,
+`cluster_all_replicas`) **are** pre-declared on `SqlFunctions.ClickHouse` and render their SQL, but
+exercising them end-to-end against a real cluster is not covered and stays out of scope. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also

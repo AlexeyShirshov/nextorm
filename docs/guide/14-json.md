@@ -28,8 +28,10 @@ feature:
   native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` (written as
   `json_all_paths`/`json_all_paths_with_types`/`to_json_string`) through the same flag. These take a
   native `JSON` value (`CAST(col AS JSON)` for a `String` column); `JSONAllPaths` projects as `string[]`
-  and `JSONAllPathsWithTypes` as `Map(String, String)` → `Dictionary<string, string>`. A native `JSON`
-  *column* is still not mapped (the driver returns it as `System.Text.Json.Nodes.JsonObject`).
+  and `JSONAllPathsWithTypes` as `Map(String, String)` → `Dictionary<string, string>`. ClickHouse also
+  has a native `JSON` *column* type (object-rooted): a `[JsonColumn]` property and a bare
+  `JsonObject`/`JsonDocument`/`JsonElement` projection/parameter map to it
+  (see [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column)).
 * **SQLite** exposes the JSON1 surface through the provider-specific `SqlFunctions.Sqlite` (`json`/`jsonb`/
   `json_extract`, the `->`/`->>` operators, `json_set`/`json_patch`, and the `json_each`/`json_tree` table
   functions). The *cross-provider* JSON API is not mapped to it: the native `json`/`jsonb` type and the
@@ -53,7 +55,7 @@ section for your provider; the [provider matrix](#provider-matrix) and
 | PostgreSQL | No | Supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | No | No |
 | SQLite | No | No | No (JSON1 via `SqlFunctions.Sqlite`) | No |
 | MySQL / MariaDB | No | Not exposed | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
-| ClickHouse | No | Not exposed | String JSON + JSONPath scalars + native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
+| ClickHouse | No | Native `JSON` ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson); object-rooted, via `[JsonColumn]`/`JsonObject`/`JsonDocument`/`JsonElement`) | String JSON + JSONPath scalars + native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
 | In-memory | Not applicable (no SQL) | Not applicable | Not applicable | Not applicable |
 
 "No" means the command is rejected with `NotSupportedException` when its SQL is built, not that the
@@ -188,6 +190,59 @@ select id from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 
 A plain JSON string is bound as `text`; parse it explicitly with `SqlFunctions.Postgres.json_cast(value)`
 (`cast(value as jsonb)`).
+
+### Map a CLR object to a native JSON column
+
+A `[JsonColumn]` property stores any serializable CLR object in the column as JSON. The default
+`JsonColumnStorage.Auto` uses the provider's native type where it has one, so on PostgreSQL the property
+maps to a native `jsonb` column for both read and write — insert, update and `RETURNING` — while `Native`
+forces `jsonb` and `Text` forces a text column. The property participates in projections and constant
+comparisons like any other converted column:
+
+```csharp
+[SqlTable("customers")]
+public sealed class Customer
+{
+    public long Id { get; set; }
+
+    [JsonColumn]
+    public Address Address { get; set; } = new();
+}
+```
+
+The mapping covers the property, not the schema: nextorm does not generate the column DDL, so the table
+must already have the `jsonb` column. See
+[Value converters](../infrastructure/04-value-converters.md#json-columns) for the fluent
+`JsonColumn(o => ...)` form and serializer options.
+
+Bare CLR JSON values are handled at the boundary, differently from a mapped column:
+
+* A `JsonDocument` or `JsonElement` value materializes from a `json`/`jsonb` column in a named projection,
+  and a parameter of either type binds as `jsonb`.
+* A bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`) reads a
+  native `json`/`jsonb` column: the text is read and parsed, covering object, array and scalar roots, in both
+  scalar (`Select(x => x.Data)`) and composite projections. A SQL `NULL` and a JSON literal `null` both become
+  CLR `null`. Declared `JsonObject`/`JsonArray` properties, and a bare `JsonDocument`/`JsonElement` *scalar*
+  projection, are outside this support — map those with `[JsonColumn]` or project them in a named shape. A
+  `JsonNode` parameter still binds as `jsonb`.
+* A plain `string` maps to `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`.
+
+On ClickHouse the same section header applies to the native `JSON` column, whose physical type is
+`JSON` and which is **object-rooted**: it accepts JSON objects at the root and rejects arrays and
+scalar roots. A `[JsonColumn]` property with `Auto` or `Native` storage maps an object-root POCO,
+`JsonObject`, `JsonDocument` or `JsonElement` to the native `JSON` type for both read and write, while
+`Text` keeps a `String` column; a model that does not serialize to an object fails closed with
+`NotSupportedException`. The same object-root DOM values map as bare projections and parameters. The
+projection must go through a named shape — `Select(x => new { x.Doc })` or a DTO — because a bare
+top-level scalar `Select(x => x.Doc)` is **not** handled by the core projection classifier. An empty
+object `{}` stays a non-null value, while SQL `NULL` in a `Nullable(JSON)` column stays **distinct**
+from it (`null` for `JsonObject`/`JsonDocument`, `default`/`JsonValueKind.Undefined` for the value-type
+`JsonElement`). A bare `string` read over a `JSON` column is not mapped. The legacy `Object('json')`
+alias is **not supported** by this integration: with `ClickHouse.Driver` 1.4.0.0 and ClickHouse
+25.8.33.6 a connection-level `allow_experimental_object_type=1` lets the type be created, but reads
+materialize as `Tuple<SByte,String>` (path → value) and cannot be read through the native `JsonObject`
+transport (`GetFieldValue<JsonObject>` throws `InvalidCastException`). nextorm does **not** enable
+`allow_experimental_object_type` itself.
 
 ### Build a JSON object or array in the projection
 
@@ -338,7 +393,8 @@ The construction and aggregation functions return `string?`; deserialize with
   `NotSupportedException` on another; use `ISqlDialect` capability flags if you must branch.
 * `ForJson`/`ForXml` are SQL Server only ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson) /
   [`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)), and the two are mutually exclusive on one command.
-* The PostgreSQL `json`/`jsonb` surface (`SqlFunctions.Postgres`) requires [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson);
+* The PostgreSQL `json`/`jsonb` surface (`SqlFunctions.Postgres`) requires
+  [`SupportsPostgresJsonSql`](xref:NextORM.Core.ISqlDialect.SupportsPostgresJsonSql) (PostgreSQL only);
   the SQL Server and MySQL/MariaDB text functions require
   [`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson). Each throws on the other provider.
 * ClickHouse's JSON surface (`JSONExtract*`/`visitParamExtract*`, the JSONPath scalars and the
@@ -347,22 +403,28 @@ The construction and aggregation functions return `string?`; deserialize with
   `SupportsTextJson` set. The native-JSON functions take a native `JSON` value (cast a `String` column
   with `CAST(col AS JSON)`); `json_all_paths` projects as `string[]` and `json_all_paths_with_types` as
   `Dictionary<string, string>` (`mapKeys`/`mapValues` turn the map into a collection). A native `JSON`
-  *column* is not mapped yet: the driver returns it as `System.Text.Json.Nodes.JsonObject`, so project
-  JSON through a `String` column or cast it in SQL.
+  *column* stores native `JSON` for `[JsonColumn]` (`Auto`/`Native`, object-root POCO/`JsonObject`/
+  `JsonDocument`/`JsonElement`) and for bare object-root `JsonObject`/`JsonDocument`/`JsonElement`
+  projections/parameters (see [Map a CLR object to a native JSON column](#map-a-clr-object-to-a-native-json-column)).
+  Arrays/scalar roots, a bare `string`, and the legacy `Object('json')` alias are not supported, and a
+  bare top-level scalar `Select(x => x.Doc)` is not handled by the core projection classifier.
 * SQLite's JSON1 extension is exposed only through the provider-specific `SqlFunctions.Sqlite` surface
   (`json_extract`, `->`/`->>`, `json_each`/`json_tree`, ...); the cross-provider native/`json_*` API is not
   mapped to it, so those names throw `NotSupportedException`.
 * The in-memory provider produces no SQL, so `ForJson`/`ForXml` throw `NotSupportedException` and the
   JSON function surfaces do not apply to it.
-* PostgreSQL is the only provider whose columns are mapped as a native JSON type in the parameter path;
-  SQL Server and MySQL/MariaDB JSON is always text.
+* PostgreSQL maps a `[JsonColumn]` property to a native `jsonb` column (`Auto` storage) on read and
+  write (insert, update and `RETURNING`), and a `JsonDocument`/`JsonElement`/`JsonNode` parameter binds
+  as `jsonb`. ClickHouse maps `[JsonColumn]` `Auto`/`Native` and bare object-root
+  `JsonObject`/`JsonDocument`/`JsonElement` to its native object-rooted `JSON` column. SQL Server and
+  MySQL/MariaDB JSON is always text.
 
 ## See also
 
 - [Querying and projections](../querying/index.md) - `ForJson`/`ForXml` for SQL Server.
 - [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) - the full PostgreSQL JSON/JSONB surface and the SQL Server / MySQL/MariaDB text-JSON functions.
 - [Table-valued functions](11-table-valued-functions.md#built-in-table-functions) - `openjson` and `string_split`.
-- [PostgreSQL provider](../providers/postgres.md) - JSON parameter binding and arrays.
+- [PostgreSQL provider](../providers/postgres.md) - JSON columns, parameter binding and arrays.
 - [SQL Server provider](../providers/sqlserver.md) - `FOR JSON`, `FOR XML` and text JSON.
 - [MySQL provider](../providers/mysql.md) and [MariaDB provider](../providers/mariadb.md) - text JSON over `JSON_EXTRACT`/`JSON_SET`.
 - [Limitations and out-of-scope features](../advanced/limitations.md)

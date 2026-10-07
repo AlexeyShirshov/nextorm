@@ -429,4 +429,74 @@ public class InsertSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void OutputIntoTableVariable_ShouldDeclareIntoAndReadBack()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql()
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); insert into insert_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name from @t");
+    }
+
+    [Fact]
+    public void OutputIntoTableVariable_QuotedIdentifiers_ShouldQuoteColumnsButNotVariable()
+    {
+        using var ctx = SqlServerTestContext.CreateQuoted();
+
+        ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql()
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); insert into [insert_entity] ([name]) output inserted.[id], inserted.[name] into @t ([id], [name]) values (@p0); select [id], [name] from @t");
+    }
+
+    [Theory]
+    [InlineData("t")]
+    [InlineData("@1bad")]
+    [InlineData("[@t]")]
+    [InlineData("\"@t\"")]
+    [InlineData("@t; drop table x")]
+    public void OutputIntoTableVariable_InvalidVariableName_ShouldThrow(string variableName)
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable(variableName, "id bigint, name nvarchar(100)");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void OutputIntoTableVariable_EmptyColumnDefinitions_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "");
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void OutputIntoTableVariable_NullColumnDefinitions_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", null!);
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

@@ -521,15 +521,68 @@ insert into simple_entity (name) output inserted.id, inserted.name into audit_lo
   terminals, because nothing reaches the client.
 * `OutputIntoThenOutput(...)` returns the ordinary returning builder, so `Single()`/`ToList()` still work;
   the statement carries both the `INTO` and the client `OUTPUT` clauses.
-* The target is an explicit table name — nextorm does not declare a table variable (`DECLARE @t TABLE ...`)
-  (tracked in [#127](https://github.com/AlexeyShirshov/nextorm/issues/127)). The target must already exist with columns that have the same names as the selected output
-  columns (the selected column list is reused as the target column list); the target name and columns are
-  quoted like any other identifier.
+* The target is an explicit table name that must already exist with columns that have the same names as
+  the selected output columns (the selected column list is reused as the target column list); the target
+  name and columns are quoted like any other identifier.
 * The same two methods are available on the `UPDATE` and `DELETE` returning builders (a `DELETE` reads the
   removed row through the `deleted` alias). A target name that is null or empty, or the identity-function
   form (`ReturningIdentity<TKey>()`, which selects no column), throws.
+
+### Writing into a table variable (`OutputIntoTableVariable`)
+
+The target may also be a **table variable** declared in the same batch. Call
+`OutputIntoTableVariable(variableName, columnDefinitions)` instead of `OutputInto`; nextorm emits the
+declaration, the DML and the read-back as one batch, so the variable is still in scope when the rows are
+read:
+
+```csharp
+var sql = ctx.CreateInsertBuilder<ISimpleEntity>()
+    .Value(x => x.Name, "a")
+    .Returning(x => new { x.Id, x.Name })
+    .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+    .ToSql();
+```
+
+```sql
+-- SQL Server (one batch)
+declare @t table (id bigint, name nvarchar(100)); insert into simple_entity (name) output inserted.id, inserted.name into @t (id, name) values (@p0); select id, name from @t
+```
+
+The same method is available on the `UPDATE` and `DELETE` returning builders (a `DELETE` reads the
+removed row through the `deleted` alias), keyed to the mutation the same way as `OutputInto`.
+
+* `variableName` must be a bare table-variable name: `@` followed by a letter or underscore and then
+  letters, digits and underscores (`@[A-Za-z_]\w*`). A bracketed or quoted identifier (`[@t]`, `"@t"`)
+  is an existing table, not a variable, and is rejected with `ArgumentException`; so is a name without
+  the leading `@`, and a null or empty declaration.
+* `columnDefinitions` is the **caller-supplied, trusted** body of the `DECLARE @t TABLE (...)` text. It
+  is embedded verbatim in the SQL and is **not** a parameter and **not** validated or escaped — never
+  pass user input there. The declared columns are ordinary storage columns: nextorm does not copy
+  `IDENTITY`, `COMPUTED` or `DEFAULT` markers from the source, so a generated identity value is simply
+  stored into the plain declared column.
+* The selected output columns are reused as the target and read-back column list, so the declared
+  columns must have the same names and compatible types. The read-back selects exactly those mapped
+  columns — never `SELECT *`.
+* No row order is guaranteed: the rows arrive in whatever order the engine writes them into the
+  variable, so treat the read-back as an unordered set.
+* `OutputIntoTableVariable(...)` returns the same [`OutputIntoBuilder`](xref:NextORM.Core.OutputIntoBuilder)
+  as `OutputInto`, with the same terminals `Execute()`/`ExecuteAsync()` (the DML affected-row count) and
+  `ToSql()` — there are no row terminals. The batch's final `SELECT` is what a raw execution reads back;
+  `Execute()` discards that row set, and the read-back offers no `@@ROWCOUNT`/rows-affected handle of its
+  own.
 * Only SQL Server implements `ISqlDialect.SupportsOutputInto`; every other provider throws
   `NotSupportedException` when the statement renders.
+
+The three forms differ in where the modified rows go and what reaches the client:
+
+| Form | Target | Returns to the client | Terminals |
+|---|---|---|---|
+| `OutputInto(targetTable)` | An existing table that must already be present | Nothing | `Execute()`/`ExecuteAsync()` (affected-row count), `ToSql()` |
+| `OutputIntoThenOutput(targetTable)` | An existing table | The modified rows (second `OUTPUT`) | `Single()`/`ToList()`/… plus `ToSql()` |
+| `OutputIntoTableVariable("@t", definitions)` | A table variable declared in the same batch | The read-back rows of the final `SELECT`, visible to a raw execution (`Execute()` discards them) | `Execute()`/`ExecuteAsync()` (affected-row count), `ToSql()` |
+
+SQL Server `OUTPUT`/`OUTPUT INTO` support is tracked in issue
+[#15](https://github.com/AlexeyShirshov/nextorm/issues/15) (closed).
 
 ## Bulk insert
 

@@ -29,7 +29,7 @@
 | Сырой SQL (целый запрос, composable-источник и сырые команды с параметрами/выходными параметрами/несколькими наборами результатов) | yes | yes | yes |
 | Несколько наборов результатов из одного батча (`AddQuery<TResult>` + `Execute`/`ExecuteAsync`) | yes (PostgreSQL, SQL Server, MySQL, MariaDB, SQLite) | yes | no |
 | Хранимые процедуры (`ExecuteProcedure`, `CommandType.StoredProcedure`) | yes (SQL Server, PostgreSQL, MySQL/MariaDB) | yes | yes |
-| Стриминг result-set (поток LOB, `ToDataReader`) | yes | yes | partial (сырой reader) |
+| Стриминг result-set (поток LOB, `ToDataReader`) | yes (последовательное потоковое чтение LOB на PostgreSQL/SQL Server; `ToDataReader` в SQLite буферизованный и без локатора; MySQL/MariaDB/ClickHouse и in-memory отклоняют) | yes | partial (сырой reader) |
 | Экспорт result-set в поток (JSON, CSV) | yes | partial (клиентская сериализация) | partial (клиентская сериализация) |
 
 ## Типы и маппинг
@@ -42,7 +42,7 @@
 | Колонки-длительности / interval | yes | yes | partial (только маппинг interval провайдером) |
 | Нативные JSON-документы | yes на PostgreSQL | partial (тип + `@>`/`#>>`/`Json.Value`; не полная библиотека `jsonb_*`) | partial (маппинг JSON-колонок + Npgsql `EF.Functions.Json*`) |
 | Массивы и higher-order функции над массивами | yes на PostgreSQL и ClickHouse | partial (операторы массивов PostgreSQL) | partial |
-| Row values / tuple | yes на PostgreSQL и ClickHouse | yes | partial |
+| Row values / tuple | yes — PostgreSQL `ROW`/`(row).fN` и ClickHouse `tuple`/`tupleElement`; плоский операнд сравнения `(a, b)` в MySQL/MariaDB/SQLite | yes | partial |
 | Range-типы и range поверх пары скалярных колонок | yes | partial | partial |
 | Collation и ordinal-семантика строк | yes | partial ([linq2db#5927](https://github.com/linq2db/linq2db/issues/5927)) | partial |
 | Соглашения об именах (например snake_case) | yes (opt-in, встроенное) | partial | partial |

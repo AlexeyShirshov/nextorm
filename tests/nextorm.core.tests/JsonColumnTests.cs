@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -166,5 +167,120 @@ public class JsonColumnTests
 
         comparer.Equals(first, first).Should().BeTrue();
         comparer.Equals(first, second).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ObjectConverter_ShouldRoundTripThroughJsonObject()
+    {
+        var converter = new JsonColumnConverter<ProbePoco, JsonObject>();
+
+        var obj = converter.ConvertToProvider(Sample()).Should().BeOfType<JsonObject>().Subject;
+        // No options => default serializer naming, i.e. the declared PascalCase property name.
+        obj["Name"]!.GetValue<string>().Should().Be("value");
+
+        var back = converter.ConvertFromProvider(obj).Should().BeOfType<ProbePoco>().Subject;
+        back.Values.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void ObjectConverter_NullModel_ShouldRoundTripNull()
+    {
+        var converter = new JsonColumnConverter<ProbePoco, JsonObject>();
+
+        converter.ConvertToProvider(null).Should().BeNull();
+        converter.ConvertFromProvider(null).Should().BeNull();
+    }
+
+    [Fact]
+    public void ObjectConverter_NonObjectRoot_ShouldThrowObjectRootGuard()
+    {
+        // A JSON array/primitive root cannot be stored in ClickHouse's object-rooted native JSON.
+        var converter = new JsonColumnConverter<List<int>, JsonObject>();
+
+        var act = () => converter.ConvertToProvider([1, 2, 3]);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*object-root*");
+    }
+
+    [Fact]
+    public void ObjectConverter_UndefinedElement_ShouldThrowObjectRootGuard()
+    {
+        var converter = new JsonColumnConverter<JsonElement, JsonObject>();
+
+        var act = () => converter.ConvertToProvider(default);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*object-root*");
+    }
+
+    [Fact]
+    public void ObjectConverter_JsonNullRoot_ShouldThrowObjectRootGuard()
+    {
+        // A JSON-literal null root is not a JSON object either; it must hit the same guard rather than
+        // being stored as an object.
+        var converter = new JsonColumnConverter<JsonElement, JsonObject>();
+        using var document = JsonDocument.Parse("null");
+
+        var act = () => converter.ConvertToProvider(document.RootElement);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*object-root*");
+    }
+
+    [Fact]
+    public void ObjectConverter_ShouldHonorSerializerOptions()
+    {
+        var options = new JsonColumnOptions
+        {
+            Storage = JsonColumnStorage.Native,
+            Options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower },
+        };
+        var converter = new JsonColumnConverter<ProbePoco, JsonObject>(options);
+
+        var obj = converter.ConvertToProvider(Sample()).Should().BeOfType<JsonObject>().Subject;
+
+        obj["name"]!.GetValue<string>().Should().Be("value");
+    }
+
+    [Fact]
+    public void PlanComparer_ShouldDistinguishJsonObjectConvertersWithDifferentOptions()
+    {
+        var comparer = new SelectExpressionPlanEqualityComparer(new QueryProvider());
+        var snake = new JsonColumnConverter<ProbePoco, JsonObject>(new JsonColumnOptions
+        {
+            Storage = JsonColumnStorage.Native,
+            Options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower },
+        });
+        var defaultOptions = new JsonColumnConverter<ProbePoco, JsonObject>();
+
+        var first = new SelectExpression(typeof(ProbePoco))
+        {
+            Index = 0,
+            ProviderType = typeof(JsonObject),
+            Converter = snake,
+        };
+        var sameConverterInstance = new SelectExpression(typeof(ProbePoco))
+        {
+            Index = 0,
+            ProviderType = typeof(JsonObject),
+            Converter = snake,
+        };
+        var differentOptions = new SelectExpression(typeof(ProbePoco))
+        {
+            Index = 0,
+            ProviderType = typeof(JsonObject),
+            Converter = defaultOptions,
+        };
+
+        // The same converter instance (as reused by the cached property metadata) keeps the plan identical...
+        comparer.Equals(first, sameConverterInstance).Should().BeTrue();
+        comparer.GetHashCode(first).Should().Be(comparer.GetHashCode(sameConverterInstance));
+
+        // ...while a converter carrying different serializer options is a distinct plan entry.
+        comparer.Equals(first, differentOptions).Should().BeFalse();
+
+        // And the difference is real: the options change the serialized property name.
+        snake.ConvertToProvider(Sample()).Should().BeOfType<JsonObject>()
+            .Which["name"]!.GetValue<string>().Should().Be("value");
+        defaultOptions.ConvertToProvider(Sample()).Should().BeOfType<JsonObject>()
+            .Which["Name"]!.GetValue<string>().Should().Be("value");
     }
 }

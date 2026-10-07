@@ -56,7 +56,7 @@ internal static class TupleSqlTranslator
         if (!node.Expression.Has<ParameterExpression>())
             return false;
 
-        if (TryGetInlineTupleArguments(node.Expression, out var arguments))
+        if (TryGetConstructorArguments(node.Expression, out var arguments))
         {
             if (index < 1 || index > arguments.Count)
                 return false;
@@ -74,7 +74,7 @@ internal static class TupleSqlTranslator
 
         if (!visitor.Dialect.SupportsTupleFunctions || visitor.Dialect.Tuple is not { } tuple)
             throw new NotSupportedException(
-                "Tuple element access requires a provider with a native tuple type (PostgreSQL, ClickHouse).");
+                $"Tuple element access is not supported by provider '{visitor.Dialect.GetType().Name}'.");
 
         if (visitor.IsParamMode)
         {
@@ -83,14 +83,68 @@ internal static class TupleSqlTranslator
         }
 
         Func<string, int, string?> renderElement = tuple.RenderElement;
-        if (renderElement is null)
+        var renderedElement = renderElement(visitor.VisitToString(node.Expression), index);
+        if (renderedElement is null)
             throw new NotSupportedException(
-                "Positional tuple element access requires a provider with a native tuple type that supports element access (PostgreSQL, ClickHouse).");
+                $"Positional tuple element access (.ItemN) on a server-side tuple is not supported by provider '{visitor.Dialect.GetType().Name}'.");
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(renderElement(visitor.VisitToString(node.Expression), index));
+        visitor.Builder!.Append(renderedElement);
         return true;
     }
+
+    /// <summary>
+    /// True when <paramref name="expression"/> is a tuple constructor (possibly under a <c>Convert</c>),
+    /// i.e. the direct operand of a comparison that a provider with a flat row constructor may render.
+    /// </summary>
+    internal static bool IsDirectTupleConstructor(Expression expression) => TypeFacts.UnwrapConvert(expression) switch
+    {
+        NewExpression newExpression when TypeFacts.IsTupleLike(newExpression.Type) => true,
+        MethodCallExpression call when call.Object is null
+            && call.Method.DeclaringType == typeof(Tuple)
+            && call.Method.Name == nameof(Tuple.Create) => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Rejects a comparison operand that is a tuple but not an inline row constructor on a provider with
+    /// the flat row form (MySQL/MariaDB/SQLite). Such an operand (a captured local, a parameter or a
+    /// tuple-typed member) would otherwise fold to a single <see cref="Tuple"/> parameter and reach the
+    /// driver as an unbindable value on a provider without a server-side row type.
+    /// </summary>
+    internal static void ValidateComparisonOperand(BaseExpressionVisitor visitor, Expression operand)
+    {
+        if (visitor.IsParamMode || !IsFlatRowConstructorProvider(visitor.Dialect))
+            return;
+        if (IsDirectTupleConstructor(operand) || !TypeFacts.IsTupleLike(operand.Type))
+            return;
+
+        throw new NotSupportedException(
+            $"A row comparison operand that is not an inline row constructor is not supported by provider '{visitor.Dialect.GetType().Name}'; " +
+            "both operands must be inline row constructors.");
+    }
+
+    /// <summary>
+    /// Rejects a flat-provider row constructor compared against a null literal. A row value is never a
+    /// nullable scalar, so the comparison has no SQL form; without this check it reaches the generic
+    /// "wrong position" rejection, which does not reflect the real reason.
+    /// </summary>
+    internal static void RejectNullComparisonOfFlatTupleConstructor(BaseExpressionVisitor visitor, Expression operand)
+    {
+        if (visitor.IsParamMode || !IsFlatRowConstructorProvider(visitor.Dialect) || !IsDirectTupleConstructor(operand))
+            return;
+
+        throw new NotSupportedException(
+            $"A row constructor cannot be compared to null by provider '{visitor.Dialect.GetType().Name}'.");
+    }
+
+    // ITupleRenderer encodes positional access as RenderElement returning null (PostgreSQL/ClickHouse
+    // return the field expression, MySQL/MariaDB/SQLite return null). Probing with a placeholder row keeps
+    // the check side-effect-free and independent of any specific provider type.
+    private static bool IsFlatRowConstructor(ITupleRenderer tuple) => tuple.RenderElement("row", 1) is null;
+
+    private static bool IsFlatRowConstructorProvider(ISqlDialect dialect)
+        => dialect.SupportsTupleFunctions && dialect.Tuple is { } tuple && IsFlatRowConstructor(tuple);
 
     private static void RenderConstructor(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
     {
@@ -104,7 +158,19 @@ internal static class TupleSqlTranslator
 
         if (!visitor.Dialect.SupportsTupleFunctions || visitor.Dialect.Tuple is not { } tuple)
             throw new NotSupportedException(
-                "Tuple construction requires a provider with a native tuple type (PostgreSQL, ClickHouse).");
+                $"Row constructors are not supported by provider '{visitor.Dialect.GetType().Name}'.");
+
+        // A provider whose ITupleRenderer has no positional element access renders the row constructor as
+        // the flat ANSI tuple "(a, b)" (MySQL/MariaDB/SQLite). That form is valid SQL only as an operand of
+        // a row comparison in WHERE/HAVING/JOIN ON; in any other position (projection, ORDER BY/GROUP BY, a
+        // function argument, or a comparison nested inside a function argument) it would be invalid or
+        // ambiguous, so it is rejected at preparation with a provider-named message. The clause origin is
+        // the visitor's predicate context; the position flag is scoped to one direct comparison operand.
+        if (IsFlatRowConstructor(tuple)
+            && !(visitor.IsPredicateContext && visitor.IsDirectTupleComparisonOperand))
+            throw new NotSupportedException(
+                $"A row constructor in this position is not supported by provider '{visitor.Dialect.GetType().Name}'; " +
+                "it is supported only as a direct comparison operand in WHERE/HAVING/JOIN ON.");
 
         var fields = new string[args.Count];
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
@@ -114,9 +180,15 @@ internal static class TupleSqlTranslator
         visitor.Builder!.Append(tuple.RenderConstructor(fields));
     }
 
-    private static bool TryGetInlineTupleArguments(Expression expression, out IReadOnlyList<Expression> arguments)
+    /// <summary>
+    /// Extracts the component arguments of an inline tuple constructor
+    /// (<c>Tuple.Create(a, b, ...)</c>, <c>new Tuple&lt;...&gt;(...)</c> or
+    /// <c>new ValueTuple&lt;...&gt;(...)</c>, possibly under a <c>Convert</c>). Returns <c>false</c> for
+    /// any other expression.
+    /// </summary>
+    internal static bool TryGetConstructorArguments(Expression expression, out IReadOnlyList<Expression> arguments)
     {
-        switch (expression)
+        switch (TypeFacts.UnwrapConvert(expression))
         {
             case NewExpression newExpression when TypeFacts.IsTupleLike(newExpression.Type):
                 arguments = newExpression.Arguments;

@@ -106,10 +106,15 @@ var rows = dataContext.From<IReservation>()
 
 ## `json` и `jsonb`
 
-PostgreSQL — единственный провайдер с нативными типами `json`/`jsonb`. JSON-операнды — это
-сопоставленные колонки, другие JSON-функции или параметры, чьё значение во время выполнения —
-`JsonDocument`/`JsonElement`/`JsonNode` (Npgsql биндит их как `jsonb`). Семейство `jsonb_*` покрывает
-построение, извлечение, вложенность и агрегацию: `jsonb_build_object`, `jsonb_agg`, `json_get_text`,
+PostgreSQL — единственный провайдер с нативными типами `json`/`jsonb`. JSON-операнды — это нативные
+JSON-колонки (свойство `[JsonColumn]` отображает CLR-объект на `jsonb` на чтение и запись), другие
+JSON-функции или параметры, чьё значение во время выполнения — `JsonDocument`/`JsonElement`/`JsonNode`
+(Npgsql биндит их как `jsonb`). «Голое» свойство `JsonNode`/`JsonNode?` (объявленное ровно как `JsonNode`,
+не `JsonObject`/`JsonArray`) читает нативную колонку `json`/`jsonb` для корней-объектов, массивов и
+скаляров, в скалярной и составной проекциях; SQL `NULL` и JSON-литерал `null` оба становятся CLR `null`.
+Объявленные свойства `JsonObject`/`JsonArray` и «голая» *скалярная* проекция `JsonDocument`/`JsonElement`
+в эту поддержку не входят. Семейство `jsonb_*` покрывает построение,
+извлечение, вложенность и агрегацию: `jsonb_build_object`, `jsonb_agg`, `json_get_text`,
 `json_cast`, операторы `->`, `->>`.
 
 ```csharp
@@ -319,11 +324,56 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 общие (read) CTE — в [Общих табличных выражениях](../08-cte.md). Остальные провайдеры отклоняют
 `With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 
+## Сырые строки и composite-типы
+
+Сырая инструкция, проецирующая одну колонку-запись PostgreSQL — анонимный `ROW(...)` или
+зарегистрированный вызывающим именованный composite, — может быть материализована в соответствующий
+`System.Tuple<...>` или именованный CLR-тип. Это аналог результата `tuple(...)` в ClickHouse; полная
+матрица форм, конфигурация и контракт ошибок — в
+[Сыром SQL](../12-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
+
+```csharp
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring) as r from complex_entity order by id");
+
+var rows = result.Read<System.Tuple<int, string?>>();
+// rows[0].Item1 == 1, rows[0].Item2 == "..."
+```
+
+Анонимному `ROW(...)` регистрация не нужна; именованный composite должен быть зарегистрирован в
+принадлежащем вызывающему `NpgsqlDataSource` (`MapComposite<Point>()`), а контекст создан из
+`dataSource.CreateConnection()`. Поддерживается только одна колонка-запись. Неподдерживаемые формы —
+`ValueTuple`, арность ≥8, вложенный или пустой `ROW`, несколько или смешанные колонки-записи,
+незарегистрированный composite и composite, объявленный как `System.Tuple`, — бросают
+`NotSupportedException`; `NULL` в поле, объявленном non-nullable value-типом, бросает
+`InvalidOperationException` вместо подстановки `default`. См.
+[Сырой SQL](../12-raw-sql.md#сырые-postgresql-строки-и-composite-типы).
+
+Классификация composite авторитетна: колонка считается именованным composite только тогда, когда это подтверждает загруженный каталог типов Npgsql, — никогда по dotted-имени типа данных или форме исключения. На чистом каталоге неотображённый некомпозитный тип (например `hstore` или `ltree`) теперь даёт обычную ошибку "None of the result-set columns (...) matches a mapped property", а не диагностику named-composite; настоящий composite, чей тип отсутствует в загруженном каталоге, деградирует до той же обычной ошибки, пока нет авторитетных метаданных типа (осознанный компромисс — холодный каталог не даёт вердикт о composite вместо вводящего в заблуждение). Composite, зарегистрированный через `MapComposite<T>`, по-прежнему материализуется, а незарегистрированный composite на прогретом каталоге по-прежнему сообщает специфичный для composite guard (его нужно зарегистрировать, прежде чем читать). Контексты nextorm используют общий на уровне процесса неявный источник данных Npgsql, ключом которого служит строка подключения; перезагрузка типов должна выполняться для источника, связанного с той же строкой подключения, что используется контекстом.
+
+Авторы провайдеров управляют классификацией composite через protected-шов `DataContext.IsGenuineCompositeColumn(DbDataReader, int)` — единственный предикат, к которому обращается маппер сырых строк на обоих путях, одноколоночном и многоколоночном. Базовая реализация возвращает `false` (авторитетного вердикта о composite нет) и зеркалит `SupportsRawRowColumns`; `PostgresDataContext` переопределяет его через `NpgsqlDataReader.GetPostgresType(ordinal) is PostgresCompositeType`.
+
 ## Динамическая схема записи
 
 `jsonb_to_record`/`jsonb_to_recordset` доступны как табличные функции, схема результата которых
-объявляется типом строки вызывающего и рендерится списком определений колонок в псевдониме
-(`AS x(a int, b text)`). См. [Динамическая схема результата](../11-table-valued-functions.md#dynamic-result-schema).
+объявляется типом строки вызывающего и рендерится списком определений колонок в псевдониме.
+PostgreSQL **требует** такой список определений колонок, например `AS x(a int, b text)`:
+
+```sql
+select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+```
+
+Свободный/частичный список колонок **без** объявленного вызывающим `TRow` для этих двух функций не
+поддерживается. Сценарии без схемы покрываются существующими путями:
+
+* хранилище `[DynamicColumns]` (`Dictionary<string, object?>`) собирает не сопоставленные колонки
+  строки — см. [Динамические колонки](../27-dynamic-columns.md);
+* сырой путь чтения — колонки [`ResultSet`](../12-raw-sql.md#несколько-наборов-результатов) читаются
+  по `FieldCount`/`ColumnNames` без материализации, а [`ToDataReader`](../26-large-objects.md) отдаёт
+  их как `DbDataReader`;
+* `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` разворачивают JSON-объект в строки
+  ключ/значение — см. [Динамическая схема результата](../11-table-valued-functions.md#dynamic-result-schema).
+
 Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
 свободный список колонок) остаются вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).

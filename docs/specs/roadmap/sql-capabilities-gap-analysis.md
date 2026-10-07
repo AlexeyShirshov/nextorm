@@ -43,7 +43,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`) | **<span style="color:green">Done</span> on SQL providers** (any nesting depth; join-projection outer references included) and on the in-memory provider for depth-one scalar/aggregate/`EXISTS`/`IN` (deeper forms throw `NotSupportedException`) |
 > | 27 | Materialize a query into a table (CTAS: `ToTable`/`ToTempTable`) | **<span style="color:green">Done</span>** on PostgreSQL, SQLite, MySQL, MariaDB, SQL Server (via `SELECT ... INTO`) and ClickHouse (persistent, `ENGINE = MergeTree`); the temporary `ToTempTable` form is on PostgreSQL/SQLite/MySQL/MariaDB only |
 > | 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy` + chunked `VALUES`; `BulkInsertOptions`/`BulkInsertOptionsBuilder`) | **<span style="color:green">Done</span>** |
-> | 29 | Row values (`System.Tuple`/`ValueTuple`) cross-provider (`ROW`/`tupleElement`, comparisons) | **<span style="color:green">Done</span>** on PostgreSQL and ClickHouse |
+> | 29 | Row values (`System.Tuple`/`ValueTuple`) cross-provider (`ROW`/`tupleElement`, comparisons) | **<span style="color:green">Done</span>** on PostgreSQL and ClickHouse; **flat `(a, b)` constructor on MySQL/MariaDB/SQLite** as a direct `==`/`!=` predicate operand (inline `.ItemN` folds; projection/ordering/grouping/function arguments and server-side `.ItemN` rejected). Raw row materialisation shipped on PostgreSQL ([#194](https://github.com/AlexeyShirshov/nextorm/issues/194)); tuple `IN`/`Contains` ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)) over a flat value list (arity 1..7) shipped on PostgreSQL/ClickHouse/MySQL/MariaDB/SQLite, while SQL Server rejects it; a tuple-typed `QueryCommand` RHS and `Rest`/nested tuples remain deferred |
 > | 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping | **P1+P2+P3 shipped; P4 <span style="color:orange">out of scope</span>** ([EF Core integration](../../advanced/integration-efcore.md)) — `CreateNextOrmContext`/`UseNextOrm` reuse the EF connection/current transaction and map entities from `IModel`; `ToNextOrm` translates a bounded `IQueryable` subset; the opt-in DML bridge (`SaveChanges`) is explicitly out of scope; shared-transaction tests on PostgreSQL/SQL Server/MySQL deferred to [#106](https://github.com/AlexeyShirshov/nextorm/issues/106) |
 > | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core/Dapper/ADO.NET) transaction | **<span style="color:green">Done</span>** on SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse and in-memory reject |
 > | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **<span style="color:green">Done</span>** (PostgreSQL/MySQL/MariaDB/SQL Server; SQLite/ClickHouse/in-memory reject) |
@@ -447,14 +447,30 @@ to the ledger on 2026-09-29.
     one batch (`DROP TABLE IF EXISTS` + `CREATE TEMPORARY TABLE ... AS SELECT` + read) on the providers above
     that support a temporary form; `From(source)` reads it through `TableAlias`. Shipped:
     [Materializing a query into a table](../../guide/18-create-table-as.md) (`ToTable`/`ToTempTable`/`AsTempTable`).
-22. **PostgreSQL row values — <span style="color:green">shipped</span> (PostgreSQL + ClickHouse), with phase-2/4 remainders.** The tuple
-    surface moved to the cross-provider capability object [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple)
-    ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer)): PostgreSQL renders `ROW(a, b)` and `(row).fN`,
-    ClickHouse keeps `tuple(a, b)`/`tupleElement` (same SQL). `Tuple.Create`/`new Tuple`/`new ValueTuple`
+22. **Row values — <span style="color:green">shipped</span> (PostgreSQL + ClickHouse; flat constructor on MySQL/MariaDB/SQLite).**
+    The tuple surface moved to the cross-provider capability object
+    [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple) ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer)):
+    PostgreSQL renders `ROW(a, b)` and `(row).fN`, ClickHouse keeps `tuple(a, b)`/`tupleElement` (same SQL),
+    and MySQL/MariaDB/SQLite render the flat ANSI `(a, b)` (`RenderElement == null`). `Tuple.Create`/`new Tuple`
     construct, an inline constructor's `.ItemN` folds to the argument, and `System.Tuple<,> ==` is
-    reinterpreted as a row-value comparison. Still open: tuple `IN`/`Contains`, raw `ROW(...)`
-    materialisation on PostgreSQL (`EnableRecords()`), and the `(a, b)` constructor on MySQL/MariaDB/SQLite.
-    Shipped: [Scalar functions](../../scalar-functions/index.md).
+    reinterpreted as a row-value comparison. On MySQL/MariaDB/SQLite a flat constructor is accepted only as a
+    direct `==`/`!=` comparison operand in `WHERE`/`HAVING`/`JOIN ON`; in `Select`/`ORDER BY`/`GROUP BY` or as
+    a function argument, and for any server-side `.ItemN`, preparation throws `NotSupportedException` naming
+    the provider; SQL Server still rejects constructors. `<`/`>`/`<=`/`>=` and relational `ValueTuple`
+    operands are C#-inexpressible (a language boundary, no product gap). Tuple `IN`/`Contains` over a
+    value list of flat `System.Tuple`/`System.ValueTuple` entries of arity 1..7 is **shipped**
+    ([#193](https://github.com/AlexeyShirshov/nextorm/issues/193)): PostgreSQL `ROW(a, b) IN (ROW(...), ...)`,
+    ClickHouse `tuple(a, b) IN (tuple(...), ...)` (`GLOBAL IN` for `global_in`), MySQL/MariaDB
+    `(a, b) IN ((...), ...)` and SQLite `(a, b) IN (VALUES (...), ...)`; SQL Server rejects it with
+    `NotSupportedException` (`SQL Server does not support tuple IN/Contains translation.`). An empty list
+    is `1 = 0`, a null collection throws `ArgumentNullException`, rows with null components match via
+    explicit guarded arms, and arity ≥8/`Rest`/nested tuples throw `NotSupportedException`. A tuple-typed
+    `QueryCommand` (subquery) RHS and `Rest`/nested tuples are deferred (not supported yet). Materialising a raw `ROW(...)` on
+    PostgreSQL is **shipped**: an anonymous `ROW(...)` (arity 1..7) or a caller-registered named composite
+    materialises into the matching `System.Tuple<...>`/named type through a caller-owned
+    `NpgsqlDataSource` (tracking issue [#194](https://github.com/AlexeyShirshov/nextorm/issues/194));
+    `ValueTuple`, arity ≥8, nested/empty/multiple/mixed record columns and unregistered or mis-declared
+    composites stay guarded. Shipped: [Scalar functions](../../scalar-functions/index.md).
 23. **Bulk insert / bulk copy — <span style="color:green">shipped</span>, hybrid native + portable fallback.** `BulkInsertInto<T>()` writes a
     large set through the provider's native API where one exists (PostgreSQL `COPY BINARY`, SQL Server
     `SqlBulkCopy`) and otherwise falls back to a chunked multi-row `INSERT ... VALUES` (SQLite, and
@@ -541,12 +557,23 @@ to the ledger on 2026-09-29.
     now on `SqlFunctions.Postgres`, gated by the existing PostgreSQL-only capability flags.
     Shipped: [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql)
     and [JSON and JSONB](../../guide/14-json.md) (+RU).
-38. **SQL Server built-in function gaps — <span style="color:green">shipped</span>.** `PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`,
-    `STRING_ESCAPE`, `FORMAT`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`,
-    `SQUARE`, the trigonometric functions and the SQL Server JSON constructors/aggregates
-    (`JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/`JSON_PATH_EXISTS`) are
-    exposed through `SqlServerFunctions` / `ISqlServerFunctions`; `ASCII`/`CHAR`/`TRANSLATE` inherit from
-    `CommonFunctions` (item 36), and `LOG10` stays on `Math.Log10`. Shipped:
+38. **SQL Server built-in function gaps — <span style="color:green">shipped</span>.** The original batch (`PATINDEX`, `QUOTENAME`,
+    `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `FORMAT`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`,
+    `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`, `SQUARE`, the trigonometric functions and the SQL Server JSON
+    constructors/aggregates `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/
+    `JSON_PATH_EXISTS`) is joined by the linq2db-v6.5.0 reconciliation ([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)):
+    61 pinned T-SQL scalars = **51 covered + 10 excluded** (connection/session/statement scope). The 47
+    additions are the clock/offset/`*FROMPARTS` date family (`SYSDATETIME`/`SYSDATETIMEOFFSET`/
+    `SYSUTCDATETIME`/`SWITCHOFFSET`/`TODATETIMEOFFSET`/`TIMEFROMPARTS`/`SMALLDATETIMEFROMPARTS`/
+    `DATETIMEFROMPARTS`/`DATETIME2FROMPARTS`/`DATETIMEOFFSETFROMPARTS`; FROMPARTS 6 total/5 new, date 13
+    total/10 new), the binary/checksum set (`CHECKSUM`/`BINARY_CHECKSUM`/`COMPRESS`/`DECOMPRESS`), the
+    `RAND`/`STUFF` scalars and the A-D metadata families (`COL_LENGTH`/`COL_NAME`/`IDENT_INCR`/`IDENT_SEED`/
+    `INDEX_COL`/`OBJECT_*`/`STATS_DATE`, `DB_ID`/`DB_NAME`/`ORIGINAL_DB_NAME`/`SCHEMA_ID`/`SCHEMA_NAME`/
+    `TYPE_ID`/`TYPE_NAME`, `FILEGROUP_*`/`FILE_ID`/`FILE_IDEX`/`FILE_NAME`,
+    `CURRENT_TIMEZONE(_ID)`/`FORMATMESSAGE`/`GETANSINULL`/`ISDATE`/`ISNUMERIC`/`PARSENAME`/
+    `PUBLISHINGSERVERNAME`/`STR`). All are exposed through `SqlServerFunctions` /
+    `ISqlServerFunctions`, gated per name; `ASCII`/`CHAR`/`TRANSLATE` inherit from `CommonFunctions`
+    (item 36), and `LOG10` stays on `Math.Log10`. Shipped:
     [`guide/provider-specific/sqlserver.md`](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (+RU).
 39. **MySQL built-in function gaps — <span style="color:green">done</span>.** `SqlFunctions.MySql` (`MySqlFunctions`) is new;
     `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`,
@@ -661,6 +688,19 @@ to the ledger on 2026-09-29.
     [Limitations](../../advanced/limitations.md). Docs:
     [Connections](../../infrastructure/02-connections.md#command-timeout) (EN+RU).
 
+55. **Server-version gates (G13, linq2db `#5933`/`#5948`/`#5952`) — <span style="color:green">shipped</span> (issue #141).** The provider carries an
+    explicitly configured server `Version` (a `Version` parameter on the provider context constructor);
+    nextorm never probes the live server. PostgreSQL enables the ANSI aggregate `FILTER (WHERE ...)` at
+    9.4+ and rejects it with `NotSupportedException` below that, while an unset version keeps today's
+    ≥9.4 assumption; MariaDB enables `UPDATE ... RETURNING` only at an explicit 13.0+
+    (`SupportsUpdateReturning`), with unset/older rejecting it, and insert/delete `RETURNING` and the
+    `ANY_VALUE` (13.2) gate unchanged. PostgreSQL enforces one immutable version per **concrete context
+    type** for the process lifetime — a different version for the same type throws `InvalidOperationException`,
+    so several PostgreSQL versions in one process need distinct context subclasses; MariaDB imposes no such
+    guard, because its gated `UPDATE ... RETURNING` is a mutation whose SQL is not plan-cached.
+    Shipped: [PostgreSQL provider](../../providers/postgres.md), [MariaDB provider](../../providers/mariadb.md),
+    [Limitations](../../advanced/limitations.md).
+
 ## 6. Implementation plan
 
 This is the original per-workstream plan, kept as a status ledger. Workstreams that touch the same files
@@ -698,7 +738,7 @@ developed in parallel on the same working tree.
 | 26 | Warm-path plan-build (CTE / recursive CTE / `Join4` / `IN`-list) | **Closed (decision)** | `QueryCommand*.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, `Visitors/`, `EntityBuilder.cs`, `JoinedEntityBuilder.cs` | `SqliteBenchmarkFeaturesFairCached`, SQL-generation tests |
 | 27 | Materialize a query into a table (`ToTable`/`ToTempTable`; `CREATE TABLE ... AS SELECT` / SQL Server `SELECT ... INTO` / ClickHouse `ENGINE = MergeTree`) | **<span style="color:green">Done</span>** ([Materializing a query](../../guide/18-create-table-as.md)) | `Query/Mutations/CreateTableAsCommand.cs`, `Query/CreateTableAsClause.cs`, `Builders/{CreateTableOptions,TempTableExtensions}.cs`, `DataContext/SqlMutationBuilder.cs`, `DataContext/SqlBuilder.cs`, `DataContext/QueryPlanner.cs`, `DataContext/Dialect/*`, provider dialects, `DataContext/DataContext.cs` | `CommonTestSuite.CreateTableAs.cs`, SQL-generation tests |
 | 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy`; chunked `VALUES` fallback + G5 returning/ignore/identity) | **<span style="color:green">Done</span>** ([Bulk insert](../../guide/20-bulk-insert.md)) | `Builders/BulkInsertBuilder.cs`, `Builders/BulkInsertReturningBuilder.cs`, `Query/Mutations/BulkInsertCommand.cs`, `DataContext/{DataContext,PortableBulkInsertExecutor,SyncToAsyncEnumerable}.cs`, `DataContext/Dialect/*`, `DataContext/SqlMutationBuilder.cs`, provider dialects/contexts | `CommonTestSuite.BulkInsert.cs`, SQL-generation tests |
-| 29 | Row values (`System.Tuple`) cross-provider: PostgreSQL `ROW`/`(row).fN`, ClickHouse `tuple`/`tupleElement`, constructor fold, row comparison | **<span style="color:green">Done</span> (PostgreSQL + ClickHouse)** | `Visitors/TupleSqlTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `Visitors/TypeFacts.cs`, `Dialect/DialectCapabilities.cs`, `PostgresDialect.cs`, `ClickHouseDialect.cs` | SQL-generation tests |
+| 29 | Row values (`System.Tuple`) cross-provider: PostgreSQL `ROW`/`(row).fN`, ClickHouse `tuple`/`tupleElement`, MySQL/MariaDB/SQLite flat `(a, b)` comparison operand, constructor fold, row comparison | **<span style="color:green">Done</span> (PostgreSQL + ClickHouse; MySQL/MariaDB/SQLite flat constructor)** | `Visitors/TupleSqlTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `Visitors/TypeFacts.cs`, `Dialect/DialectCapabilities.cs`, `PostgresDialect.cs`, `ClickHouseDialect.cs`, `nextorm.mysql/MySqlDialect.cs`, `nextorm.sqlite/SqliteDialect.cs` | SQL-generation tests; SQLite/MySQL/MariaDB execution |
 | 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping (P1), `UseNextOrm`/DI (P2) and bounded `IQueryable` translation (P3); opt-in DML bridge (P4) out of scope | **P1+P2+P3 shipped; P4 <span style="color:orange">out of scope</span>; shared-transaction tests deferred to [#106](https://github.com/AlexeyShirshov/nextorm/issues/106)** ([EF Core integration](../../advanced/integration-efcore.md)) — `CreateNextOrmContext` + `NextOrmModelMapper.Register` (P1), `UseNextOrm`/`GetNextOrmContext`/`AddNextOrmFromDbContext` (P2), `ToNextOrm` bounded subset (P3) | `src/nextorm.entityframeworkcore/{EntityFrameworkCoreExtensions,NextOrmDbContextExtensions,NextOrmQueryableExtensions,NextOrmOptionsExtension,NextOrmModelMapper}.cs`; prerequisite `DataContext/Roles/ITransactionManager.cs` — **<span style="color:green">Done</span>** ([Transactions](../../guide/21-transactions.md)) | `tests/nextorm.entityframeworkcore.tests/{CreateNextOrmContextTests,NextOrmModelMapperTests,EfCoreSharedTransactionTests,UseNextOrmTests,AddNextOrmFromDbContextTests,ToNextOrmTests}.cs` |
 | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core / Dapper / ADO.NET) transaction, `DbCommand.Transaction` on every execution path | **<span style="color:green">Done</span>** ([Transactions](../../guide/21-transactions.md)) | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `DataContext/{DataContext,QueryExecutor,ResultSetEnumerator}.cs`, `DataContext/Cache/DbPreparedQueryCommand.cs`, `DataContext/Dialect/*` | `TransactionTests.cs` (SQLite core + ClickHouse), `CommonTestSuite.Transactions.cs`, `EfCoreSharedTransactionTests.cs` |
 | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **<span style="color:green">Done</span>** ([Row locking](../../querying/03-provider-specifics.md#row-locking-for-update--for-share)) | `DataContext/Dialect/DialectCapabilities.cs`, `DataContext/SqlBuilder.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `Query/{LockClause,LockWaitMode}.cs`, `nextorm.{postgres,mysql,mariadb,sqlserver}/*Dialect.cs` | SQL-generation tests; `CommonTestSuite.Locking.cs` two-transaction `SKIP LOCKED` |

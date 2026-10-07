@@ -64,3 +64,18 @@ public class DynamicColumnsEntity
     [DynamicColumns]
     public Dictionary<string, object?> Extra { get; set; } = new();
 }
+
+/// <summary>A mapped entity whose physical table/column names carry a backtick and a backslash.</summary>
+[SqlTable("we`ird\\table")]
+public interface ISpecialCharEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("col`umn")]
+    int Backtick { get; set; }
+
+    [Column("back\\slash")]
+    int Backslash { get; set; }
+}

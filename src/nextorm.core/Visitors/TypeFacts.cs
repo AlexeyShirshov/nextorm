@@ -1,4 +1,6 @@
 using System.Linq.Expressions;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace NextORM.Core;
 
@@ -60,7 +62,9 @@ internal static class TypeFacts
 
     /// <summary>
     /// True for a type a projection maps to a single column: the primitives, strings, dates, decimals,
-    /// GUIDs and nullables, plus an array (<c>T[]</c>, covering binary <c>byte[]</c>). A tuple is
+    /// GUIDs and nullables, plus an array (<c>T[]</c>, covering binary <c>byte[]</c>). A bare
+    /// <see cref="JsonNode"/> is included by exact type (the native <c>json</c>/<c>jsonb</c> read path);
+    /// the derived <c>JsonObject</c>/<c>JsonArray</c>/<c>JsonValue</c> are not. A tuple is
     /// deliberately excluded because <c>new Tuple&lt;...&gt;(a, b)</c> is a multi-column constructor
     /// projection; a native <c>Tuple(...)</c> column is recognised separately by
     /// <see cref="IsTupleType"/> at the non-<c>NewExpression</c> call site.
@@ -73,8 +77,22 @@ internal static class TypeFacts
         || type == typeof(TimeSpan)
         || type == typeof(decimal)
         || type == typeof(Guid)
+        || type == typeof(JsonNode)
         || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
         || type.IsArray;
+
+    /// <summary>
+    /// True for the JSON DOM scalar types that are explicitly named as a bare top-level projection
+    /// limitation: <see cref="JsonObject"/>, <see cref="JsonDocument"/> and <see cref="JsonElement"/>.
+    /// These have a provider representation (native <c>JSON</c>) but no single-column projection shape
+    /// of their own, so <c>Select(x =&gt; x.Doc)</c> over such a property (with no <c>[JsonColumn]</c>
+    /// converter) is rejected up front. The exact <see cref="JsonNode"/> type is deliberately excluded:
+    /// it is a recognised single-column scalar (see <see cref="IsSingleColumnProjection"/>), and a
+    /// <see cref="Nullable{T}"/> wrapping <see cref="JsonElement"/> is handled by the nullable branch
+    /// there. Used by the query preparer to fail fast instead of building an empty select list.
+    /// </summary>
+    internal static bool IsBareDomScalar(Type type) =>
+        type == typeof(JsonObject) || type == typeof(JsonDocument) || type == typeof(JsonElement);
 
     /// <summary>
     /// True for the <see cref="System.Tuple"/> family (arity 1..7), the CLR shape the ClickHouse
@@ -107,6 +125,38 @@ internal static class TypeFacts
 
     /// <summary>True for either the <see cref="Tuple"/> or the <see cref="ValueTuple"/> family.</summary>
     internal static bool IsTupleLike(Type type) => IsTupleType(type) || IsValueTupleType(type);
+
+    /// <summary>
+    /// True for any arity of the <see cref="System.Tuple"/> / <see cref="System.ValueTuple"/> families,
+    /// including the 8-element <c>Rest</c> form that <see cref="IsTupleLike"/> deliberately excludes, and
+    /// for a <see cref="Nullable{T}"/> wrapping a value-tuple (the recognisable nullable tuple shape; a
+    /// nullable <see cref="System.Tuple"/> is not legal CLR). Used to route a tuple-valued value list to
+    /// the tuple translator so an unsupported arity or a nullable element is rejected with an explicit
+    /// message instead of falling through to the scalar value-list path.
+    /// </summary>
+    internal static bool IsTupleFamily(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        if (!type.IsGenericType)
+            return false;
+
+        var name = type.GetGenericTypeDefinition().FullName;
+        return name is not null
+            && (name.StartsWith("System.Tuple`", StringComparison.Ordinal)
+                || name.StartsWith("System.ValueTuple`", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The number of components of a tuple type in the <see cref="Tuple"/>/<see cref="ValueTuple"/>
+    /// family (arities 1..7 are supported by the tuple value-list renderer; the 8-element <c>Rest</c>
+    /// form is out of scope), or <c>0</c> for any other type. A <see cref="Nullable{T}"/> wrapper is
+    /// unwrapped so a nullable value-tuple reports the arity of its underlying tuple.
+    /// </summary>
+    internal static int TupleArity(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        return IsTupleFamily(type) ? type.GetGenericArguments().Length : 0;
+    }
 
     /// <summary>
     /// True when a numeric CLR conversion actually changes the type and therefore has to be emitted

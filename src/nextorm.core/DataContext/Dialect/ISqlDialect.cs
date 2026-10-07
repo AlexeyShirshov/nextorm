@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace NextORM.Core;
 
@@ -278,11 +279,29 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsArrayJoin { get; }
     /// <summary>
-    /// True when the provider has a JSON type and can render the JSON surface: the <c>json</c>/<c>jsonb</c>
-    /// functions and the access/containment operators in <see cref="CommonFunctions"/>. The safe default is
-    /// <c>false</c>; only PostgreSQL opts in today.
+    /// True when the provider has a native JSON storage type and can store a <see cref="JsonColumnAttribute"/> as it
+    /// (rather than as text): the <see cref="JsonColumnStorage.Auto"/>/<see cref="JsonColumnStorage.Native"/>
+    /// storage forms resolve to <see cref="NativeJsonProviderType"/> when this is <c>true</c>. The safe
+    /// default is <c>false</c>; PostgreSQL and ClickHouse opt in today. This flag does <b>not</b> gate the
+    /// PostgreSQL <c>json</c>/<c>jsonb</c> functions and operators — that surface is
+    /// <see cref="SupportsPostgresJsonSql"/>.
     /// </summary>
     bool SupportsJson { get; }
+    /// <summary>
+    /// True when the provider can render the PostgreSQL JSON surface: the <c>json</c>/<c>jsonb</c> functions
+    /// and the access/containment operators translated by <c>JsonSqlTranslator</c>. The safe default is
+    /// <c>false</c>; only PostgreSQL opts in. Declared as a default interface method so existing external
+    /// implementations keep compiling and so a provider with native JSON storage (ClickHouse) does not
+    /// accidentally admit PostgreSQL JSON syntax.
+    /// </summary>
+    bool SupportsPostgresJsonSql => false;
+    /// <summary>
+    /// The CLR type the provider's native JSON representation materializes as (and binds a parameter to),
+    /// consulted only when native JSON storage is selected by <see cref="SupportsJson"/>. The safe default is
+    /// <see cref="JsonElement"/>; ClickHouse overrides it with <c>JsonObject</c>. Declared as a default
+    /// interface method so existing external implementations keep compiling.
+    /// </summary>
+    Type NativeJsonProviderType => typeof(JsonElement);
     /// <summary>
     /// True when the provider can render the JSON-as-text functions of <see cref="CommonFunctions"/>
     /// (<c>json_value</c>, <c>json_query</c>, <c>json_modify</c>, <c>isjson</c>), where JSON is stored in
@@ -1277,6 +1296,15 @@ public interface ISqlDialect
     /// unsigned <c>numbers</c> column to a type the row reader supports.
     /// </summary>
     string WrapTableFunction(string name, string call);
+
+    /// <summary>
+    /// Wraps the rendered table-function call with the structured, already-rendered arguments, or
+    /// returns it unchanged. A dialect that needs an individual argument intact (SQLite rewrites the
+    /// FTS5 <c>fts5(table, query)</c> placeholder to the native <c>table(query)</c> form) uses this
+    /// overload so it never has to reparse the serialized call text. The default forwards to
+    /// <see cref="WrapTableFunction(string, string)"/> so existing implementations keep compiling.
+    /// </summary>
+    string WrapTableFunction(string name, string call, IReadOnlyList<string> arguments) => WrapTableFunction(name, call);
     /// <summary>
     /// Whether the dialect supports the <c>FINAL</c> table modifier (ClickHouse). When <c>false</c>, a
     /// command that carries it is rejected when its SQL is built.
@@ -1386,6 +1414,15 @@ public interface ISqlDialect
     /// dialect that opts in also overrides <see cref="MakeReturning"/>.
     /// </summary>
     bool SupportsReturning => false;
+    /// <summary>
+    /// Whether the dialect can append <c>RETURNING &lt;columns&gt;</c> to a single-table <c>UPDATE</c>.
+    /// Defaults to <see cref="SupportsReturning"/> so a dialect whose <c>RETURNING</c> support covers
+    /// every statement keeps working unchanged. Overridden separately where the server's
+    /// <c>UPDATE ... RETURNING</c> appears at a different version than <c>INSERT</c>/<c>DELETE</c>
+    /// (MariaDB 13.0+). Declared as a default interface method so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    bool SupportsUpdateReturning => SupportsReturning;
     /// <summary>
     /// Whether the dialect can place an <c>OUTPUT inserted.&lt;column&gt;</c> clause on an
     /// <c>INSERT</c> so the statement returns the generated column (SQL Server). Declared as a default

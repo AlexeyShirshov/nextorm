@@ -131,6 +131,28 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// stale cached plan.
     /// </summary>
     internal bool ShapeScanned;
+    /// <summary>
+    /// Whether a tuple-valued <c>IN</c>/<c>Contains</c> appears in a clause whose captured-collection
+    /// shape is <b>not</b> folded into the plan key (HAVING, a JOIN condition, a SELECT column or a
+    /// subquery nested in one of those). The rendered SQL of such a clause depends on the collection's
+    /// current shape, so reusing a cached plan built for another shape would be wrong; the planner reads
+    /// this flag and suppresses the call-local cache instead of mutating the sticky <see cref="Cache"/>
+    /// flag. A false positive only forgoes caching (harmless); a false negative would be a wrong result.
+    /// </summary>
+    internal bool HasUnkeyedTupleInValues;
+    /// <summary>
+    /// Whether a scalar-valued (non-tuple) captured-collection <c>IN</c>/<c>Contains</c> appears in a
+    /// clause whose captured-collection shape is <b>not</b> folded into the plan key, including the
+    /// WHERE/PREWHERE of a descendant command rendered through this one (for example the referenced query
+    /// swapped into the context-shared <c>Any</c>/<c>Count</c> command). The rendered SQL of such a clause
+    /// depends on the collection's current shape, so reusing a cached plan built for another shape would be
+    /// wrong; the planner reads this flag and suppresses the call-local cache instead of mutating the
+    /// sticky <see cref="Cache"/> flag. It is set during preparation, recomputed when a shared command's
+    /// referenced query is swapped (<see cref="ReplaceCommand"/>) and cleared by
+    /// <see cref="ResetPreparation"/>. A false positive only forgoes caching (harmless); a false negative
+    /// would be a wrong result.
+    /// </summary>
+    internal bool HasUnkeyedScalarInValues;
     private QueryPlanEqualityComparer? _queryPlanComparer;
     private ExpressionPlanEqualityComparer? _expressionPlanComparer;
     private SelectExpressionPlanEqualityComparer? _selectExpressionPlanComparer;
@@ -831,6 +853,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         HasTopLevelInValues = false;
         LookupPartitions = null;
         ShapeScanned = false;
+        HasUnkeyedTupleInValues = false;
+        HasUnkeyedScalarInValues = false;
         _whereBasePlanHash = 0;
         // Correlated subqueries and outer references are registered while preparing (#148-B: the
         // navigation collection terminals add one referenced command per terminal). A re-preparation
@@ -854,6 +878,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
 
         _referencedQueries[idx] = cmd;
+        // The scalar unkeyed flag was computed against the previous referenced graph. A swapped-in
+        // referenced query can add or remove a scalar captured Contains in its WHERE/PREWHERE, which is
+        // not re-keyed by the swap, so recompute the flag now to keep the planner's call-local suppression
+        // in step with the current graph.
+        HasUnkeyedScalarInValues = QueryPreparer.ScanUnkeyedScalarInValues(this);
         // The shared Any/Count command swaps its referenced subquery in place between executions
         // without resetting: the plan key it was prepared under no longer describes the query.
         InvalidatePlanKey();

@@ -2,7 +2,9 @@ using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -110,7 +112,158 @@ public class SelectExpressionTests
         column.GetDataRecordMethod().ReturnType.Should().Be(typeof(JsonElement));
     }
 
-    private sealed class SingleColumnReader(object? value) : DbDataReader
+    [Fact]
+    public void MapColumn_ForJsonNode_ShouldReadStringAndParse()
+    {
+        var column = new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 };
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+        var mapper = Expression.Lambda<Func<DbDataReader, JsonNode>>(
+            RowMapperFactory.MapColumn(column, param), param).Compile();
+
+        var reader = new RecordingJsonReader("{\"a\":1}");
+        var node = mapper(reader);
+
+        node.Should().NotBeNull();
+        JsonNode.DeepEquals(node, JsonNode.Parse("{\"a\":1}")).Should().BeTrue();
+        reader.RequestedTypes.Should().Equal(typeof(string));
+    }
+
+    [Fact]
+    public void MapColumn_ForJsonNode_ShouldNotEmitGenericJsonNodeAccessor()
+    {
+        var column = new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 };
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+        var collector = new MethodCallCollector();
+        collector.Visit(RowMapperFactory.MapColumn(column, param));
+
+        collector.Methods.Should().Contain(m => m.DeclaringType == typeof(DbDataReader)
+            && m.Name == nameof(DbDataReader.GetFieldValue)
+            && m.IsGenericMethod
+            && m.GetGenericArguments()[0] == typeof(string));
+        collector.Methods.Should().NotContain(m => m.IsGenericMethod && m.GetGenericArguments()[0] == typeof(JsonNode));
+        collector.Methods.Should().Contain(m => m.DeclaringType == typeof(JsonNode) && m.Name == nameof(JsonNode.Parse));
+    }
+
+    [Fact]
+    public void MapColumn_ForJsonNode_WithSqlNull_ShouldReturnNullWithoutReadingString()
+    {
+        var column = new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 };
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+        var body = RowMapperFactory.MapColumn(column, param);
+
+        // `JsonNode` and `JsonNode?` are the same CLR type; both annotations close over the same guard.
+        var nonNullable = Expression.Lambda<Func<DbDataReader, JsonNode>>(body, param).Compile();
+        var nullable = Expression.Lambda<Func<DbDataReader, JsonNode?>>(body, param).Compile();
+
+        var reader = new RecordingJsonReader(DBNull.Value);
+
+        nonNullable(reader).Should().BeNull();
+        nullable(reader).Should().BeNull();
+        reader.RequestedTypes.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("{\"a\":1}")]
+    [InlineData("[1,2,3]")]
+    [InlineData("42")]
+    [InlineData("\"hello\"")]
+    [InlineData("true")]
+    [InlineData("null")]
+    public void MapColumn_ForJsonNode_ShouldParseEveryRootKind(string json)
+    {
+        var column = new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 };
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+        var mapper = Expression.Lambda<Func<DbDataReader, JsonNode?>>(
+            RowMapperFactory.MapColumn(column, param), param).Compile();
+
+        var node = mapper(new RecordingJsonReader(json));
+
+        JsonNode.DeepEquals(node, JsonNode.Parse(json)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("{not json")]
+    [InlineData("{\"a\":}")]
+    public void MapColumn_ForJsonNode_WithMalformedJson_ShouldThrowJsonException(string json)
+    {
+        var column = new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 };
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+        var mapper = Expression.Lambda<Func<DbDataReader, JsonNode?>>(
+            RowMapperFactory.MapColumn(column, param), param).Compile();
+
+        var act = () => mapper(new RecordingJsonReader(json));
+
+        act.Should().Throw<JsonException>();
+    }
+
+    [Fact]
+    public void MapColumn_ForJsonDocumentAndJsonElement_ShouldKeepGenericAccessors()
+    {
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+
+        var documentCollector = new MethodCallCollector();
+        documentCollector.Visit(RowMapperFactory.MapColumn(
+            new SelectExpression(typeof(JsonDocument)) { PropertyName = "Data", Index = 0 }, param));
+        documentCollector.Methods.Should().Contain(m => m.Name == nameof(DbDataReader.GetFieldValue)
+            && m.IsGenericMethod
+            && m.GetGenericArguments()[0] == typeof(JsonDocument));
+
+        var elementCollector = new MethodCallCollector();
+        elementCollector.Visit(RowMapperFactory.MapColumn(
+            new SelectExpression(typeof(JsonElement)) { PropertyName = "Data", Index = 0 }, param));
+        elementCollector.Methods.Should().Contain(m => m.Name == nameof(DbDataReader.GetFieldValue)
+            && m.IsGenericMethod
+            && m.GetGenericArguments()[0] == typeof(JsonElement));
+    }
+
+    [Fact]
+    public void MapColumn_ForJsonNode_ShouldReuseParseMethodAcrossMaterializations()
+    {
+        var param = Expression.Parameter(typeof(DbDataReader), "reader");
+
+        var first = new MethodCallCollector();
+        first.Visit(RowMapperFactory.MapColumn(new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 }, param));
+        var second = new MethodCallCollector();
+        second.Visit(RowMapperFactory.MapColumn(new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 }, param));
+
+        var firstParse = first.Methods.Single(m => m.DeclaringType == typeof(JsonNode) && m.Name == nameof(JsonNode.Parse));
+        var secondParse = second.Methods.Single(m => m.DeclaringType == typeof(JsonNode) && m.Name == nameof(JsonNode.Parse));
+        ReferenceEquals(firstParse, secondParse).Should().BeTrue();
+
+        var mapper = Expression.Lambda<Func<DbDataReader, JsonNode?>>(
+            RowMapperFactory.MapColumn(new SelectExpression(typeof(JsonNode)) { PropertyName = "Data", Index = 0 }, param), param).Compile();
+        for (var i = 0; i < 3; i++)
+            JsonNode.DeepEquals(mapper(new RecordingJsonReader("{\"a\":1}")), JsonNode.Parse("{\"a\":1}")).Should().BeTrue();
+    }
+
+    private sealed class MethodCallCollector : ExpressionVisitor
+    {
+        public List<MethodInfo> Methods { get; } = [];
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            Methods.Add(node.Method);
+            return base.VisitMethodCall(node);
+        }
+    }
+
+    private sealed class RecordingJsonReader(object? value) : SingleColumnReader(value)
+    {
+        public List<Type> RequestedTypes { get; } = [];
+
+        public override T GetFieldValue<T>(int ordinal)
+        {
+            RequestedTypes.Add(typeof(T));
+
+            if (typeof(T) != typeof(string))
+                throw new InvalidCastException($"JSON reader only supports GetFieldValue<string>; requested {typeof(T)}.");
+
+            return base.GetFieldValue<T>(ordinal);
+        }
+    }
+
+    private class SingleColumnReader(object? value) : DbDataReader
     {
         public override int FieldCount => 1;
 

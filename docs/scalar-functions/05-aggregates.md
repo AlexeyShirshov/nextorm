@@ -36,7 +36,10 @@ select group_concat(somestring, ',') from complex_entity
 full query predicate and may reference columns and parameters. The spelling is selected by
 [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) — PostgreSQL and SQLite
 render the ANSI `filter (where ...)` clause, ClickHouse renders its `-If` combinator
-(`countIf`/`sumIf`/...) and MySQL/MariaDB and SQL Server reject the call:
+(`countIf`/`sumIf`/...) and MySQL/MariaDB and SQL Server reject the call. On PostgreSQL the ANSI clause
+requires server version 9.4 or later; a dialect configured with an older `Version` rejects the call with
+`NotSupportedException`, while an unset version assumes 9.4+ (see
+[PostgreSQL provider](../providers/postgres.md#server-version)):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

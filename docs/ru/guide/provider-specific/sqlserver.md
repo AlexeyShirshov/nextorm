@@ -2,7 +2,8 @@
 
 > SQL Server даёт условную функцию `CHOOSE`, библиотеку скаляров, специфичных для T-SQL
 > (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `UNICODE`, `NCHAR`, `FORMAT`,
-> тригонометрические функции, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID` и
+> тригонометрические функции, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, семейство
+> дат часов/смещения/`*FROMPARTS`, скаляры `CHECKSUM`/`COMPRESS`/`RAND`/`STUFF`, функции метаданных и
 > конструкторы/агрегаты SQL/JSON), хинты инструкции/таблицы и форму результата `FOR JSON`/`FOR XML`,
 > методы типа XML (`value`/`query`/`exist` и rowset `nodes`), нативные конструкции источника
 > `PIVOT`/`UNPIVOT`, а также табличные функции `string_split`/`openjson`.
@@ -291,17 +292,24 @@ from complex_entity
 
 * **Строковые:** `patindex(pattern, expression)`, `quotename(value)` / `quotename(value, quote)`,
   `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
-  `nchar(code)`, `format(value, format)` / `format(value, format, culture)`. `format` — нативный
-  T-SQL `FORMAT`, не путать с трансляцией CLR `string.Format`.
-* **Числовые:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` переносимы — см. [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)).
-* **Дата/время:** `datename(datepart, date)` (часть — константа) и
-  `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+).
-* **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`) и
-  `newsequentialid()`; последний допустим только как `DEFAULT` столбца, но не в обычном `SELECT`.
+  `nchar(code)`, `format(value, format)` / `format(value, format, culture)` и
+  `stuff(value, start, length, newValue)` (только строка — T-SQL `STUFF` неявно преобразует бинарные аргументы в символьные, поэтому перегрузка `byte[]` не открыта). `format` — нативный
+  T-SQL `FORMAT`, не путать с трансляцией CLR `string.Format`; `str(value[, length[, decimals]])` —
+  преобразование числа с плавающей точкой в строку фиксированной ширины.
+* **Числовые:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` переносимы — см. [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)) и `rand()` / `rand(seed)` (без seed — недетерминирован).
+* **Дата/время:** `datename(datepart, date)` (часть — константа), `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+), серверные часы `sysdatetime`/`sysdatetimeoffset`/`sysutcdatetime`, функции смещения `switchoffset(value, offset)`/`todatetimeoffset(value, offset)` (строка вида `"+02:00"` или минуты со знаком) и семейство конструкторов `timefromparts`/`smalldatetimefromparts`/`datetimefromparts`/`datetime2fromparts`/`datetimeoffsetfromparts`. Завершающая точность `*FROMPARTS` должна быть константой `0..7` (неконстантное, `null` или выходящее за диапазон значение бросает исключение до генерации SQL).
+* **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`), `newsequentialid()` (допустим только как `DEFAULT` столбца, но не в обычном `SELECT`), `checksum(values...)`/`binary_checksum(values...)` (минимум одно значение; форма `checksum(*)` не открыта) и `compress(value)`/`decompress(value)` (GZIP над `varbinary(max)`).
+* **Метаданные:** `col_length`, `col_name`, `ident_incr`/`ident_seed`, `index_col`, `object_definition`/`object_id`/`object_name`/`object_schema_name`, `stats_date`, `db_id`/`db_name`/`original_db_name`, `schema_id`/`schema_name`, `type_id`/`type_name`, `filegroup_id`/`filegroup_name`/`file_id`/`file_idex`/`file_name`, `current_timezone`/`current_timezone_id`, `getansinull`, `parsename` и `publishingservername`. Отсутствующий объект/столбец/индекс/статистика даёт `null`, как и нативная функция.
+* **Преобразование/логика:** `isdate(value)`/`isnumeric(value)` возвращают нативный T-SQL `int` (1/0), а не `bit`, поэтому остаются целочисленными значениями, а не материализованными предикатами; `formatmessage(messageOrId, args...)` принимает не более 20 аргументов форматирования.
 * **JSON:** `json_array(value, ...)` и `json_object(key, value, ...)` (SQL Server 2022+),
   `json_objectagg(key, value)` и `json_arrayagg(value)` (SQL Server 2025+),
   `json_path_exists(json, path)` (SQL Server 2022+) и `json_contains(json, searchValue, path)`
   (SQL Server 2025+). Два предиката материализуются в `bit`, как `isjson`.
+
+Десять имён области соединения/сессии/инструкции намеренно **не** открыты: `CURRENT_REQUEST_ID`,
+`CURRENT_TRANSACTION_ID`, `XACT_STATE`, `APP_NAME`, `HOST_ID`, `HOST_NAME`, `IDENT_CURRENT`,
+`MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` и `SCOPE_IDENTITY`; используйте сырой SQL или обёртку
+`[SqlFunction]` при появлении конкретного построчного применения.
 
 ## Пока не поддерживается
 

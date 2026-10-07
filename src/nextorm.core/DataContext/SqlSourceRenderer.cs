@@ -707,7 +707,8 @@ internal static class SqlSourceRenderer
 
         // The built-in SqlFunctions.Sql table functions are provider-specific; user-defined [SqlTableFunction]
         // functions are emitted verbatim and are the caller's responsibility.
-        if (typeof(CommonFunctions).IsAssignableFrom(function.Call.Method.DeclaringType) && !ctx.Dialect.SupportsTableFunction(function.Name))
+        var isBuiltIn = typeof(CommonFunctions).IsAssignableFrom(function.Call.Method.DeclaringType);
+        if (isBuiltIn && !ctx.Dialect.SupportsTableFunction(function.Name))
             throw new NotSupportedException($"The table function '{function.Name}' is not supported by this provider.");
 
         if (ctx.ParamMode)
@@ -737,6 +738,10 @@ internal static class SqlSourceRenderer
             if (leadsWithSchema)
                 sqlBuilder.Append(SqlLiteral.ToSqlStringLiteral(columnDefinitions!));
 
+            // The structured, already-rendered arguments are kept so a dialect can rewrite the call
+            // using an individual argument (SQLite quotes the FTS5 table token) without reparsing the
+            // serialized call text.
+            var renderedArguments = new string[arguments.Count];
             for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
             {
                 if (i > 0 || leadsWithSchema)
@@ -744,13 +749,31 @@ internal static class SqlSourceRenderer
 
                 if (IsVerbatimArgument(function, i))
                 {
-                    sqlBuilder.Append(GetVerbatimArgument(arguments[i]));
+                    var verbatim = GetVerbatimArgument(arguments[i]);
+                    renderedArguments[i] = verbatim;
+                    sqlBuilder.Append(verbatim);
                     continue;
                 }
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase, ParameterNamePrefix = ctx.ParameterNamePrefix });
-                visitor.Visit(arguments[i]);
-                sqlBuilder.Append(visitor.ToString());
+                // A built-in table function's constant string value (for example the FTS5 match query) is
+                // an SQL literal owned by the library; render it with the quote-doubling literal helper.
+                // The generic constant path inlines without escaping, so a value such as "O'Brien" would
+                // otherwise break out of the literal; a captured value still goes through the visitor
+                // (and is bound as a parameter).
+                string renderedArgument;
+                if (isBuiltIn && arguments[i] is ConstantExpression { Value: string constantArgument })
+                {
+                    renderedArgument = SqlLiteral.ToSqlStringLiteral(constantArgument);
+                }
+                else
+                {
+                    using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase, ParameterNamePrefix = ctx.ParameterNamePrefix });
+                    visitor.Visit(arguments[i]);
+                    renderedArgument = visitor.ToString();
+                }
+
+                renderedArguments[i] = renderedArgument;
+                sqlBuilder.Append(renderedArgument);
             }
 
             if (!string.IsNullOrEmpty(function.CallClause))
@@ -759,7 +782,7 @@ internal static class SqlSourceRenderer
             sqlBuilder.Append(')');
 
             var callSql = sqlBuilder.ToString();
-            var wrappedCall = ctx.Dialect.WrapTableFunction(function.Name, callSql);
+            var wrappedCall = ctx.Dialect.WrapTableFunction(function.Name, callSql, renderedArguments);
             if (!string.Equals(wrappedCall, callSql, StringComparison.Ordinal))
             {
                 sqlBuilder.Clear();

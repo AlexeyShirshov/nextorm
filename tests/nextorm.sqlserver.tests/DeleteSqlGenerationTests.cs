@@ -90,6 +90,19 @@ public class DeleteSqlGenerationTests
     }
 
     [Fact]
+    public void Delete_OutputIntoTableVariable_ShouldDeclareIntoAndReadBack()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql()
+            .Should().Be("declare @t table (id bigint, name nvarchar(100)); delete from merge_entity output deleted.id, deleted.name into @t (id, name) where id = 1; select id, name from @t");
+    }
+
+    [Fact]
     public void Truncate_ShouldRenderTruncateTable()
     {
         using var ctx = SqlServerTestContext.Create();

@@ -42,6 +42,14 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity
 Microsoft.Data.Sqlite также принимает `@name`, хотя генерируемый nextorm SQL для SQLite использует
 `$name`).
 
+> **Сырые row-значения.** В PostgreSQL вручную написанная инструкция, проецирующая одну колонку
+> `ROW(...)` или зарегистрированного вызывающим именованного composite-типа, материализует её в
+> соответствующий `System.Tuple<...>` или именованный тип — см.
+> [Сырые PostgreSQL-строки и composite-типы](#сырые-postgresql-строки-и-composite-типы). ClickHouse
+> читает свою нативную колонку `tuple(...)` как `System.Tuple<...>`; плоский конструктор `(a, b)` в
+> MySQL/MariaDB/SQLite — это поверхность билдера для прямых операндов предикатов `==`/`!=` (см.
+> [Row values](../scalar-functions/06-arrays.md)), а не часть сырого SQL.
+
 ## [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
 ```csharp
@@ -363,6 +371,68 @@ IReadOnlyList<RawOrder> orders = result.Read<RawOrder>();
 ```
 
 Всё, что не является ни скаляром, ни отображаемой сущностью с конструктором без параметров, бросает `NotSupportedException` (см. [Сопоставление, параметры и кэширование](#сопоставление-параметры-и-кэширование)).
+
+### Сырые PostgreSQL-строки и composite-типы
+
+Сырая инструкция PostgreSQL может проецировать **одну колонку-запись** — анонимный `ROW(a, b, ...)` или
+именованный composite-тип, — и `Read<T>()` материализует её в объявленную CLR-форму:
+
+* анонимный `ROW(a)` … `ROW(a, ..., g)` (арность 1..7) материализуется в соответствующий
+  `System.Tuple<...>` (`Tuple<T1>` … `Tuple<T1, ..., T7>`), а
+* именованный composite-тип, **зарегистрированный вызывающим** через Npgsql `MapComposite<T>`,
+  материализуется в этот именованный `T`.
+
+Запись обязана быть **единственной** колонкой набора результатов, а каждое поле — типом, который сырой
+путь уже читает как скаляр (тот же allow-list, что и у обычной скалярной колонки). Форма колонки-записи
+входит в ключ кэша маппера результатов, как и у любой другой сырой формы.
+
+Анонимному `ROW(...)` регистрация не нужна: полный `NpgsqlDataSourceBuilder` по умолчанию отображает
+колонку-запись в `object[]`, сохраняющий `null`. Именованный composite — это регистрируемый вызывающим
+тип драйвера, поэтому постройте `NpgsqlDataSource`, зарегистрируйте в нём composite и передайте
+`dataSource.CreateConnection()` в существующий конструктор контекста для внешнего соединения. nextorm не
+добавляет публичного API и глобального маппера драйвера, а путь строки подключения (собственный
+`CreateDbConnection` nextorm) не меняется:
+
+```csharp
+var dataSource = new NpgsqlDataSourceBuilder(connectionString)
+    .MapComposite<Point>()   // регистрируем именованный composite-тип
+    .Build();
+
+await using var dataContext = new PostgresDataContext(
+    dataSource.CreateConnection(), new DataContextBuilder());
+
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring) as r from complex_entity order by id");
+
+IReadOnlyList<System.Tuple<int, string?>> rows =
+    result.Read<System.Tuple<int, string?>>();
+```
+
+Классификация composite авторитетна: колонка считается именованным composite только тогда, когда это подтверждает загруженный каталог типов Npgsql, — никогда по dotted-имени типа данных или форме исключения. На чистом каталоге неотображённый некомпозитный тип (например `hstore` или `ltree`) теперь даёт обычную ошибку "None of the result-set columns (...) matches a mapped property", а не диагностику named-composite; настоящий composite, чей тип отсутствует в загруженном каталоге, деградирует до той же обычной ошибки, пока нет авторитетных метаданных типа (осознанный компромисс — холодный каталог не даёт вердикт о composite вместо вводящего в заблуждение). Composite, зарегистрированный через `MapComposite<T>`, по-прежнему материализуется, а незарегистрированный composite на прогретом каталоге по-прежнему сообщает специфичный для composite guard (его нужно зарегистрировать, прежде чем читать). Контексты nextorm используют общий на уровне процесса неявный источник данных Npgsql, ключом которого служит строка подключения; перезагрузка типов должна выполняться для источника, связанного с той же строкой подключения, что используется контекстом.
+
+Семантика `NULL`:
+
+* SQL `NULL` для всей колонки-записи ⇒ CLR `null` (для nullable/ссылочного объявленного типа); запись
+  не открывается.
+* непустая запись, у которой **все** поля `NULL`, ⇒ **непустой** объект с элементами `null` (никогда не
+  `null`).
+* `NULL` в поле, объявленном **nullable**-типом, ⇒ CLR `null`; значение никогда не подменяется
+  `default` (`0`, `""`, `false`).
+* `NULL` в поле, объявленном **non-nullable value-типом**, ⇒ `InvalidOperationException`, никогда не
+  `default(T)`.
+
+Неподдерживаемые формы бросают `NotSupportedException` с сообщением
+`PostgreSQL raw-row materialization is not supported: <reason>.`: результат типа
+`System.ValueTuple<...>`, арность ≥8 или `Tuple<..., TRest>`, вложенный `ROW(ROW(...))`, пустой `ROW()`,
+несколько колонок-записей в одной строке, смесь записи и скалярных колонок, незарегистрированный
+именованный composite и именованный composite, объявленный как `System.Tuple`. Несоответствие данных
+после открытия записи — поле, которое не удаётся преобразовать в объявленный тип элемента, — бросает
+`InvalidOperationException` с сообщением `PostgreSQL raw-row materialization failed: <reason>.`, сохраняя
+исключение драйвера в `InnerException`, когда оно есть.
+
+Только PostgreSQL материализует сырую колонку-запись в кортеж или именованный composite. У SQL Server,
+MySQL/MariaDB, SQLite и контекста in-memory нет серверного row/composite-типа результата, а ClickHouse уже
+читает свою нативную колонку `tuple(...)` как `System.Tuple<...>`.
 
 ### Несколько наборов результатов
 

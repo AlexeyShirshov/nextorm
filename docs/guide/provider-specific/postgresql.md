@@ -107,9 +107,14 @@ var rows = dataContext.From<IReservation>()
 
 ## `json` and `jsonb`
 
-PostgreSQL is the only provider with native `json`/`jsonb` types. JSON operands are mapped columns,
-other JSON functions, or parameters whose runtime value is a `JsonDocument`/`JsonElement`/`JsonNode`
-(which Npgsql binds as `jsonb`). The `jsonb_*` family covers construction, extraction, containment and
+PostgreSQL is the only provider with native `json`/`jsonb` types. JSON operands are native JSON columns
+(a `[JsonColumn]` property maps a CLR object to `jsonb` on read and write), other JSON functions, or
+parameters whose runtime value is a `JsonDocument`/`JsonElement`/`JsonNode` (which Npgsql binds as
+`jsonb`). A bare `JsonNode`/`JsonNode?` property (declared exactly `JsonNode`, not `JsonObject`/`JsonArray`)
+reads a native `json`/`jsonb` column for object, array and scalar roots, in scalar and composite
+projections; SQL `NULL` and a JSON literal `null` both become CLR `null`. Declared `JsonObject`/`JsonArray`
+properties and a bare `JsonDocument`/`JsonElement` *scalar* projection remain outside this support. The
+`jsonb_*` family covers construction, extraction, containment and
 aggregation, for example `jsonb_build_object`, `jsonb_agg`, `json_get_text`, `json_cast`, `->`, `->>`.
 
 ```csharp
@@ -316,11 +321,55 @@ for the full set of forms; general read CTEs are in
 [Common table expressions](../08-cte.md). Every
 other provider rejects `With(name, insert)` at build time with `NotSupportedException`.
 
+## Raw rows and composites
+
+A raw statement that projects a single PostgreSQL record column — an anonymous `ROW(...)` or a
+caller-registered named composite — can be materialised into the matching `System.Tuple<...>` or the named
+CLR type. This is the PostgreSQL counterpart of the ClickHouse `tuple(...)` result; see
+[Raw SQL](../12-raw-sql.md#postgresql-raw-rows-and-composites) for the full shape matrix, the
+configuration and the error contract.
+
+```csharp
+using var result = dataContext.ExecuteRaw(
+    "select row(id, somestring) as r from complex_entity order by id");
+
+var rows = result.Read<System.Tuple<int, string?>>();
+// rows[0].Item1 == 1, rows[0].Item2 == "..."
+```
+
+An anonymous `ROW(...)` needs no registration; a named composite must be registered on the caller-owned
+`NpgsqlDataSource` (`MapComposite<Point>()`) and the context created from `dataSource.CreateConnection()`.
+Only a single record column is supported. Unsupported shapes — a `ValueTuple`, arity ≥8, a nested or empty
+`ROW`, several or mixed record columns, an unregistered composite and a composite declared as
+`System.Tuple` — throw `NotSupportedException`; a `NULL` in a field declared as a non-nullable value type
+throws `InvalidOperationException` instead of substituting `default`. See
+[Raw SQL](../12-raw-sql.md#postgresql-raw-rows-and-composites).
+
+Composite classification is authoritative: a column is treated as a named composite only when the loaded Npgsql type catalog says so, never from a dotted data type name or an exception shape. On a clean catalog an unmapped non-composite type (for example `hstore` or `ltree`) now yields the ordinary "None of the result-set columns (...) matches a mapped property" error rather than the named-composite diagnostic; a genuine composite whose type is not in the loaded catalog degrades to the same ordinary error until authoritative type metadata is available (a deliberate trade-off — a cold catalog gives no composite verdict instead of a misleading one). A composite registered through `MapComposite<T>` still materialises, and a warm-catalog unregistered composite still reports the composite-specific guard (it must be registered before it can be read). nextorm contexts share a process-wide implicit Npgsql data source keyed by connection string; a type reload must target the source associated with the same connection string used by the context.
+
+Provider authors control composite classification through the protected `DataContext.IsGenuineCompositeColumn(DbDataReader, int)` seam — the single predicate the raw-row mapper consults on both the single- and multi-column paths. The base implementation returns `false` (no authoritative composite verdict), mirroring `SupportsRawRowColumns`; `PostgresDataContext` overrides it with `NpgsqlDataReader.GetPostgresType(ordinal) is PostgresCompositeType`.
+
 ## Dynamic record schema
 
 `jsonb_to_record`/`jsonb_to_recordset` are exposed as table-valued functions whose result schema is
-declared by the caller's row type and rendered as the alias column-definition list
-(`AS x(a int, b text)`). See [Dynamic result schema](../11-table-valued-functions.md#dynamic-result-schema).
+declared by the caller's row type and rendered as the alias column-definition list. PostgreSQL
+**requires** that column definition list, for example `AS x(a int, b text)`:
+
+```sql
+select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+```
+
+A free/partial column list **without** a caller-declared `TRow` is not supported for these two
+functions. Schema-less scenarios are covered by the existing paths instead:
+
+* a `[DynamicColumns]` store (`Dictionary<string, object?>`) captures the row's unmapped columns —
+  see [Dynamic columns](../27-dynamic-columns.md);
+* the raw reader path — [`ResultSet`](../12-raw-sql.md#multiple-result-sets) columns are read by
+  `FieldCount`/`ColumnNames` without materialisation, and [`ToDataReader`](../26-large-objects.md)
+  streams them as a `DbDataReader`;
+* `jsonb_each` / `jsonb_each_text` / `jsonb_object_keys` expand a JSON object into key/value rows —
+  see [Dynamic result schema](../11-table-valued-functions.md#dynamic-result-schema).
+
 The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
 free-form column list) remain out of scope. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).

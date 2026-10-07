@@ -65,14 +65,16 @@ internal abstract class MutationCommand
 }
 
 /// <summary>
-/// The target of an <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> clause (SQL Server): an existing table
-/// plus the mapped columns written into it by position. nextorm does not declare a table variable from
-/// its own text, so the target must already exist with a compatible column shape; emitting a
-/// <c>DECLARE @t TABLE (...)</c> batch is not supported (see issue #127).
+/// The target of an <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> clause (SQL Server): either an
+/// existing table, or a table variable declared in the same batch
+/// (<c>DECLARE @t TABLE (...)</c>) whose written rows are read back by a final
+/// <c>SELECT &lt;columns&gt; FROM @t</c>. Both forms carry the mapped columns written into the target by
+/// position; a table variable additionally carries the caller-supplied declaration text, which is
+/// trusted SQL and is never parameterised.
 /// </summary>
 internal sealed class OutputIntoClause
 {
-    /// <summary>Creates an output-into target.</summary>
+    /// <summary>Creates an output-into target over an existing table.</summary>
     /// <param name="tableName">The raw (unquoted) target table name.</param>
     /// <param name="columns">The mapped columns written into the target, in output order.</param>
     public OutputIntoClause(string tableName, IReadOnlyList<IPropertyMetadata> columns)
@@ -81,11 +83,62 @@ internal sealed class OutputIntoClause
         Columns = columns;
     }
 
-    /// <summary>The raw (unquoted) target table name.</summary>
-    public string TableName { get; }
+    /// <summary>Creates an output-into target over a table variable declared in the same batch.</summary>
+    /// <param name="variableName">The table-variable name (including the leading <c>@</c>); never bracketed or quoted.</param>
+    /// <param name="columnDefinitions">The caller-supplied, trusted column definitions of the <c>DECLARE @t TABLE (...)</c> text (not a parameter).</param>
+    /// <param name="columns">The mapped columns written into the target and read back by the final <c>SELECT</c>, in output order.</param>
+    /// <exception cref="ArgumentException"><paramref name="variableName"/> is not a bare table-variable name, or <paramref name="columnDefinitions"/> is empty.</exception>
+    public OutputIntoClause(string variableName, string columnDefinitions, IReadOnlyList<IPropertyMetadata> columns)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(variableName);
+        if (!IsValidVariableName(variableName))
+            throw new ArgumentException(
+                $"'{variableName}' is not a valid table-variable name. It must start with '@' followed by a letter or underscore and contain only letters, digits and underscores; a bracketed or quoted identifier is not a table variable.",
+                nameof(variableName));
 
-    /// <summary>The mapped columns written into the target, in output order.</summary>
+        ArgumentException.ThrowIfNullOrEmpty(columnDefinitions);
+
+        IsTableVariable = true;
+        VariableName = variableName;
+        ColumnDefinitions = columnDefinitions;
+        Columns = columns;
+    }
+
+    /// <summary>The raw (unquoted) existing target table name, or <see langword="null"/> for a table variable.</summary>
+    public string? TableName { get; }
+
+    /// <summary>The table-variable name (including the leading <c>@</c>), or <see langword="null"/> for an existing table.</summary>
+    public string? VariableName { get; }
+
+    /// <summary>The caller-supplied column definitions of the table variable, or <see langword="null"/> for an existing table.</summary>
+    public string? ColumnDefinitions { get; }
+
+    /// <summary>Whether the target is a table variable declared in the same batch.</summary>
+    public bool IsTableVariable { get; }
+
+    /// <summary>The mapped columns written into the target, in output order; a table variable also reads them back by name.</summary>
     public IReadOnlyList<IPropertyMetadata> Columns { get; }
+
+    // A table variable is addressed by a bare name: the leading '@' is required and an identifier that
+    // needs quoting ([@t], "@t") is an existing table, not a variable, so it is rejected here.
+    private static bool IsValidVariableName(string name)
+    {
+        if (name.Length < 2 || name[0] != '@')
+            return false;
+
+        var first = name[1];
+        if (first != '_' && (first < 'A' || first > 'Z') && (first < 'a' || first > 'z'))
+            return false;
+
+        for (var i = 2; i < name.Length; i++)
+        {
+            var c = name[i];
+            if (c != '_' && !char.IsLetterOrDigit(c))
+                return false;
+        }
+
+        return true;
+    }
 }
 
 /// <summary>One column written by an <see cref="InsertCommand"/>: its mapping plus the value of each row.</summary>

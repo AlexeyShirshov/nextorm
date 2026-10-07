@@ -11,10 +11,11 @@
 возвращает [`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance) из свойства `Dialect`.
 
 [`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) (`src/nextorm.mariadb/MariaDbDialect.cs`) наследуется от [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) и меняет
-возможности: `INTERSECT ALL` и `EXCEPT ALL` поддерживаются в MariaDB 10.4 и новее, поэтому
+набор возможностей: `INTERSECT ALL` и `EXCEPT ALL` поддерживаются в MariaDB 10.4 и новее, поэтому
 [`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) равно `true`, а MariaDB 10.3+ рендерит оконные
 квантили `percentile_cont`/`percentile_disc` (`... within group (order by ...) over (...)`), поэтому
-[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) тоже равно `true`. Агрегат произвольного значения
+[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) тоже равно `true`; `UPDATE ... RETURNING` включается только при явно
+настроенной версии сервера 13.0+ ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)). Агрегат произвольного значения
 `any_agg` при этом **отключён**, потому что в MariaDB нет `ANY_VALUE` в 10.4–12.x (возможность SQL-2023
 `T626` всё ещё ожидается, ориентир — 13.2). Всё остальное (параметры, квотирование, `concat`, coalesce,
 разбиение на страницы, имена агрегатов, написание `if(...)` для переносимого `iif`) наследуется без
@@ -45,6 +46,33 @@ using IDataContext ctx = new MariaDbDataContext(
     "Server=localhost;Database=app;User ID=app;Password=secret", new DataContextBuilder());
 ```
 
+## Версия сервера
+
+Диалект можно привязать к версии сервера, которая гейтит `UPDATE ... RETURNING`. Настройка **явная** —
+nextorm никогда не опрашивает живой сервер. Передайте версию через параметр `Version` конструктора
+контекста. В отличие от PostgreSQL, **незаданная** версия **не** включает возможность: без явной 13.0+
+терминал `Returning()` у `UPDATE` бросает `NotSupportedException`. `RETURNING` у insert и delete не
+меняется (MariaDB отклоняет их как и раньше), как и гейт `ANY_VALUE` (`any_agg`, ориентир — 13.2).
+
+```csharp
+// Явная 13.0+: UPDATE ... RETURNING включён.
+using var ctx = new MariaDbDataContext(
+    "Server=localhost;Database=app;...", new DataContextBuilder(), new Version(13, 0));
+```
+
+В отличие от PostgreSQL, MariaDB **не** накладывает защиту «одна версия на конкретный тип контекста»:
+её единственная версионно-гейтируемая ось (`UPDATE ... RETURNING`) — мутация, чей SQL не кладётся в
+кэш планов, поэтому один и тот же конкретный тип контекста можно создавать с разными версиями.
+Строго типизированный подкласс всё ещё удобен, чтобы зафиксировать одну версию:
+
+```csharp
+public sealed class MariaDb130DataContext : MariaDbDataContext
+{
+    public MariaDb130DataContext(string connectionString, DataContextBuilder builder)
+        : base(connectionString, builder, new Version(13, 0)) { }
+}
+```
+
 ## Операции над множествами
 
 ```csharp
@@ -60,7 +88,7 @@ select id from simple_entity
 
 ## Различия провайдера
 
-MariaDB отличается от [MySQL](mysql.md) возможностью операций над множествами, оконными квантилями и агрегатом произвольного значения:
+MariaDB отличается от [MySQL](mysql.md) возможностью операций над множествами, оконными квантилями, версионным гейтом `UPDATE ... RETURNING` и агрегатом произвольного значения:
 
 | Аспект | MariaDB |
 |---|---|
@@ -70,6 +98,8 @@ MariaDB отличается от [MySQL](mysql.md) возможностью о�
 | Квотирование идентификаторов | обратные кавычки (`` as `t1` ``) |
 | Псевдоним производной таблицы | требуется |
 | `*ALL` | поддерживается (MariaDB 10.4+) |
+| `UPDATE ... RETURNING` | включается только при явной версии сервера 13.0+ (`SupportsUpdateReturning`); иначе `NotSupportedException` |
+| Версия сервера | настраивается явно через `Version` у контекста |
 | Текстовый JSON | наследуется от MySQL (`JSON_EXTRACT`/`JSON_SET`) |
 | Session/info-функции | наследуются от MySQL (`current_user()`, `session_user()`, `schema()`, `database()`, `version()`) |
 | Произвольное значение | не поддерживается (в 10.4–12.x нет `ANY_VALUE`; ожидается MDEV-10426, ориентир — 13.2) |

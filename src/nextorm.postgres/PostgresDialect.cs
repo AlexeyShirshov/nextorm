@@ -9,8 +9,28 @@ namespace NextORM.Postgres;
 /// </summary>
 public class PostgresDialect : SqlDialectBase
 {
+    // The first PostgreSQL release with the ANSI aggregate FILTER clause (SQL:2003 T612, 9.4).
+    private static readonly Version AggregatesFilterMinVersion = new(9, 4);
+
     /// <summary>Gets the shared PostgreSQL dialect instance.</summary>
     public static readonly PostgresDialect Instance = new();
+
+    private readonly Version? _version;
+
+    /// <summary>
+    /// Creates an unversioned PostgreSQL dialect: every supported form (including the ANSI aggregate
+    /// <c>FILTER</c> clause) is emitted. Equivalent to the shared <see cref="Instance"/>.
+    /// </summary>
+    public PostgresDialect()
+    {
+    }
+
+    /// <summary>
+    /// Creates a PostgreSQL dialect for <paramref name="serverVersion"/>. A version below 9.4 gates off
+    /// the ANSI aggregate <c>FILTER</c> clause; <see langword="null"/> is the unversioned form.
+    /// </summary>
+    /// <param name="serverVersion">The PostgreSQL server version, or <see langword="null"/> for unset.</param>
+    public PostgresDialect(Version? serverVersion) => _version = serverVersion;
 
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
@@ -304,10 +324,16 @@ public class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsJson => true;
 
-    // PostgreSQL accepts the FILTER (WHERE ...) aggregate clause, greatest/least, date_trunc and the
-    // string_agg/array_agg aggregate surface.
+    // PostgreSQL (and only PostgreSQL) renders the json/jsonb functions and access/containment operators.
     /// <inheritdoc/>
-    public override AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.AnsiFilter;
+    public override bool SupportsPostgresJsonSql => true;
+
+    // PostgreSQL accepts the FILTER (WHERE ...) aggregate clause from 9.4 (SQL:2003 T612),
+    // greatest/least, date_trunc and the string_agg/array_agg aggregate surface. A version below 9.4
+    // rejects the filtered-aggregate overloads instead of emitting SQL the server cannot parse.
+    /// <inheritdoc/>
+    public override AggregateFilterStyle AggregateFilterStyle =>
+        _version is null || _version >= AggregatesFilterMinVersion ? AggregateFilterStyle.AnsiFilter : AggregateFilterStyle.None;
     /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
 

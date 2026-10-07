@@ -47,6 +47,95 @@ public class ExtremeRowParityEntity
 }
 
 /// <summary>
+/// Deterministic fixture for issue #150 D150.4 floating-key native-vs-forced-portable parity. Physical
+/// columns are named after the key role (<c>f32</c>/<c>f64</c> and their nullable <c>f32n</c>/<c>f64n</c>
+/// forms are the extreme keys, <c>grp</c> is the integral-only group key, <c>i1</c>/<c>i2</c> back the
+/// composite/three-component shapes, <c>payload</c> is a nullable string). The <see cref="Dataset"/>
+/// column selects one deterministic scenario per test; ids are globally unique. Kept separate from
+/// <see cref="ExtremeRowParityEntity"/> so the issue-144 integral fixtures stay untouched.
+/// </summary>
+[SqlTable("extreme_float_150")]
+public class ExtremeRowFloatEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    /// <summary>The scenario selector (finite, mixednan, allnan, inf, zeros, nulls, allnull, ...).</summary>
+    [Column("dataset")]
+    public string Dataset { get; set; } = "";
+
+    /// <summary>The nullable integral group key; the allowlist keeps group columns integral-only.</summary>
+    [Column("grp")]
+    public int? Grp { get; set; }
+
+    /// <summary>A non-nullable Float32 extreme key.</summary>
+    [Column("f32")]
+    public float F32 { get; set; }
+
+    /// <summary>A non-nullable Float64 extreme key.</summary>
+    [Column("f64")]
+    public double F64 { get; set; }
+
+    /// <summary>A nullable Float32 extreme key.</summary>
+    [Column("f32n")]
+    public float? F32n { get; set; }
+
+    /// <summary>A nullable Float64 extreme key.</summary>
+    [Column("f64n")]
+    public double? F64n { get; set; }
+
+    /// <summary>The leading integral component of the composite/three-component key shapes.</summary>
+    [Column("i1")]
+    public int I1 { get; set; }
+
+    /// <summary>The trailing integral component of the three-component key shape (payload otherwise).</summary>
+    [Column("i2")]
+    public int I2 { get; set; }
+
+    /// <summary>The nullable string payload.</summary>
+    [Column("payload")]
+    public string? Payload { get; set; }
+}
+
+/// <summary>
+/// Decimal extreme-key fixture for the D150 real-server negative re-check: <c>Decimal</c> is neither
+/// integral nor float/double, so the native renderer must decline and keep the portable lowering.
+/// </summary>
+[SqlTable("extreme_decimal_150")]
+public class ExtremeRowDecimalEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    /// <summary>A nullable decimal extreme key (outside the native allowlist).</summary>
+    [Column("dec")]
+    public decimal? Dec { get; set; }
+
+    [Column("payload")]
+    public string? Payload { get; set; }
+}
+
+/// <summary>
+/// Float16 (CLR <see cref="Half"/>) extreme-key fixture. The CLR type has no ClickHouse column mapping,
+/// so this shape is only used to pin the SQL-generation refusal (portable lowering), never executed.
+/// </summary>
+[SqlTable("extreme_half_150")]
+public class ExtremeRowHalfEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("h")]
+    public Half H { get; set; }
+
+    [Column("payload")]
+    public string? Payload { get; set; }
+}
+
+/// <summary>
 /// A reference projection shape with no parameterless constructor: the materializer must bind the three
 /// projected columns to the three-argument constructor positionally.
 /// </summary>

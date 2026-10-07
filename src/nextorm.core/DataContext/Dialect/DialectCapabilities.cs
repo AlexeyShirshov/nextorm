@@ -327,6 +327,7 @@ public sealed record ExtremeRowRenderRequest
         bool isMax,
         IReadOnlyList<string> payloadAliases,
         IReadOnlyList<string> keyAliases,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns,
         IReadOnlyList<string> groupAliases,
         KeywordCase keywordCase)
     {
@@ -334,6 +335,7 @@ public sealed record ExtremeRowRenderRequest
         IsMax = isMax;
         PayloadAliases = payloadAliases;
         KeyAliases = keyAliases;
+        KeyColumns = keyColumns;
         GroupAliases = groupAliases;
         KeywordCase = keywordCase;
     }
@@ -352,6 +354,13 @@ public sealed record ExtremeRowRenderRequest
 
     /// <summary>The aliases of the extreme-key components, in selector order.</summary>
     public IReadOnlyList<string> KeyAliases { get; }
+
+    /// <summary>
+    /// The shape facts of the extreme-key components, positionally aligned with
+    /// <see cref="KeyAliases"/>. A renderer whose key emission depends on the component type (for
+    /// example ClickHouse's floating-key NaN adaptation) reads this instead of re-deriving it.
+    /// </summary>
+    public IReadOnlyList<ExtremeRowRenderColumn> KeyColumns { get; }
 
     /// <summary>The aliases of the group-by components, in selector order; empty for the global form.</summary>
     public IReadOnlyList<string> GroupAliases { get; }
@@ -578,8 +587,12 @@ public interface IMySqlFunctions
 /// A dialect's surface for the SQL Server-only T-SQL scalar functions that have no cross-provider
 /// analog (the string functions <c>PATINDEX</c>/<c>QUOTENAME</c>/<c>SOUNDEX</c>/<c>DIFFERENCE</c>/
 /// <c>STRING_ESCAPE</c>/<c>UNICODE</c>/<c>NCHAR</c>/<c>FORMAT</c>, the trigonometric functions, the
-/// date functions <c>DATENAME</c>/<c>DATE_BUCKET</c>, the binary/system functions
-/// <c>HASHBYTES</c>/<c>NEWSEQUENTIALID</c> and the SQL/JSON constructors/aggregates/predicates). The
+/// date functions <c>DATENAME</c>/<c>DATE_BUCKET</c> and the clock/offset/<c>*FROMPARTS</c> family,
+/// the binary/system functions <c>HASHBYTES</c>/<c>NEWSEQUENTIALID</c>, the
+/// <c>CHECKSUM</c>/<c>COMPRESS</c>/<c>RAND</c>/<c>STUFF</c> scalars, the metadata functions
+/// (<c>COL_LENGTH</c>/<c>OBJECT_ID</c>/<c>DB_ID</c>/<c>SCHEMA_NAME</c>/<c>FILE_ID</c>/
+/// <c>ISDATE</c>/<c>STR</c>/<c>FORMATMESSAGE</c> and the rest of the A–D metadata families) and the
+/// SQL/JSON constructors/aggregates/predicates). The
 /// predicate and the renderer live on one object, so a name the dialect reports as supported always
 /// has a rendering; <see langword="null"/> is the capability being absent, which makes every other
 /// provider reject the members with a clear message.
@@ -620,6 +633,14 @@ public interface ITupleRenderer
     /// <see langword="null"/>, an inline constructor's element access is folded to the argument instead.
     /// </summary>
     string? RenderElement(string row, int oneBasedIndex);
+
+    /// <summary>
+    /// Renders the right-hand value list of a row membership test from the already-rendered row
+    /// constructors, including the wrapping parentheses. The default is the ANSI row list
+    /// <c>((...), (...))</c> used by MySQL/MariaDB/PostgreSQL/ClickHouse; SQLite overrides it with the
+    /// <c>(VALUES (...), (...))</c> grammar.
+    /// </summary>
+    string RenderInValues(IReadOnlyList<string> rows) => "(" + string.Join(", ", rows) + ")";
 }
 
 /// <summary>
@@ -628,8 +649,10 @@ public interface ITupleRenderer
 /// <c>random</c>/<c>randomblob</c>, <c>quote</c>, <c>typeof</c>, <c>glob</c>, <c>unicode</c>/<c>char</c>,
 /// <c>soundex</c>, <c>octet_length</c>, <c>if</c>/<c>ifnull</c>), the JSON1 functions/operators/aggregates
 /// (<c>json_extract</c>, <c>-&gt;</c>/<c>-&gt;&gt;</c>, <c>json_set</c>, <c>json_group_array</c>, ...), the
-/// date functions (<c>timediff</c>, <c>unixepoch</c>, <c>julianday</c>) and the math-extension functions
-/// (<c>acos</c>, <c>degrees</c>, <c>log2</c>, <c>mod</c>, <c>pi</c>, ...). The predicate and the renderer
+/// date functions (<c>timediff</c>, <c>unixepoch</c>, <c>julianday</c>), the math-extension functions
+/// (<c>acos</c>, <c>degrees</c>, <c>log2</c>, <c>mod</c>, <c>pi</c>, ...) and the full-text (FTS3/FTS4/FTS5)
+/// query surface (<c>Match</c>, <c>Rank</c>, <c>FTS5bm25</c>, <c>Highlight</c>, <c>FTS3Offsets</c>, ...).
+/// The predicate and the renderer
 /// live on one object, so a name the dialect reports as supported always has a rendering, and a provider
 /// that cannot express the surface returns <see langword="null"/> from
 /// <see cref="ISqlDialect.SqliteFunctions"/>.

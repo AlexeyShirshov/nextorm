@@ -599,4 +599,18 @@ public class InsertSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void OutputIntoTableVariable_OnSqlite_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id })
+            .OutputIntoTableVariable("@t", "id bigint")
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

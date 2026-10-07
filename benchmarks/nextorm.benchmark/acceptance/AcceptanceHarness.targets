@@ -1,0 +1,24 @@
+<Project>
+
+  <!--
+    Benchmark-only injection target for the #168 acceptance gate (D4).
+
+    The same file is attached to both trees (the candidate working tree and the baseline tree produced
+    by `git archive` of the recorded SHA) via `-p:CustomAfterMicrosoftCommonTargets=<this file>`, so the
+    acceptance benchmark source is compiled identically into both. `AcceptanceBenchmark=true` gates the
+    inclusion: without it the acceptance sources are excluded from the normal benchmark build.
+
+    The Remove/Include pair is idempotent whether or not the importing project already excludes the
+    folder, which lets the candidate (with its `<Compile Remove="acceptance/**/*.cs"/>`) and the
+    untouched baseline project share one injection.
+  -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'nextorm.benchmark'">
+    <AcceptanceHarnessDir Condition="'$(AcceptanceHarnessDir)' == ''">$(MSBuildProjectDirectory)/acceptance</AcceptanceHarnessDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'nextorm.benchmark'">
+    <Compile Remove="$(AcceptanceHarnessDir)/**/*.cs" />
+    <Compile Include="$(AcceptanceHarnessDir)/**/*.cs" Condition="'$(AcceptanceBenchmark)' == 'true'" />
+  </ItemGroup>
+
+</Project>

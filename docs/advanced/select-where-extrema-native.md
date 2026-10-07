@@ -86,12 +86,12 @@ Eligibility is intentionally narrow, and is decided from a prepared description 
 
 | Part | Native eligibility |
 |---|---|
-| Extreme key | a direct mapped column bound to `short`/`int`/`long` (including nullable), or a composite of those |
-| Group key | the same as the extreme key |
-| ClickHouse payload | integral types (`sbyte`/`byte`/`short`/`ushort`/`int`/`uint`/`long`/`ulong`, including nullable) and `string` |
+| Extreme key | a direct mapped column bound to `short`/`int`/`long` or `float`/`double` (including nullable), or a composite of such components; a composite that contains a floating component is limited to three components, while a purely integral composite has no arity limit; a floating component is adapted NaN-safe |
+| Group key | the same integral types as the extreme key (`short`/`int`/`long`, including nullable), or a composite of those of any arity; a floating group key keeps the portable path |
+| ClickHouse payload | integral types (`sbyte`/`byte`/`short`/`ushort`/`int`/`uint`/`long`/`ulong`, including nullable), floating-point types (`float`/`double`, including nullable) and `string` |
 | Everything else | the portable window-function lowering |
 
-A composite key is compared lexicographically component by component. The group selector must be compound (`e => new { e.TeamId }`); a bare single-column group selector keeps the portable path. Everything outside the table above keeps the portable lowering with the same results contract: the other providers, `ExtremeRowTies.All`, floating-point keys (rejected as a whole on ClickHouse because their ordering is not portable), value converters, computed expressions, and other key or payload types.
+A composite key is compared lexicographically component by component. A `Float32`/`Float64` component of the extreme key is adapted in the same query instead of being passed to `argMin`/`argMax` verbatim: a leading `isNaN` rank keeps NaN last in both directions, matching the portable contract, and a `Float32` component is widened to `Float64` for the comparison. The raw direct aggregate is deliberately not used, because ClickHouse seeds it with the first row and `x > NaN`/`x < NaN` are both false, so a leading NaN would otherwise win. The adaptation covers single, two- and three-component keys across `Min`/`Max`, global/grouped, and nullable/non-nullable components. The arity limits are deliberately asymmetric: a purely integral extreme key or group key is a plain lexicographic tuple and is not arity-capped, while only a key that contains a floating component is capped at three components, because only that adaptation was proven arity by arity. The group selector must be compound (`e => new { e.TeamId }`); a bare single-column group selector keeps the portable path. Everything outside the table above keeps the portable lowering with the same results contract: the other providers, `ExtremeRowTies.All`, floating-point group keys, floating extreme keys with more than three components, `Float16`/`Decimal` keys, value converters, computed expressions, and other key or payload types.
 
 ## Semantics
 

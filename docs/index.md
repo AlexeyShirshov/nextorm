@@ -105,7 +105,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.9-b) is a prof of concept.
+The current status (1.0.9-rc1) is a prof of concept.
 
 ## Installation
 
@@ -134,6 +134,32 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](infrastructure/01-query-reuse-and-caching.md).
 
 ## Releases
+
+### 1.0.9-rc1
+
+- [ClickHouse: нативная поддержка JSON (`[JsonColumn]`, `JsonDocument`, `JsonElement`)](https://github.com/AlexeyShirshov/nextorm/issues/198)
+- [PostgreSQL: чтение `JsonNode` из нативных `json`/`jsonb`-колонок](https://github.com/AlexeyShirshov/nextorm/issues/197)
+- [Raw-row materialization: поддержка PostgreSQL `ROW`/composite](https://github.com/AlexeyShirshov/nextorm/issues/194)
+- [SQL Server: паритет скалярных функций с linq2db (metadata / date-part / checksum)](https://github.com/AlexeyShirshov/nextorm/issues/182)
+- [SQLite: полнотекстовый поиск FTS3/FTS4/FTS5](https://github.com/AlexeyShirshov/nextorm/issues/181)
+- [SQLite: поддержка JSON1](https://github.com/AlexeyShirshov/nextorm/issues/132)
+- [ClickHouse: экранирование обратных слэшей в идентификаторах](https://github.com/AlexeyShirshov/nextorm/issues/161)
+- [ClickHouse: нативный паритет extreme-row для float/double ключей](https://github.com/AlexeyShirshov/nextorm/issues/150)
+- [ClickHouse: маппинг нативного типа колонки JSON](https://github.com/AlexeyShirshov/nextorm/issues/128)
+- [Version-gates: MariaDB 13 и PostgreSQL FILTER-агрегаты для 9.2/9.3](https://github.com/AlexeyShirshov/nextorm/issues/141)
+- [PostgreSQL: маппинг нативной колонки `json`/`jsonb`](https://github.com/AlexeyShirshov/nextorm/issues/131)
+- [PostgreSQL: свободный (provider-specific) список колонок](https://github.com/AlexeyShirshov/nextorm/issues/140)
+- [`ToDataReader` на SQLite](https://github.com/AlexeyShirshov/nextorm/issues/134)
+- [Streaming LOB: MySQL/MariaDB и ClickHouse](https://github.com/AlexeyShirshov/nextorm/issues/133)
+- [SQL Server: `OUTPUT INTO` в табличную переменную (`DECLARE @t TABLE`)](https://github.com/AlexeyShirshov/nextorm/issues/127)
+- [Tuple-конструктор `(a, b)` на MySQL/MariaDB/SQLite](https://github.com/AlexeyShirshov/nextorm/issues/126)
+- [Tuple `IN`/`Contains`: трансляция и исполнение во всех провайдерах](https://github.com/AlexeyShirshov/nextorm/issues/193)
+- [FTS5 maintenance/control: поверхность команд (`AutoMerge`/`CrisisMerge`/`Merge`/`Optimize`/`Rebuild`/`IntegrityCheck`)](https://github.com/AlexeyShirshov/nextorm/issues/195)
+- [FTS5 maintenance: тесты на реальном SQLite + документация EN/RU](https://github.com/AlexeyShirshov/nextorm/issues/196)
+- [ClickHouse: `reference→collection` навигация — принятое ограничение провайдера (явный gate)](https://github.com/AlexeyShirshov/nextorm/issues/163)
+- [SQL Server: `MapColumnExpression` больше не боксит числовые значения](https://github.com/AlexeyShirshov/nextorm/issues/168)
+- [Fix: скалярный путь `InValuesTranslator` больше не отравляет plan-cache общего `QueryCommand` (sticky `Cache=false`)](https://github.com/AlexeyShirshov/nextorm/issues/199)
+- [Perf: снижены аллокации свежего cached-пути CTE/RecursiveCTE](https://github.com/AlexeyShirshov/nextorm/issues/200)
 
 ### 1.0.9-b
 

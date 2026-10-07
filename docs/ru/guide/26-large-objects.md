@@ -108,9 +108,14 @@ await foreach (var row in ctx.From("documents")
 Строковая проекция, содержащая потоковый член, готовится заново с
 `CommandBehavior.SequentialAccess` и никогда не пишется в кэш планов, поэтому обычная буферизованная
 проекция той же формы сохраняет свой план. В SQLite к таким строкам тоже добавляется локатор
-`rowid`, поэтому источник обязан быть rowid-таблицей. Провайдер без поддержки sequential access
-(MySQL/MariaDB, ClickHouse) бросает `NotSupportedException` при выполнении запроса; используйте там
-буферизованную проекцию `byte[]`/`string`.
+`rowid`, поэтому источник обязан быть rowid-таблицей. MySQL/MariaDB и ClickHouse **не** дают
+потокового чтения LOB с ограниченной памятью: их драйверы буферизуют всё значение даже под
+`CommandBehavior.SequentialAccess`, поэтому диалекты осознанно оставляют
+[`ISqlDialect.SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess)
+в значении `false` по умолчанию, и терминал бросает `NotSupportedException` при выполнении запроса
+(`GetStream`/`GetTextReader` у `MySqlConnector` аллоцируют вместе со значением — измеренное
+отношение ≈ 4–8, а `GetStream` у `ClickHouse.Driver` вообще не реализован). Потокового выигрыша
+здесь нет — используйте буферизованную проекцию `byte[]`/`string`.
 
 ## Провайдеры
 
@@ -119,24 +124,24 @@ await foreach (var row in ctx.From("documents")
 | PostgreSQL | поддерживается (`bytea` / `text`) |
 | SQL Server | поддерживается (`varbinary(max)` / `nvarchar(max)`; потоковый режим — `CommandBehavior.SequentialAccess`) |
 | SQLite | поддерживается (`blob` / `text`; источник должен раскрывать `rowid`) |
-| MySQL / MariaDB | `NotSupportedException` |
-| ClickHouse | `NotSupportedException` |
+| MySQL / MariaDB | `NotSupportedException` (драйвер буферизует; не memory-bounded) |
+| ClickHouse | `NotSupportedException` (`GetStream` не реализован; `GetTextReader` буферизует) |
 | In-memory | поддерживается (`MemoryStream`/`StringReader` над единственным материализованным значением; см. [In-memory](#in-memory)) |
 
-Стриминг реализован для **PostgreSQL, SQL Server и SQLite** в этом выпуске. Терминал стриминга — opt-in: обычная буферизованная проекция `byte[]`/`string` продолжает работать у каждого провайдера, а запись LOB — вне области охвата. MySQL/MariaDB и ClickHouse отклоняют терминал через `NotSupportedException`, в сообщении которого назван провайдер. Провайдер in-memory тоже поддерживает скалярные терминалы, но стримить не из чего — `DbDataReader` нет, поэтому он возвращает обычный BCL-объект над материализованным значением; см. [In-memory](#in-memory).
+Стриминг реализован для **PostgreSQL, SQL Server и SQLite** в этом выпуске. Терминал стриминга — opt-in: обычная буферизованная проекция `byte[]`/`string` продолжает работать у каждого провайдера, а запись LOB — вне области охвата. MySQL/MariaDB и ClickHouse отклоняют терминал через `NotSupportedException`, в сообщении которого назван провайдер, потому что их драйверы не дают потокового чтения LOB с ограниченной памятью (они буферизуют всё значение; `SequentialAccess` не меняет аллокации, а `GetStream` в ClickHouse не реализован), поэтому [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess) у них осознанно `false` — поддерживаемый путь там — буферизованная проекция. Провайдер in-memory тоже поддерживает скалярные терминалы, но стримить не из чего — `DbDataReader` нет, поэтому он возвращает обычный BCL-объект над материализованным значением; см. [In-memory](#in-memory).
 
-Многоколоночный терминал [`ToDataReader`](#многоколоночность-todatareader) доступен на PostgreSQL и SQL Server. SQLite его отклоняет, потому что его потоковая проекция всегда несёт локатор `rowid`; MySQL/MariaDB и ClickHouse отклоняют его, потому что у них нет поддержки sequential access; провайдер in-memory отклоняет его, потому что у него вообще нет `DbDataReader`:
+Многоколоночный терминал [`ToDataReader`](#многоколоночность-todatareader) доступен на PostgreSQL, SQL Server и SQLite. PostgreSQL и SQL Server отдают sequential-access команду; SQLite возвращает **буферизованный reader без локатора** (запрос не открывается с `SequentialAccess`, `rowid` не добавляется, поэтому `FieldCount` равен числу колонок проекции, а ordinals соответствуют `Select`). MySQL/MariaDB и ClickHouse отклоняют его, потому что у них нет поддержки sequential access; провайдер in-memory отклоняет его, потому что у него вообще нет `DbDataReader`:
 
 | Провайдер | `ToDataReader` / `ToDataReaderAsync` |
 |---|---|
-| PostgreSQL | поддерживается |
-| SQL Server | поддерживается |
-| SQLite | `NotSupportedException` (локатор `rowid`) |
+| PostgreSQL | поддерживается (sequential-access) |
+| SQL Server | поддерживается (sequential-access) |
+| SQLite | поддерживается (буферизованный, без локатора; LOB не чанками) |
 | MySQL / MariaDB | `NotSupportedException` |
 | ClickHouse | `NotSupportedException` |
 | In-memory | `NotSupportedException` |
 
-У SQLite нет собственного локатора строк, поэтому `Microsoft.Data.Sqlite` возвращает настоящий потоковый `SqliteBlob` только когда запрос выбирает ещё и `rowid`. Диалект добавляет собственный завершающий столбец-локатор — [`ISqlDialect.LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn), `"rowid"` в SQLite и `null` в PostgreSQL/SQL Server, — так что payload остаётся на позиции `0` и не является частью пользовательской проекции. Поэтому источник запроса обязан быть обычной rowid-таблицей: на `view` или таблице `WITHOUT ROWID` команда падает fail-closed с сырым `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — буферизованного фолбэка нет.
+На **одноколоночных потоковых** терминалах и построчном стриминге именованных колонок у SQLite нет собственного локатора строк, поэтому `Microsoft.Data.Sqlite` возвращает настоящий потоковый `SqliteBlob` только когда запрос выбирает ещё и `rowid`. Диалект добавляет собственный завершающий столбец-локатор — [`ISqlDialect.LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn), `"rowid"` в SQLite и `null` в PostgreSQL/SQL Server, — так что payload остаётся на позиции `0` и не является частью пользовательской проекции. Поэтому источник запроса обязан быть обычной rowid-таблицей: на `view` или таблице `WITHOUT ROWID` одноколоночная потоковая команда падает fail-closed с сырым `Microsoft.Data.Sqlite.SqliteException: no such column: rowid` — буферизованного фолбэка на этом пути нет. Многоколоночный `ToDataReader` его **не** использует: он готовит locator-free буферизованную команду (без `SequentialAccess`, без `rowid`), поэтому не привязан к rowid-источнику.
 
 ### In-memory
 
@@ -156,7 +161,7 @@ await foreach (var row in ctx.From("documents")
 
 ## Многоколоночность: `ToDataReader`
 
-Когда в проекции больше одной колонки или нужны все строки без материализации результата, используйте терминалы `ToDataReader`/`ToDataReaderAsync`. Они возвращают принадлежащий вызывающему [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) поверх той же sequential-access команды:
+Когда в проекции больше одной колонки или нужны все строки без материализации результата, используйте терминалы `ToDataReader`/`ToDataReaderAsync`. Они возвращают принадлежащий вызывающему [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) поверх команды провайдера — sequential-access на PostgreSQL/SQL Server, буферизованной без локатора на SQLite:
 
 ```csharp
 public static DbDataReader ToDataReader<TResult>(this QueryCommand<TResult> command, params ReadOnlySpan<object?> parameters);
@@ -181,11 +186,12 @@ while (reader.Read())
 
 Терминал **не** применяет проверку «ровно одна колонка»: он отдаёт provider-reader как есть, поэтому контракт [потоковой проекции](#владение-и-освобождение) по-прежнему действует:
 
-* **Только вперёд, последовательный доступ.** Читайте колонки в порядке возрастания порядкового номера и не читайте колонку дважды; LOB-колонку нужно прочитать до любой последующей колонки.
+* **Только вперёд, последовательный доступ (PostgreSQL, SQL Server).** Читайте колонки в порядке возрастания порядкового номера и не читайте колонку дважды; LOB-колонку нужно прочитать до любой последующей колонки. В SQLite reader, наоборот, **буферизованный**: он не открывается с `SequentialAccess`, ordinals можно читать в любом порядке, а `FieldCount` равен числу колонок проекции (без добавленного локатора `rowid`). Reader остаётся forward-only у каждого провайдера.
+* **SQLite буферизует, а не читает чанками.** Колонка `byte[]`/`string` в многоколоночной проекции SQLite читается целиком в managed-память (`Select(x => new { x.Id, x.Body })` возвращает `Body` через `GetString`/`GetValue`); чанкования `SqliteBlob` нет, и выигрыша O(буфера) для этой колонки тоже. Для одной большой колонки в SQLite используйте `ToStream`/`ToTextReader` — они действительно стримят.
 * **Владение.** Возвращённый reader владеет нижележащим `DbDataReader` и per-call `DbCommand`; освободите его (`await using` на асинхронном пути), чтобы освободить и то и другое. Контекст остаётся живым и пригодным.
 * **Отмена.** Токен отменяет открытие reader'а; он также связывается внутри `Read`/`ReadAsync` и `NextResult`/`NextResultAsync`.
 
-`ToDataReader` **не поддерживается в SQLite**, потому что потоковая проекция SQLite всегда добавляет локатор `rowid`, и терминал выставил бы колонку, которую вызывающий не проецировал; он падает fail-closed с `NotSupportedException`. Для одной LOB-колонки в SQLite используйте `ToStream`/`ToTextReader`. MySQL/MariaDB и ClickHouse отклоняют терминал, потому что у них нет поддержки sequential access, а провайдер in-memory — потому что у него нет `DbDataReader`.
+`ToDataReader` поддерживается в SQLite для не-LOB проекций и — с оговоркой о буферизации выше — для LOB-колонки внутри многоколоночной проекции. MySQL/MariaDB и ClickHouse отклоняют терминал, потому что у них нет поддержки sequential access, а провайдер in-memory — потому что у него нет `DbDataReader`.
 
 ## `SequentialAccess` и кэш планов
 

@@ -1,6 +1,10 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using ClickHouse.Driver.ADO;
 using ClickHouse.Driver.ADO.Parameters;
 using NextORM.Core;
@@ -13,6 +17,11 @@ namespace NextORM.ClickHouse;
 /// </summary>
 public class ClickHouseDataContext : DataContext
 {
+    private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
+    private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+    private static readonly MethodInfo ToJsonDocumentMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToJsonDocument), BindingFlags.NonPublic | BindingFlags.Static)!;
+    private static readonly MethodInfo ToJsonElementMI = typeof(ClickHouseDataContext).GetMethod(nameof(ToJsonElement), BindingFlags.NonPublic | BindingFlags.Static)!;
+
     /// <summary>
     /// Creates a ClickHouse context that owns a connection built lazily from
     /// <paramref name="connectionString"/>.
@@ -45,9 +54,77 @@ public class ClickHouseDataContext : DataContext
     public override ISqlDialect Dialect => ClickHouseDialect.Instance;
 
     /// <summary>
+    /// Materializes a projected native ClickHouse <c>JSON</c> column. A bare <see cref="JsonObject"/> is
+    /// read as-is; a bare <see cref="JsonDocument"/>/<see cref="JsonElement"/> is adapted from the driver's
+    /// object-root <see cref="JsonObject"/> transport. A SQL <c>NULL</c> becomes a null reference (or
+    /// <see langword="default"/> for the value-type <see cref="JsonElement"/>), which stays distinct from an
+    /// empty object. Every other column is mapped by the base implementation, which also resolves a
+    /// <c>[JsonColumn]</c> converter (its provider type is <see cref="JsonObject"/> on ClickHouse).
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="param">The data-reader expression the accessor is built from.</param>
+    /// <returns>An expression that reads the column value.</returns>
+    public override Expression MapColumnExpression(SelectExpression column, Expression param)
+    {
+        var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        // A converter (for example [JsonColumn]) keeps its own storage policy; the native-mapping
+        // shortcut applies to a bare JSON projection only.
+        if (column.Converter is null
+            && (realType == typeof(JsonObject) || realType == typeof(JsonDocument) || realType == typeof(JsonElement)))
+            return MapJsonColumn(column, param, realType);
+
+        return base.MapColumnExpression(column, param);
+    }
+
+    private static Expression MapJsonColumn(SelectExpression column, Expression param, Type realType)
+    {
+        var index = Expression.Constant(column.Index);
+        var getter = Expression.Call(
+            Expression.Convert(param, typeof(DbDataReader)),
+            GetFieldValueMI.MakeGenericMethod(typeof(JsonObject)),
+            index);
+
+        Expression value = realType == typeof(JsonObject) ? getter : AdaptJsonObject(getter, realType);
+
+        // Defensive DBNull handling: a SQL NULL materializes as a null reference (JsonObject/JsonDocument),
+        // or as default(JsonElement) (ValueKind Undefined) for the non-nullable value type, distinct from
+        // {}. For a declared Nullable<T> (for example JsonElement?) the null must stay a true null: the
+        // default(JsonElement) would otherwise surface as an Undefined value that has HasValue == true.
+        Expression nullValue;
+        if (column.Nullable && column.PropertyType != realType)
+        {
+            value = Expression.Convert(value, column.PropertyType);
+            nullValue = Expression.Constant(null, column.PropertyType);
+        }
+        else
+        {
+            nullValue = realType.IsValueType
+                ? Expression.Default(realType)
+                : Expression.Constant(null, realType);
+        }
+
+        return Expression.Condition(
+            Expression.Call(param, IsDBNullMI, index),
+            nullValue,
+            value);
+    }
+
+    private static Expression AdaptJsonObject(Expression jsonObject, Type realType)
+    {
+        var method = realType == typeof(JsonDocument) ? ToJsonDocumentMI : ToJsonElementMI;
+        return Expression.Call(method, jsonObject);
+    }
+
+    private static JsonDocument ToJsonDocument(JsonObject value) => JsonDocument.Parse(value.ToJsonString());
+
+    private static JsonElement ToJsonElement(JsonObject value) => JsonSerializer.SerializeToElement(value);
+
+    /// <summary>
     /// Creates a <c>ClickHouseDbParameter</c>. The driver rewrites the ADO-style <c>@name</c>
     /// placeholder to <c>{name:Type}</c> and infers the ClickHouse type from the CLR value, so the
-    /// stored name omits the <c>@</c> prefix.
+    /// stored name omits the <c>@</c> prefix. A <see cref="JsonObject"/>, and an object-root
+    /// <see cref="JsonElement"/>/<see cref="JsonDocument"/>, are bound as the native ClickHouse
+    /// <c>JSON</c> type; any other value keeps its existing binding.
     /// </summary>
     /// <param name="name">The parameter name, without the provider prefix.</param>
     /// <param name="value">The parameter value, or <see langword="null"/>.</param>
@@ -56,11 +133,35 @@ public class ClickHouseDataContext : DataContext
     {
         // The driver rewrites the ADO-style @name placeholder to {name:Type} and infers the
         // ClickHouse type from the CLR value; the stored name is the one without the @ prefix.
-        return new ClickHouseDbParameter
+        var parameter = new ClickHouseDbParameter
         {
             ParameterName = name.TrimStart('@'),
             Value = value
         };
+
+        // The driver infers JSON from a JsonObject value; the explicit type makes the native JSON
+        // binding independent of that inference. Native ClickHouse JSON is object-rooted, so a bare
+        // object-root element/document is normalized to a self-contained JsonObject first; any other
+        // root (array, primitive, string, JSON null) keeps its existing binding rather than silently
+        // rewriting. A JsonObject created directly from a JsonElement still references the caller's
+        // JsonDocument, so the value is reparsed from its raw text: the parameter then survives the
+        // caller disposing the document before execution.
+        if (value is JsonObject)
+        {
+            parameter.ClickHouseType = "JSON";
+        }
+        else if (value is JsonElement { ValueKind: JsonValueKind.Object } element)
+        {
+            parameter.Value = JsonNode.Parse(element.GetRawText())!;
+            parameter.ClickHouseType = "JSON";
+        }
+        else if (value is JsonDocument { RootElement.ValueKind: JsonValueKind.Object } document)
+        {
+            parameter.Value = JsonNode.Parse(document.RootElement.GetRawText())!;
+            parameter.ClickHouseType = "JSON";
+        }
+
+        return parameter;
     }
 
     /// <summary>

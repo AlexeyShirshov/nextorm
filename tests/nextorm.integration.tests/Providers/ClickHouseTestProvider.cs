@@ -191,6 +191,37 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (2, '{"flag":true,"list":[1,2,3]}')
         """,
 
+        // #128: a separate bare JsonObject mapping over a native JSON column. The json_entity fixture
+        // above keeps IJsonEntity.Doc as a string (the existing SQL-function path); this table backs the
+        // bare JsonObject projection/parameter round-trip.
+        "drop table if exists json_object_entity",
+        """
+        create table json_object_entity
+        (
+            id Int32,
+            doc JSON
+        ) engine = Memory
+        """,
+        """
+        insert into json_object_entity (id, doc) values
+            (1, '{"name":"bob","age":25,"nested":{"x":2}}'),
+            (2, '{}')
+        """,
+
+        // #198: native JSON backing the [JsonColumn] Auto/Native object-root POCO round-trip, the native
+        // parameter path and the Nullable(JSON) SQL-NULL-vs-{} distinction. auto_doc/native_doc are the
+        // physical types asserted through system.columns; null_doc stays nullable.
+        "drop table if exists json_native_poco",
+        """
+        create table json_native_poco
+        (
+            id Int32,
+            auto_doc JSON,
+            native_doc JSON,
+            null_doc Nullable(JSON)
+        ) engine = Memory
+        """,
+
         "drop table if exists tuple_entity",
         """
         create table tuple_entity
@@ -315,6 +346,106 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (1, 5, 1, 1, 10, 1),
             (2, 7, 2, 2, 10, 3),
             (3, 6, 3, 3, 20, 2)
+        """,
+
+        // Floating-key extreme-row parity fixture (#150 D150.4): a separate table from the integral
+        // extreme_parity_144 so the issue-144 fixtures stay untouched. Float32/Float64 (and their
+        // nullable forms) are the extreme keys; the group key is integral-only (as the frozen
+        // allowlist requires), i1/i2 back the composite/three-component key shapes and payload is a
+        // nullable string. The `dataset` column selects one deterministic scenario per test and the
+        // ids are globally unique. Datasets cover finite extrema/ties, mixed and all-NaN, +/-infinity,
+        // both signed zeros, mixed and all-NULL nullable keys, a NULL group with a NULL winning
+        // payload, composite/three-component options and the empty filter.
+        "drop table if exists extreme_float_150",
+        """
+        create table extreme_float_150
+        (
+            id Int32,
+            dataset String,
+            grp Nullable(Int32),
+            f32 Float32,
+            f64 Float64,
+            f32n Nullable(Float32),
+            f64n Nullable(Float64),
+            i1 Int32,
+            i2 Int32,
+            payload Nullable(String)
+        ) engine = Memory
+        """,
+        """
+        insert into extreme_float_150 (id, dataset, grp, f32, f64, f32n, f64n, i1, i2, payload) values
+            (1,   'finite',     10,   -5.5,   -5.5,   -5.5,   -5.5,   1, 1, 'f1'),
+            (2,   'finite',     10,    3.25,   3.25,   3.25,   3.25,  1, 2, 'f2'),
+            (3,   'finite',     10,   10.0,   10.0,   10.0,   10.0,   2, 1, 'f3'),
+            (4,   'finite',     10,  -12.75, -12.75, -12.75, -12.75,  2, 2, 'f4'),
+            (5,   'finite',     20,   10.0,   10.0,   10.0,   10.0,   3, 1, 'f5'),
+            (6,   'finite',     20,    0.0,    0.0,    0.0,    0.0,   3, 2, 'f6'),
+            (7,   'finite',     20,  -12.75, -12.75, -12.75, -12.75,  4, 1, 'f7'),
+            (10,  'mixednan',   10,    1.5,    1.5,    1.5,    1.5,   1, 1, 'm1'),
+            (11,  'mixednan',   10,    nan,    nan,    nan,    nan,    1, 2, 'm2'),
+            (12,  'mixednan',   10,    2.5,    2.5,    2.5,    2.5,   2, 1, 'm3'),
+            (13,  'mixednan',   20,   -3.5,   -3.5,   -3.5,   -3.5,   2, 2, 'm4'),
+            (20,  'allnan',     10,    nan,    nan,    nan,    nan,    1, 1, 'n1'),
+            (21,  'allnan',     10,    nan,    nan,    nan,    nan,    1, 2, 'n2'),
+            (30,  'inf',        10,   -inf,   -inf,   -inf,   -inf,    1, 1, 'i1'),
+            (31,  'inf',        10,    inf,    inf,    inf,    inf,    1, 2, 'i2'),
+            (32,  'inf',        10,    5.0,    5.0,    5.0,    5.0,   2, 1, 'i3'),
+            (40,  'zeros',      10,    0.0,    0.0,    0.0,    0.0,   1, 1, 'z1'),
+            (41,  'zeros',      10,   -0.0,   -0.0,   -0.0,   -0.0,   1, 1, 'z2'),
+            (50,  'nulls',      10,    1.5,    1.5,    1.5,    1.5,   1, 1, 'q1'),
+            (51,  'nulls',      10,    2.5,    2.5,    2.5,    NULL,  1, 2, 'q2'),
+            (52,  'nulls',      10,    3.5,    3.5,    3.5,    2.5,   2, 1, 'q3'),
+            (60,  'allnull',    10,    1.0,    1.0,    1.0,    NULL,  1, 1, 'an1'),
+            (61,  'allnull',    10,    2.0,    2.0,    2.0,    NULL,  1, 2, 'an2'),
+            (70,  'composite',  10,    nan,    nan,    nan,    nan,    1, 1, 'c1'),
+            (71,  'composite',  10,    1.0,    1.0,    1.0,    1.0,   2, 1, 'c2'),
+            (72,  'composite',  10,    3.0,    3.0,    3.0,    3.0,   1, 3, 'c3'),
+            (73,  'composite',  10,    nan,    nan,    nan,    nan,    2, 2, 'c4'),
+            (74,  'composite',  10,    5.0,    5.0,    5.0,    5.0,   1, 2, 'c5'),
+            (75,  'composite',  20,    4.0,    4.0,    4.0,    4.0,   1, 1, 'c6'),
+            (76,  'composite',  20,   -1.0,   -1.0,   -1.0,   -1.0,   2, 1, 'c7'),
+            (80,  'f32',        10,    nan,    0.0,    nan,    0.0,   1, 1, 'g1'),
+            (81,  'f32',        10,    1.5,    0.0,    1.5,    0.0,   1, 2, 'g2'),
+            (82,  'f32',        10,    inf,    0.0,    inf,    0.0,   2, 1, 'g3'),
+            (83,  'f32',        10,   -inf,    0.0,   -inf,    0.0,   2, 2, 'g4'),
+            (84,  'f32',        10,    2.5,    0.0,    2.5,    0.0,   3, 1, 'g5'),
+            (90,  'nanfirst',   10,    nan,    nan,    nan,    nan,    1, 1, 'h1'),
+            (91,  'nanfirst',   10,    1.0,    1.0,    1.0,    1.0,   1, 2, 'h2'),
+            (92,  'nanfirst',   10,    2.0,    2.0,    2.0,    2.0,   1, 3, 'h3'),
+            (95,  'nanlast',    20,    2.0,    2.0,    2.0,    2.0,   2, 1, 'h4'),
+            (96,  'nanlast',    20,    1.0,    1.0,    1.0,    1.0,   2, 2, 'h5'),
+            (97,  'nanlast',    20,    nan,    nan,    nan,    nan,    2, 3, 'h6'),
+            (100, 'naninf',     10,    nan,    nan,    nan,    nan,    1, 1, 'k1'),
+            (101, 'naninf',     10,    inf,    inf,    inf,    inf,    1, 2, 'k2'),
+            (102, 'naninf',     10,   -inf,   -inf,   -inf,   -inf,    1, 3, 'k3'),
+            (110, 'compfloat',  10,    nan,    nan,    nan,    nan,    1, 1, 'l1'),
+            (111, 'compfloat',  10,    1.0,    1.0,    1.0,    1.0,   2, 1, 'l2'),
+            (112, 'compfloat',  10,    3.0,    3.0,    3.0,    3.0,   1, 1, 'l3'),
+            (120, 'threecomp',  10,    1.0,    1.0,    1.0,    1.0,   1, 1, 't1'),
+            (121, 'threecomp',  10,    nan,    nan,    nan,    nan,    1, 2, 't2'),
+            (122, 'threecomp',  10,    3.0,    3.0,    3.0,    3.0,   1, 2, 't3'),
+            (123, 'threecomp',  10,   -1.0,   -1.0,   -1.0,   -1.0,   2, 1, 't4'),
+            (140, 'nullgrp',    NULL,  3.0,    3.0,    3.0,    3.0,   1, 1, 'ng1'),
+            (141, 'nullgrp',    10,    5.0,    5.0,    5.0,    5.0,   1, 2, NULL),
+            (142, 'nullgrp',    10,    1.0,    1.0,    1.0,    1.0,   2, 1, 'ng2')
+        """,
+
+        // Decimal extreme-key fixture (#150): outside the native allowlist, so the real-server
+        // negative re-check can prove the native renderer declines and the portable lowering matches.
+        "drop table if exists extreme_decimal_150",
+        """
+        create table extreme_decimal_150
+        (
+            id Int32,
+            dec Nullable(Decimal(38, 10)),
+            payload Nullable(String)
+        ) engine = Memory
+        """,
+        """
+        insert into extreme_decimal_150 (id, dec, payload) values
+            (1, 1.5, 'd1'),
+            (2, 2.5, 'd2'),
+            (3, NULL, 'd3')
         """,
 
         // Implicit-navigation reference fixtures (#148-B D8): ClickHouse does not derive

@@ -517,6 +517,52 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
         }
     }
 
+    // ---- Tuple / row constructor execution (#126): flat "(a, b)" row comparison and inline .ItemN ----
+    // MySQL has no server-side row type; the constructor is rendered as the ANSI flat row "(a, b)" and is
+    // allowed only as a direct comparison operand in a predicate. These execute against the real server,
+    // so they prove the generated statement is accepted and filters/materialises correctly.
+
+    [Fact]
+    public void Tuple_RowComparisonInWhere_ShouldExecuteAndFilter()
+    {
+        var ids = _sut.ComplexEntity
+            .Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "dadfasd"))
+            .Select(x => x.Id)
+            .ToList();
+
+        ids.Should().Equal(1L);
+    }
+
+    [Fact]
+    public void Tuple_RowComparisonAndOr_ShouldExecuteAndFilter()
+    {
+        var ids = _sut.ComplexEntity
+            .Where(x => (Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "dadfasd"))
+                        || (Tuple.Create(x.Id, x.String) == Tuple.Create(2L, "xxx")))
+            .Select(x => x.Id)
+            .ToList();
+
+        ids.Should().BeEquivalentTo(new[] { 1L, 2L });
+    }
+
+    [Fact]
+    public void Tuple_InlineElementAccess_ShouldExecuteInFilterAndProjection()
+    {
+        var ids = _sut.ComplexEntity
+            .Where(x => Tuple.Create(x.Id, x.String).Item1 > 1L)
+            .Select(x => x.Id)
+            .ToList();
+
+        ids.Should().BeEquivalentTo(new[] { 2L, 3L });
+
+        var strings = _sut.ComplexEntity
+            .OrderBy(x => Tuple.Create(x.Id, x.String).Item1)
+            .Select(x => Tuple.Create(x.Id, x.String).Item2)
+            .ToList();
+
+        strings.Should().Equal("dadfasd", "xxx", null);
+    }
+
     private sealed class TvpEntity
     {
         public int Id { get; set; }

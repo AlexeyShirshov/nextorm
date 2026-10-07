@@ -271,4 +271,85 @@ public class SqliteFunctions : CommonFunctions
     /// <summary><c>json_tree(json, path)</c> as a FROM source, walking the element selected by <paramref name="path"/>.</summary>
     [SqlTableFunction("json_tree")]
     public IQueryable<SqlFunctions.IJsonTreeRow> json_tree(string? json, string? path) => throw new NotSupportedException();
+
+    // -------------------------------------------------------------------------------------------------
+    // FTS3/FTS4/FTS5 full-text search (FTS support exists only when SQLite was compiled with the
+    // corresponding module; the bundled provider ships with fts3, fts4 and fts5).
+    //
+    // The members below are SQL-only: they have no CLR equivalent, so the in-memory provider rejects
+    // every one of them with an explicit NotSupportedException instead of fabricating a value.
+    // -------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// <c>table MATCH query</c> or <c>column MATCH query</c>: the full-text search predicate shared by
+    /// FTS3, FTS4 and FTS5. <paramref name="tableOrColumn"/> may be a mapped column expression
+    /// (<c>x.Title</c>) or a trusted constant token naming the FTS table/alias (rendered verbatim, never
+    /// parameterised); <paramref name="match"/> is the FTS query and stays parameterised.
+    /// </summary>
+    /// <remarks>SQL-only; the in-memory provider throws.</remarks>
+    public bool Match(object? tableOrColumn, string? match) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>
+    /// FTS5 <c>table(query)</c> as a FROM source: the table-valued form of an FTS5 search over
+    /// <paramref name="table"/> using the <paramref name="match"/> query. <typeparamref name="TEntity"/>
+    /// is the mapped row shape of the FTS table; project it like any other source. Use through
+    /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+    /// <paramref name="table"/> is a trusted constant token emitted verbatim (never built from user
+    /// input); <paramref name="match"/> stays parameterised. FTS5 only.
+    /// </summary>
+    [SqlTableFunction(Fts5TableFunction, VerbatimArguments = new[] { 0 })]
+    public IQueryable<TEntity> MatchTable<TEntity>(string? table, string? match) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS5 <c>bm25(table)</c>: the BM25 ranking score of each matching row (smaller is a better match). SQL-only.</summary>
+    public double? FTS5bm25(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS5 <c>bm25(table, weight1, ...)</c>: BM25 with a per-column weight. SQL-only.</summary>
+    public double? FTS5bm25(string? table, params double[] weights) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS5 <c>highlight(table, columnIndex, startMatch, endMatch)</c>: the text with every match wrapped. SQL-only.</summary>
+    public string? Highlight(string? table, int columnIndex, string? startMatch, string? endMatch) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS5 <c>snippet(table, columnIndex, startMatch, endMatch, ellipses, tokensNumber)</c>: the fragment with matches wrapped. SQL-only.</summary>
+    public string? Snippet(string? table, int columnIndex, string? startMatch, string? endMatch, string? ellipses, int tokensNumber) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS5 <c>table.rank</c>: the hidden rank column (the default order is by ascending rank). SQL-only.</summary>
+    public double? Rank(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>rank(matchinfo(...))</c>: ranks a matching row through the connection-registered <c>rank</c> UDF fed with <paramref name="matchInfo"/> (see <see cref="FTS3MatchInfo(string?)"/>). SQL-only.</summary>
+    public double? Rank(byte[]? matchInfo) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>table.rowid</c>: the hidden rowid column. SQL-only.</summary>
+    public long? RowId(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>offsets(table)</c>: the <c>&lt;column&gt; &lt;term&gt; &lt;byte offset&gt; &lt;byte length&gt; ...</c> string. SQL-only.</summary>
+    public string? FTS3Offsets(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>matchinfo(table)</c>: the binary match statistics passed to a ranking UDF such as <c>rank</c>. SQL-only.</summary>
+    public byte[]? FTS3MatchInfo(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>matchinfo(table, format)</c>: the match statistics under <paramref name="format"/> (<c>pcx</c>, <c>pcnalx</c>, ...). SQL-only.</summary>
+    public byte[]? FTS3MatchInfo(string? table, string? format) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>snippet(table)</c>: the default snippet with matches wrapped. SQL-only.</summary>
+    public string? FTS3Snippet(string? table) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>snippet(table, startMatch)</c>. SQL-only.</summary>
+    public string? FTS3Snippet(string? table, string? startMatch) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch)</c>. SQL-only.</summary>
+    public string? FTS3Snippet(string? table, string? startMatch, string? endMatch) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses)</c>. SQL-only.</summary>
+    public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses, columnIndex)</c> (<c>-1</c> selects every column). SQL-only.</summary>
+    public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses, int columnIndex) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>FTS3/4 <c>snippet(table, startMatch, endMatch, ellipses, columnIndex, tokensNumber)</c>. SQL-only.</summary>
+    public string? FTS3Snippet(string? table, string? startMatch, string? endMatch, string? ellipses, int columnIndex, int tokensNumber) => throw new NotSupportedException(InMemoryFtsMessage);
+
+    /// <summary>The sentinel SQL name of the FTS5 table-valued form, rewritten by <c>SqliteDialect</c>.</summary>
+    internal const string Fts5TableFunction = "fts5";
+
+    private const string InMemoryFtsMessage = "The SQLite full-text (FTS3/FTS4/FTS5) functions are SQL-only and have no in-memory equivalent.";
 }

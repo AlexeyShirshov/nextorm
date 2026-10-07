@@ -1640,6 +1640,769 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         rows.OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Issue #182: SQL Server scalar-function native-semantics integration coverage. Every case runs
+    // the ORM translation and the equivalent hand-written T-SQL over the same provider connection and
+    // compares the values, so the renderer's spelling is proven against the real server rather than a
+    // portable substitute. The negative cases compare the server error code raised by both paths.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void SysUtcDateTime_ShouldRoundTripNativeUtcClock()
+    {
+        var ctx = _sut.DataProvider;
+        var native = NativeScalar<DateTime>(ctx, "select sysutcdatetime()");
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.sysutcdatetime())
+            .First();
+
+        orm.Should().NotBeNull();
+        var ormUtc = DateTime.SpecifyKind(orm!.Value, DateTimeKind.Utc);
+        var nativeUtc = DateTime.SpecifyKind(native, DateTimeKind.Utc);
+
+        // datetime2 travels with Kind Unspecified, so pin both to UTC and check the clock semantics.
+        ormUtc.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(5));
+        ormUtc.Should().BeCloseTo(nativeUtc, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void OffsetBuilders_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nativeOffset = NativeScalar<DateTimeOffset>(
+            ctx, "select todatetimeoffset(cast('2023-01-01T10:00:00' as datetime2), '+02:00')");
+        var ormOffset = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.todatetimeoffset(x.Datetime, "+02:00"))
+            .First();
+
+        ormOffset.Should().Be(nativeOffset);
+        ormOffset!.Value.Offset.Should().Be(TimeSpan.FromHours(2));
+        ormOffset.Value.UtcDateTime.Should().Be(new DateTime(2023, 1, 1, 8, 0, 0, DateTimeKind.Utc));
+
+        var nativeSwitch = NativeScalar<DateTimeOffset>(
+            ctx, "select switchoffset(todatetimeoffset(cast('2023-01-01T10:00:00' as datetime2), '+02:00'), '-08:00')");
+        var ormSwitch = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.switchoffset(
+                SqlFunctions.SqlServer.todatetimeoffset(x.Datetime, "+02:00"), "-08:00"))
+            .First();
+
+        // SWITCHOFFSET keeps the instant and only changes the offset: 10:00+02:00 is 00:00-08:00.
+        ormSwitch.Should().Be(nativeSwitch);
+        ormSwitch!.Value.Offset.Should().Be(TimeSpan.FromHours(-8));
+        ormSwitch.Value.UtcDateTime.Should().Be(new DateTime(2023, 1, 1, 8, 0, 0, DateTimeKind.Utc));
+
+        var ormMinutes = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.todatetimeoffset(x.Datetime, -120))
+            .First();
+        var nativeMinutes = NativeScalar<DateTimeOffset>(
+            ctx, "select todatetimeoffset(cast('2023-01-01T10:00:00' as datetime2), -120)");
+        ormMinutes.Should().Be(nativeMinutes);
+        ormMinutes!.Value.Offset.Should().Be(TimeSpan.FromHours(-2));
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void DateTime2FromParts_ShouldRoundTripParts()
+    {
+        var ctx = _sut.DataProvider;
+        var native = NativeScalar<DateTime>(ctx, "select datetime2fromparts(2023, 5, 17, 12, 30, 45, 1234567, 7)");
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.datetime2fromparts(2023, 5, 17, 12, 30, 45, 1234567, 7))
+            .First();
+
+        // Fractions are units of 10^-precision seconds; precision 7 means 100 ns ticks.
+        var expected = new DateTime(2023, 5, 17, 12, 30, 45).AddTicks(1234567);
+        orm.Should().Be(expected);
+        native.Should().Be(expected);
+    }
+
+    private sealed class ChecksumRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+        [Column("c")]
+        public int? Checksum { get; set; }
+        [Column("b")]
+        public int? BinaryChecksum { get; set; }
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void ChecksumAndBinaryChecksum_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+
+        var orm = _sut.ComplexEntity.OrderBy(x => x.Id)
+            .Select(x => new
+            {
+                x.Id,
+                C = SqlFunctions.SqlServer.checksum(x.Id, x.String),
+                B = SqlFunctions.SqlServer.binary_checksum(x.Id, x.String)
+            })
+            .ToList();
+
+        using var native = ctx.ExecuteRaw(
+            "select id, checksum(id, somestring) as c, binary_checksum(id, somestring) as b " +
+            "from complex_entity order by id");
+        var nativeRows = native.Read<ChecksumRow>();
+
+        orm.Select(r => (r.Id, r.C, r.B)).Should().Equal(nativeRows.Select(r => (r.Id, r.Checksum, r.BinaryChecksum)));
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void CompressDecompress_ShouldRoundTripBytesAndMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+        var data = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.decompress(SqlFunctions.SqlServer.compress(data)))
+            .First();
+
+        orm.Should().Equal(data);
+
+        using var native = ctx.ExecuteRaw("select decompress(compress(@p))", [new ProcedureParameter("p", data)]);
+        native.Read<byte[]>().Single().Should().Equal(data);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Stuff_ShouldMatchNativeForString()
+    {
+        var ctx = _sut.DataProvider;
+
+        var ormString = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.stuff("abcdef", 2, 3, "XY"))
+            .First();
+        var nativeString = NativeScalar<string>(ctx, "select stuff('abcdef', 2, 3, 'XY')");
+        ormString.Should().Be("aXYef");
+        ormString.Should().Be(nativeString);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Rand_ShouldBeInRangeAndMatchNativeForSeed()
+    {
+        var ctx = _sut.DataProvider;
+
+        var unseeded = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.rand())
+            .First();
+        unseeded.Should().BeGreaterThanOrEqualTo(0.0).And.BeLessThan(1.0);
+
+        // An integer seed makes RAND deterministic (the value, not the range, is pinned here).
+        var ormA = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.rand(5))
+            .First();
+        var ormB = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.SqlServer.rand(5))
+            .First();
+        var native = NativeScalar<double>(ctx, "select rand(5)");
+
+        ormA.Should().Be(ormB);
+        ormA.Should().Be(native);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void MetadataScalars_ShouldMatchNative()
+    {
+        var ctx = _sut.DataProvider;
+
+        var orm = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                ObjectId = SqlFunctions.SqlServer.object_id("complex_entity"),
+                ObjectIdU = SqlFunctions.SqlServer.object_id("complex_entity", "U"),
+                DbName = SqlFunctions.SqlServer.db_name(),
+                IsNumericTrue = SqlFunctions.SqlServer.isnumeric("123"),
+                IsNumericFalse = SqlFunctions.SqlServer.isnumeric("abc"),
+                Str = SqlFunctions.SqlServer.str(123.456, 10, 2)
+            })
+            .First();
+
+        var nativeObjectId = NativeScalar<int>(ctx, "select object_id('complex_entity')");
+        var nativeObjectIdU = NativeScalar<int>(ctx, "select object_id('complex_entity', 'U')");
+        var nativeDbName = NativeScalar<string>(ctx, "select db_name()");
+        var nativeNumericTrue = NativeScalar<int>(ctx, "select isnumeric('123')");
+        var nativeNumericFalse = NativeScalar<int>(ctx, "select isnumeric('abc')");
+        var nativeStr = NativeScalar<string>(ctx, "select str(123.456, 10, 2)");
+
+        orm.ObjectId.Should().Be(nativeObjectId);
+        orm.ObjectIdU.Should().Be(nativeObjectIdU);
+        orm.DbName.Should().Be(nativeDbName);
+        orm.IsNumericTrue.Should().Be(1);
+        orm.IsNumericTrue.Should().Be(nativeNumericTrue);
+        orm.IsNumericFalse.Should().Be(0);
+        orm.IsNumericFalse.Should().Be(nativeNumericFalse);
+        orm.Str.Should().Be("    123.46");
+        orm.Str.Should().Be(nativeStr);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Decompress_InvalidBytes_ShouldRaiseSameNativeErrorCode()
+    {
+        var ctx = _sut.DataProvider;
+        var corrupted = new byte[] { 0x01, 0x02, 0x03, 0x04 };
+
+        var nativeNumber = CatchSqlServerError(() =>
+        {
+            using var result = ctx.ExecuteRaw("select decompress(0x01020304)");
+            result.Read<byte[]>();
+        });
+
+        var ormNumber = CatchSqlServerError(() =>
+            _sut.SimpleEntity.Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.SqlServer.decompress(corrupted))
+                .First());
+
+        nativeNumber.Should().NotBeNull();
+        ormNumber.Should().Be(nativeNumber);
+    }
+
+    [Fact]
+    [Trait("Issue", "182")]
+    public void Checksum_NonComparableXmlArgument_ShouldRaiseSameNativeErrorCode()
+    {
+        var ctx = _sut.DataProvider;
+
+        var nativeNumber = CatchSqlServerError(() =>
+        {
+            using var result = ctx.ExecuteRaw("select checksum(payload) from xml_entity where id = 1");
+            result.Read<int>();
+        });
+
+        var ormNumber = CatchSqlServerError(() =>
+            _sut.DataProvider.From<IXmlEntity>().Where(x => x.Id == 1)
+                .Select(x => SqlFunctions.SqlServer.checksum(x.Payload))
+                .First());
+
+        nativeNumber.Should().NotBeNull();
+        ormNumber.Should().Be(nativeNumber);
+    }
+
+    private static T NativeScalar<T>(IDataContext ctx, string sql)
+    {
+        using var result = ctx.ExecuteRaw(sql);
+        return result.Read<T>().Single();
+    }
+
+    private static int? CatchSqlServerError(Action action)
+    {
+        try
+        {
+            action();
+            return null;
+        }
+        catch (SqlException exception)
+        {
+            return exception.Number;
+        }
+    }
+
+    // --- OUTPUT ... INTO a table variable (issue #127) ---------------------------------------------
+    //
+    // A table variable lives only inside the batch (and connection) that declares it, so a single batch
+    // runs DECLARE + DML(OUTPUT ... INTO @t) + SELECT ... FROM @t; the read-back below would fail with
+    // "Must declare the table variable @t" if the statements were split across commands. The DECLARE text
+    // is the caller-supplied trusted column definitions and declares ordinary storage columns: no
+    // IDENTITY/computed marker is copied from the source, the generated identity value is simply stored
+    // into the plain declared column.
+
+    [Fact]
+    public void OutputIntoTableVariable_Insert_ShouldDeclareStorageColumnsAndReadBackIdentity()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "tvar_" + Guid.NewGuid().ToString("N");
+
+        var builder = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, marker)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)");
+
+        var sql = builder.ToSql();
+
+        sql.Should().StartWith("declare @t table (id bigint, name nvarchar(100));");
+        sql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
+        sql.Should().EndWith("; select id, name from @t");
+        sql.Should().NotContainEquivalentOf("identity");
+
+        var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("p0", marker));
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().BeGreaterThan(0);
+        rows[0].Name.Should().Be(marker);
+
+        // a nullable reference value round-trips as SQL NULL through an ordinary declared column
+        var nullSql = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, (string?)null)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql();
+
+        var nullRows = ExecuteTableVariableBatch(ctx, nullSql, new ProcedureParameter("p0", null, DbType: DbType.String));
+
+        nullRows.Should().ContainSingle();
+        nullRows[0].Id.Should().BeGreaterThan(0);
+        nullRows[0].Name.Should().BeNull();
+    }
+
+    [Fact]
+    public void OutputIntoTableVariable_Update_ShouldReadBackUpdatedRowsAndEmptySet()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeTestKey();
+        var missingId = MergeTestKey();
+        var marker = "tvar_" + Guid.NewGuid().ToString("N");
+
+        ctx.CreateInsertBuilder<IMergeEntity>()
+            .Values(new MergeEntity { Id = id, Name = "before", Age = 1 })
+            .Insert();
+
+        var sql = ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == id)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ToSql();
+
+        sql.Should().StartWith("declare @t table (id int, name nvarchar(100));");
+        sql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
+        sql.Should().EndWith("; select id, name from @t");
+
+        var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("p0", marker), new ProcedureParameter("id", id));
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(id);
+        rows[0].Name.Should().Be(marker);
+
+        // empty read-back: a DML whose predicate matches no row leaves the table variable empty
+        var emptySql = ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == missingId)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t2", "id int, name nvarchar(100)")
+            .ToSql();
+
+        ExecuteTableVariableBatch(ctx, emptySql, new ProcedureParameter("p0", marker), new ProcedureParameter("missingId", missingId))
+            .Should().BeEmpty();
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => x.Name).ToList()
+            .Should().ContainSingle().Which.Should().Be(marker);
+    }
+
+    [Fact]
+    public void OutputIntoTableVariable_Delete_ShouldReadBackRemovedRowsAndEmptySet()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeTestKey();
+        var missingId = MergeTestKey();
+
+        ctx.CreateInsertBuilder<IMergeEntity>()
+            .Values(new MergeEntity { Id = id, Name = "gone", Age = 2 })
+            .Insert();
+
+        var sql = ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == id)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ToSql();
+
+        sql.Should().StartWith("declare @t table (id int, name nvarchar(100));");
+        sql.Should().Contain("output deleted.id, deleted.name into @t (id, name)");
+        sql.Should().EndWith("; select id, name from @t");
+
+        // the captured predicate local is bound under its source name (@id), not as a positional @pN
+        var rows = ExecuteTableVariableBatch(ctx, sql, new ProcedureParameter("id", id));
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(id);
+        rows[0].Name.Should().Be("gone");
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => x.Id).ToList().Should().BeEmpty();
+
+        var emptySql = ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == missingId)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t2", "id int, name nvarchar(100)")
+            .ToSql();
+
+        ExecuteTableVariableBatch(ctx, emptySql, new ProcedureParameter("missingId", missingId)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Insert_ExecuteAndExecuteAsync_ShouldRunBatch()
+    {
+        var ctx = _sut.DataProvider;
+        var syncMarker = "tvar_sync_" + Guid.NewGuid().ToString("N");
+        var asyncMarker = "tvar_async_" + Guid.NewGuid().ToString("N");
+
+        var syncAffected = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, syncMarker)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .Execute();
+
+        var asyncAffected = await ctx.CreateInsertBuilder<IInsertEntity>()
+            .Value(x => x.Name, asyncMarker)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ExecuteAsync(TestContext.Current.CancellationToken);
+
+        syncAffected.Should().Be(1);
+        asyncAffected.Should().Be(1);
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == syncMarker || x.Name == asyncMarker)
+            .Select(x => x.Name).ToList()
+            .Should().BeEquivalentTo(new[] { syncMarker, asyncMarker });
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Update_ExecuteAndExecuteAsync_ShouldRunBatch()
+    {
+        var ctx = _sut.DataProvider;
+        var id1 = MergeTestKey();
+        var id2 = MergeTestKey();
+        var marker = "tvar_" + Guid.NewGuid().ToString("N");
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id1, Name = "before", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id2, Name = "before", Age = 1 }).Insert();
+
+        var syncAffected = ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == id1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .Execute();
+
+        var asyncAffected = await ctx.CreateUpdateBuilder<IMergeEntity>()
+            .Set(x => x.Name, marker)
+            .Where(x => x.Id == id2)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ExecuteAsync(TestContext.Current.CancellationToken);
+
+        syncAffected.Should().Be(1);
+        asyncAffected.Should().Be(1);
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id1 || x.Id == id2).Select(x => x.Name).ToList()
+            .Should().AllBe(marker);
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Delete_ExecuteAndExecuteAsync_ShouldRunBatch()
+    {
+        var ctx = _sut.DataProvider;
+        var id1 = MergeTestKey();
+        var id2 = MergeTestKey();
+
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id1, Name = "gone1", Age = 1 }).Insert();
+        ctx.CreateInsertBuilder<IMergeEntity>().Values(new MergeEntity { Id = id2, Name = "gone2", Age = 1 }).Insert();
+
+        var syncAffected = ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == id1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .Execute();
+
+        var asyncAffected = await ctx.CreateDeleteBuilder<IMergeEntity>()
+            .Where(x => x.Id == id2)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id int, name nvarchar(100)")
+            .ExecuteAsync(TestContext.Current.CancellationToken);
+
+        syncAffected.Should().Be(1);
+        asyncAffected.Should().Be(1);
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id1 || x.Id == id2).Select(x => x.Id).ToList().Should().BeEmpty();
+    }
+
+    // E08 (residual D127 criterion): a builder-generated INSERT ... SELECT whose source predicate matches no
+    // rows writes nothing into the table variable, so the read-back is empty and the target table is untouched.
+    [Fact]
+    public async Task OutputIntoTableVariable_Insert_EmptyResultSet_ShouldReturnEmptyAndNotChangeTarget()
+    {
+        var ctx = _sut.DataProvider;
+        var absentMarker = "tvar_empty_" + Guid.NewGuid().ToString("N");
+
+        int CountInsertEntity()
+        {
+            using var count = ctx.ExecuteRaw("select count(*) as cnt from insert_entity");
+            return count.Read<int>().Single();
+        }
+
+        var before = CountInsertEntity();
+
+        var syncSql = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Values(ctx.From<IInsertEntity>().Where(x => x.Name == absentMarker), x => new { x.Name, x.Age })
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t", "id bigint, name nvarchar(100)")
+            .ToSql();
+
+        syncSql.Should().StartWith("declare @t table (id bigint, name nvarchar(100));");
+        syncSql.Should().Contain("output inserted.id, inserted.name into @t (id, name)");
+        syncSql.Should().EndWith("; select id, name from @t");
+
+        ExecuteTableVariableBatch(ctx, syncSql, new ProcedureParameter("absentMarker", absentMarker))
+            .Should().BeEmpty();
+
+        var asyncSql = ctx.CreateInsertBuilder<IInsertEntity>()
+            .Values(ctx.From<IInsertEntity>().Where(x => x.Name == absentMarker), x => new { x.Name, x.Age })
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoTableVariable("@t2", "id bigint, name nvarchar(100)")
+            .ToSql();
+
+        var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoRow>(
+            ctx, asyncSql, [new ProcedureParameter("absentMarker", absentMarker)], TestContext.Current.CancellationToken);
+
+        asyncRows.Should().BeEmpty();
+
+        // a zero-row INSERT ... SELECT must not add a row to the target table
+        CountInsertEntity().Should().Be(before);
+    }
+
+    // E09 (residual D127 criterion): a computed column value round-trips through the table-variable read-back.
+    // 42 = basis 21 * 2; the declared table-variable columns are plain storage columns without IDENTITY/AS.
+    [Fact]
+    public async Task OutputIntoTableVariable_Insert_ComputedColumn_ShouldReadBackComputedValue()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists output_into_computed_127");
+        Execute(ctx, "create table output_into_computed_127 (id bigint identity(1,1) primary key, basis int not null, total as (basis * 2) persisted)");
+
+        try
+        {
+            var syncSql = ctx.CreateInsertBuilder<OutputIntoComputedEntity>()
+                .Values(new OutputIntoComputedEntity { Basis = 21 })
+                .Returning(x => new { x.Id, x.Basis, x.Total })
+                .OutputIntoTableVariable("@t", "id bigint, basis int, total int")
+                .ToSql();
+
+            syncSql.Should().StartWith("declare @t table (");
+            syncSql.Should().Contain("output inserted.id, inserted.basis, inserted.total into @t (id, basis, total)");
+            syncSql.Should().NotContainEquivalentOf("identity");
+            syncSql.Should().NotContainEquivalentOf(" as ");
+            syncSql.Should().EndWith("; select id, basis, total from @t");
+
+            var syncRows = ExecuteTableVariableBatch<OutputIntoComputedRow>(ctx, syncSql, new ProcedureParameter("p0", 21));
+
+            syncRows.Should().ContainSingle();
+            syncRows[0].Basis.Should().Be(21);
+            syncRows[0].Total.Should().Be(42);
+
+            // computed vs 0: a zero basis yields a real computed 0, read back as 0 (not a missing/default value)
+            var asyncSql = ctx.CreateInsertBuilder<OutputIntoComputedEntity>()
+                .Values(new OutputIntoComputedEntity { Basis = 0 })
+                .Returning(x => new { x.Id, x.Basis, x.Total })
+                .OutputIntoTableVariable("@t2", "id bigint, basis int, total int")
+                .ToSql();
+
+            var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoComputedRow>(
+                ctx, asyncSql, [new ProcedureParameter("p0", 0)], TestContext.Current.CancellationToken);
+
+            asyncRows.Should().ContainSingle();
+            asyncRows[0].Basis.Should().Be(0);
+            asyncRows[0].Total.Should().Be(0);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_into_computed_127");
+        }
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Update_ComputedColumn_ShouldReadBackComputedValue()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists output_into_computed_127");
+        Execute(ctx, "create table output_into_computed_127 (id bigint identity(1,1) primary key, basis int not null, total as (basis * 2) persisted)");
+
+        try
+        {
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 21 }).Insert();
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 21 }).Insert();
+            var ids = ctx.From<OutputIntoComputedEntity>().OrderBy(x => x.Id).Select(x => x.Id).ToList();
+            ids.Should().HaveCount(2);
+            var id1 = ids[0];
+            var id2 = ids[1];
+
+            var syncSql = ctx.CreateUpdateBuilder<OutputIntoComputedEntity>()
+                .Set(x => x.Basis, 22)
+                .Where(x => x.Id == id1)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t2", "id bigint, total int")
+                .ToSql();
+
+            syncSql.Should().StartWith("declare @t2 table (");
+            syncSql.Should().Contain("output inserted.id, inserted.total into @t2 (id, total)");
+            syncSql.Should().EndWith("; select id, total from @t2");
+
+            var syncRows = ExecuteTableVariableBatch<OutputIntoTotalRow>(
+                ctx, syncSql, new ProcedureParameter("p0", 22), new ProcedureParameter("id1", id1));
+
+            syncRows.Should().ContainSingle();
+            syncRows[0].Id.Should().Be(id1);
+            syncRows[0].Total.Should().Be(44);
+
+            var asyncSql = ctx.CreateUpdateBuilder<OutputIntoComputedEntity>()
+                .Set(x => x.Basis, 22)
+                .Where(x => x.Id == id2)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t3", "id bigint, total int")
+                .ToSql();
+
+            var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoTotalRow>(
+                ctx, asyncSql,
+                [new ProcedureParameter("p0", 22), new ProcedureParameter("id2", id2)],
+                TestContext.Current.CancellationToken);
+
+            asyncRows.Should().ContainSingle();
+            asyncRows[0].Id.Should().Be(id2);
+            asyncRows[0].Total.Should().Be(44);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_into_computed_127");
+        }
+    }
+
+    [Fact]
+    public async Task OutputIntoTableVariable_Delete_ComputedColumn_ShouldReadBackComputedValue()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists output_into_computed_127");
+        Execute(ctx, "create table output_into_computed_127 (id bigint identity(1,1) primary key, basis int not null, total as (basis * 2) persisted)");
+
+        try
+        {
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 22 }).Insert();
+            ctx.CreateInsertBuilder<OutputIntoComputedEntity>().Values(new OutputIntoComputedEntity { Basis = 22 }).Insert();
+            var ids = ctx.From<OutputIntoComputedEntity>().OrderBy(x => x.Id).Select(x => x.Id).ToList();
+            ids.Should().HaveCount(2);
+            var id1 = ids[0];
+            var id2 = ids[1];
+
+            var syncSql = ctx.CreateDeleteBuilder<OutputIntoComputedEntity>()
+                .Where(x => x.Id == id1)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t3", "id bigint, total int")
+                .ToSql();
+
+            syncSql.Should().StartWith("declare @t3 table (");
+            syncSql.Should().Contain("output deleted.id, deleted.total into @t3 (id, total)");
+            syncSql.Should().EndWith("; select id, total from @t3");
+
+            var syncRows = ExecuteTableVariableBatch<OutputIntoTotalRow>(
+                ctx, syncSql, new ProcedureParameter("id1", id1));
+
+            syncRows.Should().ContainSingle();
+            syncRows[0].Id.Should().Be(id1);
+            syncRows[0].Total.Should().Be(44);
+
+            var asyncSql = ctx.CreateDeleteBuilder<OutputIntoComputedEntity>()
+                .Where(x => x.Id == id2)
+                .Returning(x => new { x.Id, x.Total })
+                .OutputIntoTableVariable("@t4", "id bigint, total int")
+                .ToSql();
+
+            var asyncRows = await ExecuteTableVariableBatchAsync<OutputIntoTotalRow>(
+                ctx, asyncSql, [new ProcedureParameter("id2", id2)], TestContext.Current.CancellationToken);
+
+            asyncRows.Should().ContainSingle();
+            asyncRows[0].Id.Should().Be(id2);
+            asyncRows[0].Total.Should().Be(44);
+
+            ctx.From<OutputIntoComputedEntity>().Select(x => x.Id).ToList().Should().BeEmpty();
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_into_computed_127");
+        }
+    }
+
+    private static IReadOnlyList<OutputIntoRow> ExecuteTableVariableBatch(
+        IDataContext ctx, string sql, params ProcedureParameter[] parameters)
+    {
+        using var result = ctx.ExecuteRaw(sql, parameters);
+        return result.Read<OutputIntoRow>();
+    }
+
+    private static IReadOnlyList<TRow> ExecuteTableVariableBatch<TRow>(
+        IDataContext ctx, string sql, params ProcedureParameter[] parameters)
+    {
+        using var result = ctx.ExecuteRaw(sql, parameters);
+        return result.Read<TRow>();
+    }
+
+    private static async Task<IReadOnlyList<TRow>> ExecuteTableVariableBatchAsync<TRow>(
+        IDataContext ctx, string sql, ProcedureParameter[] parameters, CancellationToken cancellationToken)
+    {
+        await using var result = await ctx.ExecuteRawAsync(sql, parameters, cancellationToken);
+        var rows = new List<TRow>();
+        await foreach (var row in result.ReadAsync<TRow>(cancellationToken))
+            rows.Add(row);
+
+        return rows;
+    }
+
+    [SqlTable("output_into_row")]
+    private sealed class OutputIntoRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("name")]
+        public string? Name { get; set; }
+    }
+
+    // E09: the computed column is mapped with DatabaseGeneratedOption.Computed, so Values(...)/Set(...) never
+    // write it and it is only read back through Returning(...).
+    [SqlTable("output_into_computed_127")]
+    private sealed class OutputIntoComputedEntity
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("basis")]
+        public int Basis { get; set; }
+
+        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
+        [Column("total")]
+        public int Total { get; set; }
+    }
+
+    [SqlTable("output_into_computed_row")]
+    private sealed class OutputIntoComputedRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("basis")]
+        public int Basis { get; set; }
+
+        [Column("total")]
+        public int Total { get; set; }
+    }
+
+    [SqlTable("output_into_total_row")]
+    private sealed class OutputIntoTotalRow
+    {
+        [Column("id")]
+        public long Id { get; set; }
+
+        [Column("total")]
+        public int Total { get; set; }
+    }
+
     private static void Execute(IDataContext ctx, string sql)
     {
         ((DataContext)ctx).EnsureConnectionOpen();

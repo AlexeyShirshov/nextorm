@@ -273,6 +273,7 @@ public class CreateCommandBuilderFactoryTests
         {
             "CreateInsertBuilder", "CreateBulkInsertBuilder", "CreateDeleteBuilder",
             "CreateUpdateBuilder", "CreateMergeBuilder", "CreateTruncateBuilder", "CreateUpdateJoinBuilder",
+            "CreateSqliteFts5CommandBuilder",
         });
     }
 

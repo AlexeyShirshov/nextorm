@@ -54,7 +54,7 @@ into the guides and deleted.
 |---|---|---|
 | **Cross-provider** | `SqlFunctions.Sql` string library (`left`, `right`, `lpad`, `rpad`, `repeat`, `reverse`, `space`, `concat_ws`, `translate`, `ascii`, `char`), the length pair (`bit_length`, `octet_length`) and the angle functions (`cot`, `degrees`, `radians`, `pi`); `Math.Acos`/`Asin`/`Atan`/`Atan2`; remainder, base-10 logarithm, power and generic string formatting stay on the portable CLR methods (`%`, `Math.Log10`, `Math.Pow`, `string.Format`) | [Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions) (gap-analysis §5.36; regex translation shipped earlier, §5.35) |
 | **PostgreSQL** | extended scalar + string library, `sha224`/`sha384`/`sha512`, the regexp family (`regexp_substr` included), `age`, `date_bin`, `make_time`/`make_timestamp` (`make_date` via `date_from_parts`), `current_setting`/`set_config`, the sequence functions (`nextval`/`setval`/`currval`/`lastval`), native JSON/JSONB (`json_array`, SQL/JSON `json_exists`/`json_query`/`json_value`), native arrays, `generate_series`/`unnest`, the statistical/boolean/bit aggregates, `num_nulls`/`num_nonnulls`, `mode`, `percentile_cont`/`disc`, `ts_*` full-text | [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql) / [JSON and JSONB](../../guide/14-json.md) (gap-analysis §5.37) |
-| **SQL Server** | `ISqlServerFunctions` + `SqlServerFunctions` T-SQL scalar library (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `FORMAT`, `NCHAR`, `UNICODE`, the `ACOS`/`ASIN`/`ATAN`/`ATN2`/`SQUARE` math set, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/`JSON_PATH_EXISTS`); `ASCII`/`CHAR`/`TRANSLATE`/`REVERSE`/`SPACE`/`CONCAT_WS` and `COT`/`DEGREES`/`RADIANS`/`PI` via the portable surface | [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (gap-analysis §5.38) |
+| **SQL Server** | `ISqlServerFunctions` + `SqlServerFunctions` T-SQL scalar library (`PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`, `STRING_ESCAPE`, `FORMAT`, `NCHAR`, `UNICODE`, `STR`, `STUFF`, the `ACOS`/`ASIN`/`ATAN`/`ATN2`/`SQUARE`/`RAND` math set, `DATENAME`, `DATE_BUCKET`, the clock/offset/`*FROMPARTS` date family (`SYSDATETIME`/`SYSDATETIMEOFFSET`/`SYSUTCDATETIME`/`SWITCHOFFSET`/`TODATETIMEOFFSET`/`TIMEFROMPARTS`/`SMALLDATETIMEFROMPARTS`/`DATETIMEFROMPARTS`/`DATETIME2FROMPARTS`/`DATETIMEOFFSETFROMPARTS`), `HASHBYTES`, `NEWSEQUENTIALID`, `CHECKSUM`/`BINARY_CHECKSUM`/`COMPRESS`/`DECOMPRESS`, the A-D metadata families, `ISDATE`/`ISNUMERIC`/`FORMATMESSAGE`, `JSON_ARRAY`/`JSON_OBJECT`/`JSON_ARRAYAGG`/`JSON_OBJECTAGG`/`JSON_CONTAINS`/`JSON_PATH_EXISTS`); `ASCII`/`CHAR`/`TRANSLATE`/`REVERSE`/`SPACE`/`CONCAT_WS` and `COT`/`DEGREES`/`RADIANS`/`PI` via the portable surface. The linq2db-v6.5.0 reconciliation is **61 audited = 51 covered + 10 excluded** (FROMPARTS 6 total/5 new; date 13 total/10 new) | [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (gap-analysis §5.38, [#182](https://github.com/AlexeyShirshov/nextorm/issues/182)) |
 | **MySQL** | `SqlFunctions.MySql` (`FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`, `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the `JSON_*` mutation family, `UUID_TO_BIN`/`BIN_TO_UUID`); `LAST_DAY` via `end_of_month` | [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md) (gap-analysis §5.39, #80) |
 | **MariaDB** | the MySQL surface plus `REGEXP_INSTR`/`REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT`, the `NEXT VALUE FOR`/`NEXTVAL`/`SETVAL`/`LASTVAL` sequences | [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb) (gap-analysis §5.40, #79) |
 | **SQLite** | `SqlFunctions.Sqlite`: core scalars (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), the JSON1 family, the date helpers (`timediff`/`unixepoch`/`julianday`) and the math extension | [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (gap-analysis §5.41) |
@@ -162,42 +162,57 @@ statistical/boolean/bit aggregates, `num_nulls`/`num_nonnulls`, `mode`, `percent
 
 **Covered today:** the portable set plus `json_value`/`json_query`/`json_modify`/`isjson`, `choose`,
 `string_split`, `openjson`/`openxml`, `contains`/`freetext` (with `containstable`/`freetexttable`), the
-`xml` data-type methods (`xml_value`/`xml_query`/`xml_exist`/`xml_nodes`), and `iif`/`greatest`/`least`.
+`xml` data-type methods (`xml_value`/`xml_query`/`xml_exist`/`xml_nodes`), `iif`/`greatest`/`least`, and
+the T-SQL-only scalar library reconciled against linq2db v6.5.0
+([#182](https://github.com/AlexeyShirshov/nextorm/issues/182)): 61 pinned entries = **51 covered + 10
+excluded**. The shipped families are the string set (`PATINDEX`/`QUOTENAME`/`SOUNDEX`/`DIFFERENCE`/
+`STRING_ESCAPE`/`UNICODE`/`NCHAR`/`FORMAT`/`STR`/`STUFF`), the math/trig set (`ACOS`/`ASIN`/`ATAN`/
+`ATN2`/`SQUARE`/`RAND`), the date family (`DATENAME`/`DATE_BUCKET`, the clock/offset functions
+`SYSDATETIME`/`SYSDATETIMEOFFSET`/`SYSUTCDATETIME`/`SWITCHOFFSET`/`TODATETIMEOFFSET` and the
+`*FROMPARTS` builders — FROMPARTS 6 total/5 new, date 13 total/10 new), the binary/system/checksum set
+(`HASHBYTES`/`NEWSEQUENTIALID`/`CHECKSUM`/`BINARY_CHECKSUM`/`COMPRESS`/`DECOMPRESS`) and the A-D
+metadata families (`COL_LENGTH`/`COL_NAME`/`OBJECT_ID`/`OBJECT_NAME`/`OBJECT_SCHEMA_NAME`/
+`OBJECT_DEFINITION`/`IDENT_INCR`/`IDENT_SEED`/`INDEX_COL`/`STATS_DATE`, `DB_ID`/`DB_NAME`/
+`ORIGINAL_DB_NAME`/`SCHEMA_ID`/`SCHEMA_NAME`/`TYPE_ID`/`TYPE_NAME`, `FILEGROUP_ID`/`FILEGROUP_NAME`/
+`FILE_ID`/`FILE_IDEX`/`FILE_NAME`, `CURRENT_TIMEZONE`/`CURRENT_TIMEZONE_ID`/`GETANSINULL`/`ISDATE`/
+`ISNUMERIC`/`PARSENAME`/`PUBLISHINGSERVERNAME`), plus `FORMATMESSAGE` and the JSON constructors.
 
 **Missing:**
 
-* **String:** `STR`; the rest of the T-SQL string set is shipped (`ASCII`/`CHAR` via `SqlFunctions.Sql`,
-  `NCHAR`/`UNICODE`/`DIFFERENCE`/`FORMAT`/`PATINDEX`/`QUOTENAME`/`SOUNDEX`/`STRING_ESCAPE` via
-  `SqlServerFunctions`, `SPACE`/`TRANSLATE`/`REVERSE`/`CONCAT_WS` via the portable surface) or reachable
-  through the CLR string members (`LEN`/`LEFT`/`RIGHT`/`REPLICATE`/`STUFF`/`REPLACE`/`SUBSTRING`/
-  `CHARINDEX`/`LOWER`/`UPPER`/`TRIM`/`LTRIM`/`RTRIM`, `≈`).
+* **String:** the remaining T-SQL string set is shipped (`STR`/`STUFF`/`ASCII`/`CHAR`/`NCHAR`/`UNICODE`/
+  `DIFFERENCE`/`FORMAT`/`PATINDEX`/`QUOTENAME`/`SOUNDEX`/`STRING_ESCAPE`/`SPACE`/`TRANSLATE`/`REVERSE`/
+  `CONCAT_WS`) or reachable through the CLR string members (`LEN`/`LEFT`/`RIGHT`/`REPLICATE`/`REPLACE`/
+  `SUBSTRING`/`CHARINDEX`/`LOWER`/`UPPER`/`TRIM`/`LTRIM`/`RTRIM`, `≈`).
 * **Regular expressions (SQL Server 2025):** `REGEXP_LIKE` and `REGEXP_REPLACE` now back the portable
   `Regex.IsMatch`/`Regex.Replace` translation (SQL Server 2025+; the match needs database compatibility
   level 170), like the other providers. The extraction/tabular remainder — `REGEXP_SUBSTR`,
   `REGEXP_COUNT`, `REGEXP_INSTR`, `REGEXP_MATCHES`, `REGEXP_SPLIT_TO_TABLE` — stays a gap.
 * **Fuzzy matching (SQL Server 2025):** `EDIT_DISTANCE`, `EDIT_DISTANCE_SIMILARITY`,
   `JARO_WINKLER_DISTANCE`, `JARO_WINKLER_SIMILARITY`.
-* **Numeric:** `RAND`; `ABS`/`CEILING`/`FLOOR`/`ROUND`/`SQRT`/`POWER`/`EXP`/`LOG`/`LOG10`/`SIGN`/
-  `SIN`/`COS`/`TAN`/`TRUNC` and `ACOS`/`ASIN`/`ATAN`/`ATAN2` are reachable through `Math.*`;
+* **Numeric:** `RAND` is shipped; `ABS`/`CEILING`/`FLOOR`/`ROUND`/`SQRT`/`POWER`/`EXP`/`LOG`/`LOG10`/
+  `SIGN`/`SIN`/`COS`/`TAN`/`TRUNC` and `ACOS`/`ASIN`/`ATAN`/`ATAN2` are reachable through `Math.*`;
   `ACOS`/`ASIN`/`ATAN`/`ATN2`/`SQUARE` ship on `SqlServerFunctions`, and `COT`/`DEGREES`/`RADIANS`/`PI`
   come from the portable surface (`SqlFunctions.Sql`).
 * **Bit manipulation:** `LEFT_SHIFT`, `RIGHT_SHIFT`, `BIT_COUNT`, `GET_BIT`, `SET_BIT`.
-* **Date/time:** `DATETIMEFROMPARTS`, `DATETIME2FROMPARTS`, `DATETIMEOFFSETFROMPARTS`,
-  `SMALLDATETIMEFROMPARTS`, `TIMEFROMPARTS`, `SWITCHOFFSET`, `TODATETIMEOFFSET`, `ISDATE`
-  (`DATEADD`/`DATEDIFF`/`DATEDIFF_BIG`/`DATEFROMPARTS`/`EOMONTH`/`DATETRUNC`/`DATEPART`/`DATE_BUCKET`/
-  `DATENAME`/`YEAR`/`MONTH`/`DAY` are covered).
+* **Date/time:** the `*FROMPARTS`/offset/clock families are shipped; `DATEADD`/`DATEDIFF`/`DATEDIFF_BIG`/
+  `DATEFROMPARTS`/`EOMONTH`/`DATETRUNC`/`DATEPART`/`DATE_BUCKET`/`DATENAME`/`YEAR`/`MONTH`/`DAY` are
+  covered.
 * **Conversion:** `PARSE`, `TRY_CAST`, `TRY_CONVERT`, `TRY_PARSE`, `BASE64_ENCODE`/`BASE64_DECODE`.
-* **Logical:** `ISNUMERIC`.
+* **Logical:** `ISNUMERIC`/`ISDATE` are shipped; the remaining logical helpers are reachable through the
+  CLR conditional translation.
 * **Aggregate:** `ANY_VALUE`, `APPROX_COUNT_DISTINCT`, `CHECKSUM_AGG`, `GROUPING_ID`, `PRODUCT`.
 * **Analytic:** `APPROX_PERCENTILE_CONT`, `APPROX_PERCENTILE_DISC`.
 * **Cryptographic:** `CRYPT_GEN_RANDOM`; `HASHBYTES` is shipped, and the `ENCRYPTBY*`/`DECRYPTBY*`/
   `SIGNBY*`/`VERIFYSIGNEDBY*`/`CERT*`/`KEY_*` family is **<span style="color:orange">out of scope</span>**.
-* **System:** `COMPRESS`/`DECOMPRESS`, `SESSION_CONTEXT`, `SESSION_ID`, `CURRENT_TIMEZONE(_ID)`,
-  `XACT_STATE`, `@@ROWCOUNT`/`@@ERROR`/`ERROR_*`, `HOST_NAME`/`HOST_ID` (`NEWSEQUENTIALID` is shipped).
-* **<span style="color:orange">out of scope</span>:** security/identity (`SUSER_*`, `HAS_PERMS_BY_NAME`, `IS_MEMBER`, ...), metadata
-  (`OBJECT_*`, `COLUMNPROPERTY`, `INDEXPROPERTY`, `sys.*`), system-statistical (`@@CPU_BUSY`, ...),
-  collation, rowset (`OPENROWSET`/`OPENQUERY`), cursor, AI (`AI_*`), vector (`VECTOR_*`),
-  text/image (`TEXTPTR`/`TEXTVALID`).
+* **System:** `SESSION_CONTEXT`, `SESSION_ID`, `@@ROWCOUNT`/`@@ERROR`/`ERROR_*` (`COMPRESS`/`DECOMPRESS`,
+  `CURRENT_TIMEZONE(_ID)` and `NEWSEQUENTIALID` are shipped; `XACT_STATE`, `HOST_NAME`/`HOST_ID`,
+  `APP_NAME`, `IDENT_CURRENT`, `MIN_ACTIVE_ROWVERSION`, `ROWCOUNT_BIG` and `SCOPE_IDENTITY` are the 10
+  documented exclusions — connection/session/statement scope, reachable through raw SQL or a
+  `[SqlFunction]` wrapper).
+* **<span style="color:orange">out of scope</span>:** security/identity (`SUSER_*`, `HAS_PERMS_BY_NAME`, `IS_MEMBER`, ...),
+  metadata beyond the shipped A-D subset (`COLUMNPROPERTY`, `INDEXPROPERTY`, `sys.*`), the
+  system-statistical (`@@CPU_BUSY`, ...), collation, rowset (`OPENROWSET`/`OPENQUERY`), cursor, AI
+  (`AI_*`), vector (`VECTOR_*`), text/image (`TEXTPTR`/`TEXTVALID`).
 
 ---
 

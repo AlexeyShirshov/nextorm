@@ -1,9 +1,9 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// Fluent terminal for an <c>INSERT</c>/<c>UPDATE</c>/<c>DELETE</c> whose modified rows are written into
-/// an existing table through SQL Server's <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> clause instead of
-/// being returned to the client. Started with <c>OutputInto(...)</c> on an
+/// Fluent terminal for an <c>INSERT</c>/<c>UPDATE</c>/<c>DELETE</c> whose modified rows are written into a
+/// target through SQL Server's <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> clause instead of being
+/// returned to the client. Started with <c>OutputInto(...)</c> or <c>OutputIntoTableVariable(...)</c> on an
 /// <see cref="InsertReturningBuilder{TEntity, TResult}"/>, <see cref="UpdateReturningBuilder{TEntity, TResult}"/>
 /// or <see cref="DeleteReturningBuilder{TEntity, TResult}"/>.
 /// <para>
@@ -12,20 +12,22 @@ namespace NextORM.Core;
 /// To also return the rows to the client, use the separate <c>OutputIntoThenOutput(...)</c> form.
 /// </para>
 /// <para>
-/// The target is an explicit table name (nextorm does not declare the table variable for you), and its
-/// columns must have the same names as the selected output columns: the selected column list is reused as
-/// the target column list.
+/// The target is either an explicit table name that must already exist, or a table variable declared in
+/// the same batch. In both forms the selected output columns are reused as the target column list, so the
+/// target columns must have the same names as the selected output columns. A table variable additionally
+/// takes a caller-supplied, trusted column-definition text; the declaration text is embedded verbatim and
+/// never parameterised.
 /// </para>
 /// </summary>
 public sealed class OutputIntoBuilder
 {
     private readonly IOutputIntoMutation _mutation;
-    private readonly string _targetTable;
+    private readonly OutputIntoClause _target;
 
-    internal OutputIntoBuilder(IOutputIntoMutation mutation, string targetTable)
+    internal OutputIntoBuilder(IOutputIntoMutation mutation, OutputIntoClause target)
     {
         _mutation = mutation;
-        _targetTable = targetTable;
+        _target = target;
     }
 
     /// <summary>Executes the statement and returns the number of rows written into the target.</summary>
@@ -60,7 +62,7 @@ public sealed class OutputIntoBuilder
         throw new NotSupportedException($"{_mutation.DataContext.GetType().Name} cannot render SQL: it is not a database-backed context.");
     }
 
-    private MutationCommand BuildCommand() => _mutation.BuildOutputIntoCommand(_targetTable);
+    private MutationCommand BuildCommand() => _mutation.BuildOutputIntoCommand(_target);
 
     private IMutationExecutor RequireExecutor()
     {
@@ -78,10 +80,10 @@ public sealed class OutputIntoBuilder
 /// </summary>
 internal interface IOutputIntoMutation
 {
-    /// <summary>Builds the command that writes the modified rows into <paramref name="targetTable"/> and returns nothing to the client.</summary>
-    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <summary>Builds the command that writes the modified rows into <paramref name="outputInto"/> and returns nothing to the client.</summary>
+    /// <param name="outputInto">The output-into target: an existing table or a same-batch table variable.</param>
     /// <returns>The mutation command carrying the output-into target.</returns>
-    MutationCommand BuildOutputIntoCommand(string targetTable);
+    MutationCommand BuildOutputIntoCommand(OutputIntoClause outputInto);
 
     /// <summary>The context the mutation executes on.</summary>
     IDataContext DataContext { get; }

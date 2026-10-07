@@ -646,8 +646,9 @@ internal readonly struct SqlBuilder
                 entityMeta,
                 CancellationToken.None);
 
-            if (renderer.CanRender(MakeExtremeRowDescription(cmd, entitySelectList)))
-                return MakeNativeExtremeRowSelect(cmd, renderer, entitySelectList);
+            var description = MakeExtremeRowDescription(cmd, entitySelectList);
+            if (renderer.CanRender(description))
+                return MakeNativeExtremeRowSelect(cmd, renderer, entitySelectList, description.Keys);
         }
 
         return MakePortableExtremeRowSelect(cmd);
@@ -750,7 +751,11 @@ internal readonly struct SqlBuilder
     /// winning-row source in the same outer projection/order statement. A renderer exception
     /// propagates unchanged.
     /// </summary>
-    private string? MakeNativeExtremeRowSelect(QueryCommand cmd, IExtremeRowRenderer renderer, SelectExpression[] entitySelectList)
+    private string? MakeNativeExtremeRowSelect(
+        QueryCommand cmd,
+        IExtremeRowRenderer renderer,
+        SelectExpression[] entitySelectList,
+        IReadOnlyList<ExtremeRowRenderColumn> keyColumns)
     {
         var entityType = cmd.EntityType!;
         var from = cmd.From!;
@@ -768,6 +773,7 @@ internal readonly struct SqlBuilder
             cmd.ExtremeRow!.Kind == ExtremeKind.Max,
             payloadAliases,
             keyAliases,
+            keyColumns,
             groupAliases,
             _ctx.KeywordCase));
 

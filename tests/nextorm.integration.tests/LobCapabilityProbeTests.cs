@@ -5,11 +5,21 @@ using MySqlConnector;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
-/// Capability probe (PDCA cycle 2, issue #27): does the MySqlConnector driver — shared by the
-/// nextorm MySQL and MariaDB providers — read a large BLOB/CLOB <b>memory-bounded</b> through
-/// <see cref="System.Data.Common.DbDataReader.GetStream(int)"/> /
+/// Capability probe (PDCA cycle 2, issue #27; re-measured for D133/#133): does the MySqlConnector
+/// driver — shared by the nextorm MySQL and MariaDB providers — read a large BLOB/CLOB
+/// <b>memory-bounded</b> through <see cref="System.Data.Common.DbDataReader.GetStream(int)"/> /
 /// <see cref="System.Data.Common.DbDataReader.GetTextReader(int)"/> under
-/// <see cref="System.Data.CommandBehavior.SequentialAccess"/>.
+/// <see cref="System.Data.CommandBehavior.SequentialAccess"/>?
+/// <para>
+/// <b>Answer (measured, MySqlConnector 2.6.2): no.</b> Both getters <b>buffer the whole value</b>;
+/// <see cref="System.Data.CommandBehavior.SequentialAccess"/> does not change the allocation
+/// profile. See <c>/tmp/nextorm-D133/lob-capability-probe.log</c> (in-repo, 1→8 MiB):
+/// <c>GetStream</c> ratio 7.99 and <c>GetTextReader</c> ratio 8.00, with <c>seq=on</c> byte-identical
+/// to <c>seq=off</c>; the standalone probe (1→4 MiB) reports 4.00 for both. This is exactly why
+/// the MySQL/MariaDB dialects leave <c>SupportsSequentialAccess</c> at its <c>false</c> default and
+/// the test providers keep <c>SupportsLobStreaming = false</c>: there is no memory-bounded read to
+/// expose. Do <b>not</b> cite a passing run of this probe as evidence for enabling streaming.
+/// </para>
 /// <para>
 /// The driver is used directly (<see cref="MySqlConnection"/>/<see cref="MySqlCommand"/>), so the
 /// nextorm LOB terminals and their guard are bypassed. For each provider it seeds a 1 MiB and an
@@ -17,7 +27,9 @@ namespace NextORM.Integration.Tests;
 /// best-of-3 <see cref="GC.GetAllocatedBytesForCurrentThread"/> delta. A memory-bounded read has
 /// <c>alloc(8 MiB) / alloc(1 MiB) ≈ 1</c>; a buffered read shows <c>≈ 8</c>. The same read is
 /// repeated without <see cref="System.Data.CommandBehavior.SequentialAccess"/> to document whether
-/// the mode matters.
+/// the mode matters. The suite asserts that the measured getters are <b>not</b> memory-bounded, so
+/// a buffered driver can never be misread as streaming; if a future driver version starts
+/// streaming, the assertion fails and flags the capability for review.
 /// </para>
 /// <para>
 /// It also measures the two issue-#100 candidates against the same baseline: a fixed-buffer
@@ -40,7 +52,7 @@ public sealed class LobCapabilityProbeTests
     private static readonly object LogGate = new();
 
     [Fact]
-    public void MySql_Driver_Reads_Lobs_MemoryBounded()
+    public void MySql_Driver_Reads_Lobs_Buffered()
     {
         Assert.SkipUnless(
             Environment.GetEnvironmentVariable("NEXTORM_LOB_PROBE") == "1",
@@ -51,7 +63,7 @@ public sealed class LobCapabilityProbeTests
     }
 
     [Fact]
-    public void MariaDb_Driver_Reads_Lobs_MemoryBounded()
+    public void MariaDb_Driver_Reads_Lobs_Buffered()
     {
         Assert.SkipUnless(
             Environment.GetEnvironmentVariable("NEXTORM_LOB_PROBE") == "1",
@@ -121,6 +133,19 @@ public sealed class LobCapabilityProbeTests
         lines.Add($"[{provider}] VERDICT BLOB SUBSTRING page    : {Verdict(binaryPageSmall, binaryPage)}");
         lines.Add($"[{provider}] VERDICT CLOB SUBSTRING page    : {Verdict(textPageSmall, textPage)}");
 
+        // Guard (D133/#133): MySqlConnector 2.6.2 buffers LOB reads, so none of the four
+        // getter/mode combinations may classify as memory-bounded. A failure here means a future
+        // driver version streams — revisit SupportsLobStreaming/SupportsSequentialAccess before
+        // enabling the terminal. Without this, a green buffered run could be misread as streaming.
+        Assert.False(IsMemoryBounded(binaryOnSmall, binaryOn),
+            $"[{provider}] BLOB GetStream seq=on is memory-bounded; revisit the MySQL/MariaDB capability.");
+        Assert.False(IsMemoryBounded(binaryOffSmall, binaryOff),
+            $"[{provider}] BLOB GetStream seq=off is memory-bounded; revisit the MySQL/MariaDB capability.");
+        Assert.False(IsMemoryBounded(textOnSmall, textOn),
+            $"[{provider}] CLOB GetTextReader seq=on is memory-bounded; revisit the MySQL/MariaDB capability.");
+        Assert.False(IsMemoryBounded(textOffSmall, textOff),
+            $"[{provider}] CLOB GetTextReader seq=off is memory-bounded; revisit the MySQL/MariaDB capability.");
+
         lock (LogGate)
         {
             File.AppendAllLines(OutputPath, lines);
@@ -161,6 +186,16 @@ public sealed class LobCapabilityProbeTests
         if (oneMiB.Allocated <= 0 || eightMiB.Allocated <= 0)
             return double.NaN;
         return (double)eightMiB.Allocated / oneMiB.Allocated;
+    }
+
+    /// <summary>
+    /// Same threshold as <see cref="Verdict"/>: a ratio of at most 1.5 means the read did not grow
+    /// with the value (memory-bounded); a buffered driver shows ≈ 4–8.
+    /// </summary>
+    private static bool IsMemoryBounded(ProbeResult oneMiB, ProbeResult eightMiB)
+    {
+        var ratio = Ratio(oneMiB, eightMiB);
+        return !double.IsNaN(ratio) && ratio <= 1.5;
     }
 
     /// <summary>
