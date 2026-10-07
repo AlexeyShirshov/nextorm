@@ -90,6 +90,25 @@ public class CteQueryTests
     }
 
     [Fact]
+    public void Hoist_SingleDeclarationWithNestedBody_ShouldFlattenInsteadOfTakingFastPath()
+    {
+        using var ctx = new InMemoryDataContext();
+        var e = ctx.From<SimpleEntity>();
+
+        // Issue #200 L1: a lone declaration whose body carries a nested declaration must not take the
+        // single-item fast path, or the nested CTE would survive inside its consumer's WITH.
+        var inner = ctx.With("i", e.Where(x => x.Id > 0).Select(x => new { x.Id }))
+            .From("i")
+            .Select(t => new { id = t["id"].AsInt });
+        var list = new[] { new CteDefinition("o", inner) };
+
+        var hoisted = CteHoister.Hoist(list);
+
+        ReferenceEquals(hoisted, list).Should().BeFalse();
+        hoisted!.Select(c => c.Name).Should().Equal("i", "o");
+    }
+
+    [Fact]
     public void Hoist_SiblingReferencedBeforeItsDeclaration_ShouldListDependencyFirst()
     {
         using var ctx = new InMemoryDataContext();

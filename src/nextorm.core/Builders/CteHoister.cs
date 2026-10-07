@@ -31,6 +31,16 @@ internal static class CteHoister
         if (ctes is not { Count: > 0 })
             return ctes;
 
+        // A single declaration with no nested declarations needs no flattening, deduplication or
+        // reordering, so the walker (and its collections) can be skipped entirely.
+        if (ctes.Count == 1)
+        {
+            var only = ctes[0];
+            var body = only.Mutation?.Source ?? only.Query;
+            if (body.Ctes is not { Count: > 0 })
+                return ctes;
+        }
+
         var walker = new Walker();
         walker.Visit(ctes);
         var flat = walker.Flat;

@@ -1142,6 +1142,27 @@ public class TypedCteTests
     }
 
     [Fact]
+    public void Recursive_SingleDeclarationWithoutNestedCtes_ShouldTakeFastPathAndRender()
+    {
+        using var ctx = new TestContext();
+
+        var cte = ctx.From<TypedCteEntity>().Where(x => x.Id == 1).Select(x => x.Id)
+            .AsRecursiveCte("nums", self => ctx.From(self).Where(n => n < 5).Select(n => n + 1));
+
+        // Issue #200 L1: one declaration with no nested declaration is returned unchanged by the
+        // single-item fast path...
+        var definitions = cte.Definitions;
+        CteHoister.Hoist(definitions).Should().BeSameAs(definitions);
+
+        // ...and the recursive CTE still renders its WITH RECURSIVE / UNION ALL body.
+        var sql = SqlOf(ctx, ctx.From(cte).Select(n => n));
+
+        sql.Should().Contain("with recursive");
+        sql.Should().Contain("union all");
+        sql.Should().Contain("from nums");
+    }
+
+    [Fact]
     public void Recursive_MultipleSelfReferenceOccurrences_ShouldReferenceCteOutputNameForEachOccurrence()
     {
         using var ctx = new TestContext();
