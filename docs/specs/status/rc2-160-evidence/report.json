@@ -1,0 +1,71 @@
+{
+  "unit": "D160",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests"],
+    "selectors": [
+      "FullyQualifiedName~JoinAlias",
+      "FullyQualifiedName~Alias",
+      "FullyQualifiedName~RootAlias"
+    ],
+    "files": [
+      "src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs",
+      "src/nextorm.core/Builders/Projection.cs",
+      "src/nextorm.core/Builders/EntityBuilder.cs",
+      "tests/nextorm.alias.tests/MixedJoinChainTests.cs",
+      "tests/nextorm.alias.tests/RootAliasTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "DO\u2192CHECK: full `dotnet test tests/nextorm.alias.tests -c Debug`; full `tests/nextorm.core.tests`; six provider SQL test projects; integration via DOCKER_HOST; acceptance benchmarks",
+    "rationale": "Modified generator/core alias behavior is exercised by the alias test project; mixed-chain/root scenarios are the changed behavior."
+  },
+  "amendments": [
+    {
+      "reason": "r=2 Phase-1 checkpoint: the affected mixed-chain class is the changed behavior; added before running and validated by this report.",
+      "added_selectors": ["FullyQualifiedName~MixedJoinChainTests"],
+      "validated_before_run": true
+    },
+    {
+      "reason": "r=2 Phase-1 checkpoint: the receiver static-type binding negative lives in AliasProjectionShapeTests; added before running and validated by this report.",
+      "added_selectors": ["FullyQualifiedName~AliasProjectionShapeTests"],
+      "validated_before_run": true
+    }
+  ],
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "docs/specs/status/rc2-160-evidence/E160-07/build.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--filter", "FullyQualifiedName~MixedJoinChainTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "docs/specs/status/rc2-160-evidence/E160-15/mixed-filtered2.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--filter", "FullyQualifiedName~AliasProjectionShapeTests"],
+      "phase": "inner",
+      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "exit_code": 0,
+      "selected_count": 3,
+      "log": "docs/specs/status/rc2-160-evidence/E160-20/shape-filtered.log"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "artifact_revision": "1.0.9-rc2@4bd18c82+dirty",
+      "exit_code": 0,
+      "selected_count": 53,
+      "log": "docs/specs/status/rc2-160-evidence/E160-01/alias-boundary.log"
+    }
+  ]
+}

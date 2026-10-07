@@ -170,7 +170,7 @@ public class JoinAliasGeneratorDiagnosticTests
         run.Diagnostics.Should().BeEmpty();
         run.GeneratedTrees.Should().HaveCount(1);
         var generated = run.GeneratedTrees[0].ToString();
-        generated.Should().Contain("AliasJoin_X").And.Contain("AliasJoin_Y");
+        generated.Should().Contain("AliasJoin_P1_A2_X").And.Contain("AliasJoin_P1_A2_Y");
         generated.Should().Contain("global::NextORM.Core.EntityBuilder<TJoin> _,");
         generated.Should().Contain("global::NextORM.Core.Cte<TJoin> cte,");
 
@@ -186,7 +186,7 @@ public class JoinAliasGeneratorDiagnosticTests
 
         harness.Run.Diagnostics.Should().BeEmpty();
         harness.Run.GeneratedTrees.Should().HaveCount(1);
-        harness.Run.GeneratedTrees[0].ToString().Should().Contain("class AliasProjection_Buyer");
+        harness.Run.GeneratedTrees[0].ToString().Should().Contain("class AliasProjection_P1_A2_Buyer");
     }
 
     [Fact]

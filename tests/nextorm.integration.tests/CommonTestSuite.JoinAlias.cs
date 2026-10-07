@@ -116,8 +116,8 @@ public abstract partial class CommonTestSuite
     }
 
     // A method that names the generated builder types in its signature and returns the second alias join.
-    private static AliasJoin_Buyer_Approver<AliasOrder, AliasPerson, AliasPerson> AddApprover(
-        AliasJoin_Buyer<AliasOrder, AliasPerson> builder,
+    private static AliasJoin_P1_A2_Buyer_A3_Approver<AliasOrder, AliasPerson, AliasPerson> AddApprover(
+        AliasJoin_P1_A2_Buyer<AliasOrder, AliasPerson> builder,
         EntityBuilder<AliasPerson> person)
         => builder.Join<AliasPerson>(person, (p, a) => p.Item1.ApproverId == a.Id, Alias.Approver);
 }

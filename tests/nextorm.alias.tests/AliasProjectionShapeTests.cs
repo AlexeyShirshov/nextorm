@@ -14,7 +14,7 @@ public class AliasProjectionShapeTests
     [Fact]
     public void Alias_projection_retains_item_members_and_exposes_alias_members()
     {
-        var projection = typeof(AliasProjection_Buyer_Approver<Order, Person, Person>);
+        var projection = typeof(AliasProjection_P1_A2_Buyer_A3_Approver<Order, Person, Person>);
         projection.GetProperty("Item1").Should().NotBeNull();
         projection.GetProperty("Item2").Should().NotBeNull();
         projection.GetProperty("Item3").Should().NotBeNull();
@@ -42,24 +42,24 @@ public class AliasProjectionShapeTests
     }
 
     [Fact]
-    public void Positional_join_cannot_follow_an_alias_join()
+    public void Positional_join_after_alias_binds_the_generated_receiver()
     {
-        // R159-12 boundary (CHECK round 2): a positional Join/Apply applied to the generated alias
-        // projection builder must fail closed at construction (CreateJoined) instead of nesting the
-        // projection as Item1 and failing later in the planner. Legacy positional joins without aliases
-        // are unaffected (covered by the parity tests).
+        // #160 receiver-binding negative: the positional step after an alias must select the generated
+        // `new` instance overload, whose static return type is the slot-encoded builder. If the inherited
+        // EntityBuilder.Join were selected instead, this assignment would not compile (the static type
+        // would be JoinedEntityBuilder<...>) — exactly the failure the mechanism prevents. The r=1
+        // "positional cannot follow an alias" fail-closed boundary is superseded by free mixing.
         var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
         try
         {
             var orders = ctx.From<Order>(b => b.Table("orders"));
             var people = ctx.From<Person>(b => b.Table("person"));
 
-            var chained = orders.Join<Person>(people, (a, b) => a.BuyerId == b.Id, Alias.Buyer);
+            AliasJoin_P1_A2_Buyer_P3<Order, Person, Person> chained = orders
+                .Join<Person>(people, (a, b) => a.BuyerId == b.Id, Alias.Buyer)
+                .Join(people, (a, b) => a.Item2.Id == b.Id);
 
-            var act = () => chained.Join(people, (a, b) => a.Item1.BuyerId == b.Id);
-
-            act.Should().Throw<NotSupportedException>()
-                .WithMessage("*cannot follow an alias Join*");
+            chained.Select(p => p.Item3.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
         }
         finally
         {
@@ -71,7 +71,7 @@ public class AliasProjectionShapeTests
     [Fact]
     public void Alias_members_carry_join_slot_attribute_and_resolve_to_the_right_slot()
     {
-        var projection = typeof(AliasProjection_Buyer_Approver<Order, Person, Person>);
+        var projection = typeof(AliasProjection_P1_A2_Buyer_A3_Approver<Order, Person, Person>);
 
         projection.GetProperty("Buyer")!.GetCustomAttribute<JoinSlotAttribute>()!.Position.Should().Be(2);
         projection.GetProperty("Approver")!.GetCustomAttribute<JoinSlotAttribute>()!.Position.Should().Be(3);

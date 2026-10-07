@@ -1,0 +1,21 @@
+{
+  "unit": "D160",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests"],
+    "selectors": [
+      "FullyQualifiedName~JoinAlias",
+      "FullyQualifiedName~Alias",
+      "FullyQualifiedName~RootAlias"
+    ],
+    "files": [
+      "src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs",
+      "src/nextorm.core/Builders/Projection.cs",
+      "src/nextorm.core/Builders/EntityBuilder.cs",
+      "tests/nextorm.alias.tests/MixedJoinChainTests.cs",
+      "tests/nextorm.alias.tests/RootAliasTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "DO\u2192CHECK: full `dotnet test tests/nextorm.alias.tests -c Debug`; full `tests/nextorm.core.tests`; six provider SQL test projects; integration via DOCKER_HOST; acceptance benchmarks",
+    "rationale": "Modified generator/core alias behavior is exercised by the alias test project; mixed-chain/root scenarios are the changed behavior."
+  }
+}

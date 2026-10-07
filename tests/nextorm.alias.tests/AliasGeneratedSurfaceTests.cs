@@ -23,9 +23,10 @@ public class AliasGeneratedSurfaceTests
     [Fact]
     public void Generated_public_type_set_is_frozen()
     {
-        // The alias test assembly only ever writes Alias.Buyer / Alias.Approver, so the generator's
-        // whole public surface (one marker class, one builder/projection pair per discovered alias
-        // sequence, one extension class) is fully deterministic.
+        // The alias test assembly writes Alias.Buyer / Alias.Approver / Alias.Buyer2 across alias-only and
+        // mixed (alias/positional) chains, so the generator's whole public surface (one marker class, one
+        // builder/projection pair per discovered slot schema, one extension class) is fully deterministic.
+        // r=2: mixed chains add the P-encoded schemas; the digit alias proves names are not parsed as slots.
         var names = typeof(Alias).Assembly.GetTypes()
             .Where(type => type.Namespace == GeneratedNamespace && !type.IsNested)
             .Where(type => type.Name == "Alias"
@@ -38,10 +39,18 @@ public class AliasGeneratedSurfaceTests
 
         names.Should().Equal(
             "Alias",
-            "AliasJoin_Buyer_Approver`3",
-            "AliasJoin_Buyer`2",
-            "AliasProjection_Buyer_Approver`3",
-            "AliasProjection_Buyer`2",
+            "AliasJoin_P1_A2_Buyer2`2",
+            "AliasJoin_P1_A2_Buyer_A3_Approver`3",
+            "AliasJoin_P1_A2_Buyer_P3_A4_Approver`4",
+            "AliasJoin_P1_A2_Buyer_P3`3",
+            "AliasJoin_P1_A2_Buyer`2",
+            "AliasJoin_P1_P2_A3_Approver`3",
+            "AliasProjection_P1_A2_Buyer2`2",
+            "AliasProjection_P1_A2_Buyer_A3_Approver`3",
+            "AliasProjection_P1_A2_Buyer_P3_A4_Approver`4",
+            "AliasProjection_P1_A2_Buyer_P3`3",
+            "AliasProjection_P1_A2_Buyer`2",
+            "AliasProjection_P1_P2_A3_Approver`3",
             "JoinAliasExtensions");
     }
 
@@ -61,14 +70,14 @@ public class AliasGeneratedSurfaceTests
     public void Generated_projection_builder_pairs_are_public_and_slot_bound()
     {
         AssertPair(
-            typeof(AliasProjection_Buyer<Order, Person>),
-            typeof(AliasJoin_Buyer<Order, Person>),
+            typeof(AliasProjection_P1_A2_Buyer<Order, Person>),
+            typeof(AliasJoin_P1_A2_Buyer<Order, Person>),
             typeof(Projection<,>),
             ("Buyer", 2, typeof(Person)));
 
         AssertPair(
-            typeof(AliasProjection_Buyer_Approver<Order, Person, Person>),
-            typeof(AliasJoin_Buyer_Approver<Order, Person, Person>),
+            typeof(AliasProjection_P1_A2_Buyer_A3_Approver<Order, Person, Person>),
+            typeof(AliasJoin_P1_A2_Buyer_A3_Approver<Order, Person, Person>),
             typeof(Projection<,,>),
             ("Buyer", 2, typeof(Person)),
             ("Approver", 3, typeof(Person)));
@@ -137,16 +146,16 @@ public class AliasGeneratedSurfaceTests
     // Captured on r1/n3 before the C1 regression chains were added; all of these must survive the dedup.
     private static readonly string[] FrozenExtensionSignatures =
     [
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> CrossApply`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> CrossJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> FullJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.Cte<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> LeftJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> OuterApply`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, TJoin> RightJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Person, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Person>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Person, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
-        "NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer_Approver<NextORM.AliasTests.Order, NextORM.AliasTests.Person, TJoin> Join`1(NextORM.Generated.nextorm_alias_tests.AliasJoin_Buyer<NextORM.AliasTests.Order, NextORM.AliasTests.Person>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.Generated.nextorm_alias_tests.AliasProjection_Buyer<NextORM.AliasTests.Order, NextORM.AliasTests.Person>, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+ApproverMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> CrossApply`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> CrossJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> FullJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.Cte<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> LeftJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> OuterApply`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, TJoin> RightJoin`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Order>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Order, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Person, TJoin> Join`1(NextORM.Core.EntityBuilder<NextORM.AliasTests.Person>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.AliasTests.Person, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+BuyerMarker)",
+        "NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer_A3_Approver<NextORM.AliasTests.Order, NextORM.AliasTests.Person, TJoin> Join`1(NextORM.Generated.nextorm_alias_tests.AliasJoin_P1_A2_Buyer<NextORM.AliasTests.Order, NextORM.AliasTests.Person>, NextORM.Core.EntityBuilder<TJoin>, System.Linq.Expressions.Expression<System.Func<NextORM.Generated.nextorm_alias_tests.AliasProjection_P1_A2_Buyer<NextORM.AliasTests.Order, NextORM.AliasTests.Person>, TJoin, System.Boolean>>, NextORM.Generated.nextorm_alias_tests.Alias+ApproverMarker)",
     ];
 
     private static void AssertMarker(Type marker, string alias)
