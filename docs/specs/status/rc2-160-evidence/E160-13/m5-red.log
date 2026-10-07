@@ -1,0 +1,106 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+failed NextORM.Core.Tests.RootProjectionTests.Repeated_root_projection_preparation_reuses_the_plan_without_sticky_cache_mutation (185ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected second to refer to NextORM.Core.DbPreparedQueryCommand`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]
+  {
+      Behavior = CommandBehavior.Default {value: 0},
+      DbCommand = NextORM.Core.Tests.RootProjectionTests+FakeCommand
+      {
+          CommandText = "select Id from orders",
+          CommandTimeout = 0,
+          CommandType = CommandType.0 {value: 0},
+          Connection = <null>,
+          Container = <null>,
+          DesignTimeVisible = False,
+          Parameters = {empty},
+          Site = <null>,
+          Transaction = <null>,
+          UpdatedRowSource = UpdateRowSource.None {value: 0}
+      },
+      DbCommandParams = {empty},
+      Enumerator = <null>,
+      LastRowCount = 0,
+      MapDelegate = System.Func`2[[System.Data.IDataRecord, System.Data.Common, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]
+      {
+          HasSingleTarget = True,
+          Method = Int32 lambda_method1(System.Runtime.CompilerServices.Closure, System.Data.IDataRecord),
+          Target = System.Runtime.CompilerServices.Closure
+          {
+              Constants = {empty},
+              Locals = <null>
+          }
+      },
+      NeedsParamRefresh = False,
+      NoParams = True,
+      ParamMap = <null>,
+      SqlStmt = "select Id from orders"
+  }, but found NextORM.Core.DbPreparedQueryCommand`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]
+  {
+      Behavior = CommandBehavior.Default {value: 0},
+      DbCommand = NextORM.Core.Tests.RootProjectionTests+FakeCommand
+      {
+          CommandText = "select Id from orders",
+          CommandTimeout = 0,
+          CommandType = CommandType.0 {value: 0},
+          Connection = <null>,
+          Container = <null>,
+          DesignTimeVisible = False,
+          Parameters = {empty},
+          Site = <null>,
+          Transaction = <null>,
+          UpdatedRowSource = UpdateRowSource.None {value: 0}
+      },
+      DbCommandParams = {empty},
+      Enumerator = <null>,
+      LastRowCount = 0,
+      MapDelegate = System.Func`2[[System.Data.IDataRecord, System.Data.Common, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a],[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]
+      {
+          HasSingleTarget = True,
+          Method = Int32 lambda_method1(System.Runtime.CompilerServices.Closure, System.Data.IDataRecord),
+          Target = System.Runtime.CompilerServices.Closure
+          {
+              Constants = {empty},
+              Locals = <null>
+          }
+      },
+      NeedsParamRefresh = False,
+      NoParams = True,
+      ParamMap = <null>,
+      SqlStmt = "select Id from orders"
+  }.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.ReferenceTypeAssertions`2.BeSameAs(TSubject expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.RootProjectionTests.Repeated_root_projection_preparation_reuses_the_plan_without_sticky_cache_mutation() in /home/alex/sources/nextorm/tests/nextorm.core.tests/RootProjectionTests.cs:211
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) failed with 1 error(s) (914ms)
+Exit code: 2
+  Standard output: dbug: Microsoft.Extensions.Hosting.Internal.Host[1]
+        Hosting starting
+  info: Microsoft.Hosting.Lifetime[0]
+        Application started. Press Ctrl+C to shut down.
+  info: Microsoft.Hosting.Lifetime[0]
+        Hosting environment: Production
+  info: Microsoft.Hosting.Lifetime[0]
+        Content root path: /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[2]
+        Hosting started
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[3]
+        Hosting stopping
+  info: Microsoft.Hosting.Lifetime[0]
+        Application is shutting down...
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
+        Hosting stopped
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 1s 133ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

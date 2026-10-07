@@ -1,0 +1,27 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+failed NextORM.AliasTests.AliasProjectionShapeTests.Positional_join_after_alias_binds_the_generated_receiver (125ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: NextORM.Core.BuildSqlCommandException : Table name is not registered for type NextORM.Generated.nextorm_alias_tests.AliasProjection_P1_A2_Buyer_P3`3[NextORM.AliasTests.Order,NextORM.AliasTests.Person,NextORM.AliasTests.Person]. Materialize the entity first (for example with From<AliasProjection_P1_A2_Buyer_P3`3>()) so its metadata is registered.
+    at NextORM.Core.QueryPlanner.GetFrom(Type t) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:831
+    at NextORM.Core.QueryPlanner.GetFrom(Type srcType, QueryCommand queryCommand) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:848
+    at NextORM.Core.DataContext.GetFrom(Type srcType, QueryCommand queryCommand) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:716
+    at NextORM.Core.QueryCommand.QueryPreparer.Prepare(QueryCommand cmd, Boolean dontCalculateHash, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:71
+    at NextORM.Core.QueryCommand.PrepareCommand(Boolean dontCalculateHash, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.Prepare.cs:18
+    at NextORM.Core.QueryCommand`1.PrepareCommand(Boolean dontCalculateHash, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:34
+    at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:565
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean streamingRows, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:330
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:309
+    at NextORM.Core.QueryCommand`1.ToList(ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:219
+    at NextORM.AliasTests.AliasProjectionShapeTests.Positional_join_after_alias_binds_the_generated_receiver() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/AliasProjectionShapeTests.cs:62
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) failed with 1 error(s) (633ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 1
+  failed: 1
+  succeeded: 0
+  skipped: 0
+  duration: 855ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

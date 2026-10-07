@@ -1,0 +1,41 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+failed NextORM.AliasTests.AliasProjectionShapeTests.Alias_projection_retains_item_members_and_exposes_alias_members (92ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Expected chained.Select(p => p.Item2.Id).ToList() to be equal to {20}, but {10} differs at index 0.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Object[] args)
+    at FluentAssertions.Execution.GivenSelector`1.FailWith(String message, Func`2[] args)
+    at FluentAssertions.Execution.GivenSelectorExtensions.AssertCollectionsHaveSameItems[TActual,TExpected](GivenSelector`1 givenSelector, ICollection`1 expected, Func`3 findIndex)
+    at FluentAssertions.Collections.GenericCollectionAssertions`3.AssertSubjectEquality[TExpectation](IEnumerable`1 expectation, Func`3 equalityComparison, String because, Object[] becauseArgs)
+    at FluentAssertions.Collections.GenericCollectionAssertions`3.Equal(IEnumerable`1 expected, String because, Object[] becauseArgs)
+    at NextORM.AliasTests.AliasProjectionShapeTests.Alias_projection_retains_item_members_and_exposes_alias_members() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/AliasProjectionShapeTests.cs:34
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.AliasTests.AliasProjectionShapeTests.Alias_members_carry_join_slot_attribute_and_resolve_to_the_right_slot (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Expected projection.GetProperty("Buyer")!.GetCustomAttribute<JoinSlotAttribute>()!.Position to be 2, but found 3.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Numeric.NumericAssertions`2.Be(T expected, String because, Object[] becauseArgs)
+    at NextORM.AliasTests.AliasProjectionShapeTests.Alias_members_carry_join_slot_attribute_and_resolve_to_the_right_slot() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/AliasProjectionShapeTests.cs:76
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) failed with 2 error(s) (817ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 3
+  failed: 2
+  succeeded: 1
+  skipped: 0
+  duration: 1s 035ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
