@@ -32,7 +32,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 |---|---|---|---|---|---|---|---|---|---|---|
 | D151 | #151 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-151-stryker-mutation-1.md | Stryker re-run native extreme-row |
 | D153 | #153 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-153-public-extensibility-1.md | closed #153 (8401ca51) |
-| D154 | #154 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-154-dto-public-ctors-1.md | closed #154 |
+| D154 | #154 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-154-dto-public-ctors-1.md | committed #154 (5d72a79); gh close blocked (GitHub API 500), retry pending |
 | D157 | #157 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-157-register-finding-25-1.md | Reconcile register finding 25 |
 | D159 | #159 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | CTE direct join overloads + alias API |
 | D160 | #160 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | Join alias mixing + root alias |
@@ -86,6 +86,6 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 ## Done / Verified / Incomplete
 
-- Done: D153 (#153, commit 8401ca51).
+- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending).
 - Verified: no.
 - Incomplete: none. Excluded-gap: D171, D172 (issues OPEN, milestone unchanged).
