@@ -203,6 +203,10 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
         var connectionString = PostgresContainer.ConnectionString;
         ExecuteDdl(connectionString, $"create schema {schema}");
         ExecuteDdl(connectionString, $"create type {schema}.pt_composite as (a integer, b text)");
+        // The shared data source's catalog may have loaded before this type existed; reload it so the
+        // authoritative predicate reports the genuine composite (PostgresCompositeType) rather than a
+        // cold UnknownBackendType, which would degrade to the ordinary no-match error.
+        WarmPostgresTypeCatalog();
         try
         {
             using var ctx = Provider.CreateContext();
@@ -449,6 +453,9 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
         // A column cast to an *unregistered* named composite mixed with a scalar must guard, not fall
         // through to the generic "no mapped property" entity error.
         var schema = CreateCompositeSchema();
+        // Reload the shared catalog after the type exists so the predicate reports the genuine
+        // composite; otherwise the cold UnknownBackendType degrades to the ordinary no-match error.
+        WarmPostgresTypeCatalog();
         try
         {
             using var ctx = Provider.CreateContext();
@@ -484,6 +491,31 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
     }
 
     [Fact]
+    public void EmptyResultSet_RegisteredCompositeRead_ShouldReturnEmptyWithoutThrowing()
+    {
+        // T11 integration empty-reader row (#203): the raw-row mapper is built from the reader's column
+        // metadata before any row is read, so a `where false` result set still classifies the registered
+        // composite at preparation time and then yields an empty list instead of throwing.
+        var schema = CreateCompositeSchema();
+        try
+        {
+            using var dataSource = new NpgsqlDataSourceBuilder(PostgresContainer.ConnectionString)
+                .MapComposite<PtComposite>($"{schema}.pt_composite")
+                .Build();
+            using var connection = dataSource.CreateConnection();
+            using var ctx = new PostgresDataContext(connection, new DataContextBuilder());
+            using var result = ctx.ExecuteRaw(
+                $"select row(1::integer, 'a'::text)::{schema}.pt_composite as v where false");
+
+            result.Read<PtComposite>().Should().BeEmpty();
+        }
+        finally
+        {
+            DropCompositeSchema(schema);
+        }
+    }
+
+    [Fact]
     public void MixedUnregisteredNamedComposite_PositionalRecord_ShouldGuardNotCtorMessage()
     {
         // The unregistered composite is mixed with a scalar and the declared result is a positional
@@ -491,6 +523,9 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
         // before name-mapping validation, so the generic "requires a public parameterless
         // constructor" message must not surface.
         var schema = CreateCompositeSchema();
+        // Reload the shared catalog after the type exists so the predicate reports the genuine
+        // composite; otherwise the cold UnknownBackendType degrades to the ordinary no-match error.
+        WarmPostgresTypeCatalog();
         try
         {
             using var ctx = Provider.CreateContext();
@@ -504,6 +539,91 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
             act.Should().Throw<NotSupportedException>()
                 .Which.Message.Should().StartWith("PostgreSQL raw-row materialization is not supported: ")
                 .And.NotContain("parameterless constructor");
+        }
+        finally
+        {
+            DropCompositeSchema(schema);
+        }
+    }
+
+    // ---------------------------------------------------------------- T12 multi-column ordinals
+
+    [Fact]
+    public void MixedRegisteredNamedCompositeAtLaterOrdinal_ShouldGuard()
+    {
+        // T12: a registered genuine composite at a *later* ordinal (scalar first) is still detected by
+        // the multi-column classification loop, mirroring the first-ordinal registered case above.
+        var schema = CreateCompositeSchema();
+        try
+        {
+            using var dataSource = new NpgsqlDataSourceBuilder(PostgresContainer.ConnectionString)
+                .MapComposite<PtComposite>($"{schema}.pt_composite")
+                .Build();
+            using var connection = dataSource.CreateConnection();
+            using var ctx = new PostgresDataContext(connection, new DataContextBuilder());
+
+            var act = () =>
+            {
+                using var result = ctx.ExecuteRaw(
+                    $"select 5::integer as n, row(1::integer, 'a'::text)::{schema}.pt_composite as v");
+                result.Read<PtComposite>();
+            };
+
+            act.Should().Throw<NotSupportedException>()
+                .Which.Message.Should().StartWith("PostgreSQL raw-row materialization is not supported: ");
+        }
+        finally
+        {
+            DropCompositeSchema(schema);
+        }
+    }
+
+    [Fact]
+    public void MixedUnregisteredNamedCompositeAtLaterOrdinal_ShouldGuard()
+    {
+        // T12: an unregistered genuine composite at a later ordinal (scalar first) must be identified by
+        // the authoritative predicate at that ordinal, not only at ordinal 0.
+        var schema = CreateCompositeSchema();
+        WarmPostgresTypeCatalog();
+        try
+        {
+            using var ctx = Provider.CreateContext();
+            var act = () =>
+            {
+                using var result = ctx.ExecuteRaw(
+                    $"select 5::integer as n, row(1::integer, 'a'::text)::{schema}.pt_composite as v");
+                result.Read<PtComposite>();
+            };
+
+            act.Should().Throw<NotSupportedException>()
+                .Which.Message.Should().StartWith("PostgreSQL raw-row materialization is not supported: ");
+        }
+        finally
+        {
+            DropCompositeSchema(schema);
+        }
+    }
+
+    [Fact]
+    public void ScalarColumnMapsWhileCompositeAtLaterOrdinalIsIgnored_ShouldMaterialize()
+    {
+        // T12: a scalar column that maps by name still materializes while an unmapped unregistered
+        // composite sits at a later ordinal. The composite guard is only consulted when nothing maps, so
+        // the ordinary entity read succeeds instead of throwing (resolvable-but-unmapped columns are
+        // ignored by design).
+        var schema = CreateCompositeSchema();
+        WarmPostgresTypeCatalog();
+        try
+        {
+            using var ctx = Provider.CreateContext();
+            using var result = ctx.ExecuteRaw(
+                $"select 5::integer as a, row(1::integer, 'a'::text)::{schema}.pt_composite as v");
+
+            var rows = result.Read<ScalarPairDto>();
+
+            rows.Should().ContainSingle();
+            rows[0].A.Should().Be(5);
+            rows[0].B.Should().BeNull();
         }
         finally
         {
@@ -560,16 +680,16 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
     }
 
     [Fact]
-    public void UnmappedHstoreColumn_OnCleanCatalogConnection_ThrowsWithoutPinningTheException()
+    public void UnmappedHstoreColumn_OnCleanCatalogConnection_ShouldTakeOrdinaryNoMatch()
     {
-        // Documents the driver limitation behind #202: when a type catalog is loaded *before* the
-        // extension exists, the driver cannot resolve hstore from metadata and the read takes the
-        // (incorrect) named-composite rejection path. The shared implicit data source may already be warm,
-        // so this test isolates itself on a distinct connection string — a distinct Npgsql data source
-        // whose catalog is deliberately loaded while hstore is absent (a genuinely clean catalog; see the
-        // D-PROBE note on A1/A2 in the status file). It asserts the limitation's documented cold-state
-        // observable — the masked read surfaces the named-composite diagnostic rather than the ordinary
-        // "None of the result-set columns" error — without pinning the exception class or full message.
+        // Corrected behaviour (#203): when a type catalog is loaded *before* the extension exists, the
+        // driver reports the column as UnknownBackendType — not a genuine composite — so the authoritative
+        // predicate is false and the read takes the ordinary "None of the result-set columns" error. The
+        // shared implicit data source may already be warm, so this test isolates itself on a distinct
+        // connection string — a distinct Npgsql data source whose catalog is deliberately loaded while
+        // hstore is absent (a genuinely clean catalog; see the D-PROBE note on A1/A2 in the status file).
+        // Assert the ordinary no-match error and that no named-composite diagnostic leaks in. The
+        // classification must not query the catalog, reload types or issue a second command.
         var connectionString = PostgresContainer.ConnectionString;
         try
         {
@@ -600,10 +720,9 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
                 result.Read<ScalarPairDto>();
             };
 
-            var ex = Record.Exception(act);
-            Assert.NotNull(ex);
-            ex!.Message.Should().Contain("named composite");
-            ex.Message.Should().NotContain("None of the result-set columns");
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("None of the result-set columns*")
+                .Which.Message.Should().NotContain("named composite");
         }
         finally
         {
@@ -614,12 +733,64 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
     }
 
     [Fact]
-    public void UnmappedLtreeColumn_OnCleanCatalogConnection_ThrowsWithoutPinningTheException()
+    public void SingleUnmappedHstoreColumn_OnCleanCatalogConnection_ShouldTakeOrdinaryNoMatch()
     {
-        // Cold-state counterpart of the warm ltree test: a catalog loaded before ltree exists leaves the
-        // driver unable to classify public.ltree, so the read takes the same (incorrect) named-composite
-        // path as hstore on a clean catalog. This mirrors the hstore clean-limitation test (same isolation,
-        // same observable assertion shape), so ltree is not evidenced only by the warm state.
+        // T01 single-column cold state (#203): the mixed test above pins the multi-column branch; this one
+        // exercises the SINGLE unresolvable-column branch of RawMapperFactory. The cold catalog leaves the
+        // driver reporting hstore as UnknownBackendType, the authoritative predicate is false, and the
+        // ordinary "None of the result-set columns" error is kept — never the named-composite diagnostic.
+        // Classification must not warm the catalog or reload types inline. Same isolation and lifecycle as
+        // the mixed clean-catalog test: a unique ApplicationName avoids the warm shared implicit data
+        // source, and the extension is dropped before that catalog is loaded.
+        var connectionString = PostgresContainer.ConnectionString;
+        try
+        {
+            ExecuteDdl(connectionString, "drop extension if exists hstore cascade");
+
+            var cleanConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+            {
+                ApplicationName = "nextorm_clean_catalog_hstore_single_" + Guid.NewGuid().ToString("N")[..10]
+            }.ConnectionString;
+
+            // Opening the clean data source now loads its type catalog while hstore is absent.
+            using (var clean = new NpgsqlConnection(cleanConnectionString))
+            {
+                clean.Open();
+            }
+
+            ExecuteDdl(connectionString, "create extension if not exists hstore");
+
+            AssertExtensionPresent(connectionString, "hstore");
+            AssertFixtureCatalogCold(cleanConnectionString, "select 'a=>1'::hstore as v");
+
+            using var ctx = new PostgresDataContext(cleanConnectionString, new DataContextBuilder());
+            var act = () =>
+            {
+                using var result = ctx.ExecuteRaw("select 'a=>1'::hstore as v");
+                result.Read<ScalarPairDto>();
+            };
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("None of the result-set columns*")
+                .Which.Message.Should().NotContain("named composite");
+        }
+        finally
+        {
+            // Restore hstore (with a fresh OID) and reload the shared catalog for the other tests.
+            ExecuteDdl(connectionString, "create extension if not exists hstore");
+            WarmPostgresTypeCatalog();
+        }
+    }
+
+    [Fact]
+    public void UnmappedLtreeColumn_OnCleanCatalogConnection_ShouldTakeOrdinaryNoMatch()
+    {
+        // Cold-state counterpart of the warm ltree test (#203): a catalog loaded before ltree exists
+        // leaves the driver reporting UnknownBackendType, so the predicate is false and the read keeps the
+        // established ordinary "None of the result-set columns" error — never the named-composite
+        // diagnostic. This mirrors the hstore clean-catalog test (same isolation, same assertion shape), so
+        // ltree is not evidenced only by the warm state. Classification must not reload types or issue a
+        // second command while the reader is open.
         var connectionString = PostgresContainer.ConnectionString;
         try
         {
@@ -648,16 +819,185 @@ public sealed class PostgresRawRowTests : ProviderTestSuite
                 result.Read<ScalarPairDto>();
             };
 
-            var ex = Record.Exception(act);
-            Assert.NotNull(ex);
-            ex!.Message.Should().Contain("named composite");
-            ex.Message.Should().NotContain("None of the result-set columns");
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("None of the result-set columns*")
+                .Which.Message.Should().NotContain("named composite");
         }
         finally
         {
             // Restore ltree (with a fresh OID) and reload the shared catalog for the other tests.
             ExecuteDdl(connectionString, "create extension if not exists ltree");
             WarmPostgresTypeCatalog();
+        }
+    }
+
+    [Fact]
+    public void SingleUnmappedLtreeColumn_OnCleanCatalogConnection_ShouldTakeOrdinaryNoMatch()
+    {
+        // T02 single-column cold state (#203): the mixed ltree test above pins the multi-column branch;
+        // this one exercises the SINGLE unresolvable-column branch. A cold catalog leaves the driver
+        // reporting ltree as UnknownBackendType, so the authoritative predicate is false and the ordinary
+        // "None of the result-set columns" error is kept — never the named-composite diagnostic. Isolation
+        // and lifecycle mirror the mixed clean-catalog test; classification must not warm the catalog or
+        // reload types inline.
+        var connectionString = PostgresContainer.ConnectionString;
+        try
+        {
+            ExecuteDdl(connectionString, "drop extension if exists ltree cascade");
+
+            var cleanConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+            {
+                ApplicationName = "nextorm_clean_catalog_ltree_single_" + Guid.NewGuid().ToString("N")[..10]
+            }.ConnectionString;
+
+            // Opening the clean data source now loads its type catalog while ltree is absent.
+            using (var clean = new NpgsqlConnection(cleanConnectionString))
+            {
+                clean.Open();
+            }
+
+            ExecuteDdl(connectionString, "create extension if not exists ltree");
+
+            AssertExtensionPresent(connectionString, "ltree");
+            AssertFixtureCatalogCold(cleanConnectionString, "select 'a.b.c'::ltree as v");
+
+            using var ctx = new PostgresDataContext(cleanConnectionString, new DataContextBuilder());
+            var act = () =>
+            {
+                using var result = ctx.ExecuteRaw("select 'a.b.c'::ltree as v");
+                result.Read<ScalarPairDto>();
+            };
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("None of the result-set columns*")
+                .Which.Message.Should().NotContain("named composite");
+        }
+        finally
+        {
+            // Restore ltree (with a fresh OID) and reload the shared catalog for the other tests.
+            ExecuteDdl(connectionString, "create extension if not exists ltree");
+            WarmPostgresTypeCatalog();
+        }
+    }
+
+    // ---------------------------------------------------------------- T07 cold genuine composite
+
+    [Fact]
+    public void ColdCatalogGenuineComposite_ShouldTakeOrdinaryNoMatch_NotNamedComposite()
+    {
+        // T07: the type is created *after* a unique cold data source loaded its catalog, so the driver
+        // reports the genuine composite as UnknownBackendType. The authoritative predicate is false and
+        // the read takes the ordinary no-match error — never a named-composite diagnostic. The catalog is
+        // deliberately never warmed here: classification must not query the catalog, reload types or issue
+        // a second command. Cover a single unmappable column and a mixed composite + scalar result.
+        var connectionString = PostgresContainer.ConnectionString;
+        var schema = "d194_rawrow_" + Guid.NewGuid().ToString("N")[..10];
+        var coldConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            ApplicationName = "nextorm_cold_catalog_composite_" + Guid.NewGuid().ToString("N")[..10]
+        }.ConnectionString;
+
+        // Open the cold data source while the composite type does not exist yet (unique ApplicationName so
+        // it does not share the warm implicit data source).
+        using (var cold = new NpgsqlConnection(coldConnectionString))
+        {
+            cold.Open();
+        }
+
+        ExecuteDdl(connectionString, $"create schema {schema}");
+        ExecuteDdl(connectionString, $"create type {schema}.pt_composite as (a integer, b text)");
+        try
+        {
+            // The type exists server-side (committed on another connection), yet the cold connection still
+            // cannot classify it.
+            AssertExtensionPresent(connectionString, $"{schema}.pt_composite");
+
+            using var ctx = new PostgresDataContext(coldConnectionString, new DataContextBuilder());
+
+            AssertFixtureCatalogCold(coldConnectionString,
+                $"select row(1::integer, 'a'::text)::{schema}.pt_composite as v");
+            var single = () =>
+            {
+                using var result = ctx.ExecuteRaw(
+                    $"select row(1::integer, 'a'::text)::{schema}.pt_composite as v");
+                result.Read<ScalarPairDto>();
+            };
+            single.Should().Throw<InvalidOperationException>()
+                .WithMessage("None of the result-set columns*")
+                .Which.Message.Should().NotContain("named composite");
+
+            AssertFixtureCatalogCold(coldConnectionString,
+                $"select row(1::integer, 'a'::text)::{schema}.pt_composite as v, 5::integer as n");
+            var mixed = () =>
+            {
+                using var result = ctx.ExecuteRaw(
+                    $"select row(1::integer, 'a'::text)::{schema}.pt_composite as v, 5::integer as n");
+                result.Read<ScalarPairDto>();
+            };
+            mixed.Should().Throw<InvalidOperationException>()
+                .WithMessage("None of the result-set columns*")
+                .Which.Message.Should().NotContain("named composite");
+        }
+        finally
+        {
+            ExecuteDdl(connectionString, $"drop schema if exists {schema} cascade");
+        }
+    }
+
+    // ---------------------------------------------------------------- T14 transaction visibility
+
+    [Fact]
+    public void TransactionVisibility_UncommittedRows_RegisteredCompositeReadUsesTheSameReader()
+    {
+        // T14: within one connection/transaction, set up uncommitted state (table + rows) and read a
+        // registered genuine composite from it. Uncommitted rows are visible only through the connection
+        // and transaction the raw read runs on, so a fallback connection, a second command on the open
+        // reader or a transaction loss would fail or return no rows. The explicit connection assertion
+        // pins "uses that reader only".
+        var schema = CreateCompositeSchema();
+        var table = schema + ".t";
+        try
+        {
+            using var dataSource = new NpgsqlDataSourceBuilder(PostgresContainer.ConnectionString)
+                .MapComposite<PtComposite>($"{schema}.pt_composite")
+                .Build();
+            using var connection = dataSource.CreateConnection();
+            connection.Open();
+            using var transaction = connection.BeginTransaction();
+
+            using (var setup = connection.CreateCommand())
+            {
+                setup.Transaction = transaction;
+                setup.CommandText =
+                    $"create table {table} (id integer, a integer, b text); "
+                    + $"insert into {table} values (1, 7, 'z'); "
+                    + $"insert into {table} values (2, 8, 'y');";
+                setup.ExecuteNonQuery();
+            }
+
+            using var ctx = new PostgresDataContext(connection, new DataContextBuilder());
+            ((ITransactionManager)ctx).UseTransaction(transaction);
+
+            ctx.GetConnection().Should().BeSameAs(
+                connection,
+                "classification must use the caller's connection, not a fallback");
+
+            using var result = ctx.ExecuteRaw(
+                $"select row(t.a, t.b)::{schema}.pt_composite as v from {table} t order by t.id");
+            var rows = result.Read<PtComposite>();
+
+            rows.Should().HaveCount(2);
+            rows[0].A.Should().Be(7);
+            rows[0].B.Should().Be("z");
+            rows[1].A.Should().Be(8);
+            rows[1].B.Should().Be("y");
+
+            transaction.Connection.Should().BeSameAs(connection);
+            connection.State.Should().Be(System.Data.ConnectionState.Open);
+        }
+        finally
+        {
+            DropCompositeSchema(schema);
         }
     }
 

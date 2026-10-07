@@ -87,7 +87,7 @@ internal static class RawMapperFactory
         }
 
         if (context.RawRowColumnsSupported
-            && TryGetRawRowShape(reader, resultType, out var rawRowKind, out var guardReason))
+            && TryGetRawRowShape(context, reader, resultType, out var rawRowKind, out var guardReason))
         {
             if (guardReason is not null)
                 throw UnsupportedRawRow(guardReason);
@@ -147,7 +147,7 @@ internal static class RawMapperFactory
     /// <see cref="NotSupportedException"/>. Returns <see langword="false"/> for every ordinary
     /// scalar/entity result set, whose behaviour is unchanged.
     /// </summary>
-    private static bool TryGetRawRowShape(DbDataReader reader, Type resultType, out RawRowKind kind, out string? guardReason)
+    private static bool TryGetRawRowShape(DataContext context, DbDataReader reader, Type resultType, out RawRowKind kind, out string? guardReason)
     {
         kind = RawRowKind.None;
         guardReason = null;
@@ -232,13 +232,13 @@ internal static class RawMapperFactory
 
         // A single non-record column: a caller-registered named composite resolves its CLR field type
         // through the driver, so the declared result type can be matched exactly — but only when the
-        // driver reports a genuine composite. A CLR-type match alone is not enough: array covariance
-        // lets a text[]/int[] column satisfy a declared array type, and a provider struct/dictionary
-        // can share the declared type, so those would be routed to the typed composite accessor and
-        // silently accepted instead of taking the ordinary scalar/entity path.
+        // provider's authoritative predicate reports a genuine composite. A CLR-type match alone is not
+        // enough: array covariance lets a text[]/int[] column satisfy a declared array type, and a
+        // provider struct/dictionary can share the declared type, so those would be routed to the typed
+        // composite accessor and silently accepted instead of taking the ordinary scalar/entity path.
         if (TryGetFieldType(reader, 0, out var fieldType))
         {
-            if (fieldType == effectiveResultType && IsGenuineNamedComposite(reader, 0, effectiveResultType))
+            if (fieldType == effectiveResultType && IsGenuineNamedComposite(context, reader, 0, effectiveResultType))
             {
                 kind = RawRowKind.NamedComposite;
                 return true;
@@ -253,10 +253,11 @@ internal static class RawMapperFactory
             return false;
         }
 
-        // The driver cannot resolve the single column type. A non-scalar declared result is an
-        // unregistered named composite (S6): guard with an actionable message instead of letting the
-        // entity path report "none of the result-set columns matches a mapped property".
-        if (!IsScalarType(resultType))
+        // The driver cannot resolve the single column type. Only the provider's authoritative predicate
+        // may identify it as an unregistered named composite (S6); the metadata-probe exception shape and
+        // a dotted data type name are not classifiers, so an unresolvable non-composite keeps the ordinary
+        // entity path and its "None of the result-set columns" error.
+        if (!IsScalarType(resultType) && context.IsGenuineCompositeRawRowColumn(reader, 0))
         {
             guardReason = "a named composite type must be registered with MapComposite<T> before it can be read";
             return true;
@@ -281,25 +282,20 @@ internal static class RawMapperFactory
     }
 
     private static bool TryGetFieldType(DbDataReader reader, int index, out Type fieldType)
-        => TryGetFieldType(reader, index, out fieldType, out _);
-
-    private static bool TryGetFieldType(DbDataReader reader, int index, out Type fieldType, out Exception? probeError)
     {
         try
         {
             fieldType = reader.GetFieldType(index);
-            probeError = null;
             return true;
         }
         catch (Exception ex) when (IsMetadataRejection(ex))
         {
-            // The probe could not resolve a CLR type; the caller falls back to the ordinary path. The
-            // rejection exception is surfaced to the caller so it can discriminate a missing composite
-            // resolver (InvalidCastException) from an unresolvable non-composite (NotSupportedException).
-            // A real driver/connection error (DbException), cancellation or a disposed reader propagates
-            // instead of being masked.
+            // The probe could not resolve a CLR type; the caller falls back to the ordinary path and,
+            // where classification is needed, consults the provider's authoritative predicate. The
+            // rejection exception type is deliberately not surfaced: an exception shape is not a
+            // composite signal. A real driver/connection error (DbException), cancellation or a disposed
+            // reader propagates instead of being masked.
             fieldType = typeof(object);
-            probeError = ex;
             return false;
         }
     }
@@ -308,7 +304,9 @@ internal static class RawMapperFactory
     /// Classifies an exception thrown by a provider's metadata probe (<c>GetDataTypeName</c>/
     /// <c>GetFieldType</c>) as a rejection verdict rather than a real fault. Providers signal an
     /// unsupported column with <see cref="InvalidCastException"/> or <see cref="NotSupportedException"/>;
-    /// those only mean "no verdict on this column", so the caller falls back to the ordinary path. Every
+    /// those only mean "no verdict on this column", so the caller falls back to the ordinary path. A
+    /// composite verdict is never derived from the rejection shape: where classification is needed, the
+    /// caller consults the provider's <c>IsGenuineCompositeRawRowColumn</c> predicate instead. Every
     /// other exception — a driver/connection error, cancellation, or a disconnected/disposed reader
     /// (<see cref="ObjectDisposedException"/> is itself an <see cref="InvalidOperationException"/>) — is a
     /// real fault and propagates. In particular a plain <see cref="InvalidOperationException"/> is no
@@ -318,66 +316,43 @@ internal static class RawMapperFactory
         => ex is InvalidCastException or NotSupportedException;
 
     /// <summary>
-    /// Reports whether the single reader column at <paramref name="index"/> is a genuine PostgreSQL named
-    /// composite that may be read through the driver's typed composite accessor. The CLR field type must
-    /// match the declared result type (checked by the caller) and the column's data type name must be
-    /// schema-qualified (a real composite is e.g. <c>schema.pt_composite</c>; array types report the
-    /// <c>_type</c> marker and built-ins/provider structs are unqualified), and the declared result type
-    /// must not itself be an array or a dictionary (which array covariance / a provider dictionary type
-    /// would otherwise let match). Only arrays and <see cref="System.Collections.IDictionary"/> are
-    /// excluded: a caller-registered composite that merely implements <see cref="System.Collections.IEnumerable"/>
-    /// is a legitimate composite and must not be rejected by a blanket collection test.
+    /// Reports whether the single reader column at <paramref name="index"/> is a genuine named composite
+    /// that may be read through the driver's typed composite accessor. The CLR field type must match the
+    /// declared result type (checked by the caller) and the provider's authoritative predicate must report
+    /// a composite; the declared result type must not itself be an array or a dictionary (which array
+    /// covariance / a provider dictionary type would otherwise let match). Only arrays and
+    /// <see cref="System.Collections.IDictionary"/> are excluded: a caller-registered composite that merely
+    /// implements <see cref="System.Collections.IEnumerable"/> is a legitimate composite and must not be
+    /// rejected by a blanket collection test.
     /// </summary>
-    private static bool IsGenuineNamedComposite(DbDataReader reader, int index, Type resultType)
+    private static bool IsGenuineNamedComposite(DataContext context, DbDataReader reader, int index, Type resultType)
     {
         if (resultType.IsArray || typeof(System.Collections.IDictionary).IsAssignableFrom(resultType))
             return false;
 
-        string dataTypeName;
-        try
-        {
-            dataTypeName = reader.GetDataTypeName(index);
-        }
-        catch (Exception ex) when (IsMetadataRejection(ex))
-        {
-            return false;
-        }
-
-        return IsGenuineCompositeDataTypeName(dataTypeName);
+        return context.IsGenuineCompositeRawRowColumn(reader, index);
     }
 
     /// <summary>
-    /// The genuine-composite name test used by the single-column classification: a PostgreSQL named
-    /// composite data type is schema-qualified (contains a <c>.</c>), unlike unqualified built-ins and
-    /// arrays (<c>_type</c>) and the anonymous <c>record</c> type.
+    /// Reports whether a multi-column result set contains a column the driver cannot resolve and that the
+    /// provider's authoritative predicate identifies as an (unregistered) named composite mixed with
+    /// scalar columns (S6/S12). Resolvable columns are skipped, and a metadata-rejection exception shape
+    /// (<see cref="InvalidCastException"/>/<see cref="NotSupportedException"/>) is <b>not</b> a classifier:
+    /// an unresolvable non-composite (for example <c>ltree</c> or <c>hstore</c>) keeps the ordinary
+    /// no-match behaviour. The data type name is used only for the diagnostic. Only consulted when the
+    /// entity path already matched no column, so a resolvable-but-unmapped column is still ignored.
     /// </summary>
-    private static bool IsGenuineCompositeDataTypeName(string dataTypeName)
-        => dataTypeName.IndexOf('.') > 0;
-
-    /// <summary>
-    /// Reports whether a multi-column result set contains a column the driver cannot resolve and whose
-    /// <b>driver exception shape</b> identifies an (unregistered) named composite mixed with scalar
-    /// columns (S6/S12). A composite with no registered CLR resolver fails <c>GetFieldType</c> with
-    /// <see cref="InvalidCastException"/> ("Reading as '…' is not supported for fields having DataTypeName
-    /// 'schema.type'"), whereas an unknown/unresolvable non-composite (for example <c>ltree</c> without
-    /// <c>EnableLTree</c>) throws <see cref="NotSupportedException"/>. A dotted data type name alone is
-    /// <b>not</b> a composite signal — Npgsql reports every non-<c>pg_catalog</c> schema-qualified type as
-    /// dotted (<c>public.hstore</c>, <c>public.ltree</c>, domains/enums) — so the exception shape is the
-    /// discriminator and the ordinary no-match behaviour is preserved for a non-composite. Only consulted
-    /// when the entity path already matched no column, so a resolvable-but-unmapped column is still ignored.
-    /// </summary>
-    private static bool TryGetUnresolvableCompositeColumn(DbDataReader reader, out string? dataTypeName)
+    private static bool TryGetUnresolvableCompositeColumn(DataContext context, DbDataReader reader, out string? dataTypeName)
     {
         dataTypeName = null;
         for (var i = 0; i < reader.FieldCount; i++)
         {
-            if (TryGetFieldType(reader, i, out _, out var probeError))
+            if (TryGetFieldType(reader, i, out _))
                 continue;
 
-            // Only a missing composite resolver (InvalidCastException) is a named-composite verdict. An
-            // unresolvable non-composite (NotSupportedException) keeps the established ordinary no-match
-            // behaviour instead of a misleading composite diagnostic.
-            if (probeError is not InvalidCastException)
+            // ONLY the provider's authoritative predicate identifies a composite. The metadata-probe
+            // exception type is not a classifier.
+            if (!context.IsGenuineCompositeRawRowColumn(reader, i))
                 continue;
 
             string name;
@@ -614,7 +589,7 @@ internal static class RawMapperFactory
             // a positional-record composite surfaces the contracted guard rather than the generic
             // "... requires a public parameterless constructor" message. A resolvable unmapped column is
             // still ignored above, so ordinary entity reads are unaffected.
-            if (context.RawRowColumnsSupported && TryGetUnresolvableCompositeColumn(reader, out var compositeName))
+            if (context.RawRowColumnsSupported && TryGetUnresolvableCompositeColumn(context, reader, out var compositeName))
                 throw UnsupportedRawRow($"a named composite column ({compositeName}) mixed with scalar columns is not supported");
 
             EnsureNameMappable(resultType);

@@ -680,6 +680,24 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // this internal seam, which still virtual-dispatches to the provider override.
     internal bool RawRowColumnsSupported => SupportsRawRowColumns;
 
+    /// <summary>
+    /// Reports whether the provider authoritatively identifies the reader column at
+    /// <paramref name="ordinal"/> as a genuine composite (a PostgreSQL named or struct composite) rather
+    /// than a scalar or a provider struct. The default is <see langword="false"/>: without authoritative
+    /// metadata no column is classified as a composite, so a dotted data type name or a metadata-probe
+    /// exception never produces a composite verdict. The raw-row mapper consults this as its sole
+    /// composite-identification source.
+    /// </summary>
+    /// <param name="reader">The reader whose current result set is being classified.</param>
+    /// <param name="ordinal">The zero-based column ordinal.</param>
+    /// <returns><see langword="true"/> when the provider identifies the column as a genuine composite.</returns>
+    protected virtual bool IsGenuineCompositeColumn(DbDataReader reader, int ordinal) => false;
+
+    // RawMapperFactory lives outside the context type hierarchy, so it reaches the protected hook through
+    // this internal seam, which still virtual-dispatches to the provider override.
+    internal bool IsGenuineCompositeRawRowColumn(DbDataReader reader, int ordinal)
+        => IsGenuineCompositeColumn(reader, ordinal);
+
     // The CSV terminal lives outside the context type hierarchy, so it reaches the protected hook through
     // this internal seam, which still virtual-dispatches to the provider override.
     internal Expression MapTypedColumn(SelectExpression column, Expression record, Type storageType)

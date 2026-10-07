@@ -210,8 +210,9 @@ public class RawRowMaterializerTests
     {
         using var ctx = new TestContext();
 
-        // A rejected metadata probe (not a driver error) is a detection verdict: the PostgreSQL path
-        // reports the unregistered-composite guard rather than silently mapping a wrong shape.
+        // A rejected metadata probe combined with the explicit composite fact yields a detection verdict:
+        // the PostgreSQL path reports the unregistered-composite guard rather than silently mapping a
+        // wrong shape. The fact — not the probe exception shape — is what classifies the column.
         var probeFailure = RecordReader.MetadataFailure();
         var actProbe = () => RawMapperFactory.GetOrBuild<NamedComposite>(ctx, probeFailure);
         actProbe.Should().Throw<NotSupportedException>()
@@ -352,7 +353,8 @@ public class RawRowMaterializerTests
         var reader = RecordReader.Multi(
             ["app.named_composite", "int4"],
             [typeof(NamedComposite), typeof(int)],
-            [new NamedComposite { A = 1, B = "a" }, 2]);
+            [new NamedComposite { A = 1, B = "a" }, 2],
+            composites: [true, false]);
 
         var act = () => Map<NamedComposite>(reader);
 
@@ -394,8 +396,9 @@ public class RawRowMaterializerTests
         // The driver reports GetFieldType == int[] and a non-schema-qualified array data type name
         // (_int4). Array covariance must not route this to the typed named-composite accessor (which
         // would silently read it through GetFieldValue<int[]>); the ordinary entity path is kept and
-        // fails while building the array's metadata, so the read never silently succeeds.
-        var reader = RecordReader.Multi(["_int4"], [typeof(int[])], [new[] { 1, 2, 3 }]);
+        // fails while building the array's metadata, so the read never silently succeeds. An explicit
+        // composite fact must not bypass the array exclusion.
+        var reader = RecordReader.Multi(["_int4"], [typeof(int[])], [new[] { 1, 2, 3 }], composites: [true]);
 
         var act = () => Map<int[]>(reader);
 
@@ -408,7 +411,7 @@ public class RawRowMaterializerTests
         // Same for a Dictionary<string,int>: it is IEnumerable and its data type name is not a qualified
         // composite, so it must never reach the typed named-composite accessor and silently succeed.
         var reader = RecordReader.Multi(
-            ["_int4"], [typeof(Dictionary<string, int>)], [new Dictionary<string, int> { ["a"] = 1 }]);
+            ["_int4"], [typeof(Dictionary<string, int>)], [new Dictionary<string, int> { ["a"] = 1 }], composites: [true]);
 
         var act = () => Map<Dictionary<string, int>>(reader);
 
@@ -423,7 +426,7 @@ public class RawRowMaterializerTests
         // composite accessor instead of the ordinary entity path.
         var composite = new CustomEnumerableComposite();
         var reader = RecordReader.Multi(
-            ["app.custom_enumerable"], [typeof(CustomEnumerableComposite)], [composite]);
+            ["app.custom_enumerable"], [typeof(CustomEnumerableComposite)], [composite], composites: [true]);
         using var ctx = new TestContext();
 
         var mapper = RawMapperFactory.GetOrBuild<CustomEnumerableComposite>(ctx, reader);
@@ -435,9 +438,10 @@ public class RawRowMaterializerTests
     public void UnresolvableNonCompositeColumn_OrdinaryNoMatchRead_ShouldKeepTheEntityError()
     {
         // A dotted-but-not-composite column whose GetFieldType throws NotSupportedException (unknown
-        // type, e.g. ltree without EnableLTree) must not be classified as a named composite: the driver
-        // exception shape is the discriminator, so the established "None of the result-set columns ..."
-        // error is preserved instead of a misleading composite diagnostic.
+        // type, e.g. ltree without EnableLTree) must not be classified as a named composite: classification
+        // is delegated to the provider's authoritative predicate, and no explicit composite fact exists
+        // here, so the established "None of the result-set columns ..." error is preserved instead of a
+        // misleading composite diagnostic. The metadata-probe exception shape is not a discriminator.
         var reader = RecordReader.UnresolvableNonCompositeAndScalar();
         using var ctx = new TestContext();
 
@@ -449,13 +453,163 @@ public class RawRowMaterializerTests
     }
 
     [Fact]
+    public void SingleUnresolvableColumn_DottedNameAndCastExceptionOnly_ShouldNotClassifyAsComposite()
+    {
+        // The metadata probe rejects the single column with InvalidCastException and its data type name
+        // is dotted, but no explicit composite fact is present: neither a name nor an exception shape is
+        // a classifier, so the ordinary entity path (and its no-match error) is kept.
+        var reader = RecordReader.Multi(["app.named_composite"], [null], [42]);
+        using var ctx = new TestContext();
+
+        var act = () => RawMapperFactory.GetOrBuild<NamedComposite>(ctx, reader);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("None of the result-set columns*")
+            .Which.Message.Should().NotContain("named composite");
+    }
+
+    [Fact]
+    public void MetadataProbeRejection_WithoutCompositeFact_ShouldNotClassifyAsComposite()
+    {
+        // Both metadata probes reject (NotSupportedException on the type name, InvalidCastException on the
+        // field type) yet the predicate is the only classifier: with no explicit composite fact the read
+        // takes the ordinary path instead of the removed exception-shape composite diagnosis.
+        var reader = new RecordReader(["app.named_composite"], [null], [42]) { ThrowOnDataTypeName = true };
+        using var ctx = new TestContext();
+
+        var act = () => RawMapperFactory.GetOrBuild<NamedComposite>(ctx, reader);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("None of the result-set columns*")
+            .Which.Message.Should().NotContain("named composite");
+    }
+
+    [Fact]
+    public void UnresolvableDottedNonCompositeColumn_WithCastException_ShouldNotClassifyAsComposite()
+    {
+        // A dotted, unresolvable non-composite mixed with a scalar: the explicit fact says "not composite",
+        // so the mixed-column composite guard must not fire.
+        var reader = RecordReader.Multi(
+            ["app.dotted_non_composite", "int4"],
+            [null, typeof(int)],
+            [new object(), 5],
+            composites: [false, false]);
+        using var ctx = new TestContext();
+
+        var act = () => RawMapperFactory.GetOrBuild<NamedComposite>(ctx, reader);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("None of the result-set columns*")
+            .Which.Message.Should().NotContain("named composite");
+    }
+
+    [Fact]
+    public void UnknownPlaceholderColumn_WithCastException_ShouldNotClassifyAsComposite()
+    {
+        // The "-.-" placeholder an unresolved driver column reports is not a composite signal either.
+        var reader = RecordReader.Multi(
+            ["-.-", "int4"], [null, typeof(int)], [new object(), 5], composites: [false, false]);
+        using var ctx = new TestContext();
+
+        var act = () => RawMapperFactory.GetOrBuild<NamedComposite>(ctx, reader);
+
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("None of the result-set columns*")
+            .Which.Message.Should().NotContain("named composite");
+    }
+
+    [Fact]
+    public void UnresolvableExplicitCompositeColumn_MixedWithScalar_ShouldGuard()
+    {
+        // The explicit composite fact (the sole classifier) identifies the unresolvable column, so the
+        // mixed-composite guard fires and names the column for diagnostics.
+        var reader = RecordReader.Multi(
+            ["app.unregistered_composite", "int4"],
+            [null, typeof(int)],
+            [new NamedComposite { A = 1, B = "a" }, 5],
+            composites: [true, false]);
+        using var ctx = new TestContext();
+
+        var act = () => RawMapperFactory.GetOrBuild<NamedComposite>(ctx, reader);
+
+        act.Should().Throw<NotSupportedException>()
+            .Which.Message.Should().StartWith("PostgreSQL raw-row materialization is not supported: ")
+            .And.Contain("app.unregistered_composite");
+    }
+
+    [Fact]
+    public void UnresolvableExplicitCompositeColumn_LaterOrdinal_ShouldGuard()
+    {
+        // Same fact at a later ordinal: the scan is per column, not fixed to ordinal 0.
+        var reader = RecordReader.Multi(
+            ["int4", "app.unregistered_composite"],
+            [typeof(int), null],
+            [5, new NamedComposite { A = 1, B = "a" }],
+            composites: [false, true]);
+        using var ctx = new TestContext();
+
+        var act = () => RawMapperFactory.GetOrBuild<NamedComposite>(ctx, reader);
+
+        act.Should().Throw<NotSupportedException>()
+            .Which.Message.Should().StartWith("PostgreSQL raw-row materialization is not supported: ")
+            .And.Contain("app.unregistered_composite");
+    }
+
+    [Fact]
+    public void CompositeClassification_DoesNotScaleWithRows()
+    {
+        // Classification is a one-time mapper-preparation fact: the provider predicate is consulted while
+        // building the mapper, never again while rows are read.
+        var reader = new RecordReader(
+            ["app.pt_composite"], [typeof(Tuple<int, string>)], [Tuple.Create(1, "a")],
+            composites: [true]) { ReadCount = 3 };
+        using var ctx = new TestContext();
+
+        var mapper = RawMapperFactory.GetOrBuild<Tuple<int, string>>(ctx, reader);
+        var classificationsAfterBuild = ctx.CompositeProbeCount;
+        classificationsAfterBuild.Should().BeGreaterThan(0, "mapper preparation must consult the predicate");
+
+        var rows = 0;
+        while (reader.Read())
+        {
+            mapper(reader);
+            rows++;
+        }
+
+        rows.Should().Be(3);
+        ctx.CompositeProbeCount.Should().Be(
+            classificationsAfterBuild,
+            "classification must not grow with the row count");
+    }
+
+    // ---------------------------------------------------------------- T11 empty result set
+
+    [Fact]
+    public void EmptyRead_ShouldBuildTheMapperAndYieldNoRows()
+    {
+        // T11 empty-result-set row: the raw-row mapper is prepared from the reader's column metadata
+        // before any row is read, so preparing it must not consult row values. A reader that reports no
+        // rows (ReadCount = 0) therefore builds a valid mapper and yields an empty sequence, not a throw.
+        var reader = new RecordReader(["record"], [typeof(object[])], [new object?[] { 1, "a" }]) { ReadCount = 0 };
+        using var ctx = new TestContext();
+
+        var mapper = RawMapperFactory.GetOrBuild<Tuple<int, string>>(ctx, reader);
+
+        var rows = new List<Tuple<int, string>>();
+        while (reader.Read())
+            rows.Add(mapper(reader));
+
+        rows.Should().BeEmpty("an empty raw-row result set must materialize no rows without throwing");
+    }
+
+    [Fact]
     public void NullableStructComposite_Registered_ShouldRouteToNamedComposite()
     {
         // The driver reports a registered struct composite's CLR type (StructComposite), not
         // Nullable<StructComposite>, so eligibility must unwrap the declared Nullable<> or the
         // named-composite branch is unreachable and the read falls to the generic entity error.
         var composite = new StructComposite { A = 1, B = "a" };
-        var reader = RecordReader.Multi(["app.struct_composite"], [typeof(StructComposite)], [composite]);
+        var reader = RecordReader.Multi(["app.struct_composite"], [typeof(StructComposite)], [composite], composites: [true]);
         using var ctx = new TestContext();
 
         var mapper = RawMapperFactory.GetOrBuild<StructComposite?>(ctx, reader);
@@ -543,7 +697,7 @@ public class RawRowMaterializerTests
         var anonymous = RawMapperFactory.GetOrBuild<Tuple<int, string>>(
             ctx, RecordReader.Record(values: [new object?[] { 1, "a" }]));
         var composite = RawMapperFactory.GetOrBuild<Tuple<int, string>>(
-            ctx, RecordReader.Multi(["app.pt_composite"], [typeof(Tuple<int, string>)], [Tuple.Create(1, "a")]));
+            ctx, RecordReader.Multi(["app.pt_composite"], [typeof(Tuple<int, string>)], [Tuple.Create(1, "a")], composites: [true]));
 
         composite.Should().NotBeSameAs(
             anonymous, "RecordKind must keep the two raw-row shapes in distinct cache entries");
@@ -704,6 +858,15 @@ public class RawRowMaterializerTests
 
         protected override bool SupportsRawRowColumns => true;
 
+        /// <summary>Counts provider-predicate consultations to pin the one-time (not per-row) cadence.</summary>
+        public int CompositeProbeCount { get; private set; }
+
+        protected override bool IsGenuineCompositeColumn(DbDataReader reader, int ordinal)
+        {
+            CompositeProbeCount++;
+            return reader is RecordReader fake && fake.IsComposite(ordinal);
+        }
+
         public override DbParameter CreateParam(string name, object? value) => throw new NotSupportedException();
 
         protected override DbConnection CreateDbConnection(string? connectionString) => throw new NotSupportedException();
@@ -737,20 +900,21 @@ public class RawRowMaterializerTests
         string[] dataTypeNames,
         Type?[] fieldTypes,
         object?[] values,
-        bool[]? nulls = null) : DbDataReader
+        bool[]? nulls = null,
+        bool[]? composites = null) : DbDataReader
     {
         public static RecordReader Record(object?[] values, bool[]? nulls = null)
             => new(["record"], [typeof(object[])], values, nulls);
 
         public static RecordReader Composite(bool throwOnFieldType)
-            => new(["app.named_composite"], [throwOnFieldType ? null : typeof(NamedComposite)], [new NamedComposite { A = 1, B = "a" }]);
+            => new(["app.named_composite"], [throwOnFieldType ? null : typeof(NamedComposite)], [new NamedComposite { A = 1, B = "a" }], composites: [true]);
 
-        public static RecordReader Multi(string[] dataTypeNames, Type?[] fieldTypes, object?[] values)
-            => new(dataTypeNames, fieldTypes, values);
+        public static RecordReader Multi(string[] dataTypeNames, Type?[] fieldTypes, object?[] values, bool[]? composites = null)
+            => new(dataTypeNames, fieldTypes, values, composites: composites);
 
         /// <summary>A reader whose data-type-name metadata probe fails (not a driver/connection error).</summary>
         public static RecordReader MetadataFailure()
-            => new(["app.named_composite"], [null], [42]) { ThrowOnDataTypeName = true };
+            => new(["app.named_composite"], [null], [42], composites: [true]) { ThrowOnDataTypeName = true };
 
         /// <summary>A reader whose data-type-name metadata probe throws a real driver error.</summary>
         public static RecordReader MetadataDriverError()
@@ -769,7 +933,7 @@ public class RawRowMaterializerTests
 
         /// <summary>A reader with a resolvable named composite whose typed read fails with a disposed-reader fault.</summary>
         public static RecordReader NamedCompositeDisposed()
-            => new(["app.named_composite"], [typeof(NamedComposite)], [new NamedComposite { A = 1, B = "a" }])
+            => new(["app.named_composite"], [typeof(NamedComposite)], [new NamedComposite { A = 1, B = "a" }], composites: [true])
             {
                 FieldValueException = new ObjectDisposedException("reader"),
             };
@@ -779,10 +943,16 @@ public class RawRowMaterializerTests
         /// <see cref="NotSupportedException"/>, plus an ordinary scalar column.
         /// </summary>
         public static RecordReader UnresolvableNonCompositeAndScalar()
-            => new(["public.ltree", "int4"], [typeof(object), typeof(int)], [new object(), 5])
+            => new(["public.ltree", "int4"], [typeof(object), typeof(int)], [new object(), 5], composites: [false, false])
             {
                 FieldTypeExceptions = [new NotSupportedException("unknown type public.ltree"), null],
             };
+
+        /// <summary>
+        /// The explicit per-ordinal composite fact the fake context consumes. Classification is driven by
+        /// this fact alone: the data type name and the metadata-probe exception shape are never consulted.
+        /// </summary>
+        public bool IsComposite(int ordinal) => composites is not null && composites[ordinal];
 
         public bool ThrowOnDataTypeName { get; init; }
 
@@ -793,6 +963,11 @@ public class RawRowMaterializerTests
         public Exception? FieldValueException { get; init; }
 
         public Exception?[]? FieldTypeExceptions { get; init; }
+
+        /// <summary>Number of rows <see cref="Read"/> reports before returning <see langword="false"/>.</summary>
+        public int ReadCount { get; init; }
+
+        private int _reads;
 
         public override int FieldCount => dataTypeNames.Length;
         public override int Depth => 0;
@@ -848,7 +1023,7 @@ public class RawRowMaterializerTests
             return count;
         }
 
-        public override bool Read() => false;
+        public override bool Read() => _reads++ < ReadCount;
 
         public override bool NextResult() => false;
 

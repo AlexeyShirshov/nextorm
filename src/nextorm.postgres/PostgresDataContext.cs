@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using NextORM.Core;
 using Npgsql;
+using Npgsql.PostgresTypes;
 using NpgsqlTypes;
 
 namespace NextORM.Postgres;
@@ -229,6 +230,20 @@ public class PostgresDataContext : DataContext
     /// named composite as a single raw result-set column (#194).
     /// </summary>
     protected override bool SupportsRawRowColumns => true;
+
+    /// <summary>
+    /// True only when <paramref name="reader"/> is an <see cref="NpgsqlDataReader"/> that reports a
+    /// genuine PostgreSQL composite for <paramref name="ordinal"/> (a caller-registered named or struct
+    /// composite). Any other reader, or a column whose catalog metadata is unknown (<c>hstore</c>/<c>ltree</c>
+    /// or an unresolved cold composite → <see cref="UnknownBackendType"/>), returns
+    /// <see langword="false"/> so classification never guesses from a data type name or an exception shape.
+    /// The metadata is read from the existing reader; no second command, connection or type reload is used.
+    /// </summary>
+    /// <param name="reader">The reader whose current result set is being classified.</param>
+    /// <param name="ordinal">The zero-based column ordinal.</param>
+    /// <returns><see langword="true"/> when the driver reports a genuine composite type for the column.</returns>
+    protected override bool IsGenuineCompositeColumn(DbDataReader reader, int ordinal)
+        => reader is NpgsqlDataReader npgsql && npgsql.GetPostgresType(ordinal) is PostgresCompositeType;
 
     /// <summary>
     /// Materializes a projected <see cref="Range{T}"/> column from the driver's
