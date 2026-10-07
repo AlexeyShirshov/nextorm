@@ -5,10 +5,10 @@
 - branch: `1.0.9-rc2` @ base `18659e41`
 - selected_variant: **pdca-dotnet**
 - cycle_id N: **1**
-- plan_revision r: **1**
-- contract_revision rv: **1**
-- phase: **PLAN complete — DO not started** (collection TASK PLAN; stopped at the PLAN→DO boundary)
-- plan_state: **ready**
+- plan_revision r: **2**
+- contract_revision rv: **2**
+- phase: **ACT/EXIT complete — CHECK PASS** (r=2, n=1, rv=2; issue #159 closed)
+- plan_state: **complete**
 - provenance: briefs.md `## #159`; `docs/specs/status/collection-1.0.9-rc2.md:29` (D159 row)
 - no commits / merges / pushes are authorized by this plan that are outside the collection's explicit auto-commit mode
 
@@ -436,3 +436,23 @@ Evidence root r=2: `TestResults/pdca/D159/r2/` (alias `$E2`).
 - **Verdict:** no adverse effect from the `EntityBuilder.cs:4478` `From` resolution on streaming terminals; no product change made.
 
 **Commit:** `#159 r2: streaming reachability evidence for explicit-source TableAlias joins` — kept tests `tests/nextorm.sqlite.tests/TypedCteTests.cs` and this status file only; no `-A`, no push.
+
+## 20. ACT/EXIT — cycle complete (r=2, n=1, rv=2)
+
+**Final durable state:** Current cycle **N=1**; Plan revision **r=2**; Attempt **n=1/3**; contract revision **rv=2**; event phase **ACT/EXIT**; `tier=cheap`; final HEAD `078a7a2d` (branch `1.0.9-rc2`).
+**Final defect history:** `cte-symbol-identity-chainkey` observed r1 n1 → fixed r1 n2 (fix 1), resolved. `C1-alias-step-signature-collision` observed r1 n2 (probe) → fixed r1 n3 (fix 2), resolved. `C6-explicit-generic-iscte-vs-joined` observed r1 n2 (masked) → promoted + closed r1 n3. The rv=1→rv=2 change is a **contract revision** (R159-12 → R159-12'), not a product defect. **Applied fixes: 2.** No CHECK failure, no loop-back.
+
+**CHECK verdict:** **PASS** (CHECK-7), **r=2, n=1, rv=2**. All R159 criteria and required rows `E159-01…E159-21` plus the r=2 rows `E159-R2-SA` and `E159-R2-TVF` met; no open row.
+
+**Commit chain:** `00a7c0e6` (DO r1) → `09cedf1a` → `9bc57ad1` → `6b1eb9ef` → `1a31c3ed` (r=2) → `078a7a2d` (E159-20 streaming reachability, final tip).
+
+**Final evidence pointers:**
+- r=1: `TestResults/pdca/D159/r1/n1/`, `.../r1/n2/`, `.../r1/n3/` (mutations M1–M4, coverage, perf, capabilities, options/boundaries).
+- r=2: `TestResults/pdca/D159/r2/` — `V2-*.log`, `D-r2-1-sa-tvf.log`, `E159-20-streaming-filtered.log`, `E159-20-reachability.json`, `E159-20-sqlite-full.log`, `E159-20-core-full.log`.
+- Gates: Debug/Release build 0 warnings / 0 errors; core 1756/0; sqlite 1161/0; sqlserver 723/0; postgres 801/0; mysql 302/0; clickhouse 590/0; alias 46/0; container integration 5 providers, 0 failed; coverage line **87.8%** / branch **80.4%**; perf **7 cases, 0 fail**.
+
+**Follow-up #206 scope (recorded):** issue [#206](https://github.com/AlexeyShirshov/nextorm/issues/206) stays **OPEN**. The C1 part of its scope — intermediate-step `ChainKey` CTE-ness (`IsCte`) absent from the emitted step signature → `CS0111` — was **closed in D159** by full-text dedup of emitted extension methods plus the new `NORMGEN007` diagnostic. The remaining #206 scope is the **last-step-`JoinedType`-absent-from-signature** class, **guarded (not fixed)** by `NORMGEN007`; no public type-name/arity change (see §15.6/§16 and the issue comment `#issuecomment-6043152229`).
+
+**Issue closure:** `#159` closed on GitHub with exit 0 (`gh issue close 159`, comment recorded). Registry `docs/specs/design/API-NAMING-REVIEW.md` §«issue #159» left unchanged: the naming audit is already complete; its N159-1 remains an open P2 API-freeze item tracked under issue #53, not a D159 product defect.
+
+**Cycle closed.** No further DO/CHECK/ACT for D159; the task is marked `done` in `docs/specs/status/collection-1.0.9-rc2.md`.

@@ -34,7 +34,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D153 | #153 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-153-public-extensibility-1.md | closed #153 (8401ca51) |
 | D154 | #154 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-154-dto-public-ctors-1.md | closed #154 (5d72a79) |
 | D157 | #157 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-157-register-finding-25-1.md | closed #157 (5978556f) |
-| D159 | #159 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | CTE direct join overloads + alias API |
+| D159 | #159 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | closed #159 (078a7a2d) |
 | D160 | #160 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | Join alias mixing + root alias |
 | D161 | - | - | - | - | - | - | - | - | - | (reference only: #130/#161 hint APIs already shipped) |
 | D162 | #162 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md | V32 navigation temp/TVP fail-closed |
@@ -82,10 +82,10 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 - Verification state: `unverified` (P done; DO not started).
 - Defect id and history: none.
-- Next allowed step: continue G1 DO at first pending task D159 (same saved PLAN, continue from DO).
+- Next allowed step: continue G1 DO at first pending task D160 (same saved PLAN, continue from DO).
 
 ## Done / Verified / Incomplete
 
-- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f).
+- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed).
 - Verified: no.
 - Incomplete: none. Excluded-gap: D171, D172 (issues OPEN, milestone unchanged).
