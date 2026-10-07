@@ -1,0 +1,38 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+failed NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_builder_source_keeps_the_source (82ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Expected sql.Statements[^1] "select t2.Id from (select Id, BuyerId, ApproverId from orders) as 't1' join person as 't2' on t1.BuyerId = t2.Id" to contain "orders as 't1'".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_builder_source_keeps_the_source() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/RootAliasTests.cs:254
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_query_command_source_keeps_the_derived_query (24ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Expected sql.Statements[^1] "select t2.Id from (select Id, BuyerId, ApproverId from orders
+   where Id = 1) as 't1' join person as 't2' on t1.BuyerId = t2.Id" to contain "orders as 't1'".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.AliasTests.RootAliasTests.Generated_root_alias_on_a_query_command_source_keeps_the_derived_query() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/RootAliasTests.cs:232
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) failed with 2 error(s) (1s 027ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 13
+  failed: 2
+  succeeded: 11
+  skipped: 0
+  duration: 1s 251ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
