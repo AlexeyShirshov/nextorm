@@ -3075,7 +3075,70 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         joined.Ctes = CteMerge.Merge(Ctes, rightCtes);
         ApplyWhereToAliasJoined(joined);
+        ApplyPreAliasStateToAliasJoined(joined);
         return joined;
+    }
+
+    /// <summary>
+    /// Re-bases the query state written before an alias join that is not covered by
+    /// <see cref="ApplyWhereToAliasJoined{TNextEntity}"/> (<c>OrderBy</c>, <c>GroupBy</c>, <c>Having</c>,
+    /// <c>PreWhere</c> and <c>Paging</c>) onto the extended alias projection, so a state applied before
+    /// <c>.WithAlias</c> is not silently dropped when a join follows it. Only a preceding alias
+    /// projection is handled: a plain/derived entity source's modifiers are carried by the join base
+    /// (see <see cref="ResolveJoinBase"/>), exactly as on the positional path, so they are left alone.
+    /// </summary>
+    private void ApplyPreAliasStateToAliasJoined<TNextEntity>(EntityBuilder<TNextEntity> joined)
+    {
+        if (!typeof(TEntity).TryGetProjectionDimension(out _))
+            return;
+
+        // Paging has no lambda and is copied verbatim; it is not part of the join base for a projection
+        // source (ResolveAliasJoinBase returns null there because the projection shape cannot be wrapped).
+        joined.Paging = Paging;
+
+        (ParameterExpression Param, Expression Body) Rebase(LambdaExpression source)
+        {
+            var param = Expression.Parameter(typeof(TNextEntity), source.Parameters[0].Name);
+            var body = new RebaseAliasProjectionVisitor(source.Parameters[0], param, typeof(TNextEntity)).Visit(source.Body);
+            return (param, body);
+        }
+
+        if (_preWhere is not null)
+        {
+            var (param, body) = Rebase(_preWhere);
+            joined._preWhere = Expression.Lambda(body, param);
+        }
+
+        if (_having is not null)
+        {
+            var (param, body) = Rebase(_having);
+            joined._having = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+        }
+
+        if (_group is not null)
+        {
+            var (param, body) = Rebase(_group);
+            joined._group = Expression.Lambda(body, param);
+        }
+
+        if (_sorting is { Count: > 0 })
+        {
+            var sorting = new List<Sorting>(_sorting.Count);
+            foreach (var key in _sorting)
+            {
+                if (key.SortExpression is LambdaExpression { Parameters.Count: 1 } sort)
+                {
+                    var (param, body) = Rebase(sort);
+                    sorting.Add(new Sorting(Expression.Lambda(body, param)) { Direction = key.Direction });
+                }
+                else
+                {
+                    sorting.Add(key);
+                }
+            }
+
+            joined._sorting = sorting;
+        }
     }
 
     /// <summary>
@@ -3138,19 +3201,70 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             rooted.Query = null;
         }
 
-        // A Where written before WithAlias is over the plain root entity; move it onto the projection's
-        // Item1 so it keeps pointing at the same table after re-rooting.
-        if (_condition is not null)
+        // Query state written before '.WithAlias' is typed over the plain root entity. Move every
+        // entity-typed lambda (Where, OrderBy, GroupBy, Having, PreWhere) onto the projection's Item1 so
+        // it keeps pointing at the same table after re-rooting; Paging carries no lambda and is copied
+        // verbatim. A projection exposing Item1 is required for any of these, so fail closed instead of
+        // silently dropping the state when it is missing.
+        if (_condition is not null || _sorting is { Count: > 0 } || _group is not null
+            || _having is not null || _preWhere is not null)
         {
-            var sourceParameter = _condition.Parameters[0];
-            var param = Expression.Parameter(typeof(TNextEntity), sourceParameter.Name);
             var item1 = typeof(TNextEntity).GetProperty(nameof(Projection<TEntity, object>.Item1), BindingFlags.Public | BindingFlags.Instance)
                 ?? throw new NotSupportedException(
                     $"WithAlias requires the root projection '{typeof(TNextEntity)}' to derive from a Projection type exposing Item1.");
-            var item1Access = Expression.Property(param, item1);
-            var body = new ReplaceTargetParameterVisitor(sourceParameter, item1Access).Visit(_condition.Body);
-            rooted.Condition = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+
+            (ParameterExpression Param, Expression Body) Rebind(LambdaExpression source)
+            {
+                var param = Expression.Parameter(typeof(TNextEntity), source.Parameters[0].Name);
+                var body = new ReplaceTargetParameterVisitor(source.Parameters[0], Expression.Property(param, item1)).Visit(source.Body);
+                return (param, body);
+            }
+
+            if (_condition is not null)
+            {
+                var (param, body) = Rebind(_condition);
+                rooted.Condition = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+            }
+
+            if (_having is not null)
+            {
+                var (param, body) = Rebind(_having);
+                rooted._having = Expression.Lambda<Func<TNextEntity, bool>>(body, param);
+            }
+
+            if (_group is not null)
+            {
+                var (param, body) = Rebind(_group);
+                rooted._group = Expression.Lambda(body, param);
+            }
+
+            if (_preWhere is not null)
+            {
+                var (param, body) = Rebind(_preWhere);
+                rooted._preWhere = Expression.Lambda(body, param);
+            }
+
+            if (_sorting is { Count: > 0 })
+            {
+                var sorting = new List<Sorting>(_sorting.Count);
+                foreach (var key in _sorting)
+                {
+                    if (key.SortExpression is LambdaExpression { Parameters.Count: 1 } sort)
+                    {
+                        var (param, body) = Rebind(sort);
+                        sorting.Add(new Sorting(Expression.Lambda(body, param)) { Direction = key.Direction });
+                    }
+                    else
+                    {
+                        sorting.Add(key);
+                    }
+                }
+
+                rooted._sorting = sorting;
+            }
         }
+
+        rooted.Paging = Paging;
 
         return rooted;
     }

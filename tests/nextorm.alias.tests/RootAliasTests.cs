@@ -300,6 +300,124 @@ public class RootAliasTests
         act.Should().Throw<NotSupportedException>();
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Pre-alias query state must be preserved by '.WithAlias(Alias.X)' (issue #160, C1).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Generated_root_alias_preserves_a_where_applied_before_it()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders"))
+                .Where(o => o.BuyerId == AliasSqliteDatabase.BuyerId)
+                .WithAlias(Alias.Root);
+
+            rooted.Select(p => p.Root.Id).ToList().Should().Equal(1);
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("where BuyerId = 10");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_preserves_an_order_by_applied_before_it()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders"))
+                .OrderBy(o => o.Id)
+                .WithAlias(Alias.Root);
+
+            rooted.Select(p => p.Root.Id).ToList().Should().Equal(1);
+
+            sql.Statements[^1].Should().Contain("order by Id");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_preserves_paging_applied_before_it()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders"))
+                .Limit(1)
+                .WithAlias(Alias.Root);
+
+            rooted.Select(p => p.Root.Id).ToList().Should().Equal(1);
+
+            sql.Statements[^1].Should().Contain("limit 1");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_preserves_a_group_by_applied_before_it()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders"))
+                .GroupBy(o => o.BuyerId)
+                .WithAlias(Alias.Root);
+
+            rooted.Select(p => p.Root.BuyerId).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+
+            sql.Statements[^1].Should().Contain("group by BuyerId");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_preserves_where_order_by_and_paging_across_a_join()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders"))
+                .Where(o => o.BuyerId == AliasSqliteDatabase.BuyerId)
+                .OrderBy(o => o.Id)
+                .Limit(1)
+                .WithAlias(Alias.Root);
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            var joined = rooted.Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer);
+
+            joined.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("where t1.BuyerId = 10");
+            last.Should().Contain("order by t1.Id");
+            last.Should().Contain("limit 1");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void Hand_written_AliasRoot_is_refused_after_a_join()
     {

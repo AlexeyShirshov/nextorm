@@ -1,0 +1,25 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64)
+failed NextORM.ClickHouse.Tests.SqlGenerationTests.AsThenWhere_ShouldFilterDerivedTable (61ms)
+  from /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64)
+  Expected sql "select `OrderId`, `CustomerName` from (select t1.id as `OrderId`, t2.somestring as `CustomerName` from simple_entity as `t1` join complex_entity as `t2` on cast(t1.id as Int64) = t2.id) as `t3`
+   where (`OrderId` > 0)" to contain "where (t3".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.ClickHouse.Tests.SqlGenerationTests.AsThenWhere_ShouldFilterDerivedTable() in /home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:2896
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.clickhouse.tests/bin/linux/Debug/net10.0/nextorm.clickhouse.tests.dll (net10.0|x64) failed with 1 error(s) (1s 306ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 595
+  failed: 1
+  succeeded: 594
+  skipped: 0
+  duration: 1s 536ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

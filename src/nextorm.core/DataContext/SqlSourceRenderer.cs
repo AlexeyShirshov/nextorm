@@ -1061,10 +1061,18 @@ internal static class SqlSourceRenderer
     }
 
     internal static string MakeSort(in SqlBuildContext ctx, Type entityType, Expression sorting, int dim)
+        => MakeSort(in ctx, entityType, sorting, dim, dontNeedAlias: false);
+
+    /// <summary>
+    /// Renders an <c>ORDER BY</c> key, optionally without a table qualifier. A zero-join source (no
+    /// joins and no outer references) is not aliased, so a projection-item key must resolve unqualified
+    /// instead of failing to find a source alias; joined/aliased statements keep the qualifier.
+    /// </summary>
+    internal static string MakeSort(in SqlBuildContext ctx, Type entityType, Expression sorting, int dim, bool dontNeedAlias)
     {
         // An ORDER BY expression can reference joined tables, so columns must keep their table alias
         // (otherwise a column name shared by two joined tables is ambiguous).
-        using var visitor = ctx.CreateColumnVisitor(entityType, dim, dontNeedAlias: false);
+        using var visitor = ctx.CreateColumnVisitor(entityType, dim, dontNeedAlias);
         visitor.Visit(sorting);
 
         if (ctx.ParamMode) return string.Empty;

@@ -1,0 +1,64 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+failed NextORM.Sqlite.Tests.SqlGenerationTests.AsThenWhere_ShouldFilterDerivedTable (97ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql to be the same string, but they differ on line 2 and column 9 (index 199):
+                    ↓ (actual)
+    "…'t3'\n where (OrderId >…"
+    "…'t3'\n where (t3.OrderId >…"
+                    ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.SqlGenerationTests.AsThenWhere_ShouldFilterDerivedTable() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/SqlGenerationTests.cs:3188
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+skipped NextORM.Sqlite.Tests.SqliteRowIdLobProbeTests.Sqlite_RowId_Projection_Streams_Lobs_MemoryBounded
+  Set NEXTORM_LOB_SQLITE_PROBE=1 to run the SQLite rowid LOB capability probe.
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+failed NextORM.Sqlite.Tests.TypedCteTests.RecursiveAnonymousForm_ShouldPreserveSlotOrder (19ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql "with recursive nums as (select id as 'Id', (id + 1) as 'Next' from typed_cte_person
+   where id = 1
+   union all
+  select (Id + 1) as 'Id', (Next + 1) as 'Next' from nums as 't1'
+   where (Id < 4)) select Id, Next from nums as 't1'" to contain "t1.Id < 4".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.TypedCteTests.RecursiveAnonymousForm_ShouldPreserveSlotOrder() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/TypedCteTests.cs:881
+    at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+    at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+failed NextORM.Sqlite.Tests.TypedCteTests.RecursiveConstantAnchor_ShouldReferenceDeclaredOutputAlias (13ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected sql "with recursive nums as (select 1 as 'n' from typed_cte_person
+   where (id <= 2)
+   union all
+  select (n + 1) as 'n' from nums as 't1'
+   where (n < 1)) select n from nums as 't1'
+  limit 20" to contain "(t1.n < 1)".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.TypedCteTests.RecursiveConstantAnchor_ShouldReferenceDeclaredOutputAlias() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/TypedCteTests.cs:848
+    at System.RuntimeMethodHandle.InvokeMethod(ObjectHandleOnStack target, Void** arguments, ObjectHandleOnStack sig, BOOL isConstructor, ObjectHandleOnStack result)
+    at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) failed with 3 error(s) (11s 998ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 1166
+  failed: 3
+  succeeded: 1162
+  skipped: 1
+  duration: 11s 486ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

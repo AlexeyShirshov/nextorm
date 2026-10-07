@@ -1,0 +1,74 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
+failed NextORM.Postgres.Tests.JoinReturningIdentitySqlGenerationTests.UpdateJoinIdentity_MutationCteRead_ShouldFilterOnStoredSlotAlias (61ms)
+  from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
+  Expected sql "with upd as (update merge_entity as "t1" set name = @p0 from merge_entity as "t2" where t1.id = t2.id returning t1.id as "__s1_id", t1.name as "__s1_name", t1.age as "__s1_age", t1.total as "__s1_total", t2.id as "__s2_id", t2.name as "__s2_name", t2.age as "__s2_age", t2.total as "__s2_total") select "__s1_id", "__s2_id" from upd as "t1"
+   where "__s1_id" = 1" to contain "where t1."__s1_id" = 1".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.Postgres.Tests.JoinReturningIdentitySqlGenerationTests.UpdateJoinIdentity_MutationCteRead_ShouldFilterOnStoredSlotAlias() in /home/alex/sources/nextorm/tests/nextorm.postgres.tests/JoinReturningIdentitySqlGenerationTests.cs:162
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Postgres.Tests.InsertSqlGenerationTests.DataModifyingCte_WhereOnReturnedColumn_ShouldQualifyTheAlias (136ms)
+  from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
+  Expected SqlOf(ctx, ctx.With("ins", ctx.CreateInsertBuilder<IInsertEntity>().Value(x => x.Name, "a").Returning(x => new { x.Id, x.Age })).From("ins").Where(r => r.Age > 0).Select(r => new { r.Id })) to be the same string, but they differ on line 2 and column 9 (index 113):
+                    ↓ (actual)
+    "…"t1"\n where (age >…"
+    "…"t1"\n where (t1.age >…"
+                    ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Postgres.Tests.InsertSqlGenerationTests.DataModifyingCte_WhereOnReturnedColumn_ShouldQualifyTheAlias() in /home/alex/sources/nextorm/tests/nextorm.postgres.tests/InsertSqlGenerationTests.cs:595
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Postgres.Tests.SqlGenerationTests.AsThenWhere_ShouldFilterDerivedTable (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
+  Expected sql "select "OrderId", "CustomerName" from (select t1.id as "OrderId", t2.somestring as "CustomerName" from simple_entity as "t1" join complex_entity as "t2" on cast(t1.id as bigint) = t2.id) as "t3"
+   where ("OrderId" > 0)" to contain "where (t3".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.Postgres.Tests.SqlGenerationTests.AsThenWhere_ShouldFilterDerivedTable() in /home/alex/sources/nextorm/tests/nextorm.postgres.tests/SqlGenerationTests.cs:4184
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Postgres.Tests.SqlGenerationTests.DerivedSourceOverDerivedWithWindow_ShouldResolvePassThroughColumns (5ms)
+  from /home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64)
+  Expected sql "select "DepartureCity", "Place", "Route", "Revenue" from (select "DepartureCity", "Route", "Revenue", rank() over (partition by "DepartureCity" order by "Revenue" desc) as "Place" from (select somestring as "DepartureCity", ((somestring||' -> ')||somestring) as "Route", sum(id) as "Revenue" from complex_entity
+   group by somestring, ((somestring||' -> ')||somestring)) as "t1") as "t2"
+   where ("Place" <= 3)
+   order by "DepartureCity"" to contain "order by t2."DepartureCity"".
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringAssertions`1.Contain(String expected, String because, Object[] becauseArgs)
+    at NextORM.Postgres.Tests.SqlGenerationTests.DerivedSourceOverDerivedWithWindow_ShouldResolvePassThroughColumns() in /home/alex/sources/nextorm/tests/nextorm.postgres.tests/SqlGenerationTests.cs:4238
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.postgres.tests/bin/linux/Debug/net10.0/nextorm.postgres.tests.dll (net10.0|x64) failed with 4 error(s) (1s 664ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 806
+  failed: 4
+  succeeded: 802
+  skipped: 0
+  duration: 1s 894ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

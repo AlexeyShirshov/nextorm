@@ -7,7 +7,7 @@
 - cycle_id: 1
 - plan_revision: 2
 - contract_revision: rv=3
-- attempt: n=1/3
+- attempt: n=2/3
 - phase: DO
 - plan_state: r=2 revision issued by planner; rv=2 superseded by rv=3 (P:160-ROOT-CONTRACT sealed to bounded in-scope fix (iii)). All acceptance criteria R160-01..11 preserved; no rows/obligations weakened.
 - provenance: collection `docs/specs/status/collection-1.0.9-rc2.md` task D160; brief `/tmp/opencode/rc2/briefs.md` §#160; design `docs/specs/design/join-alias-mixing-and-root-alias.md`
@@ -248,6 +248,46 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | 2026-10-07T20:27:58Z | DO | r2 | n1/3 | E160-13 closed green: 6/6 reversible mutations detected (M1–M3, M5–M6 previously, M4 by F1 kill); all edits reverted, no residual mutation in `src`/`tests` | docs/specs/status/rc2-160-evidence/E160-13/mutations.md |
 | 2026-10-08T01:32:22Z | DO | r2 | n1/3 | E160-07 Release re-gather closed: `dotnet build nextorm.slnx -c Release --no-incremental` exit 0, 0 warnings / 0 errors (DEBUG already green) | docs/specs/status/rc2-160-evidence/E160-07/release-build.log |
 | 2026-10-08T01:34:05Z | DO | r2 | n1/3 | E160-21 / R160-11 (D:160-04) closed green: generated `new` instance transitions proven to hide the inherited `EntityBuilder<TEntity>.Join`/`Apply` overloads and alias extensions proven applicable on `AliasJoin_*`, root `AliasJoin_A1_Root<T>` and the positional `JoinedEntityBuilder` prefix. `AliasProjectionShapeTests` 5/5 exit 0 (2 new proving tests), `AliasGeneratedSurfaceTests` 5/5, `JoinAliasGeneratorDiagnosticTests` 17/17, `RootAliasTests` 13/13, `MixedJoinChainTests` 8/8; no product change (test-only, within alias footprint) | docs/specs/status/rc2-160-evidence/E160-21/README.md |
+| 2026-10-07T20:51:54Z | DO | r2 | n2/3 | attempt n=2 begins; defect key **D160-C1** (pre-`.WithAlias` Where/OrderBy/GroupBy/Having/Skip/Take dropped) first observed n1, this attempt fixes it | this file §C1 |
+| 2026-10-07T20:51:54Z | DO | r2 | n2/3 | **D160-C1 FIXED**: zero-join root alias rejected the pre-alias `Where`/`OrderBy`/`GroupBy` because `MakeSelect` rendered predicates/sort/group with `dontNeedAlias:false` over an unaliased projection source; `dontNeedAlias` is now derived from the FROM alias decision (bare physical source ⇒ unqualified). With-join pre-alias state is rebased by slot in `CreateAliasJoined` (`ApplyPreAliasStateToAliasJoined`: OrderBy/GroupBy/Having/PreWhere + Paging). Fix commit (n=2) applied in this session | this file §C1 |
+| 2026-10-07T20:51:54Z | DO | r2 | n2/3 | C1 filtered (`FullyQualifiedName~Generated_root_alias_preserves`) exit 0, selected 5 / passed 5 / failed 0 (4 original zero-join + 1 new with-join) | rc2-160-evidence/E160-27/c1-tests-green.log |
+| 2026-10-07T20:51:54Z | DO | r2 | n2/3 | ONE broad boundary sweep `dotnet test tests/nextorm.alias.tests -c Debug` exit 0, selected 80 / passed 80 / failed 0 | rc2-160-evidence/E160-27/alias-suite-final.log |
+| 2026-10-07T20:51:54Z | DO | r2 | n2/3 | renderer-regression sweep after the first C1 attempt (blanket `!needAlias`) was caught and corrected: core 1767 (0 failed), sqlite 1166 (0 failed), postgres 806 (0 failed), sqlserver 728 (0 failed), mysql 307 (0 failed), mariadb 233 (0 failed), clickhouse 595 (0 failed), all exit 0 | rc2-160-evidence/E160-27/{core,sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}-tests2.log |
+| 2026-10-07T20:51:54Z | DO | r2 | n2/3 | build `dotnet build nextorm.slnx -c Debug` exit 0, 0 warnings / 0 errors; `-c Release` exit 0, 0 warnings / 0 errors | rc2-160-evidence/E160-27/solution-debug.log, solution-release.log |
+| 2026-10-07T20:51:54Z | DO | r2 | n2/3 | scratch `tests/nextorm.alias.tests/ZScratchTests.cs` deleted; tree kept clean for the n=2 commit | git status |
+
+### C1 — defect D160-C1 (pre-`.WithAlias` query state preservation) — FIXED (r=2, n=2/3)
+
+- **Defect key:** `D160-C1`. **First observed:** attempt n=1. **Fixed in:** attempt n=2 (this session).
+  **Applied fixes:** 1. **Status:** resolved; no open C1 defect.
+- **Symptom (n=1):** state written before `.WithAlias(Alias.X)` was silently dropped or failed:
+  `Where`/`OrderBy`/`GroupBy` on a zero-join root alias threw `InvalidOperationException` from
+  `MemberTranslator.ResolveProjectionItemAliasIndex` (no source alias to resolve a projection item);
+  `OrderBy`/`GroupBy`/`Having`/`Skip`/`Take` were not carried across a subsequent alias join.
+- **Root cause:** two independent gaps: (a) `SqlBuilder.MakeSelect` always rendered
+  `PREWHERE`/`WHERE`/`GROUP BY`/`HAVING`/`ORDER BY` with `dontNeedAlias:false`, so a projection item
+  over an unaliased physical FROM source could not resolve; (b) `CreateAliasJoined` only rebased the
+  pre-join `Where` (`ApplyWhereToAliasJoined`), not `OrderBy`/`GroupBy`/`Having`/`PreWhere`/`Paging`.
+- **Fix (bounded, no renderer/planner rewrite):**
+  - `SqlBuilder.MakeSelect` computes `dontNeedAlias` from the actual FROM-alias decision (a bare
+    physical table with no joins and no column shape ⇒ unqualified; every derived/raw/shaped source and
+    every joined source ⇒ qualified, mirroring `SqlSourceRenderer.MakeFrom`) and passes it to the
+    predicate/group/sort renderers. `SqlSourceRenderer.MakeSort` gained a `dontNeedAlias`-aware overload.
+  - `EntityBuilder.CreateAliasJoined` now calls `ApplyPreAliasStateToAliasJoined`, which rebases
+    `OrderBy`/`GroupBy`/`Having`/`PreWhere` by slot (reusing `RebaseAliasProjectionVisitor`) and copies
+    `Paging`, mirroring `ApplyWhereToAliasJoined`; only a preceding alias projection is handled, leaving
+    the positional path untouched.
+  - `EntityBuilder.AliasRoot` rebases all pre-alias state (`Where`/`OrderBy`/`GroupBy`/`Having`/
+    `PreWhere`) onto the root projection's `Item1` and copies `Paging`.
+- **Negative-case regression guard:** the first C1 attempt used a blanket `!needAlias`; it was rejected
+  by the existing derived-source/CTE tests (`AsThenWhere_ShouldFilterDerivedTable`,
+  `TypedCteTests.*`, `JoinReturningIdentity*`) — those failures are recorded in
+  `rc2-160-evidence/E160-27/{core,sqlite,postgres,...}-tests.log` and the corrected run is
+  `...-tests2.log`. The final predicate restores all of them green.
+- **Evidence:** `rc2-160-evidence/E160-27/` — `c1-baseline.log` (n=1 red: 3/4 failed),
+  `c1-zerojoin-green.log` (4/4), `c1-tests-green.log` (5/5), `alias-suite-final.log` (80/80),
+  `{core,sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}-tests2.log`, `solution-debug.log`,
+  `solution-release.log`.
 
 ### Inherited collection evidence rows (verbatim; do not invent/ N/A except C-E04 single-group)
 - **C-E01 / truthful admission** — check: "Validate admission snapshot for milestone `1.0.9-rc2`: 26 open issues, 24 admitted `ready`, D171/D172 excluded-gap and still OPEN in the milestone." — owner: collection CHECK — applicability: "at admission; re-check exclusions at completion".
@@ -302,6 +342,7 @@ Next step: pre-DO sealing gather (scout) for the missing contracts/commands, the
 | E160-24 | R10 | green (D:160-04 register entry complete) | `docs/specs/design/API-NAMING-REVIEW.md` §#160 (N160-1/N160-2; kept rename mechanism-required `JoinAliasGenerator.cs:748,763,768,929,932,943,1077,1195`; nothing reverted); spec-path + AGENTS.md fixes |
 | E160-25 | R03 | green (rv=3) | `From(builder)` root `.WithAlias` preserves derived source; `dotnet test tests/nextorm.alias.tests -c Debug --filter FullyQualifiedName~RootAliasTests` exit 0, selected 13 / passed 13 / failed 0; SQL `select t2.Id from (select Id, BuyerId, ApproverId from orders) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; logs `rc2-160-evidence/E160-25/` |
 | E160-26 | R03 | green (rv=3) | `From(QueryCommand<T>)` root `.WithAlias` preserves derived query; same filtered run exit 0, 13/13; SQL `select t2.Id from (select Id, BuyerId, ApproverId from orders where Id = 1) as 't1' join person as 't2' on t1.BuyerId = t2.Id`; logs `rc2-160-evidence/E160-26/` |
+| E160-27 | R03,R07,R08 | green (n=2/3; D160-C1 fixed) | pre-`.WithAlias` state preserved: C1 filtered exit 0, 5/5 (`c1-tests-green.log`); alias boundary exit 0, 80/80 (`alias-suite-final.log`); renderer regression sweep core 1767 (0 failed), sqlite 1166 (0 failed), postgres 806 (0 failed), sqlserver 728 (0 failed), mysql 307 (0 failed), mariadb 233 (0 failed), clickhouse 595 (0 failed) exit 0 (`*-tests2.log`); build Debug+Release exit 0, 0/0 (`solution-{debug,release}.log`); full detail §C1 | `docs/specs/status/rc2-160-evidence/E160-27/` |
 
 ### D:160-02 dim-1 spike — closed green (resolved-by-AliasRoot; for CHECK)
 - Result: 3/3 `RootAliasTests` green; dim-1 `Projection<T1>` plans, root slot 1 maps to `t1`, `Extend` yields `Projection<T1,T2>` preserving `Item1`.

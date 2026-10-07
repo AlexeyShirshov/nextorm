@@ -1,0 +1,12 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+/home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs(3880,35): error CS0102: The type 'EntityBuilder<TEntity>' already contains a definition for 'Having' [/home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj]
+
+Build FAILED.
+
+/home/alex/sources/nextorm/src/nextorm.core/Builders/EntityBuilder.cs(3880,35): error CS0102: The type 'EntityBuilder<TEntity>' already contains a definition for 'Having' [/home/alex/sources/nextorm/src/nextorm.core/nextorm.core.csproj]
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:02.99

@@ -1,0 +1,40 @@
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean streamingRows, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:330
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:309
+    at NextORM.Core.QueryCommand`1.ToList(ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:219
+    at NextORM.AliasTests.RootAliasTests.Generated_root_alias_preserves_an_order_by_applied_before_it() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/RootAliasTests.cs:339
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.AliasTests.RootAliasTests.Generated_root_alias_preserves_a_where_applied_before_it (26ms)
+  from /home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidOperationException : Operation is not valid due to the current state of the object.
+    at NextORM.Core.MemberTranslator.ResolveProjectionItemAliasIndex(IColumnsProvider columnsProvider, Type itemType, Nullable`1 itemOccurrence, ParameterExpression projectionParameter, Boolean includeNestedSources) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/MemberTranslator.cs:827
+    at NextORM.Core.MemberTranslator.VisitMember(BaseExpressionVisitor visitor, MemberExpression node) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/MemberTranslator.cs:487
+    at NextORM.Core.BaseExpressionVisitor.VisitMember(MemberExpression node) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:802
+    at NextORM.Core.BaseExpressionVisitor.VisitComparisonOperandCore(Expression operand, Nullable`1 converter) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:203
+    at NextORM.Core.BaseExpressionVisitor.VisitComparisonOperand(Expression operand, Nullable`1 converter) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:191
+    at NextORM.Core.WhereExpressionVisitor.VisitBinary(BinaryExpression node) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/WhereExpressionVisitor.cs:41
+    at NextORM.Core.PredicateTranslator.AppendCondition(BaseExpressionVisitor visitor, Expression expression) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/PredicateTranslator.cs:160
+    at NextORM.Core.PredicateTranslator.VisitCondition(BaseExpressionVisitor visitor, Expression condition) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/PredicateTranslator.cs:174
+    at NextORM.Core.BaseExpressionVisitor.VisitCondition(Expression condition) in /home/alex/sources/nextorm/src/nextorm.core/Visitors/BaseExpressionVisitor.cs:831
+    at NextORM.Core.SqlSourceRenderer.MakeWhere(SqlBuildContext& ctx, StringBuilder target, Type entityType, Expression condition, Int32 dim, Boolean dontNeedAlias) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs:991
+    at NextORM.Core.SqlSourceRenderer.MakeWhere(SqlBuildContext& ctx, StringBuilder target, Type entityType, Expression condition, Int32 dim) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlSourceRenderer.cs:981
+    at NextORM.Core.SqlBuilder.MakeSelect(QueryCommand cmd, String selectInto) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/SqlBuilder.cs:205
+    at NextORM.Core.QueryPlanner.MakeSelect(QueryCommand queryCommand, Boolean paramMode, List`1 params, IQueryRegistry queryProvider, IAliasProvider aliasProvider, Boolean sequentialAccess) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:543
+    at NextORM.Core.QueryPlanner.<GetPreparedQueryCommand>g__MakeSelectInternal|35_0[TResult](<>c__DisplayClass35_0`1&) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:770
+    at NextORM.Core.QueryPlanner.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean sequentialAccess, Boolean streamingRowsRequested, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/QueryPlanner.cs:654
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, Boolean streamingRows, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:330
+    at NextORM.Core.DataContext.GetPreparedQueryCommand[TResult](QueryCommand`1 queryCommand, Boolean createEnumerator, Boolean storeInCache, CancellationToken cancellationToken) in /home/alex/sources/nextorm/src/nextorm.core/DataContext/DataContext.cs:309
+    at NextORM.Core.QueryCommand`1.ToList(ReadOnlySpan`1 params) in /home/alex/sources/nextorm/src/nextorm.core/Query/QueryCommand.TResult.cs:219
+    at NextORM.AliasTests.RootAliasTests.Generated_root_alias_preserves_a_where_applied_before_it() in /home/alex/sources/nextorm/tests/nextorm.alias.tests/RootAliasTests.cs:317
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.alias.tests/bin/linux/Debug/net10.0/nextorm.alias.tests.dll (net10.0|x64) failed with 3 error(s) (820ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 4
+  failed: 3
+  succeeded: 1
+  skipped: 0
+  duration: 1s 048ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)
