@@ -159,8 +159,8 @@ different positional placement get different generated types (for example
 `NextORM.Generated.<assembly name>`, so no projection has to be pre-declared. The generated properties
 carry [`JoinSlot(n)`](xref:NextORM.Core.JoinSlotAttribute), the 1-based entity position in the chain
 (the first alias is slot `2`, the next is `3`, and so on), so two aliases of the same CLR type resolve
-to different tables. The legacy alias-only generated names (`AliasProjection_Buyer_Approver`) are not
-preserved — the pre-release surface was renamed to the slot-encoded form.
+to different tables. The generated type name always carries the slot-encoded suffix; no name without
+a `P{slot}`/`A{slot}_{name}` suffix is produced.
 
 The generated alias members are **expression-only**: they exist so that a `Select`/`Where`
 expression tree can name the joined table of the slot, and the translator rewrites them to that

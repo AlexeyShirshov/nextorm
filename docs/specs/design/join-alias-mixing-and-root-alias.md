@@ -10,7 +10,8 @@
 
 ## 1. Проблема и намерение
 
-#113 добавил именованные join-алиасы (`Alias.<Name>`), но зафиксировал **alias-only** семантику:
+#113 добавил именованные join-алиасы (`Alias.<Name>`), но зафиксировал поверхность без смешивания
+(ограничение снято в #160):
 
 - позиционные и алиасные джойны нельзя смешивать (guard `EntityBuilder.cs:3137`; генератор собирает только
   alias→alias; `JoinAliasGenerator.ResolveBuilderSymbol` отвергает `JoinedEntityBuilder<...>`);
@@ -175,14 +176,14 @@ PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse (где форм
 
 **Docs:** `docs/guide/02-joins.md` + `docs/ru/guide/02-joins.md` (свободное смешивание, `.WithAlias`, единый
 нейминг, примеры); `docs/querying/01-projections.md` (+RU) где затрагивается; `docs/advanced/limitations.md`
-(+RU) — снять формулировки alias-only / in-memory; внутренние `docs/specs/**` (статус alias-only и variant-matrix).
+(+RU) — снять формулировки alias-only / in-memory; внутренние `docs/specs/**` (статус и variant-matrix привести в соответствие с #160).
 
 ## 10. Фазы, поставка, гейты
 
 **Фаза 1 — свободное смешивание** (генератор-центрична; ядро не меняется): модель схемы `Positional|Alias`;
 резолв позиционных префиксов; единый slot-encoded нейминг; эмит projection/builder + позиционных и алиасных
 transitions через `JoinAlias`; diagnostics. Готово, когда смешанные цепочки компилируются и дают верный SQL,
-alias-only семантика сохранена.
+ранее работавшая alias-семантика сохранена.
 
 **Фаза 2 — алиас корня:** ядро — `Projection<T1>` + `AliasRoot` seam + root-only guard + in-memory fail;
 генератор — `.WithAlias` на каждое корневое имя; покрытие всех источников. Готово, когда `.WithAlias` работает

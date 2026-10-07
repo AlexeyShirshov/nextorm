@@ -2,7 +2,7 @@
 
 Evidence map for the join-alias feature (milestone `1.0.9-b`; #160 targets `1.0.9-rc2`): every
 behavioural variant of the alias chain is tied to the test or the runtime guard that proves it, with
-`file:line`. `#113` scope was the owner-decided **alias-only** surface (no positional mixing);
+`file:line`. `#113` shipped an owner-decided surface without positional mixing;
 **#160 supersedes that restriction** with free mixing of positional and alias steps plus the root
 alias (`.WithAlias`), still with `JoinInto` excluded and SQL providers only (in-memory fails closed).
 The #160 variants and their evidence are in §9 below. Public API surface is frozen by

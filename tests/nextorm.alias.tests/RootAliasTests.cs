@@ -441,4 +441,256 @@ public class RootAliasTests
             File.Delete(path);
         }
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Root matrix: every root source must accept '.WithAlias(Alias.Root)' (issue #160, finding B).
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Row shape of the deterministic table-valued function used by the root matrix.</summary>
+    public interface ITvfRow
+    {
+        long Id { get; set; }
+    }
+
+    /// <summary>Static table-valued function stub (SQL Server/PostgreSQL-style `all_rows()`).</summary>
+    public static class Tvf
+    {
+        [SqlTableFunction("all_rows")]
+        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> command)
+    {
+        var prepared = (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
+            command, createEnumerator: false, storeInCache: false, CancellationToken.None);
+        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+    }
+
+    [Fact]
+    public void Generated_root_alias_on_a_direct_from_table_source_maps_slot1_to_t1()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            // The 'From("table")' extension source (TableAlias), distinct from the non-generic
+            // DataContext.From(string) instance method and from CreateQueryBuilder("table") above.
+            var rooted = ((IDataContext)ctx).From("orders").WithAlias(Alias.Root);
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            var joined = rooted.Join<Person>(people, (o, p) => o.Root.GetInt64("BuyerId") == p.Id, Alias.Buyer);
+
+            joined.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+            sql.Statements[^1].Should().Contain("orders as 't1'");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_through_create_query_builder_forwarders_maps_slot1_to_t1()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            var mapped = ctx.CreateQueryBuilder<Order>(b => b.Table("orders"))
+                .WithAlias(Alias.Root)
+                .Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer);
+            mapped.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+
+            var fromSql = ctx.CreateQueryBuilderFromSql("select Id, BuyerId from orders")
+                .WithAlias(Alias.Root)
+                .Join<Person>(people, (o, p) => o.Root.GetInt64("BuyerId") == p.Id, Alias.Buyer);
+            fromSql.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+
+            var sourceCommand = ctx.From<Order>(b => b.Table("orders")).Where(o => o.Id == 1).ToCommand();
+            var fromCommand = ctx.CreateQueryBuilder(sourceCommand)
+                .WithAlias(Alias.Root)
+                .Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer);
+            fromCommand.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+
+            sql.Statements[^1].Should().Contain("as 't1'");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_on_a_typed_cte_source_keeps_the_cte_name()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var peopleCte = ctx.From<Person>(b => b.Table("person")).ToCommand().AsCte("people_cte");
+            var rooted = ctx.From(peopleCte).WithAlias(Alias.Root);
+            var orders = ctx.From<Order>(b => b.Table("orders"));
+
+            var joined = rooted.Join<Order>(orders, (p, o) => p.Root.Id == o.BuyerId, Alias.Buyer);
+
+            joined.Select(p => p.Buyer.BuyerId).ToList().Should().Contain(AliasSqliteDatabase.BuyerId);
+            var last = sql.Statements[^1];
+            last.Should().Contain("with people_cte as (");
+            last.Should().Contain("from people_cte as 't1'");
+            last.Should().Contain("join orders as 't2'");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_on_a_temp_table_source_keeps_the_batch_read()
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var temp = ctx.From<Order>(b => b.Table("orders")).Select(o => new { o.Id, o.BuyerId }).AsTempTable();
+            var rooted = ctx.From(temp).WithAlias(Alias.Root);
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            var joined = rooted.Join<Person>(people, (o, p) => o.Root.GetInt64("BuyerId") == p.Id, Alias.Buyer);
+
+            joined.Select(p => p.Buyer.Id).ToList().Should().Equal(AliasSqliteDatabase.BuyerId);
+
+            // The lazy temp-table batch is not surfaced through the query interceptor, so render the
+            // same chain once more to assert the root slot mapping in the read statement.
+            SqlOf(ctx, joined.Select(p => p.Buyer.Id)).Should().Contain("as 't1'");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Generated_root_alias_on_a_table_function_source_maps_slot1_to_t1()
+    {
+        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var people = ctx.From<Person>(b => b.Table("person"));
+            var rooted = ctx.FromTableFunction(() => Tvf.AllRows()).WithAlias(Alias.Root);
+
+            var joined = rooted.Join<Person>(people, (o, p) => o.Root.Id == p.Id, Alias.Buyer);
+
+            // A table-valued function is not executable on SQLite without the function definition, so
+            // this row is render-only: the root alias must map the call to 't1' and the join to 't2'.
+            var sql = SqlOf(ctx, joined.Select(p => p.Buyer.Id));
+            sql.Should().Contain("all_rows() as 't1'");
+            sql.Should().Contain("join person as 't2'");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // All seven operators as positional transitions after a root alias (issue #160, finding B).
+    // ---------------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Join")]
+    [InlineData("LeftJoin")]
+    [InlineData("RightJoin")]
+    [InlineData("FullJoin")]
+    [InlineData("CrossJoin")]
+    public void Generated_root_alias_supports_each_executable_positional_operator(string operation)
+    {
+        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders")).WithAlias(Alias.Root);
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            // A positional join after '.WithAlias' must bind to the generated 'new' instance transition,
+            // not the inherited EntityBuilder.Join/Apply, for every supported operator.
+            var joined = operation switch
+            {
+                "Join" => rooted.Join(people, (o, p) => o.Root.BuyerId == p.Id),
+                "LeftJoin" => rooted.LeftJoin(people, (o, p) => o.Root.BuyerId == p.Id),
+                "RightJoin" => rooted.RightJoin(people, (o, p) => o.Root.BuyerId == p.Id),
+                "FullJoin" => rooted.FullJoin(people, (o, p) => o.Root.BuyerId == p.Id),
+                _ => rooted.CrossJoin(people),
+            };
+
+            joined.Select(p => p.Item2.Id).ToList().Should().NotBeEmpty();
+
+            var last = sql.Statements[^1];
+            last.Should().Contain("orders as 't1'");
+            last.Should().Contain(operation switch
+            {
+                "Join" => " join ",
+                "LeftJoin" => " left join ",
+                "RightJoin" => " right join ",
+                "FullJoin" => " full join ",
+                _ => " cross join ",
+            });
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
+    [InlineData("CrossApply")]
+    [InlineData("OuterApply")]
+    public void Generated_root_alias_apply_fails_closed_on_a_provider_without_lateral(string operation)
+    {
+        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var rooted = ctx.From<Order>(b => b.Table("orders")).WithAlias(Alias.Root);
+            var people = ctx.From<Person>(b => b.Table("person"));
+
+            var joined = operation == "CrossApply" ? rooted.CrossApply(people) : rooted.OuterApply(people);
+
+            // SQLite has no lateral source: the positional APPLY after a root alias must fail closed,
+            // exactly like the inherited apply paths, instead of producing partial SQL.
+            Action act = () => SqlOf(ctx, joined.Select(p => p.Item2.Id));
+            act.Should().Throw<NotSupportedException>();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // '.WithAlias' is root-only: a named window already declared on the builder must fail closed.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Generated_WithAlias_is_refused_after_a_named_window()
+    {
+        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
+        try
+        {
+            var orders = ctx.From<Order>(b => b.Table("orders"));
+            var windowed = orders.Window("w", orderBy: [orders.Asc(o => o.Id)]);
+
+            Action act = () => windowed.WithAlias(Alias.Root);
+
+            act.Should().Throw<InvalidOperationException>();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }
