@@ -412,3 +412,27 @@ r=2 replaces **only** acceptance criterion **R159-12** with **R159-12'**. Every 
 | 2026-10-07T18:20Z | DO | r2 | n1/3 | **V2 verification green:** core 1756/0, sqlite 1159/0 (1 skipped pre-existing), sqlserver 723/0, postgres 801/0, mysql 302/0, clickhouse 590/0, alias 46/0 — all exit 0, 0 failed | `$E2/V2-*.log` |
 
 Evidence root r=2: `TestResults/pdca/D159/r2/` (alias `$E2`).
+
+## 19. CHECK re-gather r=2 — streaming reachability (E159-20)
+
+**Durable state:** Current cycle **N=1**; Plan revision **r=2** (unchanged — evidence re-gather, no replan); Attempt **n=1/3**; event phase **CHECK**; `tier=cheap`; HEAD `1a31c3ed` (branch `1.0.9-rc2`).
+**Defect history (carried):** `cte-symbol-identity-chainkey` observed r1 n1, fixed r1 n2 (fix 1), resolved. `C1-alias-step-signature-collision` observed r1 n2 (probe), fixed r1 n3 (fix 2), resolved. `C6-explicit-generic-iscte-vs-joined` observed r1 n2 (masked), promoted + closed r1 n3. Follow-up **#206** open for the last-step-`JoinedType` class only. This re-gather adds **no** fix, **no** new defect, **no** CHECK failure, **no** loop-back.
+
+| UTC time | phase | revision | iteration | event | evidence pointer |
+|---|---|---|---|---|---|
+| 2026-10-07T18:27Z | CHECK | r2 | n1/3 | **Step 1 (streaming tests, test-only):** two characterizing tests added to `tests/nextorm.sqlite.tests/TypedCteTests.cs` — `TableAliasReceiver_JoinWithTypedCte_StreamingTerminalsMatchBuffered` (explicit source `Cte<T>`; `ToDataReader<T>` + `ToAsyncEnumerable` vs `ToList`) and `TableAliasReceiver_JoinWithDerivedSource_AsyncEnumerableMatchesBuffered` (explicit source derived `QueryCommand`; `ToAsyncEnumerable` vs `ToList`); filtered run exit 0, **2 total / 0 failed / 0 skipped** | `$E2/E159-20-streaming-filtered.log` |
+| 2026-10-07T18:28Z | CHECK | r2 | n1/3 | **Step 2 (reachability report):** `E159-20-reachability.json` maps `JoinExpression.From` producers (`EntityBuilder.cs:4478`, sibling `:3203`, `JoinSourceResolver.cs:11-14`) and consumers (`QueryCommand.QueryPreparer.cs:1153` `PrepareFrom`, `:1156`/`:1382-1447` `InjectJoinFilters`) and shows every streaming terminal (`ToStream`/`ToTextReader`/`ToDataReader` in `QueryCommandExtensions.cs:96-400`; `ToAsyncEnumerable` in `QueryCommand.TResult.cs:114`) prepares the same `QueryCommand` through the same `QueryPreparer` without branching on the join source; conclusion: `From` affects SQL/shape only, `adverse_effect_possible = false` | `$E2/E159-20-reachability.json` |
+| 2026-10-07T18:29Z | CHECK | r2 | n1/3 | **Step 3 (affected projects):** `tests/nextorm.sqlite.tests` full **1161 / 0 failed / 1160 succeeded / 1 skipped** (pre-existing `NEXTORM_LOB_SQLITE_PROBE` probe), exit 0; `tests/nextorm.core.tests` full **1756 / 0 failed / 0 skipped**, exit 0 | `$E2/E159-20-sqlite-full.log`, `$E2/E159-20-core-full.log` |
+| 2026-10-07T18:30Z | CHECK | r2 | n1/3 | **E159-20 / R159-C03 → CLOSED (rv=2), applicability observed.** Conditional subcheck triggered because the join-`From` change feeds `PrepareFrom`/`InjectJoinFilters`; streaming-specific evidence gathered on both surfaces: sync `ToDataReader<T>` and async `ToAsyncEnumerable`, each compared to buffered `ToList`, identical rows. No product `src` change (r=2 footprint is test-only). No actual defect found by the `From` change. | `$E2/E159-20-reachability.json`, `$E2/E159-20-streaming-filtered.log` |
+| 2026-10-07T18:30Z | CHECK | r2 | n1/3 | **E159-17 / R159-01..14 → CLOSED as dependent (rv=2).** Completeness gate satisfied by this r=2 reconciliation, which depends on the E159-20 closure above; ledger re-bound to rv=2. Open rows: none. | `$E2/E159-20-reachability.json`, this section |
+| 2026-10-07T18:31Z | CHECK | r2 | n1/3 | **Step 5 (footprint commit):** committed only the intended footprint files (two streaming tests + this status doc) with `#159 r2: streaming reachability evidence for explicit-source TableAlias joins`; no `git add -A`, no push | commit sha in §19 note |
+
+### E159-20 closure (rv=2)
+
+- **Scenario:** TableAlias-receiver join carrying an explicit source (`Cte<T>` → `FromExpression` with `SubQuery`; derived `QueryCommand` → `FromExpression(SubQuery)`) is materialized through a streaming terminal and through buffered `ToList`; results must be identical.
+- **Tests:** `tests/nextorm.sqlite.tests/TypedCteTests.cs` — `TableAliasReceiver_JoinWithTypedCte_StreamingTerminalsMatchBuffered`, `TableAliasReceiver_JoinWithDerivedSource_AsyncEnumerableMatchesBuffered`.
+- **Terminals covered:** `QueryCommandExtensions.ToDataReader<T>` (sync), `QueryCommand<T>.ToAsyncEnumerable` (async); reference `ToList`.
+- **Counts:** filtered **2/0/0** (exit 0); full sqlite **1161/0/1160/1** (exit 0); full core **1756/0/1756/0** (exit 0).
+- **Verdict:** no adverse effect from the `EntityBuilder.cs:4478` `From` resolution on streaming terminals; no product change made.
+
+**Commit:** `#159 r2: streaming reachability evidence for explicit-source TableAlias joins` — kept tests `tests/nextorm.sqlite.tests/TypedCteTests.cs` and this status file only; no `-A`, no push.

@@ -1163,5 +1163,82 @@ public class TypedCteTests
         finally { ctx.Dispose(); File.Delete(path); }
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // E159-20: a TableAlias receiver join carrying an explicit join source resolves that source
+    // through JoinSourceResolver (EntityBuilder.cs:4478). The resolved `From` only shapes the join
+    // SQL / column binding (QueryCommand.QueryPreparer.cs:1153 PrepareFrom, :1384-1422
+    // InjectJoinFilters); the terminal path does not branch on it. These tests pin that the streaming
+    // terminals over the same prepared command materialize exactly the same rows as the buffered
+    // ToList materialization. r=2 is evidence/test-only: it changes no product behaviour.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task TableAliasReceiver_JoinWithTypedCte_StreamingTerminalsMatchBuffered()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Explicit join source: a typed CTE, so JoinSourceResolver installs the CTE source instead
+            // of the joined type's entity metadata.
+            var cte = ctx.From<ITypedCtePerson>()
+                .Where(p => p.Total >= 20)
+                .Select(p => new { p.Id, p.Total })
+                .AsCte("stream_joined_cte");
+
+            var command = ctx.From("typed_cte_person")
+                .Join(cte, (t, c) => t.GetInt64("id") == c.Id)
+                .Select(p => new { LeftId = p.Item1.GetInt64("id"), RightTotal = p.Item2.Total });
+
+            var buffered = command.ToList();
+
+            // QueryCommandExtensions.ToDataReader<TResult> over the same prepared QueryCommand.
+            var fromReader = new List<(long LeftId, int RightTotal)>();
+            using (var reader = command.ToDataReader())
+            {
+                while (reader.Read())
+                    fromReader.Add((reader.GetInt64(0), reader.GetInt32(1)));
+            }
+
+            // QueryCommand<TResult>.ToAsyncEnumerable over the same command.
+            var fromAsync = new List<(long LeftId, int RightTotal)>();
+            await foreach (var row in command.ToAsyncEnumerable())
+                fromAsync.Add((row.LeftId, row.RightTotal));
+
+            buffered.Should().NotBeEmpty();
+            buffered.Select(r => r.LeftId).OrderBy(id => id).Should().Equal(2, 3);
+            fromReader.Should().Equal(buffered.Select(r => (r.LeftId, r.RightTotal)));
+            fromAsync.Should().Equal(buffered.Select(r => (r.LeftId, r.RightTotal)));
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public async Task TableAliasReceiver_JoinWithDerivedSource_AsyncEnumerableMatchesBuffered()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // Explicit join source: a derived query, so JoinSourceResolver installs a sub-query source.
+            var derived = ctx.From(ctx.From<ITypedCtePerson>()
+                .Where(p => p.Total >= 20)
+                .Select(p => new { p.Id, p.Total }));
+
+            var command = ctx.From("typed_cte_person")
+                .Join(derived, (t, d) => t.GetInt64("id") == d.Id)
+                .Select(p => new { LeftId = p.Item1.GetInt64("id"), RightTotal = p.Item2.Total });
+
+            var buffered = command.ToList();
+
+            var streamed = new List<(long LeftId, int RightTotal)>();
+            await foreach (var row in command.ToAsyncEnumerable())
+                streamed.Add((row.LeftId, row.RightTotal));
+
+            buffered.Should().NotBeEmpty();
+            buffered.Select(r => r.LeftId).OrderBy(id => id).Should().Equal(2, 3);
+            streamed.Should().Equal(buffered.Select(r => (r.LeftId, r.RightTotal)));
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
 }
 
