@@ -99,6 +99,80 @@ public class JoinWholeEntitySqlGenerationTests
     }
 
     [Fact]
+    public void DirectFourthItem_Arity4_ShouldSelectOnlyFourthEntityColumns()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<JwParent>()
+            .Join(ctx.From<JwChild>(), (p, c) => p.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item2.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item3.Id == c.ParentId)
+            .Select(p => p.Item4));
+
+        var selectClause = SelectClause(sql);
+        selectClause.Should().Contain("child_value");
+        selectClause.Should().NotContain("parent_label");
+        selectClause.Should().NotContain("*");
+    }
+
+    [Fact]
+    public void DirectFifthItem_Arity5_ShouldSelectOnlyFifthEntityColumns()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<JwParent>()
+            .Join(ctx.From<JwChild>(), (p, c) => p.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item2.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item3.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item4.Id == c.ParentId)
+            .Select(p => p.Item5));
+
+        var selectClause = SelectClause(sql);
+        selectClause.Should().Contain("child_value");
+        selectClause.Should().NotContain("parent_label");
+        selectClause.Should().NotContain("*");
+    }
+
+    [Fact]
+    public void DirectSixthItem_Arity6_ShouldSelectOnlySixthEntityColumns()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<JwParent>()
+            .Join(ctx.From<JwChild>(), (p, c) => p.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item2.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item3.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item4.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item5.Id == c.ParentId)
+            .Select(p => p.Item6));
+
+        var selectClause = SelectClause(sql);
+        selectClause.Should().Contain("child_value");
+        selectClause.Should().NotContain("parent_label");
+        selectClause.Should().NotContain("*");
+    }
+
+    [Fact]
+    public void DirectSeventhItem_Arity7_ShouldSelectOnlySeventhEntityColumns()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<JwParent>()
+            .Join(ctx.From<JwChild>(), (p, c) => p.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item2.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item3.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item4.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item5.Id == c.ParentId)
+            .Join(ctx.From<JwChild>(), (p, c) => p.Item6.Id == c.ParentId)
+            .Select(p => p.Item7));
+
+        var selectClause = SelectClause(sql);
+        selectClause.Should().Contain("child_value");
+        selectClause.Should().NotContain("parent_label");
+        selectClause.Should().NotContain("*");
+    }
+
+    [Fact]
     public void DirectEighthItem_Arity8_ShouldSelectOnlyEighthEntityColumns()
     {
         using var ctx = SqlServerTestContext.Create();

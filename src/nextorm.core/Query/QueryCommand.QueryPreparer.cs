@@ -710,6 +710,23 @@ public partial class QueryCommand
                         throw new NotSupportedException(
                             $"The bare top-level scalar projection '{domMember.Type}' at Select position 0 is not supported; project it inside a named shape (for example Select(x => new {{ x.Doc }}) or a DTO) instead.");
                     }
+                    // Final invariant: a structural direct-projection read (Select(p => p.ItemN)) that no
+                    // earlier branch handled and whose item is not a mapped entity must fail closed. The
+                    // scalar/tuple/DOM branches above run first, so this guard never masks a supported
+                    // scalar; it only prevents an empty select list for a non-mapped reference-type item.
+                    else if (TryGetProjectionItemMember(cmd, out var unmappedItemType, out _, out _, out _)
+                        && RequiresMappingButUnmapped(cmd, unmappedItemType))
+                    {
+                        throw new NotSupportedException(
+                            $"The projection item '{unmappedItemType}' at Select position 0 is not a mapped entity and cannot be projected as a whole; project its columns explicitly or use a mapped entity type.");
+                    }
+                    // A cast of the item to an unrelated result type is not a supported whole-entity
+                    // projection either; fail closed rather than emit an empty select list.
+                    else if (IsUnrelatedCastOfProjectionItem(cmd, out var castItemType))
+                    {
+                        throw new NotSupportedException(
+                            $"The projection item '{castItemType}' at Select position 0 is cast to an unrelated result type and cannot be projected as a whole; project its columns explicitly or use a mapped entity type.");
+                    }
                 }
                 else
                 {
@@ -930,14 +947,15 @@ public partial class QueryCommand
         }
 
         /// <summary>
-        /// Recognizes the direct whole-entity projection of a joined projection item
-        /// (<c>Select(p =&gt; p.ItemN)</c>). Returns <see langword="true"/> only for a bare property read of
-        /// the projection parameter itself, where the property is a declared <c>ItemN</c> of that
-        /// <see cref="IProjection"/> type and the result type is the item's own type. An ordinary
-        /// entity-valued member (for example a mapped navigation), a nested item read or an explicit cast
-        /// to an unrelated result type is not recognized, so it keeps its existing behaviour.
+        /// Structural predicate for a direct whole-entity projection item
+        /// (<c>Select(p =&gt; p.ItemN)</c>): a bare property read of the joined projection parameter
+        /// itself, where the property is a declared <c>ItemN</c> of that <see cref="IProjection"/> type
+        /// and the result type is the item's own type. An ordinary entity-valued member (for example a
+        /// mapped navigation), a nested item read or an explicit cast to an unrelated result type is not
+        /// recognized. Does not consult entity metadata; the mapping gate lives in
+        /// <see cref="TryGetDirectEntityItem"/> and in the final unmapped-item guard.
         /// </summary>
-        private static bool TryGetDirectEntityItem(
+        private static bool TryGetProjectionItemMember(
             QueryCommand cmd,
             out Type itemType,
             out int slot,
@@ -986,17 +1004,68 @@ public partial class QueryCommand
             if (cmd._exp.Body.Type != resolvedItemType)
                 return false;
 
-            // The SQL path can only materialize a mapped entity into columns. A scalar or otherwise
-            // non-entity item must keep its prior scalar projection behavior, so do not claim it here
-            // and leave the select list empty when TryExpandEntityItem would refuse it.
-            if (cmd._dataContext!.NeedMapping
-                && (!DataContextCache.Metadata.TryGetValue(resolvedItemType, out var itemMetadata) || itemMetadata.Properties.Count == 0))
-                return false;
-
             slot = n - 1;
             memberName = name;
             itemType = resolvedItemType;
             itemExpression = body;
+            return true;
+        }
+
+        /// <summary>
+        /// Recognizes the direct whole-entity projection of a joined projection item and confirms the
+        /// SQL provider can materialize it: the structural <see cref="TryGetProjectionItemMember"/> match
+        /// must hold and, on a mapping provider, the item must be a mapped entity. A scalar or otherwise
+        /// non-entity item is left to the prior scalar projection behavior (and, if no earlier branch
+        /// handles it, to the final unmapped-item guard).
+        /// </summary>
+        private static bool TryGetDirectEntityItem(
+            QueryCommand cmd,
+            out Type itemType,
+            out int slot,
+            out string memberName,
+            out Expression itemExpression)
+            => TryGetProjectionItemMember(cmd, out itemType, out slot, out memberName, out itemExpression)
+                && !RequiresMappingButUnmapped(cmd, itemType);
+
+        /// <summary>
+        /// True when the command runs on a mapping provider and <paramref name="itemType"/> has no mapped
+        /// entity metadata, so it cannot be expanded into columns.
+        /// </summary>
+        private static bool RequiresMappingButUnmapped(QueryCommand cmd, Type itemType)
+            => cmd._dataContext!.NeedMapping
+                && (!DataContextCache.Metadata.TryGetValue(itemType, out var itemMetadata) || itemMetadata.Properties.Count == 0);
+
+        /// <summary>
+        /// True when the projection is a cast of a bare joined projection item (<c>Select(p =&gt;
+        /// (object)p.ItemN)</c>) to an unrelated result type: a deferred form that must fail closed
+        /// instead of rendering an empty select list.
+        /// </summary>
+        private static bool IsUnrelatedCastOfProjectionItem(QueryCommand cmd, out Type itemType)
+        {
+            itemType = typeof(object);
+            if (cmd._exp!.Body is not UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } convert)
+                return false;
+
+            if (TypeFacts.UnwrapConvert(convert.Operand) is not MemberExpression { Member: PropertyInfo property } member
+                || member.Expression is not ParameterExpression parameter)
+                return false;
+
+            var projectionType = parameter.Type;
+            if (!projectionType.IsAssignableTo(typeof(IProjection)))
+                return false;
+
+            var name = property.Name;
+            if (name.Length <= 4 || !name.StartsWith("Item", StringComparison.Ordinal))
+                return false;
+
+            if (!int.TryParse(name.AsSpan(4), out var n) || n < 1)
+                return false;
+
+            var itemTypes = projectionType.GetGenericArguments();
+            if (n > itemTypes.Length || property.DeclaringType != projectionType || property.PropertyType != itemTypes[n - 1])
+                return false;
+
+            itemType = itemTypes[n - 1];
             return true;
         }
 

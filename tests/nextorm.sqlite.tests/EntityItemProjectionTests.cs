@@ -23,8 +23,10 @@ public class EntityItemProjectionTests
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "create table entity_parent (id integer primary key, name text);" +
                               "create table entity_child (id integer primary key, parent_id integer, name text, state text);" +
+                              "create table entity_value (id integer primary key, label text);" +
                               "insert into entity_parent (id, name) values (1, 'p1'), (2, 'p2');" +
-                              "insert into entity_child (id, parent_id, name, state) values (10, 1, 'c1', 'Active'), (11, 1, 'c2', 'Closed');";
+                              "insert into entity_child (id, parent_id, name, state) values (10, 1, 'c1', 'Active'), (11, 1, 'c2', 'Closed');" +
+                              "insert into entity_value (id, label) values (1, 'v1'), (2, 'v2');";
             cmd.ExecuteNonQuery();
         }
 
@@ -259,6 +261,148 @@ public class EntityItemProjectionTests
         }
         finally { ctx.Dispose(); File.Delete(path); }
     }
+
+    [Fact]
+    public void UnmappedReferenceItem_ShouldThrowClearNotSupported()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var unmapped = ctx.From<EntityItemChild>().Select(c => new UnmappedItem { X = c.Id });
+
+            Action act = () => SqlOf(ctx, ctx.From<EntityItemParent>()
+                .Join(ctx.From(unmapped), (p, s) => p.Id == s.X)
+                .Select(p => p.Item2));
+
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*UnmappedItem*not a mapped entity*");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void UnmappedReferenceItem_Throw_ShouldNotDisableThePlanCache()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var unmapped = ctx.From<EntityItemChild>().Select(c => new UnmappedItem { X = c.Id });
+            var throwing = ctx.From<EntityItemParent>()
+                .Join(ctx.From(unmapped), (p, s) => p.Id == s.X)
+                .Select(p => p.Item2);
+
+            Action act = () => throwing.PrepareCommand(false, CancellationToken.None);
+            act.Should().Throw<NotSupportedException>();
+
+            throwing.Cache.Should().BeTrue("a rejected projection must not stick _dontCache on the command");
+
+            // The same context still serves an unrelated direct projection, and its plan is reused.
+            var rows = ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item2)
+                .ToList();
+            rows.Should().HaveCount(3);
+            rows.Count(c => c is null).Should().Be(1);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void NestedEntityMember_ShouldBeRejectedNotSilentlyEmpty()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            // p.Item2.Name is a scalar member of the item, not the item itself: it must resolve to a
+            // single column, never to an empty select list.
+            var sql = SqlOf(ctx, ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item2.Name));
+
+            sql.Should().StartWith("select ");
+            sql.Should().NotMatchRegex(@"select\s+from");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void CastToUnrelatedType_ShouldBeRejectedNotSilentlyEmpty()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var cmd = ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => (object)p.Item2);
+
+            Action act = () => SqlOf(ctx, cmd);
+            act.Should().Throw<NotSupportedException>()
+                .WithMessage("*EntityItemChild*unrelated result type*");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void ValueEntityItem_WholeProjection_ShouldFailClosedAsUnsupported()
+    {
+        // A value-type entity whole projection is not supported by the existing shared materializer:
+        // RowMaterializerBuilder.BuildCore cannot build a struct (no reflected constructor), exactly as
+        // the nested entity-item path. This is a pre-existing limitation, pinned here as a guard so the
+        // direct path never silently returns a default/mis-materialized struct.
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.From<EntityItemValue>(b => b.Table("entity_value"));
+
+            Action act = () => ctx.From<EntityItemParent>()
+                .Join(ctx.From<EntityItemValue>(), (p, v) => p.Id == v.Id)
+                .Select(p => p.Item2)
+                .ToList();
+
+            act.Should().Throw<QueryPreparationException>()
+                .WithMessage("*Cannot get ctor*EntityItemValue*");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void SelfJoin_DirectEntityItem_ShouldMaterializeBothSlots()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var first = ctx.From<EntityItemChild>()
+                .Join(ctx.From<EntityItemChild>(), (a, b) => a.Id == b.Id)
+                .Select(p => p.Item1)
+                .ToList();
+            var second = ctx.From<EntityItemChild>()
+                .Join(ctx.From<EntityItemChild>(), (a, b) => a.Id == b.Id)
+                .Select(p => p.Item2)
+                .ToList();
+
+            first.Select(c => c.Id).OrderBy(x => x).Should().Equal(10, 11);
+            second.Select(c => c.Id).OrderBy(x => x).Should().Equal(10, 11);
+            first.Select(c => c.Name).OrderBy(x => x).Should().Equal("c1", "c2");
+            second.Select(c => c.Name).OrderBy(x => x).Should().Equal("c1", "c2");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+}
+
+/// <summary>A reference type that is deliberately not a mapped entity.</summary>
+public sealed class UnmappedItem
+{
+    public int X { get; set; }
+}
+
+public struct EntityItemValue
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+
+    [Column("label")]
+    public string? Label { get; set; }
 }
 
 public enum EntityItemState
