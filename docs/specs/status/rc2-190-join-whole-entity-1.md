@@ -861,3 +861,54 @@ Shared test run может удовлетворять несколько стр�
     fabricated kills); row left OPEN. Logs: `mutation/run*`.
 - **task status:** NOT done — remains `BLOCKED` pending evidence review; do not mark complete.
 - **follow-up issue:** [#207](https://github.com/AlexeyShirshov/nextorm/issues/207).
+
+## ACT — CHECK PASS (r1/rv1, HEAD 1ff47762)
+
+- **verdict: PASS** — **evidence-completion**; **not** a 4th implementation attempt (no `src/` or test-logic
+  change in this pass). Escalation ruled **accept-PASS at r=1** under the authorized policy
+  (product build green + coverage above thresholds + tests green + honest no-tool mutation disclosure).
+  CHECK snapshot: HEAD `1ff47762`, plan revision **r1**, evidence revision **rv1**.
+- **rows R190-01..R190-09 — closed/clean:**
+  - R190-01 direct `Select(p => p.ItemN)` root projection / typed result — clean.
+  - R190-02 absent outer side ⇒ `null`, present entity (incl. defaults) not null — clean
+    (`artifacts/pdca/rc2-190/null-semantics.md` §1–§3).
+  - R190-03 scalar/composite/nested/bare + mapping/ctor/value guards preserved — clean.
+  - R190-04 cache identity / no sticky mutation, alternating shapes — clean.
+  - R190-05 six-provider SQL shape + real container integration (0 skipped) — clean.
+  - R190-06 build/coverage/branch/mutation — clean (mutation via authorized no-tool disclosure, below).
+  - R190-07 acceptance benchmark — clean.
+  - R190-08 EN/RU docs + registers — clean.
+  - R190-09 scope / test safety / single boundary sweep / evidence completeness — clean.
+- **product green (fresh n=4 receipts `artifacts/pdca/rc2-190/r1/n4/`):**
+  - build: `nextorm.slnx` Debug **0W/0E**, Release **0W/0E**.
+  - unit/focused (exit **0** each): core `~EntityItemProjection` 7/0, `~SelectExpressionPlanEqualityComparer`
+    12/0; sqlite `~EntityItemProjection` 15/0, `~PlanKeyUniqueness` 13/0, `~JoinWholeEntity` 8/0.
+  - integration: `~JoinWholeEntity` 20 selected / 0 failed / **0 skipped** (live providers, `DOCKER_HOST`).
+  - boundary sweep BOUNDARY-01: 9235 total / 0 failed / 198 capability skips; coverage **line 88.1%**
+    (48400/54902) / **branch 80.1%** (26101/32545) — above the 85/75 lower bounds.
+  - perf acceptance: exactly **7 cases**, **0 failures**, wall **51 s** ≤ 240 s; cached/prepared ratio
+    **2.171** (2.6474/1.2195) vs baseline 1.87 = **+16.1%**, below the +20% investigation threshold.
+- **mutation row R190-06 / EV190-MUTATION — CLOSED by authorized no-tool disclosure.** Governing predicate
+  recorded verbatim at `docs/specs/status/rc2-190-join-whole-entity-1.md:412` (missing/unusable tooling ⇒
+  record the established fact + attempted permitted options + list of unverified mutation branches; this is
+  contract-permitted disclosure, not a substitute for coverage/tests). **No kills or score threshold are
+  claimed.** Stryker.NET **5.0.0**; M1–M6 exact argv / exit codes:
+  - M1 `["dotnet-stryker","--config-file","artifacts/pdca/rc2-190/mutation/stryker-config.json"]` → **124** (timed out; 1167 mutants pending).
+  - M2 `["dotnet-stryker","--config-file","artifacts/pdca/rc2-190/mutation/stryker-config-rowmaterializer.json"]` → **124** (timed out; 182 pending).
+  - M3 `["dotnet-stryker","--config-file","artifacts/pdca/rc2-190/mutation/stryker-n2-rowmaterializer.json"]` → **0** (182 tested, score 0.00%, 182 survived, 0 killed).
+  - M4 `["dotnet-stryker","--config-file","artifacts/pdca/rc2-190/mutation/stryker-n2-rowmaterializer-sqlite.json"]` → **0** (182 tested, score 0.00%).
+  - M5 `["dotnet-stryker","--config-file","artifacts/pdca/rc2-190/mutation/stryker-n3-recognizer.json"]` → **124** (1035 pending; 8151 compile errors).
+  - M6 `TreatWarningsAsErrors=false dotnet-stryker --config-file artifacts/pdca/rc2-190/mutation/stryker-n3-mtp.json` → **124** (9204 tests discovered; filter not honoured under MTP; 1035 pending; 8158 compile errors).
+  - residual unverified mutants: `RowMaterializerBuilder.cs` **182**, `QueryCommand.QueryPreparer.cs` **1035**.
+  - root cause: Stryker.NET 5.0.0 vs MTP/xunit-v3 discovery (0.00% score / Safe-Mode CS0165/CS8081 / timeouts).
+- **residual risks (documented; not defects):**
+  - `artifacts/pdca/rc2-190/null-semantics.md` §5 — no direct SQL assertion for a **present row whose every
+    non-PK mapped column** is simultaneously `NULL`/default; logically covered by the `anyNotNull` guard
+    (`RowMaterializerBuilder.cs:287-301`) and in-memory covered, but not exercised with a concrete SQL row.
+    Coverage gap, not a product defect.
+  - mapper-instance identity is asserted only **indirectly** (cached SQL + plan-holder identity), not by
+    extracting/comparing the compiled mapper delegate (`artifacts/pdca/rc2-190/cache-isolation.md` §5).
+- **issue #190 close:** performed as the next step; result recorded in
+  `docs/specs/status/collection-1.0.9-rc2.md` (D190 → `done`, `#190 closed`, commit `1ff47762`).
+- **not reopened:** inherited W2 cancellation early-returns are out of #190 scope → follow-up
+  [#207](https://github.com/AlexeyShirshov/nextorm/issues/207).
