@@ -1,0 +1,11 @@
+{
+  "unit": "D160.3-1",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests", "tests/nextorm.alias.tests"],
+    "selectors": ["FullyQualifiedName~RootProjectionTests", "FullyQualifiedName~EntityBuilderStateCopyTests", "FullyQualifiedName~RootAliasTests"],
+    "files": ["src/nextorm.core/Builders/EntityBuilder.cs", "tests/nextorm.core.tests/RootProjectionTests.cs", "tests/nextorm.alias.tests/RootAliasTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.core.tests -c Debug; dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug",
+    "rationale": "State-copy change is core; filtered RootProjectionTests/RootAliasTests pin the transfer and SQL; full alias+core+six-provider projects at the boundary catch renderer/planner regressions (C1 precedent)."
+  }
+}

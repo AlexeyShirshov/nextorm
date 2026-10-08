@@ -1,0 +1,11 @@
+{
+  "unit": "D160.3-3",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests"],
+    "selectors": ["FullyQualifiedName~JoinAliasGeneratorDiagnosticTests", "FullyQualifiedName~AliasProjectionShapeTests"],
+    "files": ["src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs", "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.core.tests -c Debug",
+    "rationale": "ItemN parser reconciliation in the generator; filtered diagnostic/shape classes pin valid+invalid positions; alias+core projects at the boundary catch parser/generated-shape regressions."
+  }
+}

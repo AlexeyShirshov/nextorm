@@ -1,0 +1,3494 @@
+diff --git a/docs/specs/design/API-NAMING-REVIEW.md b/docs/specs/design/API-NAMING-REVIEW.md
+index fd2627dc..a48ea16b 100644
+--- a/docs/specs/design/API-NAMING-REVIEW.md
++++ b/docs/specs/design/API-NAMING-REVIEW.md
+@@ -5645,3 +5645,11 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
+ | N160-2 | ℹ️ (naming/форма) | `Projection.cs:39`; `EntityBuilder.cs:3096`; `JoinAliasGenerator.cs:1077` | Новые имена согласованы: `AliasRoot` — корневой аналог `CreateAliasJoined`, `WithAlias` — fluent-терминатор корня, `Projection<T1>` продолжает ряд `Projection<T1..T8>`. Сгенерированные типы лежат в reserved-namespace `NextORM.Generated.<AssemblyName>`, BCL-конфликтов нет. Формы: `.WithAlias(Alias.X)` root-only (диагностика `NORMGEN008`), `Alias.X` — единственная допустимая форма маркера, `_` в имени псевдонима запрещён | Без изменений; форму считать зафиксированной |
+ 
+ ℹ️ **Наблюдения.** (1) **P0 — нет; новых P1 по именам нет.** (2) Ручные XML-doc не менялись; сгенерированные члены по-прежнему намеренно expression-only (без XML — осознанное исключение #113, сохраняется). (3) Публичные доки EN+RU синхронны: `guide/02-joins.md` (+RU — свободное смешивание, `WithAlias`, slot-encoded имена, производный корень, `NORMGEN008`), `querying/01-projections.md` (+RU — dim-1 корень, expression-only, slot-encoded имена, арность/`As<T>`), `advanced/limitations.md` (+RU — root-only, in-memory fail-closed, `JoinInto` без alias-поверхности); `toc.yml`/нумерация не менялись, ссылок на `docs/specs/**` нет. (4) `JoinInto` alias-поверхности не получает (решение #113 сохранено); переименований ручного публичного API нет. (5) Кодовая сторона/приёмка — статус `rc2-160-join-alias-mixing-1.md`; вариант-матрица — `docs/specs/design/join-alias-variant-matrix.md` §9, design — `docs/specs/design/join-alias-mixing-and-root-alias.md`.
++
++**Дополнение 08.10.2026 — D160.3 r=3 (F2/F3/F4).** Структурные исправления r=3 правят уже документированную семантику свободного смешивания (позиционные и alias-шаги на сохранённом приёмнике, коррелированный APPLY), поэтому публичная **ручная** поверхность не менялась — новых ручных типов/членов нет, ручных переименований нет. Генерируемая поверхность расширена:
++
++- **F2 (`D160.3-2`).** Генератор теперь эмитит позиционные `new` instance-переходы всех семи операторов на **каждой** alias-bearing схеме, а не только на наблюдаемых inline/скобочных вызовах, поэтому сохранённый в переменной не-корневой приёмник (`var q = b.Join(x, Alias.Buyer); q.Join(...)`) получает сгенерированную перегрузку и больше не связывается с наследуемым `EntityBuilder<T>.Join`, уходящим в runtime-исключение. Добавлено **8** пар `${suffix}_P{n+1}` (`AliasProjection_*`/`AliasJoin_*`), замороженных в `AliasGeneratedSurfaceTests`. Суффикс строится тем же `BuildSchema` (`JoinAliasGenerator.cs:748,763,768,1195`).
++- **F4 (`D160.3-4`).** Распознаётся коррелированный APPLY-лямбда-источник (`JoinSourceKind.Correlated`; `TryGetJoinedType(..., allowCorrelated)` + `IsCorrelatedSource`), эмитятся **обе** alias-перегрузки — `Expression<Func<TEntity, EntityBuilder<TJoin>>>` и `...QueryCommand<TJoin>>` — поверх существующих correlated-швов `EntityBuilder.JoinAlias` (`EntityBuilder.cs:3015-3021,3036-3042`); новых публичных швов нет. Добавлено **10** сгенерированных correlated-типов (`P1_A2_Applied...` и производные). Ограничение остаётся задокументированным (EN+RU `guide/02-joins.md`, `advanced/limitations.md`): коррелированный APPLY требует single-entity приёмник (`JoinAliasApply` guard), а alias-шаг **после** коррелированного APPLY не связывается (генератор пропускает follower-переход) — bounded limitation, не новая возможность; триггер переоткрытия — generator-only, без нового публичного шва.
++- **F3 (`D160.3-3`).** `JoinAliasGenerator.IsItemAlias` отклоняет структурную форму `Item<digits>` целиком независимо от арности и маршрутизирует её в уже зарегистрированный `NORMGEN002`; публичной поверхности нет, новых diagnostic-id нет.
++
++`find -name 'PublicAPI*.txt'` по-прежнему **0** (Шаг 5, issue #53). Рекомендация: при заморозке внести в дельту slot-encoded и коррелированные сгенерированные типы; в release notes отметить, что legacy alias-only сгенерированные имена не сохраняются, а сохранённые не-корневые приёмники теперь получают сгенерированный позиционный переход.
+diff --git a/docs/specs/performance/acceptance-benchmarks.md b/docs/specs/performance/acceptance-benchmarks.md
+index dad295a3..e4946cc0 100644
+--- a/docs/specs/performance/acceptance-benchmarks.md
++++ b/docs/specs/performance/acceptance-benchmarks.md
+@@ -724,3 +724,30 @@ The corresponding allocated ratio is **7.66** (baseline **7.42**, **+3.2%**), un
+ **Verdict: no regression, no investigation trigger.**
+ 
+ Raw log: `docs/specs/status/rc2-160-evidence/E160-09/step3-acceptance.log`.
++
++### D160.3-6 r=3 re-run (plan r=3, rv=4 — post-D160.3-1..5)
++
++The r=3 remediation units (D160.3-1 structural state carrier, .3-2 stored non-root receivers,
++.3-3 `ItemN` reconciliation, .3-4 correlated APPLY, .3-5 missing fixtures) changed compiled
++supervisor/test sources, so the seven-case acceptance suite was re-run on the current tree
++(`40b1a159+dirty`).
++
++**7** cases selected, **0** failures, exit **0**. External shell wall clock **47 s**; BDN
++`Global total time` **45.23 s** (`executed benchmarks: 7`) — both under the 4 min budget.
++
++| Case | Mean | Allocated | Delta Mean vs baseline |
++|------|------|-----------|------------------------|
++| `Nextorm_Count` | 2.251 ms | 374.22 KB | -22.8% (high-variance row, not an assertion) |
++| `Nextorm_GroupByCount` | 59.36 ms | 50.1 MB | -2.6% |
++| `Nextorm_Cached` | 1.925 ms | 610.23 KB | +8.6% (high-variance row) |
++| `Prepared_ToList` | 916.8 us | 76.14 KB | -0.8% |
++| `Cached_ToList` | 1,785.0 us | 583.97 KB | +3.3% |
++| `Cached_PlanOnly_Param` | 565.1 us | 507.83 KB | +9.1% (no-database micro, not comparable) |
++| `Nextorm_Cached_ToListAsync` | 2.006 ms | 608.47 KB | -6.1% |
++
++Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.95** — vs documented
++baseline **1.87** (**+4.3%**), below the **20%** investigation threshold (absolute gate **2.244**).
++The corresponding allocated ratio is **7.67** (baseline **7.42**, **+3.4%**), unchanged within noise.
++**Verdict: no regression, no investigation trigger.**
++
++Raw log: `docs/specs/status/rc2-160-evidence/E160-09/acceptance.log`.
+diff --git a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+index a4d4699a..3b124a24 100644
+--- a/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
++++ b/src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs
+@@ -44,6 +44,15 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+     /// <summary>Root of the reserved generated namespace; the consumer assembly name is appended.</summary>
+     private const string GeneratedNamespaceRoot = "NextORM.Generated";
+ 
++    /// <summary>
++    /// Placeholder <c>JoinedType</c> for a correlated APPLY step: its concrete joined type is only known
++    /// once the generated overload exists (it is the method type parameter <c>TJoin</c>), so the chain
++    /// model uses a sentinel only for identity/dedup. It never appears in emitted C# because a correlated
++    /// step is rendered with <c>TJoin</c> and alias extensions depending on a correlated prefix are not
++    /// emitted (their concrete receiver cannot be rendered).
++    /// </summary>
++    private const string CorrelatedJoinedType = "<correlated>";
++
+     /// <summary>Stable diagnostic id prefix for every rule this generator reports.</summary>
+     private const string DiagnosticIdPrefix = "NORMGEN";
+ 
+@@ -69,6 +78,16 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         "CrossJoin", "CrossApply", "OuterApply"
+     };
+ 
++    /// <summary>
++    /// The APPLY operators that accept a correlated lambda source (<c>Expression&lt;Func&lt;TEntity,
++    /// EntityBuilder&lt;TJoin&gt;&gt;&gt;</c> or <c>Expression&lt;Func&lt;TEntity, QueryCommand&lt;TJoin&gt;&gt;&gt;</c>)
++    /// in addition to a table/CTE source.
++    /// </summary>
++    private static readonly HashSet<string> CorrelatedSourceOperators = new(StringComparer.Ordinal)
++    {
++        "CrossApply", "OuterApply"
++    };
++
+     private static readonly DiagnosticDescriptor DuplicateAlias = new(
+         DiagnosticIdPrefix + "001",
+         "Duplicate join alias",
+@@ -242,12 +261,12 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             var conditionless = ConditionlessOperators.Contains(operation);
+             if (conditionless ? arguments.Count != 2 : arguments.Count != 3) return null;
+ 
+-            if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined, out var isCte)) return null;
++            if (!TryGetJoinedType(invocation, name, semanticModel, ct, allowCorrelated: true, out var joined, out var sourceKind)) return null;
+ 
+             var receiver = ResolveChain(memberAccess.Expression, semanticModel, ct);
+             if (receiver is null) return null;
+ 
+-            var step = new ChainStep(StepKind.Alias, alias, Display(joined), operation, conditionless, isCte, location);
++            var step = new ChainStep(StepKind.Alias, alias, JoinTypeDisplay(joined), operation, conditionless, sourceKind, location);
+             return new Candidate(true, alias, Append(receiver, step), location);
+         }
+ 
+@@ -261,9 +280,9 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         var receiverChain = ResolveChain(memberAccess.Expression, semanticModel, ct);
+         if (receiverChain is null || !receiverChain.HasAlias) return null;
+ 
+-        if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var positionalJoined, out var positionalIsCte)) return null;
++        if (!TryGetJoinedType(invocation, name, semanticModel, ct, allowCorrelated: false, out var positionalJoined, out var positionalSourceKind)) return null;
+ 
+-        var positionalStep = new ChainStep(StepKind.Positional, string.Empty, Display(positionalJoined), operation, positionalConditionless, positionalIsCte, location);
++        var positionalStep = new ChainStep(StepKind.Positional, string.Empty, JoinTypeDisplay(positionalJoined), operation, positionalConditionless, positionalSourceKind, location);
+         return new Candidate(true, string.Empty, Append(receiverChain, positionalStep), location);
+     }
+ 
+@@ -331,7 +350,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             var steps = new ChainStep[builder.TypeArguments.Length - 1];
+             for (var i = 1; i < builder.TypeArguments.Length; i++)
+             {
+-                steps[i - 1] = new ChainStep(StepKind.Positional, string.Empty, Display(builder.TypeArguments[i]), "Join", false, false, default);
++                steps[i - 1] = new ChainStep(StepKind.Positional, string.Empty, Display(builder.TypeArguments[i]), "Join", false, JoinSourceKind.EntityBuilder, default);
+             }
+ 
+             return new ChainModel(Display(builder.TypeArguments[0]), null, new EquatableArray<ChainStep>(steps));
+@@ -388,18 +407,18 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         {
+             if (!TryReadAliasArgument(lastExpression, out var alias)) return false;
+             if (conditionless ? arguments.Count != 2 : arguments.Count != 3) return false;
+-            if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var joined, out var isCte)) return false;
++            if (!TryGetJoinedType(invocation, name, semanticModel, ct, allowCorrelated: true, out var joined, out var sourceKind)) return false;
+ 
+             receiver = memberAccess.Expression;
+-            step = new ChainStep(StepKind.Alias, alias, Display(joined), operation, conditionless, isCte, ToAliasLocation(lastExpression.GetLocation()));
++            step = new ChainStep(StepKind.Alias, alias, JoinTypeDisplay(joined), operation, conditionless, sourceKind, ToAliasLocation(lastExpression.GetLocation()));
+             return true;
+         }
+ 
+         if (conditionless ? arguments.Count is < 1 or > 2 : arguments.Count is < 2 or > 3) return false;
+-        if (!TryGetJoinedType(invocation, name, semanticModel, ct, out var positionalJoined, out var positionalIsCte)) return false;
++        if (!TryGetJoinedType(invocation, name, semanticModel, ct, allowCorrelated: false, out var positionalJoined, out var positionalSourceKind)) return false;
+ 
+         receiver = memberAccess.Expression;
+-        step = new ChainStep(StepKind.Positional, string.Empty, Display(positionalJoined), operation, conditionless, positionalIsCte, ToAliasLocation(lastExpression.GetLocation()));
++        step = new ChainStep(StepKind.Positional, string.Empty, JoinTypeDisplay(positionalJoined), operation, conditionless, positionalSourceKind, ToAliasLocation(lastExpression.GetLocation()));
+         return true;
+     }
+ 
+@@ -442,7 +461,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             for (var i = 1; i < tokens.Count; i++)
+             {
+                 if (semanticModel.GetTypeInfo(typeArguments[i], ct).Type is not INamedTypeSymbol joined) return null;
+-                steps[i - 1] = new ChainStep(tokens[i].Kind, tokens[i].Name, Display(joined), "Join", false, false, default);
++                steps[i - 1] = new ChainStep(tokens[i].Kind, tokens[i].Name, Display(joined), "Join", false, JoinSourceKind.EntityBuilder, default);
+             }
+ 
+             return new ChainModel(Display(baseType), rootAlias, new EquatableArray<ChainStep>(steps));
+@@ -505,30 +524,47 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+     /// <summary>
+     /// Resolves the joined entity type: from the explicit generic type argument when present, otherwise
+     /// from an <c>EntityBuilder&lt;T&gt;</c> or typed CTE <c>Cte&lt;T&gt;</c> source argument (type-argument
+-    /// inference at the call site). <paramref name="isCte"/> reports whether the joined source is a typed
+-    /// CTE descriptor.
++    /// inference at the call site); <c>sourceKind</c> reports the shape of the joined source. When
++    /// <c>allowCorrelated</c> is set and the source is an APPLY lambda, it is recognized as
++    /// <see cref="JoinSourceKind.Correlated"/> and <c>joined</c> is left <see langword="null"/> (its
++    /// concrete type is the generated method type parameter <c>TJoin</c>). Positional steps pass
++    /// <c>allowCorrelated: false</c>: a correlated APPLY after a join projection is rejected by the runtime
++    /// seam, so the generator must not emit a table-source overload for it.
+     /// </summary>
+     private static bool TryGetJoinedType(
+         InvocationExpressionSyntax invocation,
+         SimpleNameSyntax name,
+         SemanticModel semanticModel,
+         CancellationToken ct,
+-        out ITypeSymbol joined,
+-        out bool isCte)
++        bool allowCorrelated,
++        out ITypeSymbol? joined,
++        out JoinSourceKind sourceKind)
+     {
+-        joined = null!;
+-        isCte = false;
++        joined = null;
++        sourceKind = JoinSourceKind.EntityBuilder;
+ 
+         var arguments = invocation.ArgumentList.Arguments;
+         if (arguments.Count == 0) return false;
+ 
++        // A correlated APPLY lambda source has no applicable candidate before the generated overload
++        // exists, so its joined type cannot be bound here; carry the source kind and let the emitted
++        // method's TJoin receive it. The alias marker only ever follows an APPLY lambda for the
++        // correlated seam, so any lambda in this position is a correlated source.
++        if (allowCorrelated
++            && CorrelatedSourceOperators.Contains(name.Identifier.ValueText)
++            && IsCorrelatedSource(arguments[0].Expression, semanticModel, ct))
++        {
++            sourceKind = JoinSourceKind.Correlated;
++            return true;
++        }
++
+         if (name is GenericNameSyntax generic)
+         {
+             if (generic.TypeArgumentList.Arguments.Count != 1) return false;
+             var explicitType = semanticModel.GetTypeInfo(generic.TypeArgumentList.Arguments[0], ct).Type;
+             if (explicitType is null) return false;
+             joined = explicitType;
+-            isCte = IsCteSource(arguments[0].Expression, semanticModel, ct);
++            sourceKind = IsCteSource(arguments[0].Expression, semanticModel, ct) ? JoinSourceKind.Cte : JoinSourceKind.EntityBuilder;
+             return true;
+         }
+ 
+@@ -537,13 +573,51 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             && (IsCteSource(source, semanticModel) || source.Name == "EntityBuilder"))
+         {
+             joined = source.TypeArguments[0];
+-            isCte = IsCteSource(source, semanticModel);
++            sourceKind = IsCteSource(source, semanticModel) ? JoinSourceKind.Cte : JoinSourceKind.EntityBuilder;
+             return true;
+         }
+ 
+         return false;
+     }
+ 
++    /// <summary>
++    /// True when the argument is a correlated APPLY source: a lambda literal, or a value whose type is a
++    /// delegate (or <c>System.Linq.Expressions.Expression&lt;TDelegate&gt;</c>) returning
++    /// <c>EntityBuilder&lt;T&gt;</c> or <c>QueryCommand&lt;T&gt;</c>.
++    /// </summary>
++    private static bool IsCorrelatedSource(ExpressionSyntax expression, SemanticModel semanticModel, CancellationToken ct)
++    {
++        if (expression is AnonymousFunctionExpressionSyntax) return true;
++        return IsCorrelatedSourceType(semanticModel.GetTypeInfo(expression, ct).Type);
++    }
++
++    private static bool IsCorrelatedSourceType(ITypeSymbol? type)
++    {
++        if (type is not INamedTypeSymbol named) return false;
++
++        // System.Linq.Expressions.Expression<Func<...>>: unwrap the wrapped delegate.
++        if (named.Name == "Expression"
++            && named.TypeArguments.Length == 1
++            && named.ContainingNamespace?.ToDisplayString() == "System.Linq.Expressions")
++        {
++            return IsCorrelatedSourceType(named.TypeArguments[0]);
++        }
++
++        var invoke = named.DelegateInvokeMethod;
++        return invoke is not null && IsBuilderOrQuery(invoke.ReturnType);
++    }
++
++    private static bool IsBuilderOrQuery(ITypeSymbol type)
++        => type is INamedTypeSymbol { TypeArguments.Length: 1 } named
++            && (named.Name == "EntityBuilder" || named.Name == "QueryCommand");
++
++    /// <summary>
++    /// Display of a slot's joined type. A correlated APPLY step has no bindable type before its generated
++    /// overload exists; it is represented by the sentinel <see cref="CorrelatedJoinedType"/> and rendered
++    /// as the method type parameter <c>TJoin</c>.
++    /// </summary>
++    private static string JoinTypeDisplay(ITypeSymbol? joined) => joined is null ? CorrelatedJoinedType : Display(joined);
++
+     /// <summary>
+     /// True when the joined source argument is a typed CTE descriptor <c>Cte&lt;T&gt;</c> by symbol identity.
+     /// A simple name match would misrecognize an unrelated user type named <c>Cte</c> (R159-10 negative).
+@@ -652,9 +726,9 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+ 
+             if (usesSuppressedAlias) continue;
+ 
+-            // A root alias colliding with a retained ItemN member (for example Alias.Item1) is the same
+-            // class of collision as for a join alias and is rejected with NORMGEN002.
+-            if (chain.RootAlias is not null && IsItemAlias(chain.RootAlias, chain.Steps.Count + 1))
++            // A root alias colliding with a retained/claimed ItemN name (for example Alias.Item1) is the
++            // same class of collision as for a join alias and is rejected with NORMGEN002.
++            if (chain.RootAlias is not null && IsItemAlias(chain.RootAlias))
+             {
+                 diagnostics.Add(Diagnostic.Create(AliasCollision, ToLocation(aliasLocations[chain.RootAlias]), chain.RootAlias, chain.RootAlias));
+                 continue;
+@@ -687,6 +761,22 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+                 var step = chain.Steps[count];
+                 if (step.Kind == StepKind.Alias)
+                 {
++                    // A correlated APPLY prefix has no bindable concrete joined type, so an alias extension
++                    // whose receiver is built from it cannot be rendered (its generic arguments would carry
++                    // the sentinel). Such a chain stays unsupported, exactly as before this change; only a
++                    // correlated step whose prefix is concrete (including count == 0) is emitted.
++                    var correlatedPrefix = false;
++                    for (var i = 0; i < count; i++)
++                    {
++                        if (chain.Steps[i].Source == JoinSourceKind.Correlated)
++                        {
++                            correlatedPrefix = true;
++                            break;
++                        }
++                    }
++
++                    if (correlatedPrefix) continue;
++
+                     // Alias extensions carry the concrete entity types in their receiver/return signature
+                     // (only TJoin is a method type parameter), so distinct base-type instantiations of the
+                     // same base-agnostic schema are distinct methods.
+@@ -703,6 +793,33 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             }
+         }
+ 
++        // A stored alias receiver — 'var q = b.Join(x, Alias.Buyer); q.Join(y, condition)' — produces no
++        // observable positional-after-alias call site (the receiver is a variable of the generated
++        // AliasJoin_* type), so the observed-transition loop above cannot seed it. An extension method
++        // cannot shadow an applicable instance method, so the generated 'new' positional transitions must
++        // exist on every alias-bearing schema regardless of the call shape, exactly like the stored root
++        // alias. Emit the full seven-operator set; a positional step adds no alias member, so the next
++        // schema is the receiver suffix plus a positional token. This is one level deep: the transitions'
++        // own result schemas are ordinary result schemas and are seeded only when their chain is observed.
++        foreach (var schema in schemas.Values.Where(static s => s.HasAlias).ToArray())
++        {
++            var nextSchema = new SchemaInfo(
++                schema.Suffix + "_P" + (schema.Arity + 1).ToString(CultureInfo.InvariantCulture),
++                schema.Arity + 1,
++                true,
++                schema.AliasMembers);
++            schemas[nextSchema.Suffix] = nextSchema;
++
++            foreach (var operation in JoinOperatorOrder)
++            {
++                var conditionless = ConditionlessOperators.Contains(operation);
++                var step = new ChainStep(StepKind.Positional, string.Empty, string.Empty, operation, conditionless, JoinSourceKind.EntityBuilder, default);
++                var key = schema.Suffix + ">>P:" + operation + ":" + (conditionless ? "1" : "0");
++                if (!positionalTransitions.ContainsKey(key))
++                    positionalTransitions[key] = new PositionalTransition(schema, step);
++            }
++        }
++
+         // Root alias (Phase 2): '.WithAlias(Alias.X)' names slot 1 on a plain root. A subsequent
+         // positional join carries no marker to select a generated extension, and the inherited
+         // EntityBuilder<TEntity>.Join/Apply instance method is applicable, so it must be hidden by a
+@@ -719,7 +836,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             foreach (var operation in JoinOperatorOrder)
+             {
+                 var conditionless = ConditionlessOperators.Contains(operation);
+-                var step = new ChainStep(StepKind.Positional, string.Empty, string.Empty, operation, conditionless, false, default);
++                var step = new ChainStep(StepKind.Positional, string.Empty, string.Empty, operation, conditionless, JoinSourceKind.EntityBuilder, default);
+                 var nextSchema = BuildSchema(Append(rootChain, step), 1);
+                 schemas[nextSchema.Suffix] = nextSchema;
+ 
+@@ -854,7 +971,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             if (steps[i].Kind != StepKind.Alias) continue;
+             var alias = steps[i].Alias;
+ 
+-            if (IsItemAlias(alias, arity))
++            if (IsItemAlias(alias))
+             {
+                 diagnostics.Add(Diagnostic.Create(AliasCollision, ToLocation(steps[i].Location), alias, alias));
+                 valid = false;
+@@ -881,7 +998,15 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         return valid;
+     }
+ 
+-    private static bool IsItemAlias(string alias, int arity)
++    /// <summary>
++    /// True when the alias is an <c>ItemN</c> name (<c>Item</c> followed by one or more digits) that the
++    /// runtime <c>ProjectionAliasCache.TryParseItemPosition</c> claims as a positional slot. The generator
++    /// must reject EVERY such name, not only the in-range <c>Item1..Item{arity}</c>: the runtime parser
++    /// parses any <c>ItemN</c> — including <c>Item0</c> and an out-of-range N — as a positional member, so
++    /// an alias member of that shape would be resolved positionally and silently address the wrong slot
++    /// (or no slot). Rejecting the whole name shape keeps the two parsers in agreement.
++    /// </summary>
++    private static bool IsItemAlias(string alias)
+     {
+         if (!alias.StartsWith("Item", StringComparison.Ordinal)) return false;
+         var digits = alias.Substring("Item".Length);
+@@ -891,8 +1016,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             if (digits[i] < '0' || digits[i] > '9') return false;
+         }
+ 
+-        return int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var position)
+-            && position >= 1 && position <= arity;
++        return true;
+     }
+ 
+     private static void AppendAliasMarker(StringBuilder emitter, string generatedNamespace, List<string> aliases)
+@@ -933,6 +1057,12 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+             emitter.AppendLine("    {");
+             foreach (var member in schema.AliasMembers)
+             {
++                // The runtime resolves the alias through JoinSlotAttribute.Position - 1
++                // (ProjectionAliasCache.GetMemberPosition) and the joins are appended in chain order,
++                // so the chain ordinal in AliasMember.Slot MUST drive both the projection parameter
++                // (T{Slot}) and the attribute position. Deriving the attribute from anything else (for
++                // example Slot + 1, or the member name / CLR type) makes the alias resolve to the wrong
++                // table whenever the same CLR type repeats across slots.
+                 emitter.AppendLine("        [global::NextORM.Core.JoinSlot(" + member.Slot + ")]");
+                 emitter.AppendLine("        public T" + member.Slot + " " + Escape(member.Name) + " => throw new global::System.NotSupportedException();");
+             }
+@@ -1026,12 +1156,8 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         var seenSignatures = new Dictionary<string, string>(StringComparer.Ordinal);
+         var methods = new List<string>();
+ 
+-        foreach (var transition in aliasTransitions.Values.OrderBy(static t => t.Receiver.Suffix, StringComparer.Ordinal).ThenBy(static t => t.Step.Alias, StringComparer.Ordinal))
++        void Add(string signature, string method)
+         {
+-            var rendered = new StringBuilder();
+-            var signature = RenderAliasExtension(rendered, generatedNamespace, transition);
+-            var method = rendered.ToString();
+-
+             if (seenSignatures.TryGetValue(signature, out var existing))
+             {
+                 if (!string.Equals(existing, method, StringComparison.Ordinal))
+@@ -1039,13 +1165,35 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+                     diagnostics.Add(Diagnostic.Create(AliasExtensionCollision, Location.None, signature));
+                 }
+ 
+-                continue;
++                return;
+             }
+ 
+             seenSignatures[signature] = method;
+             methods.Add(method);
+         }
+ 
++        foreach (var transition in aliasTransitions.Values.OrderBy(static t => t.Receiver.Suffix, StringComparer.Ordinal).ThenBy(static t => t.Step.Alias, StringComparer.Ordinal))
++        {
++            if (transition.Step.Source == JoinSourceKind.Correlated)
++            {
++                // A correlated alias APPLY is only reachable on a single-entity source (the runtime seam
++                // rejects a join projection), so both generated source shapes are emitted and the call
++                // site's overload resolution picks the applicable one once the lambda has a target type.
++                foreach (var correlatedQuery in new[] { false, true })
++                {
++                    var rendered = new StringBuilder();
++                    var signature = RenderAliasExtension(rendered, generatedNamespace, transition, correlatedQuery);
++                    Add(signature, rendered.ToString());
++                }
++
++                continue;
++            }
++
++            var normalRendered = new StringBuilder();
++            var normalSignature = RenderAliasExtension(normalRendered, generatedNamespace, transition);
++            Add(normalSignature, normalRendered.ToString());
++        }
++
+         // Root alias: one generic extension per root name. It is generic over the entity type, so a
+         // single method covers every root source (mapped entity, raw table, FromSql, CTE, temp table,
+         // table function, QueryCommand, builder) uniformly; the runtime AliasRoot seam preserves the
+@@ -1097,9 +1245,15 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+     /// Renders one alias extension method into <paramref name="emitter"/> and returns its C# signature.
+     /// The receiver is the accumulated schema: it is a core <c>EntityBuilder&lt;T&gt;</c> (no positional
+     /// prefix), a core <c>JoinedEntityBuilder&lt;T1..Tn&gt;</c> (an unaliased positional prefix), or the
+-    /// generated <c>AliasJoin_*</c> builder for a prefix that already carries an alias.
++    /// generated <c>AliasJoin_*</c> builder for a prefix that already carries an alias. For a correlated
++    /// APPLY step (<see cref="JoinSourceKind.Correlated"/>) <paramref name="correlatedQuery"/> selects the
++    /// <c>QueryCommand&lt;TJoin&gt;</c> shape (otherwise the <c>EntityBuilder&lt;TJoin&gt;</c> shape).
+     /// </summary>
+-    private static string RenderAliasExtension(StringBuilder emitter, string generatedNamespace, AliasTransition transition)
++    private static string RenderAliasExtension(
++        StringBuilder emitter,
++        string generatedNamespace,
++        AliasTransition transition,
++        bool correlatedQuery = false)
+     {
+         var schema = transition.Receiver;
+         var chain = transition.Chain;
+@@ -1135,16 +1289,39 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         var projectionType = generatedNamespace + ".AliasProjection_" + nextSchema.Suffix + "<" + returnArgumentsText + ">";
+         var markerType = generatedNamespace + ".Alias." + step.Alias + "Marker";
+         var joinType = "global::NextORM.Core.JoinType." + JoinTypeName(step.Operator);
+-        var sourceIsCte = step.IsCte;
+-        var sourceParameterType = sourceIsCte
+-            ? "global::NextORM.Core.Cte<TJoin>"
+-            : "global::NextORM.Core.EntityBuilder<TJoin>";
++
++        string sourceParameterType;
++        string sourceParameterDeclaration;
++        string sourceArgument;
++        if (step.Source == JoinSourceKind.Correlated)
++        {
++            // A correlated APPLY source is a lambda; both the EntityBuilder and the QueryCommand seam
++            // overloads are emitted and the call site's overload resolution picks the one whose lambda
++            // return type matches. The joined type stays the method type parameter TJoin.
++            var appliedType = correlatedQuery
++                ? "global::NextORM.Core.QueryCommand<TJoin>"
++                : "global::NextORM.Core.EntityBuilder<TJoin>";
++            sourceParameterType = "global::System.Linq.Expressions.Expression<global::System.Func<"
++                + conditionArgumentType + ", " + appliedType + ">>";
++            sourceParameterDeclaration = sourceParameterType + " source,";
++            sourceArgument = "source,";
++        }
++        else
++        {
++            var sourceIsCte = step.Source == JoinSourceKind.Cte;
++            sourceParameterType = sourceIsCte
++                ? "global::NextORM.Core.Cte<TJoin>"
++                : "global::NextORM.Core.EntityBuilder<TJoin>";
++            sourceParameterDeclaration = sourceParameterType + (sourceIsCte ? " cte," : " _,");
++            sourceArgument = sourceIsCte ? "cte," : "_,";
++        }
++
+         var conditionParameterType = "global::System.Linq.Expressions.Expression<global::System.Func<"
+             + conditionArgumentType + ", TJoin, bool>>";
+ 
+         emitter.AppendLine("        public static " + returnType + " " + step.Operator + "<TJoin>(");
+         emitter.AppendLine("            this " + receiverType + " self,");
+-        emitter.AppendLine("            " + sourceParameterType + (sourceIsCte ? " cte," : " _,"));
++        emitter.AppendLine("            " + sourceParameterDeclaration);
+ 
+         if (!step.Conditionless)
+         {
+@@ -1154,7 +1331,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         emitter.AppendLine("            " + markerType + " marker)");
+         emitter.AppendLine("            => self.JoinAlias<" + returnType + ", " + projectionType + ", TJoin>(");
+         emitter.AppendLine("                static dc => new " + returnType + "(dc),");
+-        emitter.AppendLine(sourceIsCte ? "                cte," : "                _,");
++        emitter.AppendLine("                " + sourceArgument);
+         if (!step.Conditionless)
+         {
+             emitter.AppendLine("                condition,");
+@@ -1192,7 +1369,7 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         for (var i = 0; i < chain.Steps.Count; i++)
+         {
+             var step = chain.Steps[i];
+-            builder.Append('|').Append(step.Operator).Append(':').Append(step.Kind == StepKind.Alias ? "A" : "P").Append(':').Append(step.Alias).Append(':').Append(step.JoinedType).Append(':').Append(step.IsCte ? 'c' : 'e');
++            builder.Append('|').Append(step.Operator).Append(':').Append(step.Kind == StepKind.Alias ? "A" : "P").Append(':').Append(step.Alias).Append(':').Append(step.JoinedType).Append(':').Append((int)step.Source);
+         }
+ 
+         return builder.ToString();
+@@ -1259,9 +1436,27 @@ internal sealed class JoinAliasGenerator : IIncrementalGenerator
+         Alias
+     }
+ 
++    /// <summary>Shape of the joined source argument of one slot.</summary>
++    private enum JoinSourceKind
++    {
++        /// <summary>A table/builder source (<c>EntityBuilder&lt;TJoin&gt;</c> / a builder variable).</summary>
++        EntityBuilder,
++
++        /// <summary>A typed CTE descriptor (<c>Cte&lt;TJoin&gt;</c>).</summary>
++        Cte,
++
++        /// <summary>
++        /// A correlated APPLY lambda source. The joined type cannot be bound before the generated
++        /// overload exists (the invocation has no applicable candidate), so the generator emits both the
++        /// builder-source and the query-source overloads generic over <c>TJoin</c>; overload resolution at
++        /// the call site selects the one matching the lambda body.
++        /// </summary>
++        Correlated
++    }
++
+     private readonly record struct AliasLocation(string FilePath, TextSpan Span, LinePositionSpan LineSpan);
+ 
+-    private sealed record ChainStep(StepKind Kind, string Alias, string JoinedType, string Operator, bool Conditionless, bool IsCte, AliasLocation Location);
++    private sealed record ChainStep(StepKind Kind, string Alias, string JoinedType, string Operator, bool Conditionless, JoinSourceKind Source, AliasLocation Location);
+ 
+     /// <summary>
+     /// One ordered slot chain: slot 1 is the base entity (optionally named by <see cref="RootAlias"/>);
+diff --git a/src/nextorm.core/Builders/EntityBuilder.cs b/src/nextorm.core/Builders/EntityBuilder.cs
+index 513db673..523a46f6 100644
+--- a/src/nextorm.core/Builders/EntityBuilder.cs
++++ b/src/nextorm.core/Builders/EntityBuilder.cs
+@@ -14,6 +14,72 @@ namespace NextORM.Core;
+ //     }
+ //     protected static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
+ // }
++/// <summary>
++/// Generic-neutral mutable query state carrier for <see cref="EntityBuilder{TEntity}"/>. Keeping the
++/// state in one non-generic value type lets a single shared copy procedure transfer it completely by
++/// assignment (a structural copy), so a newly added field is copied by default instead of being
++/// silently dropped by a hand-maintained field list. Being a value type also keeps the existing
++/// reflection-based state-purity check (<c>QueryFilterFunc</c>) correct: it compares boxed field values
++/// structurally, so an unchanged carrier compares equal across a clone. Projection-typed state
++/// (predicates, grouping, sorting, eager-load specs) deliberately stays on the builder.
++/// </summary>
++internal struct EntityBuilderSharedState
++{
++    /// <summary>Creates the default carrier (filter scope <see cref="QueryFilterScope.None"/>).</summary>
++    public EntityBuilderSharedState()
++    {
++    }
++
++    internal QueryCommand? Query;
++    internal QueryFilterScope FilterScope = QueryFilterScope.None;
++    internal LimitByClause? LimitBy;
++    internal DistinctOnClause? DistinctOn;
++    internal ExtremeRowClause? ExtremeRow;
++    internal TableSampleClause? TableSample;
++    internal TemporalClause? Temporal;
++    internal LockClause? RowLock;
++    internal List<LambdaExpression>? ArrayJoins;
++    internal ArrayJoinKind ArrayJoinKind;
++    internal List<WindowDefinition>? Windows;
++    internal Type? SourceEntityType;
++    internal bool BindArrayJoinElement;
++    internal List<KeyValuePair<string, string>>? Settings;
++    internal bool SingleQuery;
++    internal string? Table;
++    internal FromExpression? From;
++    internal string? SubQueryHint;
++    internal string? TableNameOverride;
++    internal string? SchemaOverride;
++    internal string? DatabaseOverride;
++    internal string? ServerOverride;
++    internal string? TableExpression;
++    internal ILogger? Logger;
++    internal bool IsDistinct;
++    internal GroupingType GroupingType;
++    internal IReadOnlyList<int[]>? GroupingSets;
++    internal bool GroupByWithTotals;
++    internal bool IsFinal;
++    internal double? SampleRatio;
++    internal double SampleOffset;
++    internal IReadOnlyList<string>? TableHints;
++    internal IReadOnlyList<string>? IndexHints;
++    internal IndexHintKind IndexHintKind;
++    internal IReadOnlyList<string>? TablesInScopeHints;
++    internal bool? QuoteIdentifiers;
++    internal INamingConvention? NamingConvention;
++    internal KeywordCase? KeywordCase;
++    internal string? Tag;
++    internal int? CommandTimeout;
++    internal IReadOnlyList<CteDefinition>? Ctes;
++
++    /// <summary>
++    /// Returns a complete structural copy (all fields). The value-type assignment is exhaustive by
++    /// default, so a newly added field is transferred automatically without a field list.
++    /// </summary>
++    /// <returns>A distinct carrier holding the same field values.</returns>
++    internal readonly EntityBuilderSharedState Clone() => this;
++}
++
+ /// <summary>
+ /// Fluent, immutable query builder over a mapped entity type; created by
+ /// <c>IDataContext.From&lt;TEntity&gt;()</c>.
+@@ -25,39 +91,50 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     #region Fields
+     /// <summary>The data context this builder creates commands from and resolves sources against.</summary>
+     protected readonly IDataContext _dataProvider;
+-    private QueryCommand? _query;
++    /// <summary>
++    /// The generic-neutral mutable query state. It lives in one value-type carrier so the single shared
++    /// copy procedure transfers the whole state by structural assignment (see
++    /// <see cref="EntityBuilderSharedState.Clone"/>), instead of a hand-maintained field list that can
++    /// silently omit newly added state. Projection-typed state (predicates, grouping, sorting, eager-load
++    /// specs) stays on the builder and is rebased explicitly by the transitions.
++    /// </summary>
++    private EntityBuilderSharedState _state = new();
+     private Expression<Func<TEntity, bool>>? _condition;
+-    private QueryFilterScope _filterScope = QueryFilterScope.None;
+     private LambdaExpression? _group;
+-    private LimitByClause? _limitBy;
+-    private DistinctOnClause? _distinctOn;
+-    private ExtremeRowClause? _extremeRow;
+-    private TableSampleClause? _tablesample;
+-    private TemporalClause? _temporal;
+-    private LockClause? _rowLock;
+     private LambdaExpression? _preWhere;
+-    private List<LambdaExpression>? _arrayJoins;
+-    private ArrayJoinKind _arrayJoinKind;
+-    private List<WindowDefinition>? _windows;
+-    private Type? _sourceEntityType;
+-    private bool _bindArrayJoinElement;
+-    private List<KeyValuePair<string, string>>? _settings;
+     private Expression<Func<TEntity, bool>>? _having;
+     private List<Sorting>? _sorting;
+     private List<IEagerLoadSpec<TEntity>>? _loadSpecs;
+     private List<IJoinIntoSpec<TEntity>>? _joinIntos;
+-    private bool _singleQuery;
+     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
+     protected List<JoinExpression>? _joins;
+-    private string? _table;
+-    private FromExpression? _from;
+-    private string? _subQueryHint;
+-    private string? _tableNameOverride;
+-    private string? _schemaOverride;
+-    private string? _databaseOverride;
+-    private string? _serverOverride;
+-    private string? _tableExpression;
+     #endregion
++    #region Shared-state accessors (delegate into <see cref="EntityBuilderSharedState"/>)
++    private QueryCommand? _query { get => _state.Query; set => _state.Query = value; }
++    private QueryFilterScope _filterScope { get => _state.FilterScope; set => _state.FilterScope = value; }
++    private LimitByClause? _limitBy { get => _state.LimitBy; set => _state.LimitBy = value; }
++    private DistinctOnClause? _distinctOn { get => _state.DistinctOn; set => _state.DistinctOn = value; }
++    private ExtremeRowClause? _extremeRow { get => _state.ExtremeRow; set => _state.ExtremeRow = value; }
++    private TableSampleClause? _tablesample { get => _state.TableSample; set => _state.TableSample = value; }
++    private TemporalClause? _temporal { get => _state.Temporal; set => _state.Temporal = value; }
++    private LockClause? _rowLock { get => _state.RowLock; set => _state.RowLock = value; }
++    private List<LambdaExpression>? _arrayJoins { get => _state.ArrayJoins; set => _state.ArrayJoins = value; }
++    private ArrayJoinKind _arrayJoinKind { get => _state.ArrayJoinKind; set => _state.ArrayJoinKind = value; }
++    private List<WindowDefinition>? _windows { get => _state.Windows; set => _state.Windows = value; }
++    private Type? _sourceEntityType { get => _state.SourceEntityType; set => _state.SourceEntityType = value; }
++    private bool _bindArrayJoinElement { get => _state.BindArrayJoinElement; set => _state.BindArrayJoinElement = value; }
++    private List<KeyValuePair<string, string>>? _settings { get => _state.Settings; set => _state.Settings = value; }
++    private bool _singleQuery { get => _state.SingleQuery; set => _state.SingleQuery = value; }
++    private string? _table { get => _state.Table; set => _state.Table = value; }
++    private FromExpression? _from { get => _state.From; set => _state.From = value; }
++    private string? _subQueryHint { get => _state.SubQueryHint; set => _state.SubQueryHint = value; }
++    private string? _tableNameOverride { get => _state.TableNameOverride; set => _state.TableNameOverride = value; }
++    private string? _schemaOverride { get => _state.SchemaOverride; set => _state.SchemaOverride = value; }
++    private string? _databaseOverride { get => _state.DatabaseOverride; set => _state.DatabaseOverride = value; }
++    private string? _serverOverride { get => _state.ServerOverride; set => _state.ServerOverride = value; }
++    private string? _tableExpression { get => _state.TableExpression; set => _state.TableExpression = value; }
++    #endregion
++
+     /// <summary>
+     /// Initializes a builder over the mapped entity type; the source is resolved from entity metadata.
+     /// </summary>
+@@ -83,7 +160,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+         _table = table;
+     }
+     #region Properties
+-    internal ILogger? Logger { get; set; }
++    internal ILogger? Logger { get => _state.Logger; set => _state.Logger = value; }
+     internal QueryCommand? Query { get => _query; set => _query = value; }
+     /// <summary>
+     /// Provider-specific hint attached to a derived-table primary source, or <c>null</c> when there is
+@@ -148,13 +225,13 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     public List<JoinExpression>? Joins { get => _joins; set => _joins = value; }
+     /// <summary>The limit/offset paging state set by <c>Limit</c>, <c>Offset</c> and <c>Page</c>.</summary>
+     public Paging Paging;
+-    internal bool IsDistinct { get; set; }
++    internal bool IsDistinct { get => _state.IsDistinct; set => _state.IsDistinct = value; }
+     /// <summary>Super-aggregate modifier applied to the grouping list (<c>ROLLUP</c>/<c>CUBE</c>).</summary>
+-    internal GroupingType GroupingType { get; set; }
++    internal GroupingType GroupingType { get => _state.GroupingType; set => _state.GroupingType = value; }
+     /// <summary>Explicit grouping-set indices used when <see cref="GroupingType"/> is <c>GroupingSets</c>.</summary>
+-    internal IReadOnlyList<int[]>? GroupingSets { get; set; }
++    internal IReadOnlyList<int[]>? GroupingSets { get => _state.GroupingSets; set => _state.GroupingSets = value; }
+     /// <summary>Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse).</summary>
+-    internal bool GroupByWithTotals { get; set; }
++    internal bool GroupByWithTotals { get => _state.GroupByWithTotals; set => _state.GroupByWithTotals = value; }
+     /// <summary>The <c>LIMIT n BY expr</c> clause (ClickHouse), or <c>null</c> when there is none.</summary>
+     internal LimitByClause? LimitByClause { get => _limitBy; set => _limitBy = value; }
+     /// <summary>The <c>DISTINCT ON (expr, ...)</c> clause (PostgreSQL), or <c>null</c> when there is none.</summary>
+@@ -168,11 +245,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     /// <summary>The trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause, or <c>null</c> when there is none.</summary>
+     internal LockClause? RowLockClause { get => _rowLock; set => _rowLock = value; }
+     /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
+-    internal bool IsFinal { get; set; }
++    internal bool IsFinal { get => _state.IsFinal; set => _state.IsFinal = value; }
+     /// <summary>The ClickHouse <c>SAMPLE</c> ratio, or <c>null</c> when the modifier is absent.</summary>
+-    internal double? SampleRatio { get; set; }
++    internal double? SampleRatio { get => _state.SampleRatio; set => _state.SampleRatio = value; }
+     /// <summary>The ClickHouse <c>SAMPLE ... OFFSET</c> value; zero when absent.</summary>
+-    internal double SampleOffset { get; set; }
++    internal double SampleOffset { get => _state.SampleOffset; set => _state.SampleOffset = value; }
+     /// <summary>The trailing ClickHouse <c>SETTINGS</c> entries, or <c>null</c> when there are none.</summary>
+     internal IReadOnlyList<KeyValuePair<string, string>>? SettingsList { get => _settings; set => _settings = value is null ? null : [.. value]; }
+     /// <summary>The <c>PREWHERE</c> predicate (ClickHouse), or <c>null</c> when there is none.</summary>
+@@ -184,39 +261,39 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     /// <summary>The <c>ARRAY JOIN</c> kind (plain or <c>LEFT</c>) shared by <see cref="ArrayJoins"/>.</summary>
+     internal ArrayJoinKind ArrayJoinKind { get => _arrayJoinKind; set => _arrayJoinKind = value; }
+     /// <summary>Table-level hints applied to the primary physical table (for example SQL Server <c>nolock</c>).</summary>
+-    internal IReadOnlyList<string>? TableHints { get; set; }
++    internal IReadOnlyList<string>? TableHints { get => _state.TableHints; set => _state.TableHints = value; }
+     /// <summary>Index-hint index names applied to the primary physical table, or <c>null</c> when there are none.</summary>
+-    internal IReadOnlyList<string>? IndexHints { get; set; }
++    internal IReadOnlyList<string>? IndexHints { get => _state.IndexHints; set => _state.IndexHints = value; }
+     /// <summary>The intent of <see cref="IndexHints"/> (<c>USE</c>, <c>FORCE</c> or <c>IGNORE</c>).</summary>
+-    internal IndexHintKind IndexHintKind { get; set; }
++    internal IndexHintKind IndexHintKind { get => _state.IndexHintKind; set => _state.IndexHintKind = value; }
+     /// <summary>Hints applied to every physical table in the command's scope, or <c>null</c> when there are none.</summary>
+-    internal IReadOnlyList<string>? TablesInScopeHints { get; set; }
++    internal IReadOnlyList<string>? TablesInScopeHints { get => _state.TablesInScopeHints; set => _state.TablesInScopeHints = value; }
+     /// <summary>
+     /// Per-query override of identifier quoting (<c>null</c> inherits the context default). Set through
+     /// <see cref="WithQuotedIdentifiers"/>.
+     /// </summary>
+-    internal bool? QuoteIdentifiers { get; set; }
++    internal bool? QuoteIdentifiers { get => _state.QuoteIdentifiers; set => _state.QuoteIdentifiers = value; }
+     /// <summary>
+     /// Per-query override of the naming convention for auto-derived table/column names (<c>null</c>
+     /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
+     /// </summary>
+-    internal INamingConvention? NamingConvention { get; set; }
++    internal INamingConvention? NamingConvention { get => _state.NamingConvention; set => _state.NamingConvention = value; }
+     /// <summary>
+     /// Per-query override of the SQL keyword case (<c>null</c> inherits the context default). Set
+     /// through <see cref="WithKeywordCase"/>.
+     /// </summary>
+-    internal KeywordCase? KeywordCase { get; set; }
++    internal KeywordCase? KeywordCase { get => _state.KeywordCase; set => _state.KeywordCase = value; }
+     /// <summary>
+     /// Query tag rendered as a block comment (<c>/* tag */</c>) right after <c>SELECT</c>. Set through
+     /// <see cref="WithTag"/>; <c>null</c> means no tag.
+     /// </summary>
+-    internal string? Tag { get; set; }
++    internal string? Tag { get => _state.Tag; set => _state.Tag = value; }
+     /// <summary>
+     /// Per-query override of the command timeout in seconds (<c>null</c> inherits the context
+     /// default). A value of zero or less means the provider default. Set through
+     /// <see cref="WithCommandTimeout"/>.
+     /// </summary>
+-    internal int? CommandTimeout { get; set; }
++    internal int? CommandTimeout { get => _state.CommandTimeout; set => _state.CommandTimeout = value; }
+     internal string? Table { get => _table; set => _table = value; }
+     /// <summary>
+     /// Explicit FROM source, used for table-valued functions (and any other source that is neither a
+@@ -234,7 +311,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     /// <summary>Whether the last <c>ARRAY JOIN</c> expression is bound to an element alias.</summary>
+     internal bool BindArrayJoinElement { get => _bindArrayJoinElement; set => _bindArrayJoinElement = value; }
+     /// <summary>CTE declarations that must be attached to commands this builder creates.</summary>
+-    internal IReadOnlyList<CteDefinition>? Ctes { get; set; }
++    internal IReadOnlyList<CteDefinition>? Ctes { get => _state.Ctes; set => _state.Ctes = value; }
+     //public delegate void CommandCreatedHandler<T>(EntityBuilder<T> sender, QueryCommand queryCommand);
+     //public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
+     #endregion
+@@ -3270,52 +3347,83 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     }
+ 
+     /// <summary>
+-    /// Copies the query state a join builder carries onto <paramref name="target"/>, which may have a
+-    /// different projection type. Shared by the positional <see cref="CreateJoined{TJoinEntity}"/> and
+-    /// the alias <see cref="CreateAliasJoined{TNext,TNextEntity}"/> so both observe the same
+-    /// <c>_query</c>/<c>SourceFrom</c>/modifier propagation. Overrides are copied only when the source
+-    /// stayed unresolved for the planner (<paramref name="query"/> is <see langword="null"/>), mirroring
+-    /// the positional path.
++    /// The single structural state-transfer procedure shared by the root transition
++    /// (<see cref="AliasRoot{TNext,TNextEntity}"/>) and the joined transitions
++    /// (<see cref="CreateAliasJoined{TNext,TNextEntity}"/> and <see cref="CreateJoined{TJoinEntity}"/>).
++    /// It transfers the complete generic-neutral state in one structural assignment through the
++    /// <see cref="EntityBuilderSharedState"/> value-type carrier, so a newly added
++    /// generic-neutral field is copied by default and cannot be silently dropped. Projection-typed state
++    /// is handled explicitly on top by the callers.
++    /// </summary>
++    /// <typeparam name="TOther">The target builder's projection type.</typeparam>
++    /// <param name="target">The builder that receives the state.</param>
++    private void CopySharedStateTo<TOther>(EntityBuilder<TOther> target)
++    {
++        target._state = _state;
++        // Paging is a public mutable struct field (kept off the carrier so `builder.Paging.Limit = n`
++        // still mutates the builder in place), so the shared procedure copies it explicitly. The other
++        // reference-typed collections are shallow-shared, exactly as the previous join transfer did.
++        target.Paging = Paging;
++        target.ArrayJoins = ArrayJoins;
++        target.SettingsList = SettingsList;
++    }
++
++    /// <summary>
++    /// Alias-path counterpart of the join transfer: copies the complete generic-neutral state onto
++    /// <paramref name="target"/> (the D160-C1 fix) and then applies the join-specific query/override
++    /// state. Used only by the alias transitions <see cref="AliasRoot{TNext,TNextEntity}"/> and
++    /// <see cref="CreateAliasJoined{TNext,TNextEntity}"/>, which must preserve a sub-query hint, tag and
++    /// command timeout; the positional <see cref="CreateJoined{TJoinEntity}"/> path deliberately does not
++    /// carry those (see <see cref="ApplyJoinQueryStateTo{TOther}"/>).
+     /// </summary>
+     private void ApplyJoinStateTo<TOther>(EntityBuilder<TOther> target, QueryCommand? query)
+     {
+-        target.Logger = Logger;
+-        target.Table = Table;
++        CopySharedStateTo(target);
++        ApplyJoinQueryStateTo(target, query);
++    }
++
++    /// <summary>
++    /// Positional-path join transfer. It copies the complete generic-neutral carrier (so the positional
++    /// path keeps carrying CTE/From/FilterScope/grouping/... exactly as before) but then applies the
++    /// Defect B reset guard: at the 40b1a159 baseline a positional Join/Apply carried neither a
++    /// sub-query hint, nor a tag, nor a command timeout onto the joined builder. The alias transitions
++    /// keep those through <see cref="ApplyJoinStateTo{TOther}"/> (D160-C1/F1); clearing them here keeps
++    /// the positional path from over-preserving alias-only state, and makes the contract explicit so a
++    /// future carrier field cannot silently change it.
++    /// </summary>
++    private void ApplyPositionalJoinStateTo<TOther>(EntityBuilder<TOther> target, QueryCommand? query)
++    {
++        CopySharedStateTo(target);
++        target.SubQueryHint = null;
++        target.Tag = null;
++        target.CommandTimeout = null;
++        ApplyJoinQueryStateTo(target, query);
++    }
++
++    /// <summary>
++    /// Applies the join-specific query state shared by the positional and alias join transitions:
++    /// the resolved source command, the raw <c>PreWhere</c> carry and the source-command override
++    /// handling. It does not transfer the generic-neutral carrier by itself, so the positional path can
++    /// reuse it without inheriting the alias-preserved sub-query modifiers.
++    /// </summary>
++    private void ApplyJoinQueryStateTo<TOther>(EntityBuilder<TOther> target, QueryCommand? query)
++    {
+         target.Query = query;
+-        target.IsDistinct = IsDistinct;
+-        target.GroupingType = GroupingType;
+-        target.GroupingSets = GroupingSets;
+-        target.GroupByWithTotals = GroupByWithTotals;
+-        target.LimitByClause = LimitByClause;
+-        target.DistinctOnClause = DistinctOnClause;
+-        target.TableSampleClause = TableSampleClause;
+-        target.TemporalClause = TemporalClause;
+-        target.RowLockClause = RowLockClause;
+-        target.IsFinal = IsFinal;
+-        target.SampleRatio = SampleRatio;
+-        target.SampleOffset = SampleOffset;
+-        target.SettingsList = SettingsList;
++
++        // PreWhere is projection-typed but carried verbatim here, as before: the alias path rebases it
++        // onto the extended projection afterwards (ApplyPreAliasStateToAliasJoined / the AliasRoot
++        // rebind step), while the positional path keeps the previous raw carry.
+         target.PreWhereCondition = PreWhereCondition;
+-        target.ArrayJoins = ArrayJoins;
+-        target.ArrayJoinKind = ArrayJoinKind;
+-        target.TableHints = TableHints;
+-        target.IndexHints = IndexHints;
+-        target.IndexHintKind = IndexHintKind;
+-        target.TablesInScopeHints = TablesInScopeHints;
+-        target.Ctes = Ctes;
+-        target.QuoteIdentifiers = QuoteIdentifiers;
+-        target.NamingConvention = NamingConvention;
+-        target.KeywordCase = KeywordCase;
+-        target.SourceFrom = SourceFrom;
+-        target.FilterScope = _filterScope;
+-
+-        if (query is null)
++
++        if (query is not null)
+         {
+-            target._tableNameOverride = _tableNameOverride;
+-            target._schemaOverride = _schemaOverride;
+-            target._databaseOverride = _databaseOverride;
+-            target._serverOverride = _serverOverride;
+-            target._tableExpression = _tableExpression;
++            // The source command already carries the table overrides; they must not be re-applied to the
++            // joined builder.
++            target._tableNameOverride = null;
++            target._schemaOverride = null;
++            target._databaseOverride = null;
++            target._serverOverride = null;
++            target._tableExpression = null;
+         }
+     }
+ 
+@@ -3542,7 +3650,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+         EnsureNoEagerLoadState("Join/Apply");
+ 
+         var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join);
+-        ApplyJoinStateTo(cb, query);
++        ApplyPositionalJoinStateTo(cb, query);
+         return cb;
+     }
+     private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition, Action<JoinOptions>? options = null)
+diff --git a/tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs b/tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs
+index a5fd0e07..74c1586d 100644
+--- a/tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs
++++ b/tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs
+@@ -42,27 +42,56 @@ public class AliasGeneratedSurfaceTests
+             .OrderBy(name => name, StringComparer.Ordinal)
+             .ToArray();
+ 
++        // D160.3-2 (F2): a stored non-root alias receiver carries no observable positional-after-alias
++        // call site, so every alias-bearing schema now seeds the full seven-operator positional
++        // transition set and its `${suffix}_P{n+1}` result schema, exactly like the stored root alias.
+         names.Should().Equal(
+             "Alias",
++            "AliasJoin_A1_Root_A2_Buyer_P3`3",
+             "AliasJoin_A1_Root_A2_Buyer`2",
++            "AliasJoin_A1_Root_P2_P3`3",
+             "AliasJoin_A1_Root_P2`2",
+             "AliasJoin_A1_Root`1",
++            "AliasJoin_P1_A2_Applied_P3_P4`4",
++            "AliasJoin_P1_A2_Applied_P3`3",
++            "AliasJoin_P1_A2_Applied`2",
++            "AliasJoin_P1_A2_Buyer2_P3`3",
+             "AliasJoin_P1_A2_Buyer2`2",
++            "AliasJoin_P1_A2_Buyer_A3_Applied_P4`4",
++            "AliasJoin_P1_A2_Buyer_A3_Applied`3",
++            "AliasJoin_P1_A2_Buyer_A3_Approver_P4`4",
+             "AliasJoin_P1_A2_Buyer_A3_Approver`3",
++            "AliasJoin_P1_A2_Buyer_P3_A4_Approver_P5`5",
+             "AliasJoin_P1_A2_Buyer_P3_A4_Approver`4",
++            "AliasJoin_P1_A2_Buyer_P3_P4`4",
+             "AliasJoin_P1_A2_Buyer_P3`3",
+             "AliasJoin_P1_A2_Buyer`2",
++            "AliasJoin_P1_P2_A3_Approver_P4`4",
+             "AliasJoin_P1_P2_A3_Approver`3",
++            "AliasJoin_P1_P2_A3_Buyer2_P4`4",
+             "AliasJoin_P1_P2_A3_Buyer2`3",
++            "AliasProjection_A1_Root_A2_Buyer_P3`3",
+             "AliasProjection_A1_Root_A2_Buyer`2",
++            "AliasProjection_A1_Root_P2_P3`3",
+             "AliasProjection_A1_Root_P2`2",
+             "AliasProjection_A1_Root`1",
++            "AliasProjection_P1_A2_Applied_P3_P4`4",
++            "AliasProjection_P1_A2_Applied_P3`3",
++            "AliasProjection_P1_A2_Applied`2",
++            "AliasProjection_P1_A2_Buyer2_P3`3",
+             "AliasProjection_P1_A2_Buyer2`2",
++            "AliasProjection_P1_A2_Buyer_A3_Applied_P4`4",
++            "AliasProjection_P1_A2_Buyer_A3_Applied`3",
++            "AliasProjection_P1_A2_Buyer_A3_Approver_P4`4",
+             "AliasProjection_P1_A2_Buyer_A3_Approver`3",
++            "AliasProjection_P1_A2_Buyer_P3_A4_Approver_P5`5",
+             "AliasProjection_P1_A2_Buyer_P3_A4_Approver`4",
++            "AliasProjection_P1_A2_Buyer_P3_P4`4",
+             "AliasProjection_P1_A2_Buyer_P3`3",
+             "AliasProjection_P1_A2_Buyer`2",
++            "AliasProjection_P1_P2_A3_Approver_P4`4",
+             "AliasProjection_P1_P2_A3_Approver`3",
++            "AliasProjection_P1_P2_A3_Buyer2_P4`4",
+             "AliasProjection_P1_P2_A3_Buyer2`3",
+             "JoinAliasExtensions");
+     }
+diff --git a/tests/nextorm.alias.tests/HintAliasTestContext.cs b/tests/nextorm.alias.tests/HintAliasTestContext.cs
+new file mode 100644
+index 00000000..bc1e5174
+--- /dev/null
++++ b/tests/nextorm.alias.tests/HintAliasTestContext.cs
+@@ -0,0 +1,208 @@
++using System.Collections;
++using System.Data;
++using System.Data.Common;
++using System.Diagnostics.CodeAnalysis;
++using System.Text;
++using NextORM.Core;
++
++namespace NextORM.AliasTests;
++
++/// <summary>
++/// Provider-free data context whose dialect accepts sub-query hints as an inline comment (like
++/// PostgreSQL/MySQL). Used by <c>RootAliasTests</c> to render the SQL of a derived source carrying a
++/// <c>SubQueryHint</c> across the generated root alias and a following alias join — SQLite, which the
++/// rest of the alias suite executes against, rejects sub-query hints at render time.
++/// </summary>
++internal sealed class HintAliasDataContext : DataContext
++{
++    public HintAliasDataContext() : base(new DataContextBuilder())
++    {
++    }
++
++    public override ISqlDialect Dialect => HintAliasDialect.Instance;
++
++    public override DbParameter CreateParam(string name, object? value) => new HindAliasParameter(name) { Value = value };
++
++    protected override DbConnection CreateDbConnection(string? connectionString) => new HintAliasConnection();
++}
++
++internal sealed class HintAliasDialect : SqlDialectBase
++{
++    internal static readonly HintAliasDialect Instance = new();
++
++    public override string MakeParam(string name) => "@" + name;
++
++    public override bool SupportsRawSqlSource => true;
++
++    public override bool SupportsSubQueryHints => true;
++
++    public override bool SupportsInlineHints => true;
++
++    public override bool SupportsQueryHints => true;
++
++    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
++    {
++        var token = keywordCase == KeywordCase.Upper ? "SELECT " : "select ";
++        var index = sql.IndexOf(token, StringComparison.OrdinalIgnoreCase);
++        if (index < 0)
++            return sql;
++
++        var at = index + token.Length;
++        return sql[..at] + "/*+ " + string.Join(" ", hints) + " */ " + sql[at..];
++    }
++
++    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
++    {
++    }
++}
++
++internal sealed class HindAliasParameter(string name) : DbParameter
++{
++    public override DbType DbType { get; set; }
++
++    public override ParameterDirection Direction { get; set; }
++
++    public override bool IsNullable { get; set; }
++
++    [AllowNull]
++    public override string ParameterName { get; set; } = name;
++
++    public override int Size { get; set; }
++
++    [AllowNull]
++    public override string SourceColumn { get; set; } = string.Empty;
++
++    public override bool SourceColumnNullMapping { get; set; }
++
++    public override object? Value { get; set; }
++
++    public override void ResetDbType()
++    {
++    }
++}
++
++internal sealed class HintAliasConnection : DbConnection
++{
++    [AllowNull]
++    public override string ConnectionString { get; set; } = string.Empty;
++
++    public override string Database => string.Empty;
++
++    public override string DataSource => string.Empty;
++
++    public override string ServerVersion => string.Empty;
++
++    public override ConnectionState State => ConnectionState.Closed;
++
++    public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
++
++    public override void Close()
++    {
++    }
++
++    public override void Open()
++    {
++    }
++
++    protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
++
++    protected override DbCommand CreateDbCommand() => new HintAliasCommand();
++}
++
++internal sealed class HintAliasCommand : DbCommand
++{
++    private readonly HintAliasParameterCollection _parameters = new();
++
++    [AllowNull]
++    protected override DbConnection DbConnection { get; set; } = null!;
++
++    protected override DbParameterCollection DbParameterCollection => _parameters;
++
++    [AllowNull]
++    protected override DbTransaction DbTransaction { get; set; } = null!;
++
++    [AllowNull]
++    public override string CommandText { get; set; } = string.Empty;
++
++    public override int CommandTimeout { get; set; }
++
++    public override CommandType CommandType { get; set; }
++
++    public override bool DesignTimeVisible { get; set; }
++
++    public override UpdateRowSource UpdatedRowSource { get; set; }
++
++    protected override DbParameter CreateDbParameter() => new HindAliasParameter(string.Empty);
++
++    public override void Cancel()
++    {
++    }
++
++    public override int ExecuteNonQuery() => throw new NotSupportedException();
++
++    public override object ExecuteScalar() => throw new NotSupportedException();
++
++    public override void Prepare()
++    {
++    }
++
++    protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => throw new NotSupportedException();
++}
++
++internal sealed class HintAliasParameterCollection : DbParameterCollection
++{
++    private readonly List<DbParameter> _items = [];
++
++    public override int Count => _items.Count;
++
++    public override object SyncRoot => this;
++
++    public override int Add(object value)
++    {
++        _items.Add((DbParameter)value);
++        return _items.Count - 1;
++    }
++
++    public override void AddRange(Array values)
++    {
++        foreach (var value in values)
++            Add(value!);
++    }
++
++    public override void Clear() => _items.Clear();
++
++    public override bool Contains(object value) => _items.Contains((DbParameter)value);
++
++    public override bool Contains(string? value) => _items.Any(p => p.ParameterName == value);
++
++    public override void CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
++
++    public override IEnumerator GetEnumerator() => _items.GetEnumerator();
++
++    public override int IndexOf(object value) => _items.IndexOf((DbParameter)value);
++
++    public override int IndexOf(string? parameterName) => _items.FindIndex(p => p.ParameterName == parameterName);
++
++    public override void Insert(int index, object value) => _items.Insert(index, (DbParameter)value);
++
++    public override void Remove(object value) => _items.Remove((DbParameter)value);
++
++    public override void RemoveAt(int index) => _items.RemoveAt(index);
++
++    public override void RemoveAt(string? parameterName) => _items.RemoveAll(p => p.ParameterName == parameterName);
++
++    protected override DbParameter GetParameter(int index) => _items[index];
++
++    protected override DbParameter GetParameter(string? parameterName) => _items[IndexOf(parameterName)];
++
++    protected override void SetParameter(int index, DbParameter value) => _items[index] = value;
++
++    protected override void SetParameter(string? parameterName, DbParameter value)
++    {
++        var index = IndexOf(parameterName);
++        if (index < 0)
++            Add(value);
++        else
++            _items[index] = value;
++    }
++}
+diff --git a/tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs b/tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs
+index c3c91bcd..ba96de48 100644
+--- a/tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs
++++ b/tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs
+@@ -303,6 +303,84 @@ public class JoinAliasGeneratorDiagnosticTests
+         generated.Should().NotMatchRegex(@"\[global::NextORM\.Core\.JoinSlot\(2\)\]\s+public T2 Buyer2 =>");
+     }
+ 
++    [Theory]
++    [InlineData("Item0")] // zero: the runtime parser claims it and maps to a negative slot
++    [InlineData("Item9")] // out of range for a single join (arity 2)
++    public void Out_of_range_item_join_alias_reports_NORMGEN002(string itemName)
++    {
++        // R160-04 / R160-11 (D160.3-3, F3): ProjectionAliasCache.TryParseItemPosition claims ANY 'ItemN'
++        // name (Item0 and an out-of-range N included), so a generated alias member of that shape would be
++        // read back positionally and silently address the wrong slot. The generator must reject the whole
++        // shape with the registered NORMGEN002, exactly like the in-range Item1..Item{arity} case.
++        var harness = RunDiagnosticCase(
++            $"var q = orders.Join<Person>(people, (a, b) => true, Alias.{itemName});");
++
++        AssertSingleDiagnostic(harness, "NORMGEN002", $"Alias.{itemName}");
++        AssertGeneratedSourceIsWellFormed(harness);
++
++        // The rejected chain emits no projection type, so no positional member can mis-resolve.
++        harness.Run.GeneratedTrees.Single().ToString().Should().NotContain("AliasProjection_");
++    }
++
++    [Fact]
++    public void Item_alias_at_arity_plus_one_reports_NORMGEN002()
++    {
++        // Item3 is the first out-of-range position for a single alias join (arity 2): the runtime parser
++        // would claim slot 3 on a two-slot projection.
++        var harness = RunDiagnosticCase(
++            "var q = orders.Join<Person>(people, (a, b) => true, Alias.Item3);");
++
++        AssertSingleDiagnostic(harness, "NORMGEN002", "Alias.Item3");
++        AssertGeneratedSourceIsWellFormed(harness);
++    }
++
++    [Theory]
++    [InlineData("Item0")] // out of range for a root-only projection (arity 1): parser maps to -1
++    [InlineData("Item2")] // out of range for a root-only projection (arity 1)
++    public void Out_of_range_item_root_alias_reports_NORMGEN002(string itemName)
++    {
++        // The root alias path shares the same predicate; an out-of-range ItemN root name must fail as well.
++        var harness = RunDiagnosticCase($"var q = orders.WithAlias(Alias.{itemName});");
++
++        AssertSingleDiagnostic(harness, "NORMGEN002", $"Alias.{itemName}");
++        AssertGeneratedSourceIsWellFormed(harness);
++    }
++
++    [Theory]
++    [InlineData("Item")]   // no digits: not an ItemN name
++    [InlineData("Items")]  // trailing non-digits
++    [InlineData("ItemX")]  // trailing non-digits
++    [InlineData("Buyer2")] // digit-ending but not 'Item'-prefixed
++    public void Non_numeric_item_names_stay_valid_join_aliases(string alias)
++    {
++        // Boundary of the structural check: only 'Item' + one-or-more-digits is claimed by the runtime
++        // positional parser, so every other digit-bearing name stays a legal lexical alias.
++        var harness = RunDiagnosticCase(
++            $"var q = orders.Join<Person>(people, (a, b) => true, Alias.{alias});");
++
++        harness.Run.Diagnostics.Should().BeEmpty();
++        harness.Run.GeneratedTrees.Should().HaveCount(1);
++        AssertGeneratedSourceIsWellFormed(harness);
++    }
++
++    [Fact]
++    public void Valid_in_range_positions_still_compile_without_diagnostics()
++    {
++        // The reconciliation must not disturb the retained Item1..ItemK positional members: a valid mixed
++        // chain (positional prefix + alias slot) stays diagnostic-free, exposes its in-range Item members
++        // and the lexical alias, and emits well-formed C#.
++        var harness = RunDiagnosticCase(
++            "var q = orders" +
++            ".Join<Person>(people, (a, b) => a.BuyerId == b.Id)" +
++            ".Join<Person>(people, (a, b) => a.Item1.ApproverId == b.Id, Alias.Buyer2);");
++
++        harness.Run.Diagnostics.Should().BeEmpty();
++        harness.Run.GeneratedTrees.Should().HaveCount(1);
++        var generated = harness.Run.GeneratedTrees.Single().ToString();
++        generated.Should().Contain("class AliasProjection_P1_P2_A3_Buyer2");
++        AssertGeneratedSourceIsWellFormed(harness);
++    }
++
+     [Fact]
+     public void Distinct_root_aliases_emit_one_WithAlias_each_and_duplicates_are_deduped()
+     {
+@@ -334,6 +412,108 @@ public class JoinAliasGeneratorDiagnosticTests
+         generatedDuplicate.Should().Contain("AliasJoin_A1_Root<T>");
+     }
+ 
++    [Fact]
++    public void Correlated_apply_alias_emits_builder_and_query_source_seam_overloads()
++    {
++        // F4 (D160.3-4): a correlated APPLY alias step must emit one extension per source shape
++        // (Expression<Func<TEntity, EntityBuilder<TJoin>>> and ...QueryCommand<TJoin>>), each routing to
++        // the existing EntityBuilder.JoinAlias correlated seam. The joined type stays the method type
++        // parameter TJoin, so the applied slot is slot 2 and outer slot 1 is unchanged.
++        var harness = RunDiagnosticCase(
++            "var q = orders.CrossApply(o => people.Where(p => p.Id == o.Id), Alias.Applied);");
++
++        harness.Run.Diagnostics.Should().BeEmpty();
++        harness.Run.GeneratedTrees.Should().ContainSingle();
++        var generated = harness.Run.GeneratedTrees.Single().ToString();
++
++        generated.Should().Contain("class AliasJoin_P1_A2_Applied<T1, T2>");
++        generated.Should().Contain("[global::NextORM.Core.JoinSlot(2)]");
++        generated.Should().Contain("public T2 Applied =>");
++
++        // Both correlated source shapes are emitted, each forwarding to the existing JoinAlias seam.
++        generated.Should().Contain("global::NextORM.Core.EntityBuilder<TJoin>>> source");
++        generated.Should().Contain("global::NextORM.Core.QueryCommand<TJoin>>> source");
++        generated.Should().Contain("self.JoinAlias<NextORM.Generated.AliasHarness.AliasJoin_P1_A2_Applied<global::Harness.Order, TJoin>");
++
++        AssertGeneratedSourceIsWellFormed(harness);
++    }
++
++    [Fact]
++    public void Alias_step_after_a_correlated_apply_has_no_generated_extension()
++    {
++        // F4 boundary, pinned: a correlated APPLY prefix has no bindable concrete joined type (it is only
++        // known once the generated overload exists), so the generator does not emit an alias extension for
++        // a step that follows it. This is a bounded limitation for CHECK, not a silent wrong binding: the
++        // generated correlated step itself is present and the follower fails to compile.
++        const string source =
++            "using NextORM.Core;\n" +
++            "using NextORM.Generated.AliasHarness;\n" +
++            "namespace Harness;\n" +
++            "public sealed class Order { public int Id { get; set; } }\n" +
++            "public sealed class Person { public int Id { get; set; } }\n" +
++            "public static class Cases\n" +
++            "{\n" +
++            "    public static void Run(EntityBuilder<Order> orders, EntityBuilder<Person> people)\n" +
++            "    {\n" +
++            "        _ = orders" +
++            "            .CrossApply(o => people.Where(p => p.Id == o.Id), Alias.Applied)" +
++            "            .Join<Person>(people, (a, b) => true, Alias.Next);\n" +
++            "    }\n" +
++            "}\n";
++
++        var compilation = CSharpCompilation.Create(
++            "AliasHarness",
++            [CSharpSyntaxTree.ParseText(source, path: "Harness.cs", cancellationToken: TestContext.Current.CancellationToken)],
++            References,
++            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
++
++        GeneratorDriver driver = CSharpGeneratorDriver.Create([CreateGenerator()]);
++        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var diagnostics, TestContext.Current.CancellationToken);
++
++        diagnostics.Should().BeEmpty();
++        var generated = driver.GetRunResult().GeneratedTrees.Single().ToString();
++
++        // The correlated APPLY step itself is emitted...
++        generated.Should().Contain("AppliedMarker marker)");
++        generated.Should().Contain("global::NextORM.Core.EntityBuilder<TJoin>>> source");
++
++        // ...but the alias step that follows it has no generated extension.
++        generated.Should().NotContain("NextMarker marker)");
++        output.GetDiagnostics(TestContext.Current.CancellationToken)
++            .Should().Contain(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
++    }
++
++    [Fact]
++    public void Editing_an_alias_slot_and_order_regenerates_the_output()
++    {
++        // Incremental edit (R160-11): an edited alias name and slot order must regenerate the emitted
++        // slot-encoded output instead of reusing the previous output. The generator keys its pipeline on
++        // the call-site schema, so the changed chain yields a different projection and drops the old one.
++        var generator = CreateGenerator();
++        GeneratorDriver driver = CSharpGeneratorDriver.Create(
++            [generator],
++            driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
++
++        var original = CreateCompilation(Source(
++            "var q = orders.Join<Person>(people, (a, b) => true, Alias.Buyer);"));
++        driver = driver.RunGenerators(original, TestContext.Current.CancellationToken);
++        var first = driver.GetRunResult().GeneratedTrees.Single().ToString();
++        first.Should().Contain("class AliasProjection_P1_A2_Buyer");
++
++        // Same alias name, different slot: a positional prefix pushes Buyer from slot 2 to slot 3.
++        var edited = CreateCompilation(Source(
++            "var q = orders" +
++            ".Join<Person>(people, (a, b) => true)" +
++            ".Join<Person>(people, (a, b) => true, Alias.Buyer);"));
++        driver = driver.RunGenerators(edited, TestContext.Current.CancellationToken);
++        var second = driver.GetRunResult().GeneratedTrees.Single().ToString();
++
++        second.Should().Contain("class AliasProjection_P1_P2_A3_Buyer");
++        second.Should().NotContain("AliasProjection_P1_A2_Buyer");
++        second.Should().NotBe(first);
++        AssertGeneratedSourceIsWellFormed(new Harness(Source(string.Empty), driver.GetRunResult(), edited));
++    }
++
+     // ---------------------------------------------------------------------------------------------
+     // Harness plumbing.
+     // ---------------------------------------------------------------------------------------------
+@@ -396,6 +576,18 @@ public class JoinAliasGeneratorDiagnosticTests
+         return diagnostic;
+     }
+ 
++    /// <summary>
++    /// A diagnostic must not leave syntactically malformed generated C#. The harness compilation as a
++    /// whole legitimately fails at the rejected call site (the extension signature is not emitted), so
++    /// only the generated tree's parse diagnostics are asserted here.
++    /// </summary>
++    private static void AssertGeneratedSourceIsWellFormed(Harness harness)
++    {
++        harness.Run.GeneratedTrees.Should().ContainSingle();
++        harness.Run.GeneratedTrees.Single().GetDiagnostics()
++            .Should().NotContain(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
++    }
++
+     private static ImmutableArray<MetadataReference> CreateReferences()
+     {
+         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+diff --git a/tests/nextorm.alias.tests/MixedJoinChainTests.cs b/tests/nextorm.alias.tests/MixedJoinChainTests.cs
+index 20262efa..b2a9b449 100644
+--- a/tests/nextorm.alias.tests/MixedJoinChainTests.cs
++++ b/tests/nextorm.alias.tests/MixedJoinChainTests.cs
+@@ -1,3 +1,4 @@
++using System.Reflection;
+ using FluentAssertions;
+ using NextORM.Core;
+ using NextORM.Generated.nextorm_alias_tests;
+@@ -12,6 +13,9 @@ namespace NextORM.AliasTests;
+ /// </summary>
+ public class MixedJoinChainTests
+ {
++    private static readonly string[] JoinOperators =
++        ["Join", "LeftJoin", "RightJoin", "FullJoin", "CrossJoin", "CrossApply", "OuterApply"];
++
+     [Fact]
+     public void Alias_then_positional_join_keeps_slot_identity_and_distinct_sql_aliases()
+     {
+@@ -226,4 +230,408 @@ public class MixedJoinChainTests
+             File.Delete(path);
+         }
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // F2 (D160.3-2): stored non-root alias receivers must carry the generated positional-after-alias
++    // transitions. A stored receiver ('var q = b.Join(x, Alias.Buyer); q.Join(...)') produces no
++    // observable positional-after-alias call site, so the transitions must be seeded on the alias
++    // builder type for the full operator set, exactly like the stored root '.WithAlias' receiver.
++    // ---------------------------------------------------------------------------------------------
++
++    [Theory]
++    [InlineData("Join")]
++    [InlineData("LeftJoin")]
++    [InlineData("RightJoin")]
++    [InlineData("FullJoin")]
++    [InlineData("CrossJoin")]
++    public void Stored_alias_receiver_binds_each_generated_positional_operator(string operation)
++    {
++        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            // Slot 2 alias; storing the receiver hides the call site from the generator predicate.
++            var aliasReceiver = orders.Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer);
++
++            var names = operation switch
++            {
++                "Join" => aliasReceiver.Join(people, (p, x) => p.Item2.Id == x.Id).Select(p => p.Item3.Name).ToList(),
++                "LeftJoin" => aliasReceiver.LeftJoin(people, (p, x) => p.Item2.Id == x.Id).Select(p => p.Item3.Name).ToList(),
++                "RightJoin" => aliasReceiver.RightJoin(people, (p, x) => p.Item2.Id == x.Id).Select(p => p.Item3.Name).ToList(),
++                "FullJoin" => aliasReceiver.FullJoin(people, (p, x) => p.Item2.Id == x.Id).Select(p => p.Item3.Name).ToList(),
++                _ => aliasReceiver.CrossJoin(people).Select(p => p.Item3.Name).ToList(),
++            };
++
++            // Outer/cross variants preserve the unmatched right-hand row, so the third slot is not always
++            // a single row; the mapped slot-3 value must still be the joined person (Buyer).
++            names.Should().Contain("Buyer");
++
++            var last = sql.Statements[^1];
++            last.Should().Contain("person as 't2'").And.Contain("person as 't3'");
++            last.Should().Contain(operation switch
++            {
++                "Join" => " join ",
++                "LeftJoin" => " left join ",
++                "RightJoin" => " right join ",
++                "FullJoin" => " full join ",
++                _ => " cross join ",
++            });
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Theory]
++    [InlineData("CrossApply")]
++    [InlineData("OuterApply")]
++    public void Stored_alias_receiver_apply_fails_closed_on_a_provider_without_lateral(string operation)
++    {
++        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            var aliasReceiver = orders.Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer);
++            var applied = operation == "CrossApply"
++                ? aliasReceiver.CrossApply(people)
++                : aliasReceiver.OuterApply(people);
++
++            Action act = () => applied.Select(p => p.Item3.Id).ToList();
++            act.Should().Throw<NotSupportedException>();
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Stored_alias_receiver_declares_the_full_generated_positional_operator_set()
++    {
++        // Negative (E160-20/E160-21): a stored receiver must expose every generated `new` transition,
++        // not only the operators whose inline call site happened to be observed. Without the full set a
++        // stored `.LeftJoin`/`.CrossJoin` (and the rest) would bind the inherited positional instance
++        // overload and route around the JoinAlias seam.
++        var declared = typeof(AliasJoin_P1_A2_Buyer<Order, Person>)
++            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
++            .Where(method => JoinOperators.Contains(method.Name))
++            .Select(method => method.Name)
++            .Distinct()
++            .ToArray();
++
++        declared.Should().BeEquivalentTo(JoinOperators);
++    }
++
++    [Fact]
++    public void Stored_alias_receiver_supports_alternating_alias_positional_alias_with_repeated_clr_types()
++    {
++        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            var slot2 = orders.Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer); // slot 2 alias -> Buyer (10)
++            var slot3 = slot2.Join(people, (p, x) => p.Item2.Id == x.Id);                        // slot 3 positional -> Buyer (10)
++            var slot4 = slot3.Join<Person>(people, (p, a) => p.Item1.ApproverId == a.Id, Alias.Approver); // slot 4 alias -> Approver (20)
++
++            slot4.Select(p => p.Buyer.Name).ToList().Should().Equal("Buyer");
++            slot4.Select(p => p.Item3.Name).ToList().Should().Equal("Buyer");
++            slot4.Select(p => p.Approver.Name).ToList().Should().Equal("Approver");
++            slot4.Select(p => p.Approver.Id).ToList().Should().Equal(AliasSqliteDatabase.ApproverId);
++
++            var last = sql.Statements[^1];
++            last.Should().Contain("person as 't2'").And.Contain("person as 't3'").And.Contain("person as 't4'");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Stored_alias_receiver_then_positional_keeps_slot_and_matches_the_inline_route()
++    {
++        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            var stored = orders
++                .Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer);    // slot 2 alias
++            var chained = stored.Join(people, (p, x) => p.Item2.Id == x.Id);         // slot 3 positional
++
++            var inline = orders
++                .Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
++                .Join(people, (p, x) => p.Item2.Id == x.Id);
++
++            chained.Select(p => p.Item3.Id).ToList()
++                .Should().Equal(inline.Select(p => p.Item3.Id).ToList());
++
++            // Both directions of the alias/slot identity hold on the stored receiver.
++            chained.Select(p => p.Buyer.Id).ToList()
++                .Should().Equal(chained.Select(p => p.Item2.Id).ToList());
++            sql.Statements[^1].Should().Contain("person as 't2'").And.Contain("person as 't3'");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Stored_positional_receiver_then_alias_binds_the_alias_to_the_next_slot()
++    {
++        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            // Positional -> alias stored: the core JoinedEntityBuilder receiver keeps the alias
++            // extension applicable (the other direction of E160-31).
++            var positionalReceiver = orders.Join(people, (o, p) => o.BuyerId == p.Id);
++            var chained = positionalReceiver.Join<Person>(people, (p, a) => p.Item2.Id == a.Id, Alias.Approver);
++
++            chained.Select(p => p.Approver.Name).ToList().Should().Equal("Buyer");
++            chained.Select(p => p.Approver.Id).ToList()
++                .Should().Equal(chained.Select(p => p.Item3.Id).ToList());
++            sql.Statements[^1].Should().Contain("person as 't2'").And.Contain("person as 't3'");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Inline_and_parenthesized_receivers_bind_positional_and_alias_transitions_in_both_directions()
++    {
++        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            var inlineAliasThenPositional = orders
++                .Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer)
++                .Join(people, (p, x) => p.Item2.Id == x.Id);
++            inlineAliasThenPositional.Select(p => p.Item3.Name).ToList().Should().Equal("Buyer");
++
++            var parenthesizedThenPositional = (orders
++                    .Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer))
++                .Join(people, (p, x) => p.Item2.Id == x.Id);
++            parenthesizedThenPositional.Select(p => p.Item3.Name).ToList().Should().Equal("Buyer");
++
++            var inlinePositionalThenAlias = orders
++                .Join(people, (o, p) => o.BuyerId == p.Id)
++                .Join<Person>(people, (p, a) => p.Item2.Id == a.Id, Alias.Approver);
++            inlinePositionalThenAlias.Select(p => p.Approver.Name).ToList().Should().Equal("Buyer");
++
++            var parenthesizedPositionalThenAlias = (orders
++                    .Join(people, (o, p) => o.BuyerId == p.Id))
++                .Join<Person>(people, (p, a) => p.Item2.Id == a.Id, Alias.Approver);
++            parenthesizedPositionalThenAlias.Select(p => p.Approver.Name).ToList().Should().Equal("Buyer");
++
++            sql.Statements[^1].Should().Contain("person as 't2'").And.Contain("person as 't3'");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // F4 (D160.3-4): correlated APPLY through the alias seam. The generated correlated extension
++    // routes the lambda source to the existing EntityBuilder.JoinAlias correlated overloads; the joined
++    // type stays the generated method type parameter TJoin, so slot 1 (outer) is never shifted.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_builder_apply_alias_routes_through_the_alias_seam()
++    {
++        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            // Compiles only when the correlated builder-source APPLY routes through the generated alias
++            // seam: the static return type is the slot-encoded generated receiver. The inherited positional
++            // CrossApply would return JoinedEntityBuilder<...> instead.
++            AliasJoin_P1_A2_Applied<Order, Person> chained =
++                orders.CrossApply(o => people.Where(p => p.Id == o.BuyerId), Alias.Applied);
++
++            // Outer slot 1 is the Order (unchanged); the applied source is slot 2 and the alias names it.
++            var projection = typeof(AliasProjection_P1_A2_Applied<Order, Person>);
++            projection.GetProperty("Item1")!.PropertyType.Should().Be(typeof(Order));
++            projection.GetProperty("Item2")!.PropertyType.Should().Be(typeof(Person));
++            var applied = projection.GetProperty("Applied")!;
++            applied.PropertyType.Should().Be(typeof(Person));
++            applied.GetCustomAttribute<JoinSlotAttribute>()!.Position.Should().Be(2);
++
++            typeof(AliasJoin_P1_A2_Applied<Order, Person>).BaseType!
++                .GenericTypeArguments[0].Should().Be(typeof(AliasProjection_P1_A2_Applied<Order, Person>));
++
++            // Reaching the renderer proves the correlated source built an APPLY seam; SQLite has no
++            // LATERAL, so it fails closed with the provider's CrossApply message (not a binding error).
++            Action act = () => chained.Select(p => p.Applied.Name).ToList();
++            act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Correlated_query_apply_alias_routes_through_the_alias_seam()
++    {
++        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            // QueryCommand source shape: the lambda returns QueryCommand<TJoin>; the generated correlated
++            // overload is generic over the anonymous TJoin (the joined type is not bound before emission).
++            var chained = orders.CrossApply(
++                o => people.Where(p => p.Id == o.BuyerId).Select(p => new { p.Id, p.Name }),
++                Alias.Applied);
++
++            chained.GetType().Name.Should().StartWith("AliasJoin_P1_A2_Applied");
++            var projection = chained.GetType().BaseType!.GenericTypeArguments[0];
++            projection.GetProperty("Item1")!.PropertyType.Should().Be(typeof(Order));
++            projection.GetProperty("Applied")!.GetCustomAttribute<JoinSlotAttribute>()!.Position.Should().Be(2);
++
++            Action act = () => chained.Select(p => p.Applied.Name).ToList();
++            act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Correlated_outer_apply_alias_routes_through_the_alias_seam()
++    {
++        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            AliasJoin_P1_A2_Applied<Order, Person> chained =
++                orders.OuterApply(o => people.Where(p => p.Id == o.BuyerId), Alias.Applied);
++
++            chained.GetType().Should().Be(typeof(AliasJoin_P1_A2_Applied<Order, Person>));
++
++            Action act = () => chained.Select(p => p.Applied.Name).ToList();
++            act.Should().Throw<NotSupportedException>().WithMessage("*OuterApply*");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Positional_step_after_a_correlated_apply_binds_the_generated_receiver()
++    {
++        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            // A positional step after the correlated APPLY is a generated `new` transition on the
++            // alias-bearing receiver: outer slots stay 1 (Order) and 2 (applied Person), the new slot is 3.
++            AliasJoin_P1_A2_Applied_P3<Order, Person, Person> chained = orders
++                .CrossApply(o => people.Where(p => p.Id == o.BuyerId), Alias.Applied)
++                .Join(people, (p, x) => p.Item2.Id == x.Id);
++
++            chained.GetType().Should().Be(typeof(AliasJoin_P1_A2_Applied_P3<Order, Person, Person>));
++
++            Action act = () => chained.Select(p => p.Item3.Id).ToList();
++            act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public void Correlated_apply_after_a_preceding_alias_is_refused_fail_closed()
++    {
++        var (path, ctx, _) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            var aliasReceiver = orders.Join<Person>(people, (o, p) => o.BuyerId == p.Id, Alias.Buyer);
++
++            // The generated correlated overload is emitted for an alias receiver (it compiles), but the
++            // runtime seam refuses a correlated APPLY over a join projection: a correlated source may only
++            // reference a single-entity source, so outer slots are never silently shifted.
++            Action act = () => aliasReceiver.CrossApply(b => people.Where(p => p.Id == b.Item2.Id), Alias.Applied);
++
++            act.Should().Throw<NotSupportedException>().WithMessage("*single-entity*");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // R160-01/R160-11: a reference entity slot in a mixed chain. A left join that never matches must
++    // expose a null reference entity and the value member's default (not throw, not a wrong slot).
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Left_join_unmatched_alias_slot_yields_a_null_reference_and_the_default_value()
++    {
++        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var orders = ctx.From<Order>(b => b.Table("orders"));
++            var people = ctx.From<Person>(b => b.Table("person"));
++
++            // The predicate can never match (buyer id 10 vs person id + 1000), so the joined slot is
++            // NULL for the single order row: both the reference member and the nullable value projection
++            // of the same slot read null (a NULL slot never fabricates a default value).
++            var chained = orders.LeftJoin<Person>(people, (o, p) => o.BuyerId == p.Id + 1000, Alias.Buyer);
++
++            chained.Select(p => p.Buyer.Name).ToList().Should().Equal((string?)null);
++            chained.Select(p => (int?)p.Buyer.Id).ToList().Should().Equal((int?)null);
++            chained.Select(p => p.Item2.Name).ToList().Should().Equal((string?)null);
++
++            sql.Statements[^1].Should().Contain("left join person as 't2'");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
+ }
+diff --git a/tests/nextorm.alias.tests/RootAliasTests.cs b/tests/nextorm.alias.tests/RootAliasTests.cs
+index 425b764a..d43d3841 100644
+--- a/tests/nextorm.alias.tests/RootAliasTests.cs
++++ b/tests/nextorm.alias.tests/RootAliasTests.cs
+@@ -693,4 +693,85 @@ public class RootAliasTests
+             File.Delete(path);
+         }
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // F1: the generated '.WithAlias' must carry a pre-alias SubQueryHint through the root transition
++    // and a following alias join into the rendered SQL (not merely avoid an exception). Uses a
++    // provider-free hint dialect because SQLite rejects sub-query hints at render time.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Generated_WithAlias_and_alias_join_preserve_a_subquery_hint_across_both_transitions()
++    {
++        using var ctx = new HintAliasDataContext();
++        var source = ctx.From<Order>(b => b.Table("orders")).Where(o => o.Id == 1);
++        var derived = ctx.From(source, o => o.WithSubQueryHint("ALIAS_HINT(a)"));
++        var rooted = derived.WithAlias(Alias.Root);
++        var people = ctx.From<Person>(b => b.Table("person"));
++
++        var joined = rooted.Join<Person>(people, (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer);
++
++        var sql = SqlOf(ctx, joined.Select(p => p.Buyer.Id));
++
++        // The hint survives the root '.WithAlias' (AliasRoot) and the joined transition
++        // (CreateAliasJoined) and is rendered by the dialect at the :3944/:3948 site.
++        sql.Should().StartWith("select /*+ ALIAS_HINT(a) */");
++        sql.Should().Contain(") as 't1'");
++        sql.Should().Contain("join person as 't2'");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // Direct read of the generated root alias member is expression-only (R160-05): reading it outside
++    // an expression tree throws instead of returning a default value.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Reading_the_root_alias_member_outside_an_expression_tree_throws()
++    {
++        var projection = new AliasProjection_A1_Root<Order>();
++
++        projection.Item1.Should().BeNull();
++        Action readRoot = () => _ = projection.Root;
++
++        readRoot.Should().Throw<NotSupportedException>(
++            "the root alias member is an expression-only slot name, not a materializable value");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // Root alias over From(CteReference<T>): the recursive self-reference source is a root source too
++    // and must accept '.WithAlias(Alias.Root)' inside the recursive step while keeping the recursive
++    // declaration read by name and the step's row shape.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Generated_root_alias_on_a_recursive_cte_reference_source_keeps_the_reference()
++    {
++        var (path, ctx, sql) = AliasSqliteDatabase.CreateContext();
++        try
++        {
++            var peopleCte = ctx.From<Person>(b => b.Table("person"))
++                .Where(p => p.Id == AliasSqliteDatabase.BuyerId)
++                .ToCommand()
++                .AsRecursiveCte("people_nums", self => ctx.From(self)
++                    .WithAlias(Alias.Root)
++                    .Where(p => p.Root.Id < AliasSqliteDatabase.ApproverId)
++                    .Select(p => new Person { Id = p.Root.Id + 10, Name = p.Root.Name }));
++
++            var rows = ctx.From(peopleCte).Limit(10).Select(p => new { p.Id, p.Name }).ToList();
++
++            rows.Select(r => r.Id).OrderBy(id => id)
++                .Should().Equal(AliasSqliteDatabase.BuyerId, AliasSqliteDatabase.ApproverId);
++
++            var last = sql.Statements[^1];
++            last.Should().Contain("with recursive people_nums as (");
++            last.Should().Contain("union all");
++            last.Should().Contain("from people_nums");
++            last.Should().NotContain("join (select");
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
+ }
+diff --git a/tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs b/tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs
+index 2872c1e0..f2816752 100644
+--- a/tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs
++++ b/tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs
+@@ -256,4 +256,126 @@ public class JoinAliasSqlGenerationTests
+ 
+         act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 F4 (D160.3-4): correlated APPLY through the generated alias seam on a single-entity
++    // receiver. ClickHouse supports no lateral source, so every correlated form must fail closed at
++    // rendering (never silently bind the inherited positional overload).
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_builder_cross_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
++    }
++
++    [Fact]
++    public void Correlated_query_cross_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
++    }
++
++    [Fact]
++    public void Correlated_builder_outer_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*OuterApply*");
++    }
++
++    [Fact]
++    public void Correlated_query_outer_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*OuterApply*");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 free mixing directions: alias->positional, positional->alias and alternation must render
++    // the same SQL as the equivalent fully positional chain, with slots assigned in chain order
++    // (t2, t3, t4). Provider SQL previously covered alias-only and root-alias joins only.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Mixed_alias_then_positional_join_matches_the_positional_chain()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.Buyer)
++            .Join(complex, (a, c) => a.Buyer.Id == c.Id)
++            .Select(p => p.Item3.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_matches_the_positional_chain()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item2.Id == c.Id, Alias.Approver)
++            .Select(p => p.Approver.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_assigns_slots_in_chain_order()
++    {
++        using var ctx = ClickHouseTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Join(complex, (a, c) => a.Item3.Id == c.Id)
++            .Select(p => p.Item4.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.First)
++            .Join(complex, (a, c) => a.First.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item3.Id == c.Id, Alias.Second)
++            .Select(p => p.Second.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.").And.Contain("t4.");
++    }
+ }
+diff --git a/tests/nextorm.core.tests/EntityBuilderStateCopyTests.cs b/tests/nextorm.core.tests/EntityBuilderStateCopyTests.cs
+new file mode 100644
+index 00000000..06c67c40
+--- /dev/null
++++ b/tests/nextorm.core.tests/EntityBuilderStateCopyTests.cs
+@@ -0,0 +1,416 @@
++using System.Collections;
++using System.ComponentModel.DataAnnotations;
++using System.ComponentModel.DataAnnotations.Schema;
++using System.Data;
++using System.Data.Common;
++using System.Diagnostics.CodeAnalysis;
++using System.Reflection;
++using System.Runtime.CompilerServices;
++using System.Text;
++using FluentAssertions;
++using FluentAssertions.Execution;
++using NextORM.Core;
++
++namespace NextORM.Core.Tests;
++
++/// <summary>
++/// F1 (D160.3-1): the <see cref="EntityBuilder{TEntity}"/> query state is transferred by one structural
++/// procedure shared by the root (<c>.WithAlias</c>/<c>AliasRoot</c>) and joined
++/// (<c>CreateAliasJoined</c>) transitions. These tests protect the generic-neutral state carrier
++/// (<see cref="EntityBuilderSharedState"/>) against the hand-maintained field-list omission that caused
++/// the D160-C1 recurrence, and prove a non-default state (a <c>SubQueryHint</c> and an entity type)
++/// survives both transitions into the rendered SQL.
++/// </summary>
++[Collection("Query cache controls")]
++public class EntityBuilderStateCopyTests
++{
++    [SqlTable("orders")]
++    private sealed class Order
++    {
++        [Key]
++        public int Id { get; set; }
++
++        [Column("buyer_id")]
++        public long BuyerId { get; set; }
++    }
++
++    [SqlTable("person")]
++    private sealed class Person
++    {
++        [Key]
++        public long Id { get; set; }
++    }
++
++    private sealed class RootProjection<T> : Projection<T>
++    {
++        [JoinSlot(1)]
++        public T Root => throw new NotSupportedException();
++    }
++
++    private sealed class RootJoinProjection<T1, T2> : Projection<T1, T2>
++    {
++        [JoinSlot(2)]
++        public T2 Buyer => throw new NotSupportedException();
++    }
++
++    // ------------------------------------------------------------------ structural completeness ----
++
++    [Fact]
++    public void Every_EntityBuilder_instance_field_is_copied_or_explicitly_excluded()
++    {
++        var fields = typeof(EntityBuilder<>).GetFields(
++            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
++
++        // Transferred by the single shared CopySharedStateTo procedure: the whole generic-neutral carrier
++        // (a MemberwiseClone) plus the one public mutable struct field kept outside it.
++        var copied = new HashSet<string>(StringComparer.Ordinal) { "_state", "Paging" };
++
++        // Projection-typed or transition-owned state that is deliberately handled outside the carrier.
++        var excluded = new Dictionary<string, string>(StringComparer.Ordinal)
++        {
++            ["_dataProvider"] = "the target's data context is supplied by its factory and never transferred",
++            ["_joins"] = "the join chain is assembled explicitly by each join transition after the copy",
++            ["_condition"] = "projection-typed predicate; rebased by ApplyWhereToAliasJoined/ApplyWhereToJoined",
++            ["_having"] = "projection-typed; rebased by ApplyPreAliasStateToAliasJoined / the AliasRoot rebind step",
++            ["_group"] = "projection-typed; rebased by ApplyPreAliasStateToAliasJoined / the AliasRoot rebind step",
++            ["_preWhere"] = "projection-typed; carried explicitly then rebased by the alias transitions",
++            ["_sorting"] = "projection-typed; rebased by ApplyPreAliasStateToAliasJoined / the AliasRoot rebind step",
++            ["_loadSpecs"] = "eager-load state; join transitions fail closed before any copy",
++            ["_joinIntos"] = "JoinInto state; join transitions fail closed before any copy",
++        };
++
++        var names = fields.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
++        copied.Concat(excluded.Keys).Should().BeSubsetOf(names,
++            "exclusion entries must stay real fields; a stale entry would hide a rename");
++
++        fields.Select(f => f.Name)
++            .Where(name => !copied.Contains(name) && !excluded.ContainsKey(name))
++            .Should().BeEmpty(
++                "every EntityBuilder<> field must be copied by the single shared CopySharedStateTo procedure " +
++                "(add generic-neutral state to EntityBuilderSharedState) or listed in the explicit exclusion set " +
++                "with a reason; an unlisted field means state can be silently dropped (D160-C1)");
++    }
++
++    [Fact]
++    public void Shared_state_carrier_clone_copies_every_field()
++    {
++        var fields = typeof(EntityBuilderSharedState).GetFields(
++            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
++        fields.Should().NotBeEmpty();
++
++        // The carrier is a value type: box it once so reflection writes reach the same instance.
++        object source = new EntityBuilderSharedState();
++        var seed = 0;
++        foreach (var field in fields)
++            field.SetValue(source, Probe(field.FieldType, ++seed));
++
++        ((EntityBuilderSharedState)source).FilterScope.Should().NotBeNull(
++            "the carrier must default its filter scope to None, not null");
++
++        var clone = ((EntityBuilderSharedState)source).Clone();
++
++        foreach (var field in fields)
++            field.GetValue(clone).Should().Be(field.GetValue(source),
++                $"carrier field '{field.Name}' must be copied by the structural clone");
++    }
++
++    // ------------------------------------------------------------------ state transfer ---------------
++
++    [Fact]
++    public void Root_alias_preserves_a_subquery_hint_and_the_source_entity_type()
++    {
++        using var ctx = new HintContext();
++        var inner = ctx.From<Order>().Select(o => new { o.Id, o.BuyerId });
++        var source = ctx.From(inner, o => o.WithSubQueryHint("MY_HINT(a)"));
++        source.SourceEntityType = typeof(Order);
++
++        var rooted = source.AliasRoot<EntityBuilder<RootProjection<Order>>, RootProjection<Order>>(
++            static dc => new EntityBuilder<RootProjection<Order>>(dc));
++
++        // Non-default state must survive the root transition, not merely fail to throw.
++        rooted.SubQueryHint.Should().Be("MY_HINT(a)");
++        rooted.SourceEntityType.Should().Be(typeof(Order));
++
++        var sql = SqlOf(ctx, rooted.Select(p => p.Root.Id));
++        sql.Should().StartWith("select /*+ MY_HINT(a) */");
++        sql.Should().Contain(") as 't1'");
++    }
++
++    [Fact]
++    public void Alias_join_transition_preserves_a_subquery_hint_and_the_source_entity_type()
++    {
++        using var ctx = new HintContext();
++        var inner = ctx.From<Order>().Select(o => new { o.Id, o.BuyerId });
++        var source = ctx.From(inner, o => o.WithSubQueryHint("MY_HINT(b)"));
++        source.SourceEntityType = typeof(Order);
++
++        var rooted = source.AliasRoot<EntityBuilder<RootProjection<Order>>, RootProjection<Order>>(
++            static dc => new EntityBuilder<RootProjection<Order>>(dc));
++        var people = ctx.From<Person>();
++
++        var joined = rooted.JoinAlias<EntityBuilder<RootJoinProjection<Order, Person>>, RootJoinProjection<Order, Person>, Person>(
++            static dc => new EntityBuilder<RootJoinProjection<Order, Person>>(dc),
++            people,
++            (a, b) => a.Root.BuyerId == b.Id);
++
++        joined.SubQueryHint.Should().Be("MY_HINT(b)");
++        joined.SourceEntityType.Should().Be(typeof(Order));
++
++        var sql = SqlOf(ctx, joined.Select(p => p.Buyer.Id));
++        sql.Should().StartWith("select /*+ MY_HINT(b) */");
++        sql.Should().Contain("join person as 't2'");
++    }
++
++    // ------------------------------------------------------------------ positional control -----------
++
++    /// <summary>
++    /// W1/W2 control: the r=3 shared <c>CopySharedStateTo</c> is also the positional (<c>CreateJoined</c>)
++    /// transfer. This test pins the baseline (40b1a159) positional behavior, where the hand-maintained
++    /// join transfer carried neither a sub-query hint, nor a tag, nor a command timeout.
++    /// </summary>
++    [Fact]
++    public void Positional_join_control_pins_the_baseline_modifier_behavior()
++    {
++        using var ctx = new HintContext();
++        var inner = ctx.From<Order>().Select(o => new { o.Id, o.BuyerId });
++        var source = ctx.From(inner, o => o.WithSubQueryHint("MY_HINT(positional)"));
++        source.SourceEntityType = typeof(Order);
++        source = source.WithTag("positional-tag").WithCommandTimeout(42);
++
++        var people = ctx.From<Person>();
++        var joined = source.Join(people, (a, b) => a.Id == b.Id);
++
++        var prepared = PreparedOf(ctx, joined.Select(p => new { OrderId = p.Item1.Id, PersonId = p.Item2.Id }));
++        var sql = prepared.DbCommand.CommandText.Replace("\r\n", "\n");
++
++        using (new AssertionScope())
++        {
++            sql.Should().NotStartWith("select /*+ MY_HINT(positional)", "baseline positional join dropped _subQueryHint\n" + sql);
++            sql.Should().NotContain("positional-tag", "baseline positional join dropped _tag\n" + sql);
++            prepared.DbCommand.CommandTimeout.Should().Be(0, "baseline positional join dropped _commandTimeout");
++        }
++    }
++
++    // ------------------------------------------------------------------ helpers ----------------------
++
++    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++    {
++        return PreparedOf(ctx, cmd).DbCommand.CommandText.Replace("\r\n", "\n");
++    }
++
++    private static DbPreparedQueryCommand<T> PreparedOf<T>(IDataContext ctx, QueryCommand<T> cmd)
++        => (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
++
++    /// <summary>Builds a distinct non-null probe for a carrier field type, so the clone round-trip is observable.</summary>
++    private static object? Probe(Type type, int seed)
++    {
++        if (type == typeof(string)) return "probe" + seed;
++        if (type == typeof(bool)) return true;
++        if (type == typeof(int)) return seed;
++        if (type == typeof(double)) return seed + 0.5;
++        if (type == typeof(double?)) return (double)seed + 0.5;
++        if (type == typeof(bool?)) return true;
++        if (type == typeof(int?)) return seed;
++        if (type == typeof(Type)) return typeof(Order);
++        if (type == typeof(QueryFilterScope)) return QueryFilterScope.None;
++        if (type.IsEnum) return Enum.ToObject(type, seed);
++        if (type.IsInterface || type.IsAbstract) return null;
++        if (!type.IsValueType) return RuntimeHelpers.GetUninitializedObject(type);
++        return Activator.CreateInstance(type);
++    }
++
++    /// <summary>Provider-free dialect that accepts sub-query hints as an inline comment, like PostgreSQL/MySQL.</summary>
++    private sealed class HintDialect : SqlDialectBase
++    {
++        internal static readonly HintDialect Instance = new();
++
++        public override string MakeParam(string name) => "@" + name;
++
++        public override bool SupportsRawSqlSource => true;
++
++        public override bool SupportsSubQueryHints => true;
++
++        public override bool SupportsInlineHints => true;
++
++        public override bool SupportsQueryHints => true;
++
++        public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
++        {
++            var token = keywordCase == KeywordCase.Upper ? "SELECT " : "select ";
++            var index = sql.IndexOf(token, StringComparison.OrdinalIgnoreCase);
++            if (index < 0)
++                return sql;
++
++            var at = index + token.Length;
++            return sql[..at] + "/*+ " + string.Join(" ", hints) + " */ " + sql[at..];
++        }
++
++        public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
++        {
++        }
++    }
++
++    private sealed class HintContext : DataContext
++    {
++        public HintContext() : base(new DataContextBuilder())
++        {
++        }
++
++        public override ISqlDialect Dialect => HintDialect.Instance;
++
++        public override DbParameter CreateParam(string name, object? value) => new FakeParameter(name) { Value = value };
++
++        protected override DbConnection CreateDbConnection(string? connectionString) => new FakeConnection();
++    }
++
++    private sealed class FakeParameter(string name) : DbParameter
++    {
++        public override DbType DbType { get; set; }
++
++        public override ParameterDirection Direction { get; set; }
++
++        public override bool IsNullable { get; set; }
++
++        [AllowNull]
++        public override string ParameterName { get; set; } = name;
++
++        public override int Size { get; set; }
++
++        [AllowNull]
++        public override string SourceColumn { get; set; } = string.Empty;
++
++        public override bool SourceColumnNullMapping { get; set; }
++
++        public override object? Value { get; set; }
++
++        public override void ResetDbType()
++        {
++        }
++    }
++
++    private sealed class FakeConnection : DbConnection
++    {
++        [AllowNull]
++        public override string ConnectionString { get; set; } = string.Empty;
++
++        public override string Database => string.Empty;
++
++        public override string DataSource => string.Empty;
++
++        public override string ServerVersion => string.Empty;
++
++        public override ConnectionState State => ConnectionState.Closed;
++
++        public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
++
++        public override void Close()
++        {
++        }
++
++        public override void Open()
++        {
++        }
++
++        protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
++
++        protected override DbCommand CreateDbCommand() => new FakeCommand();
++    }
++
++    private sealed class FakeCommand : DbCommand
++    {
++        private readonly FakeParameterCollection _parameters = new();
++
++        [AllowNull]
++        protected override DbConnection DbConnection { get; set; } = null!;
++
++        protected override DbParameterCollection DbParameterCollection => _parameters;
++
++        [AllowNull]
++        protected override DbTransaction DbTransaction { get; set; } = null!;
++
++        [AllowNull]
++        public override string CommandText { get; set; } = string.Empty;
++
++        public override int CommandTimeout { get; set; }
++
++        public override CommandType CommandType { get; set; }
++
++        public override bool DesignTimeVisible { get; set; }
++
++        public override UpdateRowSource UpdatedRowSource { get; set; }
++
++        protected override DbParameter CreateDbParameter() => new FakeParameter(string.Empty);
++
++        public override void Cancel()
++        {
++        }
++
++        public override int ExecuteNonQuery() => throw new NotSupportedException();
++
++        public override object ExecuteScalar() => throw new NotSupportedException();
++
++        public override void Prepare()
++        {
++        }
++
++        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => throw new NotSupportedException();
++    }
++
++    private sealed class FakeParameterCollection : DbParameterCollection
++    {
++        private readonly List<DbParameter> _items = [];
++
++        public override int Count => _items.Count;
++
++        public override object SyncRoot => this;
++
++        public override int Add(object value)
++        {
++            _items.Add((DbParameter)value);
++            return _items.Count - 1;
++        }
++
++        public override void AddRange(Array values)
++        {
++            foreach (var value in values)
++                Add(value!);
++        }
++
++        public override void Clear() => _items.Clear();
++
++        public override bool Contains(object value) => _items.Contains((DbParameter)value);
++
++        public override bool Contains(string? value) => _items.Any(p => p.ParameterName == value);
++
++        public override void CopyTo(Array array, int index) => ((ICollection)_items).CopyTo(array, index);
++
++        public override IEnumerator GetEnumerator() => _items.GetEnumerator();
++
++        public override int IndexOf(object value) => _items.IndexOf((DbParameter)value);
++
++        public override int IndexOf(string? parameterName) => _items.FindIndex(p => p.ParameterName == parameterName);
++
++        public override void Insert(int index, object value) => _items.Insert(index, (DbParameter)value);
++
++        public override void Remove(object value) => _items.Remove((DbParameter)value);
++
++        public override void RemoveAt(int index) => _items.RemoveAt(index);
++
++        public override void RemoveAt(string? parameterName) => _items.RemoveAll(p => p.ParameterName == parameterName);
++
++        protected override DbParameter GetParameter(int index) => _items[index];
++
++        protected override DbParameter GetParameter(string? parameterName) => _items[IndexOf(parameterName)];
++
++        protected override void SetParameter(int index, DbParameter value) => _items[index] = value;
++
++        protected override void SetParameter(string? parameterName, DbParameter value)
++        {
++            var index = IndexOf(parameterName);
++            if (index < 0)
++                Add(value);
++            else
++                _items[index] = value;
++        }
++    }
++}
+diff --git a/tests/nextorm.core.tests/RootProjectionTests.cs b/tests/nextorm.core.tests/RootProjectionTests.cs
+index 90d75685..a7959afb 100644
+--- a/tests/nextorm.core.tests/RootProjectionTests.cs
++++ b/tests/nextorm.core.tests/RootProjectionTests.cs
+@@ -145,6 +145,25 @@ public class RootProjectionTests
+             .Should().Be(typeof(System.Linq.Expressions.Expression<>));
+     }
+ 
++    [Fact]
++    public void As_overflow_escape_projects_the_chain_and_continues_from_the_derived_table()
++    {
++        using var ctx = new TestContext();
++        var people = ctx.From<Person>();
++
++        // The documented arity escape is usable, not merely reflected: a joined chain is projected into
++        // a named shape with As<TResult>, and composition continues from the derived table.
++        var derived = ctx.From<Order>()
++            .Join(people, (o, p) => o.BuyerId == p.Id)
++            .As(p => new { OrderId = p.Item1.Id, BuyerId = p.Item2.Id });
++
++        var sql = SqlOf(ctx, derived.Select(x => x.BuyerId));
++
++        sql.Should().Contain("(select");
++        sql.Should().Contain("from orders");
++        sql.Should().Contain("join person");
++    }
++
+     // ------------------------------------------------------------------ planning ------------------
+ 
+     [Fact]
+diff --git a/tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs b/tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs
+index 33cd4021..cf16b0c1 100644
+--- a/tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs
++++ b/tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs
+@@ -4,6 +4,7 @@ using System.Text.Json;
+ using System.Text.Json.Nodes;
+ using FluentAssertions;
+ using NextORM.Core;
++using NextORM.Generated.nextorm_integration_tests;
+ 
+ namespace NextORM.Integration.Tests;
+ 
+@@ -1740,6 +1741,73 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
+         rows.Should().OnlyContain(r => r.Score == 1);
+     }
+ 
++    // ------------------------------------------------------------------ #160 join alias (D160.3-5)
++    // ClickHouse does not derive CommonTestSuite and its container seeds simple_entity/complex_entity
++    // (not orders/person), so the shared root-alias/mixed cases cannot run here. These provider-only
++    // cases execute the same generated root-alias and mixing surface against simple_entity/complex_entity.
++
++    [Fact]
++    public void Root_alias_inner_join_returns_matched_rows()
++    {
++        var ids = _sut.SimpleEntity
++            .WithAlias(Alias.Root)
++            .Join<IComplexEntity>(_sut.ComplexEntity, (s, c) => s.Root.Id == c.Id, Alias.Buyer)
++            .Select(p => p.Buyer.Id)
++            .ToList()
++            .OrderBy(id => id)
++            .ToList();
++
++        ids.Should().Equal(1L, 2L, 3L);
++
++        var sql = SqlOf(_sut.DataProvider, _sut.SimpleEntity
++            .WithAlias(Alias.Root)
++            .Join<IComplexEntity>(_sut.ComplexEntity, (s, c) => s.Root.Id == c.Id, Alias.Buyer)
++            .Select(p => p.Buyer.Id));
++        sql.Should().Contain("simple_entity as `t1`").And.Contain("complex_entity as `t2`");
++    }
++
++    [Fact]
++    public void Root_alias_then_mixed_positional_join_executes_and_keeps_slots()
++    {
++        var rows = _sut.SimpleEntity
++            .WithAlias(Alias.Root)
++            .Join<IComplexEntity>(_sut.ComplexEntity, (s, c) => s.Root.Id == c.Id, Alias.Buyer)
++            .Join(_sut.ComplexEntity, (p, x) => p.Buyer.Id == x.Id)
++            .Select(p => new { Root = p.Root.Id, Buyer = p.Buyer.Id, Positional = p.Item3.Id })
++            .ToList();
++
++        rows.Should().HaveCount(3);
++        rows.Should().OnlyContain(r => r.Buyer == r.Positional);
++        rows.Select(r => r.Root).OrderBy(id => id).Should().Equal(1, 2, 3);
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_executes_and_keeps_slot_identity()
++    {
++        var rows = _sut.SimpleEntity
++            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
++            .Join<IComplexEntity>(_sut.ComplexEntity, (a, c) => a.Item2.Id == c.Id, Alias.Approver)
++            .Select(p => new { Positional = p.Item2.Id, Alias = p.Approver.Id })
++            .ToList();
++
++        rows.Should().HaveCount(3);
++        rows.Should().OnlyContain(r => r.Positional == r.Alias);
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_executes_and_keeps_slots()
++    {
++        var rows = _sut.SimpleEntity
++            .Join<IComplexEntity>(_sut.ComplexEntity, (s, c) => s.Id == c.Id, Alias.First)
++            .Join(_sut.ComplexEntity, (a, c) => a.First.Id == c.Id)
++            .Join<IComplexEntity>(_sut.ComplexEntity, (a, c) => a.Item3.Id == c.Id, Alias.Second)
++            .Select(p => new { First = p.First.Id, Item3 = p.Item3.Id, Second = p.Second.Id })
++            .ToList();
++
++        rows.Should().HaveCount(3);
++        rows.Should().OnlyContain(r => r.First == r.Item3 && r.Item3 == r.Second);
++    }
++
+     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+         => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(
+                 cmd, createEnumerator: false, storeInCache: false, TestContext.Current.CancellationToken))
+diff --git a/tests/nextorm.integration.tests/CommonTestSuite.JoinAlias.cs b/tests/nextorm.integration.tests/CommonTestSuite.JoinAlias.cs
+index df474d13..74d634f8 100644
+--- a/tests/nextorm.integration.tests/CommonTestSuite.JoinAlias.cs
++++ b/tests/nextorm.integration.tests/CommonTestSuite.JoinAlias.cs
+@@ -198,4 +198,66 @@ public abstract partial class CommonTestSuite
+         rows.Should().HaveCount(2);
+         rows.Should().OnlyContain(r => r.Positional == r.Alias);
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // F4 (D160.3-4): correlated APPLY through the generated alias seam on a single-entity receiver.
++    // The applied source occupies slot 2 under a lexical alias, while slot 1 keeps the outer row.
++    // Provider-agnostic: inherited by PostgreSQL/SQL Server/MySQL/SQLite (SQLite/ClickHouse skip on
++    // Provider.SupportsApply — a capability skip, not a provider-availability skip).
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_cross_apply_alias_builder_source_returns_matched_rows()
++    {
++        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
++
++        var rows = _sut.AliasOrder
++            .CrossApply(o => _sut.AliasPerson.Where(p => p.Id == o.BuyerId), Alias.Applied)
++            .Select(p => new { Outer = p.Item1.Id, Applied = p.Applied.Id, Name = p.Applied.Name })
++            .ToList()
++            .OrderBy(r => r.Outer)
++            .ToList();
++
++        rows.Should().HaveCount(2);
++        rows.Select(r => r.Outer).Should().Equal(1, 2);
++        rows.Select(r => r.Applied).Should().Equal(10, 20);
++        rows.Select(r => r.Name).Should().Equal("Buyer", "Approver");
++    }
++
++    [Fact]
++    public void Correlated_cross_apply_alias_query_source_returns_matched_rows()
++    {
++        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
++
++        var rows = _sut.AliasOrder
++            .CrossApply(o => _sut.AliasPerson.Where(p => p.Id == o.BuyerId).Select(p => new { p.Id, p.Name }), Alias.Applied)
++            .Select(p => new { Outer = p.Item1.Id, Applied = p.Applied.Id, Name = p.Applied.Name })
++            .ToList()
++            .OrderBy(r => r.Outer)
++            .ToList();
++
++        rows.Should().HaveCount(2);
++        rows.Select(r => r.Outer).Should().Equal(1, 2);
++        rows.Select(r => r.Applied).Should().Equal(10, 20);
++        rows.Select(r => r.Name).Should().Equal("Buyer", "Approver");
++    }
++
++    [Fact]
++    public void Correlated_outer_apply_alias_preserves_unmatched_outer_rows()
++    {
++        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
++
++        // Order ids {1, 2} never match person ids {10, 20, 30}, so OUTER APPLY keeps every outer row
++        // with a NULL applied slot; the outer (slot 1) value must be preserved unchanged.
++        var rows = _sut.AliasOrder
++            .OuterApply(o => _sut.AliasPerson.Where(p => p.Id == o.Id), Alias.Applied)
++            .Select(p => new { Outer = p.Item1.Id, Applied = (long?)p.Applied.Id })
++            .ToList()
++            .OrderBy(r => r.Outer)
++            .ToList();
++
++        rows.Should().HaveCount(2);
++        rows.Select(r => r.Outer).Should().Equal(1, 2);
++        rows.Should().OnlyContain(r => r.Applied == null);
++    }
+ }
+diff --git a/tests/nextorm.integration.tests/MariaDbJoinAliasIntegrationTests.cs b/tests/nextorm.integration.tests/MariaDbJoinAliasIntegrationTests.cs
+new file mode 100644
+index 00000000..ff19f5ef
+--- /dev/null
++++ b/tests/nextorm.integration.tests/MariaDbJoinAliasIntegrationTests.cs
+@@ -0,0 +1,132 @@
++using System.ComponentModel.DataAnnotations;
++using System.ComponentModel.DataAnnotations.Schema;
++using FluentAssertions;
++using NextORM.Core;
++using NextORM.Generated.nextorm_integration_tests;
++using NextORM.MariaDb;
++
++namespace NextORM.Integration.Tests;
++
++/// <summary>
++/// MariaDB-only real-execution coverage for the #160 root alias (<c>.WithAlias</c>) and free
++/// positional/alias mixing. MariaDB has no <see cref="CommonTestSuite"/>-based integration class (it
++/// uses its own <see cref="MariaDbContainer"/> harness), so the shared root-alias/mixed facts are
++/// re-pinned here against a real MariaDB server instead of being left at SQL generation. MySQL is not
++/// substituted for MariaDB.
++/// </summary>
++public sealed class MariaDbJoinAliasIntegrationTests : IDisposable
++{
++    private readonly IDataContext _ctx;
++
++    public MariaDbJoinAliasIntegrationTests()
++    {
++        Assert.SkipUnless(MariaDbContainer.IsAvailable, MariaDbContainer.Failure ?? "MariaDB is not available.");
++
++        _ctx = new MariaDbDataContext(MariaDbContainer.ConnectionString, new DataContextBuilder());
++        Seed();
++    }
++
++    public void Dispose() => _ctx.Dispose();
++
++    [Fact]
++    public void Root_alias_inner_join_returns_matched_rows()
++    {
++        var ids = _ctx.From<IMariaDbAliasOrder>()
++            .WithAlias(Alias.Root)
++            .Join<IMariaDbAliasPerson>(_ctx.From<IMariaDbAliasPerson>(), (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer)
++            .Select(p => p.Buyer.Id)
++            .ToList()
++            .OrderBy(id => id)
++            .ToList();
++
++        ids.Should().Equal(10);
++    }
++
++    [Fact]
++    public void Root_alias_then_mixed_positional_join_executes_and_keeps_slots()
++    {
++        var rows = _ctx.From<IMariaDbAliasOrder>()
++            .WithAlias(Alias.Root)
++            .Join<IMariaDbAliasPerson>(_ctx.From<IMariaDbAliasPerson>(), (o, p) => o.Root.BuyerId == p.Id, Alias.Buyer)
++            .Join(_ctx.From<IMariaDbAliasPerson>(), (p, x) => p.Buyer.Id == x.Id)
++            .Select(p => new { Root = p.Root.Id, Buyer = p.Buyer.Id, Positional = p.Item3.Id })
++            .ToList();
++
++        rows.Should().ContainSingle();
++        rows[0].Root.Should().Be(1);
++        rows[0].Buyer.Should().Be(10);
++        rows[0].Positional.Should().Be(10);
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_executes_and_keeps_slot_identity()
++    {
++        var rows = _ctx.From<IMariaDbAliasOrder>()
++            .Join(_ctx.From<IMariaDbAliasPerson>(), (o, p) => o.BuyerId == p.Id)
++            .Join<IMariaDbAliasPerson>(_ctx.From<IMariaDbAliasPerson>(), (p, a) => p.Item2.Id == a.Id, Alias.Approver)
++            .Select(p => new { Positional = p.Item2.Id, Alias = p.Approver.Id })
++            .ToList();
++
++        rows.Should().ContainSingle();
++        rows[0].Positional.Should().Be(10);
++        rows[0].Alias.Should().Be(10);
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_executes_and_keeps_slots()
++    {
++        var rows = _ctx.From<IMariaDbAliasOrder>()
++            .Join<IMariaDbAliasPerson>(_ctx.From<IMariaDbAliasPerson>(), (o, p) => o.BuyerId == p.Id, Alias.First)
++            .Join(_ctx.From<IMariaDbAliasPerson>(), (p, x) => p.First.Id == x.Id)
++            .Join<IMariaDbAliasPerson>(_ctx.From<IMariaDbAliasPerson>(), (p, a) => p.Item3.Id == a.Id, Alias.Second)
++            .Select(p => new { First = p.First.Id, Item3 = p.Item3.Id, Second = p.Second.Id })
++            .ToList();
++
++        rows.Should().ContainSingle();
++        rows[0].First.Should().Be(10);
++        rows[0].Item3.Should().Be(10);
++        rows[0].Second.Should().Be(10);
++    }
++
++    private void Seed()
++    {
++        Execute("drop table if exists alias_person");
++        Execute("drop table if exists alias_orders");
++        Execute("create table alias_person (id int not null primary key, name varchar(50))");
++        Execute("create table alias_orders (id int not null primary key, buyer_id int not null, approver_id int not null)");
++        Execute("insert into alias_person (id, name) values (10, 'Buyer'), (20, 'Approver')");
++        Execute("insert into alias_orders (id, buyer_id, approver_id) values (1, 10, 20)");
++    }
++
++    private void Execute(string sql)
++    {
++        ((DataContext)_ctx).EnsureConnectionOpen();
++        using var cmd = ((DataContext)_ctx).CreateCommand(sql);
++        cmd.ExecuteNonQuery();
++    }
++}
++
++[SqlTable("alias_orders")]
++public interface IMariaDbAliasOrder
++{
++    [Key]
++    [Column("id")]
++    int Id { get; set; }
++
++    [Column("buyer_id")]
++    int BuyerId { get; set; }
++
++    [Column("approver_id")]
++    int ApproverId { get; set; }
++}
++
++[SqlTable("alias_person")]
++public interface IMariaDbAliasPerson
++{
++    [Key]
++    [Column("id")]
++    int Id { get; set; }
++
++    [Column("name")]
++    string? Name { get; set; }
++}
+diff --git a/tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs b/tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs
+index 941aaa15..b667b3ef 100644
+--- a/tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs
++++ b/tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs
+@@ -256,4 +256,129 @@ public class JoinAliasSqlGenerationTests
+ 
+         act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 F4 (D160.3-4): correlated APPLY through the generated alias seam on a single-entity
++    // receiver (MariaDB inherits the MySQL lateral spelling). The alias form renders exactly the
++    // positional correlated form; the applied source occupies slot 2 (t3).
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_builder_cross_apply_alias_matches_positional()
++    {
++        using var ctx = MariaDbTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross join lateral");
++        alias.Should().Contain("t2.id = cast(t1.id as signed)");
++    }
++
++    [Fact]
++    public void Correlated_query_cross_apply_alias_matches_positional()
++    {
++        using var ctx = MariaDbTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross join lateral");
++        alias.Should().Contain("t2.id = cast(t1.id as signed)");
++    }
++
++    [Fact]
++    public void Correlated_builder_outer_apply_alias_matches_positional()
++    {
++        using var ctx = MariaDbTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("left join lateral").And.Contain(" on true");
++        alias.Should().Contain("t2.id = cast(t1.id as signed)");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 free mixing directions: alias->positional, positional->alias and alternation must render
++    // the same SQL as the equivalent fully positional chain, with slots assigned in chain order
++    // (t2, t3, t4). Provider SQL previously covered alias-only and root-alias joins only.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Mixed_alias_then_positional_join_matches_the_positional_chain()
++    {
++        using var ctx = MariaDbTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.Buyer)
++            .Join(complex, (a, c) => a.Buyer.Id == c.Id)
++            .Select(p => p.Item3.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_matches_the_positional_chain()
++    {
++        using var ctx = MariaDbTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item2.Id == c.Id, Alias.Approver)
++            .Select(p => p.Approver.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_assigns_slots_in_chain_order()
++    {
++        using var ctx = MariaDbTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Join(complex, (a, c) => a.Item3.Id == c.Id)
++            .Select(p => p.Item4.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.First)
++            .Join(complex, (a, c) => a.First.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item3.Id == c.Id, Alias.Second)
++            .Select(p => p.Second.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.").And.Contain("t4.");
++    }
+ }
+diff --git a/tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs b/tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs
+index 002af1e3..9e0b0464 100644
+--- a/tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs
++++ b/tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs
+@@ -256,4 +256,129 @@ public class JoinAliasSqlGenerationTests
+ 
+         act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 F4 (D160.3-4): correlated APPLY through the generated alias seam on a single-entity
++    // receiver. The alias form renders exactly the positional correlated form; the applied source
++    // occupies slot 2 (t3) and the outer slot 1 (t1) is unchanged.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_builder_cross_apply_alias_matches_positional()
++    {
++        using var ctx = MySqlTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross join lateral");
++        alias.Should().Contain("t2.id = cast(t1.id as signed)");
++    }
++
++    [Fact]
++    public void Correlated_query_cross_apply_alias_matches_positional()
++    {
++        using var ctx = MySqlTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross join lateral");
++        alias.Should().Contain("t2.id = cast(t1.id as signed)");
++    }
++
++    [Fact]
++    public void Correlated_builder_outer_apply_alias_matches_positional()
++    {
++        using var ctx = MySqlTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("left join lateral").And.Contain(" on true");
++        alias.Should().Contain("t2.id = cast(t1.id as signed)");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 free mixing directions: alias->positional, positional->alias and alternation must render
++    // the same SQL as the equivalent fully positional chain, with slots assigned in chain order
++    // (t2, t3, t4). Provider SQL previously covered alias-only and root-alias joins only.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Mixed_alias_then_positional_join_matches_the_positional_chain()
++    {
++        using var ctx = MySqlTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.Buyer)
++            .Join(complex, (a, c) => a.Buyer.Id == c.Id)
++            .Select(p => p.Item3.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_matches_the_positional_chain()
++    {
++        using var ctx = MySqlTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item2.Id == c.Id, Alias.Approver)
++            .Select(p => p.Approver.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_assigns_slots_in_chain_order()
++    {
++        using var ctx = MySqlTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Join(complex, (a, c) => a.Item3.Id == c.Id)
++            .Select(p => p.Item4.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.First)
++            .Join(complex, (a, c) => a.First.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item3.Id == c.Id, Alias.Second)
++            .Select(p => p.Second.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.").And.Contain("t4.");
++    }
+ }
+diff --git a/tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs b/tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs
+index bd2f2f8a..a86e4a88 100644
+--- a/tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs
++++ b/tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs
+@@ -258,4 +258,131 @@ public class JoinAliasSqlGenerationTests
+ 
+         act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 F4 (D160.3-4): correlated APPLY through the generated alias seam on a single-entity
++    // receiver. The alias form renders exactly the positional correlated form; the applied source
++    // occupies slot 2 (t3) and the outer slot 1 (t1) is unchanged.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_builder_cross_apply_alias_matches_positional()
++    {
++        using var ctx = PostgresTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        // Provider-agnostic: the alias correlated source renders byte-identically to the positional one.
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross join lateral");
++        alias.Should().Contain("t2.id = cast(t1.id as bigint)");
++        alias.Should().Contain("select t1.id, t3.\"String\" from");
++    }
++
++    [Fact]
++    public void Correlated_query_cross_apply_alias_matches_positional()
++    {
++        using var ctx = PostgresTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross join lateral");
++        alias.Should().Contain("t2.id = cast(t1.id as bigint)");
++    }
++
++    [Fact]
++    public void Correlated_builder_outer_apply_alias_matches_positional()
++    {
++        using var ctx = PostgresTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("left join lateral").And.Contain(" on true");
++        alias.Should().Contain("t2.id = cast(t1.id as bigint)");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 free mixing directions: alias->positional, positional->alias and alternation must render
++    // the same SQL as the equivalent fully positional chain, with slots assigned in chain order
++    // (t2, t3, t4). Provider SQL previously covered alias-only and root-alias joins only.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Mixed_alias_then_positional_join_matches_the_positional_chain()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.Buyer)
++            .Join(complex, (a, c) => a.Buyer.Id == c.Id)
++            .Select(p => p.Item3.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_matches_the_positional_chain()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item2.Id == c.Id, Alias.Approver)
++            .Select(p => p.Approver.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_assigns_slots_in_chain_order()
++    {
++        using var ctx = PostgresTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Join(complex, (a, c) => a.Item3.Id == c.Id)
++            .Select(p => p.Item4.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.First)
++            .Join(complex, (a, c) => a.First.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item3.Id == c.Id, Alias.Second)
++            .Select(p => p.Second.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.").And.Contain("t4.");
++    }
+ }
+diff --git a/tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs b/tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs
+index 68807762..39d034dc 100644
+--- a/tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs
++++ b/tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs
+@@ -204,4 +204,126 @@ public class JoinAliasSqlGenerationTests
+ 
+         act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 F4 (D160.3-4): correlated APPLY through the generated alias seam on a single-entity
++    // receiver. SQLite supports no lateral source, so every correlated form must fail closed at
++    // rendering (never silently bind the inherited positional overload).
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_builder_cross_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = SqliteTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
++    }
++
++    [Fact]
++    public void Correlated_query_cross_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = SqliteTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
++    }
++
++    [Fact]
++    public void Correlated_builder_outer_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = SqliteTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*OuterApply*");
++    }
++
++    [Fact]
++    public void Correlated_query_outer_apply_alias_fails_closed_without_lateral()
++    {
++        using var ctx = SqliteTestContext.Create();
++
++        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        act.Should().Throw<NotSupportedException>().WithMessage("*OuterApply*");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 free mixing directions: alias->positional, positional->alias and alternation must render
++    // the same SQL as the equivalent fully positional chain, with slots assigned in chain order
++    // (t2, t3, t4). Provider SQL previously covered alias-only and root-alias joins only.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Mixed_alias_then_positional_join_matches_the_positional_chain()
++    {
++        using var ctx = SqliteTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.Buyer)
++            .Join(complex, (a, c) => a.Buyer.Id == c.Id)
++            .Select(p => p.Item3.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_matches_the_positional_chain()
++    {
++        using var ctx = SqliteTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item2.Id == c.Id, Alias.Approver)
++            .Select(p => p.Approver.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_assigns_slots_in_chain_order()
++    {
++        using var ctx = SqliteTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Join(complex, (a, c) => a.Item3.Id == c.Id)
++            .Select(p => p.Item4.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.First)
++            .Join(complex, (a, c) => a.First.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item3.Id == c.Id, Alias.Second)
++            .Select(p => p.Second.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.").And.Contain("t4.");
++    }
+ }
+diff --git a/tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs b/tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs
+index e408863e..f3042485 100644
+--- a/tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs
++++ b/tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs
+@@ -257,4 +257,129 @@ public class JoinAliasSqlGenerationTests
+ 
+         act.Should().Throw<NotSupportedException>().WithMessage("*before any Join*");
+     }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 F4 (D160.3-4): correlated APPLY through the generated alias seam on a single-entity
++    // receiver. The alias form renders exactly the positional correlated form; the applied source
++    // occupies slot 2 (t3) and the outer slot 1 (t1) is unchanged.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Correlated_builder_cross_apply_alias_matches_positional()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross apply");
++        alias.Should().Contain("t2.id = cast(t1.id as bigint)");
++    }
++
++    [Fact]
++    public void Correlated_query_cross_apply_alias_matches_positional()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("cross apply");
++        alias.Should().Contain("t2.id = cast(t1.id as bigint)");
++    }
++
++    [Fact]
++    public void Correlated_builder_outer_apply_alias_matches_positional()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        var positional = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
++            .Select(p => new { p.Item1.Id, p.Item2.String }));
++        var alias = SqlOf(ctx, ctx.From<ISimpleEntity>()
++            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id), Alias.Applied)
++            .Select(p => new { p.Item1.Id, p.Applied.String }));
++
++        alias.Should().Be(positional);
++        alias.Should().Contain("outer apply");
++        alias.Should().Contain("t2.id = cast(t1.id as bigint)");
++    }
++
++    // ---------------------------------------------------------------------------------------------
++    // #160 free mixing directions: alias->positional, positional->alias and alternation must render
++    // the same SQL as the equivalent fully positional chain, with slots assigned in chain order
++    // (t2, t3, t4). Provider SQL previously covered alias-only and root-alias joins only.
++    // ---------------------------------------------------------------------------------------------
++
++    [Fact]
++    public void Mixed_alias_then_positional_join_matches_the_positional_chain()
++    {
++        using var ctx = SqlServerTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.Buyer)
++            .Join(complex, (a, c) => a.Buyer.Id == c.Id)
++            .Select(p => p.Item3.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Mixed_positional_then_alias_join_matches_the_positional_chain()
++    {
++        using var ctx = SqlServerTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Select(p => p.Item3.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item2.Id == c.Id, Alias.Approver)
++            .Select(p => p.Approver.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.");
++    }
++
++    [Fact]
++    public void Alternating_alias_positional_alias_assigns_slots_in_chain_order()
++    {
++        using var ctx = SqlServerTestContext.Create();
++        var simple = ctx.From<ISimpleEntity>();
++        var complex = ctx.From<IComplexEntity>();
++
++        var positional = SqlOf(ctx, simple
++            .Join(complex, (s, c) => s.Id == c.Id)
++            .Join(complex, (a, c) => a.Item2.Id == c.Id)
++            .Join(complex, (a, c) => a.Item3.Id == c.Id)
++            .Select(p => p.Item4.Id));
++        var mixed = SqlOf(ctx, simple
++            .Join<IComplexEntity>(complex, (s, c) => s.Id == c.Id, Alias.First)
++            .Join(complex, (a, c) => a.First.Id == c.Id)
++            .Join<IComplexEntity>(complex, (a, c) => a.Item3.Id == c.Id, Alias.Second)
++            .Select(p => p.Second.Id));
++
++        mixed.Should().Be(positional);
++        mixed.Should().Contain("t2.").And.Contain("t3.").And.Contain("t4.");
++    }
+ }

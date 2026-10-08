@@ -1,22 +1,22 @@
 Summary
-  Generated on: 10/08/2026 - 03:32:36
+  Generated on: 10/08/2026 - 10:13:22
   Parser: Cobertura
   Assemblies: 4
   Classes: 564
   Files: 324
   Line coverage: 88.2%
-  Covered lines: 48398
+  Covered lines: 48408
   Uncovered lines: 6461
-  Coverable lines: 54859
-  Total lines: 92062
+  Coverable lines: 54869
+  Total lines: 92089
   Branch coverage: 80.2% (25963 of 32355)
   Covered branches: 25963
   Total branches: 32355
-  Method coverage: 78.9% (6056 of 7667)
-  Full method coverage: 65.2% (4999 of 7667)
-  Covered methods: 6056
-  Fully covered methods: 4999
-  Total methods: 7667
+  Method coverage: 78.9% (6058 of 7669)
+  Full method coverage: 65.2% (5001 of 7669)
+  Covered methods: 6058
+  Fully covered methods: 5001
+  Total methods: 7669
 
 nextorm.core                                                                        88%
   NextORM.Core.AdvancedAggregateTranslator                                        86.4%

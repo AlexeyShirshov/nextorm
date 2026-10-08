@@ -1,0 +1,11 @@
+{
+  "unit": ".4-0",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests", "tests/nextorm.core.tests", "tests/nextorm.sqlite.tests", "tests/nextorm.postgres.tests", "tests/nextorm.sqlserver.tests", "tests/nextorm.mysql.tests", "tests/nextorm.mariadb.tests", "tests/nextorm.clickhouse.tests", "tests/nextorm.integration.tests", "benchmarks/nextorm.benchmark"],
+    "selectors": ["tests: all", "integration: all six providers; no skipped-provider acceptance", "benchmark: --anyCategories=acceptance"],
+    "files": ["src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs", "src/nextorm.core/Builders/EntityBuilder.cs", "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs", "tests/nextorm.core.tests/EntityBuilderStateCopyTests.cs", "tests/nextorm.alias.tests/MixedJoinChainTests.cs", "tests/nextorm.alias.tests/AliasPlanCacheTests.cs", "tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs", "tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs", "tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs", "tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs", "tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs", "tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs"],
+    "rebuild": "affected",
+    "boundary": "B; A; K; S; I; F; coverage; X; V",
+    "rationale": "generator/runtime numbering, shared-state boundary and clean-evidence integrity; files are focus, not suite exclusions"
+  }
+}

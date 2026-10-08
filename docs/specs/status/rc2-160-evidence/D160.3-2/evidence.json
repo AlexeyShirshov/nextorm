@@ -1,0 +1,22 @@
+{
+  "unit": "D160.3-2",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests"],
+    "selectors": ["FullyQualifiedName~MixedJoinChainTests", "FullyQualifiedName~AliasProjectionShapeTests", "FullyQualifiedName~AliasGeneratedSurfaceTests", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"],
+    "files": ["src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs", "tests/nextorm.alias.tests/MixedJoinChainTests.cs", "tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug",
+    "rationale": "Generator transition-seeding change; filtered alias classes pin stored/inline binding and the frozen surface; full alias+six-provider projects at the boundary catch generated-surface/SQL regressions."
+  },
+  "notes": "red->green: the pre-fix build of tests/nextorm.alias.tests (execution 0, exit 1) failed with 5 CS1061 errors: the stored non-root alias receiver bound the inherited EntityBuilder<TEntity> overload and produced Projection<AliasProjection_P1_A2_Buyer<Order,Person>,Person>, which has no Item3; the generated `new` positional transitions were absent. After the generator fix (execution 1, exit 0) all four filtered classes and the boundary sweeps pass. The six provider sweeps (sqlite 1166/1 skipped, postgres 806, sqlserver 728, mysql 307, mariadb 233, clickhouse 595; 0 failed) and the boundary solution build are logged under this directory; only the single comprehensive alias sweep is recorded as the boundary test execution per the validator single-sweep cap.",
+  "executions": [
+    {"command": ["dotnet", "build", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 1, "selected_count": 1},
+    {"command": ["dotnet", "build", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~MixedJoinChainTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 20},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~AliasProjectionShapeTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~AliasGeneratedSurfaceTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 18},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 108},
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 1}
+  ]
+}

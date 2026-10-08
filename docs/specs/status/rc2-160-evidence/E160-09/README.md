@@ -60,3 +60,24 @@ Cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **2.081** — vs 
 **1.87** (**+11.3%**), below the **20%** investigation threshold (absolute gate **2.244**). The
 allocated ratio is **7.66** (baseline **7.42**, **+3.2%**), unchanged within noise. **Verdict: no
 regression, no investigation trigger.** Raw log: `step3-acceptance.log` (this directory).
+
+## D160.3-6 r=3 re-run (plan r=3, rv=4, current tree `40b1a159+dirty`)
+
+Re-run after the r=3 remediation units (D160.3-1..D160.3-5). Exit **0**, **7** cases, **0**
+failures; external shell wall clock **47 s**; BDN `Global total time` **45.23 s**
+(`executed benchmarks: 7`) — both under the 4 min budget.
+
+| Case | Mean | Allocated | Delta Mean vs baseline |
+|------|------|-----------|------------------------|
+| `Nextorm_Count` | 2.251 ms | 374.22 KB | -22.8% (high-variance row, not an assertion) |
+| `Nextorm_GroupByCount` | 59.36 ms | 50.1 MB | -2.6% |
+| `Nextorm_Cached` | 1.925 ms | 610.23 KB | +8.6% (high-variance row) |
+| `Prepared_ToList` | 916.8 us | 76.14 KB | -0.8% |
+| `Cached_ToList` | 1,785.0 us | 583.97 KB | +3.3% |
+| `Cached_PlanOnly_Param` | 565.1 us | 507.83 KB | +9.1% (no-database micro, not comparable) |
+| `Nextorm_Cached_ToListAsync` | 2.006 ms | 608.47 KB | -6.1% |
+
+Cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`) = **1.95** — vs documented baseline
+**1.87** (**+4.3%**), below the **20%** investigation threshold (absolute gate **2.244**). The
+allocated ratio is **7.67** (baseline **7.42**, **+3.4%**), unchanged within noise. **Verdict: no
+regression, no investigation trigger.** Raw log: `acceptance.log` (this directory).

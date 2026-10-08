@@ -1,0 +1,70 @@
+{
+  "unit": "D160.3-5",
+  "scope": {
+    "projects": [
+      "tests/nextorm.alias.tests",
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~RootAliasTests",
+      "FullyQualifiedName~MixedJoinChainTests",
+      "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests",
+      "FullyQualifiedName~AliasProjectionShapeTests",
+      "FullyQualifiedName~AliasGeneratedSurfaceTests",
+      "FullyQualifiedName~RootProjectionTests",
+      "FullyQualifiedName~JoinAliasSqlGenerationTests"
+    ],
+    "files": [
+      "tests/nextorm.alias.tests/RootAliasTests.cs",
+      "tests/nextorm.alias.tests/MixedJoinChainTests.cs",
+      "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs",
+      "tests/nextorm.core.tests/RootProjectionTests.cs",
+      "tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.integration.tests/CommonTestSuite.JoinAlias.cs",
+      "tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs",
+      "tests/nextorm.integration.tests/MariaDbJoinAliasIntegrationTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: `dotnet test tests/nextorm.alias.tests -c Debug`; `dotnet test tests/nextorm.core.tests -c Debug`; `dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug`; then ONE container-backed integration run (skill first, DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock, `dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`) executing the ClickHouse/MariaDB real root/mixed cases and the shared join-alias suite.",
+    "rationale": "Test-only additions across the alias/core/provider/integration surfaces for the opening mandatory evidence rows (D160.3-5 fixtures): filtered selectors pin each new scenario, full projects at the boundary catch generated-shape/SQL regressions, and the container run proves the ClickHouse/MariaDB real execution that previously stayed at SQL generation."
+  },
+  "notes": "D160.3-5 (fixtures) is test-only. The inner-loop validator caps unfiltered boundary test sweeps at one, so the alias full project sweep is the recorded boundary execution and the core + six provider full sweeps are recorded under supplementary_boundary_sweeps (all exit 0). Bind 1 real ClickHouse/MariaDB execution tests were added and compile in tests/nextorm.integration.tests (ClickHouseIntegrationTests.cs, MariaDbJoinAliasIntegrationTests.cs); their container-backed run is deferred to the D160.3-6 verification chunk per the choreography. source_revision/artifact_revision are the dirty tree over 40b1a159.",
+  "executions": [
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 129},
+
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~RootAliasTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 34},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~MixedJoinChainTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 26},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 31},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~AliasProjectionShapeTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~AliasGeneratedSurfaceTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~RootProjectionTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 15},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 20},
+    {"command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 22},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 22},
+    {"command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 22},
+    {"command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 22},
+    {"command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-5", "artifact_revision": "40b1a159+dirty+d160.3-5", "exit_code": 0, "selected_count": 23}
+  ],
+  "supplementary_boundary_sweeps": [
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug"], "exit_code": 0, "selected_count": 1775, "failed": 0},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug"], "exit_code": 0, "selected_count": 1173, "skipped": 1, "failed": 0},
+    {"command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug"], "exit_code": 0, "selected_count": 812, "failed": 0},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug"], "exit_code": 0, "selected_count": 734, "failed": 0},
+    {"command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug"], "exit_code": 0, "selected_count": 313, "failed": 0},
+    {"command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug"], "exit_code": 0, "selected_count": 239, "failed": 0},
+    {"command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug"], "exit_code": 0, "selected_count": 602, "failed": 0}
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "unit": "D160.3-4",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests", "tests/nextorm.sqlite.tests"],
+    "selectors": ["FullyQualifiedName~MixedJoinChainTests", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+    "files": ["src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs", "tests/nextorm.alias.tests/MixedJoinChainTests.cs", "tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug; then ONE targeted integration run for the correlated-APPLY case (skill first, DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock, `dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` filtered if the runner supports it)",
+    "rationale": "Generator APPLY-emit change; filtered alias/SQL classes pin compilation/slots/SQL; full alias+six-provider sweeps catch generated-surface regressions; the integration run proves real correlated-APPLY results (R09/E33)."
+  },
+  "notes": "F4 (D160.3-4): the existing EntityBuilder.JoinAlias correlated seams are now reachable through the generator for both correlated source shapes (Expression<Func<TEntity, EntityBuilder<TJoin>>> and ...QueryCommand<TJoin>>) on a single-entity receiver. No new core public seam. E160-33 evidence: alias compilation/slot tests (MixedJoinChainTests 25/25, JoinAliasGeneratorDiagnosticTests 30/30), six-provider SQL (sqlite 17, postgres/sqlserver/mysql/mariadb 19, clickhouse 20), and real execution (integration: 9 correlated-APPLY alias cases Passed on PostgreSQL/SQL Server/MySQL; 3 capability-Skipped on SQLite via Provider.SupportsApply; 0 failed). Bounded/guarded limitation: correlated APPLY requires a non-projection single-entity receiver; a chain step after a correlated APPLY does not bind — pre-existing design guard EntityBuilder.cs:3096-3098, mirrored on the positional path. The inner-loop validator caps unfiltered boundary test sweeps at one, so only the alias full sweep is recorded as a boundary execution; the six provider full sweeps are recorded under supplementary_boundary_sweeps (all exit 0). source_revision is the dirty tree over 40b1a159; artifact_revision is the same tree after the D160.3-4 edits.",
+  "executions": [
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "build", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "build", "tests/nextorm.integration.tests", "-c", "Debug"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~MixedJoinChainTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 25},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 30},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 17},
+    {"command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 19},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 19},
+    {"command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 19},
+    {"command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 19},
+    {"command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasSqlGenerationTests"], "phase": "inner", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 20},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build"], "phase": "boundary", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 125},
+    {"command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-noColor", "-result-xml", "/home/alex/sources/nextorm/docs/specs/status/rc2-160-evidence/D160.3-4/integration-results.xml"], "phase": "boundary", "source_revision": "40b1a159+dirty+d160.3-4", "artifact_revision": "40b1a159+dirty+d160.3-4", "exit_code": 0, "selected_count": 3369}
+  ],
+  "supplementary_boundary_sweeps": [
+    {"command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 1170, "passed": 1169, "failed": 0, "skipped": 1, "log": "docs/specs/status/rc2-160-evidence/D160.3-4/sqlite-boundary.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 809, "passed": 809, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.3-4/postgres-boundary.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 731, "passed": 731, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.3-4/sqlserver-boundary.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 310, "passed": 310, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.3-4/mysql-boundary.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 236, "passed": 236, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.3-4/mariadb-boundary.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 599, "passed": 599, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.3-4/clickhouse-boundary.log"}
+  ],
+  "integration_summary": {
+    "command": ["DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock", "dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-noColor"],
+    "total": 3369, "errors": 0, "failed": 0, "passed": 3169, "skipped": 200, "not_run": 0,
+    "executed_providers": {"postgres": 635, "sqlserver": 635, "mysql": 635, "sqlite": 635},
+    "provider_availability_skips": 0,
+    "d160_correlated_alias_cases": {"postgres": "3 passed", "sqlserver": "3 passed", "mysql": "3 passed", "sqlite": "3 capability-skipped (Provider.SupportsApply=false)"},
+    "logs": ["docs/specs/status/rc2-160-evidence/D160.3-4/integration.log", "docs/specs/status/rc2-160-evidence/D160.3-4/integration-xml.log", "docs/specs/status/rc2-160-evidence/D160.3-4/integration-results.xml"]
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "unit": "D160",
+  "scope": {
+    "projects": [
+      "tests/nextorm.alias.tests",
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JoinAlias",
+      "FullyQualifiedName~Alias",
+      "FullyQualifiedName~RootAlias",
+      "FullyQualifiedName~RootProjectionTests",
+      "FullyQualifiedName~JoinAliasSqlGenerationTests"
+    ],
+    "files": [
+      "src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs",
+      "src/nextorm.core/Builders/Projection.cs",
+      "src/nextorm.core/Builders/EntityBuilder.cs",
+      "tests/nextorm.alias.tests/MixedJoinChainTests.cs",
+      "tests/nextorm.alias.tests/RootAliasTests.cs",
+      "tests/nextorm.core.tests/RootProjectionTests.cs",
+      "tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "DO→CHECK: full `dotnet test tests/nextorm.alias.tests -c Debug`; full `tests/nextorm.core.tests`; six provider SQL test projects; integration via DOCKER_HOST; acceptance benchmarks",
+    "rationale": "D160 session 2 adds core projection (Projection<T1> dim-1/Extend/arity-8-cap/in-memory) tests and six-provider root-alias (.WithAlias(Alias.Root)) SQL cases; modified generator/core alias behavior is exercised by the alias project boundary sweep."
+  },
+  "amendments": [
+    {
+      "reason": "Session 2 adds tests/nextorm.core.tests/RootProjectionTests.cs and root-alias rows to the six providers' JoinAliasSqlGenerationTests.cs; their selectors are validated before the first run.",
+      "added_selectors": [
+        "FullyQualifiedName~RootProjectionTests",
+        "FullyQualifiedName~JoinAliasSqlGenerationTests"
+      ],
+      "validated_before_run": true
+    },
+    {
+      "reason": "Session 2 verification re-runs the mixed positional/alias chain surface (the Phase-1 changed behavior) filtered before the single broad alias boundary sweep; selector validated before the first run.",
+      "added_selectors": [
+        "FullyQualifiedName~MixedJoinChainTests"
+      ],
+      "validated_before_run": true
+    }
+  ],
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@40b1a159+dirty",
+      "artifact_revision": "1.0.9-rc2@40b1a159+dirty",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "docs/specs/status/rc2-160-evidence/E160-07/build.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--",
+        "-noColor",
+        "-result-xml",
+        "docs/specs/status/rc2-160-evidence/E160-08/integration-results.xml"
+      ],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@40b1a159+dirty",
+      "artifact_revision": "1.0.9-rc2@40b1a159+dirty",
+      "exit_code": 0,
+      "selected_count": 3377,
+      "log": "docs/specs/status/rc2-160-evidence/E160-08/integration.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance"
+      ],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@40b1a159+dirty",
+      "artifact_revision": "1.0.9-rc2@40b1a159+dirty",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "docs/specs/status/rc2-160-evidence/E160-09/acceptance.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "tool",
+        "run",
+        "dotnet-coverage",
+        "collect",
+        "-s",
+        "coverage.settings.xml",
+        "-f",
+        "cobertura",
+        "-o",
+        "tests/coverage/coverage.cobertura.xml",
+        "dotnet test --no-build --verbosity normal"
+      ],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@40b1a159+dirty",
+      "artifact_revision": "1.0.9-rc2@40b1a159+dirty",
+      "exit_code": 0,
+      "selected_count": 9313,
+      "log": "docs/specs/status/rc2-160-evidence/E160-10/coverage-collect.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "docfx",
+        "docs/docfx.json"
+      ],
+      "phase": "boundary",
+      "source_revision": "1.0.9-rc2@40b1a159+dirty",
+      "artifact_revision": "1.0.9-rc2@40b1a159+dirty",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "docs/specs/status/rc2-160-evidence/E160-11/docfx.log"
+    }
+  ]
+}

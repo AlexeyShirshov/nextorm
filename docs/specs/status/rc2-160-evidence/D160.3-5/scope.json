@@ -1,0 +1,43 @@
+{
+  "unit": "D160.3-5",
+  "scope": {
+    "projects": [
+      "tests/nextorm.alias.tests",
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~RootAliasTests",
+      "FullyQualifiedName~MixedJoinChainTests",
+      "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests",
+      "FullyQualifiedName~AliasProjectionShapeTests",
+      "FullyQualifiedName~AliasGeneratedSurfaceTests",
+      "FullyQualifiedName~RootProjectionTests",
+      "FullyQualifiedName~JoinAliasSqlGenerationTests"
+    ],
+    "files": [
+      "tests/nextorm.alias.tests/RootAliasTests.cs",
+      "tests/nextorm.alias.tests/MixedJoinChainTests.cs",
+      "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs",
+      "tests/nextorm.core.tests/RootProjectionTests.cs",
+      "tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.postgres.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.sqlserver.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mysql.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.mariadb.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.clickhouse.tests/JoinAliasSqlGenerationTests.cs",
+      "tests/nextorm.integration.tests/CommonTestSuite.JoinAlias.cs",
+      "tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs",
+      "tests/nextorm.integration.tests/MariaDbJoinAliasIntegrationTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: `dotnet test tests/nextorm.alias.tests -c Debug`; `dotnet test tests/nextorm.core.tests -c Debug`; `dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug`; then ONE container-backed integration run (skill first, DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock, `dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`) executing the ClickHouse/MariaDB real root/mixed cases and the shared join-alias suite.",
+    "rationale": "Test-only additions across the alias/core/provider/integration surfaces for the opening mandatory evidence rows (D160.3-5 fixtures): filtered selectors pin each new scenario, full projects at the boundary catch generated-shape/SQL regressions, and the container run proves the ClickHouse/MariaDB real execution that previously stayed at SQL generation."
+  }
+}

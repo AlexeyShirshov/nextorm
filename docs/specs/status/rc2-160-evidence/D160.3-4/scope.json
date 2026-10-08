@@ -1,0 +1,11 @@
+{
+  "unit": "D160.3-4",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests", "tests/nextorm.sqlite.tests"],
+    "selectors": ["FullyQualifiedName~MixedJoinChainTests", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests", "FullyQualifiedName~JoinAliasSqlGenerationTests"],
+    "files": ["src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs", "tests/nextorm.alias.tests/MixedJoinChainTests.cs", "tests/nextorm.sqlite.tests/JoinAliasSqlGenerationTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug; then ONE targeted integration run for the correlated-APPLY case (skill first, DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock, `dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` filtered if the runner supports it)",
+    "rationale": "Generator APPLY-emit change; filtered alias/SQL classes pin compilation/slots/SQL; full alias+six-provider sweeps catch generated-surface regressions; the integration run proves real correlated-APPLY results (R09/E33)."
+  }
+}

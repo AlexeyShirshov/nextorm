@@ -1,0 +1,11 @@
+{
+  "unit": "D160.3-2",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests"],
+    "selectors": ["FullyQualifiedName~MixedJoinChainTests", "FullyQualifiedName~AliasProjectionShapeTests", "FullyQualifiedName~AliasGeneratedSurfaceTests", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"],
+    "files": ["src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs", "tests/nextorm.alias.tests/MixedJoinChainTests.cs", "tests/nextorm.alias.tests/AliasGeneratedSurfaceTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug",
+    "rationale": "Generator transition-seeding change; filtered alias classes pin stored/inline binding and the frozen surface; full alias+six-provider projects at the boundary catch generated-surface/SQL regressions."
+  }
+}

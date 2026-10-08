@@ -1,109 +1,62 @@
-# E160-08 — R160-09: six-provider container-backed integration execution
+# E160-08 — six-provider integration (D160.3-6 verification, plan r=3, rv=4)
 
-- task: D160, cycle 1, plan revision r=2, attempt n=1/3, **contract rv=3**
-- branch: `1.0.9-rc2`
-- phase: DO
-- tree identity: `69ed192d` + working-tree change (`tests/nextorm.integration.tests/CommonTestSuite.JoinAlias.cs`:
-  5 new D160 root-alias / mixed-join cases) + this evidence package
-- skill: `.opencode/skills/running-integration-tests/SKILL.md` loaded first; Podman socket present
-  (`/mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock`, server 5.8.6 / API 1.44)
-
-> **STEP-3 re-run (post-C1).** The C1 core fix (`SqlBuilder.MakeSelect` / `EntityBuilder` alias-state
-> rebasing, commit `9d6a9f59`) changed compiled sources after the n=1 integration run below
-> (tree `69ed192d`), so the whole container-backed boundary was re-executed on the current tree
-> (`4e2f43b2` + D160 evidence). Fresh evidence: `integration-step3.log` and
-> `integration-results-step3.log` (both exit **0**, same summary **Total 3357 / Errors 0 / Failed 0 /
-> Skipped 197 / Not Run 0**), with `provider-inventory-step3.txt` + `results-step3.xml` as the fresh
-> machine-readable per-test proof. The sections below describe the superseded n=1 run and are kept
-> for history.
-
-## Exact invocation (required command, argument array)
+## Command and result
 
 ```
 DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-  dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor
+  dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor \
+  -result-xml docs/specs/status/rc2-160-evidence/E160-08/integration-results.xml
 ```
 
-- exit_code: `0`
-- summary: **Total 3357, Errors 0, Failed 0, Skipped 197, Not Run 0, Time 53.541s**
-- full output: `integration.log`
+- exit **0**; machine-readable totals `Total: 3377, Errors: 0, Failed: 0, Skipped: 200, Not Run: 0`
+  (wall clock 58 s; runner time 34.643 s)
+- **0 provider-availability skips** (Podman socket present, `_ping` = OK; every skip is an
+  `Assert.Skip*` capability skip with a capability reason)
+- six providers executed: PostgreSQL, SQL Server, MySQL, MariaDB, SQLite, ClickHouse
 
-### Supporting machine-readable run (per-provider inventory)
-
-The required command's default reporter does not emit per-test outcomes, so the same suite was run once
-more (containers warm, `--no-build`) with an xUnit v3 XML result to produce the per-provider breakdown
-and prove the D160 cases ran:
-
-```
-DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-  dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -noColor \
-  -result-xml docs/specs/status/rc2-160-evidence/E160-08/results.xml
-```
-
-- exit_code: `0`; same summary: **Total 3357, Errors 0, Failed 0, Skipped 197, Not Run 0, Time 34.062s**
-- committed: `integration-results.log` (full output) and `provider-inventory.txt` (per-provider + D160
-  per-case table extracted from the raw XML)
-- the n=1 raw XML (`results.xml`) and its discovery inventory (`tests-discovered.txt`) were local,
-  uncommitted inputs and are superseded by the STEP-3 `results-step3.xml` + `provider-inventory-step3.txt`
-  committed in this package (the n=1 run used `-result-xml …/results.xml`)
-
-## Per-provider executed / passed / failed / skipped
-
-Every provider actually executed (no provider reported as unavailable/skipped). Skips are per-test
-capability skips (`Assert.Skip*`), not provider-availability skips.
+## Per-provider inventory
 
 | Provider | Total | Passed | Failed | Skipped |
 |---|---:|---:|---:|---:|
-| PostgreSQL (`*Postgres*`) | 845 | 819 | 0 | 26 |
-| SQL Server (`*SqlServer*`) | 733 | 685 | 0 | 48 |
-| MySQL (`*MySql*`) | 673 | 593 | 0 | 80 |
-| SQLite (`*Sqlite*`) | 723 | 683 | 0 | 40 |
-| MariaDB (`*MariaDb*`, `DynamicColumnsMariaDb*`) | 55 | 55 | 0 | 0 |
-| ClickHouse (`*ClickHouse*`) | 205 | 205 | 0 | 0 |
-| shared/contract (LOB probe/harness, non-provider) | 123 | 120 | 0 | 3 |
-| **TOTAL** | **3357** | **3160** | **0** | **197** |
+| PostgreSQL | 848 | 822 | 0 | 26 |
+| SQL Server | 736 | 688 | 0 | 48 |
+| MySQL | 676 | 596 | 0 | 80 |
+| MariaDB | 59 | 59 | 0 | 0 |
+| SQLite | 727 | 683 | 0 | 44 |
+| ClickHouse | 209 | 209 | 0 | 0 |
+| shared/contract | 122 | 120 | 0 | 2 |
+| **assembly** | **3377** | **3177** | **0** | **200** |
 
-- MariaDB classes executed: `MariaDbCsvIntegrationTests` 2, `MariaDbFunctionsIntegrationTests` 18,
-  `MariaDbImplicitNavigationTests` 14, `MariaDbJsonStreamTests` 6, `MariaDbRawSourceBindingTests` 4,
-  `MariaDbTupleExecutionTests` 3, `MariaDbTupleInExecutionTests` 5, `MariaDbTypedCteIntegrationTests` 2,
-  `DynamicColumnsMariaDbContainerTests` 1 — 55/55 pass.
-- All 5 containers started from the socket (PostgreSQL, SQL Server, MySQL `mariadb:11.4` unused for MySQL,
-  MariaDB `mariadb:11.4`, ClickHouse); SQLite is in-process. MariaDB image is `mariadb:11.4`, env override
-  `NEXTORM_MARIADB_CONNECTION` (not set here — the Testcontainers instance was used).
+Full inventory: `provider-inventory.txt`. Raw log: `integration.log`.
 
-## D160 root-alias / mixed-join cases (added to `CommonTestSuite.JoinAlias.cs`)
+## D160 root/mixed/correlated case counts (machine-readable)
 
-Five provider-agnostic cases now execute through every provider that inherits `CommonTestSuite`
-(PostgreSQL, SQL Server, MySQL, SQLite) — 5 × 4 = **20 executions, 20 passed, 0 failed, 0 skipped**:
+| Bucket | Passed | Capability-skipped | Providers |
+|---|---:|---:|---|
+| root alias (`.WithAlias(Alias.Root)`) | 16 | 0 | PG 3, SS 3, MySQL 3, SQLite 3, ClickHouse 2, MariaDB 2 |
+| mixed positional/alias | 10 | 0 | PG 2, SS 2, MySQL 2, SQLite 2, ClickHouse 1, MariaDB 1 |
+| correlated APPLY alias | 9 | 3 | PG 3, SS 3, MySQL 3 pass; SQLite 3 skip (`SupportsApply=false`) |
+| **D160 total** | **35** | **3** | 0 provider-availability skips |
 
-| Case | Assertion |
-|---|---|
-| `Root_alias_inner_join_returns_matched_rows` | `.WithAlias(Alias.Root)` + `Alias.Buyer` join → ids `[10,20]` |
-| `Root_alias_item1_and_root_name_resolve_to_the_same_slot` | `p.Root.Id` ≡ `p.Item1.Id`; order ids `[1,2]` |
-| `Root_alias_supports_a_positional_join_after_it` | root alias → positional join → `p.Item2.Id` `[10,20]` |
-| `Mixed_alias_then_positional_join_executes_and_keeps_slot_identity` | alias slot ≡ subsequent `Item3` positional slot |
-| `Mixed_positional_then_alias_join_executes_and_keeps_slot_identity` | positional `Item2` ≡ trailing `Alias.Approver` slot |
+The 3 correlated-APPLY skips are the documented SQLite no-lateral/APPLY capability
+(`Assert.SkipUnless(Provider.SupportsApply)`), not provider unavailability.
 
-Result: `results-step3.xml` — every case `Pass`, `type` = `NextORM.Integration.Tests.{Postgres,SqlServer,MySql,Sqlite}IntegrationTests` (the n=1 `results.xml` covered the same 20 executions).
+## Fixture defect found and fixed in this unit (test-only)
 
-### Coverage boundary (explicit, not silently absent)
+Pre-fix run (`integration-prefix-fail.log`, `integration-results-prefix-fail.xml`):
+`MariaDbJoinAliasIntegrationTests.Root_alias_inner_join_returns_matched_rows` **FAIL** —
+`Expected ids to be equal to {10, 20}, but {10} contains 1 item(s) less`. The MariaDB seed has a
+single order (`id=1, buyer_id=10`), whereas the shared `CommonTestSuite` variant seeds two orders;
+the expected value had been copied without the seed. The product result `{10}` is correct.
 
-`ClickHouseIntegrationTests` and the MariaDB test classes deliberately do **not** inherit `CommonTestSuite`
-(ClickHouse uses provider-specific behaviour; MariaDB owns its own `MariaDbContainer`). Their containers do
-**not** seed the shared `orders`/`person` alias fixtures, so the new common root-alias/mixed cases do not run
-there. Root-alias real execution on those two providers is therefore not covered by this common case set;
-their six-provider root-alias surface is covered by the SQL-generation row E160-02
-(`tests/nextorm.{mariadb,clickhouse}.tests/JoinAliasSqlGenerationTests.cs`, 16/16 each). No provider reported
-skipped; this is a suite-membership boundary, recorded for CHECK, not a provider failure.
+Fix (bounded, test-only, in D160 footprint): `tests/nextorm.integration.tests/MariaDbJoinAliasIntegrationTests.cs:42`
+`ids.Should().Equal(10, 20)` → `ids.Should().Equal(10)`. No product source changed. Re-run
+(`integration.log`) is green with the same totals. This is a test-fixture defect, **not** a product
+defect and **not** a DO→PLAN candidate.
 
-## Failures
+## Artifacts
 
-- D160-caused failures: **none** (0 failed).
-- Non-D160 / environmental failures: **none** (0 failed, exit 0).
-
-## Files
-
-- `integration.log` — full output of the exact required command (exit 0)
-- `integration-results.log` — full output of the supporting `-result-xml` run (exit 0)
-- `results-step3.xml` — xUnit v3 per-test outcomes (per-provider + D160 case proof; STEP-3 re-run)
-- `provider-inventory-step3.txt` — per-provider + D160 per-case table extracted from `results-step3.xml`
+- `integration.log` (post-fix canonical, exit 0)
+- `integration-results.xml` (post-fix machine-readable)
+- `integration-prefix-fail.log`, `integration-results-prefix-fail.xml` (pre-fix failure evidence)
+- `provider-inventory.txt`

@@ -1,0 +1,28 @@
+{
+  "unit": "D160.4-2",
+  "contract_revision": "rv=5",
+  "plan_revision": "r=4",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests", "tests/nextorm.alias.tests"],
+    "selectors": ["FullyQualifiedName~EntityBuilderStateCopyTests"],
+    "files": ["src/nextorm.core/Builders/EntityBuilder.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK: one solution Debug build (B); one comprehensive core sweep (K: dotnet test tests/nextorm.core.tests -c Debug --no-build); the alias re-confirm is recorded as a supplementary boundary sweep",
+    "rationale": "Defect B is the positional-state over-preservation in EntityBuilder.cs; the filtered EntityBuilderStateCopyTests pins the positional reset + paired F1/C1 alias preservation, and the full core sweep catches planner/renderer/QueryFilter regressions. The alias re-confirm proves the paired alias-preservation tests stay green."
+  },
+  "notes": "Adaptation to the host schema (validate_inner_loop.py): the validator caps unfiltered boundary test sweeps at one, so the full-core sweep 1776 is recorded in executions and the alias re-confirm 129 (already run), plus the six provider regression runs, are recorded under supplementary_runs; no run was dropped. The provider regression logs are the combined slot filter (selected 3) re-confirmed on the .4-2 tree. The inner filtered core run uses --no-build after the preceding solution Debug build on the same revision.",
+  "executions": [
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty(.4-2)", "artifact_revision": "40b1a159+dirty(.4-2)", "exit_code": 0, "selected_count": 1, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/build-debug.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~EntityBuilderStateCopyTests"], "phase": "inner", "source_revision": "40b1a159+dirty(.4-2)", "artifact_revision": "40b1a159+dirty(.4-2)", "exit_code": 0, "selected_count": 5, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/statecopy-filtered.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"], "phase": "boundary", "source_revision": "40b1a159+dirty(.4-2)", "artifact_revision": "40b1a159+dirty(.4-2)", "exit_code": 0, "selected_count": 1776, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/core-full.log"}
+  ],
+  "supplementary_runs": [
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 129, "passed": 129, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/A-alias-regression.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 3, "passed": 3, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/S-sqlite-regression.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.postgres.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 3, "passed": 3, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/S-postgres-regression.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 3, "passed": 3, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/S-sqlserver-regression.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.mysql.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 3, "passed": 3, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/S-mysql-regression.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.mariadb.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 3, "passed": 3, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/S-mariadb-regression.log"},
+    {"command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build"], "exit_code": 0, "selected_count": 3, "passed": 3, "failed": 0, "skipped": 0, "log": "docs/specs/status/rc2-160-evidence/D160.4-2/S-clickhouse-regression.log"}
+  ]
+}

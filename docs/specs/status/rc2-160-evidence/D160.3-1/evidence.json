@@ -1,0 +1,19 @@
+{
+  "unit": "D160.3-1",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests", "tests/nextorm.alias.tests"],
+    "selectors": ["FullyQualifiedName~RootProjectionTests", "FullyQualifiedName~EntityBuilderStateCopyTests", "FullyQualifiedName~RootAliasTests"],
+    "files": ["src/nextorm.core/Builders/EntityBuilder.cs", "tests/nextorm.core.tests/RootProjectionTests.cs", "tests/nextorm.alias.tests/RootAliasTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.core.tests -c Debug; dotnet test tests/nextorm.{sqlite,postgres,sqlserver,mysql,mariadb,clickhouse}.tests -c Debug",
+    "rationale": "State-copy change is core; filtered RootProjectionTests/RootAliasTests pin the transfer and SQL; full alias+core+six-provider projects at the boundary catch renderer/planner regressions (C1 precedent)."
+  },
+  "executions": [
+    {"command": ["dotnet", "build", "tests/nextorm.core.tests", "-c", "Debug"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--filter", "FullyQualifiedName~EntityBuilderStateCopyTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 4},
+    {"command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--filter", "FullyQualifiedName~RootProjectionTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 14},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--filter", "FullyQualifiedName~RootAliasTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 32},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 96},
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 1}
+  ]
+}

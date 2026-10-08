@@ -1,9 +1,11 @@
-2026-10-08T02:06:41: Arguments
-2026-10-08T02:06:41:  -reports:tests/coverage/coverage.cobertura.xml
-2026-10-08T02:06:41:  -targetdir:tests/coverage/report
-2026-10-08T02:06:41:  -reporttypes:Html;TextSummary;Cobertura
-2026-10-08T02:06:41:  -riskhotspotassemblyfilters:+nextorm.*
-2026-10-08T02:06:44: Writing report file 'tests/coverage/report/Cobertura.xml'
-2026-10-08T02:06:44: Writing report file 'tests/coverage/report/index.html'
-2026-10-08T02:06:44: Writing report file 'tests/coverage/report/Summary.txt'
-2026-10-08T02:06:45: Report generation took 4.0 seconds
+cmd: dotnet tool run reportgenerator -reports:tests/coverage/coverage.cobertura.xml -targetdir:tests/coverage/report -reporttypes:"Html;TextSummary;Cobertura" -riskhotspotassemblyfilters:"+nextorm.*"
+2026-10-08T03:32:32: Arguments
+2026-10-08T03:32:33:  -reports:tests/coverage/coverage.cobertura.xml
+2026-10-08T03:32:33:  -targetdir:tests/coverage/report
+2026-10-08T03:32:33:  -reporttypes:Html;TextSummary;Cobertura
+2026-10-08T03:32:33:  -riskhotspotassemblyfilters:+nextorm.*
+2026-10-08T03:32:36: Writing report file 'tests/coverage/report/Cobertura.xml'
+2026-10-08T03:32:36: Writing report file 'tests/coverage/report/index.html'
+2026-10-08T03:32:36: Writing report file 'tests/coverage/report/Summary.txt'
+2026-10-08T03:32:37: Report generation took 4.0 seconds
+EXIT=0

@@ -1,0 +1,49 @@
+    /// <summary>
+    /// Copies the query state a join builder carries onto <paramref name="target"/>, which may have a
+    /// different projection type. Shared by the positional <see cref="CreateJoined{TJoinEntity}"/> and
+    /// the alias <see cref="CreateAliasJoined{TNext,TNextEntity}"/> so both observe the same
+    /// <c>_query</c>/<c>SourceFrom</c>/modifier propagation. Overrides are copied only when the source
+    /// stayed unresolved for the planner (<paramref name="query"/> is <see langword="null"/>), mirroring
+    /// the positional path.
+    /// </summary>
+    private void ApplyJoinStateTo<TOther>(EntityBuilder<TOther> target, QueryCommand? query)
+    {
+        target.Logger = Logger;
+        target.Table = Table;
+        target.Query = query;
+        target.IsDistinct = IsDistinct;
+        target.GroupingType = GroupingType;
+        target.GroupingSets = GroupingSets;
+        target.GroupByWithTotals = GroupByWithTotals;
+        target.LimitByClause = LimitByClause;
+        target.DistinctOnClause = DistinctOnClause;
+        target.TableSampleClause = TableSampleClause;
+        target.TemporalClause = TemporalClause;
+        target.RowLockClause = RowLockClause;
+        target.IsFinal = IsFinal;
+        target.SampleRatio = SampleRatio;
+        target.SampleOffset = SampleOffset;
+        target.SettingsList = SettingsList;
+        target.PreWhereCondition = PreWhereCondition;
+        target.ArrayJoins = ArrayJoins;
+        target.ArrayJoinKind = ArrayJoinKind;
+        target.TableHints = TableHints;
+        target.IndexHints = IndexHints;
+        target.IndexHintKind = IndexHintKind;
+        target.TablesInScopeHints = TablesInScopeHints;
+        target.Ctes = Ctes;
+        target.QuoteIdentifiers = QuoteIdentifiers;
+        target.NamingConvention = NamingConvention;
+        target.KeywordCase = KeywordCase;
+        target.SourceFrom = SourceFrom;
+        target.FilterScope = _filterScope;
+
+        if (query is null)
+        {
+            target._tableNameOverride = _tableNameOverride;
+            target._schemaOverride = _schemaOverride;
+            target._databaseOverride = _databaseOverride;
+            target._serverOverride = _serverOverride;
+            target._tableExpression = _tableExpression;
+        }
+    }

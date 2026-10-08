@@ -1,0 +1,21 @@
+{
+  "unit": "D160.3-3",
+  "scope": {
+    "projects": ["tests/nextorm.alias.tests"],
+    "selectors": ["FullyQualifiedName~JoinAliasGeneratorDiagnosticTests", "FullyQualifiedName~AliasProjectionShapeTests"],
+    "files": ["src/nextorm.core.sourcegenerator/JoinAliasGenerator.cs", "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs"],
+    "rebuild": "affected",
+    "boundary": "DO->CHECK sweep once: dotnet test tests/nextorm.alias.tests -c Debug; dotnet test tests/nextorm.core.tests -c Debug",
+    "rationale": "ItemN parser reconciliation in the generator; filtered diagnostic/shape classes pin valid+invalid positions; alias+core projects at the boundary catch parser/generated-shape regressions."
+  },
+  "notes": "F3 (R160-04/R160-11, E160-32). Root cause: JoinAliasGenerator.IsItemAlias accepted only Item1..Item{arity} while ProjectionAliasCache.TryParseItemPosition claims ANY ItemN name, so Alias.Item0 / Alias.Item9 / an out-of-range ItemN were emitted as alias members that the runtime read back positionally and resolved to the wrong slot. Fix (generator-only, no ProjectionAliasCache change): IsItemAlias now rejects the whole structural shape 'Item' + one-or-more-digits regardless of arity; both call sites (root-alias path :657 and join-chain ValidateChain :884) drop the arity argument; every rejected name routes to the already-registered NORMGEN002 (AliasCollision). No new diagnostic id. red->green: with the F3 fix reverted (execution 0/1) the new out-of-range cases fail (execution 1 exit 2, selected 28 / passed 23 / failed 5: Item0 x2, Item2 root, Item3, Item9); with the fix (execution 3/4) the same filter is 28/28 exit 0. Boundary: alias sweep 118/118 exit 0 (execution 6) and solution build 0/0 (execution 7); the additional core sweep ran 1774/1774 exit 0 but is not recorded as a second unfiltered boundary execution because the inner-loop validator caps comprehensive boundary sweeps at one. No malformed generated C#: AssertGeneratedSourceIsWellFormed parses every generated tree with zero syntax errors. CRLF preserved; git diff --check clean; no residual mutation (F3 fix restored from /tmp/opencode/D160.3-3/JoinAliasGenerator.fixed.cs).",
+  "executions": [
+    {"command": ["dotnet", "build", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "inner", "source_revision": "40b1a159+dirty+f3-reverted", "artifact_revision": "40b1a159+dirty+f3-reverted", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"], "phase": "inner", "source_revision": "40b1a159+dirty+f3-reverted", "artifact_revision": "40b1a159+dirty+f3-reverted", "exit_code": 2, "selected_count": 28},
+    {"command": ["dotnet", "build", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 1},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 28},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~AliasProjectionShapeTests"], "phase": "inner", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 5},
+    {"command": ["dotnet", "test", "tests/nextorm.alias.tests", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 118},
+    {"command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"], "phase": "boundary", "source_revision": "40b1a159+dirty", "artifact_revision": "40b1a159+dirty", "exit_code": 0, "selected_count": 1}
+  ]
+}

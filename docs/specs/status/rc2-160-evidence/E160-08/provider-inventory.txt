@@ -1,43 +1,13 @@
-E160-08 per-provider inventory (xUnit v3 XML, exit 0)
-Run summary: Total 3357, Errors 0, Failed 0, Skipped 197, Not Run 0
+E160-08 integration provider inventory (D160.3-6, plan r=3, rv=4)
+tree nextorm.integration.tests.dll  run 2026-10-07 22:28:33
+ASSEMBLY total=3377 passed=3177 failed=0 skipped=200 errors=0 not-run=0 time=34.643
+ClickHouse      total=209   passed=209   failed=0 skipped=0
+MariaDB         total=59    passed=59    failed=0 skipped=0
+PostgreSQL      total=848   passed=822   failed=0 skipped=26
+SQL Server      total=736   passed=688   failed=0 skipped=48
+shared/contract total=122   passed=120   failed=0 skipped=2
+MySQL           total=676   passed=596   failed=0 skipped=80
+SQLite          total=727   passed=683   failed=0 skipped=44
 
-Provider        Total  Passed  Failed  Skipped
-PostgreSQL        845     819       0       26
-SQL Server        733     685       0       48
-MySQL             673     593       0       80
-SQLite            723     683       0       40
-MariaDB            55      55       0        0
-ClickHouse        205     205       0        0
-shared/contract    123     120       0        3
-TOTAL            3357    3160       0      197
-
-D160 root-alias / mixed-join cases (CommonTestSuite.JoinAlias.cs), per provider:
-  PostgreSQL     executed=5 passed=5 failed=0 skipped=0
-      Pass Tests.PostgresIntegrationTests.Mixed_alias_then_positional_join_executes_and_keeps_slot_identity
-      Pass Tests.PostgresIntegrationTests.Mixed_positional_then_alias_join_executes_and_keeps_slot_identity
-      Pass Tests.PostgresIntegrationTests.Root_alias_inner_join_returns_matched_rows
-      Pass Tests.PostgresIntegrationTests.Root_alias_item1_and_root_name_resolve_to_the_same_slot
-      Pass Tests.PostgresIntegrationTests.Root_alias_supports_a_positional_join_after_it
-  SQL Server     executed=5 passed=5 failed=0 skipped=0
-      Pass Tests.SqlServerIntegrationTests.Mixed_alias_then_positional_join_executes_and_keeps_slot_identity
-      Pass Tests.SqlServerIntegrationTests.Mixed_positional_then_alias_join_executes_and_keeps_slot_identity
-      Pass Tests.SqlServerIntegrationTests.Root_alias_inner_join_returns_matched_rows
-      Pass Tests.SqlServerIntegrationTests.Root_alias_item1_and_root_name_resolve_to_the_same_slot
-      Pass Tests.SqlServerIntegrationTests.Root_alias_supports_a_positional_join_after_it
-  MySQL          executed=5 passed=5 failed=0 skipped=0
-      Pass Tests.MySqlIntegrationTests.Mixed_alias_then_positional_join_executes_and_keeps_slot_identity
-      Pass Tests.MySqlIntegrationTests.Mixed_positional_then_alias_join_executes_and_keeps_slot_identity
-      Pass Tests.MySqlIntegrationTests.Root_alias_inner_join_returns_matched_rows
-      Pass Tests.MySqlIntegrationTests.Root_alias_item1_and_root_name_resolve_to_the_same_slot
-      Pass Tests.MySqlIntegrationTests.Root_alias_supports_a_positional_join_after_it
-  SQLite         executed=5 passed=5 failed=0 skipped=0
-      Pass Tests.SqliteIntegrationTests.Mixed_alias_then_positional_join_executes_and_keeps_slot_identity
-      Pass Tests.SqliteIntegrationTests.Mixed_positional_then_alias_join_executes_and_keeps_slot_identity
-      Pass Tests.SqliteIntegrationTests.Root_alias_inner_join_returns_matched_rows
-      Pass Tests.SqliteIntegrationTests.Root_alias_item1_and_root_name_resolve_to_the_same_slot
-      Pass Tests.SqliteIntegrationTests.Root_alias_supports_a_positional_join_after_it
-
-Providers without the common D160 cases: ClickHouse, MariaDB
-  (do not inherit CommonTestSuite; their containers do not seed orders/person;
-   their root-alias surface is covered by SQL generation E160-02: 16/16 each).
-All 197 skips are per-test capability skips (Assert.Skip*), not provider-availability skips.
+All 200 skips are capability/`Assert.Skip*` skips (messages are capability reasons).
+Provider-availability skips (DOCKER_HOST missing / container unavailable) = 0.

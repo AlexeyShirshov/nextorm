@@ -6,7 +6,7 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc2` at `18659e41` (merge of PR #205 from `1.0.9-rc1`)
 - collection revision: r1; evidence revision: rv1; PLAN-revision vector: all admitted tasks r=1/rv=1
-- collection status: **in-progress** — P done (24 own PLANs `ready`), ALL-barrier evaluated over 24 admitted tasks; DO **gated** on the D191 written-spec review (see Blockers)
+- collection status: **stopped / incomplete** — P done (24 own PLANs `ready`), ALL-barrier evaluated over 24 admitted tasks; D160 sealed r=4 STOP (final incomplete, confirmed R02); G1 halted, remaining tasks not executed; D191 written-spec review gate unresolved (see Blockers)
 
 ## Admission / gaps (P)
 
@@ -22,7 +22,7 @@ Single connected component by shared core footprint (`EntityBuilder`, `SqlBuilde
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | 24 admitted tasks | D153 → D154 → D157 → D159 → D160 → D184 → D191 → D162 → D170 → D174 → D175 → D173 → D190 → D176 → D178 → D180 → D177 → D179 → D185 → D167 → D169 → D189 → D188 → D151 | current worktree | 1.0.9-rc2 | in-progress |
+| G1 | 24 admitted tasks | D153 → D154 → D157 → D159 → D160 → D184 → D191 → D162 → D170 → D174 → D175 → D173 → D190 → D176 → D178 → D180 → D177 → D179 → D185 → D167 → D169 → D189 → D188 → D151 | current worktree | 1.0.9-rc2 | incomplete — группа остановлена — D160 final incomplete (confirmed R02, sealed r=4 terminal rule) |
 
 Intra-group order is a serialization dependency (footprint overlap) plus one functional edge `D189 → D188`; it is not a functional chain for the rest.
 
@@ -30,39 +30,40 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 
 | task | issue | group | branch | status | plan_state | selected_variant | cycle_id | plan_revision | status file | reason + patch |
 |---|---|---|---|---|---|---|---|---|---|---|
-| D151 | #151 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-151-stryker-mutation-1.md | Stryker re-run native extreme-row |
+| D151 | #151 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-151-stryker-mutation-1.md | Stryker re-run native extreme-row; группа остановлена |
 | D153 | #153 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-153-public-extensibility-1.md | closed #153 (8401ca51) |
 | D154 | #154 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-154-dto-public-ctors-1.md | closed #154 (5d72a79) |
 | D157 | #157 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-157-register-finding-25-1.md | closed #157 (5978556f) |
 | D159 | #159 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | closed #159 (078a7a2d) |
-| D160 | #160 | G1 | 1.0.9-rc2 | in-progress | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | Join alias mixing + root alias |
+| D160 | #160 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=4 | docs/specs/status/rc2-160-join-alias-mixing-1.md | r=4 final CHECK FAIL (confirmed R02 regression; positional over-preservation Defect-B family) → sealed r=4 STOP (planner decision (a)); no r=5; patch docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch |
 | D161 | - | - | - | - | - | - | - | - | - | (reference only: #130/#161 hint APIs already shipped) |
-| D162 | #162 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md | V32 navigation temp/TVP fail-closed |
-| D167 | #167 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-167-csv-chunked-read-1.md | CSV chunked read for byte[] (P0 validator prerequisite) |
-| D169 | #169 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-169-dml-scope-hints-1.md | DML scope hints on join paths |
-| D170 | #170 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | OneToOne FK uniqueness |
+| D162 | #162 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md | V32 navigation temp/TVP fail-closed; группа остановлена |
+| D167 | #167 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-167-csv-chunked-read-1.md | CSV chunked read for byte[] (P0 validator prerequisite); группа остановлена |
+| D169 | #169 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-169-dml-scope-hints-1.md | DML scope hints on join paths; группа остановлена |
+| D170 | #170 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | OneToOne FK uniqueness; группа остановлена |
 | D171 | #171 | - | 1.0.9-rc2 | excluded-gap | gap | pdca-dotnet | N=1 | - | docs/specs/status/rc2-171-joininto-as-derived-1.md | revisit-on-demand placeholder; issue OPEN in milestone |
 | D172 | #172 | - | 1.0.9-rc2 | excluded-gap | gap | pdca-dotnet | N=1 | - | docs/specs/status/rc2-172-child-collection-projection-1.md | awaiting-consumer; issue OPEN in milestone |
-| D173 | #173 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-173-projection-folding-member-1.md | projection folding ignores Member |
-| D174 | #174 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-174-identity-selector-cache-1.md | IdentitySelectorCache clear |
-| D175 | #175 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-175-joininto-test-quality-1.md | JoinInto test-quality debt |
-| D176 | #176 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-176-json-nested-1.md | JSON streaming Phase 2 |
-| D177 | #177 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-177-native-json-1.md | JSON streaming Phase 3 DB-side fast-path |
-| D178 | #178 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-178-json-enum-1.md | JSON streaming enum |
-| D179 | #179 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-179-json-error-policy-1.md | JSON streaming error policy |
-| D180 | #180 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-180-json-stream-provider-conversion-1.md | JSON provider column conversion |
-| D184 | #184 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md | LoadWith EagerLoadMode |
-| D185 | #185 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-185-bindentity-registration-1.md | BindEntity registration |
-| D188 | #188 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md | Comparison benchmarks tier 1 (needs D189) |
-| D189 | #189 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-189-sqlite-datareader-1.md | SQLite ToDataReader verification |
-| D190 | #190 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-190-join-whole-entity-1.md | Whole-entity JOIN projection |
-| D191 | #191 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-191-provider-extensions-1.md | Provider-specific extensions move (**blocked on user review of committed spec**) |
+| D173 | #173 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-173-projection-folding-member-1.md | projection folding ignores Member; группа остановлена |
+| D174 | #174 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-174-identity-selector-cache-1.md | IdentitySelectorCache clear; группа остановлена |
+| D175 | #175 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-175-joininto-test-quality-1.md | JoinInto test-quality debt; группа остановлена |
+| D176 | #176 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-176-json-nested-1.md | JSON streaming Phase 2; группа остановлена |
+| D177 | #177 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-177-native-json-1.md | JSON streaming Phase 3 DB-side fast-path; группа остановлена |
+| D178 | #178 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-178-json-enum-1.md | JSON streaming enum; группа остановлена |
+| D179 | #179 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-179-json-error-policy-1.md | JSON streaming error policy; группа остановлена |
+| D180 | #180 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-180-json-stream-provider-conversion-1.md | JSON provider column conversion; группа остановлена |
+| D184 | #184 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md | LoadWith EagerLoadMode; группа остановлена |
+| D185 | #185 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-185-bindentity-registration-1.md | BindEntity registration; группа остановлена |
+| D188 | #188 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md | Comparison benchmarks tier 1 (needs D189); группа остановлена |
+| D189 | #189 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-189-sqlite-datareader-1.md | SQLite ToDataReader verification; группа остановлена |
+| D190 | #190 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-190-join-whole-entity-1.md | Whole-entity JOIN projection; группа остановлена |
+| D191 | #191 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-191-provider-extensions-1.md | Provider-specific extensions move (**blocked on user review of committed spec**); группа остановлена |
 
 ## Decisions
 
 - **Gap exclusion:** D171/D172 excluded from the actionable set (not-actionable-now, awaiting external input); issues stay OPEN in milestone `1.0.9-rc2`; no scope invented (planner, r=1).
 - **Single group G1:** the footprint graph over the 24 admitted tasks is one connected component through shared core files; disjoint groups impossible. Single-group mode ⇒ current worktree/branch, no worktrees/branches, no merge.
 - **Order** is footprint serialization plus `D189 → D188`.
+- **D160 r=3 → r=4 escalation:** D160's r=2 final CHECK failed; F1 is a recurrence of D160-C1 (pre-.WithAlias state loss), escalated; planner sealed a structural r=3 plan (rv=4). The r=3 final CHECK then failed on a fresh clean-build boundary (slot-numbering shift + positional over-preservation; DO green not reproducible); the r=3 CHECK FAIL was escalated (not STOP) and planner sealed **r=4 (rv=5; rv=4 superseded)** — the **last revision for the F1/C1 family**; any further F1/C1 or R02 failure ⇒ STOP with preserved status, no new escalation. G1 remains in-progress; D160 DO not started (clean PLAN→DO boundary).
 - **Blockers:**
   - **D191 — external user-approval gate.** `docs/superpowers/specs/2026-10-05-provider-specific-extensions-design.md` declares `written spec — AWAITING USER REVIEW` and `implementation — NOT AUTHORIZED`. Autonomous DO cannot satisfy this; requires explicit user review/approval before DO of D191 (and, since G1 is sequential, before any task ordered after D191).
   - **D167 — P0 prerequisite:** in-repo `scripts/validate_inner_loop.py` absent (host copy exists at `/home/alex/.config/opencode/skills/pdca-dotnet/scripts/validate_inner_loop.py`); resolve inside the lane or provide the manual evidence gate; do not weaken acceptance.
@@ -80,12 +81,16 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 ## Общая верификация и восстановление
 
-- Verification state: `unverified` (P done; DO not started).
-- Defect id and history: none.
-- Next allowed step: continue G1 DO at first pending task D160 (same saved PLAN, continue from DO).
+- Verification state: `unverified` / **stopped** (P done; G1 halted at D160). No task after D160 was executed; no merge performed.
+- Defect id and history: D160-C1 (pre-.WithAlias state loss) — fixed n=2, **recurred as F1**; F1 fixed r=3/D160.3-1 (2 applied fixes of C1/F1), F2/F3/F4 each fixed once in r=3 (D160.3-2/.3-3/.3-4); **NEW Defect A** (generator/runtime ordinal slot-numbering shift) + **Defect B** (positional-path over-preservation) observed at the r=3 CHECK; Defect A fixed in r=4 (D160.4-1), but **Defect B / R02 (positional over-preservation of `SourceEntityType`/`BindArrayJoinElement`)** survived and was **CONFIRMED** at the r=4 final CHECK ⇒ sealed r=4 STOP (the last revision for the F1/C1 family; further F1/C1 or R02 failure ⇒ STOP).
+- **D160 STOP record:** CHECK verdict **FAIL** (open rows: R02; alias `Tag`/`CommandTimeout` validation missing; per-variant refs; rv=5 contract reconciliation); STOP decision **planner decision (a)** — confirmed R02 failure ⇒ sealed r=4 STOP, **no r=5**, no further DO/re-CHECK/escalation; D160 final state `incomplete`.
+- **Patch pointer:** `docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch` (20 files, +2823/-124; paths against HEAD `40b1a159`).
+- **Issue #160:** stays **OPEN** — an incomplete task is not closed (not closed on incomplete).
+- **Next allowed step:** **none** — flow closed (D160 incomplete; no r=5). Remaining tasks D184…D151 are marked `incomplete` «группа остановлена»; no merge (single group G1).
+- **Committed results on branch `1.0.9-rc2`:** D153 `8401ca51`, D154 `5d72a79`, D157 `5978556f`, D159 `078a7a2d` remain; no merge (single group G1). The existing #154 notice (`gh close blocked, retry pending`) is preserved.
 
 ## Done / Verified / Incomplete
 
 - Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed).
 - Verified: no.
-- Incomplete: none. Excluded-gap: D171, D172 (issues OPEN, milestone unchanged).
+- Incomplete: **D160** (final incomplete, STOP — confirmed R02, sealed r=4 terminal rule; patch `docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch`); and the not-executed remaining tasks **D184, D191, D162, D170, D174, D175, D173, D190, D176, D178, D180, D177, D179, D185, D167, D169, D189, D188, D151** (группа остановлена). Excluded-gap: D171, D172 (issues OPEN, milestone unchanged).

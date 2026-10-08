@@ -1,0 +1,27 @@
+    /// <summary>
+    /// Wraps a join into a <see cref="JoinedEntityBuilder{TEntity, TJoinEntity}"/>, carrying this
+    /// builder's query modifiers (table, grouping, limits, hints, ...) onto the joined builder. Shared
+    /// by the join and apply variants so they stay in sync.
+    /// </summary>
+    private JoinedEntityBuilder<TEntity, TJoinEntity> CreateJoined<TJoinEntity>(JoinExpression join, QueryCommand? query)
+    {
+        if (_joinIntos is { Count: > 0 })
+            throw new NotSupportedException(
+                "JoinInto cannot be combined with other joins on the same builder; declare JoinInto on a plain entity source only.");
+
+        // A positional Join/Apply applied to a projection-shaped builder (a generated alias-join
+        // builder, or any other source whose entity is a join projection) would nest that projection
+        // as the result's Item1. The planner resolves the physical primary table from Item1, so a
+        // nested projection cannot be mapped to a table and only fails later with a confusing
+        // BuildSqlCommandException. Fail closed here, at construction, with an actionable message.
+        // A derived query (query is not null) keeps its own resolution path and is unaffected.
+        if (query is null && typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "A positional Join/Apply cannot follow an alias Join: the alias projection cannot be nested as the joined source. Keep the chain alias-based, or use positional joins without aliases.");
+
+        EnsureNoEagerLoadState("Join/Apply");
+
+        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join);
+        ApplyJoinStateTo(cb, query);
+        return cb;
+    }

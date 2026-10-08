@@ -1,4 +1,7 @@
-nextorm.core                                                                       88%
-nextorm.postgres                                                                   90.1%
-nextorm.sqlite                                                                     90.5%
-nextorm.sqlserver                                                                  94.9%
+E160-10 coverage per-assembly (D160.3-6, plan r=3, rv=4)
+Overall: line 88.2% (48398/54859), branch 80.2% (25963/32355)
+nextorm.core       88%
+nextorm.postgres   90.1%
+nextorm.sqlite     90.5%
+nextorm.sqlserver  94.9%
+Source: tests/coverage/report/Summary.txt (scope coverage.settings.xml)
