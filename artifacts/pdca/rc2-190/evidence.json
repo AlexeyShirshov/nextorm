@@ -1,0 +1,520 @@
+{
+  "unit": "D190",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests",
+      "tests/nextorm.postgres.tests",
+      "tests/nextorm.sqlserver.tests",
+      "tests/nextorm.mysql.tests",
+      "tests/nextorm.mariadb.tests",
+      "tests/nextorm.clickhouse.tests",
+      "tests/nextorm.integration.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~EntityItemProjectionInMemoryTests",
+      "FullyQualifiedName~RowMaterializerBuilderTests",
+      "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests",
+      "FullyQualifiedName~JoinReturningIdentityTests",
+      "FullyQualifiedName~PlanKeyUniquenessTests",
+      "FullyQualifiedName~EntityItemProjectionTests",
+      "FullyQualifiedName~JoinWholeEntitySqlGenerationTests",
+      "FullyQualifiedName~JoinWholeEntity_",
+      "FullyQualifiedName~MariaDbJoinWholeEntityIntegrationTests",
+      "FullyQualifiedName~ClickHouseJoinWholeEntityIntegrationTests",
+      "FullyQualifiedName~Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData",
+      "FullyQualifiedName~Cte_Typed_SelfJoin_ShouldReturnBothSides",
+      "FullyQualifiedName~JoinArities_ToSqlAndUpdateJoin_ShouldRender"
+    ],
+    "files": [
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "src/nextorm.core/DataContext/RowMaterializerBuilder.cs",
+      "tests/nextorm.core.tests/EntityItemProjectionInMemoryTests.cs",
+      "tests/nextorm.core.tests/RowMaterializerBuilderTests.cs",
+      "tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs",
+      "tests/nextorm.core.tests/JoinReturningIdentityTests.cs",
+      "tests/nextorm.sqlite.tests/EntityItemProjectionTests.cs",
+      "tests/nextorm.sqlite.tests/PlanKeyUniquenessTests.cs",
+      "tests/nextorm.sqlite.tests/JoinWholeEntitySqlGenerationTests.cs",
+      "tests/nextorm.integration.tests/CommonTestSuite.JoinWholeEntity.cs",
+      "tests/nextorm.integration.tests/MariaDbJoinWholeEntityIntegrationTests.cs",
+      "tests/nextorm.integration.tests/ClickHouseJoinWholeEntityIntegrationTests.cs"
+    ],
+    "rationale": "D190 n=3 (final slot): added the unmapped-item/cast guard and the reinforced projection/guard tests; focused inner loop plus one BOUNDARY-01 sweep.",
+    "rebuild": "affected",
+    "boundary": "BOUNDARY-01"
+  },
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.integration.tests/nextorm.integration.tests.csproj",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~EntityItemProjectionInMemoryTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 7
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~RowMaterializerBuilderTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 6
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~SelectExpressionPlanEqualityComparerTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 12
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinReturningIdentityTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 24
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~EntityItemProjectionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 15
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~PlanKeyUniquenessTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 13
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.postgres.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlserver.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mysql.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.mariadb.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.clickhouse.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinWholeEntitySqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 8
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinWholeEntity_"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 20
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~MariaDbJoinWholeEntityIntegrationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~ClickHouseJoinWholeEntityIntegrationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 2
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~Cte_Typed_HeterogeneousWithDependency_ShouldHoistInOrderAndReturnData"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 4
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~Cte_Typed_SelfJoin_ShouldReturnBothSides"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 4
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--filter",
+        "FullyQualifiedName~JoinArities_ToSqlAndUpdateJoin_ShouldRender"
+      ],
+      "phase": "inner",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": [
+        "dotnet",
+        "tool",
+        "run",
+        "dotnet-coverage",
+        "collect",
+        "-s",
+        "coverage.settings.xml",
+        "-f",
+        "cobertura",
+        "-o",
+        "tests/coverage/coverage.cobertura.xml",
+        "dotnet test --no-build --verbosity normal -c Debug --max-parallel-test-modules 1"
+      ],
+      "phase": "boundary",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 9235
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--no-build",
+        "--",
+        "--anyCategories=acceptance"
+      ],
+      "phase": "boundary",
+      "source_revision": "d190-r3-cabc1d72-worktree",
+      "artifact_revision": "d190-r3-cabc1d72-worktree",
+      "exit_code": 0,
+      "selected_count": 7
+    }
+  ]
+}

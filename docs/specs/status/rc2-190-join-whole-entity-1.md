@@ -832,3 +832,32 @@ Shared test run может удовлетворять несколько стр�
 - **branch delta:** temp worktree at `eb45e213~1` (`b447b7be`) removed after use; focused baseline QueryPreparer branch 26.9% / RowMaterializerBuilder 50.6% vs final full-sweep 85.2% / 86.6% (different scopes — lower bound).
 - **mutation (row left OPEN, PASS forbidden):** n=3 targeted recognizer run (`coverage-analysis: perTest`, `QueryCommand.QueryPreparer.cs`) → rc 124 timeout with 1035 mutants pending; n=2 run rc 0 but 0.00% (182 survived) from MTP/xunit-v3 discovery; 8151 Stryker Safe Mode compile errors under `TreatWarningsAsErrors`. Not usable as evidence; residual mutants unverified.
 - **phase:** DO-complete-awaiting-CHECK (r1, n=3/3).
+
+## CHECK verdict n=3 and evidence-only completion pass
+
+- **CHECK n=3 verdict: BLOCKED** (PASS forbidden). W1 product defect is closed; the cycle is blocked on
+  evidence completeness (branch baseline scope, mutation usability, per-criterion bindings). No product
+  code change is permitted or made in this pass.
+- **evidence-only pass (no `src/` / no test-logic changes):**
+  - `artifacts/pdca/rc2-190/r1/n3-evidence-brief.md` rewritten — each R190-01…R190-09 has `file:line`,
+    argv + `--filter`, exit, selected_count and a provenance line (cmd/cwd/ts/sha); R190-02 SQL-side
+    present-all-default marked **not produced** with reason (non-null PK ⇒ no all-NULL present row).
+  - `artifacts/pdca/rc2-190/provenance.md` added — standalone ledger of every run (argv, filter, exit,
+    selected, log path), incl. builds, inner-loop, integration, boundary, baseline, mutation, validator.
+  - `test-scope.json` regenerated with **13 individual single-class selectors, no `|`**; validator
+    `brief` rc 0 and `report` rc 0; outputs non-empty (`validate-inner-loop-brief.txt`,
+    `validate-inner-loop-report-n3.txt`).
+  - **full-sweep branch baseline** re-captured on base `b447b7be` (`eb45e213~1`) in a temporary worktree
+    (removed after): `QueryCommand.QueryPreparer` line 90.9% / branch 85.6%, `RowMaterializerBuilder`
+    line 93.3% / branch 86.0%. Final n=3: QueryPreparer 91.3/85.2, RowMaterializerBuilder 93.3/86.6.
+    Δ line +0.4pp / branch −0.4pp (QueryPreparer), line 0.0pp / branch +0.6pp (RowMaterializerBuilder).
+    Base sweep had 2 unrelated failures (ClickHouse native parity; timed-dictionary eviction) but still
+    emitted the coverage XML.
+  - **mutation retry (one focused attempt, M6):** Stryker.NET 5.0.0 with `test-runner: mtp`,
+    `coverage-analysis: perTest`, `TreatWarningsAsErrors=false` (env, mutation build only) → **rc 124**,
+    discovered 9204 tests (MTP ignores `test-case-filter`), 8158 Safe-Mode compile errors
+    (`CS0165`/`CS8081` in unrelated visitors), 1035 mutants pending. Earlier rc-0 run scored 0.00%
+    (182 survived). Mutation remains **not usable as evidence** (environment/tooling limitation, no
+    fabricated kills); row left OPEN. Logs: `mutation/run*`.
+- **task status:** NOT done — remains `BLOCKED` pending evidence review; do not mark complete.
+- **follow-up issue:** [#207](https://github.com/AlexeyShirshov/nextorm/issues/207).
