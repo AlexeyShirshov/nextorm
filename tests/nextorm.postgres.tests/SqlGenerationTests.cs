@@ -5,6 +5,7 @@ using System.Text.Json;
 using FluentAssertions;
 using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.SqlServer;
 using NpgsqlTypes;
 
 namespace NextORM.Postgres.Tests;

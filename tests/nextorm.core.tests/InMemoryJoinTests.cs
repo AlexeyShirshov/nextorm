@@ -1,4 +1,7 @@
 using FluentAssertions;
+using NextORM.ClickHouse;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.Core.Tests;
 

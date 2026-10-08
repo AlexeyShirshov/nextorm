@@ -19,6 +19,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
+    <!-- Provider extensions moved out of nextorm.core; the in-memory dialect-gating tests call the
+         ClickHouse/PostgreSQL/SQL Server fluent members as public extension methods. -->
+    <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
   </ItemGroup>
 
 </Project>

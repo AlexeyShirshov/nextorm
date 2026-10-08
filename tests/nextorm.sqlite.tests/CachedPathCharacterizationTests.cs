@@ -1,5 +1,6 @@
 using System.Data.Common;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 
 namespace NextORM.Sqlite.Tests;

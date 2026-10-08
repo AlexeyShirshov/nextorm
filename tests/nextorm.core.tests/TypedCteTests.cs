@@ -5,7 +5,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.Core.Tests;
 

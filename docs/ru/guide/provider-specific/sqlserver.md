@@ -139,11 +139,12 @@ MariaDB поддерживает ту же клаузу на системно-в
 
 ## `PIVOT` / `UNPIVOT`
 
-[`EntityBuilder<TEntity>.Pivot`](xref:NextORM.Core.EntityBuilder`1) разворачивает источник в колонки
+[`EntityBuilder.Pivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Pivot``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PivotAggregate,System.Linq.Expressions.Expression{System.Func{``0,System.Object}},System.Linq.Expressions.Expression{System.Func{``0,System.Object}},NextORM.Core.PivotValue[])) разворачивает источник в колонки
 нативным оператором T-SQL `PIVOT`, а
-[`Unpivot`](xref:NextORM.Core.EntityBuilder`1.Unpivot(System.String,System.String,NextORM.Core.UnpivotColumn[])) складывает колонки в строки через `UNPIVOT`
+[`Unpivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Unpivot``1(NextORM.Core.EntityBuilder{``0},System.String,System.String,NextORM.Core.UnpivotColumn[])) складывает колонки в строки через `UNPIVOT`
 ([`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot) /
-[`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). Результат — нетипизированный
+[`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). Это extension-методы в пространстве имён
+`NextORM.SqlServer`; добавьте `using NextORM.SqlServer;`, чтобы их использовать. Результат — нетипизированный
 источник: группирующие колонки и колонки-значения выбираются по имени через `TableAlias`. Операторы
 применяются к табличному выражению, поэтому источником может быть простая таблица/сущность,
 табличная функция или производный запрос (`ctx.From(derivedQuery)`); фильтры и прочие модификаторы

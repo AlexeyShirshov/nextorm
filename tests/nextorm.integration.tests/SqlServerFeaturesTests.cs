@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.SqlServer;
 
 namespace NextORM.Integration.Tests;
 

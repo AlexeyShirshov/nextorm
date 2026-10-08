@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 
 namespace NextORM.Integration.Tests;

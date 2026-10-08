@@ -1,4 +1,5 @@
 using FluentAssertions;
+using NextORM.ClickHouse;
 using NextORM.Core;
 using System.Linq.Expressions;
 

@@ -188,9 +188,10 @@ See [Scalar functions](../../scalar-functions/index.md).
 
 ## `DISTINCT ON`
 
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) renders `SELECT DISTINCT ON (expr, ...)`, keeping the
+[`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) renders `SELECT DISTINCT ON (expr, ...)`, keeping the
 first row of each key ([`DistinctOn`](xref:NextORM.Core.ISqlDialect.DistinctOn));
-mutually exclusive with `Distinct`.
+mutually exclusive with `Distinct`. It is an extension method in the `NextORM.Postgres` namespace; add
+`using NextORM.Postgres;` to use it.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

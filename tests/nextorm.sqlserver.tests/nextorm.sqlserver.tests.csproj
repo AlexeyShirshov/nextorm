@@ -18,6 +18,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
+    <!-- DistinctOn moved to the PostgreSQL provider; the SQL Server generation tests call it as a
+         public extension method to assert the cross-dialect rejection. -->
+    <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
     <!-- The join-alias generator runs as an analyzer over this test assembly so Alias.Buyer and the
          generated projection/builder types bind in JoinAliasSqlGenerationTests. -->
     <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"

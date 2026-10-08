@@ -21,6 +21,10 @@
     <!-- Reference the ClickHouse provider to call its SemiJoin extension method when asserting that
          MySQL rejects it at render time (issue #122). -->
     <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
+    <!-- DistinctOn/Pivot moved to the PostgreSQL/SQL Server providers; the MySQL generation tests call
+         them as public extension methods to assert the cross-dialect rejection. -->
+    <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
     <!-- The join-alias generator runs as an analyzer over this test assembly so Alias.Buyer and the
          generated projection/builder types bind in JoinAliasSqlGenerationTests. -->
     <ProjectReference Include="..\..\src\nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj"

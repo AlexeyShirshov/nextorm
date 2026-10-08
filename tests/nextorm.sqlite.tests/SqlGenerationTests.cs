@@ -4,6 +4,8 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Postgres;
+using NextORM.SqlServer;
 
 namespace NextORM.Sqlite.Tests;
 

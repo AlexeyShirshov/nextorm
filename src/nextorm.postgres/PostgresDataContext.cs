@@ -171,7 +171,7 @@ public class PostgresDataContext : DataContext
     /// <param name="parameter">The parameter descriptor.</param>
     /// <returns>A new PostgreSQL parameter configured from <paramref name="parameter"/>.</returns>
     /// <exception cref="ArgumentException">The descriptor carries a <see cref="ProcedureParameter.TypeName"/> (SQL Server only), or a table parameter is not <see cref="ParameterDirection.Input"/>.</exception>
-    protected override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
+    protected internal override DbParameter CreateProcedureParameter(ProcedureParameter parameter)
     {
         if (parameter.Value is TableParameterValue tableValue)
         {

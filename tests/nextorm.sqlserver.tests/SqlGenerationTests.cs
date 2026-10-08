@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
+using NextORM.Postgres;
 
 namespace NextORM.SqlServer.Tests;
 
@@ -3187,6 +3188,19 @@ public class SqlGenerationTests
         var act = () => e.Unpivot("val", "qtr");
 
         act.Should().Throw<ArgumentException>().WithMessage("*at least one column*");
+    }
+
+    [Fact]
+    public void Unpivot_WithUnresolvableAliasSource_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        // A raw TableAlias builder has no query, source, table name or resolvable metadata mapping, so
+        // ResolvePivotInner reaches its fallback and reports the unresolvable source.
+        var e = new EntityBuilder<TableAlias>(ctx);
+
+        var act = () => e.Unpivot("val", "qtr", UnpivotColumn.Create("q1"));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*could not be resolved*");
     }
 
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)

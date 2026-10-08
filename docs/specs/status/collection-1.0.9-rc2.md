@@ -6,7 +6,7 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc2` at `18659e41` (merge of PR #205 from `1.0.9-rc1`)
 - collection revision: r1; evidence revision: rv1; PLAN-revision vector: all admitted tasks r=1/rv=1
-- collection status: **in-progress (recovery)** — D153/D154/D157/D159 done; **D160 set aside** as terminal `incomplete` (preserved on branch `wip/d160-incomplete` + patch); continuing the remaining 19 tasks from the clean pre-D160 tip `4bd18c82` under a user-authorized continuation policy
+- collection status: **in-progress (recovery)** — D153/D154/D157/D159/D191 done; **D160 set aside** as terminal `incomplete` (preserved on branch `wip/d160-incomplete` + patch); continuing the remaining tasks from the clean pre-D160 tip `4bd18c82` under a user-authorized continuation policy
 
 ## Admission / gaps (P)
 
@@ -22,7 +22,7 @@ Single connected component by shared core footprint (`EntityBuilder`, `SqlBuilde
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | 23 active tasks (D160 set aside) | D153 → D154 → D157 → D159 → [D160 set aside] → D184 → D191 → D162 → D170 → D174 → D175 → D173 → D190 → D176 → D178 → D180 → D177 → D179 → D185 → D167 → D169 → D189 → D188 → D151 | current worktree | 1.0.9-rc2 | in-progress |
+| G1 | 23 active tasks (D160 set aside) | D153 → D154 → D157 → D159 → [D160 set aside] → D184 → D191 (done) → D162 → D170 → D174 → D175 → D173 → D190 → D176 → D178 → D180 → D177 → D179 → D185 → D167 → D169 → D189 → D188 → D151 | current worktree | 1.0.9-rc2 | in-progress |
 
 Intra-group order is a serialization dependency (footprint overlap) plus one functional edge `D189 → D188`; it is not a functional chain for the rest.
 
@@ -64,7 +64,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D188 | #188 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md | Comparison benchmarks tier 1 (needs D189) |
 | D189 | #189 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-189-sqlite-datareader-1.md | SQLite ToDataReader verification |
 | D190 | #190 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-190-join-whole-entity-1.md | Whole-entity JOIN projection |
-| D191 | #191 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-191-provider-extensions-1.md | Provider-specific extensions move (**blocked on user review of committed spec**) |
+| D191 | #191 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-191-provider-extensions-1.md | done — provider-specific fluent API relocated out of core into provider packages; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; commit `__D191_SHA__`; issue #191 closed (evidence artifacts/pdca/rc2-191/r1/) |
 
 ## Decisions
 
@@ -90,10 +90,10 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 - Verification state: `unverified` (P done; DO not started).
 - Defect id and history: none.
-- Next allowed step: continue G1 DO at first pending task D160 (same saved PLAN, continue from DO).
+- Next allowed step: continue G1 DO at next pending task **D162** (D191 done, CHECK PASS snapshot-n2; same saved PLAN, continue from DO). D160 set-aside and D184 incomplete remain preserved and are not resumed here.
 
 ## Done / Verified / Incomplete
 
-- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed).
+- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed); D191 (#191, commit `__D191_SHA__`; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; issue #191 closed; evidence artifacts/pdca/rc2-191/r1/).
 - Verified: no.
 - Incomplete: **D160** (terminal r=4 STOP; preserved on `wip/d160-incomplete` + patch). Excluded-gap: D171, D172 (issues OPEN).

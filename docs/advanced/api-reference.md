@@ -196,6 +196,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 | [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `Npgsql`; a constructor overload takes a server `Version` that gates the aggregate `FILTER` (9.4+). |
 | [`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) | PostgreSQL [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.Postgres.PostgresDialect.Instance)); the aggregate `FILTER` requires the configured server `Version` to be unset or 9.4+. |
 | [`PostgresDataContextOptionsBuilderExtensions`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `UsePostgres(string connectionString)` and `UsePostgres(DbConnection)`. |
+| [`PostgresEntityBuilderExtensions`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions) | PostgreSQL-only fluent members of `EntityBuilder<TEntity>`, re-exposed as extension methods — [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})). Add `using NextORM.Postgres;`. |
 
 ## Namespace [`NextORM.SqlServer`](xref:NextORM.SqlServer)
 
@@ -204,6 +205,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 | [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `Microsoft.Data.SqlClient`, with numeric column conversion. |
 | [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) | SQL Server [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.SqlServer.SqlServerDialect.Instance)). |
 | [`SqlServerDataContextOptionsBuilderExtensions`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions) | `UseSqlServer(string connectionString)` and `UseSqlServer(DbConnection)`. |
+| [`SqlServerEntityBuilderExtensions`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions) | SQL Server-only fluent members of `EntityBuilder<TEntity>`, re-exposed as extension methods — [`Pivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Pivot``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PivotAggregate,System.Linq.Expressions.Expression{System.Func{``0,System.Object}},System.Linq.Expressions.Expression{System.Func{``0,System.Object}},NextORM.Core.PivotValue[])) / [`Unpivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Unpivot``1(NextORM.Core.EntityBuilder{``0},System.String,System.String,NextORM.Core.UnpivotColumn[])). Add `using NextORM.SqlServer;`. |
 
 ## Namespace [`NextORM.MySql`](xref:NextORM.MySql)
 

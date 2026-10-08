@@ -189,9 +189,10 @@ Native-поверхность реализована только в PostgreSQL;
 
 ## `DISTINCT ON`
 
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) рендерит `SELECT DISTINCT ON (expr, ...)`, оставляя
+[`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) рендерит `SELECT DISTINCT ON (expr, ...)`, оставляя
 первую строку каждого ключа ([`DistinctOn`](xref:NextORM.Core.ISqlDialect.DistinctOn));
-взаимоисключающе с `Distinct`.
+взаимоисключающе с `Distinct`. Это extension-метод в пространстве имён `NextORM.Postgres`; добавьте
+`using NextORM.Postgres;`, чтобы его использовать.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

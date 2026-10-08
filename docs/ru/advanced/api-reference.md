@@ -191,6 +191,7 @@
 | [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) поверх `Npgsql`; перегрузка конструктора принимает серверную `Version`, гейтящую агрегатный `FILTER` (9.4+). |
 | [`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) | Синглтон [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) для PostgreSQL ([`Instance`](xref:NextORM.Postgres.PostgresDialect.Instance)); агрегатный `FILTER` требует, чтобы настроенная серверная `Version` была не задана или 9.4+. |
 | [`PostgresDataContextOptionsBuilderExtensions`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `UsePostgres(string connectionString)` и `UsePostgres(DbConnection)`. |
+| [`PostgresEntityBuilderExtensions`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions) | Только PostgreSQL fluent-члены `EntityBuilder<TEntity>`, переоткрытые как extension-методы — [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})). Добавьте `using NextORM.Postgres;`. |
 
 ## Пространство имён `nextorm.sqlserver`
 
@@ -199,6 +200,7 @@
 | [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) поверх `Microsoft.Data.SqlClient`, с преобразованием числовых столбцов. |
 | [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) | Синглтон [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) для SQL Server ([`Instance`](xref:NextORM.SqlServer.SqlServerDialect.Instance)). |
 | [`SqlServerDataContextOptionsBuilderExtensions`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions) | `UseSqlServer(string connectionString)` и `UseSqlServer(DbConnection)`. |
+| [`SqlServerEntityBuilderExtensions`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions) | Только SQL Server fluent-члены `EntityBuilder<TEntity>`, переоткрытые как extension-методы — [`Pivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Pivot``1(NextORM.Core.EntityBuilder{``0},NextORM.Core.PivotAggregate,System.Linq.Expressions.Expression{System.Func{``0,System.Object}},System.Linq.Expressions.Expression{System.Func{``0,System.Object}},NextORM.Core.PivotValue[])) / [`Unpivot`](xref:NextORM.SqlServer.SqlServerEntityBuilderExtensions.Unpivot``1(NextORM.Core.EntityBuilder{``0},System.String,System.String,NextORM.Core.UnpivotColumn[])). Добавьте `using NextORM.SqlServer;`. |
 
 ## Пространство имён `nextorm.mysql`
 

@@ -163,7 +163,7 @@ select nullableint from complex_entity
 PostgreSQL дополнительно поддерживает `DISTINCT ON (expr, ...)`, который оставляет первую строку
 каждого уникального ключа согласно `ORDER BY` (ведущие выражения сортировки должны совпадать с
 ключом). Вместо `Distinct` используйте
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})); их сочетание бросает исключение,
+[`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})); их сочетание бросает исключение,
 поскольку PostgreSQL считает их взаимоисключающими.
 
 ```csharp
@@ -266,7 +266,7 @@ ClickHouse) и на провайдере in-memory. На PostgreSQL и ClickHous
 другая форма сохраняет переносимое понижение выше.
 
 Запрос отклоняется на этапе построения SQL при сочетании с другим модификатором формы строк, который
-не выражается через производную таблицу: [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), соединение, `Having`,
+не выражается через производную таблицу: [`DistinctOn`](xref:NextORM.Postgres.PostgresEntityBuilderExtensions.DistinctOn``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), соединение, `Having`,
 именованные окна, `LimitBy`, `ArrayJoin`, `PreWhere`, постраничный вывод, операция над множествами
 или нефизический источник.
 
