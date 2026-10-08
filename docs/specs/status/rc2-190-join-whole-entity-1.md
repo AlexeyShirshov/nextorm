@@ -801,7 +801,7 @@ Shared test run может удовлетворять несколько стр�
 2026-10-08T14:45:00Z | DO | r1 | n1/3 | D190-06 docs EN+RU + registers; DocFX exit 0 | limitations EN+RU, guide/02-joins EN+RU, code-smells-review.md, API-NAMING-REVIEW.md (#190 audit); DocFX 0 errors, 2 pre-existing warnings ($E/EV190-DOCFX)
 2026-10-08T14:45:00Z | DO | r1 | n1/3 | mutation attempted, aborted at timeout (tooling present); disclosed | $E/mutation (1167 combined / 182 RowMaterializerBuilder mutants pending, exit 124); see r1/evidence-brief.md R190-06
 2026-10-08T14:50:00Z | DO | r1 | n1/3 | inner-loop validator brief+report rc 0; r1 evidence brief written | $E/test-scope.json, $E/evidence.json, $E/r1/evidence-brief.md, $E/r1/red-regressions.md
-2026-10-08T14:55:00Z | DO | r1 | n1/3 | DO-complete-awaiting-CHECK; task files committed | HEAD (to be filled after commit); commit message starts #190
+2026-10-08T14:55:00Z | DO | r1 | n1/3 | DO-complete-awaiting-CHECK; task files committed | HEAD b447b7be (message starts #190)
 
 ## DO state
 
