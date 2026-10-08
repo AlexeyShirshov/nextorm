@@ -52,6 +52,13 @@ internal static class RowMaterializerBuilder
         // assigning it to its projection slot; ordinary projections keep the existing path.
         if (!ignoreColumns)
         {
+            // A direct whole-entity projection (Select(p => p.ItemN)) materializes the selected item
+            // itself, not a wrapper: every column belongs to one item group whose entity type is the
+            // result type. Return that entity directly, keeping the all-NULL guard that yields null on
+            // the missing outer-join side.
+            if (TryBuildRootEntityItem(resultType, param, selectList, mapColumn, mapDynamicColumns, isNull, out var rootEntity))
+                return rootEntity;
+
             for (var i = 0; i < selectList.Length; i++)
             {
                 if (selectList[i].ProjectionItem is not null)
@@ -60,6 +67,47 @@ internal static class RowMaterializerBuilder
         }
 
         return BuildCore(resultType, param, selectList, ignoreColumns, mapColumn, mapDynamicColumns);
+    }
+
+    /// <summary>
+    /// Builds the entity of a direct whole-entity projection: the select list consists entirely of one
+    /// <see cref="SelectExpression.ProjectionItem"/> group whose entity type is the result type. Returns
+    /// <see langword="false"/> for any other shape, leaving the existing projection path in place.
+    /// </summary>
+    private static bool TryBuildRootEntityItem(
+        Type resultType,
+        ParameterExpression param,
+        SelectExpression[] selectList,
+        Func<SelectExpression, Expression> mapColumn,
+        Func<SelectExpression, int, DynamicColumns, Expression>? mapDynamicColumns,
+        Func<SelectExpression, Expression>? isNull,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Expression? body)
+    {
+        body = null;
+        if (selectList.Length == 0)
+            return false;
+
+        ProjectionEntityItem? rootItem = null;
+        var columns = new List<SelectExpression>(selectList.Length);
+        for (var i = 0; i < selectList.Length; i++)
+        {
+            var column = selectList[i];
+            if (column.ProjectionItem is not { } item)
+                return false;
+
+            if (rootItem is null)
+                rootItem = item;
+            else if (!ReferenceEquals(rootItem, item))
+                return false;
+
+            columns.Add(column);
+        }
+
+        if (rootItem is null || rootItem.EntityType != resultType)
+            return false;
+
+        body = BuildEntityItem(rootItem, param, columns, mapColumn, mapDynamicColumns, isNull);
+        return true;
     }
 
     /// <summary>

@@ -101,9 +101,24 @@ var rows = await dataContext.From<ISimpleEntity>()
 select t1.id as 'Order', t2.requiredstring as 'Customer' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-A projection member must be a column of one of the joined entities (`p.Item1.Id`); referring to an entity
-as a whole (`Order = p.Item1`) is not a column and is rejected. When you need several columns from the same
-side, list each of them explicitly.
+A projection member is usually a column of one of the joined entities (`p.Item1.Id`), but the whole item can
+also be selected directly: `Select(p => p.Item1)` / `Select(p => p.Item2)` selects only that entity's mapped
+columns and materializes the entity — or `null` on the missing outer-join side. When you need selected columns
+from the same side without materializing the entity, list each of them explicitly.
+
+```csharp
+var children = await dataContext.From<ISimpleEntity>()
+    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => p.Item2)
+    .ToListAsync();
+```
+
+```sql
+select t2.id, t2.nullableint, t2.somestring, ... from simple_entity as 't1' left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+A wildcard `SELECT *` is never generated — the mapped columns are listed explicitly — and comparing whole
+entities in a predicate or casting an item to an unrelated result type is not supported.
 
 ## Named join aliases
 

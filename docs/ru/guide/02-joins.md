@@ -103,9 +103,24 @@ var rows = await dataContext.From<ISimpleEntity>()
 select t1.id as 'Order', t2.requiredstring as 'Customer' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-Член проекции обязан быть колонкой одной из соединённых сущностей (`p.Item1.Id`); ссылка на сущность
-целиком (`Order = p.Item1`) колонкой не является и отклоняется. Если нужны несколько колонок одной
-стороны, перечислите их явно.
+Член проекции обычно — колонка одной из соединённых сущностей (`p.Item1.Id`), но целый элемент можно
+выбрать и напрямую: `Select(p => p.Item1)` / `Select(p => p.Item2)` выбирает только mapped-колонки этой
+сущности и материализует её — либо `null` на отсутствующей стороне outer join. Если нужны отдельные
+колонки той же стороны без материализации сущности, перечислите их явно.
+
+```csharp
+var children = await dataContext.From<ISimpleEntity>()
+    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => p.Item2)
+    .ToListAsync();
+```
+
+```sql
+select t2.id, t2.nullableint, t2.somestring, ... from simple_entity as 't1' left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+Wildcard `SELECT *` не генерируется никогда — mapped-колонки перечисляются явно, — а сравнение целых
+сущностей в предикате и приведение элемента к несвязанному типу результата не поддержаны.
 
 ## Именованные псевдонимы соединений
 

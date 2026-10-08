@@ -48,6 +48,51 @@ public class EntityItemProjectionInMemoryTests
         childless.Item2.Should().BeNull();
         rows.Single(r => r.Item2 is { Id: 10 }).Item1.Id.Should().Be(1);
     }
+
+    [Fact]
+    public void DirectEntityItem_InnerJoin_ShouldMaterializeSelectedEntity()
+    {
+        using var ctx = CreateContext();
+
+        var children = ctx.From<MemoryItemParent>()
+            .Join(ctx.From<MemoryItemChild>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => p.Item2)
+            .ToList();
+
+        children.Should().HaveCount(2);
+        children.Should().OnlyContain(c => c.ParentId == 1);
+        children.Select(c => c.Id).OrderBy(x => x).Should().Equal(10, 11);
+    }
+
+    [Fact]
+    public void DirectEntityItem_OuterJoin_ShouldReturnNullForMissingSide()
+    {
+        using var ctx = CreateContext();
+
+        var children = ctx.From<MemoryItemParent>()
+            .LeftJoin(ctx.From<MemoryItemChild>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => p.Item2)
+            .ToList();
+
+        children.Should().HaveCount(3);
+        children.Count(c => c is null).Should().Be(1, "the missing outer-join side must materialize as null");
+        children.Where(c => c is not null).Select(c => c!.Id).OrderBy(x => x).Should().Equal(10, 11);
+    }
+
+    [Fact]
+    public void DirectEntityItem_FirstSlot_ShouldMaterializeParent()
+    {
+        using var ctx = CreateContext();
+
+        var parents = ctx.From<MemoryItemParent>()
+            .LeftJoin(ctx.From<MemoryItemChild>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => p.Item1)
+            .ToList();
+
+        parents.Should().HaveCount(3);
+        parents.Select(p => p.Id).OrderBy(x => x).Should().Equal(1, 1, 2);
+        parents.Select(p => p.Name).OrderBy(x => x).Should().Equal("p1", "p1", "p2");
+    }
 }
 
 public sealed class MemoryItemParent

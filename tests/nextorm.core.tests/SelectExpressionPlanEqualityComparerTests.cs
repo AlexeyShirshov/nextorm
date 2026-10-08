@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -157,6 +158,38 @@ public class SelectExpressionPlanEqualityComparerTests
         comparer.Equals(first, second).Should()
             .BeFalse("different entity types rebuild the row into a different shape");
         comparer.GetHashCode(first).Should().NotBe(comparer.GetHashCode(second));
+    }
+
+    [Fact]
+    public void Comparer_ShouldDistinguishDirectRootItemSourceExpressions()
+    {
+        // D190: a direct whole-entity projection expands into columns re-rooted onto the projection
+        // source (p.Item1 vs p.Item2). The same entity item and slot reached through a self-join must be
+        // separated by the source binding in the column expression, so a cached mapper/SQL built for one
+        // alias is never served for the other.
+        var comparer = new SelectExpressionPlanEqualityComparer(new QueryProvider());
+        var parameter = Expression.Parameter(typeof(Projection<PlanEqualityMemberEntity, PlanEqualityMemberEntity>), "p");
+        var item = new ProjectionEntityItem(0, typeof(PlanEqualityMemberEntity), null);
+        var id = nameof(PlanEqualityMemberEntity.Id);
+
+        var fromFirst = new SelectExpression(typeof(int))
+        {
+            Index = 0,
+            PropertyName = id,
+            ProjectionItem = item,
+            Expression = Expression.Property(Expression.Property(parameter, nameof(Projection<PlanEqualityMemberEntity, PlanEqualityMemberEntity>.Item1)), id),
+        };
+        var fromSecond = new SelectExpression(typeof(int))
+        {
+            Index = 0,
+            PropertyName = id,
+            ProjectionItem = item,
+            Expression = Expression.Property(Expression.Property(parameter, nameof(Projection<PlanEqualityMemberEntity, PlanEqualityMemberEntity>.Item2)), id),
+        };
+
+        comparer.Equals(fromFirst, fromSecond).Should()
+            .BeFalse("a self-join root item must keep its own source binding");
+        comparer.GetHashCode(fromFirst).Should().NotBe(comparer.GetHashCode(fromSecond));
     }
 
     [Fact]

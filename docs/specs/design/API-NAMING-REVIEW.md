@@ -5643,3 +5643,16 @@ Fast-тесты: `tests/nextorm.postgres.tests` — **488** passed (вкл. `Ran
 | N191-2 | ℹ️ (naming/форма) | `PostgresEntityBuilderExtensions`, `SqlServerEntityBuilderExtensions` | Имена типов следуют существующей конвенции `…EntityBuilderExtensions` (#122); namespace — провайдерный (`NextORM.Postgres`/`NextORM.SqlServer`), что осознанно требует `using` (как CHX4). XML-doc member-полный; `TreatWarningsAsErrors` ⇒ CS1591 гейтится | Без изменений; форму считать зафиксированной |
 
 ℹ️ **Наблюдения.** (1) P0/P1 по именам — нет. (2) Публичные доки EN+RU синхронны: `advanced/api-reference.md` (+RU), `guide/03-grouping-and-aggregates.md`, `guide/07-distinct.md`, `guide/provider-specific/postgresql.md`, `guide/provider-specific/sqlserver.md` (+RU) переведены с `NextORM.Core.EntityBuilder.*` на новые extension-классы; новых страниц/нумерации/`toc` нет, ссылок на `docs/specs/**` из публичных доков нет; `dotnet docfx docs/docfx.json` exit 0. (3) Кодовая сторона/приёмка — статус `rc2-191-provider-extensions-1.md`; CHECK сертифицирует завершение.
+
+---
+
+## Аудит 08.10.2026 — issue #190: прямая проекция целой соединённой сущности `Select(p => p.ItemN)` (ветка `1.0.9-rc2`; P0 — нет; P1 по именам — нет; P2 — N190-1 (Шаг 5); ℹ️ — N190-2)
+
+**Область.** #190 добавляет отсутствовавший root entity-item projection: `Select(p => p.Item1)`/`Item2..Item8` распознаётся в `QueryCommand.QueryPreparer.TryGetDirectEntityItem` (только bare `Projection<T…>.ItemN`, до скалярных ветвей), раскрывается существующим `TryExpandEntityItem` в упорядоченные mapped-колонки и материализуется корнем через `RowMaterializerBuilder.TryBuildRootEntityItem` (all-NULL → `null` на отсутствующей стороне outer join); in-memory читает объект элемента напрямую. Новых публичных типов/членов нет: сигнатуры `Select`/`Join` не менялись ⇒ Приложение A без изменений.
+
+| # | Ур. | Место | Оценка | Рекомендация |
+|---|-----|-------|--------|--------------|
+| N190-1 | **P2 (Шаг 5)** | `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs`; `src/nextorm.core/DataContext/RowMaterializerBuilder.cs` | Публичной дельты нет; `find -name 'PublicAPI*.txt'` — **0**, заморозка (Шаг 5) остаётся открытой | При заморозке записей не требуется; release notes — поддержка `Select(p => p.ItemN)` |
+| N190-2 | ℹ️ (naming) | те же | Новые имена не вводятся: распознаётся существующая позиционная поверхность `Item1..Item8`; wildcard/`WHERE`-сравнение/casts вне scope (см. `code-smells-review.md`) | Без изменений |
+
+ℹ️ **Наблюдения.** (1) P0/P1 по именам — нет. (2) Публичные доки EN+RU синхронны: `advanced/limitations.md` (+RU — запрет снят ровно для direct `ItemN`), `guide/02-joins.md` (+RU — пример direct whole entity, nullable outer side); ссылок на `docs/specs/**` нет. (3) Автор — `coder`, сертификатор — отдельный `check`; закрытие — только после CHECK PASS. Кодовая сторона/приёмка — `docs/specs/status/rc2-190-join-whole-entity-1.md`.

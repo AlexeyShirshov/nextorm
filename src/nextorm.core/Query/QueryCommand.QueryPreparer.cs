@@ -481,6 +481,55 @@ public partial class QueryCommand
                             columnsPlanHash = columnsPlanHash * 13 + scalarShape[0].PlanHashCode;
                         }
                     }
+                    else if (TryGetDirectEntityItem(cmd, out var directItemType, out var directSlot, out var directMemberName, out var directItemExpression))
+                    {
+                        // A direct whole-entity projection of a recognized joined projection item
+                        // (Select(p => p.ItemN)): expand the item into its mapped scalar columns so the
+                        // SQL path reads exactly the selected entity's columns (the agreed equivalent of
+                        // tN.*), tagged so the materializer rebuilds the entity and yields null on the
+                        // missing outer-join side. Recognized before the scalar-member branches and only
+                        // for a confirmed Projection<T...>.ItemN.
+                        if (cmd._dataContext!.NeedMapping)
+                        {
+                            var directColumns = new List<SelectExpression>();
+                            if (TryExpandEntityItem(directItemType, directItemExpression, directSlot, null, null, directColumns, cancellationToken))
+                            {
+                                selectList = directColumns.ToArray();
+                                for (var i = 0; i < selectList.Length; i++)
+                                {
+                                    selectList[i].Index = i;
+                                    if (!cmd._dontCache && !noHash)
+                                    {
+                                        selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
+                                        columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // The in-memory source row already carries the entity item (or the outer-join
+                            // null), so read the item object itself instead of re-materializing it from
+                            // flattened columns; a scalar-default presence heuristic would turn a present
+                            // all-default entity into a missing one.
+                            cmd.OneColumn = true;
+                            var directVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger) { ProjectionMode = true };
+                            var directSelect = directVisitor.Visit(cmd._exp);
+                            var directColumn = new SelectExpression(directItemType)
+                            {
+                                Index = 0,
+                                PropertyName = directMemberName,
+                                Expression = directSelect,
+                            };
+                            if (!cmd._dontCache && !noHash)
+                            {
+                                directColumn.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(directColumn);
+                                columnsPlanHash = columnsPlanHash * 13 + directColumn.PlanHashCode;
+                            }
+
+                            selectList = [directColumn];
+                        }
+                    }
                     else if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
                         // A ValueTuple construction is not a supported Select projection: this path
@@ -871,6 +920,62 @@ public partial class QueryCommand
             }
 
             selectList = columns;
+            return true;
+        }
+
+        /// <summary>
+        /// Recognizes the direct whole-entity projection of a joined projection item
+        /// (<c>Select(p =&gt; p.ItemN)</c>). Returns <see langword="true"/> only for a bare property read of
+        /// the projection parameter itself, where the property is a declared <c>ItemN</c> of that
+        /// <see cref="IProjection"/> type and the result type is the item's own type. An ordinary
+        /// entity-valued member (for example a mapped navigation), a nested item read or an explicit cast
+        /// to an unrelated result type is not recognized, so it keeps its existing behaviour.
+        /// </summary>
+        private static bool TryGetDirectEntityItem(
+            QueryCommand cmd,
+            out Type itemType,
+            out int slot,
+            out string memberName,
+            out Expression itemExpression)
+        {
+            itemType = typeof(object);
+            slot = 0;
+            memberName = string.Empty;
+            itemExpression = cmd._exp!.Body;
+
+            // Only a joined projection is addressed by ItemN; a plain entity projection has no items.
+            if (cmd._joins is not { Length: > 0 })
+                return false;
+
+            var body = TypeFacts.UnwrapConvert(cmd._exp.Body);
+            if (body is not MemberExpression { Member: PropertyInfo property } member
+                || member.Expression is not ParameterExpression parameter)
+                return false;
+
+            var projectionType = parameter.Type;
+            if (!projectionType.IsAssignableTo(typeof(IProjection)))
+                return false;
+
+            // The read must name a property declared by the projection type itself, not a member of a
+            // nested entity reached through an ItemN (for example p.Item2.SomeNavigation).
+            var name = property.Name;
+            if (name.Length <= 4 || !name.StartsWith("Item", StringComparison.Ordinal))
+                return false;
+
+            if (!int.TryParse(name.AsSpan(4), out var n) || n < 1)
+                return false;
+
+            if (projectionType.GetProperty(name) is not { } declared || declared.PropertyType != property.PropertyType)
+                return false;
+
+            // The result type must be the item's own type; a cast to an unrelated result type is deferred.
+            if (cmd._exp.Body.Type != declared.PropertyType)
+                return false;
+
+            slot = n - 1;
+            memberName = name;
+            itemType = declared.PropertyType;
+            itemExpression = body;
             return true;
         }
 

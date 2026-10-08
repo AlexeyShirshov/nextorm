@@ -143,6 +143,74 @@ public class EntityItemProjectionTests
         }
         finally { ctx.Dispose(); File.Delete(path); }
     }
+
+    [Fact]
+    public void DirectEntityItem_SecondSlot_ShouldSelectOnlyRequestedEntityColumns()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var sql = SqlOf(ctx, ctx.From<EntityItemParent>()
+                .Join(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item2));
+
+            sql.Should().StartWith("select t2.id, t2.parent_id as 'ParentId', t2.name, t2.state from");
+            sql.Should().NotContain("*", "explicit mapped columns are the agreed form of the projection");
+
+            var children = ctx.From<EntityItemParent>()
+                .Join(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item2)
+                .ToList();
+
+            children.Should().HaveCount(2);
+            children.Should().OnlyContain(c => c.ParentId == 1);
+            children.Select(c => c.Id).OrderBy(x => x).Should().Equal(10, 11);
+            children.Select(c => c.State).OrderBy(x => x).Should().Equal(EntityItemState.Active, EntityItemState.Closed);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void DirectEntityItem_OuterJoin_ShouldReturnNullForMissingSide()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var children = ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item2)
+                .ToList();
+
+            children.Should().HaveCount(3);
+            children.Count(c => c is null).Should().Be(1, "a LEFT JOIN row with no child materializes the whole entity as null");
+            children.Where(c => c is not null).Select(c => c!.Id).OrderBy(x => x).Should().Equal(10, 11);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void DirectEntityItem_FirstSlot_ShouldSelectOnlyRequestedEntityColumns()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var sql = SqlOf(ctx, ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item1));
+
+            sql.Should().StartWith("select t1.id, t1.name from");
+            sql.Should().NotContain("*");
+
+            var parents = ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item1)
+                .ToList();
+
+            parents.Should().HaveCount(3);
+            parents.Select(p => p.Id).OrderBy(x => x).Should().Equal(1, 1, 2);
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
 }
 
 public enum EntityItemState
