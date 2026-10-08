@@ -51,6 +51,27 @@ public sealed class MariaDbJsonStreamTests : IDisposable
     public void WriteJson_TypedColumns_ShouldMatchJsonSerializer()
         => CommonTestSuite.WriteJsonTypedColumns(_sut);
 
+    // D178 (#178) enum storage mirrors: MariaDB does not derive CommonTestSuite.
+    [Fact]
+    public void EnumStorage_NumericMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageNumericMember(_sut);
+
+    [Fact]
+    public void EnumStorage_StringMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageStringMember(_sut);
+
+    [Fact]
+    public void EnumStorage_GenericStringMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageGenericStringMember(_sut);
+
+    [Fact]
+    public void EnumStorage_FlatObject_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageFlatObject(_sut);
+
+    [Fact]
+    public void EnumStorage_FieldType_ShouldBeNumeric()
+        => CommonTestSuite.RecordEnumStorageFieldType(_sut, "mariadb");
+
     // D176.5 phase-2 mirrors: MariaDB does not derive CommonTestSuite, so the shared nested/object/
     // slot/conditional bodies are re-pinned here explicitly (inheriting the facts is not enough).
 
@@ -191,6 +212,11 @@ public sealed class MariaDbJsonStreamTests : IDisposable
         Execute("drop table if exists binary_entity");
         Execute("create table binary_entity (id int not null primary key, data varbinary(16) null)");
         Execute("insert into binary_entity (id, data) values (1, x'01020304'), (2, null)");
+
+        // D178 (#178) enum storage: an enum is persisted as its underlying integer.
+        Execute("drop table if exists enum_entity");
+        Execute("create table enum_entity (id int not null primary key, state int not null, nullable_state int null)");
+        Execute("insert into enum_entity (id, state, nullable_state) values (1, 7, null), (2, -3, 7), (3, 0, -3)");
     }
 
     private void Execute(string sql)

@@ -370,6 +370,12 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
         ArgumentNullException.ThrowIfNull(options);
 
+        // Fail fast on an already-cancelled token (mirroring OpenLobReader/OpenLobReaderAsync). During
+        // preparation PrepareColumns bails out of a construction projection on cancellation without
+        // throwing, yielding an empty select list that would otherwise surface as an unrelated
+        // "no selected columns" InvalidOperationException instead of the cancellation.
+        cancellationToken.ThrowIfCancellationRequested();
+
         // ResetPreparation clears the prepared pieces, including the source. A temporary-table source
         // cannot be reconstructed from the entity metadata (there is none for TableAlias), so preserve
         // it explicitly; otherwise the temp marker is lost and the batch guard never fires.

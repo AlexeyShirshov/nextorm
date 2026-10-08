@@ -155,6 +155,54 @@ public class InMemoryTests
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(length);
     }
+
+    // D178 T12: the new enum JSON support must not open an in-memory path; both terminal surfaces stay
+    // fail-closed before touching the destination (the in-memory provider has no DbDataReader).
+    [Fact]
+    public void WriteJson_InMemoryEnum_ShouldStayFailClosed()
+    {
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => _sut.SimpleEntity
+            .Select(it => new { it.Id, State = InMemoryJsonEnum.Active })
+            .WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+    }
+
+    [Fact]
+    public async Task WriteJsonAsync_InMemoryEnum_ShouldStayFailClosed()
+    {
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => _sut.SimpleEntity
+            .Select(it => new { it.Id, State = InMemoryJsonEnum.Active })
+            .WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>();
+        stream.Position.Should().Be(position);
+    }
+
+    [Fact]
+    public async Task WriteJson_InMemoryEnumEntityBuilder_ShouldStayFailClosed()
+    {
+        var builder = _sut.DataProvider.From<InMemoryEnumEntity>();
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var sync = () => builder.WriteJson(stream);
+        var async = () => builder.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        sync.Should().Throw<NotSupportedException>();
+        await async.Should().ThrowAsync<NotSupportedException>();
+        stream.Position.Should().Be(position);
+    }
     [Fact]
     public void TestPivot_ShouldThrow()
     {
@@ -989,4 +1037,17 @@ public class InMemoryTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FromSql*");
     }
+}
+
+// D178 T12 fixtures: an enum member for the in-memory fail-closed checks.
+public enum InMemoryJsonEnum
+{
+    Unknown = 0,
+    Active = 7,
+}
+
+public class InMemoryEnumEntity
+{
+    public int Id { get; set; }
+    public InMemoryJsonEnum State { get; set; }
 }

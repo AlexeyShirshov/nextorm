@@ -1377,6 +1377,27 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void WriteJson_TypedColumns_ShouldMatchJsonSerializer()
         => CommonTestSuite.WriteJsonTypedColumns(_sut);
 
+    // D178 (#178) enum storage mirrors: ClickHouse does not derive CommonTestSuite.
+    [Fact]
+    public void EnumStorage_NumericMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageNumericMember(_sut);
+
+    [Fact]
+    public void EnumStorage_StringMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageStringMember(_sut);
+
+    [Fact]
+    public void EnumStorage_GenericStringMember_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageGenericStringMember(_sut);
+
+    [Fact]
+    public void EnumStorage_FlatObject_ShouldMatchJsonSerializer()
+        => CommonTestSuite.EnumStorageFlatObject(_sut);
+
+    [Fact]
+    public void EnumStorage_FieldType_ShouldBeNumeric()
+        => CommonTestSuite.RecordEnumStorageFieldType(_sut, Provider.Name);
+
     // D176.5 phase-2 mirrors: ClickHouse does not derive CommonTestSuite, so the shared nested/object/
     // conditional bodies are re-pinned here explicitly. ClickHouse has no binary_entity, so the slot
     // scenario uses a ClickHouse-local fixture and the native-array scenarios use the Array columns.

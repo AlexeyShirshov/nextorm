@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace NextORM.Core;
 
@@ -181,8 +182,8 @@ internal static class JsonRowWriterFactory
         if (node.Binding is not { } binding)
             throw new NotSupportedException($"The JSON scalar leaf '{node.Name}' has no prepared ordinal binding.");
 
-        var (valueType, kind) = JsonShapePlan.Classify(node.DeclaredType, node.Name);
-        var column = new JsonShapeColumn(binding.Ordinal, node.Name ?? string.Empty, valueType, kind, binding.Nullable, binding.DefaultOnNull);
+        var (valueType, kind, enumUnderlying, enumConverter) = JsonShapePlan.Classify(node.DeclaredType, node.Name, node.Member);
+        var column = new JsonShapeColumn(binding.Ordinal, node.Name ?? string.Empty, valueType, kind, binding.Nullable, binding.DefaultOnNull, enumUnderlying, enumConverter);
         var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
         var present = WriteValue(writer, column, ReadValue(record, column));
         var writeNull = binding.DefaultOnNull
@@ -263,8 +264,8 @@ internal static class JsonRowWriterFactory
         if (node.Binding is not { } binding)
             throw new NotSupportedException($"The JSON scalar member '{node.Name}' has no prepared ordinal binding.");
 
-        var (valueType, kind) = JsonShapePlan.Classify(node.DeclaredType, node.Name);
-        var column = new JsonShapeColumn(binding.Ordinal, name, valueType, kind, binding.Nullable, binding.DefaultOnNull);
+        var (valueType, kind, enumUnderlying, enumConverter) = JsonShapePlan.Classify(node.DeclaredType, node.Name, node.Member);
+        var column = new JsonShapeColumn(binding.Ordinal, name, valueType, kind, binding.Nullable, binding.DefaultOnNull, enumUnderlying, enumConverter);
         var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
         var present = Expression.Block(
             Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
@@ -397,8 +398,8 @@ internal static class JsonRowWriterFactory
         }
         else
         {
-            var (valueType, kind) = JsonShapePlan.Classify(elementType, name);
-            var column = new JsonShapeColumn(0, name ?? string.Empty, valueType, kind, nullable: true, defaultOnNull: false);
+            var (valueType, kind, enumUnderlying, enumConverter) = JsonShapePlan.Classify(elementType, name, member: null);
+            var column = new JsonShapeColumn(0, name ?? string.Empty, valueType, kind, nullable: true, defaultOnNull: false, enumUnderlying, enumConverter);
             writeItem = WriteValue(writer, column, Expression.Convert(item, valueType));
         }
 
@@ -456,6 +457,7 @@ internal static class JsonRowWriterFactory
             JsonWriteKind.Guid => Expression.Call(record, GetGuidMI, Expression.Constant(column.Ordinal)),
             JsonWriteKind.DateTime => Expression.Call(record, GetDateTimeMI, Expression.Constant(column.Ordinal)),
             JsonWriteKind.Base64 => BuildByteArrayRead(record, column),
+            JsonWriteKind.EnumString => BuildEnumStringRead(record, column),
             _ => throw new NotSupportedException($"Unsupported JSON write kind {column.Kind}."),
         };
 
@@ -480,13 +482,30 @@ internal static class JsonRowWriterFactory
                 viaField));
     }
 
+    /// <summary>
+    /// Reads an enum projected as a string: the provider stores it as the underlying integral value, so
+    /// read that number first (the same provider-aware numeric read a plain numeric projection uses), then
+    /// convert it to the enum CLR type. A null read is handled by the caller's IsDBNull branch.
+    /// </summary>
+    private static Expression BuildEnumStringRead(Expression record, in JsonShapeColumn column)
+    {
+        if (column.EnumUnderlyingType is null)
+            throw new NotSupportedException($"The enum column '{column.Name}' has no underlying integral type.");
+
+        var numberColumn = new JsonShapeColumn(column.Ordinal, column.Name, column.EnumUnderlyingType, JsonWriteKind.Number, column.Nullable, column.DefaultOnNull);
+        return Expression.Convert(BuildNumericRead(record, numberColumn), column.ValueType);
+    }
+
     private static Expression WriteValue(Expression writer, in JsonShapeColumn column, Expression value)
     {
         switch (column.Kind)
         {
             case JsonWriteKind.Number:
-                // Utf8JsonWriter has no byte/short overload; widen to int (an implicit widening, no box).
-                var writeType = column.ValueType == typeof(byte) || column.ValueType == typeof(short)
+                // Utf8JsonWriter has no sbyte/byte/short/ushort overload; widen those to int (an implicit
+                // widening, no box). uint/ulong keep their exact width so a wide unsigned value is never
+                // narrowed to a signed type.
+                var writeType = column.ValueType == typeof(sbyte) || column.ValueType == typeof(byte)
+                    || column.ValueType == typeof(short) || column.ValueType == typeof(ushort)
                     ? typeof(int)
                     : column.ValueType;
                 if (writeType != column.ValueType)
@@ -508,9 +527,37 @@ internal static class JsonRowWriterFactory
             case JsonWriteKind.Base64:
                 return Expression.Call(WriteBase64MI, writer, value);
 
+            case JsonWriteKind.EnumString:
+                return WriteEnumString(writer, column, value);
+
             default:
                 throw new NotSupportedException($"Unsupported JSON write kind {column.Kind}.");
         }
+    }
+
+    /// <summary>
+    /// Writes an enum through its pre-built stock STJ string converter. The converter instance is resolved
+    /// once while the writer is compiled, and the typed <see cref="JsonConverter{T}.Write"/> method is
+    /// bound through the public closed generic base, so the generated expression is a direct virtual
+    /// dispatch with no per-row reflection/converter resolution and no boxing.
+    /// </summary>
+    private static Expression WriteEnumString(Expression writer, in JsonShapeColumn column, Expression value)
+    {
+        var converter = column.EnumStringConverter
+            ?? throw new NotSupportedException($"The enum column '{column.Name}' has no prepared string converter.");
+
+        var converterBase = typeof(JsonConverter<>).MakeGenericType(column.ValueType);
+        var writeMethod = converterBase.GetMethod(
+            "Write",
+            [typeof(Utf8JsonWriter), column.ValueType, typeof(JsonSerializerOptions)])
+            ?? throw new NotSupportedException($"The enum converter for column '{column.Name}' has no typed Write method.");
+
+        return Expression.Call(
+            Expression.Constant(converter, converterBase),
+            writeMethod,
+            writer,
+            value,
+            Expression.Constant(JsonShapePlan.EnumConverterOptions, typeof(JsonSerializerOptions)));
     }
 
     /// <summary>
@@ -592,7 +639,9 @@ internal static class JsonRowWriterFactory
     private static MethodInfo NumberMethod(Type type)
     {
         if (type == typeof(int)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(int)])!;
+        if (type == typeof(uint)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(uint)])!;
         if (type == typeof(long)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(long)])!;
+        if (type == typeof(ulong)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(ulong)])!;
         if (type == typeof(float)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(float)])!;
         if (type == typeof(double)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(double)])!;
         if (type == typeof(decimal)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(decimal)])!;
@@ -604,10 +653,14 @@ internal static class JsonRowWriterFactory
     {
         var name = target switch
         {
+            _ when target == typeof(sbyte) => nameof(Convert.ToSByte),
             _ when target == typeof(byte) => nameof(Convert.ToByte),
             _ when target == typeof(short) => nameof(Convert.ToInt16),
+            _ when target == typeof(ushort) => nameof(Convert.ToUInt16),
             _ when target == typeof(int) => nameof(Convert.ToInt32),
+            _ when target == typeof(uint) => nameof(Convert.ToUInt32),
             _ when target == typeof(long) => nameof(Convert.ToInt64),
+            _ when target == typeof(ulong) => nameof(Convert.ToUInt64),
             _ when target == typeof(float) => nameof(Convert.ToSingle),
             _ when target == typeof(double) => nameof(Convert.ToDouble),
             _ when target == typeof(decimal) => nameof(Convert.ToDecimal),

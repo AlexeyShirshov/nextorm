@@ -1,8 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
 using System.Data.Common;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
@@ -39,7 +42,11 @@ public sealed class JsonStreamingFixture : IDisposable
                 "create table json_parent (id integer primary key, name text);" +
                 "insert into json_parent (id, name) values (1, 'p1'), (2, 'p2'), (3, 'p3');" +
                 "create table json_child (id integer primary key, parent_id integer, name text);" +
-                "insert into json_child (id, parent_id, name) values (10, 1, 'c1'), (11, 1, 'c2'), (12, 2, 'c3');";
+                "insert into json_child (id, parent_id, name) values (10, 1, 'c1'), (11, 1, 'c2'), (12, 2, 'c3');" +
+                "create table json_enum (id integer primary key, state integer, nullable_state integer);" +
+                "insert into json_enum (id, state, nullable_state) values (1, 7, null);" +
+                "insert into json_enum (id, state, nullable_state) values (2, -3, 7);" +
+                "create table json_enum_empty (id integer primary key, state integer);";
             setup.ExecuteNonQuery();
         }
 
@@ -214,6 +221,60 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         public string? Name { get; set; }
     }
 
+    // D178: a plain enum projection over a numeric column; the ordinary materializer/JSON path must
+    // stream the underlying number without a value converter.
+    public enum JsonEnumState
+    {
+        Unknown = 0,
+        Active = 7,
+        Disabled = -3,
+    }
+
+    [SqlTable("json_enum")]
+    public interface IJsonEnumEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("state")]
+        JsonEnumState State { get; set; }
+
+        [Column("nullable_state")]
+        JsonEnumState? NullableState { get; set; }
+    }
+
+    public class JsonEnumEntity : IJsonEnumEntity
+    {
+        public int Id { get; set; }
+        public JsonEnumState State { get; set; }
+        public JsonEnumState? NullableState { get; set; }
+    }
+
+    // T13 empty-result shape validation: the enum member carries an unsupported [JsonConverter] and the
+    // mapped table has zero rows, so the shape must still be rejected at prepare time, never excused by
+    // the empty result set.
+    [SqlTable("json_enum_empty")]
+    public interface IJsonEmptyEnumEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [JsonConverter(typeof(JsonCustomEnumConverter))]
+        [Column("state")]
+        JsonCustomEnum State { get; set; }
+    }
+
+    public class JsonEmptyEnumEntity : IJsonEmptyEnumEntity
+    {
+        public int Id { get; set; }
+
+        // The projection lambda binds this property, so the unsupported attribute must live here too.
+        [JsonConverter(typeof(JsonCustomEnumConverter))]
+        public JsonCustomEnum State { get; set; }
+    }
+
     // Named/member-init nested construction target types (not anonymous).
     public sealed class JsonNamedOuter
     {
@@ -247,6 +308,27 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         public void CommandInitialized(CommandEventData eventData, DbCommand command) { }
 
         public void CommandExecuting(CommandEventData eventData, DbCommand command) => Sql.Add(command.CommandText);
+
+        public void CommandExecuted(CommandEventData eventData, DbCommand command, TimeSpan elapsed) { }
+
+        public void CommandFailed(CommandEventData eventData, DbCommand command, Exception exception) { }
+    }
+
+    // Captures both the rendered SQL and the bound parameter values so the JSON terminal can be checked
+    // against ordinary execution on the same enum command (T17).
+    private sealed class RecordingParameterInterceptor : IQueryInterceptor
+    {
+        public List<(string Sql, List<(string Name, object? Value)> Parameters)> Executions { get; } = [];
+
+        public void CommandInitialized(CommandEventData eventData, DbCommand command) { }
+
+        public void CommandExecuting(CommandEventData eventData, DbCommand command)
+        {
+            var parameters = new List<(string, object?)>();
+            foreach (DbParameter parameter in command.Parameters)
+                parameters.Add((parameter.ParameterName, parameter.Value));
+            Executions.Add((command.CommandText, parameters));
+        }
 
         public void CommandExecuted(CommandEventData eventData, DbCommand command, TimeSpan elapsed) { }
 
@@ -1362,4 +1444,787 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
 
     private static JsonNamedInner? MakeInner(string? name)
         => name is null ? null : new JsonNamedInner { Name = name };
+
+    // D178 direct-writer coverage: a hand-written record exercises the enum path without a database,
+    // including every underlying width and the null/attribute branches. The end-to-end SQLite case
+    // proves the same behavior through the real streaming terminal.
+
+    public enum JsonEnumSigned : short
+    {
+        Neg = -2,
+        Pos = 5,
+    }
+
+    public enum JsonEnumWide : ulong
+    {
+        Zero = 0,
+        Max = ulong.MaxValue,
+    }
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum JsonStringEnumType
+    {
+        Unknown = 0,
+        Active = 7,
+    }
+
+    public sealed class JsonStringEnumHolder
+    {
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public JsonStringEnumType Status { get; set; }
+    }
+
+    public enum JsonCustomEnum
+    {
+        A = 1,
+    }
+
+    public sealed class JsonCustomEnumConverter : JsonConverter<JsonCustomEnum>
+    {
+        public override JsonCustomEnum Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => throw new NotSupportedException();
+
+        public override void Write(Utf8JsonWriter writer, JsonCustomEnum value, JsonSerializerOptions options)
+            => throw new NotSupportedException();
+    }
+
+    public sealed class JsonCustomEnumHolder
+    {
+        [JsonConverter(typeof(JsonCustomEnumConverter))]
+        public JsonCustomEnum Status { get; set; }
+    }
+
+    public enum JsonEnumSByte : sbyte
+    {
+        Min = sbyte.MinValue,
+        Max = sbyte.MaxValue,
+    }
+
+    public enum JsonEnumByte : byte
+    {
+        Zero = 0,
+        Max = byte.MaxValue,
+    }
+
+    public enum JsonEnumUShort : ushort
+    {
+        Max = ushort.MaxValue,
+    }
+
+    public enum JsonEnumUInt : uint
+    {
+        Max = uint.MaxValue,
+    }
+
+    public enum JsonEnumLong : long
+    {
+        Min = long.MinValue,
+        Max = long.MaxValue,
+    }
+
+    [Flags]
+    public enum JsonFlagsState
+    {
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4,
+    }
+
+    [Flags]
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum JsonStringFlags
+    {
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4,
+    }
+
+    // T05: the generic stock STJ form, both type-level and member-level, exercising the
+    // JsonStringEnumConverter<> / Activator.CreateInstance branch of TryCreateStringEnumConverter.
+    [JsonConverter(typeof(JsonStringEnumConverter<JsonGenericStringEnumType>))]
+    public enum JsonGenericStringEnumType
+    {
+        Unknown = 0,
+        Active = 7,
+    }
+
+    public sealed class JsonGenericStringEnumHolder
+    {
+        [JsonConverter(typeof(JsonStringEnumConverter<JsonGenericStringEnumType>))]
+        public JsonGenericStringEnumType Status { get; set; }
+    }
+
+    public sealed class JsonGenericMismatchHolder
+    {
+        // The generic argument does not match the member's enum type: must be rejected, never used.
+        [JsonConverter(typeof(JsonStringEnumConverter<JsonGenericStringEnumType>))]
+        public JsonEnumState Status { get; set; }
+    }
+
+    // Precedence: the enum type carries the supported string attribute, but the member overrides it
+    // with an unsupported custom converter, so the member attribute must win and fail fast.
+    public sealed class JsonMemberOverridesTypeWithUnsupportedAttributeHolder
+    {
+        [JsonConverter(typeof(JsonCustomEnumConverter))]
+        public JsonStringEnumType Status { get; set; }
+    }
+
+    // Precedence in the other direction: an unsupported enum-type attribute must not win over the
+    // member's supported string converter.
+    [JsonConverter(typeof(JsonCustomEnumConverter))]
+    public enum JsonUnsupportedTypeAttributeEnum
+    {
+        Active = 7,
+    }
+
+    public sealed class JsonMemberStringOverUnsupportedTypeAttributeHolder
+    {
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public JsonUnsupportedTypeAttributeEnum Status { get; set; }
+    }
+
+    // A member-only string attribute (no enum-type attribute) so a projection that carries no
+    // SelectExpression.PropertyInfo must resolve the source member through the expression lambda.
+    public enum JsonMemberOnlyStringEnum
+    {
+        Unknown = 0,
+        Active = 7,
+        Disabled = -3,
+    }
+
+    public sealed class JsonMemberOnlyStringEnumHolder
+    {
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public JsonMemberOnlyStringEnum Status { get; set; }
+    }
+
+    [SqlTable("json_enum")]
+    public interface IJsonMemberOnlyStringEnumEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        [Column("state")]
+        JsonMemberOnlyStringEnum State { get; set; }
+    }
+
+    public class JsonMemberOnlyStringEnumEntity : IJsonMemberOnlyStringEnumEntity
+    {
+        public int Id { get; set; }
+
+        // The projection lambda binds the class property, so the attribute must live here to be
+        // reachable through the expression-based provenance walk.
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public JsonMemberOnlyStringEnum State { get; set; }
+    }
+
+    // A JSON converter attribute on a non-enum scalar must be rejected before output, not silently
+    // ignored.
+    public sealed class JsonNonEnumStringConverter : JsonConverter<string>
+    {
+        public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => reader.GetString()!;
+
+        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+            => writer.WriteStringValue(value);
+    }
+
+    public sealed class JsonNonEnumConverterHolder
+    {
+        [JsonConverter(typeof(JsonNonEnumStringConverter))]
+        public string? Name { get; set; }
+    }
+
+    [JsonConverter(typeof(JsonNonEnumStringConverter))]
+    public sealed class JsonNonEnumTypeAttributeHolder
+    {
+        public string? Name { get; set; }
+    }
+
+    private sealed class EnumScalarRecord : IDataRecord
+    {
+        private readonly object _value;
+        private readonly Type _fieldType;
+        private readonly bool _isNull;
+
+        public EnumScalarRecord(object value, Type fieldType, bool isNull)
+        {
+            _value = value;
+            _fieldType = fieldType;
+            _isNull = isNull;
+        }
+
+        public int FieldCount => 1;
+        public object this[int i] => GetValue(i);
+        public object this[string name] => throw new NotSupportedException();
+        public bool GetBoolean(int i) => throw new NotSupportedException();
+        public byte GetByte(int i) => (byte)_value;
+        public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+        public char GetChar(int i) => throw new NotSupportedException();
+        public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+        public IDataReader GetData(int i) => throw new NotSupportedException();
+        public string GetDataTypeName(int i) => _fieldType.Name;
+        public DateTime GetDateTime(int i) => throw new NotSupportedException();
+        public decimal GetDecimal(int i) => throw new NotSupportedException();
+        public double GetDouble(int i) => throw new NotSupportedException();
+        public Type GetFieldType(int i) => _fieldType;
+        public float GetFloat(int i) => throw new NotSupportedException();
+        public Guid GetGuid(int i) => throw new NotSupportedException();
+        public short GetInt16(int i) => (short)_value;
+        public int GetInt32(int i) => (int)_value;
+        public long GetInt64(int i) => (long)_value;
+        public string GetName(int i) => "Status";
+        public int GetOrdinal(string name) => 0;
+        public string GetString(int i) => (string)_value;
+        public object GetValue(int i) => _value;
+        public int GetValues(object[] values)
+        {
+            values[0] = _value;
+            return 1;
+        }
+
+        public bool IsDBNull(int i) => _isNull;
+    }
+
+    private static string WriteEnumDirect(Type declaredType, Type fieldType, object value, System.Reflection.PropertyInfo? member = null, bool isNull = false)
+    {
+        var plan = JsonShapePlan.Build(
+            [new SelectExpression(declaredType) { Index = 0, PropertyName = "Status", PropertyInfo = member }],
+            oneColumn: true,
+            new JsonStreamOptions());
+        var writeRow = JsonRowWriterFactory.Build(plan);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writeRow(new EnumScalarRecord(value, fieldType, isNull), writer);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    [Fact]
+    public void Enum_NumericScalar_ShouldWriteUnderlyingNumber()
+    {
+        WriteEnumDirect(typeof(JsonEnumState), typeof(int), (int)JsonEnumState.Active).Should().Be("7");
+    }
+
+    [Fact]
+    public void Enum_SignedNarrowUnderlying_ShouldWidenAndWriteNumber()
+    {
+        WriteEnumDirect(typeof(JsonEnumSigned), typeof(short), (short)JsonEnumSigned.Neg).Should().Be("-2");
+    }
+
+    [Fact]
+    public void Enum_UnsignedWideUnderlying_ShouldNotNarrow()
+    {
+        WriteEnumDirect(typeof(JsonEnumWide), typeof(ulong), ulong.MaxValue).Should().Be("18446744073709551615");
+    }
+
+    [Fact]
+    public void Enum_NullableNull_ShouldWriteNull()
+    {
+        WriteEnumDirect(typeof(JsonEnumState?), typeof(int), 0, isNull: true).Should().Be("null");
+    }
+
+    [Fact]
+    public void Enum_TypeStringAttribute_ShouldWriteName()
+    {
+        WriteEnumDirect(typeof(JsonStringEnumType), typeof(int), (int)JsonStringEnumType.Active).Should().Be("\"Active\"");
+    }
+
+    [Fact]
+    public void Enum_PropertyStringAttribute_ShouldWriteName()
+    {
+        var member = typeof(JsonStringEnumHolder).GetProperty(nameof(JsonStringEnumHolder.Status));
+        WriteEnumDirect(typeof(JsonStringEnumType), typeof(int), (int)JsonStringEnumType.Active, member).Should().Be("\"Active\"");
+    }
+
+    [Fact]
+    public void Enum_UnsupportedAttribute_ShouldThrowBeforeOutput()
+    {
+        var member = typeof(JsonCustomEnumHolder).GetProperty(nameof(JsonCustomEnumHolder.Status));
+        var act = () => JsonShapePlan.Build(
+            [new SelectExpression(typeof(JsonCustomEnum)) { Index = 0, PropertyName = "Status", PropertyInfo = member }],
+            oneColumn: true,
+            new JsonStreamOptions());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*converter*");
+    }
+
+    [Fact]
+    public void Enum_SqliteEndpoint_ShouldWriteNumbers()
+    {
+        var command = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.State, x.NullableState });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        Utf8(stream).Should().Be("[{\"Id\":1,\"State\":7,\"NullableState\":null},{\"Id\":2,\"State\":-3,\"NullableState\":7}]");
+    }
+
+    // D178.4 variant matrix: underlying widths (T01), undefined/flags (T02), nullable/default (T03),
+    // converter edges (T05/T06), storage-converter/attribute rejection (T07/T08), provider field
+    // type (T09), both terminals (T10), empty shape (T13), options/modes (T14), cache (T17).
+
+    [Fact]
+    public void Enum_AllUnderlyingWidths_ShouldWriteExactNumbers()
+    {
+        WriteEnumDirect(typeof(JsonEnumSByte), typeof(sbyte), sbyte.MinValue).Should().Be("-128");
+        WriteEnumDirect(typeof(JsonEnumByte), typeof(byte), byte.MaxValue).Should().Be("255");
+        WriteEnumDirect(typeof(JsonEnumSigned), typeof(short), short.MinValue).Should().Be("-32768");
+        WriteEnumDirect(typeof(JsonEnumUShort), typeof(ushort), ushort.MaxValue).Should().Be("65535");
+        WriteEnumDirect(typeof(JsonEnumState), typeof(int), int.MinValue).Should().Be("-2147483648");
+        WriteEnumDirect(typeof(JsonEnumUInt), typeof(uint), uint.MaxValue).Should().Be("4294967295");
+        WriteEnumDirect(typeof(JsonEnumLong), typeof(long), long.MaxValue).Should().Be("9223372036854775807");
+        WriteEnumDirect(typeof(JsonEnumWide), typeof(ulong), ulong.MaxValue).Should().Be("18446744073709551615");
+    }
+
+    [Fact]
+    public void Enum_UndefinedAndFlags_ShouldStayNumbers()
+    {
+        WriteEnumDirect(typeof(JsonEnumState), typeof(int), 42).Should().Be("42");
+        WriteEnumDirect(typeof(JsonFlagsState), typeof(int), (int)(JsonFlagsState.A | JsonFlagsState.C)).Should().Be("5");
+    }
+
+    [Fact]
+    public void Enum_DefaultOnNull_ShouldWriteUnderlyingDefault()
+    {
+        // A non-nullable *OrDefault scalar: SQL NULL means "no row" and must become default(enum) == 0,
+        // not a JSON null and not a wrong enum name.
+        var column = new SelectExpression(typeof(JsonEnumState)) { Index = 0, PropertyName = "State", DefaultOnNull = true };
+        var plan = JsonShapePlan.Build([column], oneColumn: true, new JsonStreamOptions());
+        var writeRow = JsonRowWriterFactory.Build(plan);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writeRow(new EnumScalarRecord(0, typeof(int), isNull: true), writer);
+        }
+
+        Encoding.UTF8.GetString(stream.ToArray()).Should().Be("0");
+    }
+
+    [Fact]
+    public void Enum_StringFlagsAndUnnamed_ShouldMatchStjConverter()
+    {
+        var flags = JsonStringFlags.A | JsonStringFlags.C;
+        WriteEnumDirect(typeof(JsonStringFlags), typeof(int), (int)flags).Should().Be(JsonSerializer.Serialize(flags));
+
+        var unnamed = (JsonStringEnumType)99;
+        WriteEnumDirect(typeof(JsonStringEnumType), typeof(int), 99).Should().Be(JsonSerializer.Serialize(unnamed));
+    }
+
+    [Fact]
+    public void Enum_WithStorageConverter_ShouldThrowBeforeOutput()
+    {
+        var column = new SelectExpression(typeof(JsonEnumState))
+        {
+            Index = 0,
+            PropertyName = "State",
+            Converter = new EnumToStringConverter<JsonEnumState>(),
+        };
+
+        var act = () => JsonShapePlan.Build([column], oneColumn: true, new JsonStreamOptions());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*value-converted*");
+    }
+
+    [Fact]
+    public void Enum_UnsupportedProviderFieldType_ShouldThrowOnWrite()
+    {
+        var plan = JsonShapePlan.Build(
+            [new SelectExpression(typeof(JsonEnumState)) { Index = 0, PropertyName = "State" }],
+            oneColumn: true,
+            new JsonStreamOptions());
+        var writeRow = JsonRowWriterFactory.Build(plan);
+        using var stream = new MemoryStream();
+        using var writer = new Utf8JsonWriter(stream);
+
+        var act = () => writeRow(new EnumScalarRecord("nope", typeof(string), isNull: false), writer);
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public async Task Enum_SyncAsync_ShouldProduceIdenticalBytes()
+    {
+        var command = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.State, x.NullableState });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public void Enum_OptionsAndModes_ShouldBeRespected()
+    {
+        var command = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.State });
+
+        using var root = new MemoryStream();
+        command.WriteJson(root, new JsonStreamOptions { Root = "states" });
+        Utf8(root).Should().Be("{\"states\":[{\"State\":7},{\"State\":-3}]}");
+
+        using var nd = new MemoryStream();
+        command.WriteJson(nd, new JsonStreamOptions { Mode = JsonStreamMode.NdJson });
+        Utf8(nd).Should().Be("{\"State\":7}\n{\"State\":-3}\n");
+    }
+
+    [Fact]
+    public void Enum_EmptyResult_ShouldWriteEmptyArray()
+    {
+        var command = _ctx.From<JsonEnumEntity>().Where(x => x.Id > 100).Select(x => new { x.State });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        Utf8(stream).Should().Be("[]");
+    }
+
+    [Fact]
+    public void Enum_WriteJson_ShouldNotDisablePlanCache()
+    {
+        var command = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.State });
+
+        using var first = new MemoryStream();
+        command.WriteJson(first);
+
+        command.Cache.Should().BeTrue("the enum JSON clone must not set the sticky QueryCommand.Cache=false flag");
+
+        // A second write on the same context/shape stays byte-identical (no leaked writer state).
+        using var second = new MemoryStream();
+        command.WriteJson(second);
+        second.ToArray().Should().Equal(first.ToArray());
+    }
+
+    // CHECK loop-back (n=2): T05 generic converter, provenance/precedence, T09 out-of-range,
+    // T10 raw/EntityBuilder surfaces, T11 ownership/cancellation, T17 SQL/parameter parity,
+    // nullable/DefaultOnNull string converter, and the non-enum converter rejection.
+
+    [Fact]
+    public void Enum_GenericTypeStringAttribute_ShouldWriteName()
+    {
+        // JsonStringEnumConverter<TEnum> declared on the enum type: TryCreateStringEnumConverter must
+        // build the concrete converter via Activator.CreateInstance and write the STJ name.
+        WriteEnumDirect(typeof(JsonGenericStringEnumType), typeof(int), (int)JsonGenericStringEnumType.Active)
+            .Should().Be("\"Active\"");
+    }
+
+    [Fact]
+    public void Enum_GenericPropertyStringAttribute_ShouldWriteName()
+    {
+        var member = typeof(JsonGenericStringEnumHolder).GetProperty(nameof(JsonGenericStringEnumHolder.Status));
+        WriteEnumDirect(typeof(JsonGenericStringEnumType), typeof(int), (int)JsonGenericStringEnumType.Active, member)
+            .Should().Be("\"Active\"");
+    }
+
+    [Fact]
+    public void Enum_GenericAttributeWrongEnumArgument_ShouldThrowBeforeOutput()
+    {
+        // JsonStringEnumConverter<OtherEnum> on a JsonEnumState member: the generic argument does not
+        // match, so the attribute is unsupported and must be rejected (never used or ignored).
+        var member = typeof(JsonGenericMismatchHolder).GetProperty(nameof(JsonGenericMismatchHolder.Status));
+        var act = () => JsonShapePlan.Build(
+            [new SelectExpression(typeof(JsonEnumState)) { Index = 0, PropertyName = "Status", PropertyInfo = member }],
+            oneColumn: true,
+            new JsonStreamOptions());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*converter*");
+    }
+
+    [Fact]
+    public void Enum_MemberAttributeResolvedFromLambdaExpression_ShouldWriteName()
+    {
+        // No PropertyInfo is supplied: the provenance must be resolved from the projection expression's
+        // lambda body (LambdaExpression -> MemberExpression). The enum type has no type-level attribute,
+        // so a numeric write would prove the member attribute was missed.
+        Expression<Func<JsonMemberOnlyStringEnumHolder, JsonMemberOnlyStringEnum>> lambda = x => x.Status;
+        var column = new SelectExpression(typeof(JsonMemberOnlyStringEnum))
+        {
+            Index = 0,
+            PropertyName = "Status",
+            PropertyInfo = null,
+            Expression = lambda,
+        };
+        var plan = JsonShapePlan.Build([column], oneColumn: true, new JsonStreamOptions());
+        var writeRow = JsonRowWriterFactory.Build(plan);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writeRow(new EnumScalarRecord((int)JsonMemberOnlyStringEnum.Active, typeof(int), isNull: false), writer);
+        }
+
+        Encoding.UTF8.GetString(stream.ToArray()).Should().Be("\"Active\"");
+    }
+
+    [Fact]
+    public void Enum_MemberAttributeOverAnonymousProjection_ShouldWriteName()
+    {
+        // The ordinary preparer does not set PropertyInfo for an anonymous member projection, so this
+        // end-to-end case walks the real lambda-based provenance over SQLite.
+        var command = _ctx.From<JsonMemberOnlyStringEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.State });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        Utf8(stream).Should().Be("[{\"State\":\"Active\"},{\"State\":\"Disabled\"}]");
+    }
+
+    [Fact]
+    public void Enum_MemberAttributeWinsOverEnumTypeAttribute()
+    {
+        // The enum type carries the supported string attribute; the member overrides it with an
+        // unsupported custom converter. If the type attribute were used the write would succeed with
+        // "Active"; the expected NotSupportedException proves member precedence.
+        var member = typeof(JsonMemberOverridesTypeWithUnsupportedAttributeHolder)
+            .GetProperty(nameof(JsonMemberOverridesTypeWithUnsupportedAttributeHolder.Status));
+        var act = () => JsonShapePlan.Build(
+            [new SelectExpression(typeof(JsonStringEnumType)) { Index = 0, PropertyName = "Status", PropertyInfo = member }],
+            oneColumn: true,
+            new JsonStreamOptions());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*converter*");
+    }
+
+    [Fact]
+    public void Enum_MemberAttributeWinsOverUnsupportedTypeAttribute()
+    {
+        // The enum type's own attribute is unsupported; the member's stock string converter must win.
+        var member = typeof(JsonMemberStringOverUnsupportedTypeAttributeHolder)
+            .GetProperty(nameof(JsonMemberStringOverUnsupportedTypeAttributeHolder.Status));
+        WriteEnumDirect(typeof(JsonUnsupportedTypeAttributeEnum), typeof(int), 7, member).Should().Be("\"Active\"");
+    }
+
+    [Fact]
+    public void Enum_NumericOutOfRange_ShouldThrowNotTruncate()
+    {
+        // The enum's underlying type is byte but the provider field is a wider int: an out-of-range
+        // value must throw from the checked Convert, never silently truncate 300 -> 44.
+        var act = () => WriteEnumDirect(typeof(JsonEnumByte), typeof(int), 300);
+        act.Should().Throw<OverflowException>();
+
+        // The in-range boundary still writes the exact value (no narrowing of a representable value).
+        WriteEnumDirect(typeof(JsonEnumByte), typeof(int), 255).Should().Be("255");
+    }
+
+    [Fact]
+    public async Task Enum_EntityBuilderSurface_ShouldMatchSerializer_SyncAndAsync()
+    {
+        // The whole-entity fluent EntityBuilder surface (no Select), streaming the mapped enum members.
+        var builder = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id);
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        builder.WriteJson(sync);
+        await builder.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        // The ordinary materializer cannot map an enum member (pre-existing buffered-mapper gap outside
+        // this footprint), so the whole-entity oracle is the literal STJ-shaped document.
+        Utf8(sync).Should().Be("[{\"Id\":1,\"State\":7,\"NullableState\":null},{\"Id\":2,\"State\":-3,\"NullableState\":7}]");
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public async Task Enum_FromSqlSurface_ShouldMatchSyncAsyncAndLiteral()
+    {
+        // The raw FromSql (BindEntity) command surface over the same enum column.
+        var command = _ctx.FromSql("select id, state, nullable_state from json_enum order by id")
+            .BindEntity<JsonEnumEntity>(["id", "state", "nullable_state"])
+            .Select(x => new { x.Id, x.State });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        Utf8(sync).Should().Be("[{\"Id\":1,\"State\":7},{\"Id\":2,\"State\":-3}]");
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public void Enum_PartialOutput_OnMidWriteFailure_ShouldKeepOwnership()
+    {
+        var command = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.State });
+        using var stream = new ThrowingWriteStream();
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("destination failed");
+        // The destination stays caller-owned and the reader/connection were released: the shared open
+        // connection is still usable and the context can immediately execute another query, twice, with
+        // no leaked reader accumulating on the connection.
+        stream.CanWrite.Should().BeTrue();
+        _fixture.Connection.State.Should().Be(ConnectionState.Open);
+        _ctx.From<JsonEnumEntity>().Select(x => x.Id).ToList().Should().HaveCount(2);
+        _ctx.From<JsonEnumEntity>().Select(x => x.Id).ToList().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Enum_Cancellation_DuringWrite_ShouldAbortAndKeepOwnership()
+    {
+        var command = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.State });
+        using var cts = new CancellationTokenSource();
+        using var stream = new CancellingWriteStream(cts);
+
+        var act = () => command.WriteJsonAsync(stream, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        stream.CanWrite.Should().BeTrue();
+        _fixture.Connection.State.Should().Be(ConnectionState.Open);
+        _ctx.From<JsonEnumEntity>().Select(x => x.Id).ToList().Should().HaveCount(2);
+        _ctx.From<JsonEnumEntity>().Select(x => x.Id).ToList().Should().HaveCount(2);
+    }
+
+    // T11 pre-cancellation on the enum path: a token already cancelled before enumeration must abort
+    // before any output and leave the caller-owned destination and the shared reader/connection intact.
+    // The sync WriteJson surface has no CancellationToken parameter, so the token-observing async
+    // terminal is the only surface that can express pre-cancellation here (no separate sync twin).
+    [Fact]
+    public async Task Enum_PreCancelled_ShouldThrowAndKeepOwnership()
+    {
+        var command = _ctx.From<JsonEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.State });
+        using var stream = new MemoryStream();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = () => command.WriteJsonAsync(stream, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        stream.Length.Should().Be(0, "a pre-cancelled token must abort before any byte reaches the destination");
+        stream.CanWrite.Should().BeTrue();
+        var write = () => stream.WriteByte(1);
+        write.Should().NotThrow();
+
+        // Reader/connection released: the shared open connection is still usable and the same context
+        // immediately re-executes successfully (twice) with no leaked reader left behind.
+        _fixture.Connection.State.Should().Be(ConnectionState.Open);
+        _ctx.From<JsonEnumEntity>().Select(x => x.Id).ToList().Should().HaveCount(2);
+        _ctx.From<JsonEnumEntity>().Select(x => x.Id).ToList().Should().HaveCount(2);
+    }
+
+    // T13 empty-result + invalid attributed shape: an unsupported [JsonConverter] on an enum member must
+    // still be rejected before any output even when the mapped table has zero rows, proving the shape is
+    // validated at prepare time rather than inferred from the (empty) result set.
+    [Fact]
+    public void Enum_InvalidAttributedShape_EmptyResult_ShouldThrowBeforeOutput()
+    {
+        var command = _ctx.From<JsonEmptyEnumEntity>().Select(x => new { x.State });
+        using var stream = new MemoryStream();
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*converter*");
+        stream.Length.Should().Be(0, "the unsupported shape must be rejected before any output");
+    }
+
+    [Fact]
+    public void Enum_WriteJson_ParametersAndSqlShouldMatchOrdinaryExecution()
+    {
+        // A context local to this test so registering the interceptor cannot leak into the shared fixture.
+        var interceptor = new RecordingParameterInterceptor();
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.AddInterceptor(interceptor);
+        context.PurgeQueryCache();
+
+        // An enum-valued parameter must reach the provider identically for ordinary and JSON execution.
+        var state = JsonEnumState.Active;
+        var command = context.From<JsonEnumEntity>().Where(x => x.State == state).Select(x => new { x.Id });
+
+        command.ToList();
+        var listExecution = interceptor.Executions[^1];
+
+        using var stream = new MemoryStream();
+        command.WriteJson(stream);
+        var jsonExecution = interceptor.Executions[^1];
+
+        jsonExecution.Sql.Should().Be(listExecution.Sql);
+        jsonExecution.Parameters.Should().Equal(listExecution.Parameters);
+        command.Cache.Should().BeTrue("streaming must not set the sticky QueryCommand.Cache=false flag");
+    }
+
+    [Fact]
+    public void Enum_WriteJson_EnumProjection_ShouldNotMutateSharedCommandState()
+    {
+        // The enum projection itself cannot be materialized by the buffered mapper (pre-existing gap),
+        // so parity is asserted by repeating the JSON write: identical SQL/parameters/bytes prove the
+        // shared command/plan state is not mutated by the enum streaming clone.
+        var interceptor = new RecordingParameterInterceptor();
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.AddInterceptor(interceptor);
+        context.PurgeQueryCache();
+
+        var command = context.From<JsonEnumEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.State });
+
+        using var first = new MemoryStream();
+        command.WriteJson(first);
+        var firstExecution = interceptor.Executions[^1];
+
+        using var second = new MemoryStream();
+        command.WriteJson(second);
+        var secondExecution = interceptor.Executions[^1];
+
+        secondExecution.Sql.Should().Be(firstExecution.Sql);
+        secondExecution.Parameters.Should().Equal(firstExecution.Parameters);
+        second.ToArray().Should().Equal(first.ToArray());
+        command.Cache.Should().BeTrue("streaming an enum must not set the sticky QueryCommand.Cache=false flag");
+    }
+
+    [Fact]
+    public void Enum_NullableStringAttribute_Null_ShouldWriteNull()
+    {
+        WriteEnumDirect(typeof(JsonStringEnumType?), typeof(int), 0, isNull: true).Should().Be("null");
+        WriteEnumDirect(typeof(JsonStringEnumType?), typeof(int), (int)JsonStringEnumType.Active).Should().Be("\"Active\"");
+    }
+
+    [Fact]
+    public void Enum_StringDefaultOnNull_ShouldWriteDefaultName()
+    {
+        // A non-nullable *OrDefault scalar with a string-enum attribute: SQL NULL means "no row" and
+        // must become default(enum) through the converter (Unknown), not JSON null.
+        var column = new SelectExpression(typeof(JsonStringEnumType))
+        {
+            Index = 0,
+            PropertyName = "State",
+            DefaultOnNull = true,
+        };
+        var plan = JsonShapePlan.Build([column], oneColumn: true, new JsonStreamOptions());
+        var writeRow = JsonRowWriterFactory.Build(plan);
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writeRow(new EnumScalarRecord(0, typeof(int), isNull: true), writer);
+        }
+
+        Encoding.UTF8.GetString(stream.ToArray()).Should().Be("\"Unknown\"");
+    }
+
+    [Fact]
+    public void NonEnumMemberJsonConverterAttribute_ShouldThrowBeforeOutput()
+    {
+        var member = typeof(JsonNonEnumConverterHolder).GetProperty(nameof(JsonNonEnumConverterHolder.Name));
+        var act = () => JsonShapePlan.Build(
+            [new SelectExpression(typeof(string)) { Index = 0, PropertyName = "Name", PropertyInfo = member }],
+            oneColumn: true,
+            new JsonStreamOptions());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*converter*");
+    }
+
+    [Fact]
+    public void NonEnumTypeJsonConverterAttribute_ShouldThrowBeforeOutput()
+    {
+        var act = () => JsonShapePlan.Build(
+            [new SelectExpression(typeof(JsonNonEnumTypeAttributeHolder)) { Index = 0, PropertyName = "Value" }],
+            oneColumn: true,
+            new JsonStreamOptions());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*converter*");
+    }
 }

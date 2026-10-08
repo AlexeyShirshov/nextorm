@@ -136,7 +136,7 @@ storage-типизированным геттером (общий `GetNumericGet
 | string | provider-aware typed reading/conversion (to design) | `WriteStringValue` |
 | Guid | provider-aware typed reading/conversion (to design) | `WriteStringValue(Guid)` |
 | DateTime / DateTimeOffset / DateOnly / TimeOnly / TimeSpan | provider-aware typed reading/conversion (to design, ISO) | `WriteStringValue` |
-| enum | provider-aware typed reading/conversion (to design) | `WriteNumberValue` (default, см. «Открытые вопросы») |
+| enum | provider-aware typed numeric reading (реализовано в D178, #178): все 8 below-integral типов, без сужения `uint`/`ulong`; string-форма через штатный STJ `[JsonConverter]` | `WriteNumberValue` (default); pre-built converter `Write` для string-формы |
 | byte[] | provider-aware typed reading/conversion (to design, `GetValue`, см. `:130-137`) | `WriteBase64String` |
 | вложенный/сложный массив, `Tuple`, `Map`, document, кастомный `JsonConverter` | — | **fail-fast исключение** (в фазе 1 не поддерживается) |
 
@@ -303,7 +303,7 @@ naming policy). Компиляция — не чаще одного раза н�
 
 1. Имя роли/делегата: `IJsonStreamWriter`/`JsonRowWriter` vs `IJsonStreamer`/`JsonRowSerializer`.
 2. Делать ли DB-side JSON (фаза 3) или ограничиться managed-сериализацией.
-3. Формат enum: число (как STJ по умолчанию) или строка по `[JsonConverter]`.
+3. ~~Формат enum: число (как STJ по умолчанию) или строка по `[JsonConverter]`.~~ **Решено в #178/D178**: число по умолчанию; строка для штатного STJ `JsonStringEnumConverter`/`JsonStringEnumConverter<TEnum>` на свойстве или типе (атрибут свойства приоритетнее); произвольные JSON-конвертеры и нативное/текстовое хранение — guard, отложены с триггером. Атрибут `[JsonConverter]` на не-перечислении отклоняется до вывода (не игнорируется).
 4. ~~Взаимодействие с `Projection<T1,T2>`/join: плоский список `Item1/Item2` (фаза 2).~~
    **Решено в #176**: реальный `Projection<T1,T2>` даёт верхнеуровневые `Item1`/`Item2`
    (объект/скаляр по типу элемента), имена проверяются на область объекта.

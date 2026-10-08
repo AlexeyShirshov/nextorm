@@ -1,4 +1,7 @@
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace NextORM.Core;
 
@@ -26,6 +29,12 @@ internal enum JsonWriteKind
 
     /// <summary>A JSON string holding the base64 encoding of a <c>byte[]</c> value.</summary>
     Base64,
+
+    /// <summary>
+    /// A JSON string produced by a supported STJ string-enum converter
+    /// (<see cref="JsonStringEnumConverter"/> or <see cref="JsonStringEnumConverter{TEnum}"/>).
+    /// </summary>
+    EnumString,
 }
 
 /// <summary>
@@ -35,7 +44,8 @@ internal enum JsonWriteKind
 internal readonly struct JsonShapeColumn
 {
     /// <summary>Initializes a planned column.</summary>
-    internal JsonShapeColumn(int ordinal, string name, Type valueType, JsonWriteKind kind, bool nullable, bool defaultOnNull)
+    internal JsonShapeColumn(int ordinal, string name, Type valueType, JsonWriteKind kind, bool nullable, bool defaultOnNull,
+        Type? enumUnderlyingType = null, JsonConverter? enumStringConverter = null)
     {
         Ordinal = ordinal;
         Name = name;
@@ -43,6 +53,8 @@ internal readonly struct JsonShapeColumn
         Kind = kind;
         Nullable = nullable;
         DefaultOnNull = defaultOnNull;
+        EnumUnderlyingType = enumUnderlyingType;
+        EnumStringConverter = enumStringConverter;
     }
 
     /// <summary>The zero-based result-set ordinal the value is read from.</summary>
@@ -66,6 +78,20 @@ internal readonly struct JsonShapeColumn
     /// <c>RowMapperFactory</c>'s substitution.
     /// </summary>
     public bool DefaultOnNull { get; }
+
+    /// <summary>
+    /// The underlying integral type of an enum projection, used to read the provider's numeric value;
+    /// <see langword="null"/> for a non-enum column. A numeric enum uses <see cref="ValueType"/> as the
+    /// underlying type directly, so this is set only for <see cref="JsonWriteKind.EnumString"/>.
+    /// </summary>
+    public Type? EnumUnderlyingType { get; }
+
+    /// <summary>
+    /// The pre-built STJ converter for an enum projected as a string (a supported
+    /// <see cref="JsonStringEnumConverter"/> attribute); <see langword="null"/> otherwise. It is created
+    /// once while the shape is planned, never resolved per row.
+    /// </summary>
+    public JsonConverter? EnumStringConverter { get; }
 }
 
 /// <summary>
@@ -82,6 +108,13 @@ internal sealed class JsonShapePlan
         Options = options;
         Shape = shape;
     }
+
+    /// <summary>
+    /// Shared serializer options handed to a pre-built string-enum converter. The converter instance owns
+    /// the naming/allow-integer policy (from its attribute), so these options are only a write-time
+    /// parameter and are never consulted per row.
+    /// </summary>
+    internal static readonly JsonSerializerOptions EnumConverterOptions = new();
 
     /// <summary>Whether the projection is a single scalar value rather than an object.</summary>
     public bool IsScalar { get; }
@@ -182,7 +215,7 @@ internal sealed class JsonShapePlan
                 throw new NotSupportedException(
                     $"Column '{column.PropertyName}' is a streaming LOB column and cannot be streamed as JSON; project it as a buffered string/byte[] column.");
 
-            var (valueType, kind) = Classify(column.PropertyType, column.PropertyName);
+            var (valueType, kind, enumUnderlying, enumConverter) = Classify(column.PropertyType, column.PropertyName, ResolveMemberProvenance(column));
 
             string name;
             if (oneColumn)
@@ -212,7 +245,7 @@ internal sealed class JsonShapePlan
                         $"Duplicate JSON property name '{name}' after naming-policy conversion; JSON object members must be unique.");
             }
 
-            columns[i] = new JsonShapeColumn(column.Index, name, valueType, kind, column.Nullable, column.DefaultOnNull);
+            columns[i] = new JsonShapeColumn(column.Index, name, valueType, kind, column.Nullable, column.DefaultOnNull, enumUnderlying, enumConverter);
         }
 
         return new JsonShapePlan(oneColumn, columns, options, shape: null);
@@ -254,38 +287,135 @@ internal sealed class JsonShapePlan
     }
 
     /// <summary>
-    /// Maps a declared CLR type to its phase-1 typed write path, unwrapping <see cref="Nullable{T}"/>.
-    /// Shared with the recursive shape writer so an array element or a nested scalar leaf uses the exact
-    /// same whitelist and never falls back to managed serialization. Throws for an unsupported type.
+    /// Resolves the CLR member a projected flat column came from, so an enum projection can honour an
+    /// STJ <c>[JsonConverter]</c> attribute. A whole-entity / expanded-entity column carries
+    /// <see cref="SelectExpression.PropertyInfo"/>; an anonymous or scalar projection carries the source
+    /// member read in <see cref="SelectExpression.Expression"/> (the ordinary preparer does not set
+    /// <c>PropertyInfo</c> for those). Returns <see langword="null"/> for a computed column.
+    /// </summary>
+    private static MemberInfo? ResolveMemberProvenance(SelectExpression column)
+    {
+        if (column.PropertyInfo is { } property)
+            return property;
+
+        var expression = column.Expression;
+        if (expression is null)
+            return null;
+
+        if (expression is LambdaExpression lambda)
+            expression = lambda.Body;
+
+        expression = TypeFacts.UnwrapConvert(expression);
+        return expression is MemberExpression member ? member.Member : null;
+    }
+
+    /// <summary>
+    /// Maps a declared CLR type to its typed write path, unwrapping <see cref="Nullable{T}"/>. An enum is
+    /// numeric by default (its underlying integral type is the write type); a property/type-level stock
+    /// <see cref="JsonStringEnumConverter"/> attribute selects the string representation instead. Shared
+    /// with the recursive shape writer so an array element or a nested scalar leaf uses the exact same
+    /// whitelist and never falls back to managed serialization. Throws for an unsupported type or an
+    /// unsupported JSON converter attribute.
     /// </summary>
     /// <param name="type">The declared CLR type (may be <see cref="Nullable{T}"/>).</param>
     /// <param name="propertyName">A member/element name used in the rejection message; may be <see langword="null"/>.</param>
-    /// <exception cref="NotSupportedException">The type is outside the phase-1 JSON whitelist.</exception>
-    internal static (Type ValueType, JsonWriteKind Kind) Classify(Type type, string? propertyName)
+    /// <param name="member">
+    /// The source member of a flat projection, or the destination member of a captured member-init, so a
+    /// property-level <c>[JsonConverter]</c> is honoured ahead of the enum type attribute.
+    /// </param>
+    /// <exception cref="NotSupportedException">The type is outside the whitelist or carries an unsupported converter.</exception>
+    internal static (Type ValueType, JsonWriteKind Kind, Type? EnumUnderlyingType, JsonConverter? EnumStringConverter) Classify(Type type, string? propertyName, MemberInfo? member)
     {
         var valueType = Nullable.GetUnderlyingType(type) ?? type;
+
+        if (valueType.IsEnum)
+        {
+            var underlying = Enum.GetUnderlyingType(valueType);
+            var attribute = ResolveConverterAttribute(member, valueType);
+            if (attribute is null)
+                return (underlying, JsonWriteKind.Number, null, null);
+
+            var converterType = attribute.ConverterType;
+            if (converterType is not null && TryCreateStringEnumConverter(converterType, valueType, out var converter))
+                return (valueType, JsonWriteKind.EnumString, underlying, converter);
+
+            throw new NotSupportedException(
+                $"Column '{propertyName}' has type {valueType} with the JSON converter '{attribute.ConverterType}', which is not supported by JSON streaming; only System.Text.Json.Serialization.JsonStringEnumConverter or JsonStringEnumConverter<TEnum> is supported for an enum projection, or remove the converter to stream the numeric value.");
+        }
+
+        // A JSON converter attribute on a non-enum scalar is not a supported streaming shape: the writer
+        // has no general converter path, so the attribute must be rejected at plan time instead of being
+        // silently ignored (which would stream the undeclared raw value). This mirrors the enum case's
+        // fail-fast policy; the only allowed JSON converter is the stock string-enum form on an enum.
+        if (ResolveConverterAttribute(member, valueType) is { } nonEnumAttribute)
+            throw new NotSupportedException(
+                $"Column '{propertyName}' has type {valueType} with the JSON converter '{nonEnumAttribute.ConverterType}', which is not supported by JSON streaming; the only supported JSON converter attribute is System.Text.Json.Serialization.JsonStringEnumConverter or JsonStringEnumConverter<TEnum> on an enum projection.");
 
         if (valueType == typeof(byte) || valueType == typeof(short) || valueType == typeof(int)
             || valueType == typeof(long) || valueType == typeof(float) || valueType == typeof(double)
             || valueType == typeof(decimal))
-            return (valueType, JsonWriteKind.Number);
+            return (valueType, JsonWriteKind.Number, null, null);
 
         if (valueType == typeof(bool))
-            return (valueType, JsonWriteKind.Boolean);
+            return (valueType, JsonWriteKind.Boolean, null, null);
 
         if (valueType == typeof(string))
-            return (valueType, JsonWriteKind.String);
+            return (valueType, JsonWriteKind.String, null, null);
 
         if (valueType == typeof(Guid))
-            return (valueType, JsonWriteKind.Guid);
+            return (valueType, JsonWriteKind.Guid, null, null);
 
         if (valueType == typeof(DateTime))
-            return (valueType, JsonWriteKind.DateTime);
+            return (valueType, JsonWriteKind.DateTime, null, null);
 
         if (valueType == typeof(byte[]))
-            return (valueType, JsonWriteKind.Base64);
+            return (valueType, JsonWriteKind.Base64, null, null);
 
         throw new NotSupportedException(
-            $"Column '{propertyName}' has type {type} which is not supported by JSON streaming in phase 1; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>).");
+            $"Column '{propertyName}' has type {type} which is not supported by JSON streaming; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>) and enum.");
+    }
+
+    /// <summary>
+    /// Resolves the effective JSON converter attribute: the member attribute wins over the type
+    /// attribute (matching STJ precedence). Used for the enum string-enum form and to fail fast on any
+    /// other (unsupported) converter attribute on a scalar projection.
+    /// </summary>
+    private static JsonConverterAttribute? ResolveConverterAttribute(MemberInfo? member, Type type)
+    {
+        if (member is not null && member.GetCustomAttribute<JsonConverterAttribute>() is { } memberAttribute)
+            return memberAttribute;
+
+        return type.GetCustomAttribute<JsonConverterAttribute>();
+    }
+
+    /// <summary>
+    /// Recognizes the stock STJ string-enum converter forms and builds the concrete converter once.
+    /// Any other converter type (including a custom enum converter) is rejected by the caller.
+    /// </summary>
+    private static bool TryCreateStringEnumConverter(Type converterType, Type enumType, out JsonConverter converter)
+    {
+        var factoryType = converterType == typeof(JsonStringEnumConverter)
+            ? typeof(JsonStringEnumConverter)
+            : converterType.IsGenericType
+                && converterType.GetGenericTypeDefinition() == typeof(JsonStringEnumConverter<>)
+                && converterType.GetGenericArguments()[0] == enumType
+                ? converterType
+                : null;
+
+        if (factoryType is null)
+        {
+            converter = null!;
+            return false;
+        }
+
+        var factory = factoryType == typeof(JsonStringEnumConverter)
+            ? (JsonConverterFactory)new JsonStringEnumConverter()
+            : (JsonConverterFactory)Activator.CreateInstance(factoryType)!;
+
+        converter = factory.CreateConverter(enumType, EnumConverterOptions)
+            ?? throw new NotSupportedException(
+                $"The JSON converter '{converterType}' did not produce a converter for enum {enumType}.");
+
+        return true;
     }
 }

@@ -67,9 +67,21 @@ values throw the same way from the terminal's options overloads.
 ### Supported shapes (fail-fast)
 
 The scalar (leaf) CLR types are `byte`, `short`, `int`, `long`, `float`, `double`, `decimal`,
-`bool`, `string`, `Guid`, `DateTime`, `byte[]` and their `Nullable<>` forms. Values are written the
+`bool`, `string`, `Guid`, `DateTime`, `byte[]`, enums and their `Nullable<>` forms. Values are written the
 way `System.Text.Json` defaults render them: numbers as JSON numbers, `bool` as a JSON boolean,
 `Guid` as canonical text, `DateTime` as ISO-8601, `byte[]` as base64.
+
+**Enums** are supported. By default an enum is written as a JSON number equal to its underlying
+integral value (all eight underlying integral types, without narrowing `uint`/`ulong`) — the numeric
+value, not the enum name. A property- or type-level `[JsonConverter]` attribute carrying the stock
+`JsonStringEnumConverter` or `JsonStringEnumConverter<TEnum>` is honoured instead, writing the string
+form exactly as the stock converter does in `System.Text.Json`: named values by name, `[Flags]`
+combinations joined the same way, and a value with no name as its underlying number written as a
+string (the converter's default `allowIntegerValues: true`). The property attribute wins over the
+enum-type attribute. A storage converter (`ValueConverter`, for example `EnumToStringConverter<T>`) is
+**not** accepted — a text-stored enum is not what the JSON string representation means — and any other
+JSON converter on an enum, as well as any `[JsonConverter]` attribute on a non-enum scalar, is rejected
+before output.
 
 On top of that flat whitelist the projection may **nest**:
 
@@ -94,11 +106,11 @@ On top of that flat whitelist the projection may **nest**:
   predicate is rejected before output.
 
 Everything else is rejected with `NotSupportedException` while the shape is planned, before any
-output: `TimeSpan`, `DateTimeOffset`, `DateOnly`/`TimeOnly`, enums, `Range<T>`, value-converted
+output: `TimeSpan`, `DateTimeOffset`, `DateOnly`/`TimeOnly`, `Range<T>`, value-converted
 columns (including JSON-column members) and streaming LOB columns. Nested construction has **explicit
 exclusions** that are deferred to their own issues rather than silently flattened:
 
-* **enums and converter-backed types** — issue [#178](https://github.com/AlexeyShirshov/nextorm/issues/178);
+* **arbitrary JSON converters and native/text enum storage** — issue [#178](https://github.com/AlexeyShirshov/nextorm/issues/178);
 * **child-collection query projections** (`List<T>`, `IEnumerable<T>`, dictionaries and any other
   collection with no provider-native array source) — issue [#172](https://github.com/AlexeyShirshov/nextorm/issues/172);
 * **new naming-policy / options behaviour** — issue [#177](https://github.com/AlexeyShirshov/nextorm/issues/177);
