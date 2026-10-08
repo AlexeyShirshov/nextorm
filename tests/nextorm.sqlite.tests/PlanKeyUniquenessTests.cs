@@ -538,4 +538,73 @@ public class PlanKeyUniquenessTests
                 ownSql[name], $"the cached plan for '{name}' must keep its own SQL");
         }
     }
+
+    /// <summary>
+    /// #173: the projection-item member is part of the plan key. Two commands with equal SQL, context
+    /// type and every other shape input, differing only in <see cref="ProjectionEntityItem.Member"/>,
+    /// must not alias each other in the real <see cref="QueryPlanStore"/>; an equal-member control must
+    /// still reuse the stored plan. The member is injected at the test seam because the production
+    /// producers only emit the tuple <c>ItemN</c> members.
+    /// </summary>
+    [Fact]
+    public void PlanCache_ShouldSeparateProjectionItemMembers()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var memberId = typeof(PKRow).GetProperty(nameof(PKRow.Id))!;
+        var memberInt = typeof(PKRow).GetProperty(nameof(PKRow.Int))!;
+
+        QueryCommand Build()
+        {
+            var cmd = Row(E(ctx));
+            cmd.PrepareCommand(false, CancellationToken.None);
+            return cmd;
+        }
+
+        var first = Build();
+        var second = Build();
+        var control = Build();
+
+        first.SelectList![0].ProjectionItem = new ProjectionEntityItem(0, typeof(PKRow), memberId);
+        second.SelectList![0].ProjectionItem = new ProjectionEntityItem(0, typeof(PKRow), memberInt);
+        control.SelectList![0].ProjectionItem = new ProjectionEntityItem(0, typeof(PKRow), memberId);
+
+        QueryPlanStore.Clear();
+        var contextType = typeof(PlanKeyUniquenessTests);
+        var holderFirst = new StubCommandHolder();
+        var holderSecond = new StubCommandHolder();
+
+        var planFirst = new QueryPlan(first, null);
+        var planSecond = new QueryPlan(second, null);
+        var planControl = new QueryPlan(control, null);
+
+        planFirst.Equals(planSecond).Should().BeFalse("a projection-item member is part of the plan key");
+        planFirst.Equals(planControl).Should().BeTrue("an equal member identity must reuse the plan key");
+
+        QueryPlanStore.Set(contextType, planFirst, holderFirst);
+        QueryPlanStore.TryGet(contextType, planSecond, out var missedHolder, out var missedPlan).Should()
+            .BeFalse("the member-only variation must not alias the stored plan");
+        missedHolder.Should().BeNull();
+        missedPlan.Should().BeNull();
+
+        QueryPlanStore.Set(contextType, planSecond, holderSecond);
+        QueryPlanStore.TryGet(contextType, planFirst, out var foundFirst, out var storedFirst).Should().BeTrue();
+        foundFirst.Should().BeSameAs(holderFirst);
+        storedFirst.Should().BeSameAs(planFirst);
+
+        QueryPlanStore.TryGet(contextType, planSecond, out var foundSecond, out var storedSecond).Should().BeTrue();
+        foundSecond.Should().BeSameAs(holderSecond);
+        storedSecond.Should().BeSameAs(planSecond);
+
+        QueryPlanStore.TryGet(contextType, planControl, out var foundControl, out _).Should()
+            .BeTrue("an equal-shape control must reuse the stored plan");
+        foundControl.Should().BeSameAs(holderFirst);
+    }
+
+    private sealed class StubCommandHolder : IDbCommandHolder
+    {
+        public void ResetConnection(DbConnection conn, IDataContext dbContext)
+        {
+        }
+    }
 }

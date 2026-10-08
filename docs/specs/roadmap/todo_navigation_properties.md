@@ -343,12 +343,6 @@ left join Child as t2 on <predicate>
 - `.Select(...)` / `.As(...)` поверх `JoinInto` отклоняются.
 - Стичинг/дедуп выполняют только list-терминалы (`ToList`/`ToListAsync`); прочие терминалы коллекции не заполняют.
 
-**Latent P2.**
-
-- `SelectExpressionPlanEqualityComparer.cs` / `RowMapperFactory.cs` сворачивают проекцию только по
-  `EntityType`+`Slot`, без `Member`. Сейчас безопасно по инварианту `Member == Item{slot+1}`;
-  пересмотреть, если инвариант изменится.
-
 **P2.**
 
 - `IdentitySelectorCache` (`JoinIntoSpec.cs`) не очищается в `DataContextCache.Clear()` — оценить

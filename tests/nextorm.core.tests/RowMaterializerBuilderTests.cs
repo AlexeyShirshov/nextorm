@@ -215,4 +215,28 @@ public class RowMaterializerBuilderTests
         act.Should().Throw<QueryPreparationException>()
             .WithMessage("*constructor position*");
     }
+
+    [Fact]
+    public void ConstructorPositionItem_WithMatchingCtor_ShouldMaterializeThroughTheCtorPosition()
+    {
+        // The item addresses a constructor position (Member is null) and the projection materializes
+        // exactly one item, matching CtorOnlyShape's single-parameter constructor. The null member must
+        // be bound by constructor position and the projected column value must materialize onto the
+        // entity, never be rejected or looked up as a member by the entity's own property name.
+        var param = Expression.Parameter(typeof(object), "row");
+        var item = new ProjectionEntityItem(0, typeof(Part), member: null);
+        var selectList = new SelectExpression[]
+        {
+            new SelectExpression(typeof(int)) { Index = 0, PropertyName = nameof(Part.Id), ProjectionItem = item },
+        };
+        Func<SelectExpression, Expression> map = column => Expression.Constant(7, column.PropertyType);
+
+        var body = RowMaterializerBuilder.Build(typeof(CtorOnlyShape), param, selectList, ignoreColumns: false, map);
+
+        var materialize = Expression.Lambda<Func<object, CtorOnlyShape>>(body, param).Compile();
+        var shape = materialize(new object());
+
+        shape.First.Should().NotBeNull();
+        shape.First!.Id.Should().Be(7, "the projected column value must reach the ctor-position entity item");
+    }
 }
