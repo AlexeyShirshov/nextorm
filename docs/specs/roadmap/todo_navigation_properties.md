@@ -330,6 +330,8 @@ left join Child as t2 on <predicate>
 
 **Отложено (не поставлено).**
 
+- **Типизированный temp-table/TVP query-root** — regression-защита границы поставлена в D162 r=2 (fail-closed без fallback на базовую таблицу и без бросания; TVP доступен только как `ProcedureParameter.Table<T>`; трейты `[Trait("D162","Boundary")]`/`[Trait("D162","Conformance")]`), а типизированный query-root над временной таблицей/TVP **отложен**: триггер — одобренная фича или воспроизведённый дефект fallback. Объём остаётся в текущем milestone `1.0.9-rc2` (tracking issue [#162](https://github.com/AlexeyShirshov/nextorm/issues/162); поведение — [design §11](../design/implicit-navigation-queries.md#11-статус-реализации-2026-10-02)).
+
 - **Анонимная/производная проекция дочерней коллекции** — историческая форма `NORM.ChildCollection(...)`
   из #40. Сценарий parent+child join покрыт `JoinInto` в объявленное свойство-коллекцию; проекция
   детей в произвольную (анонимную) форму не предоставляется. Триггер: конкретный потребитель +

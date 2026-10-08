@@ -15,6 +15,7 @@ namespace NextORM.ClickHouse.Tests;
 /// that can hold a null) because the driver infers a non-nullable type from a CLR value and otherwise
 /// fails to serialize a null tuple element.
 /// </summary>
+[Trait("D162", "Conformance")]
 public class TableValuedParameterTests
 {
     private sealed class TvpRow

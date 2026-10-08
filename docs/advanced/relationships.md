@@ -6,7 +6,7 @@
 
 ## Overview
 
-nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit joins inferred from a navigation (`e.Parent.Name`) are **not** implemented.
+nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](../guide/29-implicit-navigation.md)) — not inferred by convention. Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
 
 `JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder opts into `AsSingleQuery()`).
 

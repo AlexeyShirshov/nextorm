@@ -6,7 +6,7 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc2` at `18659e41` (merge of PR #205 from `1.0.9-rc1`)
 - collection revision: r1; evidence revision: rv1; PLAN-revision vector: all admitted tasks r=1/rv=1
-- collection status: **in-progress (recovery)** — D153/D154/D157/D159/D191 done; **D160 set aside** as terminal `incomplete` (preserved on branch `wip/d160-incomplete` + patch); continuing the remaining tasks from the clean pre-D160 tip `4bd18c82` under a user-authorized continuation policy
+- collection status: **in-progress (recovery)** — D153/D154/D157/D159/D191/D162 done; **D160 set aside** as terminal `incomplete` (preserved on branch `wip/d160-incomplete` + patch); continuing the remaining tasks from the clean pre-D160 tip `4bd18c82` under a user-authorized continuation policy
 
 ## Admission / gaps (P)
 
@@ -45,7 +45,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D159 | #159 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | closed #159 (078a7a2d) |
 | D160 | #160 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=4 (terminal) | docs/specs/status/rc2-160-join-alias-mixing-1.md | terminal r=4 STOP (R02 over-preservation of SourceEntityType/BindArrayJoinElement); set aside per explicit user direction; preserved on branch `wip/d160-incomplete` + patch `docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch`; #160 stays OPEN |
 | D161 | - | - | - | - | - | - | - | - | - | (reference only: #130/#161 hint APIs already shipped) |
-| D162 | #162 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md | V32 navigation temp/TVP fail-closed |
+| D162 | #162 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=2 | docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md | closed #162 (<short-sha>) |
 | D167 | #167 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-167-csv-chunked-read-1.md | CSV chunked read for byte[] (P0 validator prerequisite) |
 | D169 | #169 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-169-dml-scope-hints-1.md | DML scope hints on join paths |
 | D170 | #170 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | OneToOne FK uniqueness |
@@ -64,7 +64,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D188 | #188 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md | Comparison benchmarks tier 1 (needs D189) |
 | D189 | #189 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-189-sqlite-datareader-1.md | SQLite ToDataReader verification |
 | D190 | #190 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-190-join-whole-entity-1.md | Whole-entity JOIN projection |
-| D191 | #191 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-191-provider-extensions-1.md | done — provider-specific fluent API relocated out of core into provider packages; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; commit `__D191_SHA__`; issue #191 closed (evidence artifacts/pdca/rc2-191/r1/) |
+| D191 | #191 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-191-provider-extensions-1.md | done — provider-specific fluent API relocated out of core into provider packages; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; commit `e25f558e`; issue #191 closed (evidence artifacts/pdca/rc2-191/r1/) |
 
 ## Decisions
 
@@ -90,10 +90,10 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 - Verification state: `unverified` (P done; DO not started).
 - Defect id and history: none.
-- Next allowed step: continue G1 DO at next pending task **D162** (D191 done, CHECK PASS snapshot-n2; same saved PLAN, continue from DO). D160 set-aside and D184 incomplete remain preserved and are not resumed here.
+- Next allowed step: continue G1 DO at next pending task **D170** (D162 done, CHECK PASS rv=2; D191 done). D160 set-aside and D184 incomplete remain preserved and are not resumed here.
 
 ## Done / Verified / Incomplete
 
-- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed); D191 (#191, commit `__D191_SHA__`; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; issue #191 closed; evidence artifacts/pdca/rc2-191/r1/).
+- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed); D191 (#191, commit `e25f558e`; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; issue #191 closed; evidence artifacts/pdca/rc2-191/r1/). D162 (#162, commit <short-sha>, CHECK PASS rv=2).
 - Verified: no.
 - Incomplete: **D160** (terminal r=4 STOP; preserved on `wip/d160-incomplete` + patch). Excluded-gap: D171, D172 (issues OPEN).

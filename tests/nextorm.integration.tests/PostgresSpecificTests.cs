@@ -2161,6 +2161,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Scalar_ShouldUseUnnest()
     {
         var ctx = _sut.DataProvider;
@@ -2181,6 +2182,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EmptyScalar_ShouldReadNoRows()
     {
         var ctx = _sut.DataProvider;
@@ -2193,6 +2195,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Entity_ShouldUseJsonbToRecordset()
     {
         var ctx = _sut.DataProvider;
@@ -2217,6 +2220,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameterWithTypeName_ShouldThrowArgumentException()
     {
         var ctx = _sut.DataProvider;
@@ -2229,6 +2233,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_DateTime_ShouldRoundTripUnnest()
     {
         var ctx = _sut.DataProvider;
@@ -2254,6 +2259,7 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_NullableIntArray_ShouldKeepNulls()
     {
         var ctx = _sut.DataProvider;

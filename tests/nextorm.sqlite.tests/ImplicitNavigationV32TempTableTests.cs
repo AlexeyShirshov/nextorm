@@ -4,15 +4,16 @@ using NextORM.Core;
 namespace NextORM.Sqlite.Tests;
 
 /// <summary>
-/// #148-B V32 guarding test. Navigation over a temp-table/TVP source is <b>formally deferred</b>
-/// (fail-closed, tracked by issue #162): the trigger is a navigation source combined with a
-/// temp-table/TVP path. A lazy temp-table read source is an untyped <see cref="TableAlias"/> whose
-/// surface is only typed column accessors, so navigation over it is not expressible and is never
-/// lowered; navigation <i>before</i> the temp-table boundary (the materialisation
+/// #148-B V32 guarding test. Navigation <b>after</b> a temp-table/TVP boundary is verified
+/// <b>fail-closed</b> (currently unavailable; tracked by issue #162): a navigation member cannot
+/// be read over the boundary. A lazy temp-table read source is an untyped <see cref="TableAlias"/>
+/// whose surface is only typed column accessors, so navigation over it is not expressible and is
+/// never lowered; navigation <i>before</i> the temp-table boundary (the materialisation
 /// <c>CREATE TEMPORARY TABLE ... AS SELECT</c>) is still expanded. The test pins both halves so a
 /// future change that typed a temp-table/TVP source as a mapped entity would have to add a
 /// deliberate navigation join here instead of silently joining the base table for the read.
 /// </summary>
+[Trait("D162", "Boundary")]
 public class ImplicitNavigationV32TempTableTests
 {
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");

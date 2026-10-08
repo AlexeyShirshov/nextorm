@@ -8,6 +8,7 @@ namespace NextORM.Sqlite.Tests;
 /// SQLite emulates a table-valued parameter with a JSON text parameter: scalars are read through
 /// <c>json_each(@p)</c>, entities through <c>json_extract(value, '$.col')</c>.
 /// </summary>
+[Trait("D162", "Conformance")]
 public class TableValuedParameterTests
 {
     private sealed class TvpRow

@@ -212,6 +212,7 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Scalar_ShouldUseJsonTable()
     {
         using var result = _ctx.ExecuteRaw(
@@ -222,6 +223,7 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_Entity_ShouldUseJsonTable()
     {
         using var result = _ctx.ExecuteRaw(
@@ -242,6 +244,7 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EmptyScalar_ShouldReturnNoRows()
     {
         using var result = _ctx.ExecuteRaw(
@@ -252,6 +255,7 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameter_EmptyEntity_ShouldReturnNoRows()
     {
         using var result = _ctx.ExecuteRaw(
@@ -262,6 +266,7 @@ public sealed class MariaDbFunctionsIntegrationTests : IDisposable
     }
 
     [Fact]
+    [Trait("D162", "Conformance")]
     public void ExecuteRaw_TableParameterWithTypeName_ShouldThrowArgumentException()
     {
         var act = () => _ctx.ExecuteRaw("select 1", [ProcedureParameter.Table("p", "my_type", new[] { 1 })]);

@@ -16,6 +16,7 @@ namespace NextORM.SqlServer.Tests;
 /// metadata SQL Server receives (the record's <see cref="SqlMetaData"/>) plus the value actually streamed,
 /// where a widening type is asserted through its coerced representation rather than the CLR input.
 /// </summary>
+[Trait("D162", "Conformance")]
 public class TableValuedParameterBindingTests
 {
     private const string TypeName = "dbo.TvpShape";
