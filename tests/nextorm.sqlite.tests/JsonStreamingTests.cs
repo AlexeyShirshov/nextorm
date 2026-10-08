@@ -46,7 +46,9 @@ public sealed class JsonStreamingFixture : IDisposable
                 "create table json_enum (id integer primary key, state integer, nullable_state integer);" +
                 "insert into json_enum (id, state, nullable_state) values (1, 7, null);" +
                 "insert into json_enum (id, state, nullable_state) values (2, -3, 7);" +
-                "create table json_enum_empty (id integer primary key, state integer);";
+                "create table json_enum_empty (id integer primary key, state integer);" +
+                "create table json_binding (id integer primary key, int_text text);" +
+                "insert into json_binding (id, int_text) values (1, 'not-a-number');";
             setup.ExecuteNonQuery();
         }
 
@@ -178,6 +180,26 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
     {
         public int Id { get; set; }
         public DateTimeOffset When { get; set; }
+    }
+
+    // D180.2 reader-binding: a TEXT column projected as int lowers to a numeric JSON leaf whose provider
+    // field type (System.String) the compiled numeric reader cannot convert. The incompatibility is only
+    // observable after the reader is opened, so it must be rejected before the destination is written.
+    [SqlTable("json_binding")]
+    public interface IJsonBindingEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("int_text")]
+        int IntText { get; set; }
+    }
+
+    public class JsonBindingEntity : IJsonBindingEntity
+    {
+        public int Id { get; set; }
+        public int IntText { get; set; }
     }
 
     // D176.4 joined-shape entities: both sides expose an Id and a Name so duplicate leaf names across
@@ -522,7 +544,7 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         var collisionPosition = collision.Position;
         var collisionAct = () => command.WriteJson(collision, new JsonStreamOptions { PropertyNamingPolicy = new ConstantNamingPolicy() });
 
-        collisionAct.Should().Throw<NotSupportedException>();
+        collisionAct.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [names]*");
         collision.Position.Should().Be(collisionPosition);
         collision.Length.Should().Be(collisionPosition);
 
@@ -531,7 +553,7 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         var nullPosition = nullName.Position;
         var nullAct = () => command.WriteJson(nullName, new JsonStreamOptions { PropertyNamingPolicy = new NullNamingPolicy() });
 
-        nullAct.Should().Throw<NotSupportedException>();
+        nullAct.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [names]*");
         nullName.Position.Should().Be(nullPosition);
         nullName.Length.Should().Be(nullPosition);
     }
@@ -546,7 +568,7 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
 
         var act = () => command.WriteJson(stream, new JsonStreamOptions { Mode = (JsonStreamMode)999 });
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [mode-options]*");
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(position);
     }
@@ -586,7 +608,7 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
 
         var act = () => command.WriteJson(stream, new JsonStreamOptions { Mode = JsonStreamMode.NdJson, Root = "items" });
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [mode-options]*");
     }
 
     [Fact]
@@ -597,7 +619,7 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
 
         var act = () => command.WriteJson(stream, new JsonStreamOptions { Mode = JsonStreamMode.NdJson, WriteIndented = true });
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [mode-options]*");
     }
 
     [Fact]
@@ -696,9 +718,153 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
 
         var act = () => command.WriteJson(stream);
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [unsupported-execution-form]*");
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(position);
+    }
+
+    // D180.2 / R180-03: unsupported metadata or an incompatible reader schema is rejected with a stable
+    // `JSON streaming validation [<token>]` message, and the destination preloaded with sentinel bytes
+    // stays byte-for-byte unchanged (no framing, no partial row). A valid query still writes.
+    [Fact]
+    public void UnsupportedShape_ShouldRejectBeforeOutputKeepingSentinel()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1)
+            .Select(x => new { Empty = new JsonEmpty() });
+        var before = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            var act = () => command.WriteJson(stream);
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [projection]*");
+            stream.ToArray().Should().Equal(before);
+        }
+    }
+
+    [Fact]
+    public void UnsupportedColumn_ShouldRejectBeforeOutputKeepingSentinel()
+    {
+        var command = _ctx.From<UnsupportedJsonEntity>().Select(x => new { x.Id, x.When });
+        var before = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            var act = () => command.WriteJson(stream);
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [unsupported-column]*");
+            stream.ToArray().Should().Equal(before);
+        }
+    }
+
+    [Fact]
+    public void IncompatibleReaderSchema_ShouldRejectBeforeOutputKeepingSentinel()
+    {
+        var command = _ctx.From<JsonBindingEntity>().Select(x => new { x.Id, x.IntText });
+        var before = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            var act = () => command.WriteJson(stream);
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [reader-binding]*");
+            stream.ToArray().Should().Equal(before);
+        }
+    }
+
+    [Fact]
+    public async Task IncompatibleReaderSchemaAsync_ShouldRejectBeforeOutputKeepingSentinel()
+    {
+        var command = _ctx.From<JsonBindingEntity>().Select(x => new { x.Id, x.IntText });
+        var before = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            var act = () => command.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+            await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [reader-binding]*");
+            stream.ToArray().Should().Equal(before);
+        }
+    }
+
+    // W3 (r2/n2): the reader-binding guard is metadata-based, so it must run even when the result set is
+    // empty. An incompatible schema is rejected before any destination write with no row ever read; a
+    // compatible schema still emits `[]` (proving the unconditional call did not break empty output).
+    [Fact]
+    public void IncompatibleReaderSchemaEmptyResult_ShouldRejectBeforeOutputKeepingSentinel()
+    {
+        var command = _ctx.From<JsonBindingEntity>().Where(x => x.Id > 100).Select(x => new { x.Id, x.IntText });
+        var before = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            var act = () => command.WriteJson(stream);
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [reader-binding]*");
+            stream.ToArray().Should().Equal(before);
+        }
+    }
+
+    [Fact]
+    public async Task IncompatibleReaderSchemaEmptyResultAsync_ShouldRejectBeforeOutputKeepingSentinel()
+    {
+        var command = _ctx.From<JsonBindingEntity>().Where(x => x.Id > 100).Select(x => new { x.Id, x.IntText });
+        var before = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            var act = () => command.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+            await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [reader-binding]*");
+            stream.ToArray().Should().Equal(before);
+        }
+    }
+
+    [Fact]
+    public void CompatibleReaderSchemaEmptyResult_ShouldWriteEmptyArray()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id > 100).OrderBy(x => x.Id).Select(x => x.Id);
+        var sentinel = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            command.WriteJson(stream);
+
+            var written = stream.ToArray();
+            written.Take(sentinel.Length).Should().Equal(sentinel);
+            Encoding.UTF8.GetString(written.AsSpan(sentinel.Length)).Should().Be("[]");
+        }
+    }
+
+    [Fact]
+    public async Task CompatibleReaderSchemaEmptyResultAsync_ShouldWriteEmptyArray()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id > 100).OrderBy(x => x.Id).Select(x => x.Id);
+        var sentinel = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            await command.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+            var written = stream.ToArray();
+            written.Take(sentinel.Length).Should().Equal(sentinel);
+            Encoding.UTF8.GetString(written.AsSpan(sentinel.Length)).Should().Be("[]");
+        }
+    }
+
+    [Fact]
+    public void ValidQuery_ShouldWriteAfterSentinelPreload()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1).Select(x => new { x.Id, x.Name });
+        var sentinel = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            command.WriteJson(stream);
+
+            var written = stream.ToArray();
+            written.Should().HaveCountGreaterThan(sentinel.Length);
+            written.Take(sentinel.Length).Should().Equal(sentinel);
+            Encoding.UTF8.GetString(written.AsSpan(sentinel.Length)).Should().Be("[{\"Id\":1,\"Name\":\"alpha\"}]");
+        }
+    }
+
+    private static byte[] PreloadSentinel(out MemoryStream stream)
+    {
+        stream = new MemoryStream();
+        stream.Write([0x53, 0x45, 0x4E, 0x54, 0x49, 0x4E, 0x45, 0x4C]); // "SENTINEL"
+        return stream.ToArray();
     }
 
     [Fact]
@@ -1316,6 +1482,280 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         await builder.WriteJsonAsync(async, TestContext.Current.CancellationToken);
 
         async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    // D180.6 / E180-17 + S6 (r2/n2): the public `params` overloads are positional SQL parameter bindings
+    // forwarded to the existing executor path. Each case independently asserts the positional result
+    // (exact JSON or a literal-bound oracle), covering multiple values, an empty set and a null element
+    // on both terminal surfaces and both sync/async.
+    [Fact]
+    public void WriteJson_WithPositionalParams_ShouldMatchOrdinaryExecution()
+    {
+        var command = _ctx.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int>(0))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream, new JsonStreamOptions(), CancellationToken.None, 1);
+
+        Utf8(stream).Should().Be(JsonSerializer.Serialize(command.ToList(1)));
+    }
+
+    [Fact]
+    public async Task WriteJsonAsync_WithPositionalParams_ShouldMatchOrdinaryExecution()
+    {
+        var command = _ctx.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int>(0))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+        using var stream = new MemoryStream();
+
+        await command.WriteJsonAsync(stream, new JsonStreamOptions(), TestContext.Current.CancellationToken, 1);
+
+        Utf8(stream).Should().Be(JsonSerializer.Serialize(command.ToList(1)));
+    }
+
+    [Fact]
+    public async Task EntityBuilder_WriteJson_WithPositionalParams_ShouldMatchSync()
+    {
+        var builder = _ctx.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int>(0))
+            .OrderBy(x => x.Id);
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        builder.WriteJson(sync, new JsonStreamOptions(), CancellationToken.None, 1);
+        await builder.WriteJsonAsync(async, new JsonStreamOptions(), TestContext.Current.CancellationToken, 1);
+
+        sync.Length.Should().BeGreaterThan(0);
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    // Multiple values: the predicate compares two positional values; the literal gives an independent
+    // expected document, and swapping the values must invert the set (proving declaration-order binding).
+    [Fact]
+    public void WriteJson_MultiplePositionalParams_ShouldBindPositionally()
+    {
+        var command = _ctx.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int>(0) && x.Id <= SqlFunctions.Parameter<int>(1))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream, new JsonStreamOptions(), CancellationToken.None, 0, 2);
+
+        Utf8(stream).Should().Be("[{\"Id\":1,\"Name\":\"alpha\"},{\"Id\":2,\"Name\":null}]");
+
+        using var swapped = new MemoryStream();
+        command.WriteJson(swapped, new JsonStreamOptions(), CancellationToken.None, 2, 0);
+        Utf8(swapped).Should().Be("[]");
+    }
+
+    [Fact]
+    public async Task WriteJsonAsync_MultiplePositionalParams_ShouldBindPositionally()
+    {
+        var command = _ctx.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int>(0) && x.Id <= SqlFunctions.Parameter<int>(1))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+        using var stream = new MemoryStream();
+
+        await command.WriteJsonAsync(stream, new JsonStreamOptions(), TestContext.Current.CancellationToken, 0, 2);
+
+        Utf8(stream).Should().Be("[{\"Id\":1,\"Name\":\"alpha\"},{\"Id\":2,\"Name\":null}]");
+
+        using var swapped = new MemoryStream();
+        await command.WriteJsonAsync(swapped, new JsonStreamOptions(), TestContext.Current.CancellationToken, 2, 0);
+        Utf8(swapped).Should().Be("[]");
+    }
+
+    [Fact]
+    public async Task EntityBuilder_WriteJson_MultiplePositionalParams_ShouldMatchSync()
+    {
+        var builder = _ctx.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int>(0) && x.Id <= SqlFunctions.Parameter<int>(1))
+            .OrderBy(x => x.Id);
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+        using var oracle = new MemoryStream();
+
+        builder.WriteJson(sync, new JsonStreamOptions(), CancellationToken.None, 0, 2);
+        await builder.WriteJsonAsync(async, new JsonStreamOptions(), TestContext.Current.CancellationToken, 0, 2);
+        // Independent literal-bound oracle over the same default entity projection.
+        _ctx.From<JsonEntity>().Where(x => x.Id > 0 && x.Id <= 2).OrderBy(x => x.Id)
+            .WriteJson(oracle, new JsonStreamOptions());
+
+        async.ToArray().Should().Equal(sync.ToArray());
+        sync.ToArray().Should().Equal(oracle.ToArray());
+        sync.Length.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public void WriteJson_EmptyParams_ShouldMatchOptionsOnlyCall()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => x.Id);
+        using var withParams = new MemoryStream();
+        using var without = new MemoryStream();
+
+        command.WriteJson(withParams, new JsonStreamOptions(), CancellationToken.None);
+        command.WriteJson(without, new JsonStreamOptions());
+
+        withParams.ToArray().Should().Equal(without.ToArray());
+    }
+
+    [Fact]
+    public async Task WriteJsonAsync_EmptyParams_ShouldMatchOptionsOnlyCall()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => x.Id);
+        using var withParams = new MemoryStream();
+        using var without = new MemoryStream();
+
+        // The explicit empty array forces the params overload (a 3-argument call would pick the
+        // non-params overload).
+        await command.WriteJsonAsync(withParams, new JsonStreamOptions(), TestContext.Current.CancellationToken, Array.Empty<object?>());
+        await command.WriteJsonAsync(without, new JsonStreamOptions(), TestContext.Current.CancellationToken);
+
+        withParams.ToArray().Should().Equal(without.ToArray());
+    }
+
+    [Fact]
+    public async Task EntityBuilder_WriteJson_EmptyParams_ShouldMatchOptionsOnlyCall()
+    {
+        var builder = _ctx.From<JsonEntity>().OrderBy(x => x.Id);
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+        using var baseline = new MemoryStream();
+
+        builder.WriteJson(sync, new JsonStreamOptions(), CancellationToken.None, ReadOnlySpan<object?>.Empty);
+        await builder.WriteJsonAsync(async, new JsonStreamOptions(), TestContext.Current.CancellationToken, Array.Empty<object?>());
+        _ctx.From<JsonEntity>().OrderBy(x => x.Id).WriteJson(baseline, new JsonStreamOptions());
+
+        async.ToArray().Should().Equal(sync.ToArray());
+        sync.ToArray().Should().Equal(baseline.ToArray());
+    }
+
+    // W1 (r2/n2): an independent oracle for null positional binding. The former test compared the
+    // streaming output against ToList on the same command, so both used the same binding and proved
+    // nothing. Here the produced DbParameter value is asserted directly (SQL NULL is DBNull), together
+    // with the SQL NULL semantics: a null on a comparison yields no rows while a concrete value does.
+    [Fact]
+    public void WriteJson_NullParamElement_ShouldBindDbNull()
+    {
+        var interceptor = new RecordingParameterInterceptor();
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.AddInterceptor(interceptor);
+        context.PurgeQueryCache();
+
+        var command = context.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int?>(0))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream, new JsonStreamOptions(), CancellationToken.None, (object?)null);
+
+        interceptor.Executions.Should().ContainSingle();
+        var bound = interceptor.Executions[0].Parameters.Should().ContainSingle().Subject;
+        bound.Value.Should().Be(DBNull.Value, "a null positional element must bind as SQL NULL");
+        Utf8(stream).Should().Be("[]", "`id > NULL` matches no row (a concrete value would match)");
+
+        using var withValue = new MemoryStream();
+        command.WriteJson(withValue, new JsonStreamOptions(), CancellationToken.None, 1);
+        Utf8(withValue).Should().Be("[{\"Id\":2,\"Name\":null},{\"Id\":3,\"Name\":\"gamma\"}]");
+    }
+
+    [Fact]
+    public async Task WriteJsonAsync_NullParamElement_ShouldBindDbNull()
+    {
+        var interceptor = new RecordingParameterInterceptor();
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.AddInterceptor(interceptor);
+        context.PurgeQueryCache();
+
+        var command = context.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int?>(0))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+        using var stream = new MemoryStream();
+
+        await command.WriteJsonAsync(stream, new JsonStreamOptions(), TestContext.Current.CancellationToken, (object?)null);
+
+        interceptor.Executions.Should().ContainSingle();
+        var bound = interceptor.Executions[0].Parameters.Should().ContainSingle().Subject;
+        bound.Value.Should().Be(DBNull.Value);
+        Utf8(stream).Should().Be("[]");
+    }
+
+    // The fresh/created parameter branch is exercised by a positional value the plan did not pre-create
+    // (an ordinary query with no SqlFunctions.Parameter placeholder); the value must still bind as SQL
+    // NULL, not CLR null. The reused/indexed branch is exercised when the placeholder pre-exists.
+    [Fact]
+    public void WriteJson_FreshNullParamIndex_ShouldBindDbNull()
+    {
+        var interceptor = new RecordingParameterInterceptor();
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.AddInterceptor(interceptor);
+        context.PurgeQueryCache();
+
+        // No norm_p* placeholder in the SQL, so GetDbCommandCore creates the parameter on the fresh branch.
+        var command = context.From<JsonEntity>().OrderBy(x => x.Id).Select(x => x.Id);
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream, new JsonStreamOptions(), CancellationToken.None, (object?)null);
+
+        interceptor.Executions.Should().ContainSingle();
+        var bound = interceptor.Executions[0].Parameters.Should().ContainSingle().Subject;
+        bound.Value.Should().Be(DBNull.Value);
+        Utf8(stream).Should().Be("[1,2,3]");
+    }
+
+    [Fact]
+    public async Task EntityBuilder_WriteJson_NullParamElement_ShouldBindDbNull()
+    {
+        var builder = _ctx.From<JsonEntity>()
+            .Where(x => x.Id > SqlFunctions.Parameter<int?>(0))
+            .OrderBy(x => x.Id);
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        builder.WriteJson(sync, new JsonStreamOptions(), CancellationToken.None, (object?)null);
+        await builder.WriteJsonAsync(async, new JsonStreamOptions(), TestContext.Current.CancellationToken, (object?)null);
+
+        Utf8(sync).Should().Be("[]");
+        async.ToArray().Should().Equal(sync.ToArray());
+
+        using var withValue = new MemoryStream();
+        builder.WriteJson(withValue, new JsonStreamOptions(), CancellationToken.None, 1);
+        Utf8(withValue).Should().NotBe("[]", "a concrete value must match rows, so null is not being bound as 0");
+    }
+
+    // E180-17 compatibility: `(stream, null)` still binds the existing (Stream, JsonStreamOptions)
+    // overload (the new params overload requires a CancellationToken, so it is not applicable), and the
+    // existing overload's null-check proves the resolution.
+    [Fact]
+    public void WriteJson_NullOptions_ShouldResolveExistingOptionsOverload()
+    {
+        var command = _ctx.From<JsonEntity>().Select(x => x.Id);
+        using var stream = new MemoryStream();
+
+        var act = () => command.WriteJson(stream, null!);
+
+        act.Should().Throw<ArgumentNullException>();
+        stream.Length.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task WriteJsonAsync_OptionsAndToken_ShouldResolveExistingOverload()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => x.Id);
+        using var stream = new MemoryStream();
+
+        // Three arguments select the existing non-params overload in normal form over the new expanded
+        // params overload; the produced document is the same either way, so this is a resolution guard.
+        await command.WriteJsonAsync(stream, new JsonStreamOptions(), TestContext.Current.CancellationToken);
+
+        Utf8(stream).Should().Be(JsonSerializer.Serialize(command.ToList()));
     }
 
     [Fact]

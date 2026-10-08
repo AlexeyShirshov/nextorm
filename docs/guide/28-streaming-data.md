@@ -19,13 +19,15 @@ Pick a format below. To stream a single large value rather than a whole result s
 
 [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) / [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) are the one JSON surface shared by every SQL provider. The terminal executes the query, reads each row through typed `DbDataReader` accessors and writes it to a caller-owned `Stream` with `System.Text.Json` — it never materializes a `TResult` per row, so live memory stays O(buffer) regardless of the result-set size. That makes it the right tool for piping a large or unbounded result set to an HTTP response, a file or a network stream. It is **not** available on the in-memory provider: there is no `DbDataReader` and no managed fallback, so both methods throw `NotSupportedException` before the destination is touched.
 
-The four terminals are members of [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and are mirrored as extension methods on [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). The public overloads take no explicit parameter list: pass values through captured variables in the query. Streaming needs an explicit `Select` projection — an entity query with no projection has no JSON shape and throws `InvalidOperationException`.
+The four terminals are members of [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and are mirrored as extension methods on [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Besides the option-only overloads, each terminal has an overload that binds **positional SQL parameter values** through a trailing `params` list (see [Positional SQL parameters](#positional-sql-parameters)). Streaming needs an explicit `Select` projection — an entity query with no projection has no JSON shape and throws `NotSupportedException` with the `[projection]` token.
 
 ```csharp
 public void WriteJson(Stream destination);
 public void WriteJson(Stream destination, JsonStreamOptions options);
+public void WriteJson(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken, params ReadOnlySpan<object?> parameters);
 public Task WriteJsonAsync(Stream destination, CancellationToken cancellationToken = default);
 public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default);
+public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken, params object?[] parameters);
 ```
 
 ```csharp
@@ -63,6 +65,59 @@ await ctx.From<Order>()
 `NdJson` combined with `Root` or with `WriteIndented` is contradictory and throws
 `NotSupportedException` while the shape is planned — before any output is produced. Invalid option
 values throw the same way from the terminal's options overloads.
+
+### Positional SQL parameters
+
+Each JSON terminal has an overload that takes a trailing `params` list of **positional SQL parameter
+values**. Element `i` is bound to the query's placeholder `i` (`NormParam.GetName(i)`), exactly as the
+ordinary buffered terminals bind their `params` list; it is not a list of column selectors. An empty
+list binds nothing (there is no arity guard), and a `null` element binds `DBNull`.
+
+`JsonStreamOptions options` and `CancellationToken cancellationToken` are **required** on this overload
+(no defaults), so `WriteJson(stream, null)` cannot be ambiguous with an options-only call; the
+option-only overloads above are unchanged and keep the token optional.
+
+```csharp
+await using var file = File.Create("orders.ndjson");
+
+await ctx.From<Order>()
+    .Where(o => o.CreatedAt >= from && o.Total > minTotal)
+    .Select(o => new { o.Id, o.CreatedAt, o.Total })
+    .WriteJsonAsync(file, new JsonStreamOptions
+    {
+        Mode = JsonStreamMode.NdJson,
+        IgnoreNull = true,
+    }, cancellationToken, from, minTotal);
+```
+
+Both surfaces ([`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) and
+[`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1)) and both the sync and async overloads
+take the same list.
+
+### Validation exceptions and runtime errors
+
+Preflight validation — options, projection shape, member names, unsupported columns, reader binding,
+in-memory and unsupported execution forms — throws `NotSupportedException` and follows the stable
+message convention `JSON streaming validation [<token>]: <context>.` The fixed tokens are:
+
+| Token | Raised when |
+|---|---|
+| `mode-options` | an unknown `JsonStreamMode`, or `NdJson` combined with `Root`/`WriteIndented` |
+| `projection` | the query has no `Select` projection |
+| `names` | an unnamed member, a duplicate name in one object scope, or a naming policy returning `null` |
+| `unsupported-column` | a projected type or shape outside the supported whitelist |
+| `reader-binding` | the provider's reader field type is incompatible with the declared column |
+| `in-memory` | the context is the in-memory provider |
+| `unsupported-execution-form` | a query backed by a lazy temporary-table source |
+
+An incompatible reader schema (`[reader-binding]`) is detected after the reader is opened but **before
+any destination write**, including the array/root framing, so a destination preloaded with sentinel
+bytes is left byte-for-byte unchanged. Lifecycle errors keep their own type —
+`InvalidOperationException`/`ObjectDisposedException` — and a `null` destination or options still throws
+`ArgumentNullException`. Destination I/O errors, provider runtime errors and cancellation are **not**
+normalized into validation failures and can still occur mid-document; a value-dependent numeric
+overflow during a row read stays a runtime error (see
+[Ownership, flushing and errors](#ownership-flushing-and-errors)).
 
 ### Supported shapes (fail-fast)
 

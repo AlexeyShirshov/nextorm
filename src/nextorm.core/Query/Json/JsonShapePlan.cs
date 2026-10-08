@@ -144,21 +144,20 @@ internal sealed class JsonShapePlan
     /// array member or expanded entity item); <see langword="null"/> for a flat phase-1 projection whose
     /// plan is derived directly from <paramref name="selectList"/>.
     /// </param>
-    /// <exception cref="InvalidOperationException">The projection is empty.</exception>
-    /// <exception cref="NotSupportedException">A column shape or option combination is not supported.</exception>
+    /// <exception cref="NotSupportedException">The projection is empty or a column shape or option combination is not supported.</exception>
     public static JsonShapePlan Build(SelectExpression[]? selectList, bool oneColumn, JsonStreamOptions options, JsonShapeNode? shape = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         if (options.Mode is not (JsonStreamMode.Array or JsonStreamMode.NdJson))
-            throw new NotSupportedException($"Unknown JsonStreamMode value {options.Mode}; supported modes are Array and NdJson.");
+            throw new NotSupportedException($"JSON streaming validation [mode-options]: Unknown JsonStreamMode value {options.Mode}; supported modes are Array and NdJson.");
 
         if (options.Mode == JsonStreamMode.NdJson)
         {
             if (options.Root is not null)
-                throw new NotSupportedException("The 'Root' option is only supported in Array mode; NDJSON emits one value per line without a wrapper.");
+                throw new NotSupportedException("JSON streaming validation [mode-options]: The 'Root' option is only supported in Array mode; NDJSON emits one value per line without a wrapper.");
             if (options.WriteIndented)
-                throw new NotSupportedException("The 'WriteIndented' option is only supported in Array mode; NDJSON must not be indented.");
+                throw new NotSupportedException("JSON streaming validation [mode-options]: The 'WriteIndented' option is only supported in Array mode; NDJSON must not be indented.");
         }
 
         if (selectList is null || selectList.Length == 0)
@@ -169,9 +168,9 @@ internal sealed class JsonShapePlan
             // or a provider syntax error.
             if (shape is not null)
                 throw new NotSupportedException(
-                    "A JSON projection that lowers no scalar columns (for example a nested object with no members) cannot be streamed; give the construction at least one scalar member.");
+                    "JSON streaming validation [projection]: A JSON projection that lowers no scalar columns (for example a nested object with no members) cannot be streamed; give the construction at least one scalar member.");
 
-            throw new InvalidOperationException("JSON streaming requires an explicit Select projection; the query has no selected columns.");
+            throw new NotSupportedException("JSON streaming validation [projection]: the query has no selected columns.");
         }
 
         // A captured shape owns its own (scoped) name validation and recursive writing, so the phase-1 flat
@@ -186,11 +185,11 @@ internal sealed class JsonShapePlan
 
                 if (column.Converter is not null)
                     throw new NotSupportedException(
-                        $"Column '{column.PropertyName}' is value-converted and cannot be streamed as JSON; project the provider representation instead.");
+                        $"JSON streaming validation [unsupported-column]: Column '{column.PropertyName}' is value-converted and cannot be streamed as JSON; project the provider representation instead.");
 
                 if (column.IsLobStreaming)
                     throw new NotSupportedException(
-                        $"Column '{column.PropertyName}' is a streaming LOB column and cannot be streamed as JSON; project it as a buffered string/byte[] column.");
+                        $"JSON streaming validation [unsupported-column]: Column '{column.PropertyName}' is a streaming LOB column and cannot be streamed as JSON; project it as a buffered string/byte[] column.");
             }
 
             // Fail closed at prepare time when the descriptor does not match the prepared selection,
@@ -209,11 +208,11 @@ internal sealed class JsonShapePlan
 
             if (column.Converter is not null)
                 throw new NotSupportedException(
-                    $"Column '{column.PropertyName}' is value-converted and cannot be streamed as JSON in phase 1; project the provider representation instead.");
+                    $"JSON streaming validation [unsupported-column]: Column '{column.PropertyName}' is value-converted and cannot be streamed as JSON in phase 1; project the provider representation instead.");
 
             if (column.IsLobStreaming)
                 throw new NotSupportedException(
-                    $"Column '{column.PropertyName}' is a streaming LOB column and cannot be streamed as JSON; project it as a buffered string/byte[] column.");
+                    $"JSON streaming validation [unsupported-column]: Column '{column.PropertyName}' is a streaming LOB column and cannot be streamed as JSON; project it as a buffered string/byte[] column.");
 
             var (valueType, kind, enumUnderlying, enumConverter) = Classify(column.PropertyType, column.PropertyName, ResolveMemberProvenance(column));
 
@@ -226,14 +225,14 @@ internal sealed class JsonShapePlan
             {
                 if (string.IsNullOrEmpty(column.PropertyName))
                     throw new NotSupportedException(
-                        $"Projected column at ordinal {column.Index} has no property name and cannot be written as a JSON object member; use a Select with named members.");
+                        $"JSON streaming validation [names]: Projected column at ordinal {column.Index} has no property name and cannot be written as a JSON object member; use a Select with named members.");
 
                 if (options.PropertyNamingPolicy is not null)
                 {
                     name = options.PropertyNamingPolicy.ConvertName(column.PropertyName!);
                     if (name is null)
                         throw new NotSupportedException(
-                            $"The property naming policy returned null for column '{column.PropertyName}'; JSON object member names cannot be null.");
+                            $"JSON streaming validation [names]: The property naming policy returned null for column '{column.PropertyName}'; JSON object member names cannot be null.");
                 }
                 else
                 {
@@ -242,7 +241,7 @@ internal sealed class JsonShapePlan
 
                 if (!names!.Add(name))
                     throw new NotSupportedException(
-                        $"Duplicate JSON property name '{name}' after naming-policy conversion; JSON object members must be unique.");
+                        $"JSON streaming validation [names]: Duplicate JSON property name '{name}' after naming-policy conversion; JSON object members must be unique.");
             }
 
             columns[i] = new JsonShapeColumn(column.Index, name, valueType, kind, column.Nullable, column.DefaultOnNull, enumUnderlying, enumConverter);
@@ -283,7 +282,7 @@ internal sealed class JsonShapePlan
     {
         if (ordinal < 0 || ordinal >= columnCount)
             throw new NotSupportedException(
-                $"The JSON shape leaf '{name}' is bound to reader ordinal {ordinal} but the prepared projection has {columnCount} column(s); the captured shape descriptor does not match the prepared selection.");
+                $"JSON streaming validation [unsupported-column]: The JSON shape leaf '{name}' is bound to reader ordinal {ordinal} but the prepared projection has {columnCount} column(s); the captured shape descriptor does not match the prepared selection.");
     }
 
     /// <summary>
@@ -340,7 +339,7 @@ internal sealed class JsonShapePlan
                 return (valueType, JsonWriteKind.EnumString, underlying, converter);
 
             throw new NotSupportedException(
-                $"Column '{propertyName}' has type {valueType} with the JSON converter '{attribute.ConverterType}', which is not supported by JSON streaming; only System.Text.Json.Serialization.JsonStringEnumConverter or JsonStringEnumConverter<TEnum> is supported for an enum projection, or remove the converter to stream the numeric value.");
+                $"JSON streaming validation [unsupported-column]: Column '{propertyName}' has type {valueType} with the JSON converter '{attribute.ConverterType}', which is not supported by JSON streaming; only System.Text.Json.Serialization.JsonStringEnumConverter or JsonStringEnumConverter<TEnum> is supported for an enum projection, or remove the converter to stream the numeric value.");
         }
 
         // A JSON converter attribute on a non-enum scalar is not a supported streaming shape: the writer
@@ -349,7 +348,7 @@ internal sealed class JsonShapePlan
         // fail-fast policy; the only allowed JSON converter is the stock string-enum form on an enum.
         if (ResolveConverterAttribute(member, valueType) is { } nonEnumAttribute)
             throw new NotSupportedException(
-                $"Column '{propertyName}' has type {valueType} with the JSON converter '{nonEnumAttribute.ConverterType}', which is not supported by JSON streaming; the only supported JSON converter attribute is System.Text.Json.Serialization.JsonStringEnumConverter or JsonStringEnumConverter<TEnum> on an enum projection.");
+                $"JSON streaming validation [unsupported-column]: Column '{propertyName}' has type {valueType} with the JSON converter '{nonEnumAttribute.ConverterType}', which is not supported by JSON streaming; the only supported JSON converter attribute is System.Text.Json.Serialization.JsonStringEnumConverter or JsonStringEnumConverter<TEnum> on an enum projection.");
 
         if (valueType == typeof(byte) || valueType == typeof(short) || valueType == typeof(int)
             || valueType == typeof(long) || valueType == typeof(float) || valueType == typeof(double)
@@ -372,7 +371,7 @@ internal sealed class JsonShapePlan
             return (valueType, JsonWriteKind.Base64, null, null);
 
         throw new NotSupportedException(
-            $"Column '{propertyName}' has type {type} which is not supported by JSON streaming; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>) and enum.");
+            $"JSON streaming validation [unsupported-column]: Column '{propertyName}' has type {type} which is not supported by JSON streaming; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>) and enum.");
     }
 
     /// <summary>
@@ -414,7 +413,7 @@ internal sealed class JsonShapePlan
 
         converter = factory.CreateConverter(enumType, EnumConverterOptions)
             ?? throw new NotSupportedException(
-                $"The JSON converter '{converterType}' did not produce a converter for enum {enumType}.");
+                $"JSON streaming validation [unsupported-column]: The JSON converter '{converterType}' did not produce a converter for enum {enumType}.");
 
         return true;
     }

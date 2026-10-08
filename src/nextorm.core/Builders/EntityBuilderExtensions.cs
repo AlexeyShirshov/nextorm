@@ -204,6 +204,55 @@ public static class EntityBuilderExtensions
         => builder.ToParentCommand().WriteJsonAsync(destination, options, cancellationToken);
 
     /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="stream"/> as JSON using
+    /// <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TEntity"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params ReadOnlySpan<object?> @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.ToParentCommand().WriteJson(stream, options, cancellationToken, @params);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="stream"/> as JSON
+    /// using <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TEntity"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <typeparam name="TEntity">The entity type being queried.</typeparam>
+    /// <param name="builder">The query builder being extended.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Task WriteJsonAsync<TEntity>(this EntityBuilder<TEntity> builder, Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params object?[] @params)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        return builder.ToParentCommand().WriteJsonAsync(stream, options, cancellationToken, @params);
+    }
+
+    /// <summary>
     /// Determines whether the query matches at least one row.
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>

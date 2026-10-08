@@ -103,6 +103,16 @@ public enum JsonStreamMode { Array, NdJson }
 Перегрузки для `EntityBuilder<TEntity>` — в `Builders/EntityBuilderExtensions.cs` по образцу
 `ToAsyncEnumerable` (`ToCommand()` + делегирование в `QueryCommand`).
 
+> **Реализовано (#180/D180, r=2; CHECK PASS r=2/n=2/rv=2; #180 закрыт).** Скетч выше не совпадает с итоговой
+> поверхностью: опциональные `options = null` и необязательный `CancellationToken` **не** приняты.
+> Итоговые сигнатуры: базовые overloads без `params` сохранены, а позиционные значения привязывает
+> отдельная перегрузка с **обязательными** `JsonStreamOptions options` и `CancellationToken
+> cancellationToken` (без значений по умолчанию, чтобы `(stream, null)` не был неоднозначным):
+> `WriteJson(Stream, JsonStreamOptions, CancellationToken, params ReadOnlySpan<object?>)` /
+> `WriteJsonAsync(Stream, JsonStreamOptions, CancellationToken, params object?[])` — по одной на
+> `QueryCommand<TResult>` и `EntityBuilder<TEntity>`. Пустой набор ничего не привязывает, `null`-элемент
+> → `DBNull`, в `QueryCommandExtensions` перегрузки нет. Детали — Q7 ниже.
+
 **Контракт.** Выходной `Stream` — владение вызывающего: не закрывается и не `Dispose`-ится,
 выполняется только `Flush`/`FlushAsync`. Ридер и команда освобождаются внутри метода. Требуется
 явный `Select` (см. «Валидация»). Поддерживаются только SQL-провайдеры: если `DataContext` не
@@ -208,8 +218,8 @@ naming policy). Компиляция — не чаще одного раза н�
 
 ### Валидация
 
-- Нет явного `Select`/`SelectList` пуст (`IgnoreColumns`) → `InvalidOperationException` с подсказкой
-  использовать `Select(...)`.
+- Нет явного `Select`/`SelectList` пуст (`IgnoreColumns`) → `NotSupportedException` с токеном
+  `[projection]` (унифицировано в #180/D180 r=2; ранее был `InvalidOperationException`).
 - `NdJson` + `Root` **или** `NdJson` + `WriteIndented` → явная **ошибка валидации** (исключение),
   без тихого игнора. В `NdJson` каждая строка — одно скалярное значение или объект, без root/indent.
 - Поддерживаемые фазы 2 формы: вложенные `new`/member-init объекты, слоты `Projection<T1,T2>`
@@ -309,8 +319,29 @@ naming policy). Компиляция — не чаще одного раза н�
    (объект/скаляр по типу элемента), имена проверяются на область объекта.
 5. Поведение при частичном выводе/ошибке (откат/дописать ли валидный JSON) — не согласовано в #39.
 6. Точная сигнатура роли: sync + async entry paths (J4) — форма sync-метода пока не определена.
-7. Провайдер-специфичные детали конверсии колонок/ридеров (сверх направления J1) и общий
-   тип/сообщение исключений валидации (для in-memory зафиксирован `NotSupportedException`).
+7. ~~Провайдер-специфичные детали конверсии колонок/ридеров (сверх направления J1) и общий
+   тип/сообщение исключений валидации (для in-memory зафиксирован `NotSupportedException`).~~
+   **Решено в #180/D180 (r=2; CHECK PASS r=2/n=2/rv=2; #180 закрыт):**
+   - **Матрица конверсии (подтверждение реальными reader'ами).** Объявленные
+     `sbyte`/`ushort`/`uint`/`ulong` остаются preflight-неподдерживаемыми (расширение отложено);
+     reader-типы `SByte`/unsigned сохраняются только для достижимых разрешённых проекций; белый
+     список сужается привязками, а не именем; несовместимая схема reader'а → `[reader-binding]`
+     **после** открытия reader'а, но **до** первой записи; overflow, зависящий от значения, остаётся
+     ошибкой времени чтения (`ulong.MaxValue → long` не маскируется под `NotSupported`); J1 +
+     ClickHouse decimal сохранены; новой провайдерной абстракции и боксящего fallback'а нет.
+   - **Контракт исключений/токенов.** Preflight-валидация всегда `NotSupportedException` с сообщением
+     `JSON streaming validation [<token>]: <context>.`; фиксированные токены: `mode-options`,
+     `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`,
+     `unsupported-execution-form` (пустой `Select` → `[projection]`). Lifecycle-ошибки остаются
+     `InvalidOperationException`/`ObjectDisposedException`; ошибки ввода-вывода провайдера, отмена и
+     value-dependent overflow категорию не меняют. Несовместимая схема reader'а отклоняется до
+     обрамления (`QueryExecutor.cs` sync/async: позиционирование + `ValidateReaderBinding` до создания
+     writer'а).
+   - **Перегрузки `params` (решение).** Добавлены четыре публичные перегрузки с позиционными
+     SQL-значениями на `QueryCommand<TResult>` и `EntityBuilder<TEntity>` (см. блок «Реализовано» в
+     разделе «API»): `options` и `CancellationToken` обязательны; пустой набор ничего не привязывает;
+     `null`-элемент → `DBNull`; значения позиционные, не селекторы колонок. Существующие overloads
+     сохранены, в `QueryCommandExtensions` перегрузки нет.
 8. ~~**Блокер:** SQL Server numeric converter без боксинга + провайдерная паритетность
    (`GetValue`+`Convert.ChangeType` боксит) — типизированный эквивалент не спроектирован.~~
    **Снято в #168**: рантайм-диспетчеризация по `GetFieldType` + storage-типизированные геттеры,

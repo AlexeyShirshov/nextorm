@@ -190,6 +190,61 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return RequireJsonContext().WriteJsonAsync(this, destination, options, null, cancellationToken);
     }
 
+    /// <summary>
+    /// Writes the query's projected rows directly to <paramref name="stream"/> as JSON using
+    /// <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public void WriteJson(Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params ReadOnlySpan<object?> @params)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var values = new object[@params.Length];
+        for (var i = 0; i < @params.Length; i++)
+            values[i] = @params[i]!;
+
+        RequireJsonContext().WriteJson(this, stream, options, values, cancellationToken);
+    }
+
+    /// <summary>
+    /// Asynchronously writes the query's projected rows directly to <paramref name="stream"/> as JSON
+    /// using <paramref name="options"/> and binding the positional SQL parameter values in
+    /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
+    /// destination is owned by the caller and is never closed. Supported on database providers only.
+    /// </summary>
+    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="options">The JSON container and shaping options.</param>
+    /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
+    /// <param name="params">
+    /// The positional SQL parameter values, in the order their placeholders appear. An empty set binds
+    /// nothing; a <see langword="null"/> element binds <see cref="System.DBNull"/>.
+    /// </param>
+    /// <returns>A task that completes when the whole document has been written.</returns>
+    /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
+    public Task WriteJsonAsync(Stream stream, JsonStreamOptions options, CancellationToken cancellationToken, params object?[] @params)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var values = new object[@params.Length];
+        for (var i = 0; i < @params.Length; i++)
+            values[i] = @params[i]!;
+
+        return RequireJsonContext().WriteJsonAsync(this, stream, options, values, cancellationToken);
+    }
+
     // JSON streaming has no in-memory fallback: the in-memory provider has no DbDataReader and no
     // managed JsonSerializer path. Fail before the destination is touched, mirroring the LOB guard.
     private DataContext RequireJsonContext()
@@ -204,7 +259,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
 
         return _dataContext as DataContext
             ?? throw new NotSupportedException(
-                "WriteJson requires a database provider; the in-memory provider has no DbDataReader and does not support JSON streaming.");
+                "JSON streaming validation [in-memory]: WriteJson requires a database provider; the in-memory provider has no DbDataReader and does not support JSON streaming.");
     }
     /// <summary>Executes the command and returns the result set as a synchronous sequence.</summary>
     /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>

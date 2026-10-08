@@ -19,13 +19,15 @@
 
 [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) / [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) — единственная JSON-поверхность, общая для всех SQL-провайдеров. Терминал выполняет запрос, читает каждую строку типизированными аксессорами `DbDataReader` и пишет её в принадлежащий вызывающему `Stream` через `System.Text.Json` — он никогда не материализует `TResult` на строку, поэтому живая память остаётся O(buffer) независимо от размера набора результатов. Это делает его подходящим для передачи большого или неограниченного набора результатов в HTTP-ответ, файл или сетевой поток. Он **не** доступен провайдеру in-memory: там нет `DbDataReader` и нет управляемого запасного пути, поэтому оба метода бросают `NotSupportedException` до обращения к приёмнику.
 
-Четыре терминала — члены [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) и продублированы extension-методами на [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Публичные перегрузки не принимают явного списка параметров: передавайте значения через захваченные переменные в запросе. Для потоковой записи нужна явная проекция `Select` — запрос сущности без проекции не имеет JSON-формы и бросает `InvalidOperationException`.
+Четыре терминала — члены [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) и продублированы extension-методами на [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Помимо перегрузок только с опциями, у каждого терминала есть перегрузка, привязывающая **позиционные SQL-значения** через завершающий список `params` (см. [Позиционные SQL-параметры](#позиционные-sql-параметры)). Для потоковой записи нужна явная проекция `Select` — запрос сущности без проекции не имеет JSON-формы и бросает `NotSupportedException` с токеном `[projection]`.
 
 ```csharp
 public void WriteJson(Stream destination);
 public void WriteJson(Stream destination, JsonStreamOptions options);
+public void WriteJson(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken, params ReadOnlySpan<object?> parameters);
 public Task WriteJsonAsync(Stream destination, CancellationToken cancellationToken = default);
 public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken = default);
+public Task WriteJsonAsync(Stream destination, JsonStreamOptions options, CancellationToken cancellationToken, params object?[] parameters);
 ```
 
 ```csharp
@@ -63,6 +65,60 @@ await ctx.From<Order>()
 `NdJson` вместе с `Root` или `WriteIndented` противоречивы и бросают `NotSupportedException` при
 построении формы — до создания какого-либо вывода. Неверные значения опций точно так же бросают
 исключение из перегрузок терминала с опциями.
+
+### Позиционные SQL-параметры
+
+У каждого JSON-терминала есть перегрузка с завершающим списком `params` из **позиционных SQL-значений**.
+Элемент `i` привязывается к плейсхолдеру запроса `i` (`NormParam.GetName(i)`) точно так же, как это
+делает список `params` обычных буферизованных терминалов; это не список селекторов колонок. Пустой
+список ничего не привязывает (проверки арности нет), а `null`-элемент привязывает `DBNull`.
+
+`JsonStreamOptions options` и `CancellationToken cancellationToken` на этой перегрузке **обязательны**
+(без значений по умолчанию), поэтому `WriteJson(stream, null)` не может быть неоднозначен с вызовом
+только с опциями; перегрузки только с опциями выше не изменены и сохраняют токен необязательным.
+
+```csharp
+await using var file = File.Create("orders.ndjson");
+
+await ctx.From<Order>()
+    .Where(o => o.CreatedAt >= from && o.Total > minTotal)
+    .Select(o => new { o.Id, o.CreatedAt, o.Total })
+    .WriteJsonAsync(file, new JsonStreamOptions
+    {
+        Mode = JsonStreamMode.NdJson,
+        IgnoreNull = true,
+    }, cancellationToken, from, minTotal);
+```
+
+Обе поверхности ([`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) и
+[`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1)) и обе перегрузки — sync и async —
+принимают тот же список.
+
+### Исключения валидации и ошибки времени выполнения
+
+Предварительная валидация — опции, форма проекции, имена членов, неподдерживаемые колонки, привязка
+reader'а, in-memory и неподдерживаемые формы исполнения — бросает `NotSupportedException` и следует
+стабильному соглашению о сообщении `JSON streaming validation [<token>]: <context>.` Фиксированные
+токены:
+
+| Токен | Когда бросается |
+|---|---|
+| `mode-options` | неизвестный `JsonStreamMode` либо `NdJson` вместе с `Root`/`WriteIndented` |
+| `projection` | в запросе нет проекции `Select` |
+| `names` | безымянный член, дубликат имени в одной области объекта или политика именования, вернувшая `null` |
+| `unsupported-column` | спроецированный тип или форма вне поддерживаемого белого списка |
+| `reader-binding` | тип поля reader'а провайдера несовместим с объявленной колонкой |
+| `in-memory` | контекст — провайдер in-memory |
+| `unsupported-execution-form` | запрос поверх ленивого источника временной таблицы |
+
+Несовместимая схема reader'а (`[reader-binding]`) обнаруживается после открытия reader'а, но **до любой
+записи в приёмник**, включая обрамление массива/`Root`, поэтому приёмник, предварительно заполненный
+сентинельными байтами, остаётся побайтово неизменным. Ошибки жизненного цикла сохраняют свой тип —
+`InvalidOperationException`/`ObjectDisposedException` — а `null` вместо приёмника или опций по-прежнему
+бросает `ArgumentNullException`. Ошибки ввода-вывода приёмника, ошибки провайдера во время выполнения и
+отмена **не** нормализуются в ошибки валидации и могут произойти в середине документа; overflow,
+зависящий от значения, при чтении строки остаётся ошибкой времени выполнения (см.
+[Владение, сброс буфера и ошибки](#владение-сброс-буфера-и-ошибки)).
 
 ### Поддерживаемые формы (fail-fast)
 

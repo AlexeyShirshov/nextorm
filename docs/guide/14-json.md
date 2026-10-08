@@ -40,8 +40,12 @@ feature:
 * **Every SQL provider** shares one JSON *terminal*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
   [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) stream the query's projection to a caller-owned `Stream` as a JSON array or
   NDJSON, serialized client-side with `System.Text.Json` (see [Streaming data to a Stream](28-streaming-data.md#json)).
-  This is a serialization terminal, not a SQL JSON function: it does not change the per-provider JSON
-  surfaces below.
+  Preflight validation uses a single exception contract — `NotSupportedException` with the message
+  convention `JSON streaming validation [<token>]: <context>.` and the fixed tokens `mode-options`,
+  `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory` and
+  `unsupported-execution-form` — and an incompatible reader schema is rejected before any output,
+  framing included. This is a serialization terminal, not a SQL JSON function: it does not change the
+  per-provider JSON surfaces below.
 
 Because the mechanisms are different, the same conceptual result is written in different ways. Read the
 section for your provider; the [provider matrix](#provider-matrix) and
@@ -391,6 +395,14 @@ The construction and aggregation functions return `string?`; deserialize with
 
 * There is no portable JSON abstraction. Code written for one provider's JSON surface throws
   `NotSupportedException` on another; use `ISqlDialect` capability flags if you must branch.
+* The JSON streaming terminal validates its options and projection up front and fails with
+  `NotSupportedException` under the stable `JSON streaming validation [<token>]: <context>.`
+  convention (tokens `mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`,
+  `in-memory`, `unsupported-execution-form`); an incompatible reader schema is rejected before any
+  output, the array/root framing included. Lifecycle failures stay
+  `InvalidOperationException`/`ObjectDisposedException`, while destination/provider errors and
+  cancellation keep their category. See
+  [Validation exceptions and runtime errors](28-streaming-data.md#validation-exceptions-and-runtime-errors).
 * `ForJson`/`ForXml` are SQL Server only ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson) /
   [`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)), and the two are mutually exclusive on one command.
 * The PostgreSQL `json`/`jsonb` surface (`SqlFunctions.Postgres`) requires

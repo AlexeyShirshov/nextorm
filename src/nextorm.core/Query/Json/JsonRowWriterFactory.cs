@@ -150,6 +150,86 @@ internal static class JsonRowWriterFactory
     }
 
     /// <summary>
+    /// Validates that the prepared JSON plan can be read from the supplied open reader: every numeric
+    /// leaf's provider field type must be one the compiled writer can convert. Called after the reader is
+    /// positioned but before the destination is touched, so an incompatible reader schema is rejected with
+    /// a stable <c>[reader-binding]</c> message without writing anything (framing included).
+    /// </summary>
+    /// <param name="plan">The frozen shape plan being executed.</param>
+    /// <param name="reader">The open, positioned reader whose schema is inspected.</param>
+    /// <exception cref="NotSupportedException">A numeric leaf's provider field type is not supported.</exception>
+    internal static void ValidateReaderBinding(JsonShapePlan plan, IDataRecord reader)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(reader);
+
+        if (plan.Shape is not null)
+        {
+            ValidateShapeReaderBinding(plan.Shape, reader);
+            return;
+        }
+
+        foreach (var column in plan.Columns)
+            ValidateColumnReaderBinding(column, reader);
+    }
+
+    private static void ValidateShapeReaderBinding(JsonShapeNode node, IDataRecord reader)
+    {
+        switch (node.Kind)
+        {
+            case JsonShapeNodeKind.Scalar:
+                if (node.Binding is { } binding)
+                {
+                    var (valueType, kind, enumUnderlying, _) = JsonShapePlan.Classify(node.DeclaredType, node.Name, node.Member);
+                    if (kind is JsonWriteKind.Number or JsonWriteKind.EnumString)
+                        EnsureNumericFieldType(reader, binding.Ordinal, node.Name, kind == JsonWriteKind.EnumString ? enumUnderlying ?? valueType : valueType);
+                }
+                break;
+
+            case JsonShapeNodeKind.Object:
+                foreach (var member in node.Members)
+                    ValidateShapeReaderBinding(member, reader);
+                break;
+
+            // A provider-native array is read through GetValue and its elements are converted without a
+            // per-field type inspection, so there is no numeric reader binding to validate here.
+            case JsonShapeNodeKind.Array:
+                break;
+        }
+    }
+
+    private static void ValidateColumnReaderBinding(in JsonShapeColumn column, IDataRecord reader)
+    {
+        if (column.Kind is not (JsonWriteKind.Number or JsonWriteKind.EnumString))
+            return;
+
+        var target = column.Kind == JsonWriteKind.EnumString ? column.EnumUnderlyingType ?? column.ValueType : column.ValueType;
+        EnsureNumericFieldType(reader, column.Ordinal, column.Name, target);
+    }
+
+    private static void EnsureNumericFieldType(IDataRecord reader, int ordinal, string? name, Type target)
+    {
+        var fieldType = reader.GetFieldType(ordinal);
+        if (IsSupportedNumericFieldType(fieldType))
+            return;
+
+        var label = string.IsNullOrEmpty(name) ? "column" : $"column '{name}'";
+        throw new NotSupportedException(
+            $"JSON streaming validation [reader-binding]: the numeric {label} at ordinal {ordinal} (declared {target.Name}) has provider field type '{fieldType}' which is not supported; supported numeric field types are sbyte, byte, short, ushort, int, uint, long, ulong, float, double, decimal or ClickHouseDecimal.");
+    }
+
+    private static bool IsSupportedNumericFieldType(Type fieldType)
+    {
+        for (var i = 0; i < NumericFieldTypes.Length; i++)
+        {
+            if (NumericFieldTypes[i] == fieldType)
+                return true;
+        }
+
+        return ClickHouseDecimalFieldType is not null && fieldType == ClickHouseDecimalFieldType;
+    }
+
+    /// <summary>
     /// Compiles the recursive row writer for a captured <see cref="JsonShapeNode"/> descriptor. Scalar
     /// leaves reuse the phase-1 typed accessors through their explicit prepared ordinals; object nodes
     /// write <c>{...}</c> with per-scope validated names; array nodes recurse over the declared
@@ -173,14 +253,14 @@ internal static class JsonRowWriterFactory
             JsonShapeNodeKind.Scalar => BuildScalarValue(node, record, writer),
             JsonShapeNodeKind.Array => BuildRootArrayValue(node, record, writer, depth),
             JsonShapeNodeKind.Object => BuildRootObjectValue(node, options, record, writer, depth),
-            _ => throw new NotSupportedException($"Unsupported JSON shape node kind {node.Kind}."),
+            _ => throw new NotSupportedException($"JSON streaming validation [unsupported-column]: Unsupported JSON shape node kind {node.Kind}."),
         };
     }
 
     private static Expression BuildScalarValue(JsonShapeNode node, Expression record, Expression writer)
     {
         if (node.Binding is not { } binding)
-            throw new NotSupportedException($"The JSON scalar leaf '{node.Name}' has no prepared ordinal binding.");
+            throw new NotSupportedException($"JSON streaming validation [unsupported-column]: The JSON scalar leaf '{node.Name}' has no prepared ordinal binding.");
 
         var (valueType, kind, enumUnderlying, enumConverter) = JsonShapePlan.Classify(node.DeclaredType, node.Name, node.Member);
         var column = new JsonShapeColumn(binding.Ordinal, node.Name ?? string.Empty, valueType, kind, binding.Nullable, binding.DefaultOnNull, enumUnderlying, enumConverter);
@@ -195,7 +275,7 @@ internal static class JsonRowWriterFactory
     private static Expression BuildRootArrayValue(JsonShapeNode node, Expression record, Expression writer, int depth)
     {
         if (node.Binding is not { } binding)
-            throw new NotSupportedException($"The JSON array '{node.Name}' has no prepared ordinal binding.");
+            throw new NotSupportedException($"JSON streaming validation [unsupported-column]: The JSON array '{node.Name}' has no prepared ordinal binding.");
 
         var arrayWriter = BuildArrayWriter(node.DeclaredType, node.Name, depth + 1);
         var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
@@ -242,7 +322,7 @@ internal static class JsonRowWriterFactory
             var name = ResolveMemberName(member.Name, options);
             if (!seen.Add(name))
                 throw new NotSupportedException(
-                    $"Duplicate JSON property name '{name}' within one object scope; JSON object members must be unique per object.");
+                    $"JSON streaming validation [names]: Duplicate JSON property name '{name}' within one object scope; JSON object members must be unique per object.");
 
             expressions.Add(BuildMember(member, name, options, record, writer, depth));
         }
@@ -256,13 +336,13 @@ internal static class JsonRowWriterFactory
             JsonShapeNodeKind.Scalar => BuildScalarMember(node, name, options, record, writer),
             JsonShapeNodeKind.Array => BuildArrayMember(node, name, options, record, writer, depth),
             JsonShapeNodeKind.Object => BuildObjectMember(node, name, options, record, writer, depth),
-            _ => throw new NotSupportedException($"Unsupported JSON shape node kind {node.Kind}."),
+            _ => throw new NotSupportedException($"JSON streaming validation [unsupported-column]: Unsupported JSON shape node kind {node.Kind}."),
         };
 
     private static Expression BuildScalarMember(JsonShapeNode node, string name, JsonStreamOptions options, Expression record, Expression writer)
     {
         if (node.Binding is not { } binding)
-            throw new NotSupportedException($"The JSON scalar member '{node.Name}' has no prepared ordinal binding.");
+            throw new NotSupportedException($"JSON streaming validation [unsupported-column]: The JSON scalar member '{node.Name}' has no prepared ordinal binding.");
 
         var (valueType, kind, enumUnderlying, enumConverter) = JsonShapePlan.Classify(node.DeclaredType, node.Name, node.Member);
         var column = new JsonShapeColumn(binding.Ordinal, name, valueType, kind, binding.Nullable, binding.DefaultOnNull, enumUnderlying, enumConverter);
@@ -293,7 +373,7 @@ internal static class JsonRowWriterFactory
     private static Expression BuildArrayMember(JsonShapeNode node, string name, JsonStreamOptions options, Expression record, Expression writer, int depth)
     {
         if (node.Binding is not { } binding)
-            throw new NotSupportedException($"The JSON array member '{node.Name}' has no prepared ordinal binding.");
+            throw new NotSupportedException($"JSON streaming validation [unsupported-column]: The JSON array member '{node.Name}' has no prepared ordinal binding.");
 
         var arrayWriter = BuildArrayWriter(node.DeclaredType, node.Name, depth + 1);
         var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
@@ -337,10 +417,10 @@ internal static class JsonRowWriterFactory
     private static Expression BuildAnyColumnNotNull(JsonShapePresence presence, Expression record)
     {
         if (presence.Kind != JsonShapePresenceKind.AnyColumnNotNull)
-            throw new NotSupportedException($"Unexpected JSON presence kind {presence.Kind} for an any-column predicate.");
+            throw new NotSupportedException($"JSON streaming validation [unsupported-column]: Unexpected JSON presence kind {presence.Kind} for an any-column predicate.");
 
         if (presence.Ordinals.Length == 0)
-            throw new NotSupportedException("A JSON entity slot has no mapped columns and cannot decide presence.");
+            throw new NotSupportedException("JSON streaming validation [unsupported-column]: A JSON entity slot has no mapped columns and cannot decide presence.");
 
         Expression? anyNotNull = null;
         foreach (var ordinal in presence.Ordinals)
@@ -418,7 +498,7 @@ internal static class JsonRowWriterFactory
     private static string ResolveMemberName(string? rawName, JsonStreamOptions options)
     {
         if (string.IsNullOrEmpty(rawName))
-            throw new NotSupportedException("A nested JSON object member has no name; only the root object is unnamed.");
+            throw new NotSupportedException("JSON streaming validation [names]: A nested JSON object member has no name; only the root object is unnamed.");
 
         if (options.PropertyNamingPolicy is null)
             return rawName;
@@ -426,7 +506,7 @@ internal static class JsonRowWriterFactory
         var name = options.PropertyNamingPolicy.ConvertName(rawName);
         if (name is null)
             throw new NotSupportedException(
-                $"The property naming policy returned null for member '{rawName}'; JSON object member names cannot be null.");
+                $"JSON streaming validation [names]: The property naming policy returned null for member '{rawName}'; JSON object member names cannot be null.");
         return name;
     }
 
@@ -434,14 +514,14 @@ internal static class JsonRowWriterFactory
     {
         if (!arrayType.IsArray || arrayType.GetArrayRank() != 1)
             throw new NotSupportedException(
-                $"Array '{name}' has declared type {arrayType} which is not a supported rank-one JSON array; multidimensional and non-vector arrays are not supported by JSON streaming.");
+                $"JSON streaming validation [unsupported-column]: Array '{name}' has declared type {arrayType} which is not a supported rank-one JSON array; multidimensional and non-vector arrays are not supported by JSON streaming.");
     }
 
     private static void EnsureDepth(int depth, string? name)
     {
         if (depth > MaxShapeDepth)
             throw new NotSupportedException(
-                $"The JSON projection shape around '{name}' exceeds the maximum supported nesting depth of {MaxShapeDepth}.");
+                $"JSON streaming validation [unsupported-column]: The JSON projection shape around '{name}' exceeds the maximum supported nesting depth of {MaxShapeDepth}.");
     }
 
     private static Array ToArray(object? value) => value as Array
@@ -458,7 +538,7 @@ internal static class JsonRowWriterFactory
             JsonWriteKind.DateTime => Expression.Call(record, GetDateTimeMI, Expression.Constant(column.Ordinal)),
             JsonWriteKind.Base64 => BuildByteArrayRead(record, column),
             JsonWriteKind.EnumString => BuildEnumStringRead(record, column),
-            _ => throw new NotSupportedException($"Unsupported JSON write kind {column.Kind}."),
+            _ => throw new NotSupportedException($"JSON streaming validation [unsupported-column]: Unsupported JSON write kind {column.Kind}."),
         };
 
     private static Expression BuildByteArrayRead(Expression record, in JsonShapeColumn column)
@@ -490,7 +570,7 @@ internal static class JsonRowWriterFactory
     private static Expression BuildEnumStringRead(Expression record, in JsonShapeColumn column)
     {
         if (column.EnumUnderlyingType is null)
-            throw new NotSupportedException($"The enum column '{column.Name}' has no underlying integral type.");
+            throw new NotSupportedException($"JSON streaming validation [unsupported-column]: The enum column '{column.Name}' has no underlying integral type.");
 
         var numberColumn = new JsonShapeColumn(column.Ordinal, column.Name, column.EnumUnderlyingType, JsonWriteKind.Number, column.Nullable, column.DefaultOnNull);
         return Expression.Convert(BuildNumericRead(record, numberColumn), column.ValueType);
@@ -531,7 +611,7 @@ internal static class JsonRowWriterFactory
                 return WriteEnumString(writer, column, value);
 
             default:
-                throw new NotSupportedException($"Unsupported JSON write kind {column.Kind}.");
+                throw new NotSupportedException($"JSON streaming validation [unsupported-column]: Unsupported JSON write kind {column.Kind}.");
         }
     }
 
@@ -544,13 +624,13 @@ internal static class JsonRowWriterFactory
     private static Expression WriteEnumString(Expression writer, in JsonShapeColumn column, Expression value)
     {
         var converter = column.EnumStringConverter
-            ?? throw new NotSupportedException($"The enum column '{column.Name}' has no prepared string converter.");
+            ?? throw new NotSupportedException($"JSON streaming validation [unsupported-column]: The enum column '{column.Name}' has no prepared string converter.");
 
         var converterBase = typeof(JsonConverter<>).MakeGenericType(column.ValueType);
         var writeMethod = converterBase.GetMethod(
             "Write",
             [typeof(Utf8JsonWriter), column.ValueType, typeof(JsonSerializerOptions)])
-            ?? throw new NotSupportedException($"The enum converter for column '{column.Name}' has no typed Write method.");
+            ?? throw new NotSupportedException($"JSON streaming validation [unsupported-column]: The enum converter for column '{column.Name}' has no typed Write method.");
 
         return Expression.Call(
             Expression.Constant(converter, converterBase),
@@ -576,7 +656,7 @@ internal static class JsonRowWriterFactory
             Expression.New(
                 NotSupportedExceptionCtor,
                 Expression.Constant(
-                    $"JSON streaming cannot read the numeric column at ordinal {column.Ordinal} (target {column.ValueType.Name}): its provider field type is not one of sbyte, byte, short, ushort, int, uint, long, ulong, float, double, decimal or ClickHouseDecimal.")),
+                    $"JSON streaming validation [reader-binding]: The numeric column at ordinal {column.Ordinal} (declared {column.ValueType.Name}) has a provider field type that is not one of sbyte, byte, short, ushort, int, uint, long, ulong, float, double, decimal or ClickHouseDecimal.")),
             column.ValueType);
 
         // ClickHouse's arbitrary-precision decimal representation, read through the driver's GetDecimal.
@@ -646,7 +726,7 @@ internal static class JsonRowWriterFactory
         if (type == typeof(double)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(double)])!;
         if (type == typeof(decimal)) return typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteNumberValue), [typeof(decimal)])!;
 
-        throw new NotSupportedException($"No JSON number writer for CLR type {type}.");
+        throw new NotSupportedException($"JSON streaming validation [unsupported-column]: No JSON number writer for CLR type {type}.");
     }
 
     private static MethodInfo ConvertMethod(Type target, Type field)
@@ -664,7 +744,7 @@ internal static class JsonRowWriterFactory
             _ when target == typeof(float) => nameof(Convert.ToSingle),
             _ when target == typeof(double) => nameof(Convert.ToDouble),
             _ when target == typeof(decimal) => nameof(Convert.ToDecimal),
-            _ => throw new NotSupportedException($"No typed Convert overload for JSON numeric target {target}."),
+            _ => throw new NotSupportedException($"JSON streaming validation [unsupported-column]: No typed Convert overload for JSON numeric target {target}."),
         };
 
         return typeof(Convert).GetMethod(name, [field])!;

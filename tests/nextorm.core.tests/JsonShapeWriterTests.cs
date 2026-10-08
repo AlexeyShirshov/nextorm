@@ -668,6 +668,22 @@ public class JsonShapeWriterTests
     }
 
     [Fact]
+    public void NoSelectedColumns_ShouldThrowProjectionBeforeWriting()
+    {
+        // W2 (r2/n2): the phase-1 flat path (shape == null) with no selected columns. No public query
+        // surface lowers a zero-column projection: EntityBuilder.ToCommand applies the entity projection,
+        // and the historical trigger was a construction projection aborted by cancellation during
+        // PrepareColumns, which PrepareJsonStream now short-circuits with ThrowIfCancellationRequested.
+        // The reachable trigger is therefore this internal entry point — the exact method
+        // PrepareJsonStream calls with cmd.SelectList — so the branch is exercised directly, not faked.
+        var nullList = () => JsonShapePlan.Build(null, oneColumn: false, new JsonStreamOptions());
+        nullList.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [projection]*");
+
+        var emptyList = () => JsonShapePlan.Build([], oneColumn: false, new JsonStreamOptions());
+        emptyList.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [projection]*");
+    }
+
+    [Fact]
     public void OneElementArray_ShouldWriteSingleElement()
     {
         var shape = Obj(null, [Arr("Values", typeof(int[]), 0, true)], JsonShapePresence.Always);

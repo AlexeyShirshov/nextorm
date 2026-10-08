@@ -343,8 +343,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     internal void WriteJson<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
     {
-        var (prepared, rowWriter) = PrepareJsonStream(queryCommand, options, cancellationToken);
-        _executor.WriteJson(prepared, rowWriter, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params);
+        var (prepared, rowWriter, plan) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        _executor.WriteJson(prepared, rowWriter, plan, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params);
     }
 
     /// <summary>Asynchronously streams a query's projected rows as JSON to a caller-owned stream; see <see cref="WriteJson{TResult}"/>.</summary>
@@ -357,15 +357,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <returns>A task that completes when the whole document has been written.</returns>
     internal Task WriteJsonAsync<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
     {
-        var (prepared, rowWriter) = PrepareJsonStream(queryCommand, options, cancellationToken);
-        return _executor.WriteJsonAsync(prepared, rowWriter, output, options, @params, cancellationToken);
+        var (prepared, rowWriter, plan) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        return _executor.WriteJsonAsync(prepared, rowWriter, plan, output, options, @params, cancellationToken);
     }
 
     // A JSON stream needs the SQL rendered and the command attached, but no Func<IDataRecord,TResult>:
     // DocumentMode is the planner's existing no-mapper flag. It is set on a live clone so the caller's
     // command is never mutated (DocumentMode is part of the plan key and the sticky-state hazard is the
     // same as Cache). The clone's populated SelectList/OneColumn feed the shape plan.
-    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter RowWriter) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
+    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter RowWriter, JsonShapePlan Plan) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
         ArgumentNullException.ThrowIfNull(options);
@@ -373,7 +373,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // Fail fast on an already-cancelled token (mirroring OpenLobReader/OpenLobReaderAsync). During
         // preparation PrepareColumns bails out of a construction projection on cancellation without
         // throwing, yielding an empty select list that would otherwise surface as an unrelated
-        // "no selected columns" InvalidOperationException instead of the cancellation.
+        // "no selected columns" NotSupportedException instead of the cancellation.
         cancellationToken.ThrowIfCancellationRequested();
 
         // ResetPreparation clears the prepared pieces, including the source. A temporary-table source
@@ -399,7 +399,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
 
         var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
-        return (prepared, JsonRowWriterFactory.Build(plan));
+        return (prepared, JsonRowWriterFactory.Build(plan), plan);
     }
 
     // A query that reads a lazy temporary table is not a single statement: the table must be created on

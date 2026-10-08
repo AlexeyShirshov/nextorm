@@ -137,7 +137,7 @@ public class InMemoryTests
 
         var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).WriteJson(stream);
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(length);
     }
@@ -151,7 +151,7 @@ public class InMemoryTests
 
         var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).WriteJsonAsync(stream, TestContext.Current.CancellationToken);
 
-        await act.Should().ThrowAsync<NotSupportedException>();
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(length);
     }
@@ -169,7 +169,7 @@ public class InMemoryTests
             .Select(it => new { it.Id, State = InMemoryJsonEnum.Active })
             .WriteJson(stream);
 
-        act.Should().Throw<NotSupportedException>();
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
         stream.Position.Should().Be(position);
     }
 
@@ -184,7 +184,7 @@ public class InMemoryTests
             .Select(it => new { it.Id, State = InMemoryJsonEnum.Active })
             .WriteJsonAsync(stream, TestContext.Current.CancellationToken);
 
-        await act.Should().ThrowAsync<NotSupportedException>();
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
         stream.Position.Should().Be(position);
     }
 
@@ -199,8 +199,8 @@ public class InMemoryTests
         var sync = () => builder.WriteJson(stream);
         var async = () => builder.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
 
-        sync.Should().Throw<NotSupportedException>();
-        await async.Should().ThrowAsync<NotSupportedException>();
+        sync.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
+        await async.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [in-memory]*");
         stream.Position.Should().Be(position);
     }
     [Fact]
