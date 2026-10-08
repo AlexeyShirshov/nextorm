@@ -81,7 +81,13 @@ Mutation tooling: `dotnet-stryker` 5.0.0 (global), `--test-runner` supports `vst
 accepted the option but ignored `test-case-filter`. `TreatWarningsAsErrors=false` in the environment did
 not remove the Stryker Safe-Mode compile errors (CS0165/CS8081 in unrelated visitor files). Mutation is
 **not usable as evidence**; residual unverified mutants: `RowMaterializerBuilder.cs` 182,
-`QueryCommand.QueryPreparer.cs` 1035. Row intentionally open.
+`QueryCommand.QueryPreparer.cs` 1035. **rv1 disposition (reconciled): CLOSED by authorized no-tool
+disclosure** — the row is not a kill claim and not "OPEN" as an unmet obligation; no mutation kills or
+score threshold are claimed and residual mutants are unverified; closed under the explicit user-authorized
+policy (product build green + coverage above thresholds + tests green + honest no-tool disclosure ⇒ PASS),
+per the governing predicate quoted verbatim at `docs/specs/status/rc2-190-join-whole-entity-1.md:412`.
+Root cause: Stryker.NET 5.0.0 vs MTP/xunit-v3 test discovery (0.00% / Safe-Mode CS0165/CS8081 / timeouts).
+Full disclosure: `r1/n4-evidence-brief.md` §12.
 
 ## Inner-loop validator
 
