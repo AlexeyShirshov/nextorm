@@ -93,6 +93,45 @@ public class EntityItemProjectionInMemoryTests
         parents.Select(p => p.Id).OrderBy(x => x).Should().Equal(1, 1, 2);
         parents.Select(p => p.Name).OrderBy(x => x).Should().Equal("p1", "p1", "p2");
     }
+
+    [Fact]
+    public void DirectEntityItem_PresentAllDefaultEntity_ShouldNotBeNull()
+    {
+        // The in-memory source carries the entity object itself, so a matched entity whose scalar
+        // values are all default (0/0/null) must materialize as that object, never as null.
+        using var ctx = new InMemoryDataContext();
+        ctx.From<MemoryItemParent>().WithData([new MemoryItemParent { Id = 0, Name = null }]);
+        ctx.From<MemoryItemChild>().WithData([new MemoryItemChild { Id = 0, ParentId = 0, Name = null }]);
+
+        var children = ctx.From<MemoryItemParent>()
+            .Join(ctx.From<MemoryItemChild>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => p.Item2)
+            .ToList();
+
+        children.Should().HaveCount(1);
+        children[0].Should().NotBeNull("a present entity with all-default scalars must not be nulled");
+        children[0].Id.Should().Be(0);
+    }
+
+    [Fact]
+    public void DirectEntityItem_SelfJoin_ShouldMaterializeBothSlots()
+    {
+        using var ctx = CreateContext();
+
+        var first = ctx.From<MemoryItemChild>()
+            .Join(ctx.From<MemoryItemChild>(), (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1)
+            .ToList();
+        var second = ctx.From<MemoryItemChild>()
+            .Join(ctx.From<MemoryItemChild>(), (a, b) => a.Id == b.Id)
+            .Select(p => p.Item2)
+            .ToList();
+
+        first.Select(c => c.Id).OrderBy(x => x).Should().Equal(10, 11);
+        second.Select(c => c.Id).OrderBy(x => x).Should().Equal(10, 11);
+        first.Select(c => c.Name).OrderBy(x => x).Should().Equal("c1", "c2");
+        second.Select(c => c.Name).OrderBy(x => x).Should().Equal("c1", "c2");
+    }
 }
 
 public sealed class MemoryItemParent

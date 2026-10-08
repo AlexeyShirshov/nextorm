@@ -211,6 +211,54 @@ public class EntityItemProjectionTests
         }
         finally { ctx.Dispose(); File.Delete(path); }
     }
+
+    [Fact]
+    public void ScalarJoinItem_ShouldKeepSingleScalarColumnProjection()
+    {
+        // A joined item that is a scalar (here an int subquery source) is NOT a whole entity. The
+        // direct-item recognizer must not claim it, or the select list would stay empty and the SQL
+        // would be broken; the previous single-column scalar projection must be preserved.
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var scalarIds = ctx.From<EntityItemChild>().Where(c => c.Id == 10).Select(c => c.Id);
+
+            var cmd = ctx.From<EntityItemParent>()
+                .Join(ctx.From(scalarIds), (p, s) => p.Id == s)
+                .Select(p => p.Item2);
+
+            var prepared = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+            var sql = prepared.DbCommand.CommandText;
+
+            // Before the fix the direct-item recognizer claimed the scalar item and left the select
+            // list empty ("select from ..."); the prior single-column scalar projection must survive.
+            sql.Should().StartWith("select ", "the scalar join item must produce a non-empty projection");
+            sql.Should().NotMatchRegex(@"select\s+from", "a scalar item must still project exactly one column");
+            cmd.SelectList.Should().NotBeNullOrEmpty("the scalar join item must keep its single column");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void DirectEntityProjection_CancelledPreparation_ShouldThrowOperationCanceled()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            var cmd = ctx.From<EntityItemParent>()
+                .LeftJoin(ctx.From<EntityItemChild>(), (p, c) => p.Id == c.ParentId)
+                .Select(p => p.Item2);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            Action act = () => cmd.PrepareCommand(dontCalculateHash: true, cts.Token);
+
+            act.Should().Throw<OperationCanceledException>(
+                "a cancelled direct-entity expansion must surface cancellation, not an empty select list");
+        }
+        finally { ctx.Dispose(); File.Delete(path); }
+    }
 }
 
 public enum EntityItemState

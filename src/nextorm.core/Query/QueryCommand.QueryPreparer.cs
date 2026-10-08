@@ -492,17 +492,23 @@ public partial class QueryCommand
                         if (cmd._dataContext!.NeedMapping)
                         {
                             var directColumns = new List<SelectExpression>();
-                            if (TryExpandEntityItem(directItemType, directItemExpression, directSlot, null, null, directColumns, cancellationToken))
+                            if (!TryExpandEntityItem(directItemType, directItemExpression, directSlot, null, null, directColumns, cancellationToken))
                             {
-                                selectList = directColumns.ToArray();
-                                for (var i = 0; i < selectList.Length; i++)
+                                // The recognizer already proved a mapped entity, so a refused expansion
+                                // means the build was cancelled. Never leave the select list empty.
+                                cancellationToken.ThrowIfCancellationRequested();
+                                throw new QueryPreparationException(
+                                    $"Cannot expand the projected entity item '{directItemType.Name}'; it is not a supported mapped entity.");
+                            }
+
+                            selectList = directColumns.ToArray();
+                            for (var i = 0; i < selectList.Length; i++)
+                            {
+                                selectList[i].Index = i;
+                                if (!cmd._dontCache && !noHash)
                                 {
-                                    selectList[i].Index = i;
-                                    if (!cmd._dontCache && !noHash)
-                                    {
-                                        selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
-                                        columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
-                                    }
+                                    selectList[i].PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selectList[i]);
+                                    columnsPlanHash = columnsPlanHash * 13 + selectList[i].PlanHashCode;
                                 }
                             }
                         }
@@ -965,16 +971,31 @@ public partial class QueryCommand
             if (!int.TryParse(name.AsSpan(4), out var n) || n < 1)
                 return false;
 
-            if (projectionType.GetProperty(name) is not { } declared || declared.PropertyType != property.PropertyType)
+            // Read the item type from the projection's generic arguments and take the member directly
+            // from the expression, instead of re-resolving by name: a re-resolution could throw
+            // AmbiguousMatchException on a hidden member and is not needed to prove the binding.
+            var itemTypes = projectionType.GetGenericArguments();
+            if (n > itemTypes.Length || property.DeclaringType != projectionType)
+                return false;
+
+            var resolvedItemType = itemTypes[n - 1];
+            if (property.PropertyType != resolvedItemType)
                 return false;
 
             // The result type must be the item's own type; a cast to an unrelated result type is deferred.
-            if (cmd._exp.Body.Type != declared.PropertyType)
+            if (cmd._exp.Body.Type != resolvedItemType)
+                return false;
+
+            // The SQL path can only materialize a mapped entity into columns. A scalar or otherwise
+            // non-entity item must keep its prior scalar projection behavior, so do not claim it here
+            // and leave the select list empty when TryExpandEntityItem would refuse it.
+            if (cmd._dataContext!.NeedMapping
+                && (!DataContextCache.Metadata.TryGetValue(resolvedItemType, out var itemMetadata) || itemMetadata.Properties.Count == 0))
                 return false;
 
             slot = n - 1;
             memberName = name;
-            itemType = declared.PropertyType;
+            itemType = resolvedItemType;
             itemExpression = body;
             return true;
         }

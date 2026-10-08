@@ -646,6 +646,43 @@ public class PlanKeyUniquenessTests
         Cached(selfItem2).Should().Be(ownSql[3], "the second self-join slot keeps its own cached SQL");
     }
 
+    /// <summary>
+    /// D190: two independently built but equivalent direct whole-entity projections must share one
+    /// plan key and actually hit the stored <see cref="QueryPlanStore"/> entry, so the mapper/SQL is
+    /// reused rather than rebuilt per call site.
+    /// </summary>
+    [Fact]
+    public void QueryPlan_ShouldReuseEquivalentDirectEntityProjection()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        QueryCommand<EagerChild> Build()
+        {
+            var cmd = DirectParentJoin(ctx).Select(p => p.Item2);
+            cmd.PrepareCommand(false, CancellationToken.None);
+            return cmd;
+        }
+
+        var first = Build();
+        var second = Build();
+
+        var planFirst = new QueryPlan(first, null);
+        var planSecond = new QueryPlan(second, null);
+
+        planFirst.Equals(planSecond).Should().BeTrue("an equivalent direct projection must share the plan key");
+        planFirst.GetHashCode().Should().Be(planSecond.GetHashCode(), "equal plans must hash alike");
+
+        QueryPlanStore.Clear();
+        var contextType = typeof(PlanKeyUniquenessTests);
+        var holder = new StubCommandHolder();
+        QueryPlanStore.Set(contextType, planFirst, holder);
+
+        QueryPlanStore.TryGet(contextType, planSecond, out var found, out var stored).Should()
+            .BeTrue("the equivalent direct projection must hit the cached plan");
+        found.Should().BeSameAs(holder);
+        stored.Should().BeSameAs(planFirst);
+    }
+
     private sealed class StubCommandHolder : IDbCommandHolder
     {
         public void ResetConnection(DbConnection conn, IDataContext dbContext)

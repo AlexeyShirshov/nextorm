@@ -811,3 +811,13 @@ Shared test run может удовлетворять несколько стр�
 - **base:** plan base `18659e41`; task-start tip `0817ffef`; D173 `29e794fd` already touched the comparer/mapper — built upon, not reverted.
 - **evidence:** `artifacts/pdca/rc2-190/r1/evidence-brief.md` (criteria↔evidence + provenance); `artifacts/pdca/rc2-190/test-scope.json` + `evidence.json` (validator rc 0).
 - **open at CHECK:** branch-delta baseline not separately captured; direct-projection arities >2 covered indirectly; mutation not completed.
+
+## DO loop-back n=2 (CHECK FAIL r1 n1/3 → n=2/3)
+
+- **trigger:** CHECK FAIL r1 n1/3 — P1 recognizer claimed any bare `p.ItemN` (scalar items → empty select), W2 silent empty on refused expansion, S3 `GetProperty` ambiguity risk; plus test/evidence reinforcements.
+- **fix:** `QueryCommand.QueryPreparer.TryGetDirectEntityItem` now reads the item type from the projection generic args, takes the member directly from the expression (S3 removed), and — under `NeedMapping` — refuses non-entity items without mapped metadata (W1); the SQL branch surfaces cancellation (`ThrowIfCancellationRequested`) then `QueryPreparationException` instead of leaving `selectList` empty (W2).
+- **red→green:** `ScalarJoinItem_ShouldKeepSingleScalarColumnProjection` red (gate disabled) = `QueryPreparationException: Cannot expand … 'Int32'`, exit 2/total 2/1 failed ($E/n2-red-scalar); green exit 0 ($E/n2-green-scalar). New `DirectEntityProjection_CancelledPreparation_ShouldThrowOperationCanceled`.
+- **reinforcements:** anchored SELECT-clause + arity 3/8 in six provider `JoinWholeEntitySqlGenerationTests` (4 each, exit 0); `QueryPlan_ShouldReuseEquivalentDirectEntityProjection` (real QueryPlanStore, exit 0); present-all-default + self-join in-memory tests; MariaDB (`MariaDbJoinWholeEntityIntegrationTests`) and ClickHouse (`ClickHouseJoinWholeEntityIntegrationTests`) runtime tests with `DOCKER_HOST` — 2 each, 0 skipped, exit 0; register `code-smells-review.md:1770` `MemberTranslator.cs:410`→`:573`.
+- **n=2 qualification:** Debug+Release `nextorm.slnx` 0W/0E; boundary coverage 9205/0 failed, line 88.1% / branch 80.2% (changed types QueryPreparer 91.4/85.6, RowMaterializerBuilder 93.3/86.0); perf 7 cases, 44.53s, cached/prepared 2.02; validator `report` rc 0.
+- **mutation disclosure:** Stryker 5.0.0 with `coverage-analysis: off` completed (rc 0) but score 0.00% (182 survived) — test discovery under MTP/xunit v3 killed no mutant; not usable as evidence.
+- **phase:** DO-complete-awaiting-CHECK (r1, n=2/3).
