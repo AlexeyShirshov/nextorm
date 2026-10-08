@@ -7,7 +7,7 @@
 - cycle_id: `1`
 - plan_revision: `r1`
 - iteration: `n2`
-- plan_state: **ready** (PLAN complete; stopped at the PLAN→DO boundary)
+- plan_state: **done** (CHECK PASS r1/n2; ACT complete; commit `6bc4ae41`)
 - base: branch `1.0.9-rc2` at `18659e41`
 - status-file role: child-task status file for the collection; the collection status file `docs/specs/status/collection-1.0.9-rc2.md` is **not** modified by this task.
 - footprint (planned, with uncertainty):
@@ -20,7 +20,7 @@
 - predecessor-result requirements: **none hard**. Clustering must serialize shared-file footprint with **D170** (`JoinIntoSpec.cs`, `EntityMetadataBuilder.cs`) and **D175** (JoinInto tests); an integrated predecessor must supply its diff + CHECK result, not just a closed issue.
 - assumptions/prerequisites: `DataContextCache` is process-wide static (`DataContextCache.cs:21`), so its explicit `Clear()` is the correct lifecycle boundary; the compiled selector retains no metadata reference but bakes the key-property choice, so surviving `Clear()` can be observably wrong after key-configuration change; no public API change; clearing is behaviorally safe; atomic concurrent clear/build freshness is explicitly out of scope.
 - pre-DO prerequisite (planned, read-only): scout supported metadata registration/re-registration, value-type/composite constraints, reusable in-memory JoinInto setup, exact coverage-workflow commands, and benchmark policy before DO.
-- next step: DO (not started; this file records PLAN only).
+- next step: none — D174 ACT complete (see ACT section at end of file).
 
 ---
 
@@ -451,4 +451,18 @@ Format: `<UTC time> | <phase> | revision r | iteration n/3 | <event> | <evidence
 - `2026-10-08T11:49:45Z | DO | r1 | n2/3 | boundary evidence refreshed on final n2 tree (machine-checkable): core 1767/0/0 exit 0, sqlite 1161/0/1 skipped exit 0, postgres 803/0/0 exit 0, sqlserver 727/0/0 exit 0; focused inner 10/10 exit 0; evidence.json unit/scope wrapper unchanged; validate_inner_loop.py report exit 0 (clean stdout) | /tmp/opencode/rc2-174/boundary-run-{core,sqlite,postgres,sqlserver}-n2.log; inner-run-n2.log; evidence.json; evidence-validate.log`
 - `2026-10-08T11:57:26Z | DO | r1 | n2/3 | D174 evidence materialization: materialized every planned E174 artifact so each row points at a real file under TestResults/D174/; no product/test/doc edit | E174-01 prerequisites.md; E174-02/03/04 focused-tests.log (+focused-n2.log, focused-tests-pre-n2.log, focused-inner.log); E174-05/10 final-audit.md; E174-06 core.log/sqlite.log/postgres.log/sqlserver.log/build-debug.log/build-release.log; E174-07 coverage/baseline/ + coverage/final/ + coverage/delta.md; E174-08 mutation-negative.log. Baseline detached worktree at 5b7fb9e7: build 0 warnings/0 errors (exit 0), collect 9121 total/2 pre-existing unrelated ParamRefreshRecipe failures (exit 2), line 86.7% (47224/54448), branch 79.3% (25529/32181); final line 86.7% (47230/54450), branch 79.3% (25535/32181); new lines JoinIntoSpec.cs:672 and DataContextCache.cs:140 covered (hits=1), 0 new branch rows; worktree removed after copy; D174 NOT done (ACT pending CHECK)`
 - `2026-10-08T12:01:46Z | DO | r1 | n2/3 | D174 evidence-binding pass (escalate-directed): created final-aggregate.md (E174-01..10 table + pinned contract rows 358-369 verbatim + C-E01..C-E04 verdicts + priority matrix + ClickHouse N/A + git diff --stat src); appended prerequisites "Verification results" (frozen contract rc2-174:358-369); extended variant-matrix with 10-test traceability (line span :86..:320 re-verified, unchanged); added perf baseline-vs-final Mean(±Error)/Allocated table (final alloc ratio 7.66 = baseline alloc ratio 7.66, no allocation increase); no src/tests edit, no commit; r/n unchanged; validate_inner_loop.py report exit 0 | TestResults/D174/final-aggregate.md; prerequisites.md; variant-matrix.md; perf/summary.md; /tmp/opencode/rc2-174/evidence.json (validator exit 0)`
-- `2026-10-08T12:13:27Z | CHECK | r1 | n2/3 | CHECK evidence-gap closure (final CHECK artifact pass; no r/n change, no src/tests edit): ran the identical JoinInto container selector against ClickHouse — `FullyQualifiedName~JoinInto&FullyQualifiedName~ClickHouseIntegrationTests` selects 0 tests (exit 8; ClickHouse does not derive CommonTestSuite and has no JoinInto_ tests), so ran the ClickHouse provider suite instead (117/117, 0 failed / 0 skipped, exit 0); quoted R174-05 `ConcurrentBuildAndClearRemainSafe` assertions verbatim into final-aggregate.md; added rv/DO-ledger bindings + container-integration row (SQLite/PostgreSQL/SQL Server/MySQL 17/17 each) to final-aggregate.md; validate_inner_loop.py report exit 0 | TestResults/D174/integration-clickhouse-joininto.log, TestResults/D174/integration-clickhouse-provider.log, TestResults/D174/final-aggregate.md; /tmp/opencode/rc2-174/evidence.json`
+- `2026-10-08T12:13:27Z | CHECK | r1 | n2/3 | CHECK evidence-gap closure (final CHECK artifact pass; no r/n change, no src/tests edit): ran the identical JoinInto container selector against ClickHouse — `FullyQualifiedName~JoinInto&FullyQualifiedName~ClickHouseIntegrationTests` selects 0 tests (exit 8; ClickHouse does not derive CommonTestSuite and has no JoinInto_ tests), so ran the ClickHouse provider suite instead (117/117, 0 failed / 0 skipped, exit 0); quoted R174-05 `ConcurrentBuildAndClearRemainSafe` assertions verbatim into final-aggregate.md; added rv/DO-ledger bindings + container-integration row (SQLite/PostgreSQL/SQL Server/MySQL 17/17 each) to final-aggregate.md; validate_inner_loop.py report exit 0 | TestResults/D174/integration-clickhouse-joininto.log, TestResults/D174/integration-clickhouse-provider.log, TestResults/D174/final-aggregate.md; /tmp/opencode/rc2-174/evidence.json
+
+---
+
+# ACT — D174 / GitHub #174
+
+- ACT recorded: 2026-10-08 (collection `1.0.9-rc2`, branch `1.0.9-rc2`).
+- CHECK verdict: **PASS** at `r1` / `n2` (revision binding `5b7fb9e7+d174-do-n2`).
+- Product commit: `6bc4ae41b8edf282ba83aa51fd7cc8e3480a7573` — `#174 D174: invalidate JoinInto identity-selector cache on DataContextCache.Clear()`.
+- Files committed: `src/nextorm.core/Builders/Joins/JoinIntoSpec.cs`, `src/nextorm.core/DataContext/DataContextCache.cs`, `tests/nextorm.core.tests/JoinIntoIdentitySelectorCacheTests.cs`, `docs/infrastructure/01-query-reuse-and-caching.md`, `docs/ru/infrastructure/01-query-reuse-and-caching.md`, `docs/specs/status/rc2-174-identity-selector-cache-1.md`.
+- Evidence bundle: `artifacts/pdca/rc2-174/` (**gitignored** — local only, not committed, consistent with prior tasks `rc2-184`/`rc2-191`).
+- GitHub issue `#174`: **closed** via `gh issue close 174` (exit 0), comment references the product commit and evidence bundle.
+- Roadmap `docs/specs/roadmap/todo_navigation_properties.md` retained (only one covered bullet; the plan is not fully implemented).
+- Collection status `docs/specs/status/collection-1.0.9-rc2.md`: D174 row set to `done`, Done list updated, next allowed step set to **D175**.
+- ACT complete; D174 done.`
