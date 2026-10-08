@@ -6,7 +6,7 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc2` at `18659e41` (merge of PR #205 from `1.0.9-rc1`)
 - collection revision: r1; evidence revision: rv1; PLAN-revision vector: all admitted tasks r=1/rv=1
-- collection status: **in-progress** — P done (24 own PLANs `ready`), ALL-barrier evaluated over 24 admitted tasks; DO **gated** on the D191 written-spec review (see Blockers)
+- collection status: **in-progress (recovery)** — D153/D154/D157/D159 done; **D160 set aside** as terminal `incomplete` (preserved on branch `wip/d160-incomplete` + patch); continuing the remaining 19 tasks from the clean pre-D160 tip `4bd18c82` under a user-authorized continuation policy
 
 ## Admission / gaps (P)
 
@@ -22,9 +22,17 @@ Single connected component by shared core footprint (`EntityBuilder`, `SqlBuilde
 
 | group | tasks | order | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | 24 admitted tasks | D153 → D154 → D157 → D159 → D160 → D184 → D191 → D162 → D170 → D174 → D175 → D173 → D190 → D176 → D178 → D180 → D177 → D179 → D185 → D167 → D169 → D189 → D188 → D151 | current worktree | 1.0.9-rc2 | in-progress |
+| G1 | 23 active tasks (D160 set aside) | D153 → D154 → D157 → D159 → [D160 set aside] → D184 → D191 → D162 → D170 → D174 → D175 → D173 → D190 → D176 → D178 → D180 → D177 → D179 → D185 → D167 → D169 → D189 → D188 → D151 | current worktree | 1.0.9-rc2 | in-progress |
 
 Intra-group order is a serialization dependency (footprint overlap) plus one functional edge `D189 → D188`; it is not a functional chain for the rest.
+
+## Recovery (D160 set-aside) — user-directed
+
+- **D160 STOP:** after r=4 (the sealed terminal revision) CHECK failed on the same R02 over-preservation family, the task was marked final `incomplete` (no r=5). Its full state is preserved on branch `wip/d160-incomplete` (commit chain through `40b1a159` + STOP record) and as patch `docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch`; #160 stays OPEN.
+- **Branch recovery (non-destructive):** local branch `1.0.9-rc2` was reset to the clean pre-D160 tip `4bd18c82` (D159 checkpoint) after preserving D160 on `wip/d160-incomplete`. No product code lost.
+- **Continuation policy (user-authorized deviation from the strict group-stop rule):** the remaining 19 tasks are executed in the fixed order; if one task finally ends `incomplete`, it is marked `incomplete`, its product/test paths are restored to the last verified-green tip (patch preserved), and the lane **continues** with the next task (a single failure does not stop the rest).
+- **PUSH FINDING (rule violation):** `origin/1.0.9-rc2` was created/advanced by a push during the run to `40b1a159` (remote-tracking reflog: `update by push`), although the repo rule is "push never". The remote was NOT touched by this recovery; local `1.0.9-rc2` now diverges from `origin/1.0.9-rc2`. Resolving the remote is the user's manual action (do not push from the cycle).
+- **D184 blocked (evidence-contract gap):** escalation decided a real r=2 evidence-tracing replan and CHECK invoked STOP on recurrence; all product gates were green but CHECK could not certify. Product/test/docs paths were reset to the last verified-green tip `4bd18c82` (tree reset), the complete change is preserved uncommitted as patch `artifacts/pdca/rc2-184/D184-blocked.patch` with artifacts `artifacts/pdca/rc2-184/{r1,r2}/`, and #184 stays OPEN. The lane continues with D191 (next pending) in the fixed order.
 
 ## Tasks
 
@@ -35,7 +43,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D154 | #154 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-154-dto-public-ctors-1.md | closed #154 (5d72a79) |
 | D157 | #157 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-157-register-finding-25-1.md | closed #157 (5978556f) |
 | D159 | #159 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-159-cte-direct-joins-1.md | closed #159 (078a7a2d) |
-| D160 | #160 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | Join alias mixing + root alias |
+| D160 | #160 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=4 (terminal) | docs/specs/status/rc2-160-join-alias-mixing-1.md | terminal r=4 STOP (R02 over-preservation of SourceEntityType/BindArrayJoinElement); set aside per explicit user direction; preserved on branch `wip/d160-incomplete` + patch `docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch`; #160 stays OPEN |
 | D161 | - | - | - | - | - | - | - | - | - | (reference only: #130/#161 hint APIs already shipped) |
 | D162 | #162 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-162-navigation-temp-tvp-fail-closed-1.md | V32 navigation temp/TVP fail-closed |
 | D167 | #167 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-167-csv-chunked-read-1.md | CSV chunked read for byte[] (P0 validator prerequisite) |
@@ -51,7 +59,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D178 | #178 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-178-json-enum-1.md | JSON streaming enum |
 | D179 | #179 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-179-json-error-policy-1.md | JSON streaming error policy |
 | D180 | #180 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-180-json-stream-provider-conversion-1.md | JSON provider column conversion |
-| D184 | #184 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md | LoadWith EagerLoadMode |
+| D184 | #184 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=2 | docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md | blocked: evidence-contract gap — CHECK could not certify despite all product gates green (build Debug/Release 0/0, core 1772/0/0, sqlite 1161/1skip, eager integration 52/0/0 four providers, full container 3337/0 failed, coverage 85.9/76.5, code audit 0 Critical/0 product Warnings); escalation decided real r=2 evidence-tracing replan; CHECK invoked STOP on recurrence; patch `artifacts/pdca/rc2-184/D184-blocked.patch`; artifacts `artifacts/pdca/rc2-184/{r1,r2}/` |
 | D185 | #185 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-185-bindentity-registration-1.md | BindEntity registration |
 | D188 | #188 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md | Comparison benchmarks tier 1 (needs D189) |
 | D189 | #189 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-189-sqlite-datareader-1.md | SQLite ToDataReader verification |
@@ -88,4 +96,4 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 - Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed).
 - Verified: no.
-- Incomplete: none. Excluded-gap: D171, D172 (issues OPEN, milestone unchanged).
+- Incomplete: **D160** (terminal r=4 STOP; preserved on `wip/d160-incomplete` + patch). Excluded-gap: D171, D172 (issues OPEN).
