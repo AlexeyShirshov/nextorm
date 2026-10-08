@@ -1,0 +1,28 @@
+branch: 1.0.9-rc2
+HEAD: 04836505fdb506d2e2176e74e2a7cc283a132d2f
+base 18659e41 exists: commit
+ancestry_exit=0
+--- status porcelain ---
+?? StrykerOutput/
+?? docs/specs/status/rc2-151-stryker-mutation-1.md
+?? docs/specs/status/rc2-167-csv-chunked-read-1.md
+?? docs/specs/status/rc2-169-dml-scope-hints-1.md
+?? docs/specs/status/rc2-170-evidence/
+?? docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md
+?? docs/specs/status/rc2-171-joininto-as-derived-1.md
+?? docs/specs/status/rc2-172-child-collection-projection-1.md
+?? docs/specs/status/rc2-173-projection-folding-member-1.md
+?? docs/specs/status/rc2-175-joininto-test-quality-1.md
+?? docs/specs/status/rc2-176-json-nested-1.md
+?? docs/specs/status/rc2-177-native-json-1.md
+?? docs/specs/status/rc2-178-json-enum-1.md
+?? docs/specs/status/rc2-179-json-error-policy-1.md
+?? docs/specs/status/rc2-180-json-stream-provider-conversion-1.md
+?? docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md
+?? docs/specs/status/rc2-185-bindentity-registration-1.md
+?? docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md
+?? docs/specs/status/rc2-189-sqlite-datareader-1.md
+?? docs/specs/status/rc2-190-join-whole-entity-1.md
+--- diff-check ---
+diff_check_exit=0
+--- shortcut stats ---

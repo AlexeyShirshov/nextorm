@@ -1,0 +1,24 @@
+branch: 1.0.9-rc2
+HEAD: 04836505fdb506d2e2176e74e2a7cc283a132d2f
+ancestry_exit=0
+--- git diff --check ---
+diff_check_exit=0
+--- changed tracked files ---
+ M tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs
+ M tests/nextorm.core.tests/InMemoryTests.cs
+ M tests/nextorm.core.tests/PlanKeyStructureTests.cs
+ M tests/nextorm.core.tests/RawSourceBindingFilterTests.cs
+ M tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs
+--- D175 patch stat ---
+ .../ImplicitNavigationR3CountBoundaryTests.cs                  |  1 -
+ tests/nextorm.core.tests/InMemoryTests.cs                      |  1 -
+ tests/nextorm.core.tests/PlanKeyStructureTests.cs              |  1 -
+ tests/nextorm.core.tests/RawSourceBindingFilterTests.cs        | 10 ++--------
+ .../SelectExpressionPlanEqualityComparerTests.cs               |  7 ++-----
+ 5 files changed, 4 insertions(+), 16 deletions(-)
+--- CRLF check (file's line terminators) ---
+tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs: ASCII text, with CRLF line terminators
+tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs:    Unicode text, UTF-8 text, with CRLF line terminators
+tests/nextorm.core.tests/RawSourceBindingFilterTests.cs:               Unicode text, UTF-8 text, with CRLF line terminators
+tests/nextorm.core.tests/PlanKeyStructureTests.cs:                     ASCII text, with CRLF line terminators
+tests/nextorm.core.tests/InMemoryTests.cs:                             ASCII text, with CRLF line terminators
