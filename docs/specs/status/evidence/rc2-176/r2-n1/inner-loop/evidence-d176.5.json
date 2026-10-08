@@ -1,0 +1,86 @@
+{
+  "unit": "D176.5",
+  "scope": {
+    "projects": [
+      "tests/nextorm.integration.tests/nextorm.integration.tests.csproj",
+      "tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj",
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~WriteJson"
+    ],
+    "files": [
+      "tests/nextorm.integration.tests/CommonTestSuite.JsonStreamNested.cs",
+      "tests/nextorm.integration.tests/MariaDbJsonStreamTests.cs",
+      "tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs",
+      "tests/nextorm.integration.tests/PostgresSpecificTests.cs",
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "tests/nextorm.sqlserver.tests/JsonStreamingSqlLoweringTests.cs"
+    ],
+    "rationale": "D176.5 is the integration layer for the D176.1-D176.4 + D176.7 JSON shape work: shared nested/object/slot/conditional cases in a new CommonTestSuite partial (run by SQLite/PostgreSQL/SQL Server/MySQL subclasses), provider-native array cases (PostgreSQL array_agg string source; ClickHouse Array(String)/Array(Int32) and nested group_array string[][] source), an explicit MariaDB binary_entity seed plus mirrors in MariaDbJsonStreamTests, and ClickHouse mirrors plus a ClickHouse-local join slot fixture. A provider test exposed a real in-footprint defect: SQL Server rejected the same-name-different-scopes JSON capture as an ambiguous ORDER BY; fixed minimally in the JSON-only preparer alias assignment, with a SQL-lowering regression. The inner selector FullyQualifiedName~WriteJson is the affected filtered subset; the unfiltered C04 container sweep is the single boundary execution.",
+    "rebuild": "affected",
+    "boundary": "Full container-backed suite (C04) after the last edit: DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor -result-xml <evidence>/c04-sweep.xml, exit 0, 3476 total / 3279 passed / 0 failed / 197 capability skips, with positive executed counts for SQLite/PostgreSQL/SQL Server/MySQL/MariaDB/ClickHouse."
+  },
+  "amendments": [
+    {
+      "reason": "Local inner-loop regressions for the units the D176.5 change touches: the recursive writer (core JsonShapeWriterTests), the real SQLite JSON terminal (JsonStreamingTests), and the SQL Server JSON capture/alias lowering (JsonStreamingSqlLoweringTests). All are pre-declared affected subsets; none widens to a whole project.",
+      "added_selectors": [
+        "FullyQualifiedName~JsonShapeWriterTests",
+        "FullyQualifiedName~JsonStreamingTests",
+        "FullyQualifiedName~JsonStreamingSqlLoweringTests"
+      ],
+      "validated_before_run": true
+    }
+  ],
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.5-it1",
+      "artifact_revision": "d176.5-it1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonShapeWriterTests"],
+      "phase": "inner",
+      "source_revision": "d176.5-it1",
+      "artifact_revision": "d176.5-it1",
+      "exit_code": 0,
+      "selected_count": 34
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingTests"],
+      "phase": "inner",
+      "source_revision": "d176.5-it1",
+      "artifact_revision": "d176.5-it1",
+      "exit_code": 0,
+      "selected_count": 53
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingSqlLoweringTests"],
+      "phase": "inner",
+      "source_revision": "d176.5-it1",
+      "artifact_revision": "d176.5-it1",
+      "exit_code": 0,
+      "selected_count": 3
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~WriteJson"],
+      "phase": "boundary",
+      "source_revision": "d176.5-it1",
+      "artifact_revision": "d176.5-it1",
+      "exit_code": 0,
+      "selected_count": 159
+    },
+    {
+      "command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--", "-noColor", "-result-xml", "docs/specs/status/evidence/rc2-176/r2-n1/integration/c04-sweep.xml"],
+      "phase": "boundary",
+      "source_revision": "d176.5-it1",
+      "artifact_revision": "d176.5-it1",
+      "exit_code": 0,
+      "selected_count": 3476
+    }
+  ]
+}

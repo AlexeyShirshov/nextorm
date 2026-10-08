@@ -35,7 +35,11 @@ public sealed class JsonStreamingFixture : IDisposable
                 "insert into json_typed (id, flag, amount, when_col, tiny, data) values (1, 1, 12.34, '2023-01-01 10:00:00', 2, X'010203');" +
                 "insert into json_typed (id, flag, amount, when_col, tiny, data) values (2, 0, null, null, 0, null);" +
                 "create table json_big (id integer primary key, name text);" +
-                "create table unsupported_entity (id integer primary key, when_col text);";
+                "create table unsupported_entity (id integer primary key, when_col text);" +
+                "create table json_parent (id integer primary key, name text);" +
+                "insert into json_parent (id, name) values (1, 'p1'), (2, 'p2'), (3, 'p3');" +
+                "create table json_child (id integer primary key, parent_id integer, name text);" +
+                "insert into json_child (id, parent_id, name) values (10, 1, 'c1'), (11, 1, 'c2'), (12, 2, 'c3');";
             setup.ExecuteNonQuery();
         }
 
@@ -167,6 +171,73 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
     {
         public int Id { get; set; }
         public DateTimeOffset When { get; set; }
+    }
+
+    // D176.4 joined-shape entities: both sides expose an Id and a Name so duplicate leaf names across
+    // projection slots are exercised, and parent 3 has no child so the unmatched outer-join slot is
+    // emitted as JSON null.
+    [SqlTable("json_parent")]
+    public interface IJsonParentEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("name")]
+        string? Name { get; set; }
+    }
+
+    public class JsonParentEntity : IJsonParentEntity
+    {
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    [SqlTable("json_child")]
+    public interface IJsonChildEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+
+        [Column("parent_id")]
+        int ParentId { get; set; }
+
+        [Column("name")]
+        string? Name { get; set; }
+    }
+
+    public class JsonChildEntity : IJsonChildEntity
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+        public string? Name { get; set; }
+    }
+
+    // Named/member-init nested construction target types (not anonymous).
+    public sealed class JsonNamedOuter
+    {
+        public int Id { get; set; }
+        public JsonNamedInner? Child { get; set; }
+    }
+
+    public sealed class JsonNamedInner
+    {
+        public string? Name { get; set; }
+        public int? Value { get; set; }
+    }
+
+    // A parameterless, member-less construction used to exercise an empty nested JSON object.
+    public sealed class JsonEmpty
+    {
+    }
+
+    // A policy that maps two distinct nested member names onto one effective name while leaving the
+    // root members untouched, so the duplicate is inside the nested object scope, not the root.
+    private sealed class SelectiveDuplicateNamingPolicy : JsonNamingPolicy
+    {
+        public override string ConvertName(string name)
+            => name is "Name" or "IntValue" ? "collision" : name;
     }
 
     private sealed class RecordingSqlInterceptor : IQueryInterceptor
@@ -609,4 +680,686 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         text.Should().EndWith("\n");
         text.Should().Be(string.Concat(command.ToList().Select(row => JsonSerializer.Serialize(row) + "\n")));
     }
+
+    // D176.3 focused coverage: nested object recursion and per-object scoped name validation through the
+    // real SQLite terminal (the preparer captures the shape and the recursive writer consumes it).
+
+    [Fact]
+    public void NestedObject_ShouldMatchJsonSerializer()
+    {
+        // The ordinary materializer does not support a nested construction (that is #172), so the oracle
+        // is STJ over constructed objects with the same shape and values, not command.ToList().
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name, x.IntValue } });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Child = new { Name = "alpha", IntValue = (int?)10 } },
+            new { Id = 2, Child = new { Name = (string?)null, IntValue = (int?)null } },
+            new { Id = 3, Child = new { Name = "gamma", IntValue = (int?)20 } },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void NestedObject_SameNameInDifferentScopes_ShouldBeAccepted()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Id } });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new[]
+        {
+            new { Id = 1, Child = new { Id = 1 } },
+            new { Id = 2, Child = new { Id = 2 } },
+            new { Id = 3, Child = new { Id = 3 } },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void WholeEntity_ShouldStreamFlatObject()
+    {
+        // The whole-entity terminal is captured as a root entity object with any-column-not-null presence;
+        // it must stream exactly like the ordinary materialized entity (the D176.2 temporary guard had
+        // rejected every captured shape, so this restores the second terminal).
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id);
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        Utf8(stream).Should().Be(JsonSerializer.Serialize(command.ToList()));
+    }
+
+    [Fact]
+    public void NestedObject_DuplicateNameWithinScope_ShouldThrowBeforeOutput()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } });
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream, new JsonStreamOptions { PropertyNamingPolicy = new ConstantNamingPolicy() });
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    // D176.4 end-to-end boundary sweep: nested multi-level/named shapes, the actual Projection<T1,T2>
+    // terminal, slot forms, both terminal surfaces (sync/async), lifecycle and ordinary-materializer /
+    // plan-cache isolation. Supported results use the STJ oracle; distinct sentinel leaves catch a
+    // wrong-ordinal binding.
+
+    private string JsonOf<T>(QueryCommand<T> command, JsonStreamOptions? options = null)
+    {
+        using var stream = new MemoryStream();
+        if (options is null)
+            command.WriteJson(stream);
+        else
+            command.WriteJson(stream, options);
+
+        return Utf8(stream);
+    }
+
+    private string JsonOf<TEntity>(EntityBuilder<TEntity> builder)
+    {
+        using var stream = new MemoryStream();
+        builder.WriteJson(stream);
+        return Utf8(stream);
+    }
+
+    [Fact]
+    public void NestedObject_MultipleLevels_ShouldMatchSerializer()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Outer = new { x.Name, Inner = new { x.IntValue } } });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Outer = new { Name = "alpha", Inner = new { IntValue = (int?)10 } } },
+            new { Id = 2, Outer = new { Name = (string?)null, Inner = new { IntValue = (int?)null } } },
+            new { Id = 3, Outer = new { Name = "gamma", Inner = new { IntValue = (int?)20 } } },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void NestedMemberInit_ShouldMatchSerializer()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new JsonNamedOuter
+            {
+                Id = x.Id,
+                Child = new JsonNamedInner { Name = x.Name, Value = x.IntValue },
+            });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new[]
+        {
+            new JsonNamedOuter { Id = 1, Child = new JsonNamedInner { Name = "alpha", Value = 10 } },
+            new JsonNamedOuter { Id = 2, Child = new JsonNamedInner { Name = null, Value = null } },
+            new JsonNamedOuter { Id = 3, Child = new JsonNamedInner { Name = "gamma", Value = 20 } },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void NestedObject_AllNullChild_ShouldStayObject()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 2)
+            .Select(x => new { x.Id, Child = new { x.Name, x.IntValue } });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        Utf8(stream).Should().Be("[{\"Id\":2,\"Child\":{\"Name\":null,\"IntValue\":null}}]");
+    }
+
+    [Fact]
+    public void BareProjection_LeftJoin_ShouldMatchItem1Item2()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .LeftJoin(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId);
+
+        var expected = JsonSerializer.Serialize(command.ToList());
+        var actual = JsonOf(command);
+
+        actual.Should().Be(expected);
+        actual.Should().Contain("\"Item1\"").And.Contain("\"Item2\"");
+        actual.Should().Contain("\"Item2\":null", "the unmatched outer-join slot for parent 3 is JSON null");
+    }
+
+    [Fact]
+    public void BareProjection_InnerJoin_ShouldMatchItem1Item2()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .Join(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId);
+
+        var expected = JsonSerializer.Serialize(command.ToList());
+        JsonOf(command).Should().Be(expected);
+    }
+
+    [Fact]
+    public void BareProjection_DuplicateLeafNamesAcrossSlots_ShouldBeAccepted()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .LeftJoin(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId);
+
+        using var document = JsonDocument.Parse(JsonOf(command));
+        var first = document.RootElement[0];
+
+        // Id/Name exist in both slots; uniqueness is enforced per object scope, not globally.
+        first.GetProperty("Item1").GetProperty("Id").GetInt32().Should().Be(1);
+        first.GetProperty("Item2").GetProperty("Id").GetInt32().Should().Be(10);
+        first.GetProperty("Item1").GetProperty("Name").GetString().Should().Be("p1");
+        first.GetProperty("Item2").GetProperty("Name").GetString().Should().Be("c1");
+    }
+
+    [Fact]
+    public void EntityItemWithScalarMember_ShouldNotWrapScalarInObject()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .Join(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => new { p.Item1, ChildName = p.Item2.Name });
+        var actual = JsonOf(command);
+
+        actual.Should().Be(JsonSerializer.Serialize(command.ToList()));
+
+        // The scalar slot is a JSON string; only the entity slot is an object.
+        using var document = JsonDocument.Parse(actual);
+        var first = document.RootElement[0];
+        first.GetProperty("Item1").ValueKind.Should().Be(JsonValueKind.Object);
+        first.GetProperty("ChildName").ValueKind.Should().Be(JsonValueKind.String);
+    }
+
+    [Fact]
+    public void ScalarScalarSlots_ShouldBeFlatScalars()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .Join(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => new { ParentName = p.Item1.Name, ChildName = p.Item2.Name });
+        var actual = JsonOf(command);
+
+        actual.Should().Be(JsonSerializer.Serialize(command.ToList()));
+
+        using var document = JsonDocument.Parse(actual);
+        var first = document.RootElement[0];
+        first.GetProperty("ParentName").ValueKind.Should().Be(JsonValueKind.String);
+        first.GetProperty("ChildName").ValueKind.Should().Be(JsonValueKind.String);
+    }
+
+    [Fact]
+    public async Task BareProjection_Async_ShouldMatchSync()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .LeftJoin(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId);
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public async Task NestedQueryCommand_Async_ShouldMatchSync()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public void RepeatedWriteJson_OnOneContext_ShouldBeStable()
+    {
+        var first = JsonOf(_ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } }));
+        var second = JsonOf(_ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } }));
+
+        second.Should().Be(first);
+    }
+
+    [Fact]
+    public void JsonThenOrdinary_AndReverse_ShouldNotLeakShape()
+    {
+        var nestedJson = JsonOf(_ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } }));
+
+        // After a recursive-shape JSON write, the ordinary materializer is unchanged.
+        var ordinary = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name }).ToList();
+        ordinary.Select(x => x.Name).Should().Equal("alpha", null, "gamma");
+
+        // And the flat JSON shape is not contaminated by the earlier nested one.
+        var flatJson = JsonOf(_ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name }));
+        flatJson.Should().Be(JsonSerializer.Serialize(ordinary));
+        nestedJson.Should().Contain("\"Child\"");
+        flatJson.Should().NotContain("\"Child\"");
+    }
+
+    [Fact]
+    public void JsonWrite_ShouldNotDisablePlanCache()
+    {
+        // A context local to this test so AddInterceptor cannot leak into the shared fixture.
+        var interceptor = new RecordingSqlInterceptor();
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.AddInterceptor(interceptor);
+        context.PurgeQueryCache();
+
+        var flat = context.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        var before = context.GetPreparedQueryCommand(flat, createEnumerator: false, storeInCache: true, CancellationToken.None);
+
+        flat.WriteJson(new MemoryStream());
+
+        flat.Cache.Should().BeTrue("the JSON clone must not set the sticky QueryCommand.Cache=false flag");
+        var after = context.GetPreparedQueryCommand(flat, createEnumerator: false, storeInCache: true, CancellationToken.None);
+        ReferenceEquals(before, after).Should().BeTrue("the caller's plan is still served from the plan cache");
+    }
+
+    [Fact]
+    public void NestedPartialOutput_OnMidWriteFailure()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } });
+        using var stream = new ThrowingWriteStream();
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("destination failed");
+        stream.CanWrite.Should().BeTrue();
+        _ctx.From<JsonEntity>().Select(x => x.Id).ToList().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task NestedCancellation_DuringWrite_ShouldAbort()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } });
+        using var cts = new CancellationTokenSource();
+        using var stream = new CancellingWriteStream(cts);
+
+        var act = () => command.WriteJsonAsync(stream, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        stream.CanWrite.Should().BeTrue();
+    }
+
+    // D176.7 conditional-construction coverage: a translatable predicate choosing a New/MemberInit
+    // construction arm against a null arm lowers to a scoped object plus a hidden nullable sentinel
+    // presence column (CASE ... THEN non-null ELSE null). Presence comes from that sentinel, never from
+    // the visible payload; the hidden column is never a JSON member; both terminal surfaces agree.
+
+    [Fact]
+    public void ConditionalConstruction_NullArmTrue_ShouldMatchSerializer()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name == null ? null : new { x.Name } });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Child = new { Name = "alpha" } },
+            new { Id = 2, Child = (object?)null },
+            new { Id = 3, Child = new { Name = "gamma" } },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ConditionalConstruction_NullArmFalse_ShouldMatchSerializer()
+    {
+        // The other null-arm orientation: the null arm is the false arm and the construction is the true arm.
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name != null ? new { x.Name } : null });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Child = new { Name = "alpha" } },
+            new { Id = 2, Child = (object?)null },
+            new { Id = 3, Child = new { Name = "gamma" } },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ConditionalConstruction_AllNullProperties_ShouldStayObject()
+    {
+        // The construction arm is chosen by Id, not by the visible Name; row 2 has an all-null object that
+        // must stay an object (explicit presence), while rows with the null arm are JSON null.
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Id == 2 ? new { x.Name } : null });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Child = (object?)null },
+            new { Id = 2, Child = new { Name = (string?)null } },
+            new { Id = 3, Child = (object?)null },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ConditionalConstruction_MemberInit_ShouldMatchSerializer()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name == null ? null : new JsonNamedInner { Name = x.Name, Value = x.IntValue } });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Child = new JsonNamedInner { Name = "alpha", Value = 10 } },
+            new { Id = 2, Child = (JsonNamedInner?)null },
+            new { Id = 3, Child = new JsonNamedInner { Name = "gamma", Value = 20 } },
+        });
+        Utf8(stream).Should().Be(expected);
+    }
+
+    [Fact]
+    public void ConditionalConstruction_Root_ShouldMatchSerializer()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1)
+            .Select(x => x.Name == null ? null : new { x.Name });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        Utf8(stream).Should().Be(JsonSerializer.Serialize(new object[] { new { Name = "alpha" } }));
+    }
+
+    [Fact]
+    public async Task ConditionalConstruction_Async_ShouldMatchSync()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name == null ? null : new { x.Name } });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public void ConditionalConstruction_HiddenColumn_NotMemberAndOrdinaryUnchanged()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name == null ? null : new { x.Name } });
+
+        // The ordinary materializer/query path is untouched by the JSON-only lowering.
+        var ordinary = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name }).ToList();
+        ordinary.Select(x => x.Name).Should().Equal("alpha", null, "gamma");
+
+        using var stream = new MemoryStream();
+        command.WriteJson(stream);
+        var text = Utf8(stream);
+
+        // Exact oracle equality proves no hidden presence column leaked into the JSON shape.
+        var expected = JsonSerializer.Serialize(new object[]
+        {
+            new { Id = 1, Child = new { Name = "alpha" } },
+            new { Id = 2, Child = (object?)null },
+            new { Id = 3, Child = new { Name = "gamma" } },
+        });
+        text.Should().Be(expected);
+        text.Should().NotContain("json", "the sentinel value must never appear in JSON output");
+        command.Cache.Should().BeTrue("the JSON clone must not set the sticky QueryCommand.Cache=false flag");
+    }
+
+    [Fact]
+    public void ConditionalConstruction_UntranslatablePredicate_ShouldThrowBeforeOutput()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name!.Normalize() == "a" ? new { x.Name } : null });
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    [Fact]
+    public void ConditionalConstruction_BothArmsConstruct_ShouldThrowBeforeOutput()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name == null ? new { Name = (string?)x.Name } : new { Name = (string?)x.Name } });
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    [Fact]
+    public void ConditionalConstruction_ConstructionAgainstNonNullArm_ShouldThrowBeforeOutput()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = x.Name == null ? (object)new { x.Name } : (object)x.Id });
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    // CHECK r2-n2 loopback: T3 (per-scope duplicate name actually inside one nested object), T4 (missing
+    // async terminal surfaces), W3 (nested empty construction) and T5 lifecycle/disposal edges.
+
+    [Fact]
+    public void NestedObject_DuplicateNameWithinNestedScopeOnly_ShouldThrowBeforeOutput()
+    {
+        // The root members (Id, Child) keep distinct names; only the two members inside Child collapse to
+        // one effective name, proving the per-object check rejects a duplicate inside a nested scope.
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name, x.IntValue } });
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream, new JsonStreamOptions { PropertyNamingPolicy = new SelectiveDuplicateNamingPolicy() });
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    [Fact]
+    public void NestedEmptyConstruction_ShouldThrowBeforeOutput()
+    {
+        // W3: a nested construction with no scalar members lowers zero columns; it must fail closed with an
+        // explicit message before any output is written, instead of producing invalid SQL or a misleading
+        // "requires an explicit Select projection" guard.
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1)
+            .Select(x => new { Empty = new JsonEmpty() });
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    [Fact]
+    public async Task EntityBuilder_Async_ShouldMatchSync()
+    {
+        var builder = _ctx.From<JsonEntity>().OrderBy(x => x.Id);
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        builder.WriteJson(sync);
+        await builder.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public async Task EntityItemWithScalarSlot_Async_ShouldMatchSync()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .Join(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => new { p.Item1, ChildName = p.Item2.Name });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public async Task ScalarScalarSlots_Async_ShouldMatchSync()
+    {
+        var command = _ctx.From<JsonParentEntity>().OrderBy(p => p.Id)
+            .Join(_ctx.From<JsonChildEntity>(), (p, c) => p.Id == c.ParentId)
+            .Select(p => new { ParentName = p.Item1.Name, ChildName = p.Item2.Name });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public async Task ConditionalConstruction_RootAsync_ShouldMatchSync()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1)
+            .Select(x => x.Name == null ? null : new { x.Name });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync);
+        await command.WriteJsonAsync(async, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+    }
+
+    [Fact]
+    public void DisposedContext_ShouldThrowBeforeOutput()
+    {
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.Dispose();
+        var command = context.From<JsonEntity>().Select(x => x.Id);
+        using var stream = new MemoryStream();
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<ObjectDisposedException>();
+    }
+
+    // W4: the capture trigger classifies a member via the unwrapped conversion type while the shape build
+    // classifies from the declared member type. An interface-typed (upcast) member must not silently
+    // flatten or produce a mismatched shape. Reproducer outcome: ordinary materialization already rejects
+    // the same projection as an unsupported member type, so JSON is not a divergent path here — it must
+    // fail closed before any output, uniformly with the ordinary materializer.
+    [Fact]
+    public void InterfaceTypedUpcastMember_ShouldFailClosedBeforeOutput()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1)
+            .Select(x => new { x.Id, Upcast = (IJsonEntity)x });
+
+        // Ordinary materialization rejects the interface-typed member type; the JSON path must not accept
+        // it more permissively (the W4 divergence would be a JSON-only success or a wrong shape).
+        var listAct = () => command.ToList();
+        listAct.Should().Throw<NotSupportedException>();
+
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    // T1 / §10 row 5: an object produced by a factory/method call (not new/MemberInit/Conditional) is not
+    // a JSON construction. It must be rejected before writing instead of flattening to a scalar.
+    [Fact]
+    public void OpaqueFactoryProducedObject_ShouldFailBeforeOutput()
+    {
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1)
+            .Select(x => new { x.Id, Child = MakeInner(x.Name) });
+
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<NotSupportedException>();
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    // T2 / §10 row 20: the managed JSON path must never route through a database-side JSON generator.
+    // The executed guard inspects the actual SQL emitted by WriteJson.
+    [Fact]
+    public void DbSideJsonRoute_ShouldNotUseForJson()
+    {
+        var interceptor = new RecordingSqlInterceptor();
+        using var context = new SqliteDataContext(_fixture.Connection, new DataContextBuilder());
+        context.AddInterceptor(interceptor);
+        context.PurgeQueryCache();
+
+        var command = context.From<JsonEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Child = new { x.Name } });
+        using var stream = new MemoryStream();
+
+        command.WriteJson(stream);
+
+        interceptor.Sql.Should().NotBeEmpty("WriteJson must execute a real query");
+        var sql = interceptor.Sql[^1].ToLowerInvariant();
+        sql.Should().NotContain("json_agg").And.NotContain("json_object").And.NotContain("for json").And.NotContain("jsonb_build");
+    }
+
+    private static JsonNamedInner? MakeInner(string? name)
+        => name is null ? null : new JsonNamedInner { Name = name };
 }

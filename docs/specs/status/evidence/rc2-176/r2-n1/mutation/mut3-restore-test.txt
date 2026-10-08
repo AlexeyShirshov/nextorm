@@ -1,0 +1,9 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) passed (1s 394ms)
+
+Test run summary: Passed!
+  total: 63
+  failed: 0
+  succeeded: 63
+  skipped: 0
+  duration: 1s 665ms

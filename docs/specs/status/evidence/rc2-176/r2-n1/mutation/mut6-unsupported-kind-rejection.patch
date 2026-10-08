@@ -1,0 +1,12 @@
+--- a/src/nextorm.core/Query/Json/JsonShapePlan.cs
++++ b/src/nextorm.core/Query/Json/JsonShapePlan.cs
+@@ -285,7 +285,7 @@
+         if (valueType == typeof(byte[]))
+             return (valueType, JsonWriteKind.Base64);
+ 
+-        throw new NotSupportedException(
+-            $"Column '{propertyName}' has type {type} which is not supported by JSON streaming in phase 1; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>).");
++        // Mutation: permissively classify an unsupported kind instead of failing closed.
++        return (valueType, JsonWriteKind.String);
+     }
+ }

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.JsonStreamPhase2WriterBenchmark-20261009-012827</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+Categories=json-stream-phase2  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                    </th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>NativeArrayJagged_MaterializeStj</td><td>1.407 &mu;s</td><td>0.0668</td><td>-</td><td>560 B</td>
+</tr><tr><td>NativeArrayJagged_Stream</td><td>1.575 &mu;s</td><td>0.1850</td><td>-</td><td>1552 B</td>
+</tr><tr><td>NativeArrayInt_MaterializeStj</td><td>2.059 &mu;s</td><td>0.1602</td><td>-</td><td>1360 B</td>
+</tr><tr><td>NativeArrayInt_Stream</td><td>6.680 &mu;s</td><td>1.3351</td><td>0.0229</td><td>11208 B</td>
+</tr></tbody></table>
+</body>
+</html>

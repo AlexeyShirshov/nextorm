@@ -1,0 +1,8 @@
+query build: none
+prepare: prepared ok
+selectList.Count = 2
+  [0] ordinal=0 name=Id type=Int32 nullable=False defaultOnNull=False converter=null projectionItem=null
+  [1] ordinal=1 name=Child type=ProbeInner nullable=True defaultOnNull=False converter=null projectionItem=null
+WriteJson json: <null>
+WriteJson error: System.NotSupportedException: Column 'Child' has type NextORM.Sqlite.Tests.D176ProbeTests+ProbeInner which is not supported by JSON streaming in phase 1; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>).
+builder-surface WriteJson: [{"Id":1,"Name":"p1","LeafA":11},{"Id":2,"Name":null,"LeafA":null}]

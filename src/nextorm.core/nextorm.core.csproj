@@ -80,5 +80,10 @@
          registration gate, so a concurrent auto/configured registration or junction publication
          cannot clobber a bridged entry (and vice versa). -->
     <InternalsVisibleTo Include="nextorm.entityframeworkcore" />
+    <!-- The C08 focused JSON-stream-phase2 benchmark drives the recursive writer's native-array path
+         (JsonShapeNode/JsonRowWriterFactory) over a fake IDataRecord, so it can measure the array
+         recursion without a provider-native array source/container. Same benchmark-only mechanism the
+         test projects use; no product behaviour depends on it. -->
+    <InternalsVisibleTo Include="nextorm.benchmark" />
   </ItemGroup>
 </Project>

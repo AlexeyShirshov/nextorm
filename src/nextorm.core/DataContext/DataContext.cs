@@ -381,13 +381,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         if (tempSource is not null)
             cmd.From = tempSource;
 
+        // Capture the recursive JSON shape and lower its scalar descendants while preparing this clone
+        // only; the caller's command and the shared select list/result shape are never mutated.
+        cmd.JsonShapeMode = true;
+        cmd.JsonShape = null;
+
         // Route through the context's preparation wrapper (not the planner directly) so a lazy
         // temporary-table source is still detected; the executor then rejects that shape, since a
         // batch read cannot be streamed through a single reader.
         var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
             cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
 
-        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options);
+        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
         return (prepared, JsonRowWriterFactory.Build(plan));
     }
 

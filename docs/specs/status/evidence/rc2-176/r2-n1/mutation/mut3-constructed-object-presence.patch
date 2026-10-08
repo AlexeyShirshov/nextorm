@@ -1,0 +1,15 @@
+--- a/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
++++ b/src/nextorm.core/Query/QueryCommand.QueryPreparer.cs
+@@ -1046,7 +1046,11 @@
+                 members[i] = BuildJsonShapeNode(cmd, visitor, srcMetadata, arguments[i], parameter.ParameterType, memberName, i, null, lowered, cancellationToken);
+             }
+ 
+-            return JsonShapeNode.Object(name, ctor.Type, members, JsonShapePresence.Always, slot, member);
++            var scalarMembers = Array.FindAll(members, m => m.Binding is not null);
++            var memberOrdinals = Array.ConvertAll(scalarMembers, m => m.Binding!.Value.Ordinal);
++            return JsonShapeNode.Object(name, ctor.Type, members,
++                memberOrdinals.Length > 0 ? JsonShapePresence.AnyColumnNotNull(memberOrdinals) : JsonShapePresence.Always,
++                slot, member);
+         }
+ 
+         private static JsonShapeNode BuildJsonObjectNode(

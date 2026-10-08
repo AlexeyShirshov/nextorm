@@ -1,0 +1,4 @@
+COND_ROOT_FAIL: InvalidOperationException: JSON streaming requires an explicit Select projection; the query has no selected columns.
+LIST_OK: [{"Id":1,"Items":{}},{"Id":2,"Items":{}}]
+OPAQUE_FAIL: NotSupportedException: Column 'Opaque' has type NextORM.Sqlite.Tests.D176Probe3Tests+Opaque which is not supported by JSON streaming in phase 1; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>).
+COND_MEMBER_FAIL: NotSupportedException: Column 'Child' has type <>f__AnonymousType17`1[System.String] which is not supported by JSON streaming in phase 1; supported types are byte, short, int, long, float, double, decimal, bool, string, Guid, DateTime and byte[] (and their Nullable<>).

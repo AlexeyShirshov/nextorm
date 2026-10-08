@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
@@ -40,6 +41,8 @@ internal static class JsonRowWriterFactory
     private static readonly MethodInfo GetStringMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetString))!;
     private static readonly MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
     private static readonly MethodInfo GetDateTimeMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDateTime))!;
+    private static readonly MethodInfo GetFieldValueByteArrayMI = typeof(DbDataReader)
+        .GetMethod(nameof(DbDataReader.GetFieldValue))!.MakeGenericMethod(typeof(byte[]));
 
     private static readonly MethodInfo WriteStartObjectMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteStartObject), Type.EmptyTypes)!;
     private static readonly MethodInfo WriteEndObjectMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteEndObject), Type.EmptyTypes)!;
@@ -50,7 +53,19 @@ internal static class JsonRowWriterFactory
     private static readonly MethodInfo WriteStringValueGuidMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteStringValue), [typeof(Guid)])!;
     private static readonly MethodInfo WriteStringValueDateTimeMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteStringValue), [typeof(DateTime)])!;
     private static readonly MethodInfo WriteBase64MI = typeof(JsonRowWriterFactory).GetMethod(nameof(WriteBase64), BindingFlags.NonPublic | BindingFlags.Static)!;
+    private static readonly MethodInfo WriteStartArrayMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteStartArray), Type.EmptyTypes)!;
+    private static readonly MethodInfo WriteEndArrayMI = typeof(Utf8JsonWriter).GetMethod(nameof(Utf8JsonWriter.WriteEndArray), Type.EmptyTypes)!;
+    private static readonly PropertyInfo ArrayLengthPI = typeof(Array).GetProperty(nameof(Array.Length))!;
+    private static readonly MethodInfo ArrayGetValueMI = typeof(Array).GetMethod(nameof(Array.GetValue), [typeof(int)])!;
+    private static readonly MethodInfo ToArrayMI = typeof(JsonRowWriterFactory).GetMethod(nameof(ToArray), BindingFlags.NonPublic | BindingFlags.Static)!;
     private static readonly ConstructorInfo NotSupportedExceptionCtor = typeof(NotSupportedException).GetConstructor([typeof(string)])!;
+
+    // Matches System.Text.Json's default maximum depth; a deeper recursive shape is rejected while the
+    // writer is compiled (during preparation), never with a partial unsupported-shape fallback.
+    private const int MaxShapeDepth = 64;
+
+    // Writes one recursively-typed array value (the whole-column runtime value or a jagged element).
+    private delegate void JsonShapeArrayWriter(object? value, Utf8JsonWriter writer);
 
     // Every numeric provider field type a supported provider can report. sbyte/ushort/uint/ulong have
     // no typed IDataRecord getter (MySQL/MariaDB) and are read via GetValue in BuildNumericRead.
@@ -73,6 +88,12 @@ internal static class JsonRowWriterFactory
     /// <returns>A delegate that writes one row value per call.</returns>
     public static JsonRowWriter Build(JsonShapePlan plan)
     {
+        // A captured recursive shape (nested construction, array member or expanded entity item) carries
+        // its own descriptor, scoped name validation and per-object presence rule; compile the recursive
+        // writer from it. The flat phase-1 column plan is not built for such a shape (see JsonShapePlan).
+        if (plan.Shape is not null)
+            return BuildRecursive(plan.Shape, plan.Options);
+
         var record = Expression.Parameter(typeof(IDataRecord), "record");
         var writer = Expression.Parameter(typeof(Utf8JsonWriter), "writer");
         var body = new List<Expression>(plan.Columns.Length + 2);
@@ -127,6 +148,305 @@ internal static class JsonRowWriterFactory
         return Expression.Lambda<JsonRowWriter>(Expression.Block(body), record, writer).Compile();
     }
 
+    /// <summary>
+    /// Compiles the recursive row writer for a captured <see cref="JsonShapeNode"/> descriptor. Scalar
+    /// leaves reuse the phase-1 typed accessors through their explicit prepared ordinals; object nodes
+    /// write <c>{...}</c> with per-scope validated names; array nodes recurse over the declared
+    /// rank-one array type (<c>byte[]</c> Base64 is tested before general array handling). Presence is
+    /// decided from the raw <c>IsDBNull</c> inputs before any <c>DefaultOnNull</c> substitution.
+    /// </summary>
+    private static JsonRowWriter BuildRecursive(JsonShapeNode shape, JsonStreamOptions options)
+    {
+        var record = Expression.Parameter(typeof(IDataRecord), "record");
+        var writer = Expression.Parameter(typeof(Utf8JsonWriter), "writer");
+        var body = BuildRootValue(shape, options, record, writer, depth: 0);
+        return Expression.Lambda<JsonRowWriter>(body, record, writer).Compile();
+    }
+
+    private static Expression BuildRootValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, int depth)
+    {
+        EnsureDepth(depth, node.Name);
+
+        return node.Kind switch
+        {
+            JsonShapeNodeKind.Scalar => BuildScalarValue(node, record, writer),
+            JsonShapeNodeKind.Array => BuildRootArrayValue(node, record, writer, depth),
+            JsonShapeNodeKind.Object => BuildRootObjectValue(node, options, record, writer, depth),
+            _ => throw new NotSupportedException($"Unsupported JSON shape node kind {node.Kind}."),
+        };
+    }
+
+    private static Expression BuildScalarValue(JsonShapeNode node, Expression record, Expression writer)
+    {
+        if (node.Binding is not { } binding)
+            throw new NotSupportedException($"The JSON scalar leaf '{node.Name}' has no prepared ordinal binding.");
+
+        var (valueType, kind) = JsonShapePlan.Classify(node.DeclaredType, node.Name);
+        var column = new JsonShapeColumn(binding.Ordinal, node.Name ?? string.Empty, valueType, kind, binding.Nullable, binding.DefaultOnNull);
+        var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
+        var present = WriteValue(writer, column, ReadValue(record, column));
+        var writeNull = binding.DefaultOnNull
+            ? WriteValue(writer, column, Expression.Default(valueType))
+            : Expression.Call(writer, WriteNullValueMI);
+        return Expression.IfThenElse(isNull, writeNull, present);
+    }
+
+    private static Expression BuildRootArrayValue(JsonShapeNode node, Expression record, Expression writer, int depth)
+    {
+        if (node.Binding is not { } binding)
+            throw new NotSupportedException($"The JSON array '{node.Name}' has no prepared ordinal binding.");
+
+        var arrayWriter = BuildArrayWriter(node.DeclaredType, node.Name, depth + 1);
+        var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
+        var present = Expression.Invoke(
+            Expression.Constant(arrayWriter),
+            Expression.Call(record, GetValueMI, Expression.Constant(binding.Ordinal)),
+            writer);
+        return Expression.IfThenElse(isNull, Expression.Call(writer, WriteNullValueMI), present);
+    }
+
+    private static Expression BuildRootObjectValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, int depth)
+    {
+        var body = BuildObjectBody(node, options, record, writer, depth);
+
+        if (node.Presence.Kind == JsonShapePresenceKind.Always)
+            return body;
+
+        var anyNotNull = BuildAnyColumnNotNull(node.Presence, record);
+        return Expression.IfThenElse(anyNotNull, body, Expression.Call(writer, WriteNullValueMI));
+    }
+
+    private static Expression BuildObjectBody(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, int depth)
+    {
+        EnsureDepth(depth, node.Name);
+
+        var members = new List<Expression>(node.Members.Length + 2)
+        {
+            Expression.Call(writer, WriteStartObjectMI),
+        };
+        members.AddRange(BuildMemberWriters(node, options, record, writer, depth + 1));
+        members.Add(Expression.Call(writer, WriteEndObjectMI));
+        return Expression.Block(members);
+    }
+
+    private static List<Expression> BuildMemberWriters(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, int depth)
+    {
+        // Scoped-name validation: unique effective names within this object only; the same name in a
+        // sibling/different scope is accepted (replaces the flat path's single global name set).
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var expressions = new List<Expression>(node.Members.Length);
+
+        foreach (var member in node.Members)
+        {
+            var name = ResolveMemberName(member.Name, options);
+            if (!seen.Add(name))
+                throw new NotSupportedException(
+                    $"Duplicate JSON property name '{name}' within one object scope; JSON object members must be unique per object.");
+
+            expressions.Add(BuildMember(member, name, options, record, writer, depth));
+        }
+
+        return expressions;
+    }
+
+    private static Expression BuildMember(JsonShapeNode node, string name, JsonStreamOptions options, Expression record, Expression writer, int depth)
+        => node.Kind switch
+        {
+            JsonShapeNodeKind.Scalar => BuildScalarMember(node, name, options, record, writer),
+            JsonShapeNodeKind.Array => BuildArrayMember(node, name, options, record, writer, depth),
+            JsonShapeNodeKind.Object => BuildObjectMember(node, name, options, record, writer, depth),
+            _ => throw new NotSupportedException($"Unsupported JSON shape node kind {node.Kind}."),
+        };
+
+    private static Expression BuildScalarMember(JsonShapeNode node, string name, JsonStreamOptions options, Expression record, Expression writer)
+    {
+        if (node.Binding is not { } binding)
+            throw new NotSupportedException($"The JSON scalar member '{node.Name}' has no prepared ordinal binding.");
+
+        var (valueType, kind) = JsonShapePlan.Classify(node.DeclaredType, node.Name);
+        var column = new JsonShapeColumn(binding.Ordinal, name, valueType, kind, binding.Nullable, binding.DefaultOnNull);
+        var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
+        var present = Expression.Block(
+            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+            WriteValue(writer, column, ReadValue(record, column)));
+
+        Expression writeNull;
+        if (binding.DefaultOnNull)
+        {
+            writeNull = Expression.Block(
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                WriteValue(writer, column, Expression.Default(valueType)));
+        }
+        else
+        {
+            writeNull = options.IgnoreNull
+                ? Expression.Empty()
+                : Expression.Block(
+                    Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                    Expression.Call(writer, WriteNullValueMI));
+        }
+
+        return Expression.IfThenElse(isNull, writeNull, present);
+    }
+
+    private static Expression BuildArrayMember(JsonShapeNode node, string name, JsonStreamOptions options, Expression record, Expression writer, int depth)
+    {
+        if (node.Binding is not { } binding)
+            throw new NotSupportedException($"The JSON array member '{node.Name}' has no prepared ordinal binding.");
+
+        var arrayWriter = BuildArrayWriter(node.DeclaredType, node.Name, depth + 1);
+        var isNull = Expression.Call(record, IsDBNullMI, Expression.Constant(binding.Ordinal));
+        var present = Expression.Block(
+            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+            Expression.Invoke(
+                Expression.Constant(arrayWriter),
+                Expression.Call(record, GetValueMI, Expression.Constant(binding.Ordinal)),
+                writer));
+        var writeNull = options.IgnoreNull
+            ? (Expression)Expression.Empty()
+            : Expression.Block(
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                Expression.Call(writer, WriteNullValueMI));
+        return Expression.IfThenElse(isNull, writeNull, present);
+    }
+
+    private static Expression BuildObjectMember(JsonShapeNode node, string name, JsonStreamOptions options, Expression record, Expression writer, int depth)
+    {
+        var body = BuildObjectBody(node, options, record, writer, depth);
+
+        if (node.Presence.Kind == JsonShapePresenceKind.Always)
+        {
+            return Expression.Block(
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                body);
+        }
+
+        var anyNotNull = BuildAnyColumnNotNull(node.Presence, record);
+        var present = Expression.Block(
+            Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+            body);
+        var writeNull = options.IgnoreNull
+            ? (Expression)Expression.Empty()
+            : Expression.Block(
+                Expression.Call(writer, WritePropertyNameMI, Expression.Constant(name)),
+                Expression.Call(writer, WriteNullValueMI));
+        return Expression.IfThenElse(anyNotNull, present, writeNull);
+    }
+
+    private static Expression BuildAnyColumnNotNull(JsonShapePresence presence, Expression record)
+    {
+        if (presence.Kind != JsonShapePresenceKind.AnyColumnNotNull)
+            throw new NotSupportedException($"Unexpected JSON presence kind {presence.Kind} for an any-column predicate.");
+
+        if (presence.Ordinals.Length == 0)
+            throw new NotSupportedException("A JSON entity slot has no mapped columns and cannot decide presence.");
+
+        Expression? anyNotNull = null;
+        foreach (var ordinal in presence.Ordinals)
+        {
+            var notNull = Expression.Not(Expression.Call(record, IsDBNullMI, Expression.Constant(ordinal)));
+            anyNotNull = anyNotNull is null ? notNull : Expression.OrElse(anyNotNull, notNull);
+        }
+
+        return anyNotNull!;
+    }
+
+    private static JsonShapeArrayWriter BuildArrayWriter(Type arrayType, string? name, int depth)
+    {
+        EnsureDepth(depth, name);
+        ValidateArrayType(arrayType, name);
+
+        var elementType = arrayType.GetElementType()!;
+        var elementValueType = Nullable.GetUnderlyingType(elementType) ?? elementType;
+
+        var value = Expression.Parameter(typeof(object), "value");
+        var writer = Expression.Parameter(typeof(Utf8JsonWriter), "writer");
+        var array = Expression.Variable(typeof(Array), "array");
+        var index = Expression.Variable(typeof(int), "index");
+        var item = Expression.Variable(typeof(object), "item");
+        var breakLabel = Expression.Label("break");
+
+        var body = Expression.Block(
+            new[] { array, index, item },
+            Expression.Assign(array, Expression.Call(ToArrayMI, value)),
+            Expression.Call(writer, WriteStartArrayMI),
+            Expression.Assign(index, Expression.Constant(0)),
+            Expression.Loop(
+                Expression.IfThenElse(
+                    Expression.LessThan(index, Expression.Property(array, ArrayLengthPI)),
+                    Expression.Block(
+                        Expression.Assign(item, Expression.Call(array, ArrayGetValueMI, index)),
+                        BuildElementWrite(elementType, elementValueType, name, item, writer, depth),
+                        Expression.PostIncrementAssign(index)),
+                    Expression.Break(breakLabel)),
+                breakLabel),
+            Expression.Call(writer, WriteEndArrayMI));
+
+        return Expression.Lambda<JsonShapeArrayWriter>(body, value, writer).Compile();
+    }
+
+    private static Expression BuildElementWrite(Type elementType, Type elementValueType, string? name, Expression item, Expression writer, int depth)
+    {
+        Expression writeItem;
+
+        // byte[] Base64 takes precedence over general array handling, including as a jagged element.
+        if (elementValueType != typeof(byte[]) && elementValueType.IsArray)
+        {
+            var nested = BuildArrayWriter(elementValueType, name, depth + 1);
+            writeItem = Expression.Invoke(Expression.Constant(nested), item, writer);
+        }
+        else
+        {
+            var (valueType, kind) = JsonShapePlan.Classify(elementType, name);
+            var column = new JsonShapeColumn(0, name ?? string.Empty, valueType, kind, nullable: true, defaultOnNull: false);
+            writeItem = WriteValue(writer, column, Expression.Convert(item, valueType));
+        }
+
+        // A provider-native array element may surface a SQL NULL as CLR null or as boxed DBNull.Value
+        // depending on the driver; both mean "no value" and must emit null rather than fail the
+        // element conversion.
+        var isNull = Expression.OrElse(
+            Expression.ReferenceEqual(item, Expression.Constant(null, typeof(object))),
+            Expression.ReferenceEqual(item, Expression.Constant(DBNull.Value, typeof(object))));
+        return Expression.IfThenElse(
+            isNull,
+            Expression.Call(writer, WriteNullValueMI),
+            writeItem);
+    }
+
+    private static string ResolveMemberName(string? rawName, JsonStreamOptions options)
+    {
+        if (string.IsNullOrEmpty(rawName))
+            throw new NotSupportedException("A nested JSON object member has no name; only the root object is unnamed.");
+
+        if (options.PropertyNamingPolicy is null)
+            return rawName;
+
+        var name = options.PropertyNamingPolicy.ConvertName(rawName);
+        if (name is null)
+            throw new NotSupportedException(
+                $"The property naming policy returned null for member '{rawName}'; JSON object member names cannot be null.");
+        return name;
+    }
+
+    private static void ValidateArrayType(Type arrayType, string? name)
+    {
+        if (!arrayType.IsArray || arrayType.GetArrayRank() != 1)
+            throw new NotSupportedException(
+                $"Array '{name}' has declared type {arrayType} which is not a supported rank-one JSON array; multidimensional and non-vector arrays are not supported by JSON streaming.");
+    }
+
+    private static void EnsureDepth(int depth, string? name)
+    {
+        if (depth > MaxShapeDepth)
+            throw new NotSupportedException(
+                $"The JSON projection shape around '{name}' exceeds the maximum supported nesting depth of {MaxShapeDepth}.");
+    }
+
+    private static Array ToArray(object? value) => value as Array
+        ?? throw new NotSupportedException(
+            $"A JSON array column returned a provider value of type {value?.GetType().ToString() ?? "null"} which is not a rank-one array; only provider-native arrays are supported.");
+
     private static Expression ReadValue(Expression record, in JsonShapeColumn column)
         => column.Kind switch
         {
@@ -135,11 +455,30 @@ internal static class JsonRowWriterFactory
             JsonWriteKind.String => Expression.Call(record, GetStringMI, Expression.Constant(column.Ordinal)),
             JsonWriteKind.Guid => Expression.Call(record, GetGuidMI, Expression.Constant(column.Ordinal)),
             JsonWriteKind.DateTime => Expression.Call(record, GetDateTimeMI, Expression.Constant(column.Ordinal)),
-            JsonWriteKind.Base64 => Expression.Convert(
-                Expression.Call(record, GetValueMI, Expression.Constant(column.Ordinal)),
-                typeof(byte[])),
+            JsonWriteKind.Base64 => BuildByteArrayRead(record, column),
             _ => throw new NotSupportedException($"Unsupported JSON write kind {column.Kind}."),
         };
+
+    private static Expression BuildByteArrayRead(Expression record, in JsonShapeColumn column)
+    {
+        // Prefer the driver's typed GetFieldValue<byte[]> (the ordinary materializer's accessor): a
+        // provider may expose a byte[] column as a driver value the boxed GetValue cannot cast directly
+        // (for example ClickHouse renders FixedString, and a bare IDataRecord used by the direct-writer
+        // tests has no typed accessor), so fall back to the boxed GetValue cast only when the record is
+        // not a DbDataReader.
+        var byteReader = Expression.Variable(typeof(DbDataReader), "byteReader");
+        var viaValue = Expression.Convert(
+            Expression.Call(record, GetValueMI, Expression.Constant(column.Ordinal)),
+            typeof(byte[]));
+        var viaField = Expression.Call(byteReader, GetFieldValueByteArrayMI, Expression.Constant(column.Ordinal));
+        return Expression.Block(
+            [byteReader],
+            Expression.Assign(byteReader, Expression.TypeAs(record, typeof(DbDataReader))),
+            Expression.Condition(
+                Expression.ReferenceEqual(byteReader, Expression.Constant(null, typeof(DbDataReader))),
+                viaValue,
+                viaField));
+    }
 
     private static Expression WriteValue(Expression writer, in JsonShapeColumn column, Expression value)
     {

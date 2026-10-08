@@ -1,0 +1,53 @@
+{
+  "unit": "D176.7-loopback-n2",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj",
+      "tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj",
+      "tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj",
+      "tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj",
+      "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj",
+      "tests/nextorm.integration.tests/nextorm.integration.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests",
+      "FullyQualifiedName~JsonStreamingSqlLoweringTests",
+      "FullyQualifiedName~WriteJson"
+    ],
+    "files": [
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "src/nextorm.core/Query/QueryCommand.cs",
+      "src/nextorm.core/Query/Json/JsonShapePlan.cs",
+      "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+      "src/nextorm.core/Query/Json/JsonShapeNode.cs",
+      "src/nextorm.core/DataContext/DataContext.cs",
+      "tests/nextorm.core.tests/JsonShapeWriterTests.cs",
+      "tests/nextorm.sqlite.tests/JsonStreamingTests.cs",
+      "tests/nextorm.postgres.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.sqlserver.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.mysql.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.clickhouse.tests/JsonStreamingSqlLoweringTests.cs",
+      "tests/nextorm.integration.tests/CommonTestSuite.JsonStreamNested.cs",
+      "tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs",
+      "tests/nextorm.integration.tests/MariaDbJsonStreamTests.cs",
+      "tests/nextorm.integration.tests/PostgresSpecificTests.cs"
+    ],
+    "rationale": "CHECK r2-n2 loopback: fix the confirmed T3/T4/T6 test-obligation gaps and reproduce-or-guard the W2/W3/W5/W6/W7/W8 warnings in the JSON recursive writer and its preparer. The affected product source is the JSON-only preparer (QueryCommand.QueryPreparer.cs, QueryCommand.cs) and the JSON writer/plan (JsonShapePlan.cs, JsonRowWriterFactory.cs); tests are the direct recursive-writer tests (core JsonShapeWriterTests), the end-to-end SQLite JsonStreamingTests, the dialect SQL-lowering tests and the shared/MariaDB/ClickHouse/PostgreSQL integration bodies.",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweeps after the last edit: the one comprehensive unfiltered core sweep (tests/nextorm.core.tests), the namespace-filtered complete SQLite project sweep (FullyQualifiedName~NextORM.Sqlite.Tests), the touched dialect projects, and the container integration rerun for the new ClickHouse/MariaDB/PostgreSQL cases."
+  },
+  "amendments": [
+    {
+      "reason": "The pre-declared boundary sweeps the complete SQLite project through its namespace filter (FullyQualifiedName~NextORM.Sqlite.Tests), which only the two JSON classes are asserted against but the whole project runs for regression safety.",
+      "added_selectors": ["FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "validated_before_run": true
+    },
+    {
+      "reason": "The integration rerun for the new ClickHouse/MariaDB/PostgreSQL cases is a filtered boundary subset (FullyQualifiedName~WriteJson) over the container-backed project.",
+      "added_selectors": ["FullyQualifiedName~WriteJson"],
+      "validated_before_run": true
+    }
+  ]
+}

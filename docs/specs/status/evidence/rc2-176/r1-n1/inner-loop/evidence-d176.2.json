@@ -1,0 +1,76 @@
+{
+  "unit": "D176.2",
+  "scope": {
+    "projects": [
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj",
+      "tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj",
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonStreamingTests",
+      "FullyQualifiedName~JsonRowWriterFactoryClickHouseDecimalTests",
+      "FullyQualifiedName~InMemoryTests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/Json/JsonShapeNode.cs",
+      "src/nextorm.core/Query/Json/JsonShapePlan.cs",
+      "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "src/nextorm.core/Query/QueryCommand.cs",
+      "src/nextorm.core/DataContext/DataContext.cs"
+    ],
+    "rationale": "D176.2 adds JSON-only recursive shape capture, scalar lowering/binding, slot grouping and presence metadata under src/nextorm.core/Query/Json plus the JSON-only preparer entry in QueryCommand.QueryPreparer/DataContext. The inner loop exercises the existing JSON-stream terminals and the JSON shape/plan builder. SQLite JsonStreamingTests is the end-to-end Phase-1 regression surface for the changed preparation entry; ClickHouse JsonRowWriterFactoryClickHouseDecimalTests covers JsonShapePlan.Build/JsonRowWriterFactory directly; core InMemoryTests covers the WriteJson in-memory guard. Flat Phase-1 behaviour must stay byte-identical, so these are the affected, non-broad classes.",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweep C02 (dotnet test tests/nextorm.core.tests -c Debug, no filter) after the last edit; the SQLite/ClickHouse inner classes are re-run after every coherent edit, and a final filtered SQLite JsonStreamingTests run confirms the end-to-end JSON terminal."
+  },
+  "executions": [
+    {
+      "command": ["dotnet", "build", "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj", "-c", "Debug"],
+      "phase": "inner",
+      "source_revision": "d176.2-inner",
+      "artifact_revision": "d176.2-inner",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.2-clean",
+      "artifact_revision": "d176.2-clean",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingTests"],
+      "phase": "inner",
+      "source_revision": "d176.2-clean",
+      "artifact_revision": "d176.2-clean",
+      "exit_code": 0,
+      "selected_count": 24
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.clickhouse.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonRowWriterFactoryClickHouseDecimalTests"],
+      "phase": "inner",
+      "source_revision": "d176.2-clean",
+      "artifact_revision": "d176.2-clean",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~InMemoryTests"],
+      "phase": "inner",
+      "source_revision": "d176.2-clean",
+      "artifact_revision": "d176.2-clean",
+      "exit_code": 0,
+      "selected_count": 159
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.2-clean",
+      "artifact_revision": "d176.2-clean",
+      "exit_code": 0,
+      "selected_count": 1789
+    }
+  ]
+}

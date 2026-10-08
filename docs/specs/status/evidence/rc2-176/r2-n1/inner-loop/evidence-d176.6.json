@@ -1,0 +1,80 @@
+{
+  "unit": "D176.6",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+      "src/nextorm.core/Query/Json/JsonShapePlan.cs",
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "benchmarks/nextorm.benchmark/SqliteBenchmarkJsonStreamPhase2.cs",
+      "src/nextorm.core/nextorm.core.csproj"
+    ],
+    "rationale": "D176.6 adds the C08 focused JSON-stream-phase2 benchmark and runs six isolated manual mutations against the recursive JSON writer/preparer; the affected filtered suites are core JsonShapeWriterTests and SQLite JsonStreamingTests, restored and rerun green after each mutant.",
+    "rebuild": "affected",
+    "boundary": "Comprehensive post-restore sweeps: unfiltered tests/nextorm.core.tests and namespace-filtered tests/nextorm.sqlite.tests (FullyQualifiedName~NextORM.Sqlite.Tests), plus the solution Debug build and the C05 coverage run; all exit 0."
+  },
+  "amendments": [
+    {
+      "reason": "Each mutation rebuilds its affected test project and reruns the affected filter; the boundary records the one comprehensive post-restore sweep.",
+      "added_selectors": ["FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "validated_before_run": true
+    }
+  ],
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.6-r2n1",
+      "artifact_revision": "d176.6-r2n1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonShapeWriterTests"],
+      "phase": "inner",
+      "source_revision": "d176.6-r2n1",
+      "artifact_revision": "d176.6-r2n1",
+      "exit_code": 0,
+      "selected_count": 34
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingTests"],
+      "phase": "inner",
+      "source_revision": "d176.6-r2n1",
+      "artifact_revision": "d176.6-r2n1",
+      "exit_code": 0,
+      "selected_count": 53
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "d176.6-r2n1",
+      "artifact_revision": "d176.6-r2n1",
+      "exit_code": 0,
+      "selected_count": 1823
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.6-r2n1",
+      "artifact_revision": "d176.6-r2n1",
+      "exit_code": 0,
+      "selected_count": 1212
+    },
+    {
+      "command": ["dotnet", "tool", "run", "dotnet-coverage", "collect", "-s", "coverage.settings.xml", "-f", "cobertura", "-o", "tests/coverage/coverage.cobertura.xml", "dotnet test --no-build --verbosity normal"],
+      "phase": "boundary",
+      "source_revision": "d176.6-r2n1",
+      "artifact_revision": "d176.6-r2n1",
+      "exit_code": 0,
+      "selected_count": 9426
+    }
+  ]
+}

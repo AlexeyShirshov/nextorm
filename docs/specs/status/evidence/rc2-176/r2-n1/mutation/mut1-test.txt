@@ -1,0 +1,138 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+failed NextORM.Core.Tests.JsonShapeWriterTests.NamingPolicy_ShouldApplyPerObjectScope (12ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidCastException : Unable to cast object of type 'System.Int32' to type 'System.String'.
+    at NextORM.Core.Tests.JsonShapeWriterTests.FakeRecord.GetString(Int32 i) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:85
+    at lambda_method3(Closure, IDataRecord, Utf8JsonWriter)
+    at NextORM.Core.Tests.JsonShapeWriterTests.Write(JsonRowWriter rowWriter, FakeRecord record) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:164
+    at NextORM.Core.Tests.JsonShapeWriterTests.NamingPolicy_ShouldApplyPerObjectScope() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:365
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.PresentJoinedSlot_ShouldWriteObject (3ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidCastException : Unable to cast object of type 'System.Int32' to type 'System.String'.
+    at NextORM.Core.Tests.JsonShapeWriterTests.FakeRecord.GetString(Int32 i) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:85
+    at lambda_method10(Closure, IDataRecord, Utf8JsonWriter)
+    at NextORM.Core.Tests.JsonShapeWriterTests.Write(JsonRowWriter rowWriter, FakeRecord record) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:164
+    at NextORM.Core.Tests.JsonShapeWriterTests.PresentJoinedSlot_ShouldWriteObject() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:249
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.NestedObject_ShouldWriteResolvedMemberNames (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidCastException : Unable to cast object of type 'System.Int32' to type 'System.String'.
+    at NextORM.Core.Tests.JsonShapeWriterTests.FakeRecord.GetString(Int32 i) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:85
+    at lambda_method13(Closure, IDataRecord, Utf8JsonWriter)
+    at NextORM.Core.Tests.JsonShapeWriterTests.Write(JsonRowWriter rowWriter, FakeRecord record) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:164
+    at NextORM.Core.Tests.JsonShapeWriterTests.NestedObject_ShouldWriteResolvedMemberNames() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:182
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.ConditionalConstruction_PresentSentinelWithAllNullMembers_ShouldWriteObject (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidCastException : Unable to cast object of type 'System.Int32' to type 'System.String'.
+    at NextORM.Core.Tests.JsonShapeWriterTests.FakeRecord.GetString(Int32 i) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:85
+    at lambda_method24(Closure, IDataRecord, Utf8JsonWriter)
+    at NextORM.Core.Tests.JsonShapeWriterTests.Write(JsonRowWriter rowWriter, FakeRecord record) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:164
+    at NextORM.Core.Tests.JsonShapeWriterTests.ConditionalConstruction_PresentSentinelWithAllNullMembers_ShouldWriteObject() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:600
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.RepeatedSiblingNames_InSeparateScopes_ShouldBeAccepted (65ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected Write(BuildWriter(shape), record) to be the same string, but they differ at index 39:
+                ↓ (actual)
+    "…:{"Name":"l"}}]"
+    "…:{"Name":"r"}}]"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.JsonShapeWriterTests.RepeatedSiblingNames_InSeparateScopes_ShouldBeAccepted() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:443
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.NestedObject_MultipleLevels_ShouldPreserveBoundaries (3ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidCastException : Unable to cast object of type 'System.Int32' to type 'System.String'.
+    at NextORM.Core.Tests.JsonShapeWriterTests.FakeRecord.GetString(Int32 i) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:85
+    at lambda_method33(Closure, IDataRecord, Utf8JsonWriter)
+    at NextORM.Core.Tests.JsonShapeWriterTests.Write(JsonRowWriter rowWriter, FakeRecord record) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:164
+    at NextORM.Core.Tests.JsonShapeWriterTests.NestedObject_MultipleLevels_ShouldPreserveBoundaries() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:428
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.SameNameInDifferentScopes_ShouldBeAccepted (4ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected Write(BuildWriter(shape), record) to be the same string, but they differ at index 23:
+                ↓ (actual)
+    "…ld":{"Id":1}}]"
+    "…ld":{"Id":2}}]"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.JsonShapeWriterTests.SameNameInDifferentScopes_ShouldBeAccepted() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:196
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.AnyColumnNotNull_OnePresent_ShouldWriteObject (3ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected Write(BuildWriter(shape), record) to be the same string, but they differ at index 27:
+                ↓ (actual)
+    "…ll,"Name":null}}]"
+    "…ll,"Name":"n"}}]"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.JsonShapeWriterTests.AnyColumnNotNull_OnePresent_ShouldWriteObject() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:505
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.MemberOrderDifferentFromOrdinal_ShouldBindDeclaredOrdinals (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Xunit.MicrosoftTestingPlatform.XunitException: System.InvalidCastException : Unable to cast object of type 'System.Int32' to type 'System.String'.
+    at NextORM.Core.Tests.JsonShapeWriterTests.FakeRecord.GetString(Int32 i) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:85
+    at lambda_method39(Closure, IDataRecord, Utf8JsonWriter)
+    at NextORM.Core.Tests.JsonShapeWriterTests.Write(JsonRowWriter rowWriter, FakeRecord record) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:164
+    at NextORM.Core.Tests.JsonShapeWriterTests.MemberOrderDifferentFromOrdinal_ShouldBindDeclaredOrdinals() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:474
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) failed with 9 error(s) (1s 119ms)
+Exit code: 2
+  Standard output: dbug: Microsoft.Extensions.Hosting.Internal.Host[1]
+        Hosting starting
+  info: Microsoft.Hosting.Lifetime[0]
+        Application started. Press Ctrl+C to shut down.
+  info: Microsoft.Hosting.Lifetime[0]
+        Hosting environment: Production
+  info: Microsoft.Hosting.Lifetime[0]
+        Content root path: /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[2]
+        Hosting started
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[3]
+        Hosting stopping
+  info: Microsoft.Hosting.Lifetime[0]
+        Application is shutting down...
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
+        Hosting stopped
+
+Test run summary: Failed!
+  total: 40
+  failed: 9
+  succeeded: 31
+  skipped: 0
+  duration: 1s 377ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

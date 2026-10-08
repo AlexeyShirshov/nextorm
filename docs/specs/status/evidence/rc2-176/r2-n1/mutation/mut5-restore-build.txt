@@ -1,0 +1,14 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  nextorm.core.sourcegenerator -> /home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/bin/linux/Debug/netstandard2.0/nextorm.core.sourcegenerator.dll
+  nextorm.core -> /home/alex/sources/nextorm/src/nextorm.core/bin/linux/Debug/net10.0/nextorm.core.dll
+  nextorm.postgres -> /home/alex/sources/nextorm/src/nextorm.postgres/bin/linux/Debug/net10.0/nextorm.postgres.dll
+  nextorm.clickhouse -> /home/alex/sources/nextorm/src/nextorm.clickhouse/bin/linux/Debug/net10.0/nextorm.clickhouse.dll
+  nextorm.sqlserver -> /home/alex/sources/nextorm/src/nextorm.sqlserver/bin/linux/Debug/net10.0/nextorm.sqlserver.dll
+  nextorm.core.tests -> /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:03.58

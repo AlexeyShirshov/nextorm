@@ -1,0 +1,68 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+failed NextORM.Sqlite.Tests.JsonStreamingTests.NestedObject_ShouldMatchJsonSerializer (70ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected Utf8(stream) to be the same string, but they differ at index 65:
+                ↓ (actual)
+    "…2,"Child":null},{"Id…"
+    "…2,"Child":{"Name":nu…"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.JsonStreamingTests.NestedObject_ShouldMatchJsonSerializer() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/JsonStreamingTests.cs:704
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.JsonStreamingTests.NestedObject_MultipleLevels_ShouldMatchSerializer (9ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected Utf8(stream) to be the same string, but they differ at index 75:
+                ↓ (actual)
+    "…2,"Outer":null},{"Id…"
+    "…2,"Outer":{"Name":nu…"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.JsonStreamingTests.NestedObject_MultipleLevels_ShouldMatchSerializer() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/JsonStreamingTests.cs:793
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Sqlite.Tests.JsonStreamingTests.NestedObject_AllNullChild_ShouldStayObject (4ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected Utf8(stream) to be the same string, but they differ at index 17:
+                ↓ (actual)
+    "…2,"Child":null}]"
+    "…2,"Child":{"Name":nu…"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.JsonStreamingTests.NestedObject_AllNullChild_ShouldStayObject() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/JsonStreamingTests.cs:827
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) failed with 3 error(s) (1s 351ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 63
+  failed: 3
+  succeeded: 60
+  skipped: 0
+  duration: 1s 621ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

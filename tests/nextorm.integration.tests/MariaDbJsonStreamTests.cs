@@ -51,6 +51,113 @@ public sealed class MariaDbJsonStreamTests : IDisposable
     public void WriteJson_TypedColumns_ShouldMatchJsonSerializer()
         => CommonTestSuite.WriteJsonTypedColumns(_sut);
 
+    // D176.5 phase-2 mirrors: MariaDB does not derive CommonTestSuite, so the shared nested/object/
+    // slot/conditional bodies are re-pinned here explicitly (inheriting the facts is not enough).
+
+    [Fact]
+    public void WriteJson_NestedAnonymous_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonNestedAnonymous(_sut);
+
+    [Fact]
+    public void WriteJson_NestedMultipleLevels_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonNestedMultipleLevels(_sut);
+
+    [Fact]
+    public void WriteJson_NestedNamed_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonNestedNamed(_sut);
+
+    [Fact]
+    public void WriteJson_NestedAllNullChild_ShouldStayObject()
+        => CommonTestSuite.WriteJsonNestedAllNullChild(_sut);
+
+    [Fact]
+    public void WriteJson_NestedSameNameDifferentScopes_ShouldBeAccepted()
+        => CommonTestSuite.WriteJsonNestedSameNameDifferentScopes(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalNullArmTrue_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonConditionalNullArmTrue(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalNullArmFalse_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonConditionalNullArmFalse(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalAllNullObject_ShouldStayObject()
+        => CommonTestSuite.WriteJsonConditionalAllNullObject(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalMemberInit_ShouldMatchSerializer()
+        => CommonTestSuite.WriteJsonConditionalMemberInit(_sut);
+
+    [Fact]
+    public void WriteJson_ConditionalBothArmsConstruction_ShouldThrowBeforeOutput()
+        => CommonTestSuite.WriteJsonConditionalBothArmsConstruction(_sut);
+
+    [Fact]
+    public void WriteJson_BareProjectionLeftJoin_ShouldMatchItem1Item2()
+        => CommonTestSuite.WriteJsonBareProjectionLeftJoin(_sut);
+
+    [Fact]
+    public void WriteJson_BareProjectionInnerJoin_ShouldMatchItem1Item2()
+        => CommonTestSuite.WriteJsonBareProjectionInnerJoin(_sut);
+
+    [Fact]
+    public void WriteJson_DuplicateLeafNamesAcrossSlots_ShouldBeAccepted()
+        => CommonTestSuite.WriteJsonDuplicateLeafNamesAcrossSlots(_sut);
+
+    [Fact]
+    public void WriteJson_EntityAndScalarSlot_ShouldNotWrapScalar()
+        => CommonTestSuite.WriteJsonEntityAndScalarSlot(_sut);
+
+    [Fact]
+    public void WriteJson_ScalarScalarSlots_ShouldBeFlatScalars()
+        => CommonTestSuite.WriteJsonScalarScalarSlots(_sut);
+
+    [Fact]
+    public void WriteJson_ByteArrayNested_ShouldBeBase64()
+        => CommonTestSuite.WriteJsonByteArrayNested(_sut);
+
+    [Fact]
+    public void WriteJson_ByteArray_ShouldMatchJsonSerializer()
+        => CommonTestSuite.WriteJsonByteArray(_sut);
+
+    [Fact]
+    public void WriteJson_DuplicateNameWithinOneObject_ShouldThrowBeforeOutput()
+        => CommonTestSuite.WriteJsonDuplicateNameWithinOneObject(_sut);
+
+    [Fact]
+    public async Task WriteJson_WholeEntityAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonWholeEntityAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_EntityAndScalarSlotAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonEntityAndScalarSlotAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_ScalarScalarSlotsAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonScalarScalarSlotsAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_ConditionalRootAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonConditionalRootAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_NestedAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonNestedAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_SlotAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonSlotAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_ConditionalAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonConditionalAsyncMatchesSync(_sut);
+
+    [Fact]
+    public async Task WriteJson_ByteArrayAsync_ShouldMatchSync()
+        => await CommonTestSuite.WriteJsonByteArrayAsyncMatchesSync(_sut);
+
     // Same schema and rows as MySqlTestProvider/ClickHouseTestProvider, kept local because MariaDB
     // does not share the provider seeding matrix.
     private void Seed()
@@ -79,6 +186,11 @@ public sealed class MariaDbJsonStreamTests : IDisposable
             "(1, null, 'dadfasd', 2, 3, 4, 5, 6, '2023-01-01 10:00:00', '2023-01-01', true, 'sdf'), " +
             "(2, 1, 'xxx', 2, 3, 4, 5, 6, '2023-01-01 00:00:00', '2023-01-01', false, 'asdfgoi'), " +
             "(3, 1, null, 2, 3, null, 5, 6, '2023-01-01 00:00:00', '2023-01-01', false, '34mfs')");
+
+        // D176.5 phase-2 slot/Base64 mirrors use the same binary fixture as the shared providers.
+        Execute("drop table if exists binary_entity");
+        Execute("create table binary_entity (id int not null primary key, data varbinary(16) null)");
+        Execute("insert into binary_entity (id, data) values (1, x'01020304'), (2, null)");
     }
 
     private void Execute(string sql)

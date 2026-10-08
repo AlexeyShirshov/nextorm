@@ -1,0 +1,30 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+failed NextORM.Sqlite.Tests.JsonStreamingTests.BareProjection_LeftJoin_ShouldMatchItem1Item2 (84ms)
+  from /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64)
+  Expected actual to be the same string, but they differ at index 261:
+                ↓ (actual)
+    "…},"Item2":{"Id":null…"
+    "…},"Item2":null}]"
+                ↑ (expected).
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Primitives.StringEqualityStrategy.ValidateAgainstMismatch(IAssertionScope assertion, String subject, String expected)
+    at FluentAssertions.Primitives.StringValidator.Validate(String subject, String expected)
+    at FluentAssertions.Primitives.StringAssertions`1.Be(String expected, String because, Object[] becauseArgs)
+    at NextORM.Sqlite.Tests.JsonStreamingTests.BareProjection_LeftJoin_ShouldMatchItem1Item2() in /home/alex/sources/nextorm/tests/nextorm.sqlite.tests/JsonStreamingTests.cs:839
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.sqlite.tests/bin/linux/Debug/net10.0/nextorm.sqlite.tests.dll (net10.0|x64) failed with 1 error(s) (1s 351ms)
+Exit code: 2
+
+Test run summary: Failed!
+  total: 63
+  failed: 1
+  succeeded: 62
+  skipped: 0
+  duration: 1s 612ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

@@ -1,0 +1,70 @@
+{
+  "unit": "D176.7",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "tests/nextorm.core.tests/JsonShapeWriterTests.cs",
+      "tests/nextorm.sqlite.tests/JsonStreamingTests.cs"
+    ],
+    "rationale": "D176.7 adds conditional-construction capture in the JSON-only preparer (QueryCommand.QueryPreparer.cs): a ConditionalExpression with a translatable predicate and a New/MemberInit arm lowers the construction as a scoped object plus a hidden nullable sentinel column, using the existing AnyColumnNotNull presence rule. The affected tests are the direct recursive-writer tests (core JsonShapeWriterTests) and the end-to-end SQLite JsonStreamingTests (real preparer and SQL CASE lowering).",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweeps after the last edit: the one comprehensive unfiltered core sweep (tests/nextorm.core.tests) plus the namespace-filtered complete SQLite project sweep (FullyQualifiedName~NextORM.Sqlite.Tests), both exit 0."
+  },
+  "amendments": [
+    {
+      "reason": "The pre-declared boundary sweeps the complete SQLite project through its namespace filter (FullyQualifiedName~NextORM.Sqlite.Tests); only the two JSON classes are asserted, but the whole project runs for regression safety.",
+      "added_selectors": ["FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "validated_before_run": true
+    }
+  ],
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.7-it1",
+      "artifact_revision": "d176.7-it1",
+      "exit_code": 0,
+      "selected_count": 1
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonShapeWriterTests"],
+      "phase": "inner",
+      "source_revision": "d176.7-it1",
+      "artifact_revision": "d176.7-it1",
+      "exit_code": 0,
+      "selected_count": 34
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~JsonStreamingTests"],
+      "phase": "inner",
+      "source_revision": "d176.7-it1",
+      "artifact_revision": "d176.7-it1",
+      "exit_code": 0,
+      "selected_count": 53
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug"],
+      "phase": "boundary",
+      "source_revision": "d176.7-it1",
+      "artifact_revision": "d176.7-it1",
+      "exit_code": 0,
+      "selected_count": 1823
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlite.tests", "-c", "Debug", "--filter", "FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "phase": "boundary",
+      "source_revision": "d176.7-it1",
+      "artifact_revision": "d176.7-it1",
+      "exit_code": 0,
+      "selected_count": 1212
+    }
+  ]
+}

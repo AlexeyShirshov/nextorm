@@ -66,25 +66,77 @@ values throw the same way from the terminal's options overloads.
 
 ### Supported shapes (fail-fast)
 
-The projection must be a **flat** row of whitelisted scalar columns. Supported CLR types are `byte`,
-`short`, `int`, `long`, `float`, `double`, `decimal`, `bool`, `string`, `Guid`, `DateTime`, `byte[]`
-and their `Nullable<>` forms. Values are written the way `System.Text.Json` defaults render them:
-numbers as JSON numbers, `bool` as a JSON boolean, `Guid` as canonical text, `DateTime` as ISO-8601,
-`byte[]` as base64.
+The scalar (leaf) CLR types are `byte`, `short`, `int`, `long`, `float`, `double`, `decimal`,
+`bool`, `string`, `Guid`, `DateTime`, `byte[]` and their `Nullable<>` forms. Values are written the
+way `System.Text.Json` defaults render them: numbers as JSON numbers, `bool` as a JSON boolean,
+`Guid` as canonical text, `DateTime` as ISO-8601, `byte[]` as base64.
 
-Anything outside that list throws `NotSupportedException` when the shape is planned, before any output
-is produced — `TimeSpan`, `DateTimeOffset`, `DateOnly`/`TimeOnly`, enums, `Range<T>`, value-converted
-columns (including JSON-column members) and streaming LOB columns are all rejected on purpose rather
-than silently degraded. Entity-typed projection items are not rejected as such: they are flattened
-into their mapped scalar columns (the standard SQL-mapping expansion) and those columns are then
-validated against this same whitelist. These shape/option validation failures are raised before any
-output; conversely, a provider-runtime or I/O failure, or cancellation, can occur mid-document and
-leave partial output (see [Ownership, flushing and errors](#ownership-flushing-and-errors)).
+On top of that flat whitelist the projection may **nest**:
 
-A multi-column projection must have named members (an
-anonymous type or a named record); a column without a name throws. There is no nesting: unlike SQL
-Server `FOR JSON`, each row is one flat object, so project the fields you need and reshape on the
-consumer side.
+* **Nested objects.** `new { ... }` (anonymous) and `new Dto { ... }` (named construction /
+  member-initializer) recurse: every nested construction becomes its own JSON object, at any depth up
+  to the writer limit (64). An entity-typed member is expanded into its mapped scalar columns and
+  becomes an object too.
+* **`Projection<T1,T2>` slots.** A bare join command whose result is a `Projection<T1,T2>` emits the
+  top-level members `Item1` and `Item2`, each an object or a bare scalar according to its item type.
+  A scalar slot is **not** wrapped in an invented object: `Select(p => new { p.Item1, ChildName =
+  p.Item2.Name })` writes `Item1` as an object and `ChildName` as a string. Entity and scalar slots
+  projected inside an explicit `new { ... }` follow the same rule.
+* **Native arrays.** A rank-one provider-native array member (`T[]`, for example PostgreSQL
+  `array_agg` or ClickHouse `Array(String)`/`Array(Int32)`) is written as a JSON array, recursing
+  through the supported scalar-element contract. Jagged arrays (arrays of arrays) become nested JSON
+  arrays. `byte[]` keeps Base64 precedence, including as a jagged element (`byte[][]` is an array of
+  base64 strings, never an array of numbers).
+* **Conditional nested construction.** `predicate ? new Dto { ... } : null` writes the object on the
+  construction arm and `null` on the other arm; a hidden presence column carries the arm decision.
+  The predicate must be translatable to SQL and exactly one arm must be a `new`/member-init
+  construction. Two construction arms, a construction against a non-null arm, or an untranslatable
+  predicate is rejected before output.
+
+Everything else is rejected with `NotSupportedException` while the shape is planned, before any
+output: `TimeSpan`, `DateTimeOffset`, `DateOnly`/`TimeOnly`, enums, `Range<T>`, value-converted
+columns (including JSON-column members) and streaming LOB columns. Nested construction has **explicit
+exclusions** that are deferred to their own issues rather than silently flattened:
+
+* **enums and converter-backed types** — issue [#178](https://github.com/AlexeyShirshov/nextorm/issues/178);
+* **child-collection query projections** (`List<T>`, `IEnumerable<T>`, dictionaries and any other
+  collection with no provider-native array source) — issue [#172](https://github.com/AlexeyShirshov/nextorm/issues/172);
+* **new naming-policy / options behaviour** — issue [#177](https://github.com/AlexeyShirshov/nextorm/issues/177);
+* **DB-side JSON generation** (SQL Server `FOR JSON`, PostgreSQL `json_agg`, …) stays a separate
+  server-side path;
+* **multidimensional arrays** and rank-one arrays of unsupported element types (a `List<T>` member, a
+  dictionary element, a value-converted element) fail closed instead of using an arbitrary runtime
+  serialization path.
+
+These shape/option validation failures are raised before any output; conversely, a provider-runtime
+or I/O failure, or cancellation, can occur mid-document and leave partial output (see
+[Ownership, flushing and errors](#ownership-flushing-and-errors)).
+
+A multi-column projection must have named members (an anonymous type or a named record); a column
+without a name throws when the shape is planned. Nested object members are validated **per object
+scope**.
+
+### Names, null semantics and arrays
+
+* **Scoped names.** JSON member names must be unique **within one object scope**. The same effective
+  name in different scopes is legal — a nested child may repeat its parent's property name, and the
+  two slots of a `Projection<T1,T2>` may both carry `Id` (`Item1.Id` and `Item2.Id`) — while a
+  duplicate inside *one* object throws before any output.
+* **Explicit construction is always an object.** `new { ... }` / `new Dto { ... }` establishes object
+  presence: an object whose properties are all SQL `NULL` is still written as an object (`null`
+  members, or omitted members when `IgnoreNull = true`), never as JSON `null`.
+* **A null conditional arm is `null`.** `predicate ? new Dto { ... } : null` writes JSON `null` for
+  the rows where the predicate is false, regardless of the construction's property values. Presence
+  comes from a hidden sentinel column, not from the visible leaves.
+* **An absent joined entity is `null`.** A `Projection<T1,T2>` slot (or a whole-entity projection)
+  read through an outer join is JSON `null` when every mapped column of that entity slot is SQL
+  `NULL` — the same absence predicate the ordinary materializer uses, evaluated on the raw `DBNull`
+  inputs before `DefaultOnNull` substitution.
+* **Arrays.** A SQL `NULL` array column is JSON `null`, an empty array is `[]`, and a supported
+  null/reference element is JSON `null`. `IgnoreNull` applies to object members only, so a scalar
+  `null` and the `null` inside an array are still emitted.
+* **Scalar leaves** keep Phase 1 behaviour: `DBNull` → `null`, with the ordinary `Nullable` and
+  `DefaultOnNull` (`*OrDefault`) substitutions.
 
 ### Ownership, flushing and errors
 
@@ -106,7 +158,7 @@ consumer side.
 |---|---|---|
 | Providers | every SQL provider | SQL Server only |
 | Where the JSON is built | client side, `System.Text.Json`, O(buffer) memory | server side, `FOR JSON` |
-| Shape | one flat object per row (or a bare scalar) | `FOR JSON PATH`/`AUTO`, driven by the projection or the table/join structure |
+| Shape | a nested object tree per row (or a bare scalar), from the projection | `FOR JSON PATH`/`AUTO`, driven by the projection or the table/join structure |
 | Result | written incrementally to your `Stream` | one `string` materialized in memory (`null` when the query is empty) |
 | Use when | large or unbounded result sets, HTTP/file/network output, portable code | a small result set, SQL Server-side nesting, or you want the database to render the JSON |
 

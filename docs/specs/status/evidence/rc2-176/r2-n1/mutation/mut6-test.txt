@@ -1,0 +1,140 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+failed NextORM.Core.Tests.JsonShapeWriterTests.CollectionElementType_ShouldThrowBeforeWriting (85ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected a <System.NotSupportedException> to be thrown, but found <System.ArgumentException>:
+  System.ArgumentException: Expression of type 'System.Collections.Generic.List`1[System.Int32]' cannot be used for parameter of type 'System.String' of method 'Void WriteStringValue(System.String)' (Parameter 'arg0')
+     at System.Dynamic.Utils.ExpressionUtils.ValidateOneArgument(MethodBase method, ExpressionType nodeKind, Expression arguments, ParameterInfo pi, String methodParamName, String argumentParamName, Int32 index)
+     at System.Linq.Expressions.Expression.Call(Expression instance, MethodInfo method, Expression arg0)
+     at System.Linq.Expressions.Expression.Call(Expression instance, MethodInfo method, IEnumerable`1 arguments)
+     at NextORM.Core.JsonRowWriterFactory.WriteValue(Expression writer, JsonShapeColumn& column, Expression value) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 500
+     at NextORM.Core.JsonRowWriterFactory.BuildElementWrite(Type elementType, Type elementValueType, String name, Expression item, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 402
+     at NextORM.Core.JsonRowWriterFactory.BuildArrayWriter(Type arrayType, String name, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 369
+     at NextORM.Core.JsonRowWriterFactory.BuildArrayMember(JsonShapeNode node, String name, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 297
+     at NextORM.Core.JsonRowWriterFactory.BuildMember(JsonShapeNode node, String name, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 256
+     at NextORM.Core.JsonRowWriterFactory.BuildMemberWriters(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 246
+     at NextORM.Core.JsonRowWriterFactory.BuildObjectBody(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 227
+     at NextORM.Core.JsonRowWriterFactory.BuildRootObjectValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 210
+     at NextORM.Core.JsonRowWriterFactory.BuildRootValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 174
+     at NextORM.Core.JsonRowWriterFactory.BuildRecursive(JsonShapeNode shape, JsonStreamOptions options) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 162
+     at NextORM.Core.JsonRowWriterFactory.Build(JsonShapePlan plan) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 95
+     at NextORM.Core.Tests.JsonShapeWriterTests.BuildWriter(JsonShapeNode shape) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:line 129
+     at NextORM.Core.Tests.JsonShapeWriterTests.<>c__DisplayClass22_0.<CollectionElementType_ShouldThrowBeforeWriting>b__0() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:line 331
+     at FluentAssertions.Specialized.FunctionAssertions`1.InvokeSubject()
+     at FluentAssertions.Specialized.DelegateAssertions`2.InvokeSubjectWithInterception().
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+    at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.JsonShapeWriterTests.CollectionElementType_ShouldThrowBeforeWriting() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:333
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.UnsupportedScalarMemberType_ShouldThrowBeforeWriting (3ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected a <System.NotSupportedException> to be thrown, but no exception was thrown.
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message)
+    at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+    at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.JsonShapeWriterTests.UnsupportedScalarMemberType_ShouldThrowBeforeWriting() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:535
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.DictionaryAndEnumerableArrayElements_ShouldThrowBeforeWriting (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected a <System.NotSupportedException> to be thrown, but found <System.ArgumentException>:
+  System.ArgumentException: Expression of type 'System.Collections.Generic.Dictionary`2[System.String,System.Int32]' cannot be used for parameter of type 'System.String' of method 'Void WriteStringValue(System.String)' (Parameter 'arg0')
+     at System.Dynamic.Utils.ExpressionUtils.ValidateOneArgument(MethodBase method, ExpressionType nodeKind, Expression arguments, ParameterInfo pi, String methodParamName, String argumentParamName, Int32 index)
+     at System.Linq.Expressions.Expression.Call(Expression instance, MethodInfo method, Expression arg0)
+     at System.Linq.Expressions.Expression.Call(Expression instance, MethodInfo method, IEnumerable`1 arguments)
+     at NextORM.Core.JsonRowWriterFactory.WriteValue(Expression writer, JsonShapeColumn& column, Expression value) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 500
+     at NextORM.Core.JsonRowWriterFactory.BuildElementWrite(Type elementType, Type elementValueType, String name, Expression item, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 402
+     at NextORM.Core.JsonRowWriterFactory.BuildArrayWriter(Type arrayType, String name, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 369
+     at NextORM.Core.JsonRowWriterFactory.BuildArrayMember(JsonShapeNode node, String name, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 297
+     at NextORM.Core.JsonRowWriterFactory.BuildMember(JsonShapeNode node, String name, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 256
+     at NextORM.Core.JsonRowWriterFactory.BuildMemberWriters(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 246
+     at NextORM.Core.JsonRowWriterFactory.BuildObjectBody(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 227
+     at NextORM.Core.JsonRowWriterFactory.BuildRootObjectValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 210
+     at NextORM.Core.JsonRowWriterFactory.BuildRootValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 174
+     at NextORM.Core.JsonRowWriterFactory.BuildRecursive(JsonShapeNode shape, JsonStreamOptions options) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 162
+     at NextORM.Core.JsonRowWriterFactory.Build(JsonShapePlan plan) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 95
+     at NextORM.Core.Tests.JsonShapeWriterTests.BuildWriter(JsonShapeNode shape) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:line 129
+     at NextORM.Core.Tests.JsonShapeWriterTests.<>c.<DictionaryAndEnumerableArrayElements_ShouldThrowBeforeWriting>b__37_0() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:line 541
+     at FluentAssertions.Specialized.FunctionAssertions`1.InvokeSubject()
+     at FluentAssertions.Specialized.DelegateAssertions`2.InvokeSubjectWithInterception().
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+    at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.JsonShapeWriterTests.DictionaryAndEnumerableArrayElements_ShouldThrowBeforeWriting() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:542
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+failed NextORM.Core.Tests.JsonShapeWriterTests.UnsupportedElementType_ShouldThrowBeforeWriting (2ms)
+  from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+  Expected a <System.NotSupportedException> to be thrown, but found <System.ArgumentException>:
+  System.ArgumentException: Expression of type 'System.DateTimeOffset' cannot be used for parameter of type 'System.String' of method 'Void WriteStringValue(System.String)' (Parameter 'arg0')
+     at System.Dynamic.Utils.ExpressionUtils.ValidateOneArgument(MethodBase method, ExpressionType nodeKind, Expression arguments, ParameterInfo pi, String methodParamName, String argumentParamName, Int32 index)
+     at System.Linq.Expressions.Expression.Call(Expression instance, MethodInfo method, Expression arg0)
+     at System.Linq.Expressions.Expression.Call(Expression instance, MethodInfo method, IEnumerable`1 arguments)
+     at NextORM.Core.JsonRowWriterFactory.WriteValue(Expression writer, JsonShapeColumn& column, Expression value) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 500
+     at NextORM.Core.JsonRowWriterFactory.BuildElementWrite(Type elementType, Type elementValueType, String name, Expression item, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 402
+     at NextORM.Core.JsonRowWriterFactory.BuildArrayWriter(Type arrayType, String name, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 369
+     at NextORM.Core.JsonRowWriterFactory.BuildArrayMember(JsonShapeNode node, String name, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 297
+     at NextORM.Core.JsonRowWriterFactory.BuildMember(JsonShapeNode node, String name, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 256
+     at NextORM.Core.JsonRowWriterFactory.BuildMemberWriters(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 246
+     at NextORM.Core.JsonRowWriterFactory.BuildObjectBody(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 227
+     at NextORM.Core.JsonRowWriterFactory.BuildRootObjectValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 210
+     at NextORM.Core.JsonRowWriterFactory.BuildRootValue(JsonShapeNode node, JsonStreamOptions options, Expression record, Expression writer, Int32 depth) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 174
+     at NextORM.Core.JsonRowWriterFactory.BuildRecursive(JsonShapeNode shape, JsonStreamOptions options) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 162
+     at NextORM.Core.JsonRowWriterFactory.Build(JsonShapePlan plan) in /home/alex/sources/nextorm/src/nextorm.core/Query/Json/JsonRowWriterFactory.cs:line 95
+     at NextORM.Core.Tests.JsonShapeWriterTests.BuildWriter(JsonShapeNode shape) in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:line 129
+     at NextORM.Core.Tests.JsonShapeWriterTests.<>c__DisplayClass21_0.<UnsupportedElementType_ShouldThrowBeforeWriting>b__0() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:line 321
+     at FluentAssertions.Specialized.FunctionAssertions`1.InvokeSubject()
+     at FluentAssertions.Specialized.DelegateAssertions`2.InvokeSubjectWithInterception().
+    at FluentAssertions.Execution.LateBoundTestFramework.Throw(String message)
+    at FluentAssertions.Execution.TestFrameworkProvider.Throw(String message)
+    at FluentAssertions.Execution.DefaultAssertionStrategy.HandleFailure(String message)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(Func`1 failReasonFunc)
+    at FluentAssertions.Execution.AssertionScope.FailWith(String message, Object[] args)
+    at FluentAssertions.Specialized.DelegateAssertionsBase`2.ThrowInternal[TException](Exception exception, String because, Object[] becauseArgs)
+    at FluentAssertions.Specialized.DelegateAssertions`2.Throw[TException](String because, Object[] becauseArgs)
+    at NextORM.Core.Tests.JsonShapeWriterTests.UnsupportedElementType_ShouldThrowBeforeWriting() in /home/alex/sources/nextorm/tests/nextorm.core.tests/JsonShapeWriterTests.cs:323
+    at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+    at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) failed with 4 error(s) (1s 093ms)
+Exit code: 2
+  Standard output: dbug: Microsoft.Extensions.Hosting.Internal.Host[1]
+        Hosting starting
+  info: Microsoft.Hosting.Lifetime[0]
+        Application started. Press Ctrl+C to shut down.
+  info: Microsoft.Hosting.Lifetime[0]
+        Hosting environment: Production
+  info: Microsoft.Hosting.Lifetime[0]
+        Content root path: /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[2]
+        Hosting started
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[3]
+        Hosting stopping
+  info: Microsoft.Hosting.Lifetime[0]
+        Application is shutting down...
+  dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
+        Hosting stopped
+
+Test run summary: Failed!
+  total: 40
+  failed: 4
+  succeeded: 36
+  skipped: 0
+  duration: 1s 332ms
+Test run completed with non-success exit code: 2 (see: https://aka.ms/testingplatform/exitcodes)

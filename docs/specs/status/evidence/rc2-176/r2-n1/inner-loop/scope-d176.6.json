@@ -1,0 +1,30 @@
+{
+  "unit": "D176.6",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests/nextorm.core.tests.csproj",
+      "tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JsonShapeWriterTests",
+      "FullyQualifiedName~JsonStreamingTests"
+    ],
+    "files": [
+      "src/nextorm.core/Query/Json/JsonRowWriterFactory.cs",
+      "src/nextorm.core/Query/Json/JsonShapePlan.cs",
+      "src/nextorm.core/Query/QueryCommand.QueryPreparer.cs",
+      "benchmarks/nextorm.benchmark/SqliteBenchmarkJsonStreamPhase2.cs",
+      "src/nextorm.core/nextorm.core.csproj"
+    ],
+    "rationale": "D176.6 closes the collection task: it adds the C08 focused JSON-stream-phase2 benchmark (new compiled benchmark source + a benchmark-only InternalsVisibleTo) and runs six isolated manual mutations against the JSON writer/preparer. The mutated compiled inputs are the recursive writer (JsonRowWriterFactory), the shape plan/classifier (JsonShapePlan) and the JSON-only preparer (QueryCommand.QueryPreparer); the affected filtered tests are the core direct-writer suite (JsonShapeWriterTests) and the SQLite end-to-end suite (JsonStreamingTests). Product changes for earlier units already exist in the working tree; this unit only mutates-then-restores them.",
+    "rebuild": "affected",
+    "boundary": "Full affected project sweeps after the last edit: the comprehensive unfiltered core project (tests/nextorm.core.tests) and the namespace-filtered complete SQLite project (FullyQualifiedName~NextORM.Sqlite.Tests); solution Debug build and the C05 coverage run also exit 0."
+  },
+  "amendments": [
+    {
+      "reason": "The mutation phase rebuilds each affected test project per mutant and reruns the affected filtered suite; the boundary records the one comprehensive post-restore sweep.",
+      "added_selectors": ["FullyQualifiedName~NextORM.Sqlite.Tests"],
+      "validated_before_run": true
+    }
+  ]
+}
