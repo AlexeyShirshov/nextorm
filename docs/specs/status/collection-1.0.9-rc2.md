@@ -6,7 +6,7 @@
 - mode: autonomous; auto-commit authorized by explicit user request and the repo AGENTS `pdca-collection` exception; **push never**
 - base: branch `1.0.9-rc2` at `18659e41` (merge of PR #205 from `1.0.9-rc1`)
 - collection revision: r1; evidence revision: rv1; PLAN-revision vector: all admitted tasks r=1/rv=1
-- collection status: **in progress** — done: D153, D154, D157, D159, D191, D162, D174; incomplete/set-aside: D160 (terminal `incomplete`, preserved on branch `wip/d160-incomplete`), D170 (terminal `incomplete`, patch preserved), D184 (blocked, evidence-contract gap, preserved as patch), D175 (terminal `incomplete`, escalation decision (c) STOP, patch preserved); remaining pending: D173, D190, D176, D178, D180, D177, D179, D185, D167, D169, D189, D188, D151
+- collection status: **in progress** — done: D153, D154, D157, D159, D191, D162, D174, D173; incomplete/set-aside: D160 (terminal `incomplete`, preserved on branch `wip/d160-incomplete`), D170 (terminal `incomplete`, patch preserved), D184 (blocked, evidence-contract gap, preserved as patch), D175 (terminal `incomplete`, escalation decision (c) STOP, patch preserved); remaining pending: D190, D176, D178, D180, D177, D179, D185, D167, D169, D189, D188, D151
 - User stop: run paused by explicit user request immediately after D162 (2026-10-08); no further task DO is started. Bookkeeping-only stop — no push performed.
 
 ## Admission / gaps (P)
@@ -52,7 +52,7 @@ Intra-group order is a serialization dependency (footprint overlap) plus one fun
 | D170 | #170 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=3 (terminal) | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | terminal STOP (CHECK r=3 fail, same defect family; R170-02/R170-03 variant closure unmet; patch `docs/specs/status/rc2-170-evidence/D170-STOP-incomplete.patch`); #170 stays OPEN |
 | D171 | #171 | - | 1.0.9-rc2 | excluded-gap | gap | pdca-dotnet | N=1 | - | docs/specs/status/rc2-171-joininto-as-derived-1.md | revisit-on-demand placeholder; issue OPEN in milestone |
 | D172 | #172 | - | 1.0.9-rc2 | excluded-gap | gap | pdca-dotnet | N=1 | - | docs/specs/status/rc2-172-child-collection-projection-1.md | awaiting-consumer; issue OPEN in milestone |
-| D173 | #173 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-173-projection-folding-member-1.md | projection folding ignores Member |
+| D173 | #173 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-173-projection-folding-member-1.md | closed #173 (29e794fd) |
 | D174 | #174 | G1 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-174-identity-selector-cache-1.md | closed #174 (6bc4ae41) |
 | D175 | #175 | G1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 (terminal) | docs/specs/status/rc2-175-joininto-test-quality-1.md | terminal STOP (escalation decision (c)); defect family «rv1 evidence-completeness / row-bound ledger provenance», 4× CHECK fail; no product defect demonstrated; patch `docs/specs/status/rc2-175-evidence/D175-STOP-incomplete.patch`; #175 stays OPEN |
 | D176 | #176 | G1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-176-json-nested-1.md | JSON streaming Phase 2 |
@@ -91,11 +91,11 @@ CHECK re-gather budget: ≤2 targeted evidence requests per collection CHECK inv
 
 - Verification state: `unverified` (P done; DO not started).
 - Defect id and history: none.
-- Next allowed step: continue G1 DO at next pending task **D173** (D175 terminal incomplete — escalation decision (c) STOP, patch preserved; D174 done, CHECK PASS r1/n2, commit `6bc4ae41`; D162 done, CHECK PASS rv=2; D191 done). D160 set-aside, D170, D184 and D175 incomplete remain preserved and are not resumed here.
+- Next allowed step: continue G1 DO at next pending task **D190** (D173 done, CHECK PASS r1/rv1/n2, commit `29e794fd`; D175 terminal incomplete — escalation decision (c) STOP, patch preserved; D174 done, CHECK PASS r1/n2, commit `6bc4ae41`; D162 done, CHECK PASS rv=2; D191 done). D160 set-aside, D170, D184 and D175 incomplete remain preserved and are not resumed here.
 - **D170 (continued per the user-authorized continuation policy):** marked **incomplete** — terminal STOP (CHECK r=3 fail, same defect family as r=1/r=2; unmet R170-02/R170-03 variant/oracle closure; ClickHouse row satisfied but matrix not closed). Full change preserved as patch `docs/specs/status/rc2-170-evidence/D170-STOP-incomplete.patch` with artifacts `artifacts/pdca/rc2-170/{r1,r2,r3}/`; the task's product/test/doc paths were restored to the last verified-green tip `5b7fb9e7`; the lane continues with the next pending task. #170 stays **OPEN**.
 
 ## Done / Verified / Incomplete
 
-- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed); D191 (#191, commit `e25f558e`; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; issue #191 closed; evidence artifacts/pdca/rc2-191/r1/). D162 (#162, commit ae946293, CHECK PASS rv=2). D174 (#174, commit `6bc4ae41`, CHECK PASS r1/n2; issue #174 closed; evidence `artifacts/pdca/rc2-174/`).
+- Done: D153 (#153, commit 8401ca51); D154 (#154, commit 5d72a79; issue #154 close blocked by GitHub API HTTP 500, retry pending); D157 (#157, commit 5978556f); D159 (#159, commit 078a7a2d; issue closed); D191 (#191, commit `e25f558e`; CHECK PASS snapshot-n2 `7e9fad9`/diff `f652c19e`; issue #191 closed; evidence artifacts/pdca/rc2-191/r1/). D162 (#162, commit ae946293, CHECK PASS rv=2). D174 (#174, commit `6bc4ae41`, CHECK PASS r1/n2; issue #174 closed; evidence `artifacts/pdca/rc2-174/`). D173 (#173, commit `29e794fd`, CHECK PASS r1/rv1/n2; issue #173 closed).
 - Verified: no.
 - Incomplete: **D160** (terminal r=4 STOP; preserved on `wip/d160-incomplete` + patch); **D170** (terminal r=3 STOP, same defect family; patch `docs/specs/status/rc2-170-evidence/D170-STOP-incomplete.patch`); **D184** (blocked, evidence-contract gap; patch `artifacts/pdca/rc2-184/D184-blocked.patch`); **D175** (terminal r=1 STOP, escalation decision (c), defect family «rv1 evidence-completeness / row-bound ledger provenance», 4× CHECK fail; patch `docs/specs/status/rc2-175-evidence/D175-STOP-incomplete.patch`). Excluded-gap: D171, D172 (issues OPEN).

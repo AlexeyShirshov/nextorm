@@ -4,7 +4,7 @@
 - task_id: `D173` (issue `#173`)
 - selected_variant: `pdca-dotnet`
 - cycle: `N=1`; plan revision: `r=1`; evidence contract: `rv1`
-- phase: **PLAN complete** — `plan_state=ready`; stopped at PLAN→DO (no DO, no code, no branches)
+- phase: **done** — CHECK PASS r1/rv1/n2; ACT complete; product commit `29e794fd`
 - base: branch `1.0.9-rc2` @ `18659e41`; collection status: `docs/specs/status/collection-1.0.9-rc2.md` (not modified here)
 - issue URL: https://github.com/AlexeyShirshov/nextorm/issues/173
 
@@ -295,3 +295,18 @@ authoritative skill/spec details remain prerequisite facts (D173.1), not assumed
 - 2026-10-08T13:38:43Z | DO | revision r1 | iteration 2/3 | E173-10 genuine before-edit baseline: reverted production via `git apply -R fix.patch` (only 3 test files remained), `dotnet build nextorm.slnx -c Release` exit 0 / 0 warnings 0 errors, C-PERF `--anyCategories=acceptance` exit 0 / wall 0:51.31 / 7 cases (cached-ToList 1889.2us vs prepared 932.4us = time ratio 2.03; alloc ratio 7.66 vs documented 7.42); re-applied patch, both production md5 match backups, artifacts restored, diff back to 5 files; `dotnet build -c Debug` exit 0 / 0/0; focused green `SelectExpressionPlanEqualityComparerTests` 11/0, `RowMapperFactoryStreamingKeyTests` 14/0, `PlanKeyUniquenessTests` 11/0 | `/tmp/nextorm-D173-r1/e173/perf-baseline.log`, `/tmp/nextorm-D173-r1/e173/`
 - 2026-10-08T13:38:43Z | DO | revision r1 | iteration 2/3 | E173-12 scope/docs/tracking hygiene: `gh issue view 173` state OPEN, milestone `1.0.9-rc2`, URL https://github.com/AlexeyShirshov/nextorm/issues/173; removed only the resolved `**Latent P2.**` Member/comparer block from `docs/specs/roadmap/todo_navigation_properties.md` (CRLF preserved, 354 lines); bounded 6-file diff (2 production + 3 tests + roadmap), 0 suppressions, no public API/EN/RU docs change | `/tmp/nextorm-D173-r1/e173/tracking.txt`, `/tmp/nextorm-D173-r1/e173/scope-review.txt`, `/tmp/nextorm-D173-r1/e173/final-diff.patch`
 - 2026-10-08T13:42:37Z | DO | revision r1 | iteration 2/3 | R173-04/E173-05 row-9 positive re-gather: no existing ctor-position `Member == null` materialization test found; added `ConstructorPositionItem_WithMatchingCtor_ShouldMaterializeThroughTheCtorPosition` (tests/nextorm.core.tests/RowMaterializerBuilderTests.cs:219) and recorded it in packet §8. `dotnet build nextorm.slnx -c Debug` exit 0, 0W/0E; `dotnet test tests/nextorm.core.tests -c Debug --filter "FullyQualifiedName~RowMaterializerBuilderTests"` exit 0 (succeeded 6, failed 0, skipped 0). | `/tmp/nextorm-D173-r1/ctor/`, `/tmp/nextorm-D173-r1/evidence-packet.md`
+
+---
+
+# ACT — D173 / GitHub #173
+
+- ACT recorded: 2026-10-08 (collection `1.0.9-rc2`, branch `1.0.9-rc2`).
+- CHECK verdict: **PASS** at `r1` / `rv1` / `n2`.
+- Product commit: `29e794fd6da51943596dfb5daf54e7cf52dcb4e4` — `#173 D173 projection folding honors Member in plan comparer + mapper key`.
+- Change: `ProjectionEntityItem.Member` participates in both `SelectExpressionPlanEqualityComparer` equality/hash and `RowMapperFactory.BuildSignature` plan key; producers, public API, and cache architecture unchanged.
+- Files committed: `src/nextorm.core/Expressions/SelectExpressionPlanEqualityComparer.cs`, `src/nextorm.core/DataContext/RowMapperFactory.cs`, `tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs`, `tests/nextorm.core.tests/RowMapperFactoryStreamingKeyTests.cs`, `tests/nextorm.core.tests/RowMaterializerBuilderTests.cs`, `tests/nextorm.sqlite.tests/PlanKeyUniquenessTests.cs`, `docs/specs/roadmap/todo_navigation_properties.md`, `docs/specs/status/rc2-173-projection-folding-member-1.md`.
+- Committed evidence: build Debug/Release 0 warnings / 0 errors; unit 5802 passed / 0 failed / 1 skipped; integration 3337 passed / 0 failed / 0 errors (PostgreSQL, SQL Server, MySQL, ClickHouse, SQLite; 197 pre-existing provider-capability skips); coverage 88.1% line / 80.2% branch; C-PERF acceptance 7/7 cases (before-edit baseline 51.31s, candidate 45s, cached/prepared time ratio 1.99, alloc ratio 7.66); targeted mutation M1-M4 + same-name omission mutants compiled and killed (assertion failures, sources restored); positive ctor-position `Member == null` materialization test added.
+- Roadmap `docs/specs/roadmap/todo_navigation_properties.md`: removed only the resolved latent P2 Member/comparer item.
+- GitHub issue `#173`: **closed** — https://github.com/AlexeyShirshov/nextorm/issues/173.
+- Collection status `docs/specs/status/collection-1.0.9-rc2.md`: D173 row set to `done`, Done list updated, next allowed step set to **D190**.
+- ACT complete; D173 done.
