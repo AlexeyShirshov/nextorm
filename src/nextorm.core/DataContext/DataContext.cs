@@ -343,8 +343,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     internal void WriteJson<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
     {
-        var (prepared, rowWriter, plan) = PrepareJsonStream(queryCommand, options, cancellationToken);
-        _executor.WriteJson(prepared, rowWriter, plan, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params);
+        var (prepared, rowWriter, plan, native) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        _executor.WriteJson(prepared, rowWriter, plan, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params, native);
     }
 
     /// <summary>Asynchronously streams a query's projected rows as JSON to a caller-owned stream; see <see cref="WriteJson{TResult}"/>.</summary>
@@ -357,15 +357,21 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <returns>A task that completes when the whole document has been written.</returns>
     internal Task WriteJsonAsync<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
     {
-        var (prepared, rowWriter, plan) = PrepareJsonStream(queryCommand, options, cancellationToken);
-        return _executor.WriteJsonAsync(prepared, rowWriter, plan, output, options, @params, cancellationToken);
+        var (prepared, rowWriter, plan, native) = PrepareJsonStream(queryCommand, options, cancellationToken);
+        return _executor.WriteJsonAsync(prepared, rowWriter, plan, output, options, @params, cancellationToken, native);
     }
 
     // A JSON stream needs the SQL rendered and the command attached, but no Func<IDataRecord,TResult>:
     // DocumentMode is the planner's existing no-mapper flag. It is set on a live clone so the caller's
     // command is never mutated (DocumentMode is part of the plan key and the sticky-state hazard is the
     // same as Cache). The clone's populated SelectList/OneColumn feed the shape plan.
-    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter RowWriter, JsonShapePlan Plan) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
+    //
+    // When the dialect can serve the document natively (SQL Server FOR JSON) and the request is
+    // eligible, the returned command carries the trailing FOR JSON clause and RowWriter is null; the
+    // executor then copies the single native document column. The native clone is prepared first so the
+    // eligible fast path pays one preparation; an ineligible request falls back to the managed
+    // row-streaming clone before execution and is never retried through the managed path later.
+    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter? RowWriter, JsonShapePlan Plan, bool Native) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
         ArgumentNullException.ThrowIfNull(options);
@@ -381,25 +387,51 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // it explicitly; otherwise the temp marker is lost and the batch guard never fires.
         var tempSource = queryCommand.From?.TempTable is not null ? queryCommand.From : null;
 
+        // A native document is only attempted for a dialect that renders FOR JSON and when the caller did
+        // not already attach a document clause (which the managed stream does not consume). Eligibility is
+        // decided from the validated shape plan below, before any execution.
+        var tryNative = Dialect.SupportsForJson
+            && queryCommand.ForJsonClause is null
+            && queryCommand.ForXmlClause is null;
+
+        if (tryNative)
+        {
+            var nativeCmd = CloneForJsonStream(queryCommand, tempSource);
+            // include_null_values is the inverse of IgnoreNull: FOR JSON omits null members by default,
+            // matching the managed IgnoreNull=true; INCLUDE_NULL_VALUES matches IgnoreNull=false.
+            nativeCmd.ForJsonClause = new ForJsonClause(ForJsonMode.Path, null, IncludeNullValues: !options.IgnoreNull);
+
+            var nativePrepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
+                nativeCmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+
+            var nativePlan = JsonShapePlan.Build(nativeCmd.SelectList, nativeCmd.OneColumn, options, nativeCmd.JsonShape);
+            if (JsonNativeStream.IsEligible(nativePlan, options))
+                return (nativePrepared, null, nativePlan, true);
+        }
+
+        var cmd = CloneForJsonStream(queryCommand, tempSource);
+        var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
+            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+
+        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
+        return (prepared, JsonRowWriterFactory.Build(plan), plan, false);
+    }
+
+    // Clones the caller's command into a JSON-stream preparation. DocumentMode is the planner's existing
+    // no-mapper flag; JsonShapeMode captures the recursive projection shape while preparing the clone
+    // only, so the caller's command and its shared select list/result shape are never mutated. A
+    // temporary-table source is preserved so the executor's batch guard still fires.
+    private static QueryCommand<TResult> CloneForJsonStream<TResult>(QueryCommand<TResult> queryCommand, FromExpression? tempSource)
+    {
         var cmd = (QueryCommand<TResult>)queryCommand.Clone();
         cmd.DocumentMode = true;
         cmd.ResetPreparation();
         if (tempSource is not null)
             cmd.From = tempSource;
 
-        // Capture the recursive JSON shape and lower its scalar descendants while preparing this clone
-        // only; the caller's command and the shared select list/result shape are never mutated.
         cmd.JsonShapeMode = true;
         cmd.JsonShape = null;
-
-        // Route through the context's preparation wrapper (not the planner directly) so a lazy
-        // temporary-table source is still detected; the executor then rejects that shape, since a
-        // batch read cannot be streamed through a single reader.
-        var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
-            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
-
-        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
-        return (prepared, JsonRowWriterFactory.Build(plan), plan);
+        return cmd;
     }
 
     // A query that reads a lazy temporary table is not a single statement: the table must be created on

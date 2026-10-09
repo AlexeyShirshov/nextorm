@@ -170,7 +170,8 @@ exclusions** that are deferred to their own issues rather than silently flattene
   collection with no provider-native array source) — issue [#172](https://github.com/AlexeyShirshov/nextorm/issues/172);
 * **new naming-policy / options behaviour** — issue [#177](https://github.com/AlexeyShirshov/nextorm/issues/177);
 * **DB-side JSON generation** (SQL Server `FOR JSON`, PostgreSQL `json_agg`, …) stays a separate
-  server-side path;
+  server-side path for *nested* shapes; `WriteJson` on SQL Server uses `FOR JSON` internally only for an
+  eligible flat shape (see [SQL Server native fast-path](#sql-server-native-fast-path));
 * **multidimensional arrays** and rank-one arrays of unsupported element types (a `List<T>` member, a
   dictionary element, a value-converted element) fail closed instead of using an arbitrary runtime
   serialization path.
@@ -182,6 +183,47 @@ or I/O failure, or cancellation, can occur mid-document and leave partial output
 A multi-column projection must have named members (an anonymous type or a named record); a column
 without a name throws when the shape is planned. Nested object members are validated **per object
 scope**.
+
+### SQL Server native fast-path
+
+On SQL Server an eligible request is served by the database itself: the query gets a trailing
+`FOR JSON PATH` clause and the reported single document column is copied straight to your `Stream` in
+bounded chunks, with no managed per-row serialization. This is an internal optimization — it changes
+neither the public API/signatures nor the JSON contract; only *where* the JSON is built changes
+(server side instead of `System.Text.Json`).
+
+A request is eligible for the native path only when **all** of these hold:
+
+* the projection is a **flat object** — one named member per projected column, with no nested object,
+  no `Projection<T1,T2>`/recursive shape and no scalar (single-column) projection;
+* every member name is a **simple identifier** (`[A-Za-z_][A-Za-z0-9_]*`); a dotted (`a.b`) or
+  otherwise special alias would become a `FOR JSON PATH` path or change the emitted property name;
+* every bound column is `string`, `bool`, `short`, `int` or `long`, or a nullable form of one of them —
+  `byte`, the floating-point types, `decimal`, `Guid`, `DateTime`, `byte[]` and every enum stay on the
+  managed path, as do provider value conversions and `*OrDefault` projections;
+* the options are the defaults `FOR JSON PATH` can reproduce: `Mode = Array`, `Root = null`,
+  `WriteIndented = false`, `PropertyNamingPolicy = null`. `IgnoreNull` is **not** a disqualifier:
+  `IgnoreNull = true` maps to `FOR JSON`'s default (null members omitted) and `IgnoreNull = false` to
+  `INCLUDE_NULL_VALUES`.
+
+Everything else — recursive nested/projection shapes, enums (numeric or string), provider conversions
+(`decimal`/`Guid`/`DateTime`/binary/…), special aliases and naming policies, a root or indentation,
+`NdJson`, `*OrDefault` substitution, and every other provider — automatically uses the managed
+`System.Text.Json` writer, decided **before execution**. There is no retry: a failure on the native path
+is not replayed through the managed path.
+
+The native document is **logically equivalent** to the managed output, not necessarily byte-for-byte
+identical: it is valid UTF-8 and parses to the same JSON values, but SQL Server's escaping differs from
+`System.Text.Json` — for example it leaves `<`, `>`, `&` and non-ASCII characters unescaped. A large
+document is split by the database across several reader rows and concatenated transparently. There is
+no public API or signature change. An empty result still writes `[]` in `Array` mode, and destination
+ownership is unchanged: the library never calls `Stream.Flush` and never disposes your `Stream`; on
+cancellation or error the operation stops and rethrows, leaving any already-written bytes in place (see
+[Ownership, flushing and errors](#ownership-flushing-and-errors)).
+
+The scalar [`ForJson`](14-json.md#return-the-whole-result-set-as-one-json-document) / `ForJsonAsync`
+terminals are a separate, unchanged surface: they still return one materialized `string`, and `null` for
+an empty result.
 
 ### Names, null semantics and arrays
 

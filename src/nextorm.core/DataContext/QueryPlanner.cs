@@ -537,6 +537,11 @@ internal sealed class QueryPlanner : IQueryPlanner
             NamingConvention = queryCommand.ResolvedNamingConvention,
             KeywordCase = queryCommand.ResolvedKeywordCase,
             SequentialAccess = sequentialAccess,
+            // The native FOR JSON streaming clone aliases every projected column to its JSON property
+            // name, so a mapped column that differs from the property only by case (id vs Id) still gets
+            // the exact alias FOR JSON PATH emits as the property name. Set only on that clone: a plain
+            // JSON-shape preparation (ForJsonClause null) and the scalar ForJson terminal are untouched.
+            ExactProjectionAliases = queryCommand.JsonShapeMode && queryCommand.ForJsonClause is not null,
             RenderMutationBody = _renderMutationBody,
         };
         var sqlBuilder = new SqlBuilder(in ctx);

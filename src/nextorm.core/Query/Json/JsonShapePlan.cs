@@ -45,7 +45,8 @@ internal readonly struct JsonShapeColumn
 {
     /// <summary>Initializes a planned column.</summary>
     internal JsonShapeColumn(int ordinal, string name, Type valueType, JsonWriteKind kind, bool nullable, bool defaultOnNull,
-        Type? enumUnderlyingType = null, JsonConverter? enumStringConverter = null)
+        Type? enumUnderlyingType = null, JsonConverter? enumStringConverter = null, Type? declaredType = null,
+        Type? providerType = null, bool isDirectPassThrough = false)
     {
         Ordinal = ordinal;
         Name = name;
@@ -55,6 +56,9 @@ internal readonly struct JsonShapeColumn
         DefaultOnNull = defaultOnNull;
         EnumUnderlyingType = enumUnderlyingType;
         EnumStringConverter = enumStringConverter;
+        DeclaredType = declaredType;
+        ProviderType = providerType;
+        IsDirectPassThrough = isDirectPassThrough;
     }
 
     /// <summary>The zero-based result-set ordinal the value is read from.</summary>
@@ -92,6 +96,31 @@ internal readonly struct JsonShapeColumn
     /// once while the shape is planned, never resolved per row.
     /// </summary>
     public JsonConverter? EnumStringConverter { get; }
+
+    /// <summary>
+    /// The declared CLR type of the projection before <see cref="JsonWriteKind"/> classification (for a
+    /// numeric enum this is the enum type, while <see cref="ValueType"/> is its underlying integral type).
+    /// Used by the native JSON eligibility check to keep every enum on the managed path even though a
+    /// numeric enum is classified as <see cref="JsonWriteKind.Number"/>. <see langword="null"/> for a
+    /// column built by the recursive writer that does not carry provenance.
+    /// </summary>
+    public Type? DeclaredType { get; }
+
+    /// <summary>
+    /// The provider-side storage type a value converter reads and writes, or <see langword="null"/> when
+    /// the column is read as its CLR type. The managed writer reads this type and converts it to
+    /// <see cref="ValueType"/>; the native <c>FOR JSON</c> transport would emit the raw provider value, so
+    /// a non-<see langword="null"/> type other than <see cref="ValueType"/> keeps the column managed.
+    /// </summary>
+    public Type? ProviderType { get; }
+
+    /// <summary>
+    /// Whether the column is a proven direct pass-through: a mapped CLR member (or expanded entity
+    /// column) whose storage type is read as <see cref="ValueType"/> with no computed/raw accessor. The
+    /// managed numeric reader inspects the runtime provider field type and narrows/converts it; the
+    /// native transport cannot, so only a proven pass-through may be served from the database document.
+    /// </summary>
+    public bool IsDirectPassThrough { get; }
 }
 
 /// <summary>
@@ -244,7 +273,7 @@ internal sealed class JsonShapePlan
                         $"JSON streaming validation [names]: Duplicate JSON property name '{name}' after naming-policy conversion; JSON object members must be unique.");
             }
 
-            columns[i] = new JsonShapeColumn(column.Index, name, valueType, kind, column.Nullable, column.DefaultOnNull, enumUnderlying, enumConverter);
+            columns[i] = new JsonShapeColumn(column.Index, name, valueType, kind, column.Nullable, column.DefaultOnNull, enumUnderlying, enumConverter, column.PropertyType, column.ProviderType, IsDirectProjection(column));
         }
 
         return new JsonShapePlan(oneColumn, columns, options, shape: null);
@@ -306,6 +335,36 @@ internal sealed class JsonShapePlan
 
         expression = TypeFacts.UnwrapConvert(expression);
         return expression is MemberExpression member ? member.Member : null;
+    }
+
+    /// <summary>
+    /// Whether a flat column is a proven direct pass-through: a mapped CLR member (or an expanded
+    /// entity column that carries <see cref="SelectExpression.PropertyInfo"/>) rather than a raw
+    /// named-table accessor (<c>TableAlias.GetXxx</c> / <c>TableColumn.AsXxx</c>) or a computed
+    /// expression. A raw accessor's storage type is not part of the CLR projection, so the managed reader
+    /// infers it at read time; the database <c>FOR JSON</c> serializer cannot, and admitting the column
+    /// natively could emit a wider/different value than the managed writer.
+    /// </summary>
+    private static bool IsDirectProjection(SelectExpression column)
+    {
+        if (column.PropertyInfo is not null)
+            return true;
+
+        var expression = column.Expression;
+        if (expression is null)
+            return false;
+
+        if (expression is LambdaExpression lambda)
+            expression = lambda.Body;
+
+        expression = TypeFacts.UnwrapConvert(expression);
+        return expression switch
+        {
+            MemberExpression member => member.Member.DeclaringType != typeof(TableColumn),
+            MethodCallExpression call => call.Method.DeclaringType != typeof(TableAlias)
+                && call.Method.DeclaringType != typeof(TableColumn),
+            _ => false,
+        };
     }
 
     /// <summary>
