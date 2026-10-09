@@ -1,3 +1,28 @@
+## Collection rc2-final — own PLAN adjudication (2026-10-09, HEAD 9a2a2871)
+
+- task: T171 / #171; selected_variant: `pdca-dotnet`; cycle_id: N=1; plan_revision: r=1
+- plan_state: **gap** (no `ready` placeholder created; barrier not passed)
+- CLASSIFICATION: **GAP** — no meaningful in-milestone deliverable is derivable.
+
+### Reason
+No concrete consumer, no agreed API/semantics for `JoinInto` over `As`/derived sources, and therefore no derivable acceptance criteria (including a negative case) for a NEW deliverable. Re-pinning the existing rejection or restating its documentation would manufacture scope.
+
+### Evidence
+- `docs/specs/roadmap/todo_navigation_properties.md:268,325` — explicitly excludes this behavior pending a separate decision (reject now, revisit on demand).
+- `docs/specs/status/rc2-171-joininto-as-derived-1.md:35-41` — prior GAP requires a concrete consumer plus agreed API/semantics; keep #171 open; avoid artificial DO.
+- `src/nextorm.core/Builders/EntityBuilder.cs:844-849` (calls `:694,772,819`) — all public `JoinInto` overloads already reject derived/joined-projection sources at entry; no unfinished positive path.
+- `tests/nextorm.core.tests/JoinIntoRejectionTests.cs:220,263` — negative pins of the existing guard; no demand for positive behavior.
+- `docs/advanced/relationships.md:285-286` + RU mirror — public limitation already documented.
+- #159 CTE/direct-join + alias support does not establish a consumer or semantics for this task; roadmap trigger `:333-336` belongs to #172.
+
+### Unblock trigger
+A concrete consumer plus agreed API/semantics → a separate issue supplying testable acceptance criteria and negative cases.
+
+### Collection disposition
+Retain `plan_state=gap`; do NOT create a `ready` placeholder; no DO tasks; do not close #171. The ALL-barrier does not pass.
+
+---
+
 # RC2-171 - D171 / issue #171: JoinInto over As/derived source (PLAN, collection 1.0.9-rc2)
 
 - task: D171 (GitHub issue #171, milestone 1.0.9-rc2)
