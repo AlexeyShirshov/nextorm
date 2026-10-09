@@ -151,3 +151,9 @@ E09 r4 contract pre-declared at 2026-10-09T07:11:23Z
 - Temp worktree `/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266` removed; worktrees-before == worktrees-after.
 - Task files NOT committed (`tests/nextorm.integration.tests/Providers/ITestProvider.cs`, `tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs`); **#189 stays OPEN**; preserved test-only patch `docs/specs/status/rc2-189-evidence/D189-STOP.patch`; r4 evidence `docs/specs/status/rc2-189-evidence/r4-ab/`.
 - State: D189 `incomplete` (r=4, N=1, n=1/3); r=3 STOP history preserved above.
+
+## Closing note — maintainer decision (2026-10-09)
+
+- **#189 closed by maintainer decision.** The cached-path performance degradation is **confirmed and accepted**. Functional SQLite `ToDataReader`/`ToDataReaderAsync` support for non-LOB projections is confirmed in-tree (commit `65477266`, verified on rc2).
+- Evidence: `docs/specs/status/rc2-189-evidence/r4-ab/verdict.json` — verdict `PROVEN REGRESSION` (evaluator exit 1; 8 valid pairs, 0 replacement pairs); governing case3 `SqliteBenchmarkAny.Nextorm_Cached` `L=1.05190 > 1.05` (`R=1.08211`, `U=1.11319`, z=4.786). Test-only patch preserved at `docs/specs/status/rc2-189-evidence/D189-STOP.patch`.
+- This note records the issue-level decision only; the PDCA task D189 remains `incomplete` and is not converted to PASS. Residual perf note remains tracked in the performance docs.
