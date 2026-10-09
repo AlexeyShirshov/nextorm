@@ -1,3 +1,100 @@
+## Collection rc2-final — own PLAN (2026-10-09, HEAD 9a2a2871)
+
+- task: T170 / #170; selected_variant: `pdca-dotnet`; cycle_id: N=1; plan_revision: r=1
+- baseline: `9a2a2871`; evidence contract: rv1 (planned, not pinned)
+- plan_state: **ready** (P phase; no DO yet)
+- new P: `P170-oracle-first`
+
+---
+# T170 — OneToOne FK uniqueness: documented trust and verifiable runtime boundary
+Collection `rc2-final`; issue #170; `pdca-dotnet`; N=1; r=1; evidence rv1.
+Status `docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md`. PLAN only.
+Historical r3 STOP remains terminal; its patch is reference material, not accepted evidence or an implementation baseline.
+**New P: `P170-oracle-first`** — replace aggregate "coverage exists" claims with independently constructed shared-FK fixtures and an exhaustive, case-mapped runtime oracle.
+
+## Goal and acceptance criteria
+Deliver option **(b)**: explicitly settle declaration-time trust, document its limits, and prove the existing runtime backstop. **Do not claim metadata-build-time or database-schema uniqueness validation.**
+- **AC1 / R170-01 — Trust:** metadata construction accepts a valid OneToOne declaration with either unique or non-unique FK data; it neither inspects schema/data nor introduces uniqueness constraints. Negative: non-unique FK must not cause a new metadata uniqueness exception.
+- **AC2 / R170-02 — Independence:** separately declared navigations sharing an FK remain separate declarations; OneToOne does not globally make that FK or another relationship unique. Negative: an explicitly non-OneToOne relationship sharing that FK must still expose its permitted multiplicity.
+- **AC3 / R170-03 — Runtime:** within one parent, two distinct non-null child identities cause `InvalidOperationException` with the existing "more than one distinct" diagnostic, on both sync and async consumption. Negative: silently selecting one distinct child, throwing before loading, or checking identities globally across parents fails.
+- **AC3 positive boundary:** one child, no child, and repeated rows of the same child identity load correctly; keyless/null-identity cases carry no uniqueness guarantee. Negative: valid loads throwing, missing expected children, or claiming keyless duplicate detection fails.
+- **AC4 / R170-04 — Providers:** SQLite, PostgreSQL, SQL Server, MySQL and ClickHouse each execute the required sync/async positive and negative cases. Negative: skipped providers, SQLite-only runs or inherited-suite assumptions for ClickHouse fail.
+- **AC5 / R170-05 — Records:** EN/RU docs, roadmap and issue/status disposition consistently distinguish trust from runtime checking. Negative: leaving the open item unexplained, asserting schema validation, or citing historical STOP evidence as current completion fails.
+
+## Minimal solution and alternatives
+Purpose = make the uniqueness boundary unambiguous; constraints = no new metadata API, schema I/O or hot-path behavior; optimum = documentation plus failure-first tests of existing behavior.
+| Approach | Benefit | Cost/risk | Decision |
+|---|---|---|---|
+| Metadata uniqueness guard | New build-time rejection | No agreed uniqueness source/AC; requires new policy/API or schema access | Not selected |
+| Documented trust + closed runtime oracle | Supported by current implementation; bounded, testable | Must distinguish known identities from actual FK/schema uniqueness | **Selected** |
+| Optional configured uniqueness certificate | Potential future opt-in guard | New public contract; a declaration is not proof of database uniqueness | Deferred: explicit opt-in feature request and agreed certificate semantics |
+
+Not a replay: independent shared-FK fixtures, multiplicity controls, provider×mode×outcome mapping and prerequisite oracle review become mandatory dependencies before documentation closure.
+
+## What the request did not specify
+- No metadata-build validation AC exists: define AC1–AC5 above from supplied production behavior; option (b) is explicitly authorized by this task.
+- Historical status said §10 resolved, but current roadmap remains open: **current tree is authoritative**. Rewrite the item's disposition explicitly.
+- Exact supported independent-declaration configuration and actual test symbols: targeted scout prerequisite.
+- Global evidence-contract text, integration recovery instructions, CI coverage commands and verified issue URL: scout obtains them before execution.
+- If the independent shared-FK fixture cannot be expressed through supported APIs, return to PLAN with observations; do not weaken AC2.
+
+## Tasks, footprint and classification
+All tasks **active/planned, fix now**.
+- **D170-0 — Prerequisite scout:** verify independent declarations, identity boundaries and both execution paths; inspect global `pdca-dotnet` contract, integration skill, CI workflow and issue URL. Sources `EntityMetadataBuilder.cs:637-656,971-983`; `JoinIntoSpec.cs:518-545,652`; supplied test locations.
+- **D170-1 — Oracle fixtures:** add explicit shared-FK configurations and controlled data; each negative fixture independently proves the offending rows exist before exercising OneToOne. `RelationshipMetadataTests.cs:253,555-581`; `JoinIntoOneToOneTests.cs:11`.
+- **D170-2 — Core matrix:** separately identifiable sync/async outcomes, identity variants and positive controls; bind real test IDs to case IDs. `JoinIntoOneToOneTests.cs:11`; `JoinIntoRejectionTests.cs:176`.
+- **D170-3 — Provider matrix:** extend `CommonTestSuite.JoinInto.cs:25,229,247,261,341` for its four providers; create ClickHouse-owned cases in planned `ClickHouseJoinIntoOneToOneTests.cs`. Do not count inheritance as ClickHouse coverage.
+- **D170-4 — Contract documentation:** clarify XML docs only at `RelationshipKind.cs:25-29`, `EntityMetadataBuilder.cs:625-627`, relevant `EntityBuilder.cs:978,996` and `JoinIntoSpec.cs:518-545`; update public EN/RU navigation guides and `implicit-navigation-queries.md` mirrors.
+- **D170-5 — Records and verification:** reconcile roadmap `todo_navigation_properties.md:56,259-283,324` and §10; execute commands, populate evidence, update issue/status with verified links.
+Dependencies D0→D1→D2→D3→D4→D5. Docs cannot claim closure before oracle results.
+Deferred: schema/index/DDL inspection and opt-in metadata rejection; trigger = separately approved feature.
+Footprint: core tests, shared integration tests, one planned ClickHouse test file, XML comments, EN/RU guides, roadmap/status and artifacts; **no functional production edits anticipated**.
+Classification: actionable scope decision + in-cycle evidence prerequisites.
+
+## Test strategy and CLOSED variant matrix
+Unit tests for metadata/identity semantics; integration tests for executed loads. Case IDs are stable scenario IDs, not invented test symbols; the manifest binds them to actual test IDs before CHECK.
+| Case ID / variant | Disposition and explicit oracle |
+|---|---|
+| `UQ` — OneToOne on genuinely unique FK | test: metadata succeeds; controlled unique FK values; exact graph loads. Enforceable UNIQUE fixture on SQLite/PG/SQLServer/MySQL; ClickHouse uses independently verified unique data. |
+| `NQ` — OneToOne on non-unique FK | test: unconstrained fixture with two distinct child identities for one FK; metadata succeeds, runtime rejects. Runtime negative, not metadata rejection. |
+| `SH1` — independent OneToOne + non-OneToOne, same mapped FK | test: distinct explicit declarations, no inferred inverse; metadata preserves both; non-OneToOne control returns repeated-FK multiplicity. |
+| `SH2` — two independently declared OneToOne navigations, same FK | test: both declarations survive separately without a schema constraint; each violation checked per parent/navigation. |
+| `DS`/`DA` — distinct child identities, sync/async | test: fully consume; exact runtime exception and diagnostic; two-parent control rules out global identity comparison; same outcome both modes. |
+| `RS`/`RA` — repeated same identity | test: sync/async do not throw; one reference with expected identity. |
+| `KS`/`KA` — keyless/null identity | test core both modes: no promised rejection; null plus one known identity not misreported. |
+| `ZS`/`ZA` — null/default | test core both modes: empty child input leaves navigation null; null not a distinct identity; zero-valued non-null key remains real. guard: no schema-null uniqueness promise. |
+| `PS`/`PA` — positive load | test: one-child, no-child, two-parent fixtures; assert parent/child identities and payload, not only row counts. |
+| `IV`/`IR` — value/reference identity | test core both modes: integer identities incl. zero, non-null string identities. |
+| `PV` — provider/execution cross-product | test: `{SQLite,PG,SQLServer,MySQL,ClickHouse} × {sync,async} × {distinct rejection,positive load,repeated identity}` = **30 individually mapped cases**, incl. ClickHouse-owned tests. |
+
+## Exact execution selectors and evidence requirements
+- **B:** `dotnet build -c Debug`
+- **U:** `dotnet test tests/nextorm.core.tests -c Debug`
+- **Q:** `dotnet test tests/nextorm.sqlite.tests -c Debug && dotnet test tests/nextorm.postgres.tests -c Debug`
+- **I:** `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor`
+- **C:** `DOCKER_HOST=... dotnet-coverage collect "dotnet test -c Debug" --settings coverage.settings.xml -f cobertura -o artifacts/pdca/D170/rv1/coverage.cobertura.xml`
+- **CR:** `reportgenerator -reports:artifacts/pdca/D170/rv1/coverage.cobertura.xml -targetdir:artifacts/pdca/D170/rv1/coverage-report -reporttypes:TextSummary`
+- **DOC:** `dotnet docfx docs/docfx.json`; **DIFF:** `git diff --check`
+Each requires exit 0 and retained stdout/stderr; test commands require executed, passing mapped tests, not empty selections. Load the integration skill first; missing socket requires start/wait/recheck recovery, not skipping containers. Record all five providers. Coverage thresholds line **85%**, branch **75%**, main-hard-fail/other-branch-warning.
+
+## Versioned evidence contract — rv1
+Pin **before DO** at `artifacts/pdca/D170/rv1/manifest.json`; status links it. All sources below are **planned**. Common predicate: "T170 execution on the recorded base plus recorded working-tree diff"; all rows unconditional within the selected scope. Common artifacts `artifacts/pdca/D170/rv1/{row-id}/` with logs, actual test-ID→case-ID map, result/oracle references.
+Rows: `REQ170-TRUST`/R170-01 (`UQ,NQ`); `REQ170-INDEPENDENCE`/R170-02 (`SH1,SH2`); `REQ170-RUNTIME`/R170-03 aggregate (every required runtime case mapped, no aggregate-only substitute); `REQ170-RUNTIME`/R170-03-S (sync `DS,RS,KS,ZS,PS` + `IV/IR` + provider sync cells); `REQ170-RUNTIME`/R170-03-A (async `DA,RA,KA,ZA,PA` + `IV/IR` + provider async cells); `REQ170-PROVIDERS`/R170-04 (all 30 `PV` cells; five providers execute; ClickHouse-owned); `REQ170-RECORDS`/R170-05 (AC5; roadmap contradiction resolved; verified issue URL; EN/RU parity); `REQ170-REGRESSION`/R170-06 (build, core and SQL-gen regressions); `REQ170-COVERAGE`/R170-07 (line/branch + policy). All P1 by acceptance invariants. CHECK owns re-gather: at most two targeted evidence retrievals and one rerun of an already required command total. rv1 belongs to this new cycle; historical STOP/contracts remain archived.
+
+## Execution, design, docs, performance and risks
+**Mode:** sequential units in the current worktree; shared core/integration fixtures and docs overlap. No worktree, commits, merges or pushes.
+**Design checklist:** declaration ≠ uniqueness proof; per-parent identity scope; sync/async parity; independent relationship registration; keyless limitation; no new public API, cache mutation, provider defaults or runtime algorithm; CRLF; warnings-as-errors.
+**Docs/registers:** EN/RU articles and XML comments touched; generated API/site not hand-edited. Roadmap records "resolved as documented trust with runtime boundary", schema validation explicitly outside this deliverable; no public links to internal specs.
+**Performance:** no benchmark required: only tests/docs/XML comments change. Metadata construction is one-time (`EntityMetadataBuilder.cs:637-656`); per-load code (`JoinIntoSpec.cs:518-545`) functionally unchanged. Any functional hot-path edit returns to PLAN.
+**Reconnaissance:** required, bounded to D0. Observable success = supported explicit shared-FK fixtures, identified sync/async APIs/test IDs, confirmed null/keyless boundary and loaded execution/contract instructions.
+**Priority:** all contract rows P1. CHECK cannot downgrade.
+**Risks:** repeating r1–r3 via indirect tests/unbound positive cases; accidental inferred-inverse substitution; ClickHouse fixture collapsing duplicates; false uniqueness claims; missing provider logs.
+**Confidence:** high in the trust/runtime boundary; unverified in exact fixture/API expressibility, actual symbols and environment readiness. D0 resolves these.
+Predecessors: restored branch and preserved STOP patch; no dependency on accepting that patch. Three failed CHECKs in one revision require escalation, not a fourth attempt.
+Refs: #170 (verified URL to be gathered); `todo_navigation_properties.md:56,259-283,324`; supplied production/test locations; `docs/specs/status/rc2-170-evidence/D170-STOP-incomplete.patch`.
+**Handoff:** coder persists status and rv1 manifest with planned sources now; retain HOLD. Later DO starts with D0, then oracle-first fixtures; closure requires every P1 row and a CHECK verdict.
+
+---
 # D170 — Navigation: validate FK uniqueness for OneToOne
 
 - task: D170 (GitHub issue #170)
