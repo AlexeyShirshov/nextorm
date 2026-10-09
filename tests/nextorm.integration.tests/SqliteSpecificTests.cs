@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
@@ -42,6 +43,31 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         };
 
         await test.Should().ThrowAsync<SqliteException>();
+    }
+
+    // T208 (#208) row 5: a projected SqlFunctions.Parameter<T> is provider-neutral. SQLite is a
+    // non-native JSON provider, so the request uses the managed writer and must still stream the bound
+    // value under the exact member name, proving the alias/plan fix does not depend on SQL Server.
+    [Trait("PDCA", "T208")]
+    [Fact]
+    public void ProjectedParameter_NonNativeFallback_ShouldBindAndStreamValue()
+    {
+        var command = _sut.ComplexEntity.OrderBy(it => it.Id)
+            .Select(it => new { it.Id, Param = SqlFunctions.Parameter<int>(0) });
+
+        using var buffer = new MemoryStream();
+        command.WriteJson(buffer, new JsonStreamOptions(), TestContext.Current.CancellationToken, 41);
+
+        using var document = JsonDocument.Parse(buffer.ToArray());
+        document.RootElement.GetArrayLength().Should().BeGreaterThan(0);
+        document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(41);
+
+        // A changed value on the same command must re-bind on the managed fallback too.
+        using var changed = new MemoryStream();
+        command.WriteJson(changed, new JsonStreamOptions(), TestContext.Current.CancellationToken, 42);
+
+        using var changedDocument = JsonDocument.Parse(changed.ToArray());
+        changedDocument.RootElement[0].GetProperty("Param").GetInt32().Should().Be(42);
     }
 
     [Fact]

@@ -75,7 +75,15 @@ internal static class NormSqlTranslator
             var paramName = NormParam.GetName(paramIdx);
             visitor.Params.Add(new Parameter(paramName, null));
             if (!visitor.IsParamMode)
+            {
                 visitor.Builder!.Append(visitor.Dialect.MakeParam(paramName));
+                // A projected parameter is addressed by its projected member name (an outer query
+                // re-resolves it, and the native FOR JSON fast-path takes the JSON property name from
+                // the SQL alias), so the select item must carry its exact alias like the scalar and
+                // aggregate translators do. The flag is per-visitor (one fresh visitor per projected
+                // column), so it cannot leak into a WHERE expression or a later column.
+                visitor.NeedAliasForColumn = true;
+            }
 
             return;
         }

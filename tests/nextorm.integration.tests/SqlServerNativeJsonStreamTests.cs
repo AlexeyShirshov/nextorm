@@ -55,6 +55,17 @@ public interface INativeJsonMeasureEntity
     string? Name { get; set; }
 }
 
+// T208: a NAMED (non-anonymous) projection target for the EntityBuilder .Select projection API. The
+// native FOR JSON path takes each property name from the SQL alias, so a named member must surface under
+// its exact name. Named types are the supported projection target; a derived EntityBuilder.As(...)
+// projection exposed as a whole entity is not a JSON stream source (see the status note).
+public sealed class NativeJsonProjectedParamRow
+{
+    public int Id { get; set; }
+
+    public int Param { get; set; }
+}
+
 public sealed class SqlServerNativeJsonStreamTests : ProviderTestSuite
 {
     private static readonly object SeedGate = new();
@@ -462,6 +473,154 @@ public sealed class SqlServerNativeJsonStreamTests : ProviderTestSuite
         using var document = JsonDocument.Parse(text);
         document.RootElement.GetArrayLength().Should().Be(1);
         document.RootElement[0].GetProperty("Upper").GetString().Should().Contain("中").And.Contain("<");
+    }
+
+    // T208 (live): a native-eligible object projection containing a projected SqlFunctions.Parameter<T>
+    // must alias the select item with the exact projected name and execute as native SQL Server FOR JSON.
+    // FOR JSON PATH takes the property name from the SQL alias, so pre-fix the bare "@norm_p0" item either
+    // raises the unnamed-column SqlException or silently leaves the property out; both fail this test.
+    // Sync and async must bind changed values across repeated calls on one command without stale state and
+    // without flipping the shared command's sticky Cache policy.
+    [Trait("PDCA", "T208")]
+    [Fact]
+    public async Task NativeProjectedParameter_ShouldExecuteNativeWithExactAliasSyncAndAsync()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        var command = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Param = SqlFunctions.Parameter<int>(0) });
+
+        IsNativeRoute(context, command, new JsonStreamOptions()).Should().BeTrue(
+            "a projected Parameter<T> is an admitted direct pass-through, so the request must select the native FOR JSON route");
+
+        using var sync = new MemoryStream();
+        command.WriteJson(sync, new JsonStreamOptions(), TestContext.Current.CancellationToken, 41);
+        using (var document = JsonDocument.Parse(sync.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Id").GetInt32().Should().Be(1);
+            document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(41);
+            document.RootElement[3].GetProperty("Param").GetInt32().Should().Be(41);
+        }
+
+        // A changed value on the same command must re-bind, not replay stale call-local state.
+        using var repeated = new MemoryStream();
+        command.WriteJson(repeated, new JsonStreamOptions(), TestContext.Current.CancellationToken, 42);
+        using (var document = JsonDocument.Parse(repeated.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(42);
+        }
+
+        using var async = new MemoryStream();
+        await command.WriteJsonAsync(async, new JsonStreamOptions(), TestContext.Current.CancellationToken, 7);
+        using (var document = JsonDocument.Parse(async.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(7);
+        }
+
+        // A second async call with a changed value must re-bind too (repeated changed async on one command).
+        using var asyncChanged = new MemoryStream();
+        await command.WriteJsonAsync(asyncChanged, new JsonStreamOptions(), TestContext.Current.CancellationToken, 9);
+        using (var document = JsonDocument.Parse(asyncChanged.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(9);
+        }
+
+        command.Cache.Should().BeTrue("the native projected-parameter path must not disable the caller's plan cache");
+        context.QueryCacheEnabled.Should().BeTrue();
+    }
+
+    // T208 (live) row 7: a projected reference-type Parameter<string> binds a nonempty and a null value;
+    // the native route must stream both under the exact member name (the null member is emitted because
+    // the default native document includes null values).
+    [Trait("PDCA", "T208")]
+    [Fact]
+    public void NativeProjectedStringParameter_ShouldBindNonNullAndNullValues()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        var command = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Param = SqlFunctions.Parameter<string>(0) });
+
+        IsNativeRoute(context, command, new JsonStreamOptions()).Should().BeTrue(
+            "a projected string Parameter<T> is an admitted direct pass-through and must select the native route");
+
+        using var nonEmpty = new MemoryStream();
+        command.WriteJson(nonEmpty, new JsonStreamOptions(), TestContext.Current.CancellationToken, "hello");
+        using (var document = JsonDocument.Parse(nonEmpty.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Param").GetString().Should().Be("hello");
+            document.RootElement[3].GetProperty("Param").GetString().Should().Be("hello");
+        }
+
+        using var nullValue = new MemoryStream();
+        command.WriteJson(nullValue, new JsonStreamOptions(), TestContext.Current.CancellationToken, (object?)null);
+        using (var document = JsonDocument.Parse(nullValue.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Param").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+    }
+
+    // T208 (live) row 4 + row 7: the projected-parameter path built through the EntityBuilder .Select
+    // projection API with a NAMED (non-anonymous) projection target -- the supported way to project a
+    // SqlFunctions.Parameter<T> alongside mapped columns for the native JSON path. FOR JSON PATH takes the
+    // property name from the SQL alias, so both named members must surface exactly and the route must be
+    // native. Sync and async bind a changed value and the int default zero across repeated calls without
+    // stale state and without flipping the shared command's sticky Cache policy.
+    [Trait("PDCA", "T208")]
+    [Fact]
+    public async Task NativeProjectedParameter_NamedProjection_ShouldExecuteNativeWithExactAliasSyncAndAsync()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        var command = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new NativeJsonProjectedParamRow { Id = x.Id, Param = SqlFunctions.Parameter<int>(0) });
+
+        IsNativeRoute(context, command, new JsonStreamOptions()).Should().BeTrue(
+            "a named-type projection containing a projected Parameter<T> is an admitted direct pass-through on the native route");
+
+        // Row 7 int default/zero: the projected parameter binds 0 and streams under its exact named member.
+        using var zero = new MemoryStream();
+        command.WriteJson(zero, new JsonStreamOptions(), TestContext.Current.CancellationToken, 0);
+        using (var document = JsonDocument.Parse(zero.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Id").GetInt32().Should().Be(1);
+            document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(0);
+            document.RootElement[3].GetProperty("Param").GetInt32().Should().Be(0);
+        }
+
+        // A changed value on the same command must re-bind.
+        using var changed = new MemoryStream();
+        command.WriteJson(changed, new JsonStreamOptions(), TestContext.Current.CancellationToken, 17);
+        using (var document = JsonDocument.Parse(changed.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(17);
+        }
+
+        // Async must re-bind a further changed value (both modes on the same command).
+        using var asyncChanged = new MemoryStream();
+        await command.WriteJsonAsync(asyncChanged, new JsonStreamOptions(), TestContext.Current.CancellationToken, 23);
+        using (var document = JsonDocument.Parse(asyncChanged.ToArray()))
+        {
+            document.RootElement.GetArrayLength().Should().Be(4);
+            document.RootElement[0].GetProperty("Param").GetInt32().Should().Be(23);
+        }
+
+        command.Cache.Should().BeTrue("the named projected-parameter path must not disable the caller's plan cache");
+        context.QueryCacheEnabled.Should().BeTrue();
     }
 
     // A9 (live): repeated native calls on one context with changed parameters must isolate per-call state

@@ -1,4 +1,5 @@
 using System.Data;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -111,7 +112,7 @@ public class JsonShapeWriterTests
             : JsonShapeNode.Scalar(null, elementType, binding: null);
     }
 
-    private static JsonShapeNode Arr(string name, Type arrayType, int ordinal, bool nullable)
+    private static JsonShapeNode Arr(string? name, Type arrayType, int ordinal, bool nullable)
         => JsonShapeNode.Array(name, arrayType, Element(arrayType.GetElementType()!), new JsonShapeBinding(ordinal, nullable, defaultOnNull: false));
 
     private static JsonRowWriter BuildWriter(JsonShapeNode shape)
@@ -701,5 +702,85 @@ public class JsonShapeWriterTests
         var act = () => Write(BuildWriter(shape), record);
 
         act.Should().Throw<InvalidOperationException>().WithMessage("reader failed mid-read");
+    }
+
+    // --- T208 (PDCA=T208): a projected SqlFunctions.Parameter<T> is a non-TableAlias/TableColumn
+    // method call, so the shape plan must admit it as a direct pass-through number scalar and the
+    // managed writer must emit its value under the exact projected member name (the native FOR JSON
+    // eligibility depends on that name being a simple alias). ---
+
+    [Fact]
+    public void ProjectedParameter_ShouldStreamValueUnderMemberName()
+    {
+        var call = Expression.Call(
+            typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Parameter))!.MakeGenericMethod(typeof(int)),
+            Expression.Constant(0));
+        var column = new SelectExpression(typeof(int)) { Index = 0, PropertyName = "Param", Expression = call };
+
+        var plan = JsonShapePlan.Build([column], oneColumn: false, new JsonStreamOptions());
+
+        plan.Columns[0].Name.Should().Be("Param");
+        plan.Columns[0].Kind.Should().Be(JsonWriteKind.Number);
+        plan.Columns[0].ValueType.Should().Be(typeof(int));
+        plan.Columns[0].IsDirectPassThrough.Should().BeTrue(
+            "a projected Parameter<T> is a non-TableAlias/TableColumn method call admitted as a direct pass-through");
+
+        Write(JsonRowWriterFactory.Build(plan), new FakeRecord([42], [typeof(int)]))
+            .Should().Be("[{\"Param\":42}]");
+    }
+
+    private static SelectExpression ProjectedParameterColumn(int index, string name, Type parameterType)
+    {
+        var call = Expression.Call(
+            typeof(SqlFunctions).GetMethod(nameof(SqlFunctions.Parameter))!.MakeGenericMethod(parameterType),
+            Expression.Constant(index));
+        return new SelectExpression(parameterType) { Index = index, PropertyName = name, Expression = call };
+    }
+
+    // T208 (PDCA=T208) row 2: a projected SqlFunctions.Parameter<T> inside a recursive (nested/grouped)
+    // shape is never served by the database FOR JSON transport -- the recursive writer reconstructs the
+    // shape with managed presence/alias logic -- and the managed writer emits its value under the exact
+    // member names. This is the "test + guard" closure for the array/root/nested/grouped shape row.
+    [Fact]
+    public void ProjectedParameter_InsideNestedAndArrayShape_ShouldRejectNativeAndStreamManaged()
+    {
+        var columns = new[]
+        {
+            ProjectedParameterColumn(0, "Param", typeof(int)),
+            ProjectedParameterColumn(1, "Values", typeof(int[])),
+        };
+
+        var shape = Obj(null,
+        [
+            Scalar("Param", typeof(int), 0, nullable: false),
+            Obj("Child", [Scalar("Param", typeof(int), 0, nullable: false)], JsonShapePresence.Always),
+            Arr("Values", typeof(int[]), 1, nullable: true),
+        ], JsonShapePresence.Always);
+
+        var plan = JsonShapePlan.Build(columns, oneColumn: false, new JsonStreamOptions(), shape);
+
+        plan.Shape.Should().NotBeNull("a captured recursive shape is not a flat phase-1 plan");
+        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse(
+            "a recursive shape must be reconstructed by the managed writer, never by the database FOR JSON transport");
+
+        Write(JsonRowWriterFactory.Build(plan), new FakeRecord([42, new[] { 1, 2, 3 }], [typeof(int), typeof(int[])]))
+            .Should().Be("[{\"Param\":42,\"Child\":{\"Param\":42},\"Values\":[1,2,3]}]");
+    }
+
+    // T208 (PDCA=T208) row 2 (root shape): a projected Parameter<int[]> inside a root array shape has no
+    // FOR JSON object mapping, so native is rejected and the managed recursive writer handles it.
+    [Fact]
+    public void ProjectedParameter_RootArrayShape_ShouldRejectNativeAndStreamManaged()
+    {
+        var columns = new[] { ProjectedParameterColumn(0, "Values", typeof(int[])) };
+        var shape = Arr(null, typeof(int[]), 0, nullable: true);
+
+        var plan = JsonShapePlan.Build(columns, oneColumn: false, new JsonStreamOptions(), shape);
+
+        plan.Shape.Should().NotBeNull();
+        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse(
+            "a root array shape has no FOR JSON object mapping and stays managed");
+        Write(JsonRowWriterFactory.Build(plan), new FakeRecord([new[] { 7, 8 }], [typeof(int[])]))
+            .Should().Be("[[7,8]]");
     }
 }

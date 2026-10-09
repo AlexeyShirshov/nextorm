@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -109,6 +110,93 @@ public class SqlServerNativeJsonSqlTests
         var sql = prepared.DbCommand.CommandText;
         sql.Should().Contain("upper(somestring) as [V]");
         sql.Should().EndWith("for json path");
+    }
+
+    // T208 (PDCA=T208): a native-eligible object projection containing a projected parameter must alias
+    // the select item with the exact projected-member name; otherwise FOR JSON PATH (which takes the
+    // property name from the SQL alias) emits a document without that property. Pre-fix the item is a
+    // bare "@norm_p0" (no alias), so this assertion is RED.
+    [Fact]
+    public void ProjectedParameter_ShouldAliasWithExactPropertyName()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = PrepareNative(ctx, ctx.From<IComplexEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Param = SqlFunctions.Parameter<int>(0) })).DbCommand.CommandText;
+
+        // The positive assertion is the negative control: a bare "@norm_p0" select item fails it.
+        sql.Should().Contain("@norm_p0 as [Param]");
+        sql.Should().EndWith("for json path");
+    }
+
+    // T208 (PDCA=T208) row 7: a projected reference-type Parameter<string> must carry the exact alias
+    // just like the int form. The alias is independent of the bound value, so the same SQL-generation
+    // assertion covers a nonempty and a null value (the live SQL Server test binds both).
+    [Fact]
+    public void ProjectedStringParameter_ShouldAliasWithExactPropertyName()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = PrepareNative(ctx, ctx.From<IComplexEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Param = SqlFunctions.Parameter<string>(0) })).DbCommand.CommandText;
+
+        sql.Should().Contain("@norm_p0 as [Param]");
+        sql.Should().EndWith("for json path");
+    }
+
+    // T208 (PDCA=T208) row 6: the pre-fix red state is a bare unaliased "@norm_pN" select item. The
+    // positive assertion above is the live negative control; this SQL-generation assertion pins it too,
+    // without fabricating the unnamed-column SqlException that the fix makes unreproducible.
+    [Fact]
+    public void ProjectedParameter_BareSelectItemWithoutAlias_ShouldBeAbsent()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = PrepareNative(ctx, ctx.From<IComplexEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Param = SqlFunctions.Parameter<int>(0) })).DbCommand.CommandText;
+
+        sql.Should().Contain("@norm_p0 as [Param]");
+        Regex.IsMatch(sql, @"@norm_p0\s*(?:,|from\b|for\b)", RegexOptions.IgnoreCase)
+            .Should().BeFalse("a bare parameter select item without its exact alias is the pre-fix red state");
+    }
+
+    // T208 (PDCA=T208) row 5: the alias signal is not native-specific -- a projected parameter now also
+    // carries its exact member alias in an ordinary (non-FOR-JSON) SELECT. That is the accepted design
+    // consequence of reusing the existing alias contract (outer-query re-resolution and the aggregate
+    // translators already alias this way); the SQL stays valid and the parameter stays un-aliased in WHERE.
+    [Fact]
+    public void ProjectedParameter_OrdinarySelect_ShouldAliasAndRemainValid()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var command = ctx.From<IComplexEntity>().OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Param = SqlFunctions.Parameter<int>(0) });
+
+        var sql = PrepareOrdinary(ctx, command);
+
+        sql.Should().Contain("@norm_p0 as [Param]");
+        sql.Should().NotContain("for json");
+    }
+
+    private static string PrepareOrdinary<T>(IDataContext ctx, QueryCommand<T> command)
+        => ((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(command, createEnumerator: false, storeInCache: false, CancellationToken.None)).DbCommand.CommandText;
+
+    // T208 (PDCA=T208): the alias flag is projection-scoped (a fresh visitor per select item). A parameter
+    // used only inside WHERE must stay unaliased: "@norm_p1", never "... as [x]".
+    [Fact]
+    public void WhereParameter_ShouldNotCarryAProjectionAlias()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = PrepareNative(ctx, ctx.From<IComplexEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<long>(1))
+            .Select(x => new { x.Id, Param = SqlFunctions.Parameter<int>(0) })).DbCommand.CommandText;
+
+        sql.Should().Contain("@norm_p0 as [Param]");
+
+        var wherePart = sql[sql.IndexOf("where", StringComparison.OrdinalIgnoreCase)..];
+        wherePart.Should().Contain("@norm_p1");
+        wherePart.Should().NotContain("as [", "a WHERE-only parameter must not carry a projection alias");
     }
 
     // R15: a command that already carries a ForJsonClause must not be rewritten to the native streaming
