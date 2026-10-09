@@ -1,3 +1,154 @@
+# D188 — Tier-1 cross-library comparison benchmarks (cycle N=2)
+
+```yaml
+task_id: D188
+issue: "#188 — Comparison benchmarks tier 1: projection, aggregates, paging, streaming + cross-library JSON/CSV"
+milestone: 1.0.9-rc2
+selected_variant: "SQLite; matched query workloads; explicit reuse categories; shared observable sinks"
+base: "branch 1.0.9-rc2 @ 0506b522"
+current_cycle: 2
+plan_revision: r4
+attempt: 1/3
+evidence_revision: rv4
+phase: DO
+status_file: docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md
+```
+
+Cycle 1 terminated `incomplete` (predecessor-blocked). Its terminal history is preserved verbatim in
+the appendix below and is **not** deleted. Cycle N=2 restarted at plan revision `r1`, attempt `1/3`,
+evidence revision `rv1`, phase `DO`, with the new P-task `P:C2-01`; the planner then revised the plan to
+`r2` (evidence contract `rv2` supersedes `rv1`) to fix the artifacts-path resolver, and to `r3`
+(evidence contract `rv3` supersedes `rv2`, CHECK attempt reset to `1/3`) to separate the pre-CHECK
+staging obligation from post-CHECK delivery (new task `P:C2-R3-EVIDENCE`).
+
+## PLAN (N=2, r2 — replan: artifacts path resolver)
+
+GOAL: Complete tier-1 cross-library comparison benchmarks; no product changes. New P-task P:C2-01.
+
+ACCEPTANCE CRITERIA:
+
+- R188-01: Debug and Release `dotnet build nextorm.slnx` exit 0 with 0 warnings/0 errors.
+- R188-02: Projection, Aggregates, Paging, Streaming keep [MemoryDiagnoser], filter discovery works, all benchmarks execute; no discovered-but-unexecuted method.
+- R188-03: Streaming gains synchronous Nextorm/Dapper/linq2db raw-reader (zero-materialization) arms using ONE non-retaining shared sink; validated rows/checksum match a reference; readers disposed; no retained DTOs.
+- R188-04: saved successful BDN reports for the 4 classes + WriteJson + Csv including competitor arms; zero BDN failures; old/failed reports do not count.
+- R188-05: public docs EN+RU (docs/comparisons/benchmarks.md + docs/ru/...), linq2db comparison EN+RU, and docs/specs/performance/comparison-benchmark-scenarios.md accurately describe measured arms/limits/provenance; no unsupported universal-win claims; mirrors don't drift.
+- R188-06: only authorized benchmark/docs/evidence files change (`git diff 0506b522 -- src tests Directory.Packages.props` empty); authorized #188 commit; #188 closed only after CHECK accepts.
+
+CONSTRAINTS: no LOB/DML/navigation; competitor JSON/CSV = materialize+manual-serialize (closest equivalent) stated explicitly; Category A = nextorm Prepare() vs EF.CompileAsyncQuery / LinqToDB.CompiledQuery.Compile; Category B = cached vs regular; Aggregates/Paging use large_table ~10k (record FeaturesFair invariant simple_entity=10/complex_entity=3 discrepancy); EF Core NOT in zero arm; shared sink mandatory.
+
+UNITS (one tree, sequential; D:C2-01 -> 02 -> 03 -> 04 -> 05):
+
+- D:C2-01 (fix now, prerequisite): inspect installed Dapper/linq2db reader APIs via Roslyn/compile, existing BenchmarkRowSink semantics, NEXTORM_BENCH_DB/large_table row count; compile the reader-call binding in SqliteBenchmarkStreaming.cs.
+- D:C2-02 (dep on 01): implement three sync raw-reader arms (nextorm `ToDataReader`, Dapper `ExecuteReader`, linq2db `ExecuteReader`) sharing one scanner/sink; untimed setup parity probes; replace stale #189 XML text. No changes to the other three classes unless verification finds an acceptance defect.
+- D:C2-03 (dep on 02): Debug/Release builds, red/green probe, six BDN runs; save inventory/logs/reports/env+data metadata.
+- D:C2-04 (dep on 03): update the five docs files using actual reports.
+- D:C2-05: CHECK; explicit-path staging; authorized commit; issue closure.
+
+DEFERRED: async reader arms (trigger: async raw-reader comparison requested); LOB/DML/navigation (trigger: tier-2 issue).
+
+TEST STRATEGY / EXACT COMMANDS (from repo root, NEXTORM_BENCH_FULL unset):
+
+- BUILD-D: `dotnet build nextorm.slnx -c Debug`; BUILD-R: `dotnet build nextorm.slnx -c Release`; API-BIND: `dotnet build benchmarks/nextorm.benchmark -c Release`.
+- B-PROJECTION: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkProjection* --artifacts benchmarks/BenchmarkDotNet.Artifacts`
+- B-AGGREGATES: ... `--filter *SqliteBenchmarkAggregates*`; B-PAGING: ... `*SqliteBenchmarkPaging*`; B-STREAMING: ... `*SqliteBenchmarkStreaming*`; B-JSON: ... `*SqliteBenchmarkWriteJson*`; B-CSV: ... `*SqliteBenchmarkCsv*` (all same --artifacts).
+
+Every accepted run: exit 0 AND logs show zero failed benchmarks, complete inventory, usable timing/allocation rows.
+
+Setup parity: each reader arm validated untimed against reference using same sink; logical rows=10000; nonzero checksum; equal checksum/bytes across arms; synthetic null-Str and empty-input probes; empty input -> 0 rows.
+
+RED: temporarily make setup expected checksum disagree, run B-STREAMING into `TestResults/D188/N2/r1/red-bdn`; RED passes only if the explicit mismatch assertion fails (BDN exit 0 alone insufficient); restore; GREEN = BUILD-R + B-STREAMING.
+
+SCOPE GUARD: `git diff 0506b522 -- src tests Directory.Packages.props` must be empty; otherwise STOP and report.
+
+VARIANT MATRIX (P1 = test/guard; P2 = deferred+trigger): nextorm sync ToDataReader P1; Dapper sync ExecuteReader P1; linq2db sync ExecuteReader P1; nextorm/Dapper/linq2db async readers P2 deferred; populated/repeat/empty sink P1; long Id + nullable Str P1; EF raw-reader exclusion guard P1; A/B labels P1; other providers/LOB P2.
+
+DOCS: benchmarks.md EN+RU (classes, A/B/raw-reader boundaries, report links/tables, env/job/data size, EF exclusion, competitor JSON/CSV caveat); linq2db-comparison.md EN+RU (qualify "prepared path wins every measured class"; distinguish historical measured set from new results without inventing wins); comparison-benchmark-scenarios.md (small final-inventory update: sync reader/adaptor/sink semantics, async deferral, preparation boundary, provenance).
+
+EVIDENCE MANIFEST: path `TestResults/D188/N2/r1/evidence-manifest.json`, schema_version=1, cycle=2, plan=r3, rv=3, rows C2-E01..C2-E13 + C2-E11-ACT + EV:C2-PATH-* (17 rows; row IDs stable). Logs/md under `TestResults/D188/N2/r1/`; reports under `benchmarks/BenchmarkDotNet.Artifacts/results/`. New task `P:C2-R3-EVIDENCE` owns the rv3 staging/evidence reconciliation.
+
+RISKS: wrapper API signatures (Dapper ExecuteReader, linq2db ExecuteReader), row counting, BDN exit 0 despite failures, noisy ShortRun, stale artifacts.
+
+--- END PLAN ---
+
+## Evidence contract (cycle 2, rv4 — supersedes rv3)
+
+**rv4 supersedes rv3 only for the staging predicate.** All 17 row IDs, requirement IDs, obligations,
+priorities and acceptance criteria are preserved (rv3 itself superseded rv2, which superseded rv1; rv3's
+changes — pre-CHECK staging vs post-CHECK delivery `C2-E11-ACT`, Streaming reconciled onto the frozen
+post-fix run, task `P:C2-R3-EVIDENCE`, deliverable allow-list — all remain). rv4 changes **only** the
+`git diff --cached --check` predicate of `C2-E11` / `EV:C2-PATH-TRACKING`: exit 0, or exit 2 with EVERY
+finding attributable to a path in S (the 18 frozen BDN reports); no metadata-token/line-content whitelist;
+zero findings outside S; any other exit code FAIL. Membership and immutability rules are unchanged. No
+obligation is deleted. The identical rv4 predicate is written in both this status file and
+`TestResults/D188/N2/r1/evidence-manifest.json`.
+
+Requirements: `R188-01..R188-06` and `R188-PATH` unchanged. New task `P:C2-R3-EVIDENCE` (owner D:C2-R3-SPEC,
+D:C2-R3-MANIFEST, D:C2-05): spec wording fix, rv3 manifest reconciliation, and explicit-path staging.
+
+| Row / requirement | Obligation and negative case | Owner | Applicability | Exact command / expected result | Expected artifact root |
+|---|---|---|---|---|---|
+| **C2-E01 / R188-01** | Debug + Release solution builds; negative: any warning/error | D:C2-03 | build executed | `dotnet build nextorm.slnx -c Debug`; `dotnet build nextorm.slnx -c Release`; both exit 0, 0W/0E | `TestResults/D188/N2/r1/build-*.log` |
+| **C2-E02 / R188-02** | Projection/Aggregates/Paging/Streaming keep `[MemoryDiagnoser]`, discovery complete, all execute; negative: discovered-but-unexecuted. Streaming uses the frozen post-fix run `TestResults/D188/N2/r1/check/w3-streaming.log` (16 cases, Failed=0) | D:C2-03 | run executed | six filtered `dotnet run` invocations (below); each exit 0, Failed=0, discovered=executed | logs per class |
+| **C2-E03 / R188-01,R188-02** | Benchmark project builds; reader-call binding compiles; negative: warnings/absent API | D:C2-02 | implementation present | `dotnet build benchmarks/nextorm.benchmark -c Release`; exit 0, 0W/0E | `TestResults/D188/N2/r1/api-bind.build.log` |
+| **C2-E04 / R188-02,R188-04** | Projection run complete, competitor arms present; negative: missing arm / failure | D:C2-03 | six reruns completed | `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkProjection* --artifacts benchmarks/BenchmarkDotNet.Artifacts`; exit 0, Failed=0 | `benchmarks/BenchmarkDotNet.Artifacts/results/` |
+| **C2-E05 / R188-02,R188-04** | Aggregates run complete; negative: same | D:C2-03 | six reruns completed | B-AGGREGATES (`--filter *SqliteBenchmarkAggregates*`, same `--artifacts`) | `benchmarks/BenchmarkDotNet.Artifacts/results/` |
+| **C2-E06 / R188-02,R188-04** | Paging run complete; negative: same | D:C2-03 | six reruns completed | B-PAGING (`--filter *SqliteBenchmarkPaging*`, same `--artifacts`) | `benchmarks/BenchmarkDotNet.Artifacts/results/` |
+| **C2-E07 / R188-03,R188-04** | Streaming run incl. three sync raw-reader arms and parity probes; negative: missing arm / parity failure / EF in zero arm. Frozen post-fix run: `TestResults/D188/N2/r1/check/w3-streaming.log` + `NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md` (EF `A_EFCore_Compiled_ToList_Dto` 8.012 ms, sha256 `7343d598…34b5`) | D:C2-03 | six reruns completed | B-STREAMING (`--filter *SqliteBenchmarkStreaming*`, same `--artifacts`); exit 0, Failed=0, parity probes pass | `benchmarks/BenchmarkDotNet.Artifacts/results/` |
+| **C2-E08 / R188-04** | WriteJson run complete incl. competitor materialize→serialize; negative: dropped native arm | D:C2-03 | six reruns completed | B-JSON (`--filter *SqliteBenchmarkWriteJson*`, same `--artifacts`) | `benchmarks/BenchmarkDotNet.Artifacts/results/` |
+| **C2-E09 / R188-04** | Csv run complete incl. competitor materialize→serialize; negative: dropped native arm | D:C2-03 | six reruns completed | B-CSV (`--filter *SqliteBenchmarkCsv*`, same `--artifacts`) | `benchmarks/BenchmarkDotNet.Artifacts/results/` |
+| **C2-E10 / R188-05** | EN/RU public docs, EN/RU linq2db comparison and the performance spec describe measured arms; negative: overclaim/mirror drift | D:C2-04 | six reruns completed | docs edits verified against reports | `docs/**` |
+| **C2-E11 / R188-06** | Scope guard + **pre-ACT explicit staging** of the frozen allow-list; negative: unauthorized file change, `git add -A`, or a stale repo-root artifact staged | D:C2-05 | allow-list frozen, before CHECK | `git diff 0506b522 -- src tests Directory.Packages.props` empty; explicit `git add -- <path>` for the 18 reports + 8 files; `git diff --cached --check` must exit 0, or exit 2 with EVERY finding attributable to a path in S (the exact 18 frozen BDN report paths under benchmarks/BenchmarkDotNet.Artifacts/results/); there is NO metadata-token/line-content whitelist (LaunchCount/WarmupCount/Categories and other generated lines are covered); ZERO findings outside S (including every staged source/doc/spec file); unexpected command errors or any other exit code FAIL. Membership: `git ls-files -z` includes every member of T=26; parsed `git diff --cached --name-only -z` equals T exactly. Immutability: every report in S matches its frozen manifest checksum in both index and worktree; reports not regenerated | `TestResults/D188/N2/r1/staging/` |
+| **C2-E11-ACT / R188-06** | Authorized #188 commit + `gh issue close 188`; negative: commit before CHECK PASS or any push | D:C2-05/ACT | after CHECK PASS (**`na`** at CHECK time) | `git commit -m '#188 …'` (staged allow-list only); `gh issue close 188` | n/a |
+| **C2-E12 / R188-03** | Reader APIs pinned and three arms implemented with one shared sink; negative: compiled-reader claim / mislabel | D:C2-01,D:C2-02 | implementation present | `TestResults/D188/N2/r1/api-bind.build.log`; code audit | benchmark source |
+| **C2-E13 / R188-06** | Evidence manifest (rows C2-E01..C2-E13 + C2-E11-ACT + EV:C2-PATH-*) reconciled; Streaming interpretation uses the post-fix log/report (`check/w3-streaming.log`, 8.012 ms EF ToList, sha256 `7343d598…34b5`); negative: missing row | D:C2-03,D:C2-05 | manifest authored | `TestResults/D188/N2/r1/evidence-manifest.json` | `TestResults/D188/N2/r1/` |
+| **EV:C2-PATH-BUILD / R188-PATH** | Resolver edit present and both benchmark-project builds green; negative: resolver edit absent / build warning | D:C2-03a | resolver edit present | `dotnet build benchmarks/nextorm.benchmark -c Debug`; `dotnet build benchmarks/nextorm.benchmark -c Release`; both exit 0, 0W/0E | `TestResults/D188/N2/r1/benchmark-build-debug.log`, `TestResults/D188/N2/r1/benchmark-build-release.log` |
+| **EV:C2-PATH-REPORTS / R188-PATH** | Six inherited run invocations rerun after the resolver fix; each exit 0, Failed=0, discovered=executed; 18 fresh reports at the corrected root; Streaming source is the frozen post-fix `TestResults/D188/N2/r1/check/w3-streaming.log`; negative: reports still at repo root | D:C2-03 | six reruns completed | the six C2-E04..C2-E09 invocations with `--artifacts benchmarks/BenchmarkDotNet.Artifacts` | `benchmarks/BenchmarkDotNet.Artifacts/results/` (6 × github.md/csv/html = 18) |
+| **EV:C2-PATH-TRACKING / R188-PATH** | Every manifest-listed report is present and staged at the corrected root; negative: a listed report missing from `git ls-files` | D:C2-05 | after staging, before CHECK | `git diff --cached --check` must exit 0, or exit 2 with EVERY finding attributable to a path in S (the exact 18 frozen BDN report paths under benchmarks/BenchmarkDotNet.Artifacts/results/); there is NO metadata-token/line-content whitelist (LaunchCount/WarmupCount/Categories and other generated lines are covered); ZERO findings outside S (including every staged source/doc/spec file); unexpected command errors or any other exit code FAIL. Membership: `git ls-files -z` includes every member of T=26; parsed `git diff --cached --name-only -z` equals T exactly. Immutability: every report in S matches its frozen manifest checksum in both index and worktree; reports not regenerated | `benchmarks/BenchmarkDotNet.Artifacts/results/` |
+
+**Unit state (r2):** `D:C2-03a` (resolver fix) and `D:C2-03` (rerun) are **closed** (see progress log).
+`D:C2-03` was recorded active and temporarily blocked on `D:C2-03a` while that unit was active — never
+superseded; its original criteria and remainder are unchanged.
+
+## Progress log (N=2)
+
+`<UTC time> | <phase> | revision r | iteration n/3 | <event> | <evidence pointer>`
+
+- 2026-10-09T16:31Z | DO | r1 | 1/3 | DO started; brief validator exit 0 after adding the required top-level `unit` wrapper (`D:C2-01..D:C2-02`) to the supplied scope | `TestResults/D188/N2/r1/scope.json`
+- 2026-10-09T16:37Z | DO | r1 | 1/3 | D:C2-01 closed: reader APIs pinned (Dapper `SqlMapper.ExecuteReader` -> `IDataReader`; linq2db 6.5.0 sync `DataContextExtensions.ExecuteReader` returns `DataReaderAsync` whose `.Reader` is a `DbDataReader`; nextorm `QueryCommandExtensions.ToDataReader` -> `DbDataReader`); fixture confirmed large_table=10000, complex_entity=3 (one null Str) | `TestResults/D188/N2/r1/api-bind.build.log`
+- 2026-10-09T16:37Z | DO | r1 | 1/3 | D:C2-02 closed: three sync zero-materialization arms (`A_Nextorm_Prepared_ToDataReader`, `Dapper_ToDataReader`, `Linq2Db_ToDataReader`) share one `Scan`/`_sink`; `[IterationSetup]` sink reset; untimed parity probes (10000 rows / equal checksum+bytes, complex_entity null-Str probe, empty-input probe); stale #189 XML text replaced; API-BIND and BUILD-D green | `TestResults/D188/N2/r1/api-bind.build.log`, `TestResults/D188/N2/r1/build-debug.build.log`
+- 2026-10-09T16:51Z | DO | r1 | 1/3 | D:C2-03 BUILD-R green: `dotnet build nextorm.slnx -c Release` exit 0, 0 Warning(s)/0 Error(s) | `TestResults/D188/N2/r1/build-release.build.log`
+- 2026-10-09T16:51Z | DO | r1 | 1/3 | D:C2-03 RED proven: with the setup expected checksum deliberately off by one, `*SqliteBenchmarkStreaming*` failed GlobalSetup with `InvalidOperationException: Streaming/nextorm-reader: expected checksum 422955955263575177, observed 422955955263575176` and `ExitCode != 0 and no results reported` (dotnet exit was 0, but the parity assertion failed); checksum restored, CRLF normalized | `TestResults/D188/N2/r1/red.log`
+- 2026-10-09T16:51Z | DO | r1 | 1/3 | D:C2-03 GREEN + six-class sweep: all six `dotnet run` runs exit 0, 0 Failed benchmarks, discovered 7/21/7/16/30/8 = 89 cases all executed (Streaming parity probes pass: nextorm/dapper/linq2db readers rows=10000 checksum=422955955263575176 bytes=360000; null-Str rows=3 bytes=10; empty-input 0 rows). **Deviation:** reports were written to repo-root `BenchmarkDotNet.Artifacts/results/` (not `benchmarks/BenchmarkDotNet.Artifacts/results/`) because `BenchmarkArtifacts.Resolve()` looks for `nextorm.sln` but the repo has `nextorm.slnx`, so it falls back to CWD and overrides `--artifacts` (pre-existing, documented in cycle 1); no source fix made in D:C2-03 | `TestResults/D188/N2/r1/{projection,aggregates,paging,streaming,json,csv}.log`; `BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark{Projection,Aggregates,Paging,Streaming,WriteJson,Csv}-report-{github.md,csv,html}`
+- 2026-10-09T16:51Z | DO | r2 | 1/3 | Replanned: artifacts path resolver (.slnx) — planner adjudicated the artifacts-path candidate as FIX resolver + rerun; rv2 supersedes rv1 (six run rows retargeted to `benchmarks/BenchmarkDotNet.Artifacts/results/`; added `EV:C2-PATH-BUILD`, `EV:C2-PATH-REPORTS`, `EV:C2-PATH-TRACKING` under new `R188-PATH`). `D:C2-03a` active now; `D:C2-03` active, temporarily blocked on `D:C2-03a` (not superseded) | `docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md`
+- 2026-10-09T17:07Z | DO | r2 | 1/3 | D:C2-03a closed: `benchmarks/nextorm.benchmark/BenchmarkArtifacts.cs:25` now recognizes `nextorm.slnx` (`File.Exists(sln) || File.Exists("nextorm.slnx")`) while the `nextorm.sln` const, returned paths and cwd fallback stay unchanged; benchmark project builds Debug and Release exit 0, 0 Warning(s)/0 Error(s) | `TestResults/D188/N2/r1/benchmark-build-debug.log`, `TestResults/D188/N2/r1/benchmark-build-release.log`
+- 2026-10-09T17:07Z | DO | r2 | 1/3 | D:C2-03 (r2) closed: resolver fix verified — six reruns exit 0, 0 Failed, discovered=executed 7/21/7/16/30/8 = 89 cases, and reports now land under `benchmarks/BenchmarkDotNet.Artifacts/results/` with 18 fresh files (6 classes × github.md/csv/html, 21:56–22:07; repo-root `BenchmarkDotNet.Artifacts/` received no new writes). Streaming parity probes still pass: nextorm/dapper/linq2db readers rows=10000 checksum=422955955263575176 bytes=360000; null-Str rows=3 bytes=10; empty-input 0 rows | `TestResults/D188/N2/r1/{projection,aggregates,paging,streaming,json,csv}.log`; `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark{Projection,Aggregates,Paging,Streaming,WriteJson,Csv}-report-{github.md,csv,html}`
+- 2026-10-09T17:10Z | DO | r2 | 1/3 | D:C2-04 closed: five docs updated from the fresh reports (no invented numbers) — EN/RU public `benchmarks.md` gain the tier-1 section with per-scenario A/B tables and reproduction commands, zero-materialization subgroup (EF excluded, closest-equivalent JSON/CSV caveat, `large_table`=10000 vs `simple_entity`=10/`complex_entity`=3), EN/RU arm rows mirror 48/48, no public link into `docs/specs/**`; EN/RU `linq2db-comparison.md` qualify "prepared wins every measured class" as the historical set; `comparison-benchmark-scenarios.md` final-inventory update (sync reader arms, shared sink/scanner, async deferred, resolver `nextorm.slnx` note, `storeInCache:false` preparation boundary, report provenance) | `docs/comparisons/benchmarks.md`, `docs/ru/comparisons/benchmarks.md`, `docs/specs/comparison/linq2db-comparison.md`, `docs/specs/ru/comparison/linq2db-comparison.md`, `docs/specs/performance/comparison-benchmark-scenarios.md`
+- 2026-10-09T17:12Z | DO | r2 | 1/3 | D:C2-05-prep: rv2 evidence manifest + CHECK inputs materialized — `evidence-manifest.json` (16 rows: C2-E01..C2-E13 + EV:C2-PATH-BUILD/REPORTS/TRACKING; C2-E11 `open` = authorized commit/closure in D:C2-05 after CHECK; reports point at the 18 actual fresh files; manifest validator exit 0) and `evidence-report.json` (12 gate executions; report validator exit 0; BUILD-D recorded under `solution_builds` because the validator allows one boundary solution build); `docs-review.md` (5 docs, 48/48 EN/RU arm-row parity, actual numbers, no public specs links) and `variants.md` (test/guard/deferred closure). 18 fresh reports confirmed at `benchmarks/BenchmarkDotNet.Artifacts/results/` and still **untracked** — staging deferred to D:C2-05 after CHECK: the 18 `NextORM.Benchmark.SqliteBenchmark{Projection,Aggregates,Paging,Streaming,WriteJson,Csv}-report-{github.md,csv,html}` files | `TestResults/D188/N2/r1/evidence-manifest.json`, `TestResults/D188/N2/r1/evidence-report.json`, `TestResults/D188/N2/r1/docs-review.md`, `TestResults/D188/N2/r1/variants.md`
+- 2026-10-09T17:22Z | DO | r2 | 2/3 | CHECK loop-back opened attempt 2/3 with three accepted DO corrections: **W1** (R188-05 acceptance defect — EF `A_EFCore_Compiled_ToList_Dto` used `await foreach` so the `_ToList_` label was false), **W3** (Streaming EN/RU numbers did not match any retained report; provenance false), **W5** (unverified prepared-path wording in the performance spec). No other class re-run; scope guard empty | `TestResults/D188/N2/r1/check/`
+- 2026-10-09T17:22Z | DO | r2 | 2/3 | W1/W3/W5 fixed, attempt 2/3 ready for CHECK. **W1:** `SqliteBenchmarkStreaming.cs` `A_EFCore_Compiled_ToList_Dto` now `await _efCompiled(_efCtx).ToListAsync()` (report row 8.012 ms / 3,701.54 KB); async-stream arms unchanged. **W3:** Streaming re-run once, frozen; EN+RU Streaming tables set from `NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md` mtime `2026-10-09 22:20:49 +05:00` sha256 `7343d598…34b5`; EN/RU arm rows mirror 48/48; Projection/Aggregates/Paging/WriteJson/Csv reports and docs unchanged. **W5:** performance spec line 42 corrected with `DataContext.cs:565-572`, `QueryPlanner.cs:574-575/612/663-665/691/732` evidence — `storeInCache:false` means per-call SQL render + fresh `DbCommand`, not cached-plan reuse. Builds 0/0 (Debug/Release); B-STREAMING exit 0, 16 cases, Failed=0, parity rows=10000/equal checksum+bytes; manifest+report validators exit 0; scope guard empty; 18 reports on disk (untracked) | `TestResults/D188/N2/r1/check/{w1-build-debug.log,w1-build-release.log,w3-streaming.log}`, `docs-review.md`, `evidence-manifest.json`, `evidence-report.json`
+- 2026-10-09T17:29Z | DO | r3 | 1/3 | Replanned: evidence contract r3 (staging vs post-CHECK delivery) — planner split the C2-E11 evidence obligation into pre-CHECK explicit staging (D:C2-05, allow-list frozen) and post-CHECK delivery (`C2-E11-ACT`: commit + `gh issue close 188`, `na` at CHECK time), reconciled the Streaming rows onto the frozen post-fix run, and added task `P:C2-R3-EVIDENCE`. All rv2 requirement IDs, row IDs, obligations and priorities retained; no obligation deleted. CHECK attempt reset to 1/3; evidence revision `rv3` supersedes `rv2` | `docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md`
+- 2026-10-09T17:31Z | DO | r3 | 1/3 | D:C2-R3-SPEC closed: `docs/specs/performance/comparison-benchmark-scenarios.md:42` clarified that the constructor's `_nextormReader.Prepare()` also renders SQL and creates a `DbCommand` (untimed, outside the measured region) because `storeInCache:false`, not "merely marks prepared"; per-call consequence kept (`DataContext.cs:565-572`, `QueryPlanner.cs:574-575/612/663-665/691/732`) | `docs/specs/performance/comparison-benchmark-scenarios.md` |
+- 2026-10-09T17:31Z | DO | r3 | 1/3 | D:C2-R3-MANIFEST closed: `evidence-manifest.json` rewritten to `contract_rv=3`, plan=r3, 17 required rows exactly (C2-E01..C2-E13 + `C2-E11-ACT` + EV:C2-PATH-*), **no open row** (`C2-E11-ACT` is `na` = post-CHECK delivery; `C2-E11`/`EV:C2-PATH-TRACKING` `met` on staged evidence); Streaming rows reconciled to `check/w3-streaming.log` + frozen report sha256 `7343d598…34b5` (8.012 ms EF ToList); deliverable allow-list frozen (26). Manifest validator exit 0; report validator exit 0 | `TestResults/D188/N2/r1/evidence-manifest.json` |
+- 2026-10-09T17:31Z | DO | r3 | 1/3 | D:C2-05 pre-ACT staging done: explicit `git add --` of the frozen allow-list (26 paths = 18 reports + 8 files), never `-A`; stale repo-root `BenchmarkDotNet.Artifacts` reports **not** staged; evidence captured (`git ls-files --stage`, `git diff --cached --name-only` = 26, `git diff --cached --check` exit 2 = BDN trailing whitespace only, `git diff --cached --stat`). No commit, no push | `TestResults/D188/N2/r1/staging/` |
+- 2026-10-09T17:35Z | DO | r3 | 2/3 | Evidence reconciliation + snapshots (CHECK r3 n=1 loop-back): reconciled the `git diff --cached --check` policy between status C2-E11 and manifest C2-E11 (accept exit 0 or exit 2 caused solely by BDN-generated `Job=`/`IterationCount=` trailing whitespace in the 18 frozen reports; frozen reports not modified); `evidence-report.json` updated to rv3 (`unit`/`plan`/`rv`/`contract_rv`/revision) and its stale `streaming.log` source replaced with `check/w3-streaming.log`; `docs-review.md` W5 wording aligned to the corrected spec (constructor `Prepare()` renders SQL + creates a `DbCommand` untimed). Created read-only snapshots `snapshots/` (6 reports + 5 docs + 2 sources + `INDEX.md` + `audit-evidence.md`). Validators brief/report/manifest exit 0; scope guard empty; 26 paths staged | `TestResults/D188/N2/r1/snapshots/INDEX.md`, `snapshots/audit-evidence.md`, `evidence-report.json`, `evidence-manifest.json` |
+- 2026-10-09T17:40Z | DO | r4 | 1/3 | Replanned: evidence contract r4 (staging `--check` predicate) — rv4 supersedes rv3 only for the staging predicate; all 17 row IDs/obligations/priorities preserved. Identical predicate now in status C2-E11 + EV:C2-PATH-TRACKING and manifest: `git diff --cached --check` exit 0 or exit 2 with EVERY finding attributable to a path in S (18 frozen reports); NO metadata-token/line-content whitelist; ZERO findings outside S; any other exit FAIL; membership (`git ls-files -z` ⊇ T, parsed `git diff --cached --name-only -z` == T=26) and immutability (frozen manifest checksums, index==worktree, not regenerated) unchanged | `docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md`, `TestResults/D188/N2/r1/evidence-manifest.json` |
+- 2026-10-09T17:40Z | DO | r4 | 1/3 | r4 staging validation done: `git ls-files -z -- benchmarks/BenchmarkDotNet.Artifacts/results` includes all 18 S members; parsed `git diff --cached --name-only -z` equals T exactly (26/26); `git diff --cached --check` exit 2 with all 24 findings inside S (12 distinct report paths) and zero in the 8 staged source/doc/spec/status files; 18 S sha256 frozen in the manifest `frozen_report_checksums`; worktree==index for S. Evidence `staging/r4-membership.txt`, `staging/r4-check.txt`, `staging/r4-checksums.txt`. Manifest validator exit 0; report validator exit 0; scope guard empty | `TestResults/D188/N2/r1/staging/` |
+
+## Durable state and defect history (N=2)
+
+```yaml
+current_cycle: 2
+plan_revision: r4
+attempt: 1/3
+evidence_revision: rv4
+```
+
+| defect key | observed revisions/attempts | fixes applied | evidence / last recurrence | escalation outcome |
+|---|---|---|---|---|
+| `D189-zero-materialization` | cycle 1 r1 n1 | 0 | `docs/specs/status/rc2-189-evidence/D189-STOP.patch` | cycle 1: blocked+active, no fallback; cycle 2 work-item scope moved to `P:C2-01` (write-side prerequisite resolution) |
+
+## Appendix — Cycle 1 terminal history (preserved, do not delete)
+
 # D188 — Tier-1 cross-library comparison benchmarks
 
 ```yaml

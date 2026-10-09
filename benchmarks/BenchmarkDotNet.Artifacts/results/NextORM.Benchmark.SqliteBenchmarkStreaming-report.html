@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkStreaming-20261009-221916</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                      </th><th>InvocationCount</th><th>UnrollFactor</th><th>Categories               </th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>A_Nextorm_Prepared_ToList_Dto</td><td>Default</td><td>16</td><td>A_BufferedDto</td><td>3.743 ms</td><td>160.1563</td><td>117.1875</td><td>-</td><td>1328.84 KB</td>
+</tr><tr><td>Linq2Db_Compiled_ToList_Dto</td><td>Default</td><td>16</td><td>A_BufferedDto</td><td>5.637 ms</td><td>218.7500</td><td>210.9375</td><td>54.6875</td><td>1508.25 KB</td>
+</tr><tr><td>A_EFCore_Compiled_ToList_Dto</td><td>Default</td><td>16</td><td>A_BufferedDto</td><td>8.012 ms</td><td>515.6250</td><td>296.8750</td><td>78.1250</td><td>3701.54 KB</td>
+</tr><tr><td>Dapper_ToList_Dto</td><td>Default</td><td>16</td><td>A_BufferedDto,B_BufferedDto</td><td>6.864 ms</td><td>257.8125</td><td>250.0000</td><td>62.5000</td><td>1742.31 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_AsyncStream_Dto</td><td>Default</td><td>16</td><td>A_UnbufferedDto</td><td>3.663 ms</td><td>152.3438</td><td>-</td><td>-</td><td>1250.56 KB</td>
+</tr><tr><td>A_EFCore_Compiled_AsyncStream_Dto</td><td>Default</td><td>16</td><td>A_UnbufferedDto</td><td>5.047 ms</td><td>414.0625</td><td>-</td><td>-</td><td>3444.77 KB</td>
+</tr><tr><td>Dapper_AsyncStream_Dto</td><td>Default</td><td>16</td><td>A_UnbufferedDto,B_UnbufferedDto</td><td>4.591 ms</td><td>179.6875</td><td>-</td><td>-</td><td>1485.82 KB</td>
+</tr><tr><td>B_Nextorm_Cached_ToList_Dto</td><td>Default</td><td>16</td><td>B_BufferedDto</td><td>3.786 ms</td><td>160.1563</td><td>109.3750</td><td>-</td><td>1332.39 KB</td>
+</tr><tr><td>B_Linq2Db_ToList_Dto</td><td>Default</td><td>16</td><td>B_BufferedDto</td><td>8.148 ms</td><td>218.7500</td><td>210.9375</td><td>54.6875</td><td>1511.3 KB</td>
+</tr><tr><td>B_EFCore_ToList_Dto</td><td>Default</td><td>16</td><td>B_BufferedDto</td><td>8.594 ms</td><td>500.0000</td><td>250.0000</td><td>62.5000</td><td>3705.59 KB</td>
+</tr><tr><td>B_Nextorm_Cached_AsyncStream_Dto</td><td>Default</td><td>16</td><td>B_UnbufferedDto</td><td>4.019 ms</td><td>148.4375</td><td>-</td><td>-</td><td>1254.3 KB</td>
+</tr><tr><td>B_Linq2Db_AsyncStream_Dto</td><td>Default</td><td>16</td><td>B_UnbufferedDto</td><td>4.595 ms</td><td>148.4375</td><td>-</td><td>-</td><td>1254.55 KB</td>
+</tr><tr><td>B_EFCore_AsyncStream_Dto</td><td>Default</td><td>16</td><td>B_UnbufferedDto</td><td>5.105 ms</td><td>421.8750</td><td>7.8125</td><td>-</td><td>3448.89 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_ToDataReader</td><td>1</td><td>1</td><td>A_RawReader</td><td>4.302 ms</td><td>-</td><td>-</td><td>-</td><td>944.8 KB</td>
+</tr><tr><td>Dapper_ToDataReader</td><td>1</td><td>1</td><td>B_RawReader</td><td>3.761 ms</td><td>-</td><td>-</td><td>-</td><td>942.77 KB</td>
+</tr><tr><td>Linq2Db_ToDataReader</td><td>1</td><td>1</td><td>B_RawReader</td><td>3.762 ms</td><td>-</td><td>-</td><td>-</td><td>943 KB</td>
+</tr></tbody></table>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkAggregates-20261009-215629</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                   </th><th>Categories         </th><th>Mean </th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>A_Nextorm_Prepared_Count</td><td>A_Aggregates</td><td>13.77 &mu;s</td><td>0.0458</td><td>-</td><td>408 B</td>
+</tr><tr><td>A_Linq2Db_Compiled_Count</td><td>A_Aggregates</td><td>18.02 &mu;s</td><td>0.1526</td><td>-</td><td>1280 B</td>
+</tr><tr><td>A_EFCore_Compiled_Count</td><td>A_Aggregates</td><td>38.62 &mu;s</td><td>0.9155</td><td>0.4272</td><td>7744 B</td>
+</tr><tr><td>A_Nextorm_Prepared_Sum</td><td>A_Aggregates</td><td>277.57 &mu;s</td><td>-</td><td>-</td><td>410 B</td>
+</tr><tr><td>A_Linq2Db_Compiled_Sum</td><td>A_Aggregates</td><td>291.81 &mu;s</td><td>-</td><td>-</td><td>1290 B</td>
+</tr><tr><td>A_EFCore_Compiled_Sum</td><td>A_Aggregates</td><td>319.95 &mu;s</td><td>0.4883</td><td>-</td><td>7770 B</td>
+</tr><tr><td>A_Nextorm_Prepared_GroupByCount</td><td>A_Aggregates</td><td>1,281.91 &mu;s</td><td>-</td><td>-</td><td>4737 B</td>
+</tr><tr><td>A_Linq2Db_Compiled_GroupByCount</td><td>A_Aggregates</td><td>1,309.32 &mu;s</td><td>-</td><td>-</td><td>7025 B</td>
+</tr><tr><td>A_EFCore_Compiled_GroupByCount</td><td>A_Aggregates</td><td>1,343.09 &mu;s</td><td>3.9063</td><td>-</td><td>33089 B</td>
+</tr><tr><td>Dapper_Count</td><td>A_Aggregates,B_Aggregates</td><td>17.30 &mu;s</td><td>0.0916</td><td>-</td><td>944 B</td>
+</tr><tr><td>Dapper_Sum</td><td>A_Aggregates,B_Aggregates</td><td>291.59 &mu;s</td><td>-</td><td>-</td><td>954 B</td>
+</tr><tr><td>Dapper_GroupByCount</td><td>A_Aggregates,B_Aggregates</td><td>1,317.46 &mu;s</td><td>-</td><td>-</td><td>12329 B</td>
+</tr><tr><td>B_Nextorm_Cached_Count</td><td>B_Aggregates</td><td>19.31 &mu;s</td><td>0.4272</td><td>-</td><td>3824 B</td>
+</tr><tr><td>B_Linq2Db_Count</td><td>B_Aggregates</td><td>24.56 &mu;s</td><td>0.3357</td><td>-</td><td>2864 B</td>
+</tr><tr><td>B_EFCore_Count</td><td>B_Aggregates</td><td>48.88 &mu;s</td><td>1.1597</td><td>0.5493</td><td>10080 B</td>
+</tr><tr><td>B_Nextorm_Cached_Sum</td><td>B_Aggregates</td><td>286.43 &mu;s</td><td>0.4883</td><td>-</td><td>4226 B</td>
+</tr><tr><td>B_Linq2Db_Sum</td><td>B_Aggregates</td><td>304.90 &mu;s</td><td>-</td><td>-</td><td>3490 B</td>
+</tr><tr><td>B_EFCore_Sum</td><td>B_Aggregates</td><td>338.05 &mu;s</td><td>0.9766</td><td>0.4883</td><td>10978 B</td>
+</tr><tr><td>B_Nextorm_Cached_GroupByCount</td><td>B_Aggregates</td><td>1,314.02 &mu;s</td><td>-</td><td>-</td><td>10577 B</td>
+</tr><tr><td>B_Linq2Db_GroupByCount</td><td>B_Aggregates</td><td>1,393.44 &mu;s</td><td>-</td><td>-</td><td>11553 B</td>
+</tr><tr><td>B_EFCore_GroupByCount</td><td>B_Aggregates</td><td>1,407.25 &mu;s</td><td>3.9063</td><td>-</td><td>42641 B</td>
+</tr></tbody></table>
+</body>
+</html>

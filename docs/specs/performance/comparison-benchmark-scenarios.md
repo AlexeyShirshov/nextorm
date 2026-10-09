@@ -1,9 +1,9 @@
 # Comparison benchmarks tier 1 — query-shape scenarios
 
-Статус: дизайн согласован (user review пройден 2026-10-04). Non-zero части реализованы в D188 DO (2026-10-09): SQLite projection/aggregates/paging/streaming (buffered+unbuffered DTO) и JSON/CSV cross-library. Zero/raw-reader подгруппа — `blocked + active`, ждёт CHECK-прохождения #189.
+Статус: дизайн согласован (user review пройден 2026-10-04). Реализовано в D188 (2026-10-09): SQLite projection/aggregates/paging/streaming (buffered+unbuffered DTO и синхронная zero-materialization raw-reader подгруппа) и JSON/CSV cross-library. Async reader-арм отложен (триггер: запрос async raw-reader сравнения).
 Tracking: [GitHub issue #188](https://github.com/AlexeyShirshov/nextorm/issues/188), milestone `1.0.9-rc2`.
 Branch: `1.0.9-rc2`.
-Зависимость: zero/raw-reader подгруппа item 10 (#188) заблокирована незавершённым [#189](https://github.com/AlexeyShirshov/nextorm/issues/189). Цикл #189 остановлен на собственном perf-предикате приёмки; zero-арм остаётся активным (blocked), не снят, не подменён материализацией, не подменён другим провайдером и не «вылечен» падением на materialize→serialize. Текущий статус #189 не приписывается реализации `ToDataReader` (D134) как причине пост-D134 регрессии.
+Зависимость: исторически zero/raw-reader подгруппа item 10 (#188) зависела от [#189](https://github.com/AlexeyShirshov/nextorm/issues/189). В цикле D188 N=2 (2026-10-09) синхронный raw-reader арм реализован напрямую через публичный `ToDataReader` (D134), без подмены материализацией, другим провайдером или materialize→serialize; perf-предикат #189 на него не распространяется. Async reader-арм остаётся отложенным (см. статус).
 
 ## 1. Контекст и пробел
 
@@ -14,14 +14,14 @@ Branch: `1.0.9-rc2`.
 
 Не были покрыты query-shapes/терминалы: проекция в DTO как отдельный сценарий, агрегаты/`GroupBy`, сортировка+пагинация, потоковый вывод; JSON/CSV сравнивались только внутри nextorm (`SqliteBenchmarkWriteJson`, `SqliteBenchmarkCsv` — nextorm-only). Не было ни одного zero-materialization арма.
 
-Все перечисленные non-zero пробелы закрыты D188: добавлены `SqliteBenchmarkProjection`, `SqliteBenchmarkAggregates`, `SqliteBenchmarkPaging`, `SqliteBenchmarkStreaming` (buffered/unbuffered DTO) и расширены `SqliteBenchmarkWriteJson` / `SqliteBenchmarkCsv` (competitor materialize→serialize). Единственный незакрытый пробел — zero-materialization (raw reader) подгруппа streaming, она остаётся `blocked + active`.
+Все перечисленные non-zero пробелы закрыты D188: добавлены `SqliteBenchmarkProjection`, `SqliteBenchmarkAggregates`, `SqliteBenchmarkPaging`, `SqliteBenchmarkStreaming` (buffered/unbuffered DTO и синхронный zero-materialization raw reader) и расширены `SqliteBenchmarkWriteJson` / `SqliteBenchmarkCsv` (competitor materialize→serialize). Единственный отложенный элемент — async raw-reader арм (триггер: запрос async raw-reader сравнения).
 
 ## 2. Согласованный scope (tier 1)
 
 1. `SqliteBenchmarkProjection` — `Select(x => new Dto{...})` cross-library.
 2. `SqliteBenchmarkAggregates` — `Count`/`Sum`/`GroupBy→Count` на SQLite, SQL-side.
 3. `SqliteBenchmarkPaging` — `OrderBy + offset/limit`.
-4. `SqliteBenchmarkStreaming` — buffered DTO vs unbuffered DTO enumeration; zero-materialization (raw reader) — blocked by #189.
+4. `SqliteBenchmarkStreaming` — buffered DTO vs unbuffered DTO enumeration; zero-materialization (синхронный raw reader) — реализовано; async raw reader отложен.
 5. JSON/CSV cross-library — расширить `SqliteBenchmarkWriteJson` / `SqliteBenchmarkCsv` армами Dapper / linq2db / EF Core через materialize→serialize.
 
 Вне scope: LOB-стриминг `ToStream`/`ToTextReader` (не бенчмаркаем); DML и navigation/eager loading cross-library (tier 2); synchronous-кампания; дополнительные провайдеры.
@@ -33,13 +33,13 @@ Branch: `1.0.9-rc2`.
 - Проводник: `Microsoft.Data.Sqlite` у всех участников; БД на tmpfs.
 - Конструктор-паттерн: `builder.UseSqlite(BenchDb.FilePath) → CreateDataContext → EnsureConnectionOpen`; Dapper через `((SqliteDataContext)_ctx.DataContext).ConnectionString`; EF `UseSqlite + NoTracking`; linq2db `Linq2DbDataRepository`.
 - Атрибуты класса: `[MemoryDiagnoser]`, `[Config(typeof(NextormConfig))]`, `[GroupBenchmarksBy(ByJob, ByCategory)]`, `[HideColumns(...)]`, class-level `[BenchmarkCategory]` где применимо.
-- Job: `NextormConfig` (`ShortRun` + `InProcessEmitToolchain`, `NEXTORM_BENCH_FULL=1` → `Job.Default`); отчёты в `benchmarks/BenchmarkDotNet.Artifacts`. `NEXTORM_BENCH_FULL=0` для D188-свипов.
+- Job: `NextormConfig` (`ShortRun` + `InProcessEmitToolchain`, `NEXTORM_BENCH_FULL=1` → `Job.Default`); отчёты в `benchmarks/BenchmarkDotNet.Artifacts`. `NEXTORM_BENCH_FULL=0` для D188-свипов. Резолвер артефактов (`BenchmarkArtifacts.Resolve()`) признаёт и `nextorm.sln`, и `nextorm.slnx` — иначе `--artifacts` перекрывался и отчёты падали в корневой `BenchmarkDotNet.Artifacts` (исправлено в D:C2-03a, 2026-10-09).
 - Sinks/валидация (benchmark-only, `benchmarks/nextorm.benchmark/`): `BenchmarkRowSink` (count+checksum+bytes, без удержания строк), `BenchmarkSerializationSink` (write-only non-retaining `Stream`), `BenchmarkComparisonValidation` (`Measure`/`Checksum`/`Ensure*`/`Report`).
 
 ### 3.1 Граница тайминга
 
 - Семантическая сверка армов, подготовка prepared/compiled-команд, проверка counts/checksums/pages/сериализованного вывода выполняются в конструкторе/`[GlobalSetup]` вне измеряемой области.
-- `Prepare()` / `CompiledQuery.Compile` / `CompileAsyncQuery` создаются вне timed-body; Category A измеряет только повторное исполнение reusable-команды.
+- `Prepare()` / `CompiledQuery.Compile` / `CompileAsyncQuery` создаются вне timed-body; Category A измеряет только повторное исполнение reusable-команды. Граница подготовки читающего арма: `ToDataReader` открывает читатель через `PrepareResultCommand` с `storeInCache: false` (`DataContext.cs:565-572`), поэтому подготовленная `DbPreparedQueryCommand` не кладётся в общий кэш контекста. `_nextormReader.Prepare()` в конструкторе делает больше, чем «помечает prepared»: из-за `storeInCache:false` сам прогрев тоже уходит в cache-miss ветку, рендерит SQL и создаёт `DbCommand` — но это происходит вне timed-body, в конструкторе. На повторных вызовах `PrepareCommand` пропускается и выполняется `RefreshInValuesShape()` (`QueryPlanner.cs:574-575`), однако `storeInCache:false` на каждый вызов оставляет lookup/store плана выключенными (`QueryPlanner.cs:612`, `:732`) и снова рендерит SQL (`MakeSelectInternal`, `QueryPlanner.cs:663-665`) и создаёт новый `DbCommand` (`_createCommand`, `QueryPlanner.cs:691`). То есть измеряемый арм включает повторный рендер SQL и создание команды на каждый вызов, а не исполнение закэшированного плана.
 - Sink сбрасывается вне timed-body; `BenchmarkSerializationSink` не удерживает сериализованный payload.
 - Никакие production-пути/API, фикстуры или пакеты не меняются.
 
@@ -75,8 +75,9 @@ Branch: `1.0.9-rc2`.
 - Buffered DTO: `A_Nextorm_Prepared_ToList_Dto`, `A_EFCore_Compiled_ToList_Dto`, `Dapper_ToList_Dto` (A+B), `Linq2Db_Compiled_ToList_Dto`, `B_Nextorm_Cached_ToList_Dto`, `B_EFCore_ToList_Dto`, `B_Linq2Db_ToList_Dto`.
 - Unbuffered DTO enumeration: `A_Nextorm_Prepared_AsyncStream_Dto`, `A_EFCore_Compiled_AsyncStream_Dto`, `Dapper_AsyncStream_Dto` (A+B), `B_Nextorm_Cached_AsyncStream_Dto`, `B_EFCore_AsyncStream_Dto`, `B_Linq2Db_AsyncStream_Dto`.
 - Все армы сводят колонки в один `BenchmarkRowSink`; setup-валидация сверяет count+checksum buffered/unbuffered DTO.
-- **Zero/raw-reader подгруппа — `blocked + active` (ждёт #189).** Не реализована: нет per-row entity/DTO construction и collection accumulation. EF Core исключён из zero-подгруппы (нет LINQ raw-reader). Нет `ToList`-fallback, нет relabel материализованного арма как zero, нет «SQLite unavailable» как pass. После CHECK-прохождения #189 добавляются `Nextorm_ToDataReader`/`ToDataReaderAsync`, `Dapper_ExecuteReader`, `Linq2Db_ExecuteReader` с идентичным sink; только тогда zero-утверждения попадают в отчёт.
-- Headline-метрики zero-подгруппы (когда разблокируется): `Allocated` / `Gen0` / `Gen2`; время вторично.
+- **Zero-materialization raw-reader подгруппа — реализована (синхронно).** Арм `A_Nextorm_Prepared_ToDataReader` (`QueryCommand.ToDataReader`), `Dapper_ToDataReader` (`SqlMapper.ExecuteReader` → `IDataReader`) и `Linq2Db_ToDataReader` (`DataContextExtensions.ExecuteReader` → `DataReaderAsync`, чтение через `.Reader`, `DbDataReader`) читают одну проекцию `id, someString` через **один общий** `Scan`/`BenchmarkRowSink`; читатель освобождается, per-row entity/DTO construction и collection accumulation отсутствуют. EF Core исключён (нет LINQ raw-reader). Async reader-арм (`ToDataReaderAsync`/`ExecuteReaderAsync`) отложен (триггер: запрос async raw-reader сравнения).
+- Headline-метрики zero-подгруппы: `Allocated` / `Gen0` / `Gen2`; время вторично. «Zero-materialization» = отсутствие entity/DTO-материализации, **не** нулевые аллокации (путь reader аллоцирует команду/ридер на вызов).
+- Setup-parity: все три арма сверяются с эталоном buffered DTO (rows=10000, совпадающий checksum) и между собой по checksum+bytes; отдельные probes: null-`someString` (complex_entity, 3 строки) и пустой ввод (0 строк).
 
 ### 4.5 JSON/CSV cross-library
 
@@ -116,20 +117,21 @@ Branch: `1.0.9-rc2`.
 - `dotnet build nextorm.slnx -c Debug` и `-c Release` — 0 warning / 0 error.
 - `--anyCategories=acceptance` по-прежнему даёт ровно 7 кейсов.
 - JSON/CSV: добавленные cross-library армы дают корректный вывод (логически эквивалентный native JSON; побайтово совпадающий manual CSV), подтверждено setup-сверкой.
-- Zero-армы (после CHECK-прохождения #189) демонстрируют корректное чтение и, в сохранённом отчёте, измеримо меньший `Allocated` против микро-армов. До этого zero-подгруппа остаётся `blocked + active` и в отчёт не попадает.
+- Zero-армы (синхронные raw reader) демонстрируют корректное чтение и попадают в сохранённый отчёт `NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md`; упорядоченные по `Allocated`/времени значения берутся из этого отчёта как есть, без априорного утверждения о меньшей аллокации против микро-армов. Async reader-арм в отчёт не попадает (отложен).
 
 ## 8. Доки
 
 - `docs/comparisons/benchmarks.md` + `docs/ru/comparisons/benchmarks.md`: новые строки/таблицы (projection, aggregates, paging, streaming, JSON/CSV cross-library).
-- `docs/specs/comparison/linq2db-comparison.md` + `docs/specs/ru/comparison/linq2db-comparison.md`: обновить утверждение о бенчмаркнутых сценариях (`:197-199`).
-- `docs/comparisons/capabilities.md` / `capability-matrix.md` — только если формулировка о потоковых терминалах меняется после #189.
+- `docs/specs/comparison/linq2db-comparison.md` + `docs/specs/ru/comparison/linq2db-comparison.md`: утверждение о бенчмаркнутых сценариях уточнено — исторический полный набор отделён от новых tier-1 результатов (см. раздел «Benchmarked performance»).
+- `docs/comparisons/capabilities.md` / `capability-matrix.md` — только если формулировка о потоковых терминалах меняется.
 - Публичные страницы не ссылаются на внутренние `docs/specs/**`; отчёты — на retained BDN artifacts / публичные страницы.
+- Provenance отчётов: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark{Projection,Aggregates,Paging,Streaming,WriteJson,Csv}-report-github.md` (свежие прогоны D188 N=2, 2026-10-09); числа в публичной странице `docs/comparisons/benchmarks.md` взяты из них без пересчёта.
 
 ## 9. Зависимости
 
-- Item 10 (zero-arm на SQLite) заблокирован #189; остаётся `blocked + active`, исходный объём и критерии не изменены.
-- Items 7–9 и JSON/CSV cross-library — без зависимостей, реализованы non-zero частью D188.
-- #189 не CHECK-прошёл; D188 не заменяет и не снимает zero-arm.
+- Item 10 (zero-arm на SQLite): синхронная часть реализована в D188 N=2 через `ToDataReader`; async часть отложена (триггер: запрос async raw-reader сравнения). Исходный объём и критерии не изменены.
+- Items 7–9 и JSON/CSV cross-library — без зависимостей, реализованы в D188.
+- Артефактный резолвер признаёт `nextorm.slnx` (D:C2-03a): отчёты пишутся в `benchmarks/BenchmarkDotNet.Artifacts`, не в корневой `BenchmarkDotNet.Artifacts`.
 
 ## 10. Риски
 
@@ -145,4 +147,4 @@ Branch: `1.0.9-rc2`.
 - `benchmarks/nextorm.benchmark/BenchmarkRowSink.cs`, `BenchmarkSerializationSink.cs`, `BenchmarkComparisonValidation.cs`
 - `benchmarks/nextorm.benchmark/Linq2DbDataContext.cs`, `EFDataContext.cs`, `TestDataContext.cs`, `BenchDb.cs`, `NextormConfig.cs`
 - `docs/comparisons/benchmarks.md`, `docs/specs/performance/benchmark-report.md`, `docs/specs/performance/acceptance-benchmarks.md`
-- `docs/specs/comparison/linq2db-comparison.md:197-199`
+- `docs/specs/comparison/linq2db-comparison.md` (раздел «Benchmarked performance»), `docs/specs/ru/comparison/linq2db-comparison.md`

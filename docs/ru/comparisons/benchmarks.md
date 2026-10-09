@@ -97,6 +97,169 @@ EF Core, и в 2–4 раза меньше, чем у Dapper.
 > варианта Nextorm дают 29.69–32.76 µs — это единственная фича, где кэшированный сырой SQL Dapper остаётся
 > впереди.
 
+## Сценарии tier 1 по форме запроса
+
+Добавлены в #188, чтобы покрыть формы запросов, которых нет в двух таблицах выше: проекцию в свежий
+DTO, SQL-агрегаты, сортированную пагинацию, стриминг (buffered/unbuffered DTO против
+zero-materialization raw reader) и кросс-библиотечный вывод JSON/CSV. Данные: `large_table`
+(10 000 строк) для projection/aggregates/paging/streaming; JSON-класс сеет собственную таблицу
+`json_bench`, CSV-класс берёт срез `large_table` (10 000 строк). Инварианты честного сравнения остаются
+`simple_entity`=10 и `complex_entity`=3 — «10 000 строк» выше относится к `large_table`, а не к этим
+фикстурам.
+
+Категории переиспользования те же, что в сравнении по фичам: **категория A** — Nextorm `Prepare()` против
+ближайшей *скомпилированной* формы (`EF.CompileAsyncQuery`, `LinqToDB.CompiledQuery.Compile`) и сырого
+Dapper; **категория B** — неявный кэш планов Nextorm против обычных (не compiled) EF Core/linq2db и
+сырого Dapper. У Dapper нет compiled-формы запроса/ридера, поэтому его армы несут обе категории.
+
+**У стриминга три группы:** буферизованная материализация DTO, небуферизованное перечисление DTO и
+**zero-materialization** подгруппа raw reader. Zero-подгруппа только синхронная (async reader-армы
+отложены): Nextorm `ToDataReader`, Dapper `ExecuteReader` и linq2db `ExecuteReader` (его
+`DataReaderAsync.Reader`) читают одну и ту же проекцию `id, someString` через **один общий
+неудерживающий sink**. EF Core в zero-подгруппу **не** входит — у него нет LINQ raw-reader-аналога.
+«Zero-materialization» означает отсутствие конструирования entity/DTO, **не** нулевые аллокации: путь
+reader всё равно аллоцирует свою команду/ридер на вызов.
+
+Для JSON/CSV конкурентные армы — **ближайший эквивалент**: ни у Dapper, ни у linq2db, ни у EF Core нет
+non-materialising терминала вывода, поэтому их арм = материализация → ручной сериализатор. Это не
+заявление о zero-materialization.
+
+> **Как читать эти числа.** `ShortRun` + `InProcessEmitToolchain` — исследовательский режим: различия
+> меньше ~20% считайте шумом и смотрите полный отчёт (error, стандартное отклонение, аллокации), прежде
+> чем делать выводы. В таблицах приведены `Mean`/`Allocated` BenchmarkDotNet как есть; это не заявление о
+> всеобщей победе.
+
+### Проекция — `Select(x => new Dto { Id, Str })`
+
+Воспроизведение: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkProjection*`.
+[Отчёт](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkProjection-report-github.md).
+
+| Арм | Категория | Mean | Allocated |
+|---|---|---:|---:|
+| A_Nextorm_Prepared_ToListAsync | A | 3.653 ms | 1.3 MB |
+| A_EFCore_Compiled_ToListAsync | A | 4.904 ms | 3.36 MB |
+| A_Linq2Db_Compiled_ToList | A | 5.522 ms | 1.47 MB |
+| A_Dapper_ToListAsync | A+B | 6.464 ms | 1.7 MB |
+| B_Nextorm_Cached_ToListAsync | B | 3.799 ms | 1.3 MB |
+| B_Linq2Db_ToListAsync | B | 6.472 ms | 1.48 MB |
+| B_EFCore_ToListAsync | B | 8.533 ms | 3.62 MB |
+
+### Агрегаты — SQL-side `Count` / `Sum` / `GroupBy → Count`
+
+Воспроизведение: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkAggregates*`.
+[Отчёт](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAggregates-report-github.md).
+
+| Операция | Арм | Категория | Mean | Allocated |
+|---|---|---:|---:|---:|
+| Count | A_Nextorm_Prepared_Count | A | 13.77 μs | 408 B |
+| Count | A_Linq2Db_Compiled_Count | A | 18.02 μs | 1,280 B |
+| Count | A_EFCore_Compiled_Count | A | 38.62 μs | 7,744 B |
+| Count | Dapper_Count | A+B | 17.30 μs | 944 B |
+| Count | B_Nextorm_Cached_Count | B | 19.31 μs | 3,824 B |
+| Count | B_Linq2Db_Count | B | 24.56 μs | 2,864 B |
+| Count | B_EFCore_Count | B | 48.88 μs | 10,080 B |
+| Sum | A_Nextorm_Prepared_Sum | A | 277.57 μs | 410 B |
+| Sum | A_Linq2Db_Compiled_Sum | A | 291.81 μs | 1,290 B |
+| Sum | A_EFCore_Compiled_Sum | A | 319.95 μs | 7,770 B |
+| Sum | Dapper_Sum | A+B | 291.59 μs | 954 B |
+| Sum | B_Nextorm_Cached_Sum | B | 286.43 μs | 4,226 B |
+| Sum | B_Linq2Db_Sum | B | 304.90 μs | 3,490 B |
+| Sum | B_EFCore_Sum | B | 338.05 μs | 10,978 B |
+| GroupBy→Count | A_Nextorm_Prepared_GroupByCount | A | 1,281.91 μs | 4,737 B |
+| GroupBy→Count | A_Linq2Db_Compiled_GroupByCount | A | 1,309.32 μs | 7,025 B |
+| GroupBy→Count | A_EFCore_Compiled_GroupByCount | A | 1,343.09 μs | 33,089 B |
+| GroupBy→Count | Dapper_GroupByCount | A+B | 1,317.46 μs | 12,329 B |
+| GroupBy→Count | B_Nextorm_Cached_GroupByCount | B | 1,314.02 μs | 10,577 B |
+| GroupBy→Count | B_Linq2Db_GroupByCount | B | 1,393.44 μs | 11,553 B |
+| GroupBy→Count | B_EFCore_GroupByCount | B | 1,407.25 μs | 42,641 B |
+
+### Пагинация — `OrderBy(Id).Offset(5000).Limit(100)`
+
+Воспроизведение: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkPaging*`.
+[Отчёт](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkPaging-report-github.md).
+
+| Арм | Категория | Mean | Allocated |
+|---|---|---:|---:|
+| A_Nextorm_Prepared_PageAsync | A | 87.54 μs | 13.99 KB |
+| A_Linq2Db_Compiled_Page | A | 107.44 μs | 17.61 KB |
+| A_EFCore_Compiled_PageAsync | A | 130.82 μs | 44.81 KB |
+| A_Dapper_PageAsync | A+B | 101.53 μs | 18.15 KB |
+| B_Nextorm_Cached_PageAsync | B | 99.68 μs | 22.48 KB |
+| B_Linq2Db_PageAsync | B | 138.21 μs | 22.79 KB |
+| B_EFCore_PageAsync | B | 185.63 μs | 56.9 KB |
+
+### Стриминг — buffered / unbuffered DTO и zero-materialization reader
+
+Воспроизведение: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkStreaming*`.
+[Отчёт](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkStreaming-report-github.md).
+
+Буферизованный DTO:
+
+| Арм | Категория | Mean | Allocated |
+|---|---|---:|---:|
+| A_Nextorm_Prepared_ToList_Dto | A | 3.743 ms | 1,328.84 KB |
+| A_EFCore_Compiled_ToList_Dto | A | 8.012 ms | 3,701.54 KB |
+| Linq2Db_Compiled_ToList_Dto | A | 5.637 ms | 1,508.25 KB |
+| Dapper_ToList_Dto | A+B | 6.864 ms | 1,742.31 KB |
+| B_Nextorm_Cached_ToList_Dto | B | 3.786 ms | 1,332.39 KB |
+| B_Linq2Db_ToList_Dto | B | 8.148 ms | 1,511.3 KB |
+| B_EFCore_ToList_Dto | B | 8.594 ms | 3,705.59 KB |
+
+Небуферизованное перечисление DTO:
+
+| Арм | Категория | Mean | Allocated |
+|---|---|---:|---:|
+| A_Nextorm_Prepared_AsyncStream_Dto | A | 3.663 ms | 1,250.56 KB |
+| A_EFCore_Compiled_AsyncStream_Dto | A | 5.047 ms | 3,444.77 KB |
+| Dapper_AsyncStream_Dto | A+B | 4.591 ms | 1,485.82 KB |
+| B_Nextorm_Cached_AsyncStream_Dto | B | 4.019 ms | 1,254.3 KB |
+| B_Linq2Db_AsyncStream_Dto | B | 4.595 ms | 1,254.55 KB |
+| B_EFCore_AsyncStream_Dto | B | 5.105 ms | 3,448.89 KB |
+
+Zero-materialization raw reader (синхронные; общий неудерживающий sink; EF Core исключён):
+
+| Арм | Категория | Mean | Allocated |
+|---|---|---:|---:|
+| A_Nextorm_Prepared_ToDataReader | A | 4.302 ms | 944.8 KB |
+| Linq2Db_ToDataReader | B | 3.762 ms | 943 KB |
+| Dapper_ToDataReader | B | 3.761 ms | 942.77 KB |
+
+### JSON / CSV кросс-библиотечно
+
+Воспроизведение JSON: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkWriteJson*`.
+[Отчёт](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWriteJson-report-github.md).
+Воспроизведение CSV: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkCsv*`.
+[Отчёт](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCsv-report-github.md).
+
+JSON-отчёт покрывает `RowCount` 1 000 / 10 000 / 100 000; показан блок на 10 000 строк (Ratio — относительно
+`ToList_Dto` в том же блоке). Конкурентные армы — материализация → ручной сериализатор.
+
+| Метод (10 000 строк) | Mean | Ratio | Allocated |
+|---|---:|---:|---:|
+| WriteJson_Array_Scalar | 5,724.3 μs | 0.93 | 38.04 KB |
+| ToList_Dto | 6,170.0 μs | 1.00 | 785.21 KB |
+| WriteJsonAsync_Array_Scalar | 6,620.2 μs | 1.07 | 38.25 KB |
+| Linq2Db_ToList_Json | 9,150.2 μs | 1.48 | 963.56 KB |
+| Dapper_ToList_Json | 9,415.9 μs | 1.53 | 1,273.78 KB |
+| WriteJson_Array_ScalarPayload | 10,341.2 μs | 1.68 | 11,495.22 KB |
+| WriteJson_Array_Dto | 10,351.9 μs | 1.68 | 435.64 KB |
+| WriteJsonAsync_Array_ScalarPayload | 11,258.5 μs | 1.83 | 11,495.38 KB |
+| EFCore_ToList_Json | 11,303.0 μs | 1.83 | 3,158.67 KB |
+| WriteJson_Array_WideDto | 13,801.5 μs | 2.24 | 11,527.94 KB |
+
+CSV (срез `large_table`, 10 000 строк; Ratio — относительно `Nextorm_ToList`):
+
+| Метод | Mean | Ratio | Allocated |
+|---|---:|---:|---:|
+| Nextorm_StringProjection_ToList | 2.819 ms | 0.33 | 1,019.52 KB |
+| Nextorm_StringProjection_WriteCsv | 4.029 ms | 0.47 | 949.67 KB |
+| Nextorm_ToList | 8.558 ms | 1.00 | 2,267.38 KB |
+| Nextorm_ToList_ManualCsv | 9.927 ms | 1.16 | 4,141.67 KB |
+| Nextorm_WriteCsv | 11.076 ms | 1.29 | 1,743.61 KB |
+| Dapper_ToList_ManualCsv | 13.291 ms | 1.55 | 4,865.94 KB |
+| Linq2Db_ToList_ManualCsv | 13.385 ms | 1.56 | 4,322.11 KB |
+| EFCore_ToList_ManualCsv | 14.364 ms | 1.68 | 6,516.97 KB |
+
 ## Как читать числа
 
 - Все участники используют один и тот же ADO.NET-провайдер (`Microsoft.Data.Sqlite`), поэтому сравнение

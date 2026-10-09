@@ -22,7 +22,8 @@ internal static class BenchmarkArtifacts
         // the repository root instead of counting '..', so the layout can change freely.
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {
-            if (File.Exists(System.IO.Path.Combine(dir.FullName, SolutionFileName)))
+            if (File.Exists(System.IO.Path.Combine(dir.FullName, SolutionFileName))
+                || File.Exists(System.IO.Path.Combine(dir.FullName, "nextorm.slnx")))
                 return System.IO.Path.Combine(dir.FullName, "benchmarks", "BenchmarkDotNet.Artifacts");
         }
 

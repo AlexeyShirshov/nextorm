@@ -198,10 +198,15 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
   feature request in linq2db (`linq2db#698`).
 * Two reuse paths (implicit plan cache and explicit `Prepare()`), query parametrisation and a
   benchmarked low-allocation design.
-* Benchmarked performance: on the fast (tmpfs) full run the prepared path wins every measured class
-  against Dapper, EF Core and linq2db (`Any`, `First`, `Join`, `Single`, `Where`, `LargeIteration`
-  `ToList`/stream and `Cache`) with a small allocation footprint. The remaining gap is the warm
-  (non-prepared) path: `CTE` ~1.31×, recursive `CTE` ~1.52×, `Join4` ~1.15× and captured `IN`
+* Benchmarked performance: on the fast (tmpfs) full run the prepared path wins the **historical**
+  measured class set against Dapper, EF Core and linq2db (`Any`, `First`, `Join`, `Single`, `Where`,
+  `LargeIteration` `ToList`/stream and `Cache`) with a small allocation footprint. That is a statement
+  about that historical measured set, not a universal claim. The tier-1 query-shape scenarios added in
+  #188 (projection, aggregates, paging, buffered/unbuffered streaming and synchronous raw-reader
+  streaming) are measured under the exploratory `ShortRun`/`InProcessEmitToolchain` job and are **not**
+  part of the historical full-run set; read the current per-arm results in
+  `docs/comparisons/benchmarks.md` rather than assuming a win in every class. The remaining gap is the
+  warm (non-prepared) path: `CTE` ~1.31×, recursive `CTE` ~1.52×, `Join4` ~1.15× and captured `IN`
   ~1.61–1.70× behind Dapper; iteration 8 closed the inline-`IN` refresh cost
   (`docs/specs/performance/benchmark-report.md`, iterations 3–8).
 * SQL Server statement-level hints with plan-key participation (`Hint(...)`), coalescing cleanly with

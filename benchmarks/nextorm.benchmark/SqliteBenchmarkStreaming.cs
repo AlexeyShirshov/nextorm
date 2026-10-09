@@ -1,3 +1,4 @@
+using System.Data;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using Dapper;
@@ -11,17 +12,18 @@ using IDataContext = NextORM.Core.IDataContext;
 namespace NextORM.Benchmark;
 
 /// <summary>
-/// DTO streaming comparison on SQLite <c>large_table</c> (~10 000 rows): buffered DTO
-/// materialization (<c>ToList</c>/<c>Query</c>) versus unbuffered DTO enumeration
-/// (<c>ToAsyncEnumerable</c>/<c>QueryUnbuffered</c>/<c>AsAsyncEnumerable</c>). Every arm reads the
-/// same projected columns into the shared <see cref="BenchmarkRowSink"/>; the workloads are
-/// validated against each other in setup.
+/// Streaming comparison on SQLite <c>large_table</c> (10 000 rows): buffered DTO materialization
+/// (<c>ToList</c>/<c>Query</c>), unbuffered DTO enumeration
+/// (<c>ToAsyncEnumerable</c>/<c>QueryUnbuffered</c>/<c>AsAsyncEnumerable</c>) and synchronous
+/// zero-materialization raw-reader consumption. Every arm reads the same projected columns into the
+/// shared <see cref="BenchmarkRowSink"/>; the workloads are validated against each other in setup.
 /// <para>
-/// <b>Blocked subgroup (#189).</b> The zero-materialization subgroup (raw-reader consumption with
-/// no entity/DTO construction) is deliberately absent: it depends on a CHECK-passed D189 SQLite
-/// <c>ToDataReader</c>/<c>ToDataReaderAsync</c> that does not exist, so per the D188 escalation this
-/// unit is blocked and active and no reader arm is implemented. No materialized arm is relabeled as
-/// zero, and no fallback is substituted in its place.
+/// <b>Zero-materialization subgroup (synchronous readers).</b> Nextorm, Dapper and linq2db consume the
+/// same two-column projection through a raw <see cref="IDataReader"/> with no entity/DTO construction:
+/// Nextorm via the prepared <c>ToDataReader</c> terminal, Dapper via <c>ExecuteReader</c> and linq2db
+/// via its <c>DataConnection</c> raw-reader API. All three share one scanner and one
+/// <see cref="BenchmarkRowSink"/>. EF Core is intentionally excluded from this subgroup because it has
+/// no agreed raw-reader counterpart. The asynchronous reader arms remain deferred.
 /// </para>
 /// </summary>
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
@@ -38,8 +40,11 @@ public class SqliteBenchmarkStreaming
 
     private readonly IPreparedQueryCommand<ProjectionDto> _nextormBuffered;
     private readonly IPreparedQueryCommand<ProjectionDto> _nextormUnbuffered;
+    private readonly QueryCommand<ProjectionDto> _nextormReader;
 
     private readonly BenchmarkRowSink _sink = new();
+
+    private const string RawReaderSql = "select id, someString as Str from large_table";
 
     public SqliteBenchmarkStreaming()
     {
@@ -56,6 +61,10 @@ public class SqliteBenchmarkStreaming
         _nextormUnbuffered = _ctx.LargeEntity
             .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
             .Prepare(false);
+
+        _nextormReader = _ctx.LargeEntity
+            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str });
+        _ = _nextormReader.Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite($"Filename={BenchDb.FilePath}");
@@ -92,12 +101,96 @@ public class SqliteBenchmarkStreaming
 
         Compare("Streaming/dapper-unbuffered", baseline, BenchmarkComparisonValidation.Measure(dapperUnbuffered, r => r.Id));
         Compare("Streaming/EFCore-unbuffered", baseline, BenchmarkComparisonValidation.Measure(efUnbuffered, r => r.Id));
+
+        VerifyRawReader("Streaming/nextorm-reader",
+            () => { using var reader = _nextormReader.ToDataReader(); Scan(reader); },
+            baseline.Count, baseline.Checksum, referenceBytes: null);
+        var readerBytes = _sink.Bytes;
+        BenchmarkComparisonValidation.Ensure(readerBytes > 0, "Streaming/nextorm-reader: expected non-zero byte count.");
+        VerifyRawReader("Streaming/dapper-reader",
+            () => { using var reader = _conn.ExecuteReader(RawReaderSql); Scan(reader); },
+            baseline.Count, baseline.Checksum, readerBytes);
+        VerifyRawReader("Streaming/linq2db-reader",
+            () => { using var reader = LinqToDB.Data.DataContextExtensions.ExecuteReader(_linq2Db.Db, RawReaderSql); Scan(reader.Reader!); },
+            baseline.Count, baseline.Checksum, readerBytes);
+
+        // Null-Str and empty-input probes: the shared scanner must fold the IsDBNull guard and return zero rows.
+        _sink.Reset();
+        using (var reader = _ctx.ComplexEntity.OrderBy(e => e.Id).Select(e => new ProjectionDto { Id = e.Id, Str = e.String }).ToDataReader())
+            Scan(reader);
+        BenchmarkComparisonValidation.EnsureCount(3, _sink.Rows, "Streaming/null-Str-probe");
+        BenchmarkComparisonValidation.Ensure(_sink.Bytes == 10, $"Streaming/null-Str-probe: expected 10 non-null string chars, observed {_sink.Bytes}.");
+        BenchmarkComparisonValidation.Report("Streaming/null-Str-probe", _sink.Rows, _sink.Checksum, $"bytes={_sink.Bytes}");
+
+        _sink.Reset();
+        using (var reader = _ctx.LargeEntity.Where(e => e.Id < 0).Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).ToDataReader())
+            Scan(reader);
+        BenchmarkComparisonValidation.EnsureCount(0, _sink.Rows, "Streaming/empty-reader-probe");
     }
+
+    private void VerifyRawReader(string context, Action scanArm, int expectedRows, long expectedChecksum, long? referenceBytes)
+    {
+        _sink.Reset();
+        scanArm();
+        BenchmarkComparisonValidation.EnsureCount(expectedRows, _sink.Rows, context);
+        BenchmarkComparisonValidation.EnsureChecksum(expectedChecksum, _sink.Checksum, context);
+        if (referenceBytes is long bytes)
+            BenchmarkComparisonValidation.Ensure(bytes == _sink.Bytes, $"{context}: byte count {_sink.Bytes} differs from reference {bytes}.");
+        BenchmarkComparisonValidation.Report(context, _sink.Rows, _sink.Checksum, $"bytes={_sink.Bytes}");
+    }
+
+    /// <summary>
+    /// The single non-retaining raw-reader scanner shared by all three zero-materialization arms: reads
+    /// <c>id</c> (ordinal 0) and the nullable <c>someString</c> (ordinal 1, <c>IsDBNull</c>-guarded) and
+    /// folds the identifier into the checksum and the string length into the byte counter. No DTO or
+    /// collection is created and the caller keeps ownership of the reader.
+    /// </summary>
+    private void Scan(IDataReader reader)
+    {
+        while (reader.Read())
+        {
+            _sink.Add(reader.GetInt64(0));
+            if (!reader.IsDBNull(1))
+                _sink.AddBytes(reader.GetString(1).Length);
+        }
+    }
+
+    [IterationSetup(Targets = new[]
+    {
+        nameof(A_Nextorm_Prepared_ToDataReader),
+        nameof(Dapper_ToDataReader),
+        nameof(Linq2Db_ToDataReader),
+    })]
+    public void ResetReaderSink() => _sink.Reset();
 
     private static void Compare(string context, (int Count, long Checksum) expected, (int Count, long Checksum) actual)
     {
         BenchmarkComparisonValidation.EnsureCount(expected.Count, actual.Count, context);
         BenchmarkComparisonValidation.EnsureChecksum(expected.Checksum, actual.Checksum, context);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("A_RawReader")]
+    public void A_Nextorm_Prepared_ToDataReader()
+    {
+        using var reader = _nextormReader.ToDataReader();
+        Scan(reader);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader")]
+    public void Dapper_ToDataReader()
+    {
+        using var reader = _conn.ExecuteReader(RawReaderSql);
+        Scan(reader);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader")]
+    public void Linq2Db_ToDataReader()
+    {
+        using var reader = LinqToDB.Data.DataContextExtensions.ExecuteReader(_linq2Db.Db, RawReaderSql);
+        Scan(reader.Reader!);
     }
 
     [Benchmark]
@@ -120,7 +213,7 @@ public class SqliteBenchmarkStreaming
     [BenchmarkCategory("A_BufferedDto")]
     public async Task A_EFCore_Compiled_ToList_Dto()
     {
-        await foreach (var row in _efCompiled(_efCtx))
+        foreach (var row in await _efCompiled(_efCtx).ToListAsync())
             _sink.Add(row.Id);
     }
 
