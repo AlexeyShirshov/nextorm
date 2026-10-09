@@ -1,0 +1,81 @@
+diff --git a/tests/nextorm.integration.tests/Providers/ITestProvider.cs b/tests/nextorm.integration.tests/Providers/ITestProvider.cs
+index 1a6baccd..1ea3663a 100644
+--- a/tests/nextorm.integration.tests/Providers/ITestProvider.cs
++++ b/tests/nextorm.integration.tests/Providers/ITestProvider.cs
+@@ -151,8 +151,9 @@ public interface ITestProvider
+ 
+     /// <summary>
+     /// True when the provider implements the multi-column <c>ToDataReader</c>/<c>ToDataReaderAsync</c>
+-    /// terminal. PostgreSQL and SQL Server do; SQLite appends its <c>rowid</c> locator to the streaming
+-    /// projection and fails closed, while MySQL/MariaDB and ClickHouse have no sequential-access support.
++    /// terminal. PostgreSQL and SQL Server do through sequential access; SQLite does through the
++    /// locator-free buffered result path (no <c>rowid</c> is appended to the projection). MySQL/MariaDB,
++    /// ClickHouse and the in-memory provider have no sequential-access support and fail closed.
+     /// </summary>
+     bool SupportsLobDataReader => false;
+ 
+diff --git a/tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs b/tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs
+index faa2debc..d3f3c056 100644
+--- a/tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs
++++ b/tests/nextorm.sqlite.tests/ToDataReaderSqliteTests.cs
+@@ -269,6 +269,60 @@ public class ToDataReaderSqliteTests
+         }
+     }
+ 
++    [Fact]
++    public void ToDataReader_Sqlite_SingleBlobProjection_ShouldReadWholeBufferedValue()
++    {
++        var ctx = CreateDb(out var path);
++        try
++        {
++            using var reader = ctx.From<ReaderProbeEntity>()
++                .OrderBy(x => x.Id)
++                .Select(x => x.Data!)
++                .ToDataReader();
++
++            reader.FieldCount.Should().Be(1, "the locator-free path must not append a rowid column");
++            reader.GetName(0).Should().Be("data");
++
++            reader.Read().Should().BeTrue();
++            ((byte[])reader.GetValue(0)).Should().Equal(new byte[] { 1, 2 }, "a SQLite blob is read whole (buffered, not chunked)");
++            reader.Read().Should().BeTrue();
++            reader.IsDBNull(0).Should().BeTrue("a null blob must round-trip as DBNull");
++            reader.Read().Should().BeFalse();
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
++    [Fact]
++    public async Task ToDataReaderAsync_Sqlite_SingleBlobProjection_ShouldReadWholeBufferedValue()
++    {
++        var ctx = CreateDb(out var path);
++        try
++        {
++            await using var reader = await ctx.From<ReaderProbeEntity>()
++                .OrderBy(x => x.Id)
++                .Select(x => x.Data!)
++                .ToDataReaderAsync(TestContext.Current.CancellationToken);
++
++            reader.FieldCount.Should().Be(1, "the locator-free path must not append a rowid column");
++            reader.GetName(0).Should().Be("data");
++
++            (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
++            ((byte[])reader.GetValue(0)).Should().Equal(new byte[] { 1, 2 }, "a SQLite blob is read whole (buffered, not chunked)");
++            (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
++            reader.IsDBNull(0).Should().BeTrue("a null blob must round-trip as DBNull");
++            (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeFalse();
++        }
++        finally
++        {
++            ctx.Dispose();
++            File.Delete(path);
++        }
++    }
++
+     [Fact]
+     public async Task ToDataReaderAsync_Sqlite_DefaultToken_WithParameters_ShouldBindArrayValues()
+     {
