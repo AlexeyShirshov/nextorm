@@ -40,7 +40,7 @@ Excluded gaps (removed from the barrier; not planned to DO; no `ready` placehold
 | T160 | #160 | G1 | 1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | own PLAN persisted (commit `1675a978`); selective port + R02 red↔green; terminal incomplete — fresh redo not executable; over-preserving red only in rejected patch; patch docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch |
 | T206 | #206 | G1 | 2 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md | own PLAN persisted (commit `22f0171d`); NORMGEN007 guard red↔green; terminal incomplete — NORMGEN007 conflict unreachable (bodies determined by signatures); no product change; evidence artifacts/pdca/D206/rv1/ |
 | T208 | #208 | G1 | 3 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-208-sqlserver-native-json-param-alias-1.md | own PLAN persisted (commit `27da4fd6`); commit `09f772a7`; issue #208 closed |
-| T170 | #170 | G1 | 4 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | own PLAN persisted (commit `2f7836a6`); documented trust + closed runtime oracle |
+| T170 | #170 | G1 | 4 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | own PLAN persisted (commit `2f7836a6`); documented trust + closed runtime oracle; CHECK pass r=1/rv1; issue #170 closed |
 | T151 | #151 | G1 | 5 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-151-stryker-mutation-1.md | own PLAN persisted (commit `7a65a15e`); frozen raw-artifact evidence bundle |
 
 ## Phase decisions
@@ -53,6 +53,7 @@ Excluded gaps (removed from the barrier; not planned to DO; no `ready` placehold
 - **PLAN-revision vector:** T160 r=1/rv1; T206 r=1/rv1; T208 r=1/rv1; T170 r=1/rv1; T151 r=1/rv1. (T171/T172 n/a — excluded-gap.)
 - **Merge:** not applicable (single lane); `push` never performed.
 - **Autocommit:** task/status files only, explicit paths; message prefix `#<issue>` for tasks; collection-status commits use the `rc2-final:` prefix.
+- **D lane — T170 done:** T170 completed its full cycle (DO → CHECK → ACT) with a CHECK **pass** at `r=1`/`rv1` (9/9 evidence rows met); task commit `9715f13f`. The single lane continues to **T151** (last task).
 
 ## Общая верификация и восстановление
 
