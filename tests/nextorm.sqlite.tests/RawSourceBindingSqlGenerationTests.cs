@@ -1,7 +1,9 @@
 using System.Data.Common;
 using System.Linq.Expressions;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using NextORM.Core;
+using NextORM.Sqlite;
 
 namespace NextORM.Sqlite.Tests;
 
@@ -289,5 +291,189 @@ public class RawSourceBindingSqlGenerationTests
         sql.Should().Contain("from (select id, tenant_id from rsb_sql_table)");
         sql.Should().NotContain("where", "an unbound raw source is never filtered");
         sql.Should().NotContain("tenant_id =");
+    }
+}
+
+/// <summary>
+/// #185 D185: binding a raw source is self-sufficient — it registers the entity mapping through the
+/// same path as <c>From&lt;T&gt;()</c>, so a typed member projection works on a genuinely cold
+/// <see cref="DataContextCache.Metadata"/> (no prior <c>From&lt;T&gt;</c>). The negative half pins the
+/// configured-mapping precedence and that a repeated bind is a registration no-op.
+/// <para>
+/// Joins the serialized "DataContextCache clear" collection because it clears the process-wide cache.
+/// </para>
+/// </summary>
+[Collection("DataContextCache clear")]
+public class RawSourceBindingColdRegistrationTests
+{
+    [SqlTable("rsb_cold_configured")]
+    public sealed class ColdConfiguredEntity
+    {
+        [System.ComponentModel.DataAnnotations.Schema.Column("attr_name")]
+        public string? Name { get; set; }
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
+    {
+        var prepared = (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+        return prepared.DbCommand.CommandText.Replace("\r\n", "\n");
+    }
+
+    // R01/R02: cold interface + typed projection via the raw-SQL entry point.
+    [Fact]
+    public void ColdInterfaceTypedProjection_FromSql_ShouldRegisterAndRender()
+    {
+        DataContextCache.Clear();
+        using var ctx = SqliteTestContext.Create();
+
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeFalse("genuinely cold metadata");
+
+        var sql = SqlOf(ctx, ctx.FromSql("select id, somestring from complex_entity")
+            .BindEntity<IComplexEntity>(["id", "somestring"])
+            .Select(t => t.Id));
+
+        sql.Should().Contain("select id from (select id, somestring from complex_entity)");
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeTrue(
+            "binding registers the mapping without a prior From<T>()");
+    }
+
+    // R01/R02: the same cold binding through the named-source entry point.
+    [Fact]
+    public void ColdInterfaceTypedProjection_FromNamedSource_ShouldRegisterAndRender()
+    {
+        DataContextCache.Clear();
+        using var ctx = SqliteTestContext.Create();
+
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeFalse("genuinely cold metadata");
+
+        var sql = SqlOf(ctx, ctx.From("complex_entity")
+            .BindEntity<IComplexEntity>(["id", "somestring"])
+            .Select(t => t.Id));
+
+        sql.Should().Contain("from complex_entity");
+        sql.Should().Contain("id");
+        DataContextCache.Metadata.ContainsKey(typeof(IComplexEntity)).Should().BeTrue();
+    }
+
+    // R04: a configured From<T>(cfg) registered before binding keeps its configured column name.
+    [Fact]
+    public void ColdConfiguredMapping_ShouldWinOverAttributeMapping()
+    {
+        DataContextCache.Clear();
+        using var ctx = SqliteTestContext.Create();
+        ctx.From<ColdConfiguredEntity>(cfg => cfg.Property(x => x.Name!).HasColumnName("configured_name"));
+
+        DataContextCache.Metadata[typeof(ColdConfiguredEntity)].Properties
+            .Should().ContainSingle(p => p.ColumnName == "configured_name");
+
+        var sql = SqlOf(ctx, ctx.FromSql("select configured_name from rsb_cold_configured")
+            .BindEntity<ColdConfiguredEntity>(["configured_name"])
+            .Select(x => x.Name));
+
+        sql.Should().Contain("configured_name");
+        sql.Should().NotContain("attr_name", "the configured mapping wins over the attribute mapping");
+    }
+
+    // R02: a repeated bind does not change the mapping or the generated SQL.
+    [Fact]
+    public void RepeatedBind_ShouldNotChangeSqlOrMapping()
+    {
+        DataContextCache.Clear();
+        using var ctx = SqliteTestContext.Create();
+        var source = ctx.FromSql("select id, somestring from complex_entity");
+
+        var first = source.BindEntity<IComplexEntity>(["id", "somestring"]).Select(t => t.Id);
+        var firstMetadata = DataContextCache.Metadata[typeof(IComplexEntity)];
+        var second = source.BindEntity<IComplexEntity>(["id", "somestring"]).Select(t => t.Id);
+
+        SqlOf(ctx, first).Should().Be(SqlOf(ctx, second));
+        DataContextCache.Metadata[typeof(IComplexEntity)].Should().BeSameAs(firstMetadata,
+            "the second bind is a registration no-op");
+    }
+
+    // R07: the exact TableAlias guard is unchanged and registers no mapping.
+    [Fact]
+    public void TableAlias_BindEntity_ShouldStillThrowNotSupported()
+    {
+        DataContextCache.Clear();
+        using var ctx = SqliteTestContext.Create();
+        var source = ctx.FromSql("select 1 as Id");
+
+        var act = () => source.BindEntity<TableAlias>(["Id"]);
+
+        act.Should().Throw<NotSupportedException>();
+        DataContextCache.Metadata.ContainsKey(typeof(TableAlias)).Should().BeFalse(
+            "TableAlias is rejected and has no mapping to register");
+    }
+
+    /// <summary>
+    /// A class entity unique to the R03 materialization proof: it is never primed through
+    /// <c>From&lt;T&gt;()</c>, so the bind's own registration is the only mapping source. It carries a
+    /// nullable string and a nullable value type so both a null and a non-null column value are checked.
+    /// </summary>
+    [SqlTable("rsb_cold_class")]
+    public sealed class ColdClassEntity
+    {
+        [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+        public int Id { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+        public string? Name { get; set; }
+
+        [System.ComponentModel.DataAnnotations.Schema.Column("nullable_flag")]
+        public bool? NullableFlag { get; set; }
+    }
+
+    // R03 (authoritative): a class entity materializes from a raw source with no prior From<T>(), on a
+    // verified-cold Metadata, including a null and a non-null nullable value. Isolated in the serialized
+    // cache-clear collection and run in isolation, because the integration smoke test cannot establish
+    // coldness across providers in one process (the first provider registers the shared type).
+    [Fact]
+    public void ColdClassEntity_RawSql_ShouldMaterializeNullAndNonNullValues()
+    {
+        DataContextCache.Clear();
+
+        var path = Path.Combine(Path.GetTempPath(), $"nextorm-rsb-cold-class-{Guid.NewGuid():N}.db");
+        try
+        {
+            using (var conn = new SqliteConnection($"Data Source={path}"))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText =
+                    "create table rsb_cold_class (id integer primary key, name text null, nullable_flag integer null);" +
+                    "insert into rsb_cold_class (id, name, nullable_flag) values (1, 'present', 1);" +
+                    "insert into rsb_cold_class (id, name, nullable_flag) values (2, null, null);";
+                cmd.ExecuteNonQuery();
+            }
+
+            using var ctx = new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+
+            DataContextCache.Metadata.ContainsKey(typeof(ColdClassEntity)).Should().BeFalse(
+                "the configured metadata cache is genuinely cold before the bind");
+
+            // No prior ctx.From<ColdClassEntity>(): the bind itself registers the mapping, and the whole
+            // class (not an interface or an identity projection) is materialized by the terminal.
+            var rows = ctx.FromSql("select id, name, nullable_flag from rsb_cold_class")
+                .BindEntity<ColdClassEntity>(["id", "name", "nullable_flag"])
+                .ToList();
+
+            rows.Should().HaveCount(2);
+
+            var present = rows.Single(r => r.Id == 1);
+            present.Name.Should().Be("present", "the non-null value round-trips");
+            present.NullableFlag.Should().BeTrue("the non-null nullable value round-trips");
+
+            var missing = rows.Single(r => r.Id == 2);
+            missing.Name.Should().BeNull("a null column value materializes as null, not a default");
+            missing.NullableFlag.Should().BeNull("a null nullable value materializes as null");
+
+            DataContextCache.Metadata.ContainsKey(typeof(ColdClassEntity)).Should().BeTrue(
+                "binding registers the class mapping without a prior From<T>()");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 }
