@@ -1,3 +1,28 @@
+## Collection rc2-final — own PLAN adjudication (2026-10-09, HEAD 9a2a2871)
+
+- task: T172 / #172; selected_variant: `pdca-dotnet`; cycle_id: N=1; plan_revision: r=1
+- plan_state: **gap** (no `ready` placeholder created; barrier not passed)
+- CLASSIFICATION: **GAP** — no meaningful in-milestone deliverable is derivable.
+
+### Reason
+No concrete consumer, no agreed API/semantics, and no new, testable acceptance criterion for arbitrary/anonymous child-collection projection. Adding a speculative API or another unsupported-feature guard would invent scope rather than close the gap.
+
+### Evidence
+- `docs/specs/roadmap/todo_navigation_properties.md:335-338` — explicitly deferred pending a concrete consumer + agreed API/semantics.
+- `docs/advanced/relationships.md:67` — the historical `NORM.ChildCollection(...)` form is not provided; Roslyn finds no symbol/stub.
+- `docs/advanced/relationships.md:65-73` — existing `JoinInto` requires a declared `ICollection<TChild>`; no anonymous-projection requirements.
+- `docs/guide/28-streaming-data.md:169-170`; `tests/nextorm.core.tests/JsonShapeWriterTests.cs:327` — JSON child-collection queries already excluded/rejected; re-pinning that guard would not deliver #172.
+- `docs/specs/status/rc2-176-json-nested-1.md:131,187` — #176 leaves collection projection deferred to #172.
+- `docs/specs/status/rc2-172-child-collection-projection-1.md:7,12,15,18-19,27,44-48` — prior GAP, #172 open, neither done nor superseded.
+
+### Unblock trigger
+A concrete consuming scenario plus agreed API/semantics sufficient to define observable acceptance criteria and negative cases; then gather the footprint and return T172 to PLAN.
+
+### Collection disposition
+The ALL-barrier does not pass; collection `rc2-final` stops here. T172 remains unresolved/open; no `ready` placeholder, implementation plan, or DO authorization. This confirms the existing GAP; it is not a revised implementation plan and does not reset revision/attempt counters.
+
+---
+
 # PDCA PLAN — Issue #172 Child-collection projection into anonymous/derived form (NORM.ChildCollection)
 
 - collection: `1.0.9-rc2`
