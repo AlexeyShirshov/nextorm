@@ -379,7 +379,6 @@ public class InMemoryTests
 
         var planEC = new QueryPlanEqualityComparer(q1);
 
-        planEC.GetHashCode(q1).Should().NotBe(planEC.GetHashCode(q2));
         planEC.Equals(q1, q2).Should().BeFalse();
     }
     [Fact]

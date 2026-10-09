@@ -1,0 +1,3 @@
+# command: python3 scripts/validate_inner_loop.py report docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/evidence.json
+# run: 2026-10-09T13:36Z tree 3ebaa4ee+d175-post (CHECK r2 re-gather: literal process exit codes)
+exit_code=0

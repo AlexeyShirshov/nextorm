@@ -1,0 +1,21 @@
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (889ms)
+
+Test run summary: Passed!
+  total: 19
+  failed: 0
+  succeeded: 19
+  skipped: 0
+  duration: 1s 122ms
+
+# ===== CHECK r2 re-run 2026-10-09T13:30Z : dotnet test tests/nextorm.core.tests -c Debug --no-build --verbosity normal --filter FullyQualifiedName~NextORM.Core.Tests.PlanKeyStructureTests =====
+Running tests from /home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64)
+/home/alex/sources/nextorm/tests/nextorm.core.tests/bin/linux/Debug/net10.0/nextorm.core.tests.dll (net10.0|x64) passed (891ms)
+
+Test run summary: Passed!
+  total: 19
+  failed: 0
+  succeeded: 19
+  skipped: 0
+  duration: 1s 125ms
+exit_code=0

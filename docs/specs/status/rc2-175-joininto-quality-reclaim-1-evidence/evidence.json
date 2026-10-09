@@ -1,0 +1,656 @@
+{
+  "unit": "R175 rv=2 DO report (r=1, cycle 1)",
+  "scope": {
+    "projects": [
+      "tests/nextorm.core.tests",
+      "tests/nextorm.sqlite.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~NextORM.Core.Tests.SelectExpressionPlanEqualityComparerTests",
+      "FullyQualifiedName~NextORM.Core.Tests.RawSourceBindingFilterTests",
+      "FullyQualifiedName~NextORM.Core.Tests.ImplicitNavigationR3CountBoundaryTests",
+      "FullyQualifiedName~NextORM.Core.Tests.PlanKeyStructureTests",
+      "FullyQualifiedName~NextORM.Core.Tests.InMemoryTests",
+      "FullyQualifiedName~NextORM.Core.Tests.JoinIntoPlanKeyTests",
+      "FullyQualifiedName~NextORM.Sqlite.Tests.JoinIntoExecutionTests",
+      "FullyQualifiedName~NextORM.Sqlite.Tests.JoinIntoSqlGenerationTests"
+    ],
+    "files": [
+      "tests/nextorm.core.tests/ImplicitNavigationR3CountBoundaryTests.cs",
+      "tests/nextorm.core.tests/InMemoryTests.cs",
+      "tests/nextorm.core.tests/PlanKeyStructureTests.cs",
+      "tests/nextorm.core.tests/RawSourceBindingFilterTests.cs",
+      "tests/nextorm.core.tests/SelectExpressionPlanEqualityComparerTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "BEFORE DO->CHECK: full core + full sqlite unit sweeps (focused/inner plus the comprehensive full-solution sweep run under coverage collect), full container integration with DOCKER_HOST, coverage, docfx.",
+    "rationale": "The five edited test files and the JoinInto execution/SQL assertions are exactly the changed behavior; these selectors cover every H/C/X site with minimal inner-loop cost, and one comprehensive full-solution sweep is reserved for the boundary."
+  },
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "build/post.log:101 literal exit_code=0",
+      "selected_count": 1,
+      "note": "0 Warning(s) 0 Error(s); build/post.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Core.Tests.SelectExpressionPlanEqualityComparerTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/core-post/FC1-selectexpr.log:21 literal exit_code=0",
+      "selected_count": 12,
+      "note": "H01-H03; FC1"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Core.Tests.RawSourceBindingFilterTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/core-post/FC2-rawsource.log:21 literal exit_code=0",
+      "selected_count": 60,
+      "note": "H05-H06; FC2"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Core.Tests.ImplicitNavigationR3CountBoundaryTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/core-post/FC3-implicitnav.log:21 literal exit_code=0",
+      "selected_count": 7,
+      "note": "H04; FC3"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Core.Tests.PlanKeyStructureTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/core-post/FC4-plankey.log:21 literal exit_code=0",
+      "selected_count": 19,
+      "note": "H07; FC4"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Core.Tests.InMemoryTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/core-post/FC5-inmemory.log:21 literal exit_code=0",
+      "selected_count": 93,
+      "note": "H08; FC5"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.core.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Core.Tests.JoinIntoPlanKeyTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/core-post/FC6-joinplan.log:21 literal exit_code=0",
+      "selected_count": 8,
+      "note": "C01-C04; FC6"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Sqlite.Tests.JoinIntoExecutionTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/sqlite-post/FS1-joinexec.log:21 literal exit_code=0",
+      "selected_count": 7,
+      "note": "X01-X02; FS1"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.sqlite.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--verbosity",
+        "normal",
+        "--filter",
+        "FullyQualifiedName~NextORM.Sqlite.Tests.JoinIntoSqlGenerationTests"
+      ],
+      "phase": "inner",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "focused/sqlite-post/FS2-joinsql.log:21 literal exit_code=0",
+      "selected_count": 9,
+      "note": "C05, X04-X05; FS2"
+    },
+    {
+      "command": [
+        "dotnet",
+        "tool",
+        "run",
+        "dotnet-coverage",
+        "collect",
+        "-s",
+        "coverage.settings.xml",
+        "-f",
+        "cobertura",
+        "-o",
+        "tests/coverage/coverage.cobertura.xml",
+        "dotnet test --no-build --verbosity normal"
+      ],
+      "phase": "boundary",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "collection/coverage-collect.log:1969 literal exit_code=0",
+      "selected_count": 9818,
+      "note": "single comprehensive full-solution unit sweep (11 projects + integration); collection/coverage-collect.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "run",
+        "--project",
+        "tests/nextorm.integration.tests",
+        "-c",
+        "Debug",
+        "--no-build",
+        "--",
+        "-noColor"
+      ],
+      "phase": "boundary",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "collection/integration.log:899 literal exit_code=0",
+      "selected_count": 3555,
+      "note": "0 errors / 0 failed / 197 capability skips; provider availability grep=0; collection/integration.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "docfx",
+        "docs/docfx.json"
+      ],
+      "phase": "boundary",
+      "source_revision": "3ebaa4ee+d175-post",
+      "artifact_revision": "3ebaa4ee+d175-post",
+      "exit_code": 0,
+      "exit_code_source": "collection/docfx.log:89 literal exit_code=0",
+      "selected_count": 2,
+      "note": "2 warning(s) / 0 error(s), both pre-existing duplicate AnalyzerReleases; collection/docfx.log"
+    }
+  ],
+  "coverage": {
+    "authoritative_summary": "collection/coverage-Summary.txt",
+    "line_percent": 88.3,
+    "branch_percent": 80.3,
+    "branch_covered": 27179,
+    "branch_total": 33817,
+    "thresholds": {
+      "min_line": 85,
+      "min_branch": 75
+    },
+    "collect": {
+      "command": [
+        "dotnet",
+        "tool",
+        "run",
+        "dotnet-coverage",
+        "collect",
+        "-s",
+        "coverage.settings.xml",
+        "-f",
+        "cobertura",
+        "-o",
+        "tests/coverage/coverage.cobertura.xml",
+        "dotnet test --no-build --verbosity normal"
+      ],
+      "exit_code": 0,
+      "result": "9818 total / 0 failed / 198 skipped",
+      "logs": [
+        "collection/coverage-collect.log",
+        "collection/coverage.log"
+      ],
+      "provenance": "literal process exit code in collection/coverage-collect.log:1969 'exit_code=0' (2nd attempt; 1st attempt hit unrelated QueryCacheControlsTests.SlidingExpiration_Should_Evict_After_Ttl wall-clock flake, exit_code=2 at log; full core 1969/0/0 on the untouched tree)"
+    },
+    "report": {
+      "command": [
+        "dotnet",
+        "tool",
+        "run",
+        "reportgenerator",
+        "-reports:tests/coverage/coverage.cobertura.xml",
+        "-targetdir:tests/coverage/report",
+        "-reporttypes:Html;TextSummary;Cobertura",
+        "-riskhotspotassemblyfilters:+nextorm.*"
+      ],
+      "exit_code": 0,
+      "result": "regenerated Summary identical in numbers (88.3/80.3); 2026-10-09T18:23Z",
+      "logs": [
+        "collection/coverage-report.log"
+      ],
+      "provenance": "literal process exit code in collection/coverage-report.log:22 'exit_code=0' (regenerated from the fresh cobertura XML; line 88.3% / branch 80.3%, 27179 of 33817)"
+    }
+  },
+  "rows": [
+    {
+      "id": "EC175-01",
+      "rv": 2,
+      "scenario": "intent audit / H-site mapping",
+      "invocation": "roslyn members+refs + text search",
+      "result": "exit 0",
+      "artifact": "intent-audit.md",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-02",
+      "rv": 2,
+      "scenario": "post assertion audit / hash census",
+      "invocation": "git diff + full NotBe sweep over 5 files (7 live residual)",
+      "result": "exit 0",
+      "artifact": "assertion-audit.md",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-03",
+      "rv": 2,
+      "scenario": "EagerLoadSpec.Assign refs",
+      "invocation": "roslyn members + roslyn refs NextORM.Core.EagerLoadSpec.Assign",
+      "result": "exit 0",
+      "artifact": "assign-refs.md, assign-roslyn-output.md",
+      "predicate": "applies; internal, 6 refs all in src/nextorm.core; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-04",
+      "rv": 2,
+      "scenario": "core focused baseline+post",
+      "invocation": "FC1-FC6 post + FC1-FC5 baseline",
+      "result": "exit 0 (12/60/7/19/93/8)",
+      "artifact": "focused/core-post/, focused/core-baseline/",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-05",
+      "rv": 2,
+      "scenario": "sqlite focused baseline+post",
+      "invocation": "FS1-FS2 post + FS1-FS2 baseline",
+      "result": "exit 0 (7/9)",
+      "artifact": "focused/sqlite-post/, focused/sqlite-baseline/",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-06",
+      "rv": 2,
+      "scenario": "full core post",
+      "invocation": "dotnet test tests/nextorm.core.tests -c Debug --no-build",
+      "result": "exit 0; 1969/0/0",
+      "artifact": "full/core.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-07",
+      "rv": 2,
+      "scenario": "full sqlite post",
+      "invocation": "dotnet test tests/nextorm.sqlite.tests -c Debug --no-build",
+      "result": "exit 0; 1311 (1310+1skip)/0",
+      "artifact": "full/sqlite.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-08",
+      "rv": 2,
+      "scenario": "integration iff integration diff else guard",
+      "invocation": "guard + unconditional AC3 sweep",
+      "result": "exit 0; 3555/0/0/197",
+      "artifact": "integration-guard.md, collection/integration.log",
+      "predicate": "predicate: no tests/nextorm.integration.tests/** path in git diff -> guard",
+      "state": "guard+closed"
+    },
+    {
+      "id": "EC175-09",
+      "rv": 2,
+      "scenario": "build baseline+post",
+      "invocation": "dotnet build nextorm.slnx -c Debug",
+      "result": "exit 0; 0W/0E",
+      "artifact": "build/baseline.log, build/post.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "closed"
+    },
+    {
+      "id": "EC175-10",
+      "rv": 2,
+      "scenario": "scope/CRLF/no-runtime-diff/coverage guard",
+      "invocation": "git diff --name-only = 5 core test files; byte census; coverage settings unchanged",
+      "result": "exit 0",
+      "artifact": "scope-guard.md",
+      "predicate": "predicate: no production/public-doc/coverage-policy diff; CRLF-only except documented pre-existing EOF-no-newline in InMemoryTests.cs",
+      "state": "closed"
+    },
+    {
+      "id": "H01",
+      "rv": 2,
+      "scenario": "differing PhysicalColumnName; Comparer_ShouldDistinguishPhysicalColumnNames",
+      "invocation": "FC1",
+      "result": "exit 0; 12/0/0",
+      "artifact": "variants/H01.md, focused/core-post/FC1-selectexpr.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "H02",
+      "rv": 2,
+      "scenario": "entity item vs scalar column; Comparer_ShouldDistinguishEntityItemFromScalarColumn",
+      "invocation": "FC1",
+      "result": "exit 0; 12/0/0",
+      "artifact": "variants/H02.md",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "H03",
+      "rv": 2,
+      "scenario": "different projection slots; Comparer_ShouldDistinguishProjectionItemSlots",
+      "invocation": "FC1",
+      "result": "exit 0; 12/0/0",
+      "artifact": "variants/H03.md",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "H04",
+      "rv": 2,
+      "scenario": "wide-count flag vs ordinary int; Wide_count_flag_participates_in_the_plan_identity",
+      "invocation": "FC3",
+      "result": "exit 0; 7/0/0",
+      "artifact": "variants/H04.md, focused/core-post/FC3-implicitnav.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "H05",
+      "rv": 2,
+      "scenario": "raw binding different entity type; SameSqlAndColumns_DifferentEntityType_NotEqual",
+      "invocation": "FC2",
+      "result": "exit 0; 60/0/0",
+      "artifact": "variants/H05.md, focused/core-post/FC2-rawsource.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "H06",
+      "rv": 2,
+      "scenario": "raw binding different declared columns; SameTypeSameColumnCount_DifferentColumnNames_NotEqual",
+      "invocation": "FC2",
+      "result": "exit 0; 60/0/0",
+      "artifact": "variants/H06.md",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "H07",
+      "rv": 2,
+      "scenario": "same command different rendered SQL; QueryPlan_ShouldCompareByCommandAndSql",
+      "invocation": "FC4",
+      "result": "exit 0; 19/0/0",
+      "artifact": "variants/H07.md, focused/core-post/FC4-plankey.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "H08",
+      "rv": 2,
+      "scenario": "two different query plans; TestQueryPlanCache",
+      "invocation": "FC5",
+      "result": "exit 0; 93/0/0",
+      "artifact": "variants/H08.md, focused/core-post/FC5-inmemory.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "C01",
+      "rv": 2,
+      "scenario": "JoinIntoPlanKeyTests.cs:63 RepeatedDeclaration_ShouldHitTheSamePlan",
+      "invocation": "FC6 JoinIntoPlanKeyTests; corroborated by full core 1969/0/0 and coverage 9818/0",
+      "result": "exit 0; 8/0/0",
+      "artifact": "variants/C01.md, focused/core-post/FC6-joinplan.log, full/core.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "C02",
+      "rv": 2,
+      "scenario": "JoinIntoPlanKeyTests.cs:91 DistinctOneToOneNavigations_ShouldHaveDistinctPlanKeys",
+      "invocation": "FC6; full core 1969/0/0; coverage 9818/0",
+      "result": "exit 0; 8/0/0",
+      "artifact": "variants/C02.md, focused/core-post/FC6-joinplan.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "C03",
+      "rv": 2,
+      "scenario": "JoinIntoPlanKeyTests.cs:106 DistinctManyToManyJunctionTypes_ShouldHaveDistinctPlanKeys",
+      "invocation": "FC6; full core 1969/0/0; coverage 9818/0",
+      "result": "exit 0; 8/0/0",
+      "artifact": "variants/C03.md, focused/core-post/FC6-joinplan.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "C04",
+      "rv": 2,
+      "scenario": "JoinIntoPlanKeyTests.cs:135 StructurallyIdenticalManyToManyDeclarations_ShouldReuseOnePlan",
+      "invocation": "FC6; full core 1969/0/0; coverage 9818/0",
+      "result": "exit 0; 8/0/0",
+      "artifact": "variants/C04.md, focused/core-post/FC6-joinplan.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "C05",
+      "rv": 2,
+      "scenario": "JoinIntoSqlGenerationTests.cs:136 JoinInto_DistinctSpecs_ShouldHaveDistinctPlanKeys_AndRepeatsHit",
+      "invocation": "FS2; baseline FS2 9/0/0; full sqlite 1311/0; coverage 9818/0",
+      "result": "exit 0; 9/0/0",
+      "artifact": "variants/C05.md, focused/sqlite-post/FS2-joinsql.log, full/sqlite.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "X01",
+      "rv": 2,
+      "scenario": "JoinIntoExecutionTests.cs:55 ListTerminal_ShouldExecuteOneRoundTrip_AndGroupChildren",
+      "invocation": "FS1; baseline FS1 7/0/0; full sqlite 1311/0; coverage 9818/0",
+      "result": "exit 0; 7/0/0",
+      "artifact": "variants/X01.md, focused/sqlite-post/FS1-joinexec.log, full/sqlite.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "X02",
+      "rv": 2,
+      "scenario": "JoinIntoExecutionTests.cs:76 ListTerminalAsync_ShouldExecuteOneRoundTrip_AndGroupChildren",
+      "invocation": "FS1; full sqlite 1311/0; coverage 9818/0",
+      "result": "exit 0; 7/0/0",
+      "artifact": "variants/X02.md, focused/sqlite-post/FS1-joinexec.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "X03",
+      "rv": 2,
+      "scenario": "CommonTestSuite.JoinInto.cs:221-222 JoinInto_ListTerminal_ShouldExecuteOneDenormalizedRoundTrip",
+      "invocation": "guard + unconditional integration sweep 3555/0/0/197, availability grep=0",
+      "result": "exit 0",
+      "artifact": "integration-guard.md, collection/integration.log, collection/availability.log",
+      "predicate": "predicate: no tests/nextorm.integration.tests/** path in git diff -> guard",
+      "state": "guard+run-pass"
+    },
+    {
+      "id": "X04",
+      "rv": 2,
+      "scenario": "JoinIntoSqlGenerationTests.cs:159-160 JoinInto_RepeatedDeclaration_ShouldReuseCachedPreparedPlan (reuse)",
+      "invocation": "FS2; full sqlite 1311/0; coverage 9818/0",
+      "result": "exit 0; 9/0/0",
+      "artifact": "variants/X04.md, focused/sqlite-post/FS2-joinsql.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "X05",
+      "rv": 2,
+      "scenario": "JoinIntoSqlGenerationTests.cs:161-162 same test (cache miss)",
+      "invocation": "FS2; full sqlite 1311/0; coverage 9818/0",
+      "result": "exit 0; 9/0/0",
+      "artifact": "variants/X05.md, focused/sqlite-post/FS2-joinsql.log",
+      "predicate": "applies; file not in diff; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "AC175-01",
+      "rv": 2,
+      "scenario": "build 0W/0E",
+      "invocation": "dotnet build nextorm.slnx -c Debug (+ --no-restore)",
+      "result": "exit 0; 0W/0E",
+      "artifact": "build/post.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "AC175-02",
+      "rv": 2,
+      "scenario": "unit 6263 (6262+1skip)/0",
+      "invocation": "per-project dotnet test x11",
+      "result": "exit 0; AGGREGATE rc_all=0",
+      "artifact": "collection/unit.log",
+      "predicate": "drift +16 vs planned 6247 (R184 core 1953->1969), not an AC relaxation; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "AC175-03",
+      "rv": 2,
+      "scenario": "integration 3555/0/0/197 + availability 0",
+      "invocation": "DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -noColor; grep -c 'is not available'=0",
+      "result": "exit 0; Total 3555 Errors 0 Failed 0 Skipped 197",
+      "artifact": "collection/integration.log, collection/availability.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    },
+    {
+      "id": "AC175-04",
+      "rv": 2,
+      "scenario": "coverage >=85/75",
+      "invocation": "collect exit 0 (9818/0/198) + reportgenerator exit 0 (2026-10-09T18:23Z)",
+      "result": "line 88.3% / branch 80.3% (27179 of 33817)",
+      "artifact": "collection/coverage.log, collection/coverage-collect.log, collection/coverage-report.log, collection/coverage-Summary.txt",
+      "predicate": "collect exit 0 recorded in executions[]; report exit 0 captured in coverage-report.log",
+      "state": "run-pass"
+    },
+    {
+      "id": "AC175-05",
+      "rv": 2,
+      "scenario": "docfx 2w/0e",
+      "invocation": "dotnet docfx docs/docfx.json",
+      "result": "exit 0; 2w/0e",
+      "artifact": "collection/docfx.log",
+      "predicate": "applies; binds 3ebaa4ee+d175-post",
+      "state": "run-pass"
+    }
+  ]
+}

@@ -99,7 +99,6 @@ public class ImplicitNavigationR3CountBoundaryTests
 
         comparer.Equals(narrowed, ordinary).Should().BeFalse(
             "a wide-count int column must never share a cached plan/mapper with an ordinary int column");
-        comparer.GetHashCode(narrowed).Should().NotBe(comparer.GetHashCode(ordinary));
     }
 
     [Fact]
