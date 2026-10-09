@@ -29,7 +29,7 @@ DAG edges: R184->R190; R175->R190; R177->R190 (freshness / final-tip verificatio
 
 | id | group | branch | status | plan_state | selected_variant | cycle_id | status_file | plan_revision | baseline ref | refs |
 |---|---|---|---|---|---|---|---|---|---|---|
-| R184 | G1 | `1.0.9-rc2` | pending | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-184-eagerloadmode-reclaim-1.md` | r=1 (rv=2) | cf34f910 | #184; ref patch `artifacts/pdca/rc2-184/D184-blocked.patch` |
+| R184 | G1 | `1.0.9-rc2` | done | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-184-eagerloadmode-reclaim-1.md` | r=1 (rv=2) | cf34f910 | #184; ref patch `artifacts/pdca/rc2-184/D184-blocked.patch` |
 | R175 | G1 | `1.0.9-rc2` | pending | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-175-joininto-quality-reclaim-1.md` | r=1 (rv=2) | cf34f910 | #175; `docs/specs/status/rc2-175-evidence/` |
 | R177 | G1 | `1.0.9-rc2` | pending | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-177-native-json-reclaim-1.md` | r=1 (rv=1) | cf34f910 | #177; product `2ac20818` |
 | R190 | G1 | `1.0.9-rc2` | pending | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-190-reverify-1.md` | r=1 (rv=1) | cf34f910 | #190 (closed); follow-up #207 |
@@ -56,6 +56,6 @@ DAG edges: R184->R190; R175->R190; R177->R190 (freshness / final-tip verificatio
 
 ## Done / Verified / Incomplete
 
-- Done: bootstrap; 4 own PLANs; ALL-barrier; clustering + schedule binding.
+- Done: bootstrap; 4 own PLANs; ALL-barrier; clustering + schedule binding; R184 done (#184).
 - Verified: —
 - Incomplete: —

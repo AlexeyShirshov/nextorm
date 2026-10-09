@@ -405,7 +405,7 @@ public static class EntityBuilderExtensions
 
     /// <summary>
     /// Executes the query and materializes the matching entities into a list. When the builder carries a
-    /// <c>JoinInto</c> declaration or a single-query (<c>AsSingleQuery</c>) eager load, one denormalized
+    /// <c>JoinInto</c> declaration or a single-query (<c>EagerLoadMode.SingleQuery</c>) eager load, one denormalized
     /// command is executed and its rows are stitched; otherwise the parent query is executed and any
     /// split <c>LoadWith</c> children are loaded afterwards.
     /// </summary>
@@ -479,7 +479,7 @@ public static class EntityBuilderExtensions
 
     /// <summary>
     /// Whether the builder materializes through a stitched result: a <c>JoinInto</c> declaration, a
-    /// single-query (<c>AsSingleQuery</c>) eager-load set, or a split <c>LoadWith</c> set. The
+    /// single-query (<c>EagerLoadMode.SingleQuery</c>) eager-load set, or a split <c>LoadWith</c> set. The
     /// non-stitching terminals bypass this and evaluate the parent only.
     /// </summary>
     private static bool UsesStitching<TEntity>(EntityBuilder<TEntity> builder)

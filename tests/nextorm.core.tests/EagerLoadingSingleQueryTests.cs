@@ -4,7 +4,7 @@ using NextORM.Core;
 namespace NextORM.Core.Tests;
 
 /// <summary>
-/// Single-query eager loading (<c>AsSingleQuery</c>, #107) on the in-memory provider: the parents and
+/// Single-query eager loading (<c>EagerLoadMode.SingleQuery</c>, #107) on the in-memory provider: the parents and
 /// every declared collection are fetched by one denormalized command and stitched; the child's own
 /// <c>Where</c> is folded into the join, the mode survives copies, the child query is built exactly once
 /// even beyond the split chunk size, and cancellation is honored.
@@ -52,7 +52,7 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public void AsSingleQuery_ToList_FillsChildrenAndAppliesChildFilter()
+    public void SingleQuery_ToList_FillsChildrenAndAppliesChildFilter()
     {
         using var context = CreateContext();
         context.From<SingleQueryParent>().WithData(new[]
@@ -63,8 +63,7 @@ public class EagerLoadingSingleQueryTests
         });
 
         var parents = context.From<SingleQueryParent>()
-            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>().Where(x => x.Active), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>().Where(x => x.Active), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -76,7 +75,7 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public void AsSingleQuery_MultipleSpecs_GroupEachCollectionWithoutDuplicateParents()
+    public void SingleQuery_MultipleSpecs_GroupEachCollectionWithoutDuplicateParents()
     {
         using var context = CreateContext();
         context.From<SingleQueryParent>().WithData(new[]
@@ -88,8 +87,7 @@ public class EagerLoadingSingleQueryTests
 
         var parents = context.From<SingleQueryParent>()
             .LoadWith(p => p.Children, c => c.From<SingleQueryChild>(), p => p.Id, c => c.ParentId)
-            .LoadWith(p => p.Notes, c => c.From<SingleQueryNote>(), p => p.Id, n => n.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Notes, c => c.From<SingleQueryNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -103,7 +101,7 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public void AsSingleQuery_BeyondChunkSize_BuildsTheChildQueryOnce()
+    public void SingleQuery_BeyondChunkSize_BuildsTheChildQueryOnce()
     {
         var context = new InMemoryDataContext();
         var parentData = new List<SingleQueryParent>();
@@ -127,8 +125,7 @@ public class EagerLoadingSingleQueryTests
                     return c.From<SingleQueryChild>();
                 },
                 p => p.Id,
-                c => c.ParentId)
-            .AsSingleQuery()
+                c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -141,14 +138,13 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public void AsSingleQuery_SurvivesACopyAndAFollowingModifier()
+    public void SingleQuery_SurvivesACopyAndAFollowingModifier()
     {
         using var context = CreateContext();
         context.From<SingleQueryParent>().WithData(new[] { new SingleQueryParent { Id = 1 } });
 
         var parents = context.From<SingleQueryParent>()
-            .AsSingleQuery()
-            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>(), p => p.Id, c => c.ParentId)
+            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .Clone()
             .Where(p => p.Id == 1)
             .ToList();
@@ -158,14 +154,13 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public void AsSingleQuery_ToArray_StitchesChildren()
+    public void SingleQuery_ToArray_StitchesChildren()
     {
         using var context = CreateContext();
         context.From<SingleQueryParent>().WithData(new[] { new SingleQueryParent { Id = 1 } });
 
         var parents = context.From<SingleQueryParent>()
-            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToArray();
 
         parents.Should().ContainSingle();
@@ -173,14 +168,13 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public async Task AsSingleQuery_ToArrayAsync_StitchesChildren()
+    public async Task SingleQuery_ToArrayAsync_StitchesChildren()
     {
         using var context = CreateContext();
         context.From<SingleQueryParent>().WithData(new[] { new SingleQueryParent { Id = 1 } });
 
         var parents = await context.From<SingleQueryParent>()
-            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<SingleQueryChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .ToArrayAsync();
 
         parents.Should().ContainSingle();
@@ -188,7 +182,7 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public async Task AsSingleQuery_PreCancelled_DoesNotExecute()
+    public async Task SingleQuery_PreCancelled_DoesNotExecute()
     {
         using var context = CreateContext();
         context.From<SingleQueryParent>().WithData(new[] { new SingleQueryParent { Id = 1 } });
@@ -203,8 +197,7 @@ public class EagerLoadingSingleQueryTests
                     return c.From<SingleQueryChild>();
                 },
                 p => p.Id,
-                c => c.ParentId)
-            .AsSingleQuery();
+                c => c.ParentId, EagerLoadMode.SingleQuery);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();
@@ -216,7 +209,7 @@ public class EagerLoadingSingleQueryTests
     }
 
     [Fact]
-    public void AsSingleQuery_NonStitchingTerminals_DoNotLoadChildren()
+    public void SingleQuery_NonStitchingTerminals_DoNotLoadChildren()
     {
         using var context = CreateContext();
         context.From<SingleQueryParent>().WithData(new[] { new SingleQueryParent { Id = 1 } });
@@ -231,8 +224,7 @@ public class EagerLoadingSingleQueryTests
                     return c.From<SingleQueryChild>();
                 },
                 p => p.Id,
-                c => c.ParentId)
-            .AsSingleQuery();
+                c => c.ParentId, EagerLoadMode.SingleQuery);
 
         builder.Count().Should().Be(1);
         builder.Any().Should().BeTrue();

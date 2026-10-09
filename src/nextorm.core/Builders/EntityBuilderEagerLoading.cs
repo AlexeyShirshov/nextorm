@@ -38,7 +38,7 @@ internal interface IEagerLoadSpec<TEntity>
     MemberInfo? CollectionMember { get; }
 
     /// <summary>
-    /// Builds the single-query (<c>AsSingleQuery</c>) equivalent of this split-query specification: an
+    /// Builds the single-query (<c>EagerLoadMode.SingleQuery</c>) equivalent of this split-query specification: an
     /// explicit-key <c>JoinInto</c> declaration whose <c>ON</c> predicate equates the two key selectors
     /// and folds in the child query's own <c>Where</c> condition, re-rooted onto the child join
     /// parameter, so a <c>LEFT JOIN</c> keeps childless parents while filtering the children.
@@ -174,9 +174,9 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
         var unsupported = child.UnsupportedSingleQueryChildShapes();
         if (unsupported.Count > 0)
             throw new NotSupportedException(
-                $"AsSingleQuery cannot fold the child query's {string.Join(", ", unsupported)} into the join " +
+                $"LoadWith with EagerLoadMode.SingleQuery cannot fold the child query's {string.Join(", ", unsupported)} into the join " +
                 "predicate: only the child's own Where is supported. Remove the modifier or use split-query " +
-                "loading (omit AsSingleQuery), which honors every child-query shape.");
+                "loading (omit the SingleQuery mode), which honors every child-query shape.");
 
         childSource = child.ResolveSource() ?? context.GetFrom(typeof(TChild), null)
             ?? throw new BuildSqlCommandException(
@@ -212,7 +212,7 @@ internal sealed class EagerLoadSpec<TEntity, TChild, TKey> : IEagerLoadSpec<TEnt
     /// <summary>
     /// Builds a fresh child builder for one query and folds the parent command's global-query-filter
     /// scope into the child's own scope, so the split path applies exactly the same union rule as the
-    /// single-query (<c>AsSingleQuery</c>/<c>JoinInto</c>) path: a child's selective scope combines with
+    /// single-query (<c>EagerLoadMode.SingleQuery</c>/<c>JoinInto</c>) path: a child's selective scope combines with
     /// the parent's, <c>All</c> absorbs the union, and <c>null</c>/empty child scopes inherit the parent.
     /// <see cref="EntityBuilder{TEntity}.WithFilterScope(QueryFilterScope)"/> returns a scoped copy when
     /// the parent scope is non-empty, so the user's child builder is never mutated and one child cannot
@@ -386,7 +386,7 @@ internal static class EntityBuilderEagerLoading
 
 /// <summary>
 /// Adapts a split-query <see cref="EagerLoadSpec{TEntity, TChild, TKey}"/> to the single-query
-/// <c>JoinInto</c> contract used by <c>AsSingleQuery</c>: the <c>ON</c> predicate equates the two key
+/// <c>JoinInto</c> contract used by <c>EagerLoadMode.SingleQuery</c>: the <c>ON</c> predicate equates the two key
 /// selectors and folds in the child query's own <c>Where</c> condition, re-rooted onto the child join
 /// parameter, so a <c>LEFT JOIN</c> keeps childless parents while filtering the children. The grouping
 /// and assignment delegate to the eager-load specification, so both modes share one stitching contract.
@@ -426,7 +426,7 @@ internal sealed class EagerLoadJoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSp
         var childKey = JoinIntoSpecHelpers.ReplaceParameter(
             eager.ChildKeyExpression.Body, eager.ChildKeyExpression.Parameters[0], childParameter);
 
-        Expression body = JoinIntoSpecHelpers.BuildKeyEquality(parentKey, childKey, typeof(TKey), "AsSingleQuery");
+        Expression body = JoinIntoSpecHelpers.BuildKeyEquality(parentKey, childKey, typeof(TKey), "EagerLoadMode.SingleQuery");
 
         if (childCondition is not null)
         {

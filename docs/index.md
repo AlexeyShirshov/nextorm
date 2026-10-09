@@ -187,7 +187,7 @@ its limitations are covered in the [Query reuse guide](infrastructure/01-query-r
 ### 1.0.9-a
 
 - [Навигационные свойства и связи: декларативные O2M/M2O, `JoinInto`, дочерние коллекции](https://github.com/AlexeyShirshov/nextorm/issues/105)
-- [Eager loading графа — `LoadWith`/`Include` (split- и single-query, `AsSingleQuery`)](https://github.com/AlexeyShirshov/nextorm/issues/95)
+- [Eager loading графа — `LoadWith`/`Include` (split- и single-query, `EagerLoadMode.SingleQuery`)](https://github.com/AlexeyShirshov/nextorm/issues/95)
 - [Глобальные фильтры запросов (fluent + атрибут, keyed, selective `IgnoreFilters`, DML и INSERT/MERGE-валидация)](https://github.com/AlexeyShirshov/nextorm/issues/67)
 - [Интеграция с EF Core — пакет `nextorm.entityframeworkcore` (`UseNextOrm`, DI, shared transactions)](https://github.com/AlexeyShirshov/nextorm/issues/61)
 - [Динамические колонки (store): чтение и запись, INSERT/UPDATE/MERGE рендерят ключи словаря как колонки](https://github.com/AlexeyShirshov/nextorm/issues/94)

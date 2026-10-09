@@ -12,6 +12,19 @@ namespace NextORM.ClickHouse.Extensions.Tests;
 /// </summary>
 public class ClickHouseExtensionStateTests
 {
+    public sealed class GuardParent
+    {
+        public int Id { get; set; }
+        public string[] Tags { get; set; } = [];
+        public ICollection<GuardChild> Children { get; set; } = new List<GuardChild>();
+    }
+
+    public sealed class GuardChild
+    {
+        public int Id { get; set; }
+        public int ParentId { get; set; }
+    }
+
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
     private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
@@ -61,11 +74,13 @@ public class ClickHouseExtensionStateTests
     public void ArrayJoinElement_WithSingleQueryEagerState_ShouldThrow()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var e = ctx.From<IArrayEntity>();
+        var e = ctx.From<GuardParent>();
 
-        var act = () => e.AsSingleQuery().ArrayJoinElement(x => x.Tags);
+        var act = () => e
+            .LoadWith(p => p.Children, c => c.From<GuardChild>(), p => p.Id, c => c.ParentId)
+            .ArrayJoinElement(x => x.Tags);
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*AsSingleQuery*");
+        act.Should().Throw<NotSupportedException>().WithMessage("*LoadWith*ArrayJoinElement*");
     }
 
     [Fact]

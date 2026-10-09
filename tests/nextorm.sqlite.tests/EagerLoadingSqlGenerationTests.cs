@@ -79,7 +79,7 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public void AsSingleQuery_IssuesExactlyOneCommandWithTheChildFilterInTheJoin()
+    public void SingleQuery_IssuesExactlyOneCommandWithTheChildFilterInTheJoin()
     {
         var interceptor = new SqlRecordingInterceptor();
         var (ctx, path) = CreateDb();
@@ -89,8 +89,7 @@ public class EagerLoadingSqlGenerationTests
             ctx.PurgeQueryCache();
 
             var parents = ctx.From<EagerParent>()
-                .LoadWith(p => p.Children, c => c.From<EagerChild>().Where(x => x.Name != "y"), p => p.Id, c => c.ParentId)
-                .AsSingleQuery()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>().Where(x => x.Name != "y"), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
                 .OrderBy(p => p.Id)
                 .ToList();
 
@@ -192,7 +191,7 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public void AsSingleQuery_1001Keys_IssuesExactlyOneCommandWithoutAChunkedInList()
+    public void SingleQuery_1001Keys_IssuesExactlyOneCommandWithoutAChunkedInList()
     {
         var interceptor = new SqlRecordingInterceptor();
         var (ctx, path) = CreateBulkDb(1001);
@@ -202,8 +201,7 @@ public class EagerLoadingSqlGenerationTests
             ctx.PurgeQueryCache();
 
             var parents = ctx.From<EagerParent>()
-                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
-                .AsSingleQuery()
+                .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
                 .OrderBy(p => p.Id)
                 .ToList();
 
@@ -223,7 +221,7 @@ public class EagerLoadingSqlGenerationTests
     }
 
     [Fact]
-    public void AsSingleQuery_TwoSpecs_IssueOneCommandJoiningBothChildren()
+    public void SingleQuery_TwoSpecs_IssueOneCommandJoiningBothChildren()
     {
         var interceptor = new SqlRecordingInterceptor();
         var path = Path.Combine(Path.GetTempPath(), $"nextorm-eager-two-{Guid.NewGuid():N}.db");
@@ -249,8 +247,7 @@ public class EagerLoadingSqlGenerationTests
 
             var parents = ctx.From<EagerTwoParent>()
                 .LoadWith(p => p.Children, c => c.From<EagerTwoChild>(), p => p.Id, c => c.ParentId)
-                .LoadWith(p => p.Notes, c => c.From<EagerTwoNote>(), p => p.Id, n => n.ParentId)
-                .AsSingleQuery()
+                .LoadWith(p => p.Notes, c => c.From<EagerTwoNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
                 .OrderBy(p => p.Id)
                 .ToList();
 
@@ -299,11 +296,12 @@ public class EagerLoadingSqlGenerationTests
                         p => p.Children,
                         c => childIgnore ? c.From<FilteredSqlEagerChild>().IgnoreFilters(["soft"]) : c.From<FilteredSqlEagerChild>(),
                         p => p.Id,
-                        c => c.ParentId);
+                        c => c.ParentId,
+                        single ? EagerLoadMode.SingleQuery : EagerLoadMode.SplitQuery);
                 if (parentIgnore)
                     builder = builder.IgnoreFilters(["soft"]);
 
-                var parents = (single ? builder.AsSingleQuery() : builder).OrderBy(p => p.Id).ToList();
+                var parents = builder.OrderBy(p => p.Id).ToList();
                 return Signature(parents);
             }
 

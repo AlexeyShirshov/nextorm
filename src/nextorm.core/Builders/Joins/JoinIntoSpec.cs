@@ -150,7 +150,7 @@ internal interface IJoinIntoSpec<TEntity>
 
     /// <summary>
     /// Whether this declaration is a many-to-many declaration contributing a link item before the child.
-    /// Single-query (<c>AsSingleQuery</c>) loading does not support it because it maps one join per
+    /// Single-query (<c>EagerLoadMode.SingleQuery</c>) loading does not support it because it maps one join per
     /// declaration. Defaults to <see langword="false"/>.
     /// </summary>
     bool IsManyToMany => false;

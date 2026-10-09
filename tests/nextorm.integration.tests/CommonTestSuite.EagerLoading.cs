@@ -121,7 +121,7 @@ public abstract partial class CommonTestSuite
         parents[0].Children.Select(c => c.Id).Should().Equal(childA, childB);
     }
 
-    // --- #107 single-query eager loading (AsSingleQuery) and terminal stitching: cross-provider coverage.
+    // --- #107 single-query eager loading (EagerLoadMode.SingleQuery) and terminal stitching: cross-provider coverage.
     // The 1001-key cases force the split path beyond its 1000-key chunk boundary and prove the single-query
     // path stays one command without falling back to split (no chunked IN list, no N+1).
 
@@ -206,8 +206,7 @@ public abstract partial class CommonTestSuite
 
         var parents = _sut.DataProvider.From<EagerParent>()
             .Where(p => p.Id >= first && p.Id <= last)
-            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -216,7 +215,7 @@ public abstract partial class CommonTestSuite
         parents.Should().OnlyContain(p => p.Children.Count == 1);
         parents.SelectMany(p => p.Children).Select(c => c.ParentId).Should().Equal(parents.Select(p => p.Id));
         // One denormalized command, no chunked IN list beyond the split chunk size: exactly one round trip.
-        interceptor.Executing.Should().Be(1, "AsSingleQuery must not silently fall back to the chunked split path");
+        interceptor.Executing.Should().Be(1, "SingleQuery must not silently fall back to the chunked split path");
         interceptor.Executed.Should().Be(1);
     }
 
@@ -246,8 +245,7 @@ public abstract partial class CommonTestSuite
 
         var parents = ctx.From<EagerParent>()
             .Where(p => p.Id == keep || p.Id == drop || p.Id == none)
-            .LoadWith(p => p.Children, c => c.From<EagerChild>().Where(x => x.Name == "keep"), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<EagerChild>().Where(x => x.Name == "keep"), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -277,8 +275,7 @@ public abstract partial class CommonTestSuite
         var parents = JoinIntoParents()
             .Where(p => p.Id == many || p.Id == one || p.Id == none)
             .LoadWith(p => p.Children, c => c.From<JoinIntoChild>(), p => p.Id, c => c.ParentId)
-            .LoadWith(p => p.Notes, n => n.From<JoinIntoNote>(), p => p.Id, n => n.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Notes, n => n.From<JoinIntoNote>(), p => p.Id, n => n.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -320,8 +317,7 @@ public abstract partial class CommonTestSuite
         // non-nullable (the column is nullable).
         var parents = ctx.From<EagerParent>()
             .Where(p => p.Id == first || p.Id == second)
-            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Name ?? "", c => c.Name ?? "")
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Name ?? "", c => c.Name ?? "", EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 
@@ -370,8 +366,7 @@ public abstract partial class CommonTestSuite
 
         var builder = ctx.From<EagerParent>()
             .Where(p => p.Id == parent)
-            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery();
+            .LoadWith(p => p.Children, c => c.From<EagerChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery);
 
         var array = builder.ToArray();
         array.Should().ContainSingle();
@@ -419,11 +414,12 @@ public abstract partial class CommonTestSuite
                     p => p.Children,
                     c => childIgnore ? c.From<FilteredEagerChild>().IgnoreFilters(["soft"]) : c.From<FilteredEagerChild>(),
                     p => p.Id,
-                    c => c.ParentId);
+                    c => c.ParentId,
+                    single ? EagerLoadMode.SingleQuery : EagerLoadMode.SplitQuery);
             if (parentIgnore)
                 builder = builder.IgnoreFilters(["soft"]);
 
-            var parents = (single ? builder.AsSingleQuery() : builder).OrderBy(p => p.Id).ToList();
+            var parents = builder.OrderBy(p => p.Id).ToList();
             // Child order is not part of the contract (the split and join queries have no ORDER BY on the
             // children), so compare the collections as sorted sets -- "same rows", not same sequence.
             return string.Join(";", parents.Select(p => p.Id + ":" + string.Join("|", p.Children.Select(c => c.Id).OrderBy(id => id))));
@@ -468,8 +464,7 @@ public abstract partial class CommonTestSuite
 
         var parents = ctx.From<FuncFilteredEagerParent>()
             .Where(p => p.Id == keep || p.Id == drop)
-            .LoadWith(p => p.Children, c => c.From<FuncFilteredEagerChild>(), p => p.Id, c => c.ParentId)
-            .AsSingleQuery()
+            .LoadWith(p => p.Children, c => c.From<FuncFilteredEagerChild>(), p => p.Id, c => c.ParentId, EagerLoadMode.SingleQuery)
             .OrderBy(p => p.Id)
             .ToList();
 

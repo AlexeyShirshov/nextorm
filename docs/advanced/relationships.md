@@ -8,7 +8,7 @@
 
 nextorm resolves a graph from **declared** metadata, not from a mapper convention: an entity without declared relationships is mapped exactly as before, and a navigation property is excluded from the column mapping only when it participates in a declared relationship. This page covers the metadata model and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1), the explicit single-query relationship loader. Implicit navigation queries are supported for **declared** relationships — a reference navigation as a scalar chain or a presence check, and a collection navigation through exactly four direct terminals (see [Implicit navigation queries](../guide/29-implicit-navigation.md)) — not inferred by convention. Navigation **after** a temp-table/TVP boundary is **not available (fail-closed)**, and a table-valued parameter is parameter-only (no query root).
 
-`JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder opts into `AsSingleQuery()`).
+`JoinInto` and [`LoadWith`](eager-loading.md) are two ways to fill a parent collection and share one assignment contract: `JoinInto` is one denormalized query over all parents, and `LoadWith` defaults to a split query with one extra child statement per key chunk (or one denormalized query when the builder passes `EagerLoadMode.SingleQuery` to `LoadWith`).
 
 ## Declaring a relationship
 
@@ -191,7 +191,7 @@ The LEFT/INNER semantics are the same as for a one-to-many collection: with `Lef
 
 When a query carries two or more collection navigations (one-to-one is excluded) the preparation emits the `JoinInto.MultipleCollections` warning once per plan, because the intermediate row count multiplies into a cartesian product. Pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda (`j => j.SuppressCartesianWarning()`) to silence it; the warning is informational and does not change the result.
 
-A **composite** junction selector and a many-to-many `JoinInto` under [`AsSingleQuery`](eager-loading.md) are rejected with [`NotSupportedException`](xref:System.NotSupportedException). A many-to-many `JoinInto` takes **two** projection slots, so it counts double against the arity cap.
+A **composite** junction selector and a many-to-many `JoinInto` under [`EagerLoadMode.SingleQuery`](eager-loading.md) are rejected with [`NotSupportedException`](xref:System.NotSupportedException). A many-to-many `JoinInto` takes **two** projection slots, so it counts double against the arity cap.
 
 ## One round trip
 
@@ -211,7 +211,7 @@ The rows are a denormalized `(parent, child)` stream; after the query runs, the 
 
 Parent order is the first-occurrence order of the rows; child order follows the statement, so add an `OrderBy` when the order matters. Duplicate child rows are dropped by the child identity.
 
-Parent deduplication and child identity both need a **mapped key** on the respective side. When the parent (or the child) declares no key, a plain `JoinInto` query falls back to **reference identity**: on a SQL provider every denormalized row materializes a fresh instance, so repeated rows are not collapsed and a cartesian product (two child collections) stays duplicated. Single-query eager loading ([`LoadWith`](eager-loading.md) with `AsSingleQuery`) has no such fallback — it requires a mapped parent key and rejects a keyless parent — so give the parent and the child a mapped key (`[Key]`, `Key()`, or the `Id`/`<TypeName>Id` convention), or use the explicit-key overload with a keyed child, for reliable deduplication. See [Limitations](limitations.md).
+Parent deduplication and child identity both need a **mapped key** on the respective side. When the parent (or the child) declares no key, a plain `JoinInto` query falls back to **reference identity**: on a SQL provider every denormalized row materializes a fresh instance, so repeated rows are not collapsed and a cartesian product (two child collections) stays duplicated. Single-query eager loading ([`LoadWith`](eager-loading.md) with `EagerLoadMode.SingleQuery`) has no such fallback — it requires a mapped parent key and rejects a keyless parent — so give the parent and the child a mapped key (`[Key]`, `Key()`, or the `Id`/`<TypeName>Id` convention), or use the explicit-key overload with a keyed child, for reliable deduplication. See [Limitations](limitations.md).
 
 ## Assignment rule
 
@@ -254,7 +254,7 @@ left join order_item as t2 on t1.id = t2.order_id
 
 ## Multiple collections
 
-Each `JoinInto` adds its own join. Two child collections on the same parent produce a **cartesian product** of rows in the denormalized stream; parent deduplication and independent per-collection grouping keep the result correct, but the intermediate row count multiplies. When two or more collection navigations are present, preparation emits the `JoinInto.MultipleCollections` warning once per plan; pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda to silence it. Declare several collections only when the parent sets are small, or load the second collection with a separate query (the [`LoadWith`](eager-loading.md) loader is the alternative — split-query by default, single-query with `AsSingleQuery()`).
+Each `JoinInto` adds its own join. Two child collections on the same parent produce a **cartesian product** of rows in the denormalized stream; parent deduplication and independent per-collection grouping keep the result correct, but the intermediate row count multiplies. When two or more collection navigations are present, preparation emits the `JoinInto.MultipleCollections` warning once per plan; pass `JoinOptions.SuppressCartesianWarning()` through a `JoinInto` options lambda to silence it. Declare several collections only when the parent sets are small, or load the second collection with a separate query (the [`LoadWith`](eager-loading.md) loader is the alternative — split-query by default, single-query with `EagerLoadMode.SingleQuery`).
 
 `JoinInto` **cannot be combined with any other join on the same builder**: once the builder carries a `JoinInto`, adding `Join`, `LeftJoin`, `CrossJoin`, `SemiJoin`, `AntiJoin` (or any other explicit join) throws `NotSupportedException`, and vice versa. Declare the `JoinInto` collections on a plain entity source, so the non-list terminals know exactly which joins to drop. Mixing the two would leave the parent-only command unable to tell an explicit join from a `JoinInto`.
 
@@ -279,7 +279,7 @@ The join is part of the command and is stitched **only** by the stitching termin
 
 The following are rejected with [`NotSupportedException`](xref:System.NotSupportedException):
 
-- a **many-to-many** relationship under `AsSingleQuery` — `AsSingleQuery` is the [`LoadWith`](eager-loading.md) style single-query mode; the explicit `JoinInto` path does support M:N through a junction (see above);
+- a **many-to-many** relationship under `EagerLoadMode.SingleQuery` — `EagerLoadMode.SingleQuery` is the [`LoadWith`](eager-loading.md) style single-query mode; the explicit `JoinInto` path does support M:N through a junction (see above);
 - a **composite** principal, foreign or junction key on the relationship (single-column keys only);
 - an **undeclared** relationship, when the collection overload is used without relationship metadata — declare it with `HasMany`/`HasOne`/`HasManyThrough`/`[Relationship]` or use the explicit-key overload; the reference overload likewise requires a declared one-to-one (`HasOneToOne`) or a local `JoinOptions.OneToOne` configuration;
 - `JoinInto` applied to a derived (`As`) or joined projection source;
@@ -298,7 +298,7 @@ The metadata model is exposed through [`IEntityMetadata.Relationships`](xref:Nex
 
 ## See also
 
-- [Eager loading child collections (`LoadWith`)](eager-loading.md) — the alternative loader (split-query by default, single-query with `AsSingleQuery()`).
+- [Eager loading child collections (`LoadWith`)](eager-loading.md) — the alternative loader (split-query by default, single-query with `EagerLoadMode.SingleQuery`).
 - [Joins](../guide/02-joins.md) — the explicit join surface.
 - [Entities and metadata](../getting-started/03-entities-and-metadata.md) — key and column mapping.
 

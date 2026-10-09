@@ -46,7 +46,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private List<Sorting>? _sorting;
     private List<IEagerLoadSpec<TEntity>>? _loadSpecs;
     private List<IJoinIntoSpec<TEntity>>? _joinIntos;
-    private bool _singleQuery;
+    private EagerLoadMode _eagerLoadMode;
     /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     private string? _table;
@@ -104,11 +104,17 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     internal IReadOnlyList<IJoinIntoSpec<TEntity>>? JoinIntos => _joinIntos;
     /// <summary>
-    /// Whether <see cref="AsSingleQuery"/> switched the builder to single-query eager loading, so the
-    /// list terminals execute one denormalized command for the <see cref="LoadWith{TChild, TKey}"/>
-    /// collections instead of the default split child queries.
+    /// The eager-load mode chosen on this builder. <see cref="EagerLoadMode.Default"/> means no explicit
+    /// choice was made, so the collections load through the split path; an explicit mode applies to every
+    /// collection declared on the builder, including ones declared earlier.
     /// </summary>
-    internal bool SingleQuery => _singleQuery;
+    internal EagerLoadMode Mode => _eagerLoadMode;
+    /// <summary>
+    /// Whether <see cref="LoadWith{TChild, TKey}"/> switched the builder to single-query eager loading, so
+    /// the list terminals execute one denormalized command for the declared collections instead of the
+    /// default split child queries.
+    /// </summary>
+    internal bool SingleQuery => _eagerLoadMode == EagerLoadMode.SingleQuery;
     /// <summary>
     /// Whether <see cref="IgnoreFilters()"/> (the all-or-nothing form) was applied to this builder. Used
     /// by single-query eager loading to decide the child side's global filters independently of the
@@ -525,6 +531,13 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// throws <see cref="InvalidOperationException"/>. Declare distinct members on the same builder to
     /// load several collections.
     /// </para>
+    /// <para>
+    /// <paramref name="mode"/> selects the whole builder's loading strategy. <see cref="EagerLoadMode.Default"/>
+    /// inherits the mode already chosen by an earlier <c>LoadWith</c> (split when none was); an explicit
+    /// <see cref="EagerLoadMode.SplitQuery"/> or <see cref="EagerLoadMode.SingleQuery"/> applies to every
+    /// declared collection, including one declared earlier. Repeating the same explicit mode is allowed,
+    /// but choosing a different explicit mode is rejected with <see cref="NotSupportedException"/>.
+    /// </para>
     /// </summary>
     /// <typeparam name="TChild">The child entity type.</typeparam>
     /// <typeparam name="TKey">
@@ -535,21 +548,33 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <param name="childQuery">Builds the child query from the data context that owns the parent query.</param>
     /// <param name="parentKey">Selects the parent key used to match children.</param>
     /// <param name="childKey">Selects the child key used to match parents.</param>
-    /// <returns>A copy of this builder carrying the eager-load declaration.</returns>
+    /// <param name="mode">
+    /// The whole-builder eager-load mode; <see cref="EagerLoadMode.Default"/> inherits the current choice
+    /// (split when none was made).
+    /// </param>
+    /// <returns>A copy of this builder carrying the eager-load declaration and the resolved mode.</returns>
     /// <exception cref="InvalidOperationException">
     /// The collection member already carries an eager-load declaration on this builder.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    /// <exception cref="NotSupportedException">
+    /// A different explicit mode is already active on this builder.
     /// </exception>
     public EntityBuilder<TEntity> LoadWith<TChild, TKey>(
         Expression<Func<TEntity, ICollection<TChild>>> collection,
         Func<IDataContext, EntityBuilder<TChild>> childQuery,
         Expression<Func<TEntity, TKey>> parentKey,
-        Expression<Func<TChild, TKey>> childKey)
+        Expression<Func<TChild, TKey>> childKey,
+        EagerLoadMode mode = EagerLoadMode.Default)
         where TKey : notnull
     {
         ArgumentNullException.ThrowIfNull(collection);
         ArgumentNullException.ThrowIfNull(childQuery);
         ArgumentNullException.ThrowIfNull(parentKey);
         ArgumentNullException.ThrowIfNull(childKey);
+
+        EnsureValidEagerLoadMode(mode);
+        var resolvedMode = ResolveEagerLoadMode(mode);
 
         var spec = new EagerLoadSpec<TEntity, TChild, TKey>(collection, childQuery, parentKey, childKey);
 
@@ -565,34 +590,50 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         }
 
         var b = Clone();
+        b._eagerLoadMode = resolvedMode;
         b._loadSpecs = _loadSpecs is null ? [spec] : [.. _loadSpecs, spec];
 
         return b;
     }
     /// <summary>
-    /// Switches the collections declared with <see cref="LoadWith{TChild, TKey}"/> to single-query eager
-    /// loading: one denormalized <c>LEFT JOIN</c> command fetches the parents and every declared
-    /// collection, and the rows are stitched in memory. Every terminal that stitches
-    /// (<c>ToList</c>/<c>ToListAsync</c>, <c>ToArray</c>/<c>ToArrayAsync</c>) uses this one command; the
-    /// other terminals see the parent only. The returned builder is a copy; the current builder is
-    /// unchanged.
-    /// <para>
-    /// Unlike split loading, single-query loading never chunks the parent keys: any number of parents is
-    /// fetched by the same one command, so there is no chunked <c>IN</c> list and no silent fallback to
-    /// split. The child query's own <c>Where</c> condition is merged into the join <c>ON</c> predicate, so
-    /// it filters the children without dropping childless parents.
-    /// </para>
-    /// <para>
-    /// Split (two round trips) remains the default; call this only when a single round trip matters more
-    /// than the smaller, chunked child result. A collection member may still be declared only once.
-    /// </para>
+    /// Validates that <paramref name="mode"/> is a defined <see cref="EagerLoadMode"/> value.
     /// </summary>
-    /// <returns>A copy of this builder set to single-query eager loading.</returns>
-    public EntityBuilder<TEntity> AsSingleQuery()
+    /// <param name="mode">The requested eager-load mode.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
+    private static void EnsureValidEagerLoadMode(EagerLoadMode mode)
     {
-        var b = Clone();
-        b._singleQuery = true;
-        return b;
+        switch (mode)
+        {
+            case EagerLoadMode.Default:
+            case EagerLoadMode.SplitQuery:
+            case EagerLoadMode.SingleQuery:
+                return;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(mode), mode,
+                    $"'{mode}' is not a defined EagerLoadMode value; use Default, SplitQuery or SingleQuery.");
+        }
+    }
+    /// <summary>
+    /// Resolves the requested mode against the mode already active on this builder. <see cref="EagerLoadMode.Default"/>
+    /// inherits the active mode, an explicit mode may be repeated, and two different explicit modes are
+    /// rejected because the mode belongs to the whole builder.
+    /// </summary>
+    /// <param name="mode">The requested mode, already validated.</param>
+    /// <returns>The mode the returned builder carries.</returns>
+    /// <exception cref="NotSupportedException">A different explicit mode is already active on this builder.</exception>
+    private EagerLoadMode ResolveEagerLoadMode(EagerLoadMode mode)
+    {
+        if (mode == EagerLoadMode.Default)
+            return _eagerLoadMode;
+
+        if (_eagerLoadMode == EagerLoadMode.Default || _eagerLoadMode == mode)
+            return mode;
+
+        throw new NotSupportedException(
+            $"EagerLoadMode.{_eagerLoadMode} is already active on this builder and EagerLoadMode.{mode} " +
+            "conflicts with it: the eager-load mode applies to the whole builder, so all LoadWith calls " +
+            "must use the same explicit mode.");
     }
     /// <summary>
     /// Declares a <c>LEFT JOIN</c> to <paramref name="child"/> that fills the <paramref name="collection"/>
@@ -1057,10 +1098,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
                 $"LoadWith cannot be combined with {method}; materialize the eager-loaded query with " +
                 "ToList/ToListAsync (or ToArray/ToArrayAsync) before applying the modifier.");
 
-        if (_singleQuery)
+        if (_eagerLoadMode != EagerLoadMode.Default)
             throw new NotSupportedException(
-                $"AsSingleQuery cannot be combined with {method}; apply AsSingleQuery only to the final " +
-                "eager-loaded query materialized with ToList/ToListAsync.");
+                $"Single-query eager loading cannot be combined with {method}; choose " +
+                "EagerLoadMode.SingleQuery only on the final eager-loaded query materialized with " +
+                "ToList/ToListAsync.");
     }
     /// <summary>
     /// Names the child-query shapes that single-query eager loading cannot fold into the join predicate.
@@ -1170,7 +1212,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <summary>Builds a parent-only projection command for the aggregate terminals (excludes the <c>JoinInto</c> joins).</summary>
     internal QueryCommand<TResult> SelectParent<TResult>(Expression<Func<TEntity, TResult>> exp) => WithoutJoinIntos().SelectCore(exp);
     /// <summary>
-    /// Materializes the single-query stitching metadata for <see cref="AsSingleQuery"/>: the existing
+    /// Materializes the single-query stitching metadata for <see cref="EagerLoadMode.SingleQuery"/>: the existing
     /// <c>JoinInto</c> declarations (if any) followed by one explicit-key join per
     /// <see cref="LoadWith{TChild, TKey}"/> specification, together with the join clauses that render
     /// them. The child query's own <c>Where</c> condition is folded into each synthesized <c>ON</c>
@@ -1182,7 +1224,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         if (_joinIntos is not { Count: > 0 } && _joins is { } regular && regular.Exists(j => !j.IsJoinInto))
             throw new NotSupportedException(
-                "AsSingleQuery single-query loading cannot be combined with other joins on the same builder; declare LoadWith on a plain entity source only.");
+                "SingleQuery eager loading cannot be combined with other joins on the same builder; declare LoadWith on a plain entity source only.");
 
         // A many-to-many declaration contributes two joins while the single-query mapping assumes one join
         // per declaration; reject it before any join/spec index pairing can overflow.
@@ -1192,7 +1234,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             {
                 if (manyToManyIntos[i].IsManyToMany)
                     throw new NotSupportedException(
-                        "AsSingleQuery single-query loading does not support a many-to-many JoinInto declaration; materialize the many-to-many JoinInto separately, or use split-query loading.");
+                        "SingleQuery eager loading does not support a many-to-many JoinInto declaration; materialize the many-to-many JoinInto separately, or use split-query loading.");
             }
         }
 
@@ -1958,7 +2000,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._loadSpecs = _loadSpecs is null ? null : [.. _loadSpecs];
         dst._joinIntos = _joinIntos is null ? null : [.. _joinIntos];
         dst._joins = _joins is null ? null : [.. _joins];
-        dst._singleQuery = _singleQuery;
+        dst._eagerLoadMode = _eagerLoadMode;
     }
     /// <summary>
     /// Copies every piece of query state whose type does not depend on the projection parameter, so it
@@ -2067,7 +2109,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         || _serverOverride is not null
         || _tableExpression is not null
         || IsDistinct
-        || _singleQuery
+        || _eagerLoadMode != EagerLoadMode.Default
         || !_filterScope.IsEmpty
         || _tablesample is not null
         || _temporal is not null
