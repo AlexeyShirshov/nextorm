@@ -55,7 +55,7 @@
 
 ## ACT — finalization (CHECK PASS, r=1 / rv=1 / n=2/3)
 
-- `2026-10-09T06:24:14Z | ACT | revision r=1 | iteration n=2/3 | CHECK PASS → finalize + commit | task commit <TASK_COMMIT_SHA>`
+- `2026-10-09T06:24:14Z | ACT | revision r=1 | iteration n=2/3 | CHECK PASS → finalize + commit | task commit bbc3b47e79e2659f52ccfbbcd489ae70b3df6c9a`
 - Verdict: **CHECK PASS** (r=1 / rv=1 / n=2/3). Task state `done`; plan revision unchanged (no replan).
 
 ### R169 acceptance matrix (final)
@@ -83,10 +83,10 @@
 - Out of scope: `source.Hints` statement-level query hints on SQL Server DML — pre-existing gap, not part of #169 (`TablesInScopeHints` only).
 
 ### Delivery
-- Task commit: `<TASK_COMMIT_SHA>` (branch `1.0.9-rc2`, never pushed).
-- Issue #169: <ISSUE_STATUS>.
+- Task commit: `bbc3b47e79e2659f52ccfbbcd489ae70b3df6c9a` (branch `1.0.9-rc2`, never pushed).
+- Issue #169: **closed** (`gh issue close 169`, 2026-10-09).
 - Roadmap: `docs/specs/roadmap/todo_hint-followups.md` section D marked ADDRESSED.
-- Bookkeeping commit: `<BOOKKEEPING_COMMIT_SHA>`.
+- Bookkeeping commit: recorded in `docs/specs/status/collection-1.0.9-rc2.md`.
 
 --- PLAN BODY (verbatim) ---
 
