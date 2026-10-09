@@ -209,6 +209,14 @@ Critical/Warning/Suggestion + роутинг специалистам:
 и «CHECK completeness gate — mandatory evidence contract» глобального скилла `pdca-dotnet`.
 Этот оверлей не вводит отдельную схему контракта.
 
+**Frozen evidence manifest (nextorm).** Путь по умолчанию (PLAN закрепляет точный в статусе):
+`artifacts/pdca/<task>/rv<k>/manifest.json`, где `<task>` — `D<issue>` или kebab-slug,
+`<k>` — ревизия контракта `rv` (напр. `artifacts/pdca/D167/rv1/manifest.json`). Схема — глобальный
+`pdca-dotnet` §«Versioned evidence contract» (оверлей схему не дублирует); валидируется in-repo
+`python3 scripts/validate_inner_loop.py manifest <путь>` (покрытие `required_rows` + форма строк и
+evidence). Пишет его DO на границе DO→CHECK, в пределах существующих путей (`artifacts/**`); CHECK
+открывает его первым и по каждой строке читает `path`.
+
 Строки проектной таблицы приоритетов классов — строки контракта с обязательными слотами
 и сохранёнными приоритетами. Безусловные проектные проверки нельзя снимать через N/A.
 

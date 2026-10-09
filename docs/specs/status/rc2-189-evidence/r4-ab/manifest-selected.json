@@ -1,0 +1,2247 @@
+{
+  "cases": [
+    "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count",
+    "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount",
+    "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached",
+    "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList",
+    "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList",
+    "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param",
+    "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync"
+  ],
+  "trees": {
+    "A": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+    "B": "/home/alex/sources/nextorm"
+  },
+  "commits": {
+    "A": "65477266558f2ad959a38d3c045360690769815f",
+    "B": "b25cd227b61f3958376ae3ace4bb81cee1833166"
+  },
+  "runs": [
+    {
+      "pair": 1,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:16:48Z",
+      "end_utc": "2026-10-09T07:18:41Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10023,
+          "sha256": "f86dfe80106a77968a9ebff46a58bcb8c8918c4d35d759093099fa2acd2fcde7"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 7941,
+          "sha256": "e0567fc13312ae4b88c5b03f97a85726ad782ce666cf30752d19ed72bb0faa15"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12003,
+          "sha256": "3189fba2b074f9ce1b6fa690ca763fb1c002b962de766dbb956d98e35d66af32"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35798,
+          "sha256": "0230b0697597bfbb6cd4ff40ac126a0774091f5222ca92cb8ac012ab1f855a02"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12562,
+          "sha256": "9ed53e9cf44bb0c6303031be825d9af079d2037b260cf69e4baec30e18195743"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2203676.4547991073,
+          "stddev_ns": 40581.05551176807,
+          "n": 14,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 59036981.83333332,
+          "stddev_ns": 617820.041779397,
+          "n": 13,
+          "allocated_bytes_per_op": 52485156,
+          "gen0": 37
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1814973.3695591518,
+          "stddev_ns": 16108.931662355568,
+          "n": 14,
+          "allocated_bytes_per_op": 560847,
+          "gen0": 34
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 496021.8014197716,
+          "stddev_ns": 2159.086672580403,
+          "n": 13,
+          "allocated_bytes_per_op": 476016,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 886454.711077009,
+          "stddev_ns": 3533.9981408153308,
+          "n": 14,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1701841.279231771,
+          "stddev_ns": 17548.71748996671,
+          "n": 15,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1847676.975716146,
+          "stddev_ns": 18351.695661050948,
+          "n": 15,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 112.24,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 1,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:18:41Z",
+      "end_utc": "2026-10-09T07:20:34Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 9945,
+          "sha256": "c2364f43dc92cebb33741c7afa5df23f1ef8aee9d61e974aedc4af2e41d7b4a2"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8804,
+          "sha256": "dbe9951503b212fe3c4148db1c7e42dfd939b2b6ede1291c7db386340e1c76da"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12366,
+          "sha256": "6ac95024c1f6f72f8d7c13f792802a56115664d920a9d24e9b779d8153e30c0a"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 36080,
+          "sha256": "baa9363e6ca46abcd0c1ba13aca09080869e4cf92dfbf18a077ea5c1c3093825"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-01/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12491,
+          "sha256": "c1c0349231c7949047a91f309b553a520d03b521505d9cba543afe98af20e22c"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2168058.0965401786,
+          "stddev_ns": 7064.326315003747,
+          "n": 14,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 58101683.8962963,
+          "stddev_ns": 781726.3845627955,
+          "n": 15,
+          "allocated_bytes_per_op": 52531288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1944963.5267857143,
+          "stddev_ns": 19756.76986739072,
+          "n": 14,
+          "allocated_bytes_per_op": 624849,
+          "gen0": 38
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 545552.2918945312,
+          "stddev_ns": 3970.76726575234,
+          "n": 15,
+          "allocated_bytes_per_op": 520016,
+          "gen0": 63
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 887975.2682942708,
+          "stddev_ns": 8389.833529270662,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1869163.463997396,
+          "stddev_ns": 17134.75627162752,
+          "n": 15,
+          "allocated_bytes_per_op": 597984,
+          "gen0": 36
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 2024236.1717447916,
+          "stddev_ns": 20151.954141209048,
+          "n": 15,
+          "allocated_bytes_per_op": 623077,
+          "gen0": 19
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 112.24,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 2,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:20:34Z",
+      "end_utc": "2026-10-09T07:22:33Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10055,
+          "sha256": "16368ee80f4563d310d906f4d0090380973976bfa8d6e5e0e02335f40edf7be8"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8416,
+          "sha256": "913ba65cee5874130ac8f0d25100716659b56de9cf3f5256577bb5e18cfc7b8e"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12272,
+          "sha256": "4ac8fb2a296cad7362371a59dda933e705d3861a66d43ed97317e970ff5c6a3f"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35259,
+          "sha256": "f7765fb589d6f7877171b7f6a925e1d95d70782c7e512b5186896f7a7f5a0aac"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12304,
+          "sha256": "8221cf30a18f906547c0b9690e9d8a96769643c7198b44f081931a1d1125bdea"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2172268.8721354166,
+          "stddev_ns": 17429.88145498632,
+          "n": 15,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 62224964.461538464,
+          "stddev_ns": 2107601.1965922033,
+          "n": 13,
+          "allocated_bytes_per_op": 52515288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1751899.4584635417,
+          "stddev_ns": 47470.090065564444,
+          "n": 15,
+          "allocated_bytes_per_op": 560847,
+          "gen0": 34
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 516408.07317708334,
+          "stddev_ns": 8127.574387722247,
+          "n": 15,
+          "allocated_bytes_per_op": 476015,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 885011.1600585937,
+          "stddev_ns": 3236.567532203134,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1744059.0703125,
+          "stddev_ns": 19278.642951939582,
+          "n": 15,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1810121.4373604911,
+          "stddev_ns": 25930.093605457132,
+          "n": 14,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 117.61,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 2,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:22:33Z",
+      "end_utc": "2026-10-09T07:24:17Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 9920,
+          "sha256": "925c7791a3c27a2a26f694a0ddc171fc40d87bfae00aaae31f09fdd22d2c0275"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8637,
+          "sha256": "4627f5ce664eae2b44bad2f7799d2753e63e6f86dc156e08db762f2a67fe7f4c"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12248,
+          "sha256": "be06e3ed30bf4297d8a57b7222c821969f2c31d19cd5173e6487c5b2b2e36dec"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35220,
+          "sha256": "b240b4c012be23b66eeccd1ee722848d5957cacb8a2d4f115848a492ae9502ae"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-02/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12034,
+          "sha256": "5fe8e55d2eabe28b70448a7151ae19a81d2246847a6d4c48b8c8527dc5d31407"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2220578.862723214,
+          "stddev_ns": 28545.946387580676,
+          "n": 14,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 60600442.70370371,
+          "stddev_ns": 938751.9752728875,
+          "n": 15,
+          "allocated_bytes_per_op": 52542488,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1943002.448939732,
+          "stddev_ns": 20141.327048393432,
+          "n": 14,
+          "allocated_bytes_per_op": 624861,
+          "gen0": 19
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 574687.2557896206,
+          "stddev_ns": 5237.548311461807,
+          "n": 14,
+          "allocated_bytes_per_op": 520016,
+          "gen0": 63
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 904649.707421875,
+          "stddev_ns": 8488.444300891657,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1834166.281640625,
+          "stddev_ns": 30180.128413953735,
+          "n": 15,
+          "allocated_bytes_per_op": 597984,
+          "gen0": 36
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1962431.3005208333,
+          "stddev_ns": 22710.82473715237,
+          "n": 15,
+          "allocated_bytes_per_op": 623077,
+          "gen0": 19
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 102.5,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 3,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:27:02Z",
+      "end_utc": "2026-10-09T07:28:51Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10061,
+          "sha256": "9cdde178fe18fa079f2db2f2b0fc1e1cafa69eee7614e12175575ba1616821a4"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8553,
+          "sha256": "c8adb52229750a1e602ddef19ec0de9659cacad08743813a3b48a4067e13bfe4"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 11994,
+          "sha256": "bf67d550a37daaf8a93832622e616330e004fe0fd1e2b227037102f913b6f16b"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35794,
+          "sha256": "2ed99e69e38712f8a1c2b2f09026f28447cc8f987a6727d110e52642cda63f66"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12227,
+          "sha256": "056e9637396f98d9f481c903f04257bc5abac96f94081da16553d4fcfbfa88d5"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2175913.4401041665,
+          "stddev_ns": 48904.13675238042,
+          "n": 15,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 60801171.50000001,
+          "stddev_ns": 2853854.190755428,
+          "n": 14,
+          "allocated_bytes_per_op": 52484888,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1779629.8452524038,
+          "stddev_ns": 19018.01970862211,
+          "n": 13,
+          "allocated_bytes_per_op": 560859,
+          "gen0": 17
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 516398.1307896205,
+          "stddev_ns": 5475.839734635211,
+          "n": 14,
+          "allocated_bytes_per_op": 476016,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 892541.4651041667,
+          "stddev_ns": 4916.471559154022,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1739406.2458984375,
+          "stddev_ns": 14458.80866352044,
+          "n": 15,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1836160.4274739583,
+          "stddev_ns": 19623.56410811034,
+          "n": 15,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 108.12,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 3,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:28:51Z",
+      "end_utc": "2026-10-09T07:30:55Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 9894,
+          "sha256": "31e71ce4a3fe0e4041858ddeff07dca7e645839606fd3f8cb7b8975324db19d3"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8664,
+          "sha256": "fdec3058a978c3e30524a133ce6339f9781499456102807c8c60b298a338beee"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12022,
+          "sha256": "8fa41a924519282c74578b6fed3eb7200dbd59df899f8b09dc0140fc4e880195"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35348,
+          "sha256": "9aa4403141825bb963be083f79836ebd2a7654fda41e58a1c3219e2e571b009d"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-03/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12074,
+          "sha256": "da25f367163be4241ec61e689167184c6a3e29090a3e3c4fc415d8e357e9869e"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2245295,
+          "stddev_ns": 42025.25585825168,
+          "n": 14,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 59271937.23809524,
+          "stddev_ns": 583378.266799293,
+          "n": 14,
+          "allocated_bytes_per_op": 52531256,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1909828.0277994792,
+          "stddev_ns": 25495.725978138566,
+          "n": 15,
+          "allocated_bytes_per_op": 624849,
+          "gen0": 38
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 564917.4552734375,
+          "stddev_ns": 4969.290700419037,
+          "n": 15,
+          "allocated_bytes_per_op": 531217,
+          "gen0": 65
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 903414.686711238,
+          "stddev_ns": 6911.732844217086,
+          "n": 13,
+          "allocated_bytes_per_op": 77960,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1887806.890625,
+          "stddev_ns": 63906.37860867187,
+          "n": 15,
+          "allocated_bytes_per_op": 609184,
+          "gen0": 37
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1917527.7647235577,
+          "stddev_ns": 23266.131961983963,
+          "n": 13,
+          "allocated_bytes_per_op": 623065,
+          "gen0": 38
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 122.83,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 4,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:30:55Z",
+      "end_utc": "2026-10-09T07:32:52Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 9980,
+          "sha256": "3af574e4acaae955ea2c9b321a82cb7a1ab7fe022fe77f68c2de3171617ed8fa"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8608,
+          "sha256": "14c03daf2605983cacf2309f23edb663dd67f59ae65d5471d86124b372e6a0a2"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12200,
+          "sha256": "89723629bbbedfa0580a767eb02fb35c1b893e64b8c939075277efb5f035b2b8"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35629,
+          "sha256": "bcf7e3dfdb4376c7ae2670aa446e554b46ca874ddc8173cd1007bb111c5dcbf8"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12183,
+          "sha256": "868c09fd0c327546054fd0fcb13f32450207d78c0965097f66b5cd53e4cb358c"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2128807.765625,
+          "stddev_ns": 6006.808947788488,
+          "n": 14,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 59466521.45238095,
+          "stddev_ns": 841154.042052412,
+          "n": 14,
+          "allocated_bytes_per_op": 52500088,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1777263.64296875,
+          "stddev_ns": 21466.74175487172,
+          "n": 15,
+          "allocated_bytes_per_op": 560847,
+          "gen0": 34
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 512988.4267252604,
+          "stddev_ns": 3067.972055772394,
+          "n": 15,
+          "allocated_bytes_per_op": 476016,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 891942.8220703125,
+          "stddev_ns": 5006.992126769827,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1716813.37890625,
+          "stddev_ns": 19112.213962003014,
+          "n": 15,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1799332.4990985577,
+          "stddev_ns": 4128.718653348229,
+          "n": 13,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 115.85,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 4,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:32:52Z",
+      "end_utc": "2026-10-09T07:34:43Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 9956,
+          "sha256": "0c8aea91236f48d870c5d4be83562740d85754049ecd556b101bb835b029b2f7"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8828,
+          "sha256": "8e9dcbcae1676288f09faeed9b554e56a5459973dea7e629e3ced6bb71edb9e2"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12072,
+          "sha256": "18ba579cd35f7953bdb89ef658fbe693db08c2e36b02c596c3a35a06e8f7dd47"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35324,
+          "sha256": "c7593da7816ca9db6f4d6ca2ab8f3f4ad213115c461b1fa51b8b3469f88fab59"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12503,
+          "sha256": "875e5a77b138b682d0c6c5f96f3116172cb90459fc4808f4f482790a7d810807"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2158137.3331473214,
+          "stddev_ns": 19734.820594143537,
+          "n": 14,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 57405292.096296296,
+          "stddev_ns": 1903566.544831347,
+          "n": 15,
+          "allocated_bytes_per_op": 52531288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1901868.572330729,
+          "stddev_ns": 15295.45742015398,
+          "n": 15,
+          "allocated_bytes_per_op": 624849,
+          "gen0": 38
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 534905.048828125,
+          "stddev_ns": 2135.373271002481,
+          "n": 14,
+          "allocated_bytes_per_op": 520016,
+          "gen0": 63
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 881206.51953125,
+          "stddev_ns": 3089.950249447542,
+          "n": 14,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1826213.3407552084,
+          "stddev_ns": 8514.536044156714,
+          "n": 15,
+          "allocated_bytes_per_op": 597984,
+          "gen0": 36
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1984889.4299479167,
+          "stddev_ns": 10556.305062430754,
+          "n": 15,
+          "allocated_bytes_per_op": 623077,
+          "gen0": 19
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 109.87,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 5,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:34:43Z",
+      "end_utc": "2026-10-09T07:36:42Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10030,
+          "sha256": "3acff2eea41a740a7190c58511213fbe7d933d293545b04cc11711e286a8ba39"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8798,
+          "sha256": "b603a337515a52f2d6d0d7995053013c3953b092fff215970c8e9a548a621b19"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12321,
+          "sha256": "89841373e2de87cd88afcd24048e8ecc24085de30bca1ae0f58c4b1ffcbd2807"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35216,
+          "sha256": "1ab32008ec8aa9cc0dbe3432f0ea2b15447113ac170668569ddeef078a70bec9"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12112,
+          "sha256": "e02bc1590b27b35b152d3675f6da6902c183ecf9be646fb70907267ceec6e2fc"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2281501.564583333,
+          "stddev_ns": 26401.231607473124,
+          "n": 15,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 58271157.34074075,
+          "stddev_ns": 336286.33384500723,
+          "n": 15,
+          "allocated_bytes_per_op": 52491288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1817475.4471261161,
+          "stddev_ns": 17024.944000185606,
+          "n": 14,
+          "allocated_bytes_per_op": 560847,
+          "gen0": 34
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 513804.0691964286,
+          "stddev_ns": 5739.394559678019,
+          "n": 14,
+          "allocated_bytes_per_op": 476016,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 885938.6055989583,
+          "stddev_ns": 3647.3845961214292,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1737958.4270368305,
+          "stddev_ns": 11489.087417822531,
+          "n": 14,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1846072.5940104167,
+          "stddev_ns": 21298.32972713499,
+          "n": 15,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 117.8,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 5,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:36:42Z",
+      "end_utc": "2026-10-09T07:38:35Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10121,
+          "sha256": "b485bda1f7c212970aee4a3d0fe6ef4f14a883e3ed119288c3b2e867c08af349"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8696,
+          "sha256": "ef4c36f948a3b5db2e65af1738d26da5fac1479a7bba6d4b70f4ec892001d759"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12409,
+          "sha256": "6f884d7d672528128e3b2b6b39188c0619e86e60951a43b2ad7711e1a8463da7"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35426,
+          "sha256": "0f211154382ec7a18baf71483d874a9445dfb52cc0e66fcd84024e9e3a99099b"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-05/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12285,
+          "sha256": "ae02b6b231dfc1f84a3428849ba9ab54b5fdd3c80a6834e3a7ce869d77f87d87"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2178426.5541666667,
+          "stddev_ns": 14363.10847795061,
+          "n": 15,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 60633184.14814815,
+          "stddev_ns": 3229966.331072528,
+          "n": 15,
+          "allocated_bytes_per_op": 52531288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1916629.55,
+          "stddev_ns": 21724.105274707337,
+          "n": 15,
+          "allocated_bytes_per_op": 624849,
+          "gen0": 38
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 543120.0829380581,
+          "stddev_ns": 2768.605241901835,
+          "n": 14,
+          "allocated_bytes_per_op": 520016,
+          "gen0": 63
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 892422.333984375,
+          "stddev_ns": 3233.054972859906,
+          "n": 14,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1824571.31640625,
+          "stddev_ns": 20132.194043911513,
+          "n": 15,
+          "allocated_bytes_per_op": 597984,
+          "gen0": 36
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 2043339.2993489583,
+          "stddev_ns": 18837.469242572733,
+          "n": 15,
+          "allocated_bytes_per_op": 631077,
+          "gen0": 19
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 111.36,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 6,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:38:35Z",
+      "end_utc": "2026-10-09T07:40:31Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10005,
+          "sha256": "0d104e21f6bd61d68bcdd8e225350fce6fee79182c97fd41d98a9ed029ad7acf"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8678,
+          "sha256": "fc9606f12030b3c05e932e63e9720b82238932840b9ff6f3955c29d5f5ddb4d9"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12461,
+          "sha256": "a6060e619e45532aea303fbfd4e416ea8ec18d0389a1497f8af3e585803fe095"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 36240,
+          "sha256": "7fbc6c81d81a34ed4a8225eabefa6ddbb773590f85ab95899c5c60f54e11ece8"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12584,
+          "sha256": "2b54989733f7735ac0cd13ef28717355caa6424284d1ff9a82c50ff08c02d3f8"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2089539.9193638393,
+          "stddev_ns": 21403.71825704056,
+          "n": 14,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 59934521.9925926,
+          "stddev_ns": 864126.5132467436,
+          "n": 15,
+          "allocated_bytes_per_op": 52484888,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1773958.740625,
+          "stddev_ns": 25781.516817604705,
+          "n": 15,
+          "allocated_bytes_per_op": 560847,
+          "gen0": 34
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 500747.817452567,
+          "stddev_ns": 3792.611549578613,
+          "n": 14,
+          "allocated_bytes_per_op": 476016,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 885465.3065104167,
+          "stddev_ns": 9974.116080871841,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1675327.6637620192,
+          "stddev_ns": 13532.491162666463,
+          "n": 13,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1823155.7998046875,
+          "stddev_ns": 17922.669026765143,
+          "n": 15,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 115.52,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 6,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:40:31Z",
+      "end_utc": "2026-10-09T07:42:13Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10052,
+          "sha256": "7118be16fb32c929bf5a2d6e2f0692087832d343c2eaffe340b88346409bf1e3"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8628,
+          "sha256": "ae5bc53aba6e7729e05be5aa09649db2b80f2217fde037e8f6f44312f3cdba8d"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12111,
+          "sha256": "03d83d9c632c50cf4ee603d88069c9ee7877f4f342e7a5e1f2c472ce916bf3fe"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35292,
+          "sha256": "33f09f4fd24947eb2ea7ef60c6d262d3e973c93b41bc57348d35d027ae4570b4"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-06/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12118,
+          "sha256": "7f2a000d4a3dec8da35f9b86f0731969e00eed5c85452037210f24ca4ae28794"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2126349.4075520835,
+          "stddev_ns": 15811.578031831117,
+          "n": 15,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 58297637.45238095,
+          "stddev_ns": 597242.3517395552,
+          "n": 14,
+          "allocated_bytes_per_op": 52531288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1954315.5106670673,
+          "stddev_ns": 18714.59512134864,
+          "n": 13,
+          "allocated_bytes_per_op": 624861,
+          "gen0": 19
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 549292.0569196428,
+          "stddev_ns": 2877.430333800706,
+          "n": 14,
+          "allocated_bytes_per_op": 520016,
+          "gen0": 63
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 880538.155859375,
+          "stddev_ns": 9167.978969842645,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1847422.8544270834,
+          "stddev_ns": 16285.484489121474,
+          "n": 15,
+          "allocated_bytes_per_op": 597984,
+          "gen0": 36
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1938545.0865384615,
+          "stddev_ns": 9225.48118098853,
+          "n": 13,
+          "allocated_bytes_per_op": 623077,
+          "gen0": 19
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 100.24,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 7,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:42:13Z",
+      "end_utc": "2026-10-09T07:44:12Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10042,
+          "sha256": "cbbc40d1f6b305be2012b775885754f20c4d0b35d70076c9a18a74f885f604ee"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8476,
+          "sha256": "2b5ff46bb28d9be79156a0c3c7588fd53e5014e977c8b1aa8b9ff65fac7b7feb"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12053,
+          "sha256": "5bb1f767981112dee59cbf57b81001eecef61bdb6be7eae8c4d2d3292d446e6e"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 35813,
+          "sha256": "5def551626c71b4e63b40c3e50b77dd31e8b0c8a78d9abda98d946cacc051b8e"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12392,
+          "sha256": "4960c7a3a3d4f9c94b50c82a6c9dd1eb039da64ae39a421150b87b9909653a11"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2168136.566145833,
+          "stddev_ns": 23614.296659673546,
+          "n": 15,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 58714990.05128204,
+          "stddev_ns": 344237.7779545663,
+          "n": 13,
+          "allocated_bytes_per_op": 52500088,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1803461.2992838542,
+          "stddev_ns": 20125.78870919237,
+          "n": 15,
+          "allocated_bytes_per_op": 560847,
+          "gen0": 34
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 519889.6815011161,
+          "stddev_ns": 6245.303611651763,
+          "n": 14,
+          "allocated_bytes_per_op": 476016,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 881269.4809244792,
+          "stddev_ns": 2381.0699215892937,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1717749.0622395833,
+          "stddev_ns": 13469.402075410586,
+          "n": 15,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1881804.1003069195,
+          "stddev_ns": 11699.033334891295,
+          "n": 14,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 118.17,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 7,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:44:12Z",
+      "end_utc": "2026-10-09T07:45:57Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10064,
+          "sha256": "4a4ce160ffee51a1c8b9edde45430629b31c649f99f0c76c39e897ea9f6db291"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8512,
+          "sha256": "5166ea672e341616a9206d36a5be23806b51becadd997efccb7f7a00e73f5348"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 11754,
+          "sha256": "f840f8f559fcb5f142a70c7d6a72cee980b68565a36fb31fbe3d9ffa98d76355"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 36326,
+          "sha256": "91e277a03ee8f55b145ab06f9e6fe3b726c49a36d6ed18244b8dc5e33ddde7de"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-07/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12568,
+          "sha256": "77536d88e2654d7d22a0c98b1e3e3004ef82afc6f7e10de72c9928a58adfad0b"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2258034.03515625,
+          "stddev_ns": 31122.89367125342,
+          "n": 15,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 59819308.253968254,
+          "stddev_ns": 682657.7252881256,
+          "n": 14,
+          "allocated_bytes_per_op": 52531288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1965829.1182391827,
+          "stddev_ns": 24729.636958885127,
+          "n": 13,
+          "allocated_bytes_per_op": 624859,
+          "gen0": 19
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 566821.3919596354,
+          "stddev_ns": 4115.473243096519,
+          "n": 15,
+          "allocated_bytes_per_op": 520016,
+          "gen0": 63
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 901354.007672991,
+          "stddev_ns": 3983.4215256248553,
+          "n": 14,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1880164.3397135416,
+          "stddev_ns": 23275.472490437653,
+          "n": 15,
+          "allocated_bytes_per_op": 597984,
+          "gen0": 36
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 2003008.4196614583,
+          "stddev_ns": 15801.070753934904,
+          "n": 15,
+          "allocated_bytes_per_op": 623077,
+          "gen0": 19
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 103.09,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 8,
+      "attempt": 1,
+      "side": "A",
+      "tree": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266",
+      "commit": "65477266558f2ad959a38d3c045360690769815f",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A/console.log",
+      "start_utc": "2026-10-09T07:45:57Z",
+      "end_utc": "2026-10-09T07:47:55Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 10066,
+          "sha256": "c04eba729130ab9efbc6c631a0fd83551df462daff682d305c8883a05566792b"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8408,
+          "sha256": "cd4587d263a689798d886c8db191e028c4f7be6c8a53fcad11a945ba229dd4ef"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12297,
+          "sha256": "8b281ae05d3f75cd2bcfa31d8d536884db3250901a8d6c15eaebaa4adccb18b6"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 36600,
+          "sha256": "453cf697caf3d768d10709476bdb84098399be0d0916c4464dd7dd916c17f0f2"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm-worktrees/d189-r4-ab-A-65477266/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/A/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12461,
+          "sha256": "6379cb75c5343dc230f3eafa1ca0436eabd71d407933f63665e5beb47d01ecaa"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2105067.4231770835,
+          "stddev_ns": 128402.92017763367,
+          "n": 15,
+          "allocated_bytes_per_op": 342400,
+          "gen0": 10
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 59332385.62393162,
+          "stddev_ns": 605272.1512489546,
+          "n": 13,
+          "allocated_bytes_per_op": 52484888,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1803138.9418247768,
+          "stddev_ns": 20157.77344853505,
+          "n": 14,
+          "allocated_bytes_per_op": 560847,
+          "gen0": 34
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 533658.7635416667,
+          "stddev_ns": 16478.300652194106,
+          "n": 15,
+          "allocated_bytes_per_op": 476016,
+          "gen0": 58
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 887825.3740885417,
+          "stddev_ns": 19926.46393211954,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1692049.8675130208,
+          "stddev_ns": 35161.488754997445,
+          "n": 15,
+          "allocated_bytes_per_op": 553983,
+          "gen0": 33
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1845161.2979910714,
+          "stddev_ns": 33542.51735021598,
+          "n": 14,
+          "allocated_bytes_per_op": 579064,
+          "gen0": 35
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 117.34,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    },
+    {
+      "pair": 8,
+      "attempt": 1,
+      "side": "B",
+      "tree": "/home/alex/sources/nextorm",
+      "commit": "b25cd227b61f3958376ae3ace4bb81cee1833166",
+      "out": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B",
+      "command": [
+        "timeout",
+        "--signal=TERM",
+        "--kill-after=5s",
+        "235s",
+        "dotnet",
+        "run",
+        "--no-build",
+        "--no-restore",
+        "--project",
+        "benchmarks/nextorm.benchmark",
+        "-c",
+        "Release",
+        "--",
+        "--anyCategories=acceptance",
+        "--launchCount",
+        "1",
+        "--warmupCount",
+        "3",
+        "--iterationCount",
+        "15",
+        "--exporters",
+        "json",
+        "--artifacts",
+        "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B/artifacts"
+      ],
+      "console_log": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B/console.log",
+      "start_utc": "2026-10-09T07:47:55Z",
+      "end_utc": "2026-10-09T07:49:58Z",
+      "exit_code": 0,
+      "artifacts": [
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkAggregates-report-full-compressed.json",
+          "size": 9756,
+          "sha256": "9ddf5c4eca57229f4a847912c2368ed90e3567eb684ed3934d4396ee2c9b2b70"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B/artifacts/NextORM.Benchmark.InMemoryBenchmarkGroupBy-report-full-compressed.json",
+          "size": 8576,
+          "sha256": "bb6560986be408b46f8c4ee54a9b65995ab2f3544c5fcb8ef0eda864625695ea"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkAny-report-full-compressed.json",
+          "size": 12406,
+          "sha256": "028de8dce5c2d4b4d5a6fba0e097592a99c2985ff52c8a40461b3f46388a19c2"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkCachedPlan-report-full-compressed.json",
+          "size": 36151,
+          "sha256": "9c71c1147c6470e4c39376f167c8354bba66ec7e52e75c6ce5a062af8fd8cd6e"
+        },
+        {
+          "source_path": "/home/alex/sources/nextorm/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "copied_path": "/home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-08/attempt-01/B/artifacts/NextORM.Benchmark.SqliteBenchmarkWhere-report-full-compressed.json",
+          "size": 12519,
+          "sha256": "16ce02a2949411ac282313b0740e92c22814713f2bd48dcbb00a0457fa499460"
+        }
+      ],
+      "cases": {
+        "NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count": {
+          "mean_ns": 2155738.396033654,
+          "stddev_ns": 20642.953495458187,
+          "n": 13,
+          "allocated_bytes_per_op": 384000,
+          "gen0": 11
+        },
+        "NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": {
+          "mean_ns": 61163667.25396825,
+          "stddev_ns": 1427981.2541371407,
+          "n": 14,
+          "allocated_bytes_per_op": 52531288,
+          "gen0": 56
+        },
+        "NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached": {
+          "mean_ns": 1961326.4203404018,
+          "stddev_ns": 18368.78065451653,
+          "n": 14,
+          "allocated_bytes_per_op": 624849,
+          "gen0": 38
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": {
+          "mean_ns": 530412.5389927456,
+          "stddev_ns": 2321.0741465428705,
+          "n": 14,
+          "allocated_bytes_per_op": 520016,
+          "gen0": 63
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList": {
+          "mean_ns": 887777.4826171875,
+          "stddev_ns": 3911.6667519226958,
+          "n": 15,
+          "allocated_bytes_per_op": 77966,
+          "gen0": 9
+        },
+        "NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList": {
+          "mean_ns": 1806271.8542131695,
+          "stddev_ns": 14775.416022178151,
+          "n": 14,
+          "allocated_bytes_per_op": 597972,
+          "gen0": 36
+        },
+        "NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": {
+          "mean_ns": 1958045.0768694195,
+          "stddev_ns": 18859.24112109242,
+          "n": 14,
+          "allocated_bytes_per_op": 623065,
+          "gen0": 38
+        }
+      },
+      "console_meta": {
+        "per_benchmark_iterations": {
+          "InMemoryBenchmarkAggregates.Nextorm_Count": 15,
+          "InMemoryBenchmarkGroupBy.Nextorm_GroupByCount": 15,
+          "SqliteBenchmarkAny.Nextorm_Cached": 15,
+          "SqliteBenchmarkCachedPlan.Prepared_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_ToList": 15,
+          "SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param": 15,
+          "SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync": 15
+        },
+        "global_total_sec": 122.07,
+        "executed_benchmarks": 7
+      },
+      "valid": true,
+      "invalid_reasons": []
+    }
+  ],
+  "pairs": {
+    "01": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 0,
+      "B_run_index": 1
+    },
+    "02": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 2,
+      "B_run_index": 3
+    },
+    "03": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 4,
+      "B_run_index": 5
+    },
+    "04": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 6,
+      "B_run_index": 7
+    },
+    "05": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 8,
+      "B_run_index": 9
+    },
+    "06": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 10,
+      "B_run_index": 11
+    },
+    "07": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 12,
+      "B_run_index": 13
+    },
+    "08": {
+      "attempt": 1,
+      "valid": true,
+      "A_run_index": 14,
+      "B_run_index": 15
+    }
+  }
+}

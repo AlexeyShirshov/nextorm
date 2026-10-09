@@ -1,0 +1,8 @@
+case,mean_A_ns,mean_B_ns,dbar,s_d,SE,R,L,U,U_gt_1.05,L_gt_1.05,alloc_median_A_bytes,alloc_median_B_bytes,alloc_growth_bytes,alloc_growth_limit_bytes,alloc_growth_flag,N_A,N_B
+NextORM.Benchmark.InMemoryBenchmarkAggregates.Nextorm_Count,2165614.001,2188827.211,0.010802,0.028402,0.010042,1.010861,0.963428,1.060629,True,False,342400.0,384000.0,41600.0,3424.0,True,14|15,13|14|15
+NextORM.Benchmark.InMemoryBenchmarkGroupBy.Nextorm_GroupByCount,59722836.782,59411644.130,-0.005262,0.029865,0.010559,0.994752,0.945731,1.046314,False,False,52488222.0,52531288.0,43066.0,524882.2,False,13|14|15,14|15
+NextORM.Benchmark.SqliteBenchmarkAny.Nextorm_Cached,1790225.093,1937220.397,0.078915,0.016736,0.005917,1.082112,1.051898,1.113194,True,True,560847.0,624849.0,64002.0,5608.5,True,13|14|15,13|14|15
+NextORM.Benchmark.SqliteBenchmarkCachedPlan.Prepared_ToList,887056.116,892417.270,0.005982,0.012443,0.004399,1.006000,0.985040,1.027405,False,False,77966.0,77966.0,0.0,1024.0,False,14|15,13|14|15
+NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_ToList,1715650.624,1846972.543,0.073736,0.019682,0.006959,1.076522,1.041260,1.112979,True,False,553983.0,597984.0,44001.0,5539.8,True,13|14|15,14|15
+NextORM.Benchmark.SqliteBenchmarkCachedPlan.Cached_PlanOnly_Param,513739.595,551213.515,0.070261,0.037724,0.013338,1.072788,1.006448,1.143501,True,False,476016.0,520016.0,44000.0,4760.2,True,13|14|15,14|15
+NextORM.Benchmark.SqliteBenchmarkWhere.Nextorm_Cached_ToListAsync,1836185.641,1979002.819,0.074782,0.021133,0.007472,1.077649,1.039794,1.116882,True,False,579064.0,623077.0,44013.0,5790.6,True,13|14|15,13|14|15

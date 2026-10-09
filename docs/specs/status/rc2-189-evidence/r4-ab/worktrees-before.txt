@@ -1,0 +1,114 @@
+worktree /home/alex/sources/nextorm
+HEAD b25cd227b61f3958376ae3ace4bb81cee1833166
+branch refs/heads/1.0.9-rc2
+
+worktree /home/alex/sources/nextorm-experiments/exp94/eval-wt/upstream-judge
+HEAD 37d309250e155adadc90eba32b0373b576572dae
+detached
+
+worktree /home/alex/sources/nextorm-experiments/exp94/eval-wt/upstream-own
+HEAD 37d309250e155adadc90eba32b0373b576572dae
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-1
+HEAD 3b1fcaf57113bab80af4442b9ab5b12addf798ff
+branch refs/heads/collection/1.0.9-b-5/group-1
+
+worktree /home/alex/sources/nextorm-worktrees/1.0.9-b-5/group-2
+HEAD ad9fefd607e8f607764d01b3feb9323107fee16f
+branch refs/heads/collection/1.0.9-b-5/group-2
+
+worktree /home/alex/sources/nextorm-worktrees/183-baseline
+HEAD ec35194942210cc95c5328dc9bdba1b3bb118f8b
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/b1-dml-output
+HEAD 671cee21c131d51b81dab71c33cf4e1a4dd61c06
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/b1-dynamic-schema
+HEAD 671cee21c131d51b81dab71c33cf4e1a4dd61c06
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/b1-pg-ranges
+HEAD 671cee21c131d51b81dab71c33cf4e1a4dd61c06
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/b1-range-pairs
+HEAD 8408735c129d1941f031dce3b8afb03d6d701a1d
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/b1-value-converters
+HEAD 671cee21c131d51b81dab71c33cf4e1a4dd61c06
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/clickhouse-json-type
+HEAD d52266573653bd493879726ecb4e40211a87605b
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/clickhouse-server-table-functions
+HEAD d52266573653bd493879726ecb4e40211a87605b
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/clickhouse-uint64-row-reader
+HEAD d52266573653bd493879726ecb4e40211a87605b
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/composable-raw-sql
+HEAD 06d8689711431b8aebb43a3afc4bd5e049e405fc
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/exp-a1-bare
+HEAD b6baa0ca88bd259d11532bdf74489128de5d601c
+branch refs/heads/exp/a1-bare
+
+worktree /home/alex/sources/nextorm-worktrees/exp-a2-skill
+HEAD b6baa0ca88bd259d11532bdf74489128de5d601c
+branch refs/heads/exp/a2-skill
+
+worktree /home/alex/sources/nextorm-worktrees/fulltext-ranking
+HEAD 06d8689711431b8aebb43a3afc4bd5e049e405fc
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/old-13
+HEAD 2b95d639458e44d2bef0e5779c35b54110f551ce
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/perf-baseline
+HEAD dd4482f1424ab8d6a5b364a6e2cda67cc60f8735
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/poc-projmapping
+HEAD 14dd77ebb2ba8a1d18fe789665222efc270de959
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/poc-sourcegen
+HEAD 14dd77ebb2ba8a1d18fe789665222efc270de959
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/provider-differences
+HEAD 433aa5197c8927abc80f2a60d0ea618a0f54a3bf
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/query-hints
+HEAD 06d8689711431b8aebb43a3afc4bd5e049e405fc
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/tvf-expansion
+HEAD 06d8689711431b8aebb43a3afc4bd5e049e405fc
+detached
+
+worktree /home/alex/sources/nextorm-worktrees/warm-path
+HEAD 433aa5197c8927abc80f2a60d0ea618a0f54a3bf
+detached
+
+worktree /tmp/opencode/146a/r2/after
+HEAD c7f939d683b300a2e39262f14fc9c13187f616a1
+detached
+prunable gitdir file points to non-existent location
+
+worktree /tmp/opencode/146a/r2/before
+HEAD c7f939d683b300a2e39262f14fc9c13187f616a1
+detached
+prunable gitdir file points to non-existent location
+

@@ -1,0 +1,605 @@
+diff --git a/docs/advanced/limitations.md b/docs/advanced/limitations.md
+index 5809bf64..17bb11a2 100644
+--- a/docs/advanced/limitations.md
++++ b/docs/advanced/limitations.md
+@@ -16,7 +16,7 @@ This page lists the capabilities that are **not** part of nextorm, with a one-li
+ | **Server-version-gated syntax** | Two capabilities depend on the server version and are gated by an **explicitly configured version** — nextorm never probes the live server. PostgreSQL's aggregate `FILTER (WHERE ...)` needs 9.4+; a dialect pinned below that rejects it with `NotSupportedException`, while an unset version assumes 9.4+ and enables it. MariaDB's `UPDATE ... RETURNING` is enabled only at an explicit 13.0+ ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)); unset or older rejects it with `NotSupportedException`, and insert/delete `RETURNING` and `ANY_VALUE` (13.2) are unchanged. PostgreSQL enforces one immutable server version per **concrete context type** for the process lifetime, because `FILTER` affects the cached `SELECT` SQL; a different version for the same concrete type throws `InvalidOperationException`, so a process that needs several PostgreSQL versions declares a distinct context subclass per version. MariaDB imposes **no such guard**: different versions may be used on the same context type because its gated operation (`UPDATE ... RETURNING`) is a mutation whose SQL is not plan-cached. See [PostgreSQL provider](../providers/postgres.md#server-version) and [MariaDB provider](../providers/mariadb.md#server-version). |
+ | **`Prepare()` / plan cache for DML** | Every mutation renders and executes one command per call — mutating builders are deliberately not prepared or plan-cached. Optimisation in nextorm targets read-only queries only (explicit `Prepare`, the implicit plan cache, benchmarks). |
+ | **Bulk-copy flags outside SQL Server** | `BulkInsertOptions.CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` map to `SqlBulkCopyOptions` on the SQL Server native `SqlBulkCopy` path. The PostgreSQL `COPY` path and the portable `INSERT ... VALUES` path (MySQL/MariaDB/SQLite/ClickHouse, and SQL Server when `Returning*` or `KeepIdentity` forces the portable path) reject a requested flag with `NotSupportedException` instead of ignoring it. ClickHouse `MaxDegreeOfParallelism`/`WithoutSession` are not exposed: `ClickHouse.Driver` 1.4.0's `ClickHouseBulkCopy` is obsolete and the non-obsolete `ClickHouseClient.InsertBinaryAsync` needs its own client, while the session is a connection-string setting (`UseSession`), not a per-write option. `UseInternalTransaction` is deliberately never set (nextorm opens no implicit transaction). See [Bulk insert](../guide/20-bulk-insert.md#sql-server-bulk-copy-options). |
+-| **Implicit navigation queries / joins from navigation properties** | A relationship is declared explicitly with `HasMany`/`HasOne` or [`RelationshipAttribute`](xref:NextORM.Core.RelationshipAttribute), and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) loads a child collection or reference in a single denormalized round trip — one-to-many, one-to-one and, through an explicit junction (`HasManyThrough`/`JoinOptions.ManyToMany`), many-to-many; LEFT by default, with an INNER overload and an explicit-key fallback (see [Relationships](relationships.md)). **Implicit navigation queries are supported for declared relationships**: a reference navigation is used as a scalar chain or a presence check and a collection navigation exposes exactly four direct terminals (`Any`/`Count`/`LongCount`/the `Count` property), expanded server-side as a correlated subquery or a `LEFT JOIN`; the collection navigation can be adapted with `AsEntityBuilder<T>` (see [Implicit navigation queries](../guide/29-implicit-navigation.md)). There is still no convention over foreign keys and no implicit join inference; adapter LINQ composition, a bare reference-adapter projection and predicate overloads fail closed. A multi-hop presence check (`a.Parent.Parent == null`) and the reference adapter (`Any`/`Count`/`LongCount` ≡ `nav != null`) are supported on every SQL provider; a collection reached through a reference is supported on every SQL provider except ClickHouse, which cannot correlate a subquery on a joined source and rejects the shape with `NotSupportedException`; `Count`/the `Count` property are a checked `int` (the 64-bit count is narrowed only at materialisation and throws `OverflowException` out of range), while `LongCount` is 64-bit end to end. The ClickHouse reference→collection gate is an **accepted provider limitation** (not a defect), and navigation over a temp-table/TVP source is **not available (fail-closed)**: a lazy temp-table read source is an untyped `TableAlias`, so a navigation member cannot be read over it — there is no base-table fallback and no exception; navigation declared before the temp-table boundary is still expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`. A table-valued parameter (TVP) has **no query root**: it is parameter-only, bound through `ProcedureParameter.Table<T>` on a raw command or stored procedure, and there is no `From<T>` TVP source. `JoinInto` rejects with `NotSupportedException` a composite relationship or junction key, a many-to-many relationship under `AsSingleQuery`, an undeclared relationship (unless the explicit-key overload is used), a derived (`As`) or joined projection source, a join kind other than `Inner`/`Left`, mismatched explicit key types and more than seven child collections; mixing `JoinInto` with any other join on the same builder is rejected (declare `JoinInto` on a plain entity source only), and a ClickHouse `j => j.WithStrictness(Any)` option on a `JoinInto` truncates the loaded collection to one child while the other modifiers (`All`, `Asof`, `Global`) pass through; relationship metadata fails closed on an unmapped foreign key, a keyless principal or an FK/principal-key type mismatch. Explicit joins remain the general surface: [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) (see [Joins](../guide/02-joins.md)). **Deduplication needs a mapped key**: parent dedup and child identity fall back to reference identity when the respective side declares no key, and on a SQL provider every row is a fresh instance, so repeated/cartesian rows then survive — give the parent and child a mapped key (`[Key]`/`Key()`/the `Id` convention) or use the explicit-key overload with a keyed child. `IRelationshipMetadata.Inverse` is resolved lazily on its **first read** and cached, so register both sides before reading it. |
++| **Implicit navigation queries / joins from navigation properties** | A relationship is declared explicitly with `HasMany`/`HasOne` or [`RelationshipAttribute`](xref:NextORM.Core.RelationshipAttribute), and [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) loads a child collection or reference in a single denormalized round trip — one-to-many, one-to-one and, through an explicit junction (`HasManyThrough`/`JoinOptions.ManyToMany`), many-to-many; LEFT by default, with an INNER overload and an explicit-key fallback (see [Relationships](relationships.md)). A one-to-one declaration **trusts** the foreign-key uniqueness — nextorm reads no schema or index metadata, so the unique constraint is the caller's responsibility — and a genuinely non-unique foreign key is caught only by the `JoinInto` runtime guard, and only for a dependent that exposes a non-null identity (a mapped key): more than one distinct identified child for a parent throws `InvalidOperationException`, a repeat of the same identity is tolerated, and a keyless dependent collapses to the first matched child without an exception. **Implicit navigation queries are supported for declared relationships**: a reference navigation is used as a scalar chain or a presence check and a collection navigation exposes exactly four direct terminals (`Any`/`Count`/`LongCount`/the `Count` property), expanded server-side as a correlated subquery or a `LEFT JOIN`; the collection navigation can be adapted with `AsEntityBuilder<T>` (see [Implicit navigation queries](../guide/29-implicit-navigation.md)). There is still no convention over foreign keys and no implicit join inference; adapter LINQ composition, a bare reference-adapter projection and predicate overloads fail closed. A multi-hop presence check (`a.Parent.Parent == null`) and the reference adapter (`Any`/`Count`/`LongCount` ≡ `nav != null`) are supported on every SQL provider; a collection reached through a reference is supported on every SQL provider except ClickHouse, which cannot correlate a subquery on a joined source and rejects the shape with `NotSupportedException`; `Count`/the `Count` property are a checked `int` (the 64-bit count is narrowed only at materialisation and throws `OverflowException` out of range), while `LongCount` is 64-bit end to end. The ClickHouse reference→collection gate is an **accepted provider limitation** (not a defect), and navigation over a temp-table/TVP source is **not available (fail-closed)**: a lazy temp-table read source is an untyped `TableAlias`, so a navigation member cannot be read over it — there is no base-table fallback and no exception; navigation declared before the temp-table boundary is still expanded into the materialising `CREATE TEMPORARY TABLE ... AS SELECT`. A table-valued parameter (TVP) has **no query root**: it is parameter-only, bound through `ProcedureParameter.Table<T>` on a raw command or stored procedure, and there is no `From<T>` TVP source. `JoinInto` rejects with `NotSupportedException` a composite relationship or junction key, a many-to-many relationship under `AsSingleQuery`, an undeclared relationship (unless the explicit-key overload is used), a derived (`As`) or joined projection source, a join kind other than `Inner`/`Left`, mismatched explicit key types and more than seven child collections; mixing `JoinInto` with any other join on the same builder is rejected (declare `JoinInto` on a plain entity source only), and a ClickHouse `j => j.WithStrictness(Any)` option on a `JoinInto` truncates the loaded collection to one child while the other modifiers (`All`, `Asof`, `Global`) pass through; relationship metadata fails closed on an unmapped foreign key, a keyless principal or an FK/principal-key type mismatch. Explicit joins remain the general surface: [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) (see [Joins](../guide/02-joins.md)). **Deduplication needs a mapped key**: parent dedup and child identity fall back to reference identity when the respective side declares no key, and on a SQL provider every row is a fresh instance, so repeated/cartesian rows then survive — give the parent and child a mapped key (`[Key]`/`Key()`/the `Id` convention) or use the explicit-key overload with a keyed child. `IRelationshipMetadata.Inverse` is resolved lazily on its **first read** and cached, so register both sides before reading it. |
+ | **Selecting a joined entity as a whole** | After a join the accumulated projection is positional (`Item1`..`Item8`, one item per source in join order) and only its columns can be selected (`Select(p => p.Item1.Id)`); a projection member that is the entity itself (`Select(p => p.Item1)`) is not a column and is rejected. Give the sides semantic names by projecting into a named type (`Select(p => new { Order = p.Item1.Id, Customer = p.Item2.RequiredString })`); see [Joins](../guide/02-joins.md#addressing-the-projection). |
+ | **Correlated `APPLY` / `LATERAL` source** | [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) accept a lambda that receives the left-hand row, so the applied source can reference the outer row on a lateral-capable provider (SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `... LATERAL`). Dialects without a lateral source (SQLite, ClickHouse) reject `APPLY` outright. The correlation lambda cannot reference a join projection — apply it to a single-entity source. |
+ | **[`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}})) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) on SQL providers** | [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}}))/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) throw `NotSupportedException`; the explicit [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) join surface covers the correlated equivalent (see [Joins](../guide/02-joins.md)). |
+diff --git a/docs/advanced/relationships.md b/docs/advanced/relationships.md
+index 1ff792f5..b925f07c 100644
+--- a/docs/advanced/relationships.md
++++ b/docs/advanced/relationships.md
+@@ -110,7 +110,7 @@ var orders = ctx.From<Order>()
+ 
+ ### One-to-one reference
+ 
+-A one-to-one relationship is declared with the principal key on the parent and the unique foreign key on the child; the foreign-key uniqueness is trusted, not validated by the core:
++A one-to-one relationship is declared with the principal key on the parent and the unique foreign key on the child. **Uniqueness of the foreign key is trusted, not validated**: nextorm reads no schema or index metadata, so backing the foreign key with a unique index/constraint on the dependent side is the caller's responsibility, and the declaration itself is accepted even when the data repeats. A genuinely non-unique foreign key is caught only at runtime, and only when the dependent entity exposes a non-null identity (a mapped key): `JoinInto` materialization throws `InvalidOperationException` when a parent matches more than one child with a distinct identity, a repeat of the same identity is tolerated, and a **keyless** dependent has no identity to compare — the first matched child is kept and no exception is thrown (see below):
+ 
+ ```csharp
+ ctx.From<Order>(b => b.HasOneToOne(o => o.Invoice, o => o.Id, i => i.OrderId));
+@@ -144,7 +144,7 @@ var orders = ctx.From<Order>()
+     .ToList();
+ ```
+ 
+-The LEFT/INNER semantics mirror the collection loaders: with `Left` (the default) a parent without a matching child keeps the reference `null`, and with `Inner` a parent without a matching child is excluded. A parent that matches **more than one distinct child** throws [`InvalidOperationException`](xref:System.InvalidOperationException) at materialization, while cartesian repeats of the **same** child caused by a neighbouring join are tolerated and collapse to the single occurrence. The navigation member must be settable — a read-only reference throws [`NotSupportedException`](xref:System.NotSupportedException).
++The LEFT/INNER semantics mirror the collection loaders: with `Left` (the default) a parent without a matching child keeps the reference `null`, and with `Inner` a parent without a matching child is excluded. A parent that matches **more than one child with a distinct non-null identity** (a mapped key) throws [`InvalidOperationException`](xref:System.InvalidOperationException) at materialization, while repeats of **one** identity — for example cartesian repeats of the same child caused by a neighbouring join — are tolerated and collapse to the single occurrence. A **keyless** dependent (no mapped key, so a null identity) has no identity to compare, so the first matched child is kept and no exception is thrown. The navigation member must be settable — a read-only reference throws [`NotSupportedException`](xref:System.NotSupportedException).
+ 
+ ### Many-to-many through a junction
+ 
+diff --git a/docs/ru/advanced/limitations.md b/docs/ru/advanced/limitations.md
+index b2b73eca..eaa20d94 100644
+--- a/docs/ru/advanced/limitations.md
++++ b/docs/ru/advanced/limitations.md
+@@ -16,7 +16,7 @@
+ | **Синтаксис, зависящий от версии сервера** | Две возможности зависят от версии сервера и гейтятся **явно настроенной версией** — nextorm никогда не опрашивает живой сервер. Агрегатный `FILTER (WHERE ...)` в PostgreSQL требует 9.4+; диалект, привязанный к более старой версии, отклоняет его через `NotSupportedException`, а незаданная версия предполагает 9.4+ и включает его. `UPDATE ... RETURNING` в MariaDB включается только при явной 13.0+ ([`SupportsUpdateReturning`](xref:NextORM.Core.ISqlDialect.SupportsUpdateReturning)); незаданная или более старая версия отклоняет его через `NotSupportedException`, а `RETURNING` у insert/delete и `ANY_VALUE` (13.2) не меняются. PostgreSQL накладывает одну неизменяемую версию сервера на **конкретный тип контекста** на всё время жизни процесса, потому что `FILTER` влияет на кэшируемый SQL `SELECT`; другая версия для того же конкретного типа бросает `InvalidOperationException`, поэтому процессу, которому нужно несколько версий PostgreSQL, следует объявить отдельный подкласс контекста на каждую. MariaDB **не накладывает такой защиты**: на одном типе контекста допустимы разные версии, так как её гейтируемая операция (`UPDATE ... RETURNING`) — мутация, чей SQL не кладётся в кэш планов. См. [провайдер PostgreSQL](../providers/postgres.md#версия-сервера) и [провайдер MariaDB](../providers/mariadb.md#версия-сервера). |
+ | **`Prepare()` / кэш планов для DML** | Каждая мутация рендерит и выполняет одну команду за вызов — билдеры мутаций намеренно не готовятся и не кладутся в кэш планов. Оптимизация в nextorm нацелена только на read-only запросы (явный `Prepare`, неявный кэш планов, бенчмарки). |
+ | **Bulk-copy флаги вне SQL Server** | `BulkInsertOptions.CheckConstraints`/`TableLock`/`KeepNulls`/`FireTriggers` отображаются в `SqlBulkCopyOptions` на нативном пути `SqlBulkCopy` в SQL Server. Путь `COPY` в PostgreSQL и портируемый `INSERT ... VALUES` (MySQL/MariaDB/SQLite/ClickHouse, а также SQL Server, когда `Returning*` или `KeepIdentity` переключают запись на портируемый путь) отклоняют запрошенный флаг через `NotSupportedException`, а не игнорируют его. ClickHouse `MaxDegreeOfParallelism`/`WithoutSession` не выставляются: `ClickHouseBulkCopy` в `ClickHouse.Driver` 1.4.0 устарел, а не-устаревший `ClickHouseClient.InsertBinaryAsync` требует собственного клиента; сессия — настройка строки подключения (`UseSession`), а не пер-записная опция. `UseInternalTransaction` намеренно не выставляется (nextorm не открывает неявную транзакцию). См. [Массовая вставка](../guide/20-bulk-insert.md#опции-bulk-copy-в-sql-server). |
+-| **Неявные навигационные запросы / соединения из навигационных свойств** | Связь объявляется явно через `HasMany`/`HasOne` или [`RelationshipAttribute`](xref:NextORM.Core.RelationshipAttribute), а [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) загружает дочернюю коллекцию или ссылку за один денормализованный round trip — one-to-many, one-to-one и, через явный junction (`HasManyThrough`/`JoinOptions.ManyToMany`), many-to-many; по умолчанию LEFT, есть перегрузка INNER и fallback с явными ключами (см. [Связи](relationships.md)). **Неявные навигационные запросы поддерживаются для объявленных связей**: ссылочная навигация используется как скалярная цепочка или проверка присутствия, а коллекционная предоставляет ровно четыре прямых терминала (`Any`/`Count`/`LongCount`/свойство `Count`), разворачиваемых на сервере в коррелированный подзапрос или `LEFT JOIN`; коллекционную навигацию можно адаптировать через `AsEntityBuilder<T>` (см. [Неявные навигационные запросы](../guide/29-implicit-navigation.md)). Конвенция по внешним ключам и неявный вывод соединений по-прежнему отсутствуют; LINQ-композиция после адаптера, проекция самого ссылочного адаптера и перегрузки с предикатом падают закрыто. Многошаговая проверка присутствия (`a.Parent.Parent == null`) и ссылочный адаптер (`Any`/`Count`/`LongCount` ≡ `nav != null`) поддержаны на всех SQL-провайдерах; коллекция, достигнутая через ссылку, поддержана на всех SQL-провайдерах, кроме ClickHouse, который не умеет коррелировать подзапрос по присоединённому источнику и отклоняет форму через `NotSupportedException`; `Count`/свойство `Count` — проверяемый `int` (64-битный счёт сужается только при материализации и бросает `OverflowException` вне диапазона), тогда как `LongCount` — 64-битный сквозным. Гейт ClickHouse reference→collection — **принятое ограничение провайдера** (не дефект), а навигация по temp-table/TVP-источнику **недоступна (fail-closed)**: читающий источник ленивой временной таблицы — нетипизированный `TableAlias`, поэтому член навигации по нему прочитать нельзя — fallback на базовую таблицу отсутствует, и исключение не бросается; навигация, объявленная до границы временной таблицы, по-прежнему разворачивается в материализующий `CREATE TEMPORARY TABLE ... AS SELECT`. У табличного параметра (TVP) **нет query-root**: он только параметр, привязываемый через `ProcedureParameter.Table<T>` в сырой команде или хранимой процедуре, а `From<T>`-источника для TVP не существует. `JoinInto` отклоняет с `NotSupportedException` составной ключ связи или junction, связь many-to-many под `AsSingleQuery`, необъявленную связь (кроме перегрузки с явными ключами), производный (`As`) или соединённый источник проекции, вид соединения, отличный от `Inner`/`Left`, несовпадающие типы явных ключей и более семи дочерних коллекций; смешивание `JoinInto` с любым другим соединением на одном билдере отклоняется (объявляйте `JoinInto` только на простом источнике сущности), а ClickHouse-опция `j => j.WithStrictness(Any)` на `JoinInto` усекает загруженную коллекцию до одного ребёнка, тогда как остальные модификаторы (`All`, `Asof`, `Global`) проходят без изменений; метаданные связи «падают закрыто» при неотображённом внешнем ключе, principal-типе без ключа или несовпадении типов FK/principal-ключа. Явные соединения остаются общей поверхностью: [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) (см. [Соединения](../guide/02-joins.md)). **Дедупликация требует отображённого ключа**: дедупликация родителей и идентичность ребёнка возвращаются к ссылочной идентичности, когда у соответствующей стороны не объявлен ключ, а на SQL-провайдере каждая строка — новый экземпляр, поэтому повторы/декартовы строки сохраняются — задайте родителю и ребёнку отображённый ключ (`[Key]`/`Key()`/соглашение `Id`) или используйте перегрузку с явными ключами и ключевым ребёнком. `IRelationshipMetadata.Inverse` разрешается лениво при **первом чтении** и кэшируется, поэтому регистрируйте обе стороны до его чтения. |
++| **Неявные навигационные запросы / соединения из навигационных свойств** | Связь объявляется явно через `HasMany`/`HasOne` или [`RelationshipAttribute`](xref:NextORM.Core.RelationshipAttribute), а [`JoinInto`](xref:NextORM.Core.EntityBuilder`1) загружает дочернюю коллекцию или ссылку за один денормализованный round trip — one-to-many, one-to-one и, через явный junction (`HasManyThrough`/`JoinOptions.ManyToMany`), many-to-many; по умолчанию LEFT, есть перегрузка INNER и fallback с явными ключами (см. [Связи](relationships.md)). Объявление one-to-one **доверяет** уникальности внешнего ключа — nextorm не читает метаданные схемы и индексов, поэтому уникальное ограничение — ответственность вызывающего, — а действительно неуникальный внешний ключ ловится только рантайм-защитой `JoinInto`, и только для зависимого, предоставляющего ненулевую идентичность (отображённый ключ): более одного ребёнка с различной идентичностью у родителя бросает `InvalidOperationException`, повтор той же идентичности допускается, а безключевой зависимый сворачивается к первому совпавшему ребёнку без исключения. **Неявные навигационные запросы поддерживаются для объявленных связей**: ссылочная навигация используется как скалярная цепочка или проверка присутствия, а коллекционная предоставляет ровно четыре прямых терминала (`Any`/`Count`/`LongCount`/свойство `Count`), разворачиваемых на сервере в коррелированный подзапрос или `LEFT JOIN`; коллекционную навигацию можно адаптировать через `AsEntityBuilder<T>` (см. [Неявные навигационные запросы](../guide/29-implicit-navigation.md)). Конвенция по внешним ключам и неявный вывод соединений по-прежнему отсутствуют; LINQ-композиция после адаптера, проекция самого ссылочного адаптера и перегрузки с предикатом падают закрыто. Многошаговая проверка присутствия (`a.Parent.Parent == null`) и ссылочный адаптер (`Any`/`Count`/`LongCount` ≡ `nav != null`) поддержаны на всех SQL-провайдерах; коллекция, достигнутая через ссылку, поддержана на всех SQL-провайдерах, кроме ClickHouse, который не умеет коррелировать подзапрос по присоединённому источнику и отклоняет форму через `NotSupportedException`; `Count`/свойство `Count` — проверяемый `int` (64-битный счёт сужается только при материализации и бросает `OverflowException` вне диапазона), тогда как `LongCount` — 64-битный сквозным. Гейт ClickHouse reference→collection — **принятое ограничение провайдера** (не дефект), а навигация по temp-table/TVP-источнику **недоступна (fail-closed)**: читающий источник ленивой временной таблицы — нетипизированный `TableAlias`, поэтому член навигации по нему прочитать нельзя — fallback на базовую таблицу отсутствует, и исключение не бросается; навигация, объявленная до границы временной таблицы, по-прежнему разворачивается в материализующий `CREATE TEMPORARY TABLE ... AS SELECT`. У табличного параметра (TVP) **нет query-root**: он только параметр, привязываемый через `ProcedureParameter.Table<T>` в сырой команде или хранимой процедуре, а `From<T>`-источника для TVP не существует. `JoinInto` отклоняет с `NotSupportedException` составной ключ связи или junction, связь many-to-many под `AsSingleQuery`, необъявленную связь (кроме перегрузки с явными ключами), производный (`As`) или соединённый источник проекции, вид соединения, отличный от `Inner`/`Left`, несовпадающие типы явных ключей и более семи дочерних коллекций; смешивание `JoinInto` с любым другим соединением на одном билдере отклоняется (объявляйте `JoinInto` только на простом источнике сущности), а ClickHouse-опция `j => j.WithStrictness(Any)` на `JoinInto` усекает загруженную коллекцию до одного ребёнка, тогда как остальные модификаторы (`All`, `Asof`, `Global`) проходят без изменений; метаданные связи «падают закрыто» при неотображённом внешнем ключе, principal-типе без ключа или несовпадении типов FK/principal-ключа. Явные соединения остаются общей поверхностью: [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}},System.Action{NextORM.Core.JoinOptions}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) (см. [Соединения](../guide/02-joins.md)). **Дедупликация требует отображённого ключа**: дедупликация родителей и идентичность ребёнка возвращаются к ссылочной идентичности, когда у соответствующей стороны не объявлен ключ, а на SQL-провайдере каждая строка — новый экземпляр, поэтому повторы/декартовы строки сохраняются — задайте родителю и ребёнку отображённый ключ (`[Key]`/`Key()`/соглашение `Id`) или используйте перегрузку с явными ключами и ключевым ребёнком. `IRelationshipMetadata.Inverse` разрешается лениво при **первом чтении** и кэшируется, поэтому регистрируйте обе стороны до его чтения. |
+ | **Выбор соединённой сущности целиком** | После соединения накопленная проекция позиционна (`Item1`..`Item8`, по одному элементу на источник в порядке соединений), и выбирать можно только её колонки (`Select(p => p.Item1.Id)`); член проекции, являющийся сущностью целиком (`Select(p => p.Item1)`), колонкой не является и отклоняется. Придайте сторонам осмысленные имена, спроецировав в именованный тип (`Select(p => new { Order = p.Item1.Id, Customer = p.Item2.RequiredString })`); см. [Соединения](../guide/02-joins.md#адресация-проекции). |
+ | **Коррелированный источник `APPLY` / `LATERAL`** | [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) принимают лямбду, получающую строку левой стороны, поэтому применяемый источник может ссылаться на внешнюю строку у провайдера с lateral-источником (SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `... LATERAL`). Диалекты без lateral-источника (SQLite, ClickHouse) отклоняют `APPLY`. Лямбда корреляции не может ссылаться на проекцию соединения — применяйте её к источнику из одной сущности. |
+ | **[`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}})) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) на SQL-провайдерах** | [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}}))/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) бросают `NotSupportedException`; явная поверхность соединений [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0},System.Action{NextORM.Core.JoinOptions})) покрывает коррелированный эквивалент (см. [Соединения](../guide/02-joins.md)). |
+diff --git a/docs/ru/advanced/relationships.md b/docs/ru/advanced/relationships.md
+index 298c1ab0..55542519 100644
+--- a/docs/ru/advanced/relationships.md
++++ b/docs/ru/advanced/relationships.md
+@@ -110,7 +110,7 @@ var orders = ctx.From<Order>()
+ 
+ ### One-to-one (ссылка)
+ 
+-Связь one-to-one объявляется с principal-ключом на родителе и уникальным внешним ключом на ребёнке; уникальность внешнего ключа доверяется, ядром не проверяется:
++Связь one-to-one объявляется с principal-ключом на родителе и уникальным внешним ключом на ребёнке. **Уникальность внешнего ключа доверяется, но не валидируется**: nextorm не читает метаданные схемы и индексов, поэтому обеспечение уникального индекса/ограничения на внешний ключ на зависимой стороне — ответственность вызывающего, а само объявление принимается даже когда данные повторяются. Действительно неуникальный внешний ключ ловится только в рантайме, и только когда зависимая сущность предоставляет ненулевую идентичность (отображённый ключ): материализация `JoinInto` бросает `InvalidOperationException`, когда родитель совпадает с более чем одним ребёнком с различной идентичностью, повтор той же идентичности допускается, а **безключевой** зависимый не имеет идентичности для сравнения — остаётся первый совпавший ребёнок, и исключение не бросается (см. ниже):
+ 
+ ```csharp
+ ctx.From<Order>(b => b.HasOneToOne(o => o.Invoice, o => o.Id, i => i.OrderId));
+@@ -144,7 +144,7 @@ var orders = ctx.From<Order>()
+     .ToList();
+ ```
+ 
+-Семантика LEFT/INNER повторяет загрузчики коллекций: при `Left` (по умолчанию) родитель без совпавшего ребёнка сохраняет ссылку `null`, а при `Inner` родитель без совпавшего ребёнка исключается. Родитель, совпавший с **более чем одним различным ребёнком**, бросает [`InvalidOperationException`](xref:System.InvalidOperationException) при материализации, тогда как декартовы повторы **одного и того же** ребёнка, вызванные соседним соединением, допускаются и схлопываются в единственное вхождение. Навигационный член должен быть доступен для записи — read-only ссылка бросает [`NotSupportedException`](xref:System.NotSupportedException).
++Семантика LEFT/INNER повторяет загрузчики коллекций: при `Left` (по умолчанию) родитель без совпавшего ребёнка сохраняет ссылку `null`, а при `Inner` родитель без совпавшего ребёнка исключается. Родитель, совпавший с **более чем одним ребёнком с различной ненулевой идентичностью** (отображённый ключ), бросает [`InvalidOperationException`](xref:System.InvalidOperationException) при материализации, тогда как повторы **одной** идентичности — например декартовы повторы одного и того же ребёнка, вызванные соседним соединением, — допускаются и схлопываются в единственное вхождение. **Безключевой** зависимый (нет отображённого ключа, значит идентичность null) не имеет идентичности для сравнения, поэтому остаётся первый совпавший ребёнок, и исключение не бросается. Навигационный член должен быть доступен для записи — read-only ссылка бросает [`NotSupportedException`](xref:System.NotSupportedException).
+ 
+ ### Many-to-many через junction
+ 
+diff --git a/docs/specs/design/implicit-navigation-queries.md b/docs/specs/design/implicit-navigation-queries.md
+index 889d0804..994cd08e 100644
+--- a/docs/specs/design/implicit-navigation-queries.md
++++ b/docs/specs/design/implicit-navigation-queries.md
+@@ -26,7 +26,7 @@
+ 
+ ## 2. Вне области (Out of scope)
+ 
+-Полная прямая композиция `Enumerable`/`Queryable` на навигации (`Where`/`OrderBy`/`Select`/`Skip`/`Take`/`Distinct`/`GroupBy`/joins/set-операции и т.д.). Дополнительные прямые терминалы `First`/`Single`/`Last`/`Contains` и т.п., не входящие в прямой набор. SQL `SelectMany`, финальная материализация вложенной коллекции/группы, автоматическая загрузка/заполнение графа, составные ключи связей/junction, конвенции именования, сплошное расширение существующих возможностей движка/провайдеров. Никакого подразумеваемого расширения паритета EF-моста. Полная матрица LINQ, исследованная ранее, была **явно отозвана** и заменена дизайном адаптера.
++Полная прямая композиция `Enumerable`/`Queryable` на навигации (`Where`/`OrderBy`/`Select`/`Skip`/`Take`/`Distinct`/`GroupBy`/joins/set-операции и т.д.). Дополнительные прямые терминалы `First`/`Single`/`Last`/`Contains` и т.п., не входящие в прямой набор. SQL `SelectMany`, финальная материализация вложенной коллекции/группы, автоматическая загрузка/заполнение графа, составные ключи связей/junction, конвенции именования, сплошное расширение существующих возможностей движка/провайдеров. Никакого подразумеваемого расширения паритета EF-моста. Полная матрица LINQ, исследованная ранее, была **явно отозвана** и заменена дизайном адаптера. Уникальность FK для `OneToOne` не валидируется: объявление **доверяется** (схема/уникальный индекс не читаются, ограничение — ответственность вызывающего), а backstop — рантайм-`JoinInto` (более одного ребёнка с различной ненулевой идентичностью → `InvalidOperationException`; повтор той же идентичности допускается, а безключевой зависимый сворачивается к первому ребёнку без исключения). Тот же рантайм-backstop проверен **и на ClickHouse** контейнерным прогоном (sync+async): гейт reference→collection (`SupportsReferenceToCollectionNavigation`) к one-to-one форме `JoinInto` **не относится**, а SQL-генерация доказательством не считается; см. issue [#170](https://github.com/AlexeyShirshov/nextorm/issues/170).
+ 
+ ## 3. Null-контракт
+ 
+diff --git a/docs/specs/roadmap/todo_navigation_properties.md b/docs/specs/roadmap/todo_navigation_properties.md
+index e9c2f93e..7a83f31c 100644
+--- a/docs/specs/roadmap/todo_navigation_properties.md
++++ b/docs/specs/roadmap/todo_navigation_properties.md
+@@ -321,7 +321,7 @@ left join Child as t2 on <predicate>
+ ## 10. Открытые пункты (решаются при реализации, модель их допускает)
+ 
+ - **Решено** (был открытый пункт): точная форма junction-дескриптора M2M зафиксирована при реализации M:N (см. §3.1); отложены только составные junction-селекторы и M:N под `AsSingleQuery`.
+-- Валидация уникальности FK для `OneToOne` (по умолчанию — доверие объявлению).
++- **Решено** (D170, [#170](https://github.com/AlexeyShirshov/nextorm/issues/170), milestone `1.0.9-rc2`; верифицировано 2026-10-08): валидации уникальности FK для `OneToOne` в ядре нет — схема/уникальный индекс не читаются, объявление **доверяется** (уникальное ограничение — ответственность вызывающего), а действительно неуникальный FK ловится рантайм-backstop `JoinInto` (более одного ребёнка с различной ненулевой идентичностью → `InvalidOperationException`; повтор той же идентичности и безключевой зависимый — без исключения, остаётся первый ребёнок); контракт зафиксирован в XML-doc `HasOneToOne` и публичных доках EN+RU. Рантайм-backstop одной и той же one-to-one формы проверен контейнерным прогоном ClickHouse (sync+async, `InvalidOperationException`) — гейт reference→collection к форме `JoinInto` не относится, SQL-генерация доказательством не считается. Регистр дизайна: `docs/specs/design/implicit-navigation-queries.md`.
+ - Поведение `JoinInto` над `As`/derived-источником — отклонить сейчас, пересмотреть при спросе.
+ 
+ ## Deferred / follow-ups
+diff --git a/src/nextorm.core/Builders/EntityBuilder.cs b/src/nextorm.core/Builders/EntityBuilder.cs
+index a7b2fc78..fbf88913 100644
+--- a/src/nextorm.core/Builders/EntityBuilder.cs
++++ b/src/nextorm.core/Builders/EntityBuilder.cs
+@@ -682,8 +682,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
+     /// The relationship must be declared as one-to-one (<c>HasOneToOne</c>) so the principal/foreign keys
+     /// are known. At most one child is assigned per parent; a <c>LEFT</c> join leaves the reference
+     /// <see langword="null"/> when no child matches, while an <c>INNER</c> join excludes the parent. A
+-    /// parent that matches more than one distinct child throws <see cref="InvalidOperationException"/> at
+-    /// materialization. Cartesian repeats of the same child caused by a neighbouring join are tolerated.
++    /// parent that matches more than one child with a <b>distinct non-null identity</b> (a mapped key)
++    /// throws <see cref="InvalidOperationException"/> at materialization. A repeated identity (for example
++    /// a Cartesian row caused by a neighbouring join) is tolerated, and a <b>keyless</b> dependent (no
++    /// mapped key, so a null identity) keeps the first matched child without throwing.
+     /// </para>
+     /// </summary>
+     /// <typeparam name="TChild">The child entity type.</typeparam>
+diff --git a/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs b/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs
+index 12a483a7..9be08370 100644
+--- a/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs
++++ b/src/nextorm.core/Builders/Joins/JoinIntoSpec.cs
+@@ -429,7 +429,8 @@ internal sealed class JoinIntoSpec<TEntity, TChild, TKey> : IJoinIntoSpec<TEntit
+ /// <see cref="IJoinIntoSpec{TEntity}"/> for a one-to-one navigation: the parent holds a single reference
+ /// (<c>TEntity.Profile</c>) and the join is an <c>INNER</c>/<c>LEFT</c> join whose child side carries the
+ /// foreign key. Stitching assigns at most one child per parent and rejects a parent that matches more
+-/// than one distinct child.
++/// than one child with a distinct non-null identity (a mapped key); a repeated identity and a keyless
++/// (null-identity) dependent collapse to the first matched child without an error.
+ /// </summary>
+ /// <typeparam name="TEntity">The parent entity type the builder projects.</typeparam>
+ /// <typeparam name="TChild">The child entity type.</typeparam>
+diff --git a/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs b/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs
+index 4f41caa8..dc38cbc7 100644
+--- a/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs
++++ b/src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs
+@@ -622,9 +622,17 @@ public class EntityMetadataBuilder<T>
+ 
+     /// <summary>
+     /// Declares a one-to-one relationship: a reference navigation on this (principal) entity, the
+-    /// principal key on this entity and the unique foreign key on the related (dependent) type. The
+-    /// uniqueness of the foreign key is trusted; it is not validated by the core. This is the principal
+-    /// counterpart of the <c>HasOne</c> overload, whose foreign key lives on the declaring type.
++    /// principal key on this entity and the unique foreign key on the related (dependent) type.
++    /// Uniqueness of the foreign key is <b>trusted, not validated</b>: backing the foreign key with a
++    /// unique index/constraint on the dependent side is the caller's responsibility, and no schema or
++    /// index metadata is read. A non-unique foreign key is therefore accepted at declaration and
++    /// metadata-build time; it is caught only at runtime, and only when the dependent entity exposes a
++    /// non-null identity (a mapped key): <c>JoinInto</c> materialization throws
++    /// <see cref="InvalidOperationException"/> when a parent matches more than one child with a
++    /// distinct identity, while a repeated identity (for example a Cartesian row) is tolerated. A
++    /// keyless dependent has no identity to compare, so the first matched child is kept and no
++    /// exception is thrown. This is the principal counterpart of the <c>HasOne</c> overload, whose
++    /// foreign key lives on the declaring type.
+     /// </summary>
+     /// <typeparam name="TChild">The related (dependent) entity type.</typeparam>
+     /// <typeparam name="TKey">The property type shared by the principal key and the foreign key.</typeparam>
+diff --git a/tests/nextorm.core.tests/JoinIntoOneToOneTests.cs b/tests/nextorm.core.tests/JoinIntoOneToOneTests.cs
+index 5ecdb29d..29e9e118 100644
+--- a/tests/nextorm.core.tests/JoinIntoOneToOneTests.cs
++++ b/tests/nextorm.core.tests/JoinIntoOneToOneTests.cs
+@@ -78,6 +78,20 @@ public class JoinIntoOneToOneTests
+             .WithMessage("*more than one distinct*");
+     }
+ 
++    [Fact]
++    public async Task MoreThanOneDistinctChild_ToListAsync_ShouldThrowAtMaterialization()
++    {
++        using var ctx = CreateContext();
++
++        Func<Task> act = () => ctx.From<OneToOneJoinParent>()
++            .Where(p => p.Id == 3)
++            .JoinInto(ctx.From<OneToOneJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToListAsync();
++
++        await act.Should().ThrowAsync<InvalidOperationException>()
++            .WithMessage("*more than one distinct*");
++    }
++
+     [Fact]
+     public void CartesianRepeatOfTheSameChild_ShouldNotThrowAndShouldAssignOnce()
+     {
+@@ -109,6 +123,211 @@ public class JoinIntoOneToOneTests
+         parents[0].Primary!.Id.Should().Be(10);
+         parents[1].Primary.Should().BeNull();
+     }
++
++    [Fact]
++    public void KeylessChild_WithMoreThanOneChild_ShouldNotThrowAndKeepTheFirstChild()
++    {
++        // The backstop needs a non-null child identity: a keyless dependent has no mapped key, so the
++        // repeated foreign key is not detected, the first matched child is kept and no exception is
++        // thrown. This pins the current behavior (R170-03 keyless negative), it does not strengthen it.
++        using var ctx = CreateKeylessContext();
++
++        var parents = ctx.From<KeylessOneToOneJoinParent>()
++            .Where(p => p.Id == 1)
++            .JoinInto(ctx.From<KeylessOneToOneJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToList();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary.Should().NotBeNull("a keyless child has no identity, so the duplicate is not an error");
++        parents[0].Primary!.Name.Should().Be("a", "the first matched child is kept and no exception is thrown");
++    }
++
++    [Fact]
++    public async Task KeylessChild_ToListAsync_ShouldNotThrowAndKeepTheFirstChild()
++    {
++        using var ctx = CreateKeylessContext();
++
++        var parents = await ctx.From<KeylessOneToOneJoinParent>()
++            .Where(p => p.Id == 1)
++            .JoinInto(ctx.From<KeylessOneToOneJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToListAsync();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary!.Name.Should().Be("a", "the async terminal keeps the same keyless-collapse behavior");
++    }
++
++    [Fact]
++    public void GuidKeyedChildren_WithDistinctKeys_ShouldThrowAtMaterialization()
++    {
++        // The supported value-key form exercises the identity selector over a Guid mapped key: two
++        // distinct identities for one parent are still reported.
++        using var ctx = CreateGuidKeyContext();
++
++        Action act = () => ctx.From<GuidKeyJoinParent>()
++            .Where(p => p.Id == 1)
++            .JoinInto(ctx.From<GuidKeyJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToList();
++
++        act.Should().Throw<InvalidOperationException>()
++            .WithMessage("*more than one distinct*");
++    }
++
++    [Fact]
++    public void StringKeyedChildren_WithDistinctKeys_ShouldThrowAtMaterialization()
++    {
++        // The supported reference-key form exercises the identity selector over a string mapped key.
++        using var ctx = CreateStringKeyContext();
++
++        Action act = () => ctx.From<StringKeyJoinParent>()
++            .Where(p => p.Id == 1)
++            .JoinInto(ctx.From<StringKeyJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToList();
++
++        act.Should().Throw<InvalidOperationException>()
++            .WithMessage("*more than one distinct*");
++    }
++
++    private static InMemoryDataContext CreateKeylessContext()
++    {
++        var ctx = new InMemoryDataContext();
++        ctx.From<KeylessOneToOneJoinChild>().WithData([
++            new KeylessOneToOneJoinChild { ParentId = 1, Name = "a" },
++            new KeylessOneToOneJoinChild { ParentId = 1, Name = "b" },
++            new KeylessOneToOneJoinChild { ParentId = 2, Name = "c" },
++        ]);
++        ctx.From<KeylessOneToOneJoinParent>(b => b
++                .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId))
++            .WithData([new KeylessOneToOneJoinParent { Id = 1, Name = "p1" }]);
++        return ctx;
++    }
++
++    private static InMemoryDataContext CreateGuidKeyContext()
++    {
++        var ctx = new InMemoryDataContext();
++        ctx.From<GuidKeyJoinChild>().WithData([
++            new GuidKeyJoinChild { Id = Guid.NewGuid(), ParentId = 1, Name = "a" },
++            new GuidKeyJoinChild { Id = Guid.NewGuid(), ParentId = 1, Name = "b" },
++            new GuidKeyJoinChild { Id = Guid.NewGuid(), ParentId = 2, Name = "only" },
++        ]);
++        ctx.From<GuidKeyJoinParent>(b => b
++                .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId))
++            .WithData([
++                new GuidKeyJoinParent { Id = 1 },
++                new GuidKeyJoinParent { Id = 2 },
++                new GuidKeyJoinParent { Id = 3 },
++            ]);
++        return ctx;
++    }
++
++    private static InMemoryDataContext CreateStringKeyContext()
++    {
++        var ctx = new InMemoryDataContext();
++        ctx.From<StringKeyJoinChild>().WithData([
++            new StringKeyJoinChild { Id = "a", ParentId = 1, Name = "a" },
++            new StringKeyJoinChild { Id = "b", ParentId = 1, Name = "b" },
++            new StringKeyJoinChild { Id = "only", ParentId = 2, Name = "only" },
++        ]);
++        ctx.From<StringKeyJoinParent>(b => b
++                .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId))
++            .WithData([
++                new StringKeyJoinParent { Id = 1 },
++                new StringKeyJoinParent { Id = 2 },
++                new StringKeyJoinParent { Id = 3 },
++            ]);
++        return ctx;
++    }
++
++    [Fact]
++    public void GuidKeyedChild_WithSingleChild_ShouldAssignItWithoutThrowing()
++    {
++        // The positive counterpart of the Guid negative: one matching identity assigns the reference.
++        using var ctx = CreateGuidKeyContext();
++
++        var parents = ctx.From<GuidKeyJoinParent>()
++            .Where(p => p.Id == 2)
++            .JoinInto(ctx.From<GuidKeyJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToList();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary.Should().NotBeNull("a single matching Guid-keyed child is assigned");
++        parents[0].Primary!.Name.Should().Be("only");
++    }
++
++    [Fact]
++    public async Task GuidKeyedChild_WithSingleChild_ToListAsync_ShouldAssignItWithoutThrowing()
++    {
++        using var ctx = CreateGuidKeyContext();
++
++        var parents = await ctx.From<GuidKeyJoinParent>()
++            .Where(p => p.Id == 2)
++            .JoinInto(ctx.From<GuidKeyJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToListAsync();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary.Should().NotBeNull("the async terminal assigns the single matching Guid-keyed child");
++        parents[0].Primary!.Name.Should().Be("only");
++    }
++
++    [Fact]
++    public void StringKeyedChild_WithSingleChild_ShouldAssignItWithoutThrowing()
++    {
++        // The positive counterpart of the string negative: one matching identity assigns the reference.
++        using var ctx = CreateStringKeyContext();
++
++        var parents = ctx.From<StringKeyJoinParent>()
++            .Where(p => p.Id == 2)
++            .JoinInto(ctx.From<StringKeyJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToList();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary.Should().NotBeNull("a single matching string-keyed child is assigned");
++        parents[0].Primary!.Name.Should().Be("only");
++    }
++
++    [Fact]
++    public async Task StringKeyedChild_WithSingleChild_ToListAsync_ShouldAssignItWithoutThrowing()
++    {
++        using var ctx = CreateStringKeyContext();
++
++        var parents = await ctx.From<StringKeyJoinParent>()
++            .Where(p => p.Id == 2)
++            .JoinInto(ctx.From<StringKeyJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToListAsync();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary.Should().NotBeNull("the async terminal assigns the single matching string-keyed child");
++        parents[0].Primary!.Name.Should().Be("only");
++    }
++
++    [Fact]
++    public void AbsentChild_ShouldLeaveTheReferenceNullWithoutThrowing()
++    {
++        // R170-03 absent-child/null-FK negative: a parent with no matching child keeps the LEFT one-to-one
++        // reference null and materializes without an exception.
++        using var ctx = CreateContext();
++
++        var parents = ctx.From<OneToOneJoinParent>()
++            .Where(p => p.Id == 2)
++            .JoinInto(ctx.From<OneToOneJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToList();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary.Should().BeNull("no child matches the parent, so the LEFT one-to-one reference stays null");
++    }
++
++    [Fact]
++    public async Task AbsentChild_ToListAsync_ShouldLeaveTheReferenceNullWithoutThrowing()
++    {
++        using var ctx = CreateContext();
++
++        var parents = await ctx.From<OneToOneJoinParent>()
++            .Where(p => p.Id == 2)
++            .JoinInto(ctx.From<OneToOneJoinChild>(), (p, c) => p.Id == c.ParentId, p => p.Primary)
++            .ToListAsync();
++
++        parents.Should().ContainSingle();
++        parents[0].Primary.Should().BeNull("the async terminal keeps the absent-child reference null without throwing");
++    }
+ }
+ 
+ public sealed class OneToOneJoinParent
+@@ -132,3 +351,42 @@ public sealed class OneToOneJoinNote
+     public int ParentId { get; set; }
+     public string? Text { get; set; }
+ }
++
++public sealed class KeylessOneToOneJoinParent
++{
++    public int Id { get; set; }
++    public string? Name { get; set; }
++    public KeylessOneToOneJoinChild? Primary { get; set; }
++}
++
++public sealed class KeylessOneToOneJoinChild
++{
++    public int ParentId { get; set; }
++    public string? Name { get; set; }
++}
++
++public sealed class GuidKeyJoinParent
++{
++    public int Id { get; set; }
++    public GuidKeyJoinChild? Primary { get; set; }
++}
++
++public sealed class GuidKeyJoinChild
++{
++    public Guid Id { get; set; }
++    public int ParentId { get; set; }
++    public string? Name { get; set; }
++}
++
++public sealed class StringKeyJoinParent
++{
++    public int Id { get; set; }
++    public StringKeyJoinChild? Primary { get; set; }
++}
++
++public sealed class StringKeyJoinChild
++{
++    public string Id { get; set; } = "";
++    public int ParentId { get; set; }
++    public string? Name { get; set; }
++}
+diff --git a/tests/nextorm.core.tests/RelationshipMetadataTests.cs b/tests/nextorm.core.tests/RelationshipMetadataTests.cs
+index 3df13c09..d4c7c645 100644
+--- a/tests/nextorm.core.tests/RelationshipMetadataTests.cs
++++ b/tests/nextorm.core.tests/RelationshipMetadataTests.cs
+@@ -182,6 +182,26 @@ public class RelationshipMetadataTests
+         public int OwnerId { get; set; }
+     }
+ 
++    public sealed class SharedFkParent
++    {
++        public int Id { get; set; }
++        public ICollection<SharedFkChild> Children { get; set; } = new List<SharedFkChild>();
++        public SharedFkChild? Primary { get; set; }
++    }
++
++    public sealed class SharedFkChild
++    {
++        public int Id { get; set; }
++        public int ParentId { get; set; }
++    }
++
++    public sealed class DualRefParent
++    {
++        public int Id { get; set; }
++        public SharedFkChild? Primary { get; set; }
++        public SharedFkChild? Secondary { get; set; }
++    }
++
+     public sealed class M2MParent
+     {
+         public int Id { get; set; }
+@@ -278,6 +298,63 @@ public class RelationshipMetadataTests
+         metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(ProfileOwnerA.Profile));
+     }
+ 
++    [Fact]
++    public void HasOneToOne_WithRepeatingSharedForeignKey_ShouldTrustDeclarationAndNotValidateUniqueness()
++    {
++        // The dependent FK is neither unique nor backed by any schema/index metadata, and the same FK is
++        // also declared by a collection navigation. The core accepts both declarations: it does not
++        // validate FK uniqueness and adds no conflict heuristic; the JoinInto runtime guard is the
++        // backstop when a parent really matches more than one distinct child.
++        var metadata = new EntityMetadataBuilder<SharedFkParent>()
++            .HasMany(p => p.Children, c => c.ParentId)
++            .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId)
++            .Build();
++
++        metadata.Relationships.Should().HaveCount(2);
++        metadata.Relationships.Select(r => r.Kind).Should()
++            .BeEquivalentTo(new[] { RelationshipKind.OneToMany, RelationshipKind.OneToOne });
++
++        var oneToMany = metadata.Relationships.Single(r => r.Kind == RelationshipKind.OneToMany);
++        var oneToOne = metadata.Relationships.Single(r => r.Kind == RelationshipKind.OneToOne);
++
++        // The two declarations are independent: each keeps its own navigation and cardinality even though
++        // they share one foreign key, and the one-to-one declaration neither subsumes the collection nor
++        // forces a uniqueness/index constraint into the mapped metadata. The core model has no uniqueness
++        // member, so the observable contract is that the shared FK remains a plain dependent column while
++        // both relationships survive with their declared kind.
++        oneToMany.Should().NotBeSameAs(oneToOne);
++        oneToMany.Navigation!.Name.Should().Be(nameof(SharedFkParent.Children));
++        oneToOne.Navigation!.Name.Should().Be(nameof(SharedFkParent.Primary));
++
++        oneToMany.ForeignKey[0].PropertyInfo.Should().BeSameAs(oneToOne.ForeignKey[0].PropertyInfo,
++            "both declarations share the one foreign-key property without merging");
++        oneToMany.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkChild.ParentId));
++        oneToMany.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkParent.Id));
++        oneToOne.ForeignKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkChild.ParentId));
++        oneToOne.PrincipalKey[0].PropertyInfo.Name.Should().Be(nameof(SharedFkParent.Id));
++        oneToOne.ForeignKey[0].IsKey.Should().BeFalse(
++            "no uniqueness constraint is forced onto the shared foreign key by the one-to-one declaration");
++    }
++
++    [Fact]
++    public void TwoHasOneToOne_NavigationsSharingOneForeignKey_ShouldBothRegisterWithoutRejection()
++    {
++        // Two reference navigations to the same dependent type over the same FK are not a conflict the
++        // core rejects: it trusts each declaration and runs no uniqueness heuristic, so both register
++        // and neither navigation is mapped as a column.
++        var metadata = new EntityMetadataBuilder<DualRefParent>()
++            .HasOneToOne(p => p.Primary, p => p.Id, c => c.ParentId)
++            .HasOneToOne(p => p.Secondary, p => p.Id, c => c.ParentId)
++            .Build();
++
++        metadata.Relationships.Should().HaveCount(2);
++        metadata.Relationships.Should().OnlyContain(r => r.Kind == RelationshipKind.OneToOne);
++        metadata.Relationships.Select(r => r.Navigation!.Name).Should()
++            .BeEquivalentTo(new[] { nameof(DualRefParent.Primary), nameof(DualRefParent.Secondary) });
++        metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(DualRefParent.Primary));
++        metadata.Properties.Should().NotContain(p => p.PropertyInfo.Name == nameof(DualRefParent.Secondary));
++    }
++
+     [Fact]
+     public void HasOne_ShouldRegisterManyToOneRelationshipOnDependentSide()
+     {
+diff --git a/tests/nextorm.integration.tests/ClickHouseJoinIntoOneToOneTests.cs b/tests/nextorm.integration.tests/ClickHouseJoinIntoOneToOneTests.cs
+new file mode 100644
+index 00000000..efe8f895
+--- /dev/null
++++ b/tests/nextorm.integration.tests/ClickHouseJoinIntoOneToOneTests.cs
+@@ -0,0 +1,47 @@
++using FluentAssertions;
++using NextORM.ClickHouse;
++using NextORM.Core;
++
++namespace NextORM.Integration.Tests;
++
++/// <summary>
++/// D170 (#170): ClickHouse runtime negative for the one-to-one <c>JoinInto</c> backstop. ClickHouse does
++/// not derive <see cref="CommonTestSuite"/>, so the int-key duplicate-identity case is re-pinned here
++/// against a real server: a parent that matches two distinct children must throw
++/// <see cref="InvalidOperationException"/> at materialization, sync and async, exactly like every other
++/// provider. This is runtime (materialization) evidence, not a SQL-generation or capability-flag check.
++/// The <c>eager_parent</c>/<c>eager_child</c> fixtures and the one-to-one mapping are registered by
++/// <see cref="NavConScenarios.Seed"/>, which mirrors <c>CommonTestSuite.JoinInto</c>.
++/// </summary>
++public sealed class ClickHouseJoinIntoOneToOneTests : ProviderTestSuite
++{
++    protected override ITestProvider Provider => ClickHouseTestProvider.Instance;
++
++    [Fact]
++    public void JoinInto_OneToOne_ShouldThrowWhenAParentMatchesMoreThanOneChild()
++    {
++        var f = NavConScenarios.Seed(_sut.DataProvider);
++
++        Action act = () => _sut.DataProvider.From<JoinIntoParent>()
++            .Where(p => p.Id == f)
++            .JoinInto(_sut.DataProvider.From<JoinIntoChild>(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
++            .ToList();
++
++        act.Should().Throw<InvalidOperationException>()
++            .WithMessage("*more than one distinct*");
++    }
++
++    [Fact]
++    public async Task JoinInto_OneToOne_ShouldThrowWhenAParentMatchesMoreThanOneChildAsync()
++    {
++        var f = NavConScenarios.Seed(_sut.DataProvider);
++
++        Func<Task> act = () => _sut.DataProvider.From<JoinIntoParent>()
++            .Where(p => p.Id == f)
++            .JoinInto(_sut.DataProvider.From<JoinIntoChild>(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
++            .ToListAsync(TestContext.Current.CancellationToken);
++
++        await act.Should().ThrowAsync<InvalidOperationException>()
++            .WithMessage("*more than one distinct*");
++    }
++}
+diff --git a/tests/nextorm.integration.tests/CommonTestSuite.JoinInto.cs b/tests/nextorm.integration.tests/CommonTestSuite.JoinInto.cs
+index ba70652d..269d7e6b 100644
+--- a/tests/nextorm.integration.tests/CommonTestSuite.JoinInto.cs
++++ b/tests/nextorm.integration.tests/CommonTestSuite.JoinInto.cs
+@@ -271,6 +271,20 @@ public abstract partial class CommonTestSuite
+             .WithMessage("*more than one distinct*");
+     }
+ 
++    [Fact]
++    public async Task JoinInto_OneToOne_ShouldThrowWhenAParentMatchesMoreThanOneChildAsync()
++    {
++        var (many, _, _) = SeedJoinInto();
++
++        Func<Task> act = () => JoinIntoParents()
++            .Where(p => p.Id == many)
++            .JoinInto(JoinIntoChildren(), (p, c) => p.Id == c.ParentId, p => p.PrimaryChild)
++            .ToListAsync(TestContext.Current.CancellationToken);
++
++        await act.Should().ThrowAsync<InvalidOperationException>()
++            .WithMessage("*more than one distinct*");
++    }
++
+     [Fact]
+     public void JoinInto_ManyToMany_Left_ShouldKeepParentWithoutTagAndGroupTags()
+     {

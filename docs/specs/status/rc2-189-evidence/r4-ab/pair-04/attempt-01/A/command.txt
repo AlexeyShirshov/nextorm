@@ -1,0 +1,1 @@
+timeout --signal=TERM --kill-after=5s 235s dotnet run --no-build --no-restore --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance --launchCount 1 --warmupCount 3 --iterationCount 15 --exporters json --artifacts /home/alex/sources/nextorm/docs/specs/status/rc2-189-evidence/r4-ab/pair-04/attempt-01/A/artifacts
