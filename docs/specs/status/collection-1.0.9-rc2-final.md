@@ -6,7 +6,7 @@
 - mode: autonomous; auto-commit authorized (collection/task status files only, explicit paths, never `-A`, message prefix `#<issue>`); push **never**
 - skills: `pdca-collection` + `pdca-dotnet` + `nextorm-pdca`
 - evidence contract reference: `docs/specs/status/collection-1.0.9-rc2-C-evidence.md`
-- phase: **P complete — re-scoped; T171/T172 excluded-gap removed from barrier; ALL-barrier PASSED; schedule BOUND (single lane G1); D authorized**
+- phase: **C complete — collection CHECK PASS on the integrated tree @ 4328c1bf; ACT: verified**
 
 ## Input task list
 
@@ -56,7 +56,19 @@ Excluded gaps (removed from the barrier; not planned to DO; no `ready` placehold
 - **D lane — T170 done:** T170 completed its full cycle (DO → CHECK → ACT) with a CHECK **pass** at `r=1`/`rv1` (9/9 evidence rows met); task commit `9715f13f`. The single lane continues to **T151** (last task).
 - **D lane — T151 done; G1 complete:** T151 (last task) completed its full cycle (DO → CHECK → ACT) with a CHECK **pass** at `r=2`/`rv2` (15/15 evidence rows met); task commit `57e02e66`. The single lane **G1 is complete** (T160/T206 terminal `incomplete`, preserved; T208/T170/T151 `done`) → the collection proceeds to the **C-phase** (verification on the integrated tree).
 
+## Result (collection)
+
+- **Done (3):** T208 (#208, `09f772a7`), T170 (#170, `9715f13f`), T151 (#151, `57e02e66`) — DONE, CHECK PASS, issues closed.
+- **Incomplete (2, terminal, never merged):** T160 (#160, `c817ac95`), T206 (#206, `3d1b7036`) — preserved; issues #160/#206 remain OPEN.
+- **Excluded-gap (2):** T171 (#171), T172 (#172) — issues remain OPEN.
+- **Merge:** not applicable (single lane G1); no `git merge --no-ff`; push never performed.
+- **Integrated CHECK (C):** PASS — contract `docs/specs/status/collection-rc2-final-C-evidence.md`; frozen manifest `artifacts/pdca/collection-rc2-final/C/manifest.json` (11/11 rows, validator exit 0).
+- **state: verified**
+
 ## Общая верификация и восстановление
 
-- Verification state: `not-started` (collection C runs on the integrated tree after the D lane completes).
-- Next allowed step: **C-phase** — verification on the integrated tree (the D lane G1 is complete: T160/T206 terminal `incomplete` preserved under `docs/specs/status/rc2-<n>-evidence/`; T208/T170/T151 `done`).
+- Verification state: **`pass`** — integrated CHECK (C) on branch `1.0.9-rc2` @ `4328c1bf` returned PASS after one re-gather.
+- Last C result: PASS. Evidence contract `docs/specs/status/collection-rc2-final-C-evidence.md`; raw measurements under `artifacts/pdca/collection-rc2-final/C/` (builds 0W/0E; unit 6303 total / 0 failed / 1 skip; integration 3591 / 0 failed / 197 capability skips with all 6 providers run; coverage line 88.3 % / branch 80.3 % in CI shape; docfx exit 0; perf 7 cases / 0 failures / 53.89 s); frozen manifest `.../C/manifest.json` validated exit 0.
+- First C pass was `blocked-for-evidence` (T151 rv2 stale declared hash; collection frozen manifest missing) — re-gathered, not a product defect: T151 `artifacts/pdca/D151/rv2/RECONCILE.md` records the explicit supersession plus refreshed authenticated ledger `row-hashes.reconciled.{sha256,json}`; the collection manifest was produced. No defect id (no proven product defect); no corrective task.
+- Debt (carried, unresolved): T160/#160 and T206/#206 terminal `incomplete` (issues OPEN); T171/#171 and T172/#172 excluded-gap (issues OPEN). None merged.
+- Next allowed step: **collection complete/verified** — no further C; issues #160/#206/#171/#172 remain OPEN by design; push is the user's manual action.
