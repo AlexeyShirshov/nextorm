@@ -56,6 +56,6 @@ DAG edges: R184->R190; R175->R190; R177->R190 (freshness / final-tip verificatio
 
 ## Done / Verified / Incomplete
 
-- Done: bootstrap; 4 own PLANs; ALL-barrier; clustering + schedule binding; R184 done (#184); R175 done (#175, commit 0ee60012, CHECK PASS r=1/rv=2/n=2; evidence `docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/`; contract `docs/specs/status/collection-1.0.9-rc2-C-evidence.md`); R177 done (#177, commit R177-PENDING-SHA, CHECK PASS r=2/rv=2/n=1; evidence `docs/specs/status/rc2-177-reclaim-evidence/`; closed A1/A9/R7/R15/R16/A2-E177-14; product `2ac20818`; defect #208 separate OPEN).
+- Done: bootstrap; 4 own PLANs; ALL-barrier; clustering + schedule binding; R184 done (#184); R175 done (#175, commit 0ee60012, CHECK PASS r=1/rv=2/n=2; evidence `docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/`; contract `docs/specs/status/collection-1.0.9-rc2-C-evidence.md`); R177 done (#177, commit d47b84fa, CHECK PASS r=2/rv=2/n=1; evidence `docs/specs/status/rc2-177-reclaim-evidence/`; closed A1/A9/R7/R15/R16/A2-E177-14; product `2ac20818`; defect #208 separate OPEN).
 - Verified: —
 - Incomplete: —
