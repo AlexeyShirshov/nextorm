@@ -1,8 +1,10 @@
 ## Collection rc2-final — own PLAN (2026-10-09, HEAD 9a2a2871)
 
-- task: T151 / #151; selected_variant: `pdca-dotnet`; cycle_id: N=1; plan_revision: r=1
-- baseline: `9a2a2871`; evidence contract: rv1 (planned, not pinned)
-- plan_state: **ready** (P phase; no DO yet)
+- task: T151 / #151; selected_variant: `pdca-dotnet`; cycle_id: N=1; plan_revision: r=2
+- baseline: `9a2a2871`; evidence contract: rv2 (supersedes rv1) pinned at artifacts/pdca/D151/rv2/manifest.json (15/15 required rows met)
+- plan_state: **done/verified** — CHECK **PASS** (r=2, rv2, 15/15 rows closed)
+- issue: #151 **closed** — https://github.com/AlexeyShirshov/nextorm/issues/151
+- next step: none
 - P: replace narrative-based certification with a frozen raw-artifact bundle and reproducible, row-level CHECK verification.
 - CLASSIFICATION: evidence/tooling deliverable; no established product defect. Prior STOP remains closed-incomplete, not retroactively passed.
 
@@ -609,3 +611,133 @@ Six plan-named artifacts that were previously "not established" are now produced
 | UTC | phase | rev | iter | event | evidence |
 |---|---|---|---|---|---|
 | 2026-10-09 09:48 | STOP | r=2 | n=1/3 | terminal `incomplete`: CHECK evidence-certification `fail-by-evidence` (r1 n1/2/3 + r2 n1); no product defect; no r=3/re-run; campaign valid (renderer 97 = 56/0/0/3/27/11; A/B identical; control `:81` killed+restored; PG 16/0/0; verifier `passed:true` rv=2; product clean); patch preserved; #151 OPEN | `docs/specs/status/rc2-151-evidence/D151-STOP-incomplete.patch` |
+
+## DO — freeze the rv1 row-level ledger (r=1, N=1, n=1/3; recorded 2026-10-10 02:03 UTC)
+
+> Appended by `coder`. DO for T151 at `r=1` `n=1/3`: froze the raw-artifact mutation-evidence bundle into a row-level ledger so CHECK can certify from raw files. No new Stryker campaign; no mutation re-run; no product/test C# change; no commit/push. The historical STOP block above is preserved intact.
+
+- **Provenance gate — PASS.** `git diff e67aa5f8..HEAD -- src/nextorm.postgres/PostgresExtremeRowRenderer.cs stryker-config.json tests/nextorm.postgres.tests/ExtremeRowNativeSqlGenerationTests.cs` is empty; every entry of `source-hashes.json` matches current HEAD (renderer `97345986…421537`, config `ae29d4e3…`, test `0994a86c…`, verifier `0a4c5b70…`, tool manifest `2849695f…`). `campaign-head.txt` records `4acb4772`, the pre-D151 base; the D151 files were committed in `e67aa5f8` (a descendant of `4acb4772`), so the campaign is representative. Freeze HEAD `8f48d3aa…` (brief expected `a956598a`; two later commits landed — inputs unchanged).
+- **Frozen row ledger:** `artifacts/pdca/D151/rv1/manifest.json` — `required_rows` `R-PROV,R-TEST,R-COV,R-REPRO,R-CONTROL,R-COMPARE,R-DISPOSITION,R-RETENTION,R-NEGATIVE,R-CHECK`, one row per id, all `met`; `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D151/rv1/manifest.json` exit **0**.
+- **Hash inventory:** `artifacts/pdca/D151/rv1/row-hashes.json` (39 files: every referenced immutable raw artifact + renderer/config/test/verifier script/tool manifest + both campaign reports + historical B1). The verifier's own mutable receipts (`verifier-result.json`, `verifier-verify.log`, `verifier-self-test.log`, `verifier-result-rv2.backup.json`) are **excluded** as helper outputs captured separately; `sha256sum` recheck 39/39 matched, 0 mismatched (`artifacts/pdca/D151/rv1/hash-recheck.log`).
+- **Provenance record:** `artifacts/pdca/D151/rv1/provenance.md` (trees, tool 5.0.0, exact campaign command, perTest+mtp, mutation scope, renderer 97 summary, historical-2% invalid statement, re-run steps).
+- **Helper (history preserved):** `verifier-result.json` backed up to `verifier-result-rv2.backup.json`; `self-test` exit **0** (`passed:true`); `verify --evidence StrykerOutput/d151/r1-n1 --contract docs/specs/status/rc2-151-stryker-mutation-1.md --rv 1` exit **0** (`passed:true`, `errors:[]`); logs `artifacts/pdca/D151/rv1/{self-test.log,verify.log}`. No helper edit.
+- **Branch green:** `dotnet build nextorm.slnx -c Debug` exit **0**, **0 Warning(s) / 0 Error(s)** (`artifacts/pdca/D151/rv1/build.log`); `git diff --check` exit **0**.
+
+### Журнал (DO rv1 freeze)
+| UTC | phase | rev | iter | event | evidence |
+|---|---|---|---|---|---|
+| 2026-10-10 02:03 | DO | r=1 | n=1/3 | rv1 row-level ledger frozen; provenance gate PASS (`e67aa5f8..HEAD` empty, all source-hashes match); manifest exit0 (10/10 rows met); self-test/verify exit0; build 0W/0E; no campaign re-run; no commit | `artifacts/pdca/D151/rv1/{manifest.json,row-hashes.json,provenance.md,self-test.log,verify.log,build.log}` |
+| 2026-10-09 21:08 | DO | r=1 | n=1/3 | CHECK-gather consistency fix: `row-hashes.json` recomputed over immutable raw evidence only (39 files; excluded the 4 verifier receipts) → `sha256sum` 39/39 matched, 0 mismatched; status header reconciled (evidence contract rv1 pinned at manifest 10/10, plan_state DO complete); `manifest`-validate/self-test/verify exit0; no campaign re-run; no commit | `artifacts/pdca/D151/rv1/{row-hashes.json,hash-recheck.log,manifest-validate.log,provenance.md,self-test.log,verify.log}` |
+
+## DO — accessible frozen re-gather (r=1, N=1, n=1/3; recorded 2026-10-10 02:12 UTC)
+
+> Appended by `coder`. CHECK (medium) returned **FAIL** on evidence certification: every row's evidence pointed under `StrykerOutput/**`, which is outside CHECK's permitted read locations; CHECK also requires complete per-mutant entries and comparison predicates directly inspectable. This re-gather publishes an **accessible, byte-identical frozen bundle + complete row-level extracts** under the permitted `artifacts/` root, adds an auditable frozen-path mapping, and repoints the manifest rows. It **does not** change acceptance criteria, does not weaken obligations, leaves the historical STOP closed-incomplete, re-runs no campaign, and makes no commit.
+
+- **Byte-identical frozen bundle:** `artifacts/pdca/D151/rv1/raw/` — **33** files copied with `shutil.copy2` preserving relative paths (two `run-a|run-b/reports/mutation-report.json`, `run-a.log`/`run-b.log`, `control.json`, `control-baseline.log`, `control-active.log`, `final-postgres-tests.log`, `d04-filtered-tests.log`, `final-core-extremerow-tests.log`, `repro-comparison.json`, `disposition.json`, `disposition.md`, `manifest.json`, `README.md`, `check-digest.md`, `mode-decision.json`, `variant-matrix.md`, `responsibility-map.md`, `diff-review.md`, `coverage-mode-validation.json`, `source-hashes.json`, `baseline-b1.sha256`, `campaign-head.txt`, `environment.txt`, `ec07/**`, and the historical B1 `campaign/reports/mutation-report.{json,html}` under `raw/campaign/reports/`). The three test logs are included because manifest row **R-TEST** references them; the helper's mutable `verifier-*` receipts are **not** copied.
+- **Frozen-path mapping:** `artifacts/pdca/D151/rv1/frozen-path-mapping.json` — **33** entries `{original, frozen, sha256}`; `sha256(original) == sha256(frozen)` asserted at copy time (byte-identical).
+- **Row-level extracts (all directly readable, CRLF):** `renderer-mutants-a.csv` / `renderer-mutants-b.csv` — **97** rows each with `id,file,line,column,endLine,endColumn,mutatorName,replacement,status,statusReason,coveredByCount,killedByCount,killedByTests`; `mutant-comparison.json` — **97** entries keyed by `file:startLine:startCol-endLine:endCol|mutatorName|replacement` (not numeric id), **matched 97 / mismatched 0**; `disposition-all.csv` — **97** rows with per-mutant `status` + `dispositionReason` (3 Timeouts `:112/:126/:130` = explicit `non-terminating-alias-extension` + span, 27 CompileError `statusReason="Mutant caused compile errors"`, 11 Ignored `"Removed by block already covered filter"`, 56 Killed with killing tests); `control-extract.json` — baseline exit 0 / failed 0, active exit 2 / failed 14 / assertion_failure true, restored true, `sha256_before==sha256_after=97345986…`, direction mutant `:81 col61-68 "\" desc"→"\"\""` (replacement `""`), status Killed in A and B.
+- **Manifest repointed:** every evidence `path` in `artifacts/pdca/D151/rv1/manifest.json` now points under `artifacts/` (raw copies / extracts / `check-rv1/verifier-result.json`); each item keeps its `original_path`; originals are enumerated in `frozen-path-mapping.json`. `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D151/rv1/manifest.json` → exit **0** (10/10 rows).
+- **Hash inventory:** `row-hashes.json` recomputed over the accessible files only — **46** entries (33 raw copies + 5 extracts + `frozen-path-mapping.json` + `verify.log`/`self-test.log` + 5 source anchors); `sha256sum -c row-hashes.sha256` → **46/46 OK**, exit **0** (`hash-recheck.log`).
+- **Helper:** `self-test` exit **0** (`passed:true`); `verify --evidence StrykerOutput/d151/r1-n1 --contract docs/specs/status/rc2-151-stryker-mutation-1.md --rv 1` exit **0** (`passed:true`, `errors:[]`). `check-rv1/verifier-result.json` receipt updated: `hashes_ok=true`, `hashes_matched/hashes_total=46/46`, `accessible_root="artifacts/pdca/D151/rv1/raw"`.
+- **Branch green:** `dotnet build nextorm.slnx -c Debug` exit **0**, 0 Warning(s) / 0 Error(s) (`build.log`); `git diff --check` exit **0**.
+- **Acceptance unchanged / STOP preserved:** no campaign re-run, no product/test C# change, no acceptance weakening; historical STOP above remains **closed-incomplete**; no commit/push.
+
+### Журнал (accessible re-gather)
+| UTC | phase | rev | iter | event | evidence |
+|---|---|---|---|---|---|
+| 2026-10-10 02:12 | DO | r=1 | n=1/3 | accessible frozen re-gather: 33 byte-identical raw copies + mapping; 97-row extracts (A/B/comparison/disposition/control); manifest rows repointed under artifacts/ (validator exit0); row-hashes 46/46 sha256 matched; self-test/verify exit0; check receipt accessible_root set; build 0W/0E; STOP preserved; no campaign re-run; no commit | `artifacts/pdca/D151/rv1/{raw,frozen-path-mapping.json,renderer-mutants-a.csv,renderer-mutants-b.csv,mutant-comparison.json,disposition-all.csv,control-extract.json,manifest.json,row-hashes.json,row-hashes.sha256,hash-recheck.log,manifest-validate.log,self-test.log,verify.log,build.log}` |
+
+## DO — contract-complete per-mutant ledger (re-gather #2) (r=1, N=1, n=1/3; recorded 2026-10-09 21:18 UTC)
+
+> Appended by `coder`. CHECK rv1 (2nd pass) returned **FAIL** on one remaining **evidence-completeness** gap (accessibility is closed): `artifacts/pdca/D151/rv1/renderer-mutants-{a,b}.csv` + `disposition-all.csv` are status tables, not the **contract-complete per-mutant ledger** required by the rv1 contract (plan line 75). This pass publishes `mutant-ledger.json` covering **all 97 renderer mutants in BOTH runs** (194 entries) with report path+sha256, RFC 6901 JSON pointer, file-qualified stable id, location/span, mutation/status, original `coveredBy`/`killedBy` and a per-entry disposition. It **re-runs no campaign**, changes no product/test C#, does not weaken acceptance, keeps the historical STOP **closed-incomplete**, and makes **no commit**.
+
+- **Contract-complete ledger:** `artifacts/pdca/D151/rv1/mutant-ledger.json` — top-level `renderer_file` + `runs.{a,b}` (each `report_path`, `report_sha256`, 97 `entries`) + `comparison` (97 rows). Entry fields: `id`, `stable_id` (`file:span|mutator|replacement`), `json_pointer` (+ `json_pointer_ordinal`), `file`, `span`, `mutator`, `replacement`, `status`, `statusReason`, `coveredBy` (verbatim), `killedBy` (verbatim), `killedByTests`, `disposition`, `dispositionReason`. All 194 pointers resolve against the raw reports by id.
+- **Report anchors:** run A `raw/run-a/reports/mutation-report.json` sha256 `e245e785c60d774525f9e8be4be6972d77de8e1718615e1c4d08b7f8ed41fcae`; run B `raw/run-b/reports/mutation-report.json` sha256 `678090336b2d0a619c323fbb5f415ab9aeeea9569e4e2f134301fe95f2dc78fe` (== `row-hashes.json`).
+- **Dispositions (run A; run B identical):** Killed **56** → `killed` + killing test names; Timeout **3** (`:112`, `:126`, `:130`) → `non-terminating-alias-extension` with explicit cause + span; CompileError **27** → `compile-error` + `statusReason`; Ignored **11** → `block-already-covered` + `statusReason`; Survived **0** / NoCoverage **0**. Timeout/CompileError/Ignored are recorded separately from Killed.
+- **A/B comparison:** 97 rows by `file:span|mutator|replacement` (not numeric id) — `matched 97 / mismatched 0`.
+- **Human summary:** `artifacts/pdca/D151/rv1/mutant-ledger.md` — dispositions by status; states Timeout/CompileError/Ignored are separate from Killed.
+- **Manifest repointed:** `R-DISPOSITION` and `R-CHECK` (plus `R-COV`/`R-REPRO`/`R-COMPARE`) now carry `mutant-ledger.json` (+ `.md` where applicable) as evidence; other rows unchanged. `python3 scripts/validate_inner_loop.py manifest artifacts/pdca/D151/rv1/manifest.json` → exit **0**.
+- **Hash inventory:** `row-hashes.json` recomputed to include the new ledger files — **48** entries; `sha256sum -c row-hashes.sha256` → **48/48 OK**, exit **0** (`hash-recheck.log`).
+- **Helper:** `self-test` exit **0** (`passed:true`, `failures:[]`); `verify --evidence StrykerOutput/d151/r1-n1 --contract docs/specs/status/rc2-151-stryker-mutation-1.md --rv 1` exit **0** (`passed:true`, `errors:[]`). `check-rv1/verifier-result.json` updated: `ledger_entries=194`, `ledger_complete=true`, `hashes_matched/hashes_total=48/48`.
+- **Branch green:** `dotnet build nextorm.slnx -c Debug` exit **0**, 0 Warning(s) / 0 Error(s) (`build.log`); `git diff --check` exit **0**.
+- **Acceptance unchanged / STOP preserved:** no campaign re-run, no product/test C# change, no acceptance weakening; historical STOP above remains **closed-incomplete**; no commit/push.
+
+### Журнал (DO re-gather #2)
+| UTC | phase | rev | iter | event | evidence |
+|---|---|---|---|---|---|
+| 2026-10-09 21:18 | DO | r=1 | n=1/3 | re-gather #2: contract-complete per-mutant ledger (194 entries = 97x2, report sha `e245e785`/`67809033`, RFC6901 pointers, verbatim coveredBy/killedBy, dispositions Killed56/Timeout3/CompileError27/Ignored11, A/B matched97); `mutant-ledger.md`; manifest R-DISPOSITION/R-CHECK (+R-COV/R-REPRO/R-COMPARE) repointed (validator exit0); row-hashes 48/48 matched; self-test/verify exit0; check receipt ledger_entries194/ledger_complete/48-48; build 0W/0E; STOP preserved; no campaign re-run; no commit | `artifacts/pdca/D151/rv1/{mutant-ledger.json,mutant-ledger.md,manifest.json,row-hashes.json,row-hashes.sha256,hash-recheck.log,self-test.log,verify.log,build.log}` + `artifacts/pdca/D151/check-rv1/verifier-result.json` |
+
+---
+
+## P151-r2-ledger-raw — r=2 (n=1, rv2 supersedes rv1)
+
+> Appended by `coder` (DO stage A, `r=2, n=1, N=1`; evidence contract `rv=2` **supersedes** `rv=1`). This block is the r=2 plan and is the operative contract; the historical STOP block and all earlier DO/closure records above remain intact and separate. `E=artifacts/pdca/D151/rv1`; `U=artifacts/pdca/D151/rv2`; `S=docs/specs/status/rc2-151-stryker-mutation-1.md`. No new Stryker campaign; no product/renderer/config/test change; no commit/push.
+
+### State
+- `r=2, n=1, N=1`; `contract rv=2 (rv1 superseded)`; collection `rc2-final`; branch `1.0.9-rc2`; HEAD `8f48d3aa`.
+
+### Goal
+- Close defect 1 (per-entry report binding) and defect 2 (independent ledger→raw verification); no new campaign.
+
+### Acceptance criteria (retained from rv1; unchanged, not weakened)
+- AC1 — Two independently executed, renderer-only campaigns use pinned Stryker 5.0.0, `perTest` + `mtp`, finish exit 0.
+- AC2 — Raw reports demonstrate valid coverage for executable mutants: nonempty `coveredBy`, preserved `killedBy`, no Survived or NoCoverage.
+- AC3 — A/B normalized mutant identities and dispositions match exactly; every report entry retained and individually classified.
+- AC4 — Positive control removes `" desc"` and produces an attributable assertion failure; baseline passes and original source bytes are restored.
+- AC5 — CHECK opens raw evidence by frozen path, verifies SHA-256 hashes and all row-level predicates, and produces an independent exit-0 verification receipt.
+
+### Supersession
+- `rv=2` supersedes `rv=1`; the rv1 row IDs and obligations are retained and new variants receive new IDs. The rv1 bundle `E` stays byte-identical and is the frozen source of the raw reports and source anchors.
+
+### DO tasks (r=2)
+- D151.2.1 — migrate all 194 entries from `E/mutant-ledger.json` into `U/mutant-ledger.json`, adding per-entry `report_path`/`report_sha256`; keep run-level fields and all original values; record predecessor path + full sha256 in `U/provenance.md` as a supersession addendum; leave `E` intact.
+- D151.2.2 — add `verify-ledger` to `tools/stryker/d151-evidence.py` (or extend `cmd_verify`) that consumes the contract, frozen `E/raw`, `source-hashes.json`/`frozen-path-mapping.json` and the ledger, and independently re-derives identities WITHOUT calling ledger-generation code; remove/repurpose the unused `verify --contract`.
+- D151.2.3 — compare verbatim `coveredBy`, `killedBy`, `status`, `statusReason`, location, mutator, replacement, `stable_id`; bind per-entry path/hash to run metadata; check raw vs `source-hashes.json`/`frozen-path-mapping.json`/run hashes, ledger vs `row-hashes.json`; assert A=97/B=97, per-run statuses 56/0/0/3/27/11, matched=97/unmatched=0, control `:81` Killed both; nonzero exit on any divergence.
+- D151.2.4 — emit `U/ledger-verify.log` (one line per entry: stable_id/run/pointer/OK/canonical-node sha256; + totals + exit) and lossless `U/raw-slices-{a,b}.jsonl` (verbatim raw mutant nodes, ≤~2 KB/line where possible, never truncated).
+- D151.2.5 — negative control: corrupt one ledger entry's `killedBy`/`json_pointer` in a `/tmp` copy and require `verify-ledger` to exit nonzero identifying a raw-field divergence (not merely a hash error); retain `U/negative/ledger-verify.log`, receipt and the corrupted-fixture sha256 (the `/tmp` fixture is not committed and not placed in the frozen tree).
+- D151.2.6 — extend `self-test` with the rv2 negative fixture cases; CRLF on all edited text files; `git diff --check` exit 0.
+
+### rv2 row list
+- Retained: R-PROV, R-TEST, R-COV, R-REPRO, R-CONTROL, R-COMPARE, R-DISPOSITION, R-RETENTION, R-NEGATIVE, R-CHECK.
+- Added: **R-ENTRY-BIND** (per-entry report path/hash bound to the run metadata), **R-RAW-TRACE** (verbatim raw mutant node per entry via `raw-slices-{a,b}.jsonl`), **R-LEDGER-NEGATIVE** (corrupted ledger → nonzero raw-field divergence), **R-LOOP** (independent re-derivation loop over all 194 entries), **R-BOUNDARY** (scope: only `tools/stryker/**` + `artifacts/pdca/D151/**` + `S`; no campaign, no product change).
+
+### CHECK re-gather budget
+- At most **2 targeted re-gather passes** for `r=2`; each pass is bounded to two specific missing-evidence lookups. A missing report alone does not justify a new revision; P1 rows and conditional obligations are applied without downgrade.
+
+### Boundaries
+- Only `tools/stryker/**` and `artifacts/pdca/D151/**` (plus `S`). Historical rv1 artifacts untouched. No product/renderer/config/test change; no new Stryker campaign; never `git add -A`; no commit/push.
+
+### Журнал (DO r=2)
+| UTC | phase | rev | iter | event | evidence |
+|---|---|---|---|---|---|
+| 2026-10-09 21:29 | DO | r=2 | n=1/3 | r=2 stage A: rv1 ledger migrated to `U/mutant-ledger.json` (194 entries + per-entry `report_path`/`report_sha256`; predecessor sha `c6f2682c`); `verify-ledger` added (rv1 `verify --contract` removed); positive exit0 entries194 A/B97 matched97 unmatched0 statuses56/0/0/3/27/11 control:81 killed both; negative (`--ledger /tmp/...` killedBy corruption) exit1 raw-field divergence; self-test exit0; `E` untouched | `artifacts/pdca/D151/rv2/{mutant-ledger.json,provenance.md,ledger-verify.log,raw-slices-a.jsonl,raw-slices-b.jsonl,verifier-result.json,negative/{ledger-verify.log,verifier-result.json,receipt.md}}` |
+| 2026-10-09 21:34 | DO | r=2 | n=1/3 | r=2 stage B: helper `manifest --freeze` (producer verification in-process) atomically wrote `U/row-hashes.json` (44 files; manifest.json excluded, no self-hash) + `U/manifest.json` (15/15 rows met; `validate_inner_loop.py manifest` exit0); `inner-loop-check` exit0 (invokes validator CLI `manifest`); `verify-ledger --out C` exit0 entries194 matched97 unmatched0; negative-control exit1 raw-field divergence; build 0W/0E; renderer sha256 unchanged; no product/campaign change; no commit | `artifacts/pdca/D151/rv2/{row-hashes.json,manifest.json,provenance.md,build.log,git-diff-e67aa5f8.log,renderer-hash.log,git-diff-check.log}` + `artifacts/pdca/D151/check-rv2/{inner-loop-manifest.json,inner-loop-check.log,verifier-result.json,ledger-verify.log}` |
+
+## DO — CHECK re-gather pass 1 (r=2, N=1, n=1/3; recorded 2026-10-10 02:40 UTC)
+
+> Appended by `coder`. Targeted evidence re-gather for the open CHECK rows of `r=2 n=1`. No new campaign; no product/config/test change; only `tools/stryker/**` + `artifacts/pdca/D151/**` (+ this status). Evidence `E=artifacts/pdca/D151/rv1`, `U=artifacts/pdca/D151/rv2`, `C=artifacts/pdca/D151/check-rv2`.
+
+- **Hash attestation corrected (R-RETENTION/R-CHECK).** `verify-ledger` now reports the **current** ledger: `ledger_sha256_detail` = `7e65ed7e…fead4c` (`U/mutant-ledger.json`) and `ledger_sha256_ok` compares it to the `U/row-hashes.json` pin; the rv1 predecessor hash is retained explicitly as `predecessor_ledger_sha256` = `c6f2682c…db6d97` (also in `U/provenance.md`). `verify-ledger --out C` → exit **0**, `passed:true`, errors 0, entries 194, matched 97 / unmatched 0; `C/verifier-result.json` now carries the current hash. `manifest --freeze` seeds the in-process check with the freshly computed current-ledger hash.
+- **Hash-check receipt:** `U/row-hashes.sha256` (44 entries) + `U/hash-check.log` = actual `sha256sum -c` output → **44/44 OK**, exit 0.
+- **Current self-test receipt (R-NEGATIVE):** `U/self-test-rv2.log` — `self-test` now emits per-case outcomes: **11/11 cases passed**, exit 0, helper sha256 `e86d9522…a6434f`; includes the rv2 forged `killedBy` / `json_pointer` / `stable_id` / `report_sha256` fixtures plus the rv1 scope/repro/control/disposition fixtures.
+- **Manifest repointed:** `R-NEGATIVE` → `U/self-test-rv2.log`; `R-RETENTION` includes `U/hash-check.log`; `R-CHECK` → current `C/verifier-result.json`. Freeze re-run: `U/row-hashes.json` 44 files (both manifests excluded), `U/manifest.json` 15/15 rows `met`; `validate_inner_loop.py manifest U/manifest.json` exit **0**; `C/inner-loop-manifest.json` refreshed from `U/manifest.json`; `inner-loop-check` exit **0**.
+- **Build:** not run — no compiled input changed (`src/**`, `tests/**` untouched); only `tools/stryker/**`, `artifacts/pdca/D151/**` and this status. `git diff --check` exit **0**. Only `tools/stryker/d151-evidence.py` and this status are tracked changes. No commit/push; collection status T151 left `in-progress`.
+
+### Журнал (CHECK re-gather pass 1)
+| UTC | phase | rev | iter | event | evidence |
+|---|---|---|---|---|---|
+| 2026-10-10 02:40 | DO | r=2 | n=1/3 | CHECK re-gather pass 1: `verify-ledger` reports current ledger hash `7e65ed7e…` (rv2) vs `U/row-hashes.json`, predecessor `c6f2682c…` kept separate; `hash-check.log` 44/44 OK; `self-test-rv2.log` 11/11 cases exit0 helper `e86d9522…`; manifest R-NEGATIVE/R-RETENTION repointed + freeze (44 files, 15/15 met, validator exit0); `C` receipt + inner-loop-check exit0; build not run (no compiled input); no commit | `artifacts/pdca/D151/rv2/{manifest.json,row-hashes.json,self-test-rv2.log,hash-check.log,verifier-result.json}` + `artifacts/pdca/D151/check-rv2/{verifier-result.json,inner-loop-check.log}` |
+
+## ACT — finalize r=2 (N=1, n=1/3; recorded 2026-10-10 02:45 UTC)
+
+> Appended by `coder`. CHECK returned **PASS** at `r=2`/`rv2` (**15/15** required rows met). This block finalizes the cycle: `plan_state` **done/verified**; **next step: none**; issue **#151 closed**. The historical STOP block above remains intact and clearly separated. No campaign re-run; no product/test C# change.
+
+- **CHECK verdict:** PASS — `N=1`, `r=2`, evidence contract `rv2`; `artifacts/pdca/D151/rv2/manifest.json` 15/15 rows `met`; `verify-ledger` exit 0 (entries 194, matched 97 / unmatched 0); negative control exit 1 (raw-field divergence); A/B normalized sets identical; control `:81` Killed in both with byte-exact source restore.
+- **Task commit:** `#151` — `tools/stryker/d151-evidence.py` + this status file (explicit paths only).
+- **Issue:** #151 **closed** — https://github.com/AlexeyShirshov/nextorm/issues/151.
+- **Non-blocking documentation fix:** `artifacts/pdca/D151/rv2/provenance.md` helper hash corrected to current `e86d9522…a6434f` (gitignored; no commit impact; other frozen evidence untouched).
+
+### Журнал (ACT)
+| UTC | phase | rev | iter | event | evidence |
+|---|---|---|---|---|---|
+| 2026-10-10 02:45 | ACT | r=2 | n=1/3 | CHECK **PASS** (r=2, rv2, 15/15 rows); `plan_state` done/verified; next step none; issue #151 closed; provenance helper-hash `e86d9522…a6434f` corrected (gitignored); no campaign re-run | `docs/specs/status/rc2-151-stryker-mutation-1.md`, `artifacts/pdca/D151/rv2/manifest.json`, `artifacts/pdca/D151/rv2/provenance.md` |
