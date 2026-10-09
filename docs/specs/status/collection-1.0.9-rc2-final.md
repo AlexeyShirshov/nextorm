@@ -31,13 +31,13 @@ Excluded gaps (removed from the barrier; not planned to DO; no `ready` placehold
 
 | group | tasks (order) | mode | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | T160 → T206 → T208 → T170 → T151 | single lane, sequential | current worktree (no group worktree) | `1.0.9-rc2` @ `be2652af` | pending |
+| G1 | T160 → T206 → T208 → T170 → T151 | single lane, sequential | current worktree (no group worktree) | `1.0.9-rc2` @ `be2652af` | in-progress |
 
 ## Tasks
 
 | id | issue | group | order | branch | status | plan_state | selected_variant | cycle_id | plan_revision | status file | reason + patch |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| T160 | #160 | G1 | 1 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | own PLAN persisted (commit `1675a978`); selective port + R02 red↔green |
+| T160 | #160 | G1 | 1 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-160-join-alias-mixing-1.md | own PLAN persisted (commit `1675a978`); selective port + R02 red↔green; terminal incomplete — fresh redo not executable; over-preserving red only in rejected patch; patch docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch |
 | T206 | #206 | G1 | 2 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md | own PLAN persisted (commit `22f0171d`); NORMGEN007 guard red↔green |
 | T208 | #208 | G1 | 3 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-208-sqlserver-native-json-param-alias-1.md | own PLAN persisted (commit `27da4fd6`) |
 | T170 | #170 | G1 | 4 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | own PLAN persisted (commit `2f7836a6`); documented trust + closed runtime oracle |
