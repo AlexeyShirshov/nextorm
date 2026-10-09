@@ -175,6 +175,14 @@ internal static class SqlSourceRenderer
         return sql;
     }
 
+    /// <summary>
+    /// Renders a single <c>JOIN</c> clause. When <paramref name="tablesInScopeHints"/> is non-null and
+    /// non-empty it is forwarded to the joined source, so a structural dialect (SQL Server) emits the
+    /// tables-in-scope <c>WITH (...)</c> clause on the joined physical table; the per-join
+    /// <see cref="JoinExpression.TableHints"/> are preserved alongside it. Inline-comment dialects
+    /// (PostgreSQL/MySQL) collect the scope hint at the statement level instead, so they pass
+    /// <c>null</c> here.
+    /// </summary>
     internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null)
     {
         if (join.JoinType is JoinType.Right && !ctx.Dialect.SupportsRightFullJoin
@@ -282,7 +290,7 @@ internal static class SqlSourceRenderer
     /// renderer: PostgreSQL needs the source in <c>USING</c> and the condition in <c>WHERE</c>, while the
     /// alias-style dialects use <see cref="MakeJoin"/> instead. The condition is empty in parameter mode.
     /// </summary>
-    internal static (string From, string Condition) MakeJoinParts(in SqlBuildContext ctx, JoinExpression join, Type entityType)
+    internal static (string From, string Condition) MakeJoinParts(in SqlBuildContext ctx, JoinExpression join, Type entityType, IReadOnlyList<string>? tablesInScopeHints = null)
     {
         ValidateJoinModifiers(in ctx, join);
         ValidateJoinTableHintSource(join);
@@ -296,7 +304,7 @@ internal static class SqlSourceRenderer
 
         try
         {
-            var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, condition.Parameters[1].Type, false, TableHints: join.TableHints));
+            var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, condition.Parameters[1].Type, false, TableHints: join.TableHints, TablesInScopeHints: tablesInScopeHints));
 
             var conditionBuilder = StringBuilderPool.Shared.Get();
             try

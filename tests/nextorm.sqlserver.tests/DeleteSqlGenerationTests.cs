@@ -132,4 +132,34 @@ public class DeleteSqlGenerationTests
             .ToSql()
             .Should().Be("delete [t1] from complex_entity as [t1] join simple_entity as [t2] on t1.id = cast(t2.id as bigint)");
     }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldApplyToTargetAndJoinedTables()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("nolock")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .ToSql();
+
+        sql.Should().Be("delete [t1] from complex_entity with (nolock) as [t1] join simple_entity with (nolock) as [t2] on t1.id = cast(t2.id as bigint)");
+        (sql.Split("with (").Length - 1).Should().Be(2);
+    }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldMergeWithJoinTableHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        // V07 DELETE side (structural): the target gets the scope hint; the joined table merges its
+        // per-join table hint first, then the scope hint, into a single WITH clause.
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("nolock")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id, j => j.WithJoinTableHint("rowlock"))
+            .ToSql();
+
+        sql.Should().Be("delete [t1] from complex_entity with (nolock) as [t1] join simple_entity with (rowlock, nolock) as [t2] on t1.id = cast(t2.id as bigint)");
+        (sql.Split("with (").Length - 1).Should().Be(2);
+    }
 }

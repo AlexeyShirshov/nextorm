@@ -1276,6 +1276,19 @@ internal readonly struct SqlBuilder
         if (source.From is not { } targetFrom)
             throw new BuildSqlCommandException("A multi-table DELETE is missing its target source.");
 
+        // Scope hints are structural on SQL Server (a WITH(...) on every physical table) and part of the
+        // statement-level comment elsewhere. A dialect that supports neither rejects them here, before any
+        // SQL is assembled — the same capability rule the SELECT pipeline applies (MakeSelect).
+        var scopeHints = _ctx.Dialect.SupportsTablesInScopeHints ? source.TablesInScopeHints : null;
+        if (source.TablesInScopeHints is { Count: > 0 }
+            && !_ctx.Dialect.SupportsInlineHints
+            && !_ctx.Dialect.SupportsTablesInScopeHints)
+            throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
+        var inlineHints = _ctx.Dialect.SupportsInlineHints ? MergeHints(source.Hints, CollectInlineHints(source)) : null;
+        if (inlineHints is { Count: > 0 } && !_ctx.Dialect.SupportsQueryHints)
+            throw new NotSupportedException("Query hints are not supported by this SQL dialect");
+
         _ctx.ColumnsProvider.PushSourceScope();
         try
         {
@@ -1285,7 +1298,7 @@ internal readonly struct SqlBuilder
             var whereSql = StringBuilderPool.Shared.Get();
             try
             {
-                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true), out var targetAlias);
+                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true, TablesInScopeHints: scopeHints), out var targetAlias);
                 if (string.IsNullOrEmpty(targetAlias))
                     throw new NotSupportedException("A multi-table DELETE can only target a physical table, not a derived or function source.");
 
@@ -1294,13 +1307,13 @@ internal readonly struct SqlBuilder
 
                 // The target without an alias, used by the PostgreSQL USING form (its DELETE target must
                 // stay unaliased while the join conditions reference the target alias).
-                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false));
+                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false, TablesInScopeHints: scopeHints));
 
                 if (_ctx.Dialect.DeleteJoinRequiresUsing)
                 {
                     for (var i = 0; i < joins.Length; i++)
                     {
-                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType);
+                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType, scopeHints);
 
                         if (i > 0)
                         {
@@ -1316,7 +1329,7 @@ internal readonly struct SqlBuilder
                 {
                     fromAndJoins.Append(targetSql);
                     for (var i = 0; i < joins.Length; i++)
-                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType));
+                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType, scopeHints));
                 }
 
                 if (source.PreparedCondition is { } condition)
@@ -1330,6 +1343,9 @@ internal readonly struct SqlBuilder
                     joinConditions.ToString(),
                     whereSql.Length == 0 ? null : whereSql.ToString(),
                     _ctx.KeywordCase);
+
+                if (inlineHints is { Count: > 0 })
+                    sql = ApplyInlineHints(sql, inlineHints);
 
                 var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsDeleteJoinReturning, "removed");
                 if (returning is not null)
@@ -1374,6 +1390,19 @@ internal readonly struct SqlBuilder
         if (source.From is not { } targetFrom)
             throw new BuildSqlCommandException("A multi-table UPDATE is missing its target source.");
 
+        // Scope hints are structural on SQL Server (a WITH(...) on every physical table) and part of the
+        // statement-level comment elsewhere. A dialect that supports neither rejects them here, before any
+        // SQL is assembled — the same capability rule the SELECT pipeline applies (MakeSelect).
+        var scopeHints = _ctx.Dialect.SupportsTablesInScopeHints ? source.TablesInScopeHints : null;
+        if (source.TablesInScopeHints is { Count: > 0 }
+            && !_ctx.Dialect.SupportsInlineHints
+            && !_ctx.Dialect.SupportsTablesInScopeHints)
+            throw new NotSupportedException("Tables-in-scope hints are not supported by this SQL dialect");
+
+        var inlineHints = _ctx.Dialect.SupportsInlineHints ? MergeHints(source.Hints, CollectInlineHints(source)) : null;
+        if (inlineHints is { Count: > 0 } && !_ctx.Dialect.SupportsQueryHints)
+            throw new NotSupportedException("Query hints are not supported by this SQL dialect");
+
         _ctx.ColumnsProvider.PushSourceScope();
         try
         {
@@ -1383,7 +1412,7 @@ internal readonly struct SqlBuilder
             var whereSql = StringBuilderPool.Shared.Get();
             try
             {
-                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true), out var targetAlias);
+                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true, TablesInScopeHints: scopeHints), out var targetAlias);
                 if (string.IsNullOrEmpty(targetAlias))
                     throw new NotSupportedException("A multi-table UPDATE can only target a physical table, not a derived or function source.");
 
@@ -1392,13 +1421,13 @@ internal readonly struct SqlBuilder
 
                 // The target without an alias, used by the FROM form (its UPDATE target must stay
                 // unaliased in the source list while the assignments and conditions reference the alias).
-                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false));
+                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false, TablesInScopeHints: scopeHints));
 
                 if (_ctx.Dialect.UpdateJoinRequiresFrom)
                 {
                     for (var i = 0; i < joins.Length; i++)
                     {
-                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType);
+                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType, scopeHints);
 
                         if (i > 0)
                         {
@@ -1414,7 +1443,7 @@ internal readonly struct SqlBuilder
                 {
                     fromAndJoins.Append(targetSql);
                     for (var i = 0; i < joins.Length; i++)
-                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType));
+                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType, scopeHints));
                 }
 
                 // Rendered after the sources so each table alias is already registered. PostgreSQL and
@@ -1434,6 +1463,9 @@ internal readonly struct SqlBuilder
                     joinConditions.ToString(),
                     whereSql.Length == 0 ? null : whereSql.ToString(),
                     _ctx.KeywordCase);
+
+                if (inlineHints is { Count: > 0 })
+                    sql = ApplyInlineHints(sql, inlineHints);
 
                 var returning = MakeJoinReturning(cmd.ReturningColumns, cmd.ReturningProjection, _ctx.Dialect.SupportsUpdateJoinReturning, "updated");
                 if (returning is not null)
@@ -1756,6 +1788,21 @@ internal readonly struct SqlBuilder
         for (var i = 0; i < inlineHints.Count; i++)
             combined[statementHints.Count + i] = inlineHints[i];
         return combined;
+    }
+
+    /// <summary>
+    /// Inserts the statement-level <c>/*+ ... */</c> hint comment immediately after the DML statement's
+    /// leading keyword (<c>DELETE</c>/<c>UPDATE</c>) — the position PostgreSQL <c>pg_hint_plan</c> and
+    /// MySQL optimizer hints read. The multi-table DML renderers never emit a leading <c>WITH</c> here
+    /// (the planner prepends a hoisted <c>WITH</c> afterwards), so the first token is always the verb.
+    /// </summary>
+    private static string ApplyInlineHints(string sql, IReadOnlyList<string> hints)
+    {
+        var keywordEnd = 0;
+        while (keywordEnd < sql.Length && !char.IsWhiteSpace(sql[keywordEnd]))
+            keywordEnd++;
+
+        return sql.Insert(keywordEnd, " /*+ " + string.Join(" ", hints) + " */");
     }
 
     /// <summary>

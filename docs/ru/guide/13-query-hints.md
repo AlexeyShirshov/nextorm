@@ -249,6 +249,35 @@ select /*+ JOIN_ORDER(t1, t2) */ id from simple_entity as `t1` join complex_enti
 наружу не отдаются. Все четыре хинта входят в ключ плана. В SQLite, ClickHouse и провайдере in-memory они
 отклоняются через `NotSupportedException`.
 
+### Табличные хинты области видимости в JOIN-формах DELETE/UPDATE
+
+`WithTablesInScopeHint` учитывается построителями многотабличных `DELETE` и `UPDATE`, а не только
+`SELECT`: хинты попадают на целевую и каждую присоединённую физическую таблицу.
+
+```csharp
+dataContext.From<IComplexEntity>()
+    .WithTablesInScopeHint("SeqScan(t1)")        // SQL Server: .WithTablesInScopeHint("nolock")
+    .Join(dataContext.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+    .CreateUpdateJoinBuilder()
+    .Set(p => p.Item1.String, "x")
+    .ToSql();
+```
+
+```sql
+-- SQL Server: предложение WITH (...) на каждой физической таблице
+update [t1] set t1.somestring = @p0 from complex_entity with (nolock) as [t1] join simple_entity with (nolock) as [t2] on t1.id = t2.id
+-- PostgreSQL: один комментарий уровня инструкции сразу после UPDATE (так же для DELETE)
+update /*+ SeqScan(t1) */ complex_entity as "t1" set somestring = @p0 from simple_entity as "t2" where t1.id = t2.id
+```
+
+В PostgreSQL/MySQL/MariaDB хинт области видимости — вместе с собранными join/subquery-хинтами — выводится
+один раз комментарием `/*+ ... */` сразу после ключевого слова `DELETE`/`UPDATE`. Для DML-инструкции с
+CTE поднятый префикс `WITH` ставится перед инструкцией, а комментарий остаётся после DML-глагола — так
+же, как в `SELECT` он ставится после `SELECT` в `WITH … SELECT`. SQLite и ClickHouse отклоняют непустой
+scope-хинт через `NotSupportedException`, как и в `SELECT`; сама JOIN-форма `DELETE`/`UPDATE` в этих
+провайдерах не поддерживается, поэтому их текущая диагностика о возможности не меняется. DML без хинтов
+остаётся байт-в-байт прежним.
+
 ## Модификаторы запроса ClickHouse
 
 ClickHouse имеет четыре модификатора уровня запроса — не хинты: `Final()`, `PreWhere(predicate)` и

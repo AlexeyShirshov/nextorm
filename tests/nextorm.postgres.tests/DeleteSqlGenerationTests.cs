@@ -303,6 +303,69 @@ public class DeleteSqlGenerationTests
         sql.Should().Be("delete from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint) returning t1.id");
     }
 
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldFoldIntoInlineComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .ToSql();
+
+        sql.Should().Be("delete /*+ SeqScan(t1) */ from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint)");
+    }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldNotDuplicateComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .Where(p => p.Item1.String == "x")
+            .ToSql();
+
+        (sql.Split("/*+").Length - 1).Should().Be(1);
+        sql.Should().StartWith("delete /*+ SeqScan(t1) */ from complex_entity as \"t1\" using simple_entity as \"t2\"");
+    }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldComposeWithJoinHintInOneComment()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // V08 DELETE side: a scope hint and a per-join hint both fold into one statement-level comment,
+        // once, in collection order (scope first, then the join hint).
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id, j => j.WithJoinHint("HashJoin(t1 t2)"))
+            .ToSql();
+
+        sql.Should().Be("delete /*+ SeqScan(t1) HashJoin(t1 t2) */ from complex_entity as \"t1\" using simple_entity as \"t2\" where t1.id = cast(t2.id as bigint)");
+        (sql.Split("/*+").Length - 1).Should().Be(1);
+    }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_FromCte_ShouldPlaceCommentAfterDeleteVerb()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // Finding 6: a hoisted WITH prefix is prepended before the statement, so the inline comment
+        // follows the DELETE verb — the SELECT convention ("with ... delete /*+ ... */"), not before WITH.
+        var scope = ctx.With("c", ctx.From<IComplexEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var sql = ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("SeqScan(t1)")
+            .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+            .ToSql();
+
+        sql.Should().StartWith("with c as (select id from complex_entity");
+        sql.Should().Contain("delete /*+ SeqScan(t1) */ from complex_entity as \"t1\" using c as \"t2\"");
+        (sql.IndexOf("/*+")).Should().BeGreaterThan(sql.IndexOf("delete"));
+    }
+
     private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
 
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)

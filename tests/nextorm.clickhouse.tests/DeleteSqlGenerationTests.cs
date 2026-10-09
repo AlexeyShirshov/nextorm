@@ -50,4 +50,19 @@ public class DeleteSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*does not support deleting from a joined table*");
     }
+
+    [Fact]
+    public void DeleteJoin_DmlScopeHint_ShouldThrowBecauseMutationCannotJoin()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        // ClickHouse has no joined DML at all, so the capability rejection dominates any hint handling;
+        // the scope hint must not turn the failure into a silent render or a different diagnostic.
+        var act = () => ctx.From<IComplexEntity>()
+            .WithTablesInScopeHint("x")
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*does not support deleting from a joined table*");
+    }
 }
