@@ -84,3 +84,29 @@ Pin before DO in this status and `artifacts/pdca/D206/rv1/manifest.json`. Rows: 
 ## Handoff and refs
 Task=T206/#206; variant=pdca-dotnet; plan_state=ready; r=1; baseline=9a2a2871; footprint=generator/diagnostic-tests/EN+RU-joins/status/evidence; uncertainty=fixture, workaround and contract preflight; predecessors=#113 wiring, #159 risk context; prerequisites=E00, .NET 10/tools, integration skill and live containers.
 Refs: #206 owner clarification; #113; #159; `docs/specs/design/join-alias-variant-matrix.md:76–84`; `docs/specs/status/rc2-159-cte-direct-joins-1.md`.
+
+
+---
+
+## DO - attempt n=1 (STOP: blocker, not a replan)
+
+**Durable state:** Current cycle **N=1**; Plan revision **r=1** (unchanged - STOP, no replan); Attempt **n=1/3**; event phase **DO**; `tier=cheap`; HEAD `e37f6c7a`.
+**Defect history:** new key `t206-unreachable-normgen007` -> observed r1 n1, **0 applied fixes**, evidence `artifacts/pdca/D206/rv1/{BLOCKER.md,D1-red.log,probe.log,D1D2-evidence.json}`, result **blocked (STOP), not resolved**. No prior T206 defect carried.
+
+| UTC time | phase | revision | iteration | event | evidence pointer |
+|---|---|---|---|---|---|
+| 2026-10-09T18:37Z | DO | r1 | n1/3 | **STOP (blocker):** the mandated last-step-`JoinedType` different-body collision fixture is **not constructible** - `RenderExtension` (`JoinAliasGenerator.cs:721-787`) emits the body as a pure function of the emitted signature and replaces the last-step `JoinedType` with `TJoin` (`:747-751`), so NORMGEN007 (`:692-697`) is unreachable dead code. Closest fixture emits **one byte-identical** method with 0 NORMGEN007 and 0 compiler errors; the required location test is red with **0** diagnostics (not `Location.None`). Preflight contradicts the selected guard, so per the plan prerequisites this returns to PLAN before further DO. Tree restored to HEAD; **no production/test edits**. | `artifacts/pdca/D206/rv1/BLOCKER.md`; `D1-red.log` (exit 2, 11/12); `probe.log` (exit 2); `D1D2-evidence.json` (inner-loop report validator exit 2); scope brief exit 0 |
+
+**Replan options (for planner):** (1) make the last-step `JoinedType` participate in the emitted identity - the plan's **Deferred** signature-disambiguating alternative (needs approved compat design + compiling spike; changes generated public surface); (2) keep NORMGEN007 defensive and move R01/R02 to a synthetic `AppendExtensions`/`ChainModel` test seam (internal test-only exposure, no public API change); (3) narrow T206 to R03 (byte-identical collapse + deterministic order-independent behaviour) and drop the unreachable R01/R02 fixture.
+
+---
+
+## P206.close — terminal incomplete (2026-10-09)
+
+- status: **terminal incomplete**; plan_state: **terminal**; cycle **N=1**, plan revision **r=1** closed without DO completion; no `r=2`.
+- Reason: "Required NORMGEN007 conflict is unreachable because emitted bodies are determined by emitted signatures (`JoinAliasGenerator.cs:721-787`, esp. `:747-751`); the collision branch `:692-697` cannot fire; the original acceptance remains unmet."
+- Measured facts: probe fixture (same base, same `Alias.X`, last steps `Person` vs `Other`) emits one byte-identical `Join` method, 0 generator diagnostics, 0 compiler errors; red characterization exit 2, 11/12 alias diagnostic tests passed, 0 NORMGEN007 found.
+- Acceptance disposition (all IDs preserved): **R01 unmet**; **R02 unmet** (fixture unsatisfiable); **R03 retained** (probe supports identical-duplicate collapse; intermediate-`IsCte` obligation not established by this attempt); **R04 retained**; **R05 unmet** (do not publish a purported reachable NORMGEN007 scenario or unverified workaround); **R06 retained**. None silently deferred/reclassified/passed.
+- No product/test paths broken by this attempt; **D1/D2 recorded unfinished**; no fictitious supersession.
+- Preserved evidence: `artifacts/pdca/D206/rv1/{BLOCKER.md,D1-red.log,probe.log,D1D2-evidence.json,scope.json}`.
+- Lane released to **T208 (#208)**.
