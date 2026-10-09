@@ -10,7 +10,10 @@ current_cycle: 2
 plan_revision: r4
 attempt: 1/3
 evidence_revision: rv4
-phase: DO
+phase: ACT
+terminal_status: COMPLETE
+check_verdict: PASS
+commit: 97b2bc1ac93d37519570f0597f10a629ae9c5d91
 status_file: docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md
 ```
 
@@ -109,6 +112,43 @@ D:C2-R3-MANIFEST, D:C2-05): spec wording fix, rv3 manifest reconciliation, and e
 `D:C2-03` was recorded active and temporarily blocked on `D:C2-03a` while that unit was active — never
 superseded; its original criteria and remainder are unchanged.
 
+## ACT finalization (cycle N=2, r4 / rv4) — COMPLETE
+
+```yaml
+phase: ACT
+terminal_status: COMPLETE
+check_verdict: PASS
+plan_revision: r4
+evidence_revision: rv4
+commit: 97b2bc1ac93d37519570f0597f10a629ae9c5d91
+issue: "https://github.com/AlexeyShirshov/nextorm/issues/188 (CLOSED)"
+```
+
+- **CHECK N=2 r4/rv4 PASS.** All units and all 17 evidence rows are `done`/`met`: D:C2-01, D:C2-02,
+  D:C2-03a, D:C2-03, D:C2-R3-SPEC, D:C2-R3-MANIFEST, D:C2-04, D:C2-05 (pre-ACT staging), and C2-E11-ACT
+  (post-CHECK delivery). Evidence: Debug/Release solution builds 0W/0E; 89 successful BDN cases
+  (7/21/7/16/30/8), Failed=0; 18 frozen reports; reader-parity probes; EN/RU docs verification.
+- **Delivery (C2-E11-ACT met):** commit `97b2bc1ac93d37519570f0597f10a629ae9c5d91`
+  (`#188 Complete tier-1 comparison benchmarks`) contains exactly the frozen allow-list T = 26 paths
+  (18 reports under `benchmarks/BenchmarkDotNet.Artifacts/results/` + the 8 changed source/doc/spec/status
+  files), no other path; issue #188 **CLOSED**
+  (`https://github.com/AlexeyShirshov/nextorm/issues/188`). No push.
+- **C2-E13 met:** manifest reconciled; issue state observed `CLOSED` via
+  `gh issue view 188 --repo AlexeyShirshov/nextorm --json state,url`.
+- **Status file lifetime:** finalized and **KEPT** (global contract §Status file "Lifetime") — this file is
+  the durable terminal record of cycle N=2; the cycle-1 appendix remains preserved.
+
+### Deferred items (with triggers)
+
+| Deferred item | Trigger to activate |
+|---|---|
+| Async reader arms (Nextorm `ToDataReaderAsync`, Dapper `ExecuteReaderAsync`, linq2db `ExecuteReaderAsync`) | Request for an async raw-reader comparison |
+| Other providers (PostgreSQL/SQL Server/MySQL/ClickHouse) beyond SQLite | Agreed cross-provider benchmark scope and fixtures |
+| LOB `ToStream`/`ToTextReader` benchmarks | Agreed LOB benchmark issue and representative LOB fixture |
+| DML and navigation/eager-loading cross-library comparisons | Tier-2 comparison issue |
+| Full-duration statistical/ranking campaign (replace `ShortRun`) | Request to publish statistically supported rankings |
+| JSON/CSV synchronous-database counterparts beyond the closest-equivalent materialize→serialize | Synchronous comparison campaign |
+
 ## Progress log (N=2)
 
 `<UTC time> | <phase> | revision r | iteration n/3 | <event> | <evidence pointer>`
@@ -133,6 +173,7 @@ superseded; its original criteria and remainder are unchanged.
 - 2026-10-09T17:35Z | DO | r3 | 2/3 | Evidence reconciliation + snapshots (CHECK r3 n=1 loop-back): reconciled the `git diff --cached --check` policy between status C2-E11 and manifest C2-E11 (accept exit 0 or exit 2 caused solely by BDN-generated `Job=`/`IterationCount=` trailing whitespace in the 18 frozen reports; frozen reports not modified); `evidence-report.json` updated to rv3 (`unit`/`plan`/`rv`/`contract_rv`/revision) and its stale `streaming.log` source replaced with `check/w3-streaming.log`; `docs-review.md` W5 wording aligned to the corrected spec (constructor `Prepare()` renders SQL + creates a `DbCommand` untimed). Created read-only snapshots `snapshots/` (6 reports + 5 docs + 2 sources + `INDEX.md` + `audit-evidence.md`). Validators brief/report/manifest exit 0; scope guard empty; 26 paths staged | `TestResults/D188/N2/r1/snapshots/INDEX.md`, `snapshots/audit-evidence.md`, `evidence-report.json`, `evidence-manifest.json` |
 - 2026-10-09T17:40Z | DO | r4 | 1/3 | Replanned: evidence contract r4 (staging `--check` predicate) — rv4 supersedes rv3 only for the staging predicate; all 17 row IDs/obligations/priorities preserved. Identical predicate now in status C2-E11 + EV:C2-PATH-TRACKING and manifest: `git diff --cached --check` exit 0 or exit 2 with EVERY finding attributable to a path in S (18 frozen reports); NO metadata-token/line-content whitelist; ZERO findings outside S; any other exit FAIL; membership (`git ls-files -z` ⊇ T, parsed `git diff --cached --name-only -z` == T=26) and immutability (frozen manifest checksums, index==worktree, not regenerated) unchanged | `docs/specs/status/rc2-188-comparison-benchmarks-tier1-1.md`, `TestResults/D188/N2/r1/evidence-manifest.json` |
 - 2026-10-09T17:40Z | DO | r4 | 1/3 | r4 staging validation done: `git ls-files -z -- benchmarks/BenchmarkDotNet.Artifacts/results` includes all 18 S members; parsed `git diff --cached --name-only -z` equals T exactly (26/26); `git diff --cached --check` exit 2 with all 24 findings inside S (12 distinct report paths) and zero in the 8 staged source/doc/spec/status files; 18 S sha256 frozen in the manifest `frozen_report_checksums`; worktree==index for S. Evidence `staging/r4-membership.txt`, `staging/r4-check.txt`, `staging/r4-checksums.txt`. Manifest validator exit 0; report validator exit 0; scope guard empty | `TestResults/D188/N2/r1/staging/` |
+- 2026-10-09T17:44Z | ACT | r4 | 1/3 | ACT: committed `97b2bc1ac93d37519570f0597f10a629ae9c5d91` ("#188 Complete tier-1 comparison benchmarks", exactly T=26 paths), issue #188 CLOSED (`https://github.com/AlexeyShirshov/nextorm/issues/188`); CHECK N=2 r4/rv4 PASS; terminal status COMPLETE; deferred items (async readers; other providers; LOB; DML/navigation; full-duration campaign; sync JSON/CSV) recorded with triggers; status file KEPT | `TestResults/D188/N2/r1/act-gh-view.log`, `TestResults/D188/N2/r1/evidence-manifest.json` |
 
 ## Durable state and defect history (N=2)
 
