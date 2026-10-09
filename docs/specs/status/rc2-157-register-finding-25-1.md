@@ -220,3 +220,22 @@ Journal:
 - `2026-10-07T15:24Z | DO | r=1 | n=1/3 | D2-D4 implemented (tests, XML, EN/RU docs); C1 build 0/0 | /tmp/nextorm-D157-r1/build.log`
 - `2026-10-07T15:24Z | DO | r=1 | n=1/3 | D5 verify: C2=7/0/0, C3=5/0/0, C4=791/0/0, C5=712/0/0 | /tmp/nextorm-D157-r1/postgres-withties.log`
 - `2026-10-07T15:24Z | DO | r=1 | n=1/3 | D6 finding 25 reconciled CLOSED; Roslyn locations captured | docs/specs/design/code-smells-review.md`
+
+## CHECK / ACT (collection C resumption 2026-10-09)
+
+- Verdict: **CHECK PASS — rv=1; E01–E09 bound.**
+- Re-gather reason: the per-task CHECK verdict was **missing** in collection C (collection evidence row C-E03), so the D157 CHECK was re-gathered from source and certified fresh at HEAD `efd1b30a`.
+- Fresh evidence (evidence dir `artifacts/pdca/collection-1.0.9-rc2/C/D157/`):
+  - C1 `dotnet build -c Debug` → exit 0, **0 Warning(s) / 0 Error(s)** (`build.log`).
+  - C2 `dotnet test tests/nextorm.postgres.tests -c Debug --filter ...WithTies` → exit 0, **7 / 0 / 0** (`postgres-withties.log`).
+  - C3 `dotnet test tests/nextorm.sqlserver.tests -c Debug --filter ...WithTies` → exit 0, **5 / 0 / 0** (`sqlserver-withties.log`).
+  - C4 `dotnet test tests/nextorm.postgres.tests -c Debug` (full) → exit 0, **844 / 0 / 0** (`postgres-boundary.log`).
+  - C5 `dotnet test tests/nextorm.sqlserver.tests -c Debug` (full) → exit 0, **754 / 0 / 0** (`sqlserver-boundary.log`).
+  - C6/C7 scope + `git diff --check` → exit 0, allowlist only (`c6-scope.log`).
+  - C8 `git diff` footprint → exit 0 (`c8-diff.log`).
+  - C9 no-spec-link check → exit 0, **0 matches** (`c9-no-spec-link.log`).
+  - 2× Roslyn `action=members` → exit 0 (`roslyn-1.log`, `roslyn-2.log`); register finding 25 CLOSED at `docs/specs/design/code-smells-review.md:1848`.
+- ACT: finding 25 closed; issue **#157 closed at commit `5978556f`**.
+- Journal (append-only):
+  - `2026-10-09T15:45Z | CHECK | r=1 | n=1/3 | CHECK PASS rv=1, E01-E09 bound (re-gather: missing per-task verdict, collection C-E03) | artifacts/pdca/collection-1.0.9-rc2/C/D157/`
+  - `2026-10-09T15:46Z | ACT | r=1 | n=1/3 | finding 25 CLOSED code-smells-review.md:1848; #157 closed 5978556f | docs/specs/design/code-smells-review.md`
