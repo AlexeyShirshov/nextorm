@@ -249,14 +249,27 @@ an empty result.
 
 ### Ownership, flushing and errors
 
-* The destination is **caller-owned**: the terminal never closes it and never calls `Stream.Flush`,
-  so flush or dispose it yourself after the call (for example with `await using` on a file).
+The error policy is the same on every SQL provider and on both internal execution routes — the
+managed `System.Text.Json` writer and the SQL Server native `FOR JSON` fast-path:
+
+* The destination is **caller-owned**: the terminal never closes or disposes it and never calls
+  `Stream.Flush`, so flush or dispose it yourself after the call (for example with `await using` on a
+  file).
 * Rows are flushed to the destination as they are written (per row, at the buffer threshold and at
   the end), so output appears progressively while the query is still running.
-* If an error occurs mid-document the exception propagates and the already-written bytes are left in
-  place (the JSON document is truncated, with no closing bracket), the destination is **not** closed,
-  and the reader and command are released. An empty result writes `[]` in `Array` mode and zero bytes
-  in `NdJson` mode.
+* **Fail-stop, no rollback.** If an error occurs mid-document — a provider/reader failure, a
+  destination I/O error or a value-dependent overflow — the original exception propagates and the
+  already-written bytes are left exactly where they are: the document is truncated, with no closing
+  bracket and no recovery or rollback pass. The library never reopens, rewinds or completes the
+  document after a failure.
+* **Cancellation is not success.** A cancelled async write throws `OperationCanceledException` and is
+  never turned into a completed call; the already-written prefix is left in place.
+* After any of these failures the destination stays **open and writable**, and the reader and command
+  are released.
+* **Pre-output refusals leave the destination untouched.** Preflight validation, the in-memory
+  refusal and the lazy temp-table refusal are detected before any byte — including the array/root
+  framing — is written, so a destination that already contains data keeps it byte-for-byte. An empty
+  result writes `[]` in `Array` mode and zero bytes in `NdJson` mode.
 * A query backed by a lazy temporary-table source throws `NotSupportedException`; materialize it
   first with `ToTable`/`ToTempTable`. Passing `null` for the destination or options throws
   `ArgumentNullException`.

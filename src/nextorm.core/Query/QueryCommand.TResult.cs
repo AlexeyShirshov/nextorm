@@ -140,7 +140,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// without materializing a <typeparamref name="TResult"/> per row. The destination is owned by the
     /// caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
     public void WriteJson(Stream destination) => WriteJson(destination, new JsonStreamOptions());
 
@@ -149,7 +149,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per row. The
     /// destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <exception cref="NotSupportedException">The command is executed by the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
     public void WriteJson(Stream destination, JsonStreamOptions options)
@@ -165,7 +165,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// JSON array, without materializing a <typeparamref name="TResult"/> per row. The destination is
     /// owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
     /// <exception cref="NotSupportedException">The command is executed by the in-memory provider.</exception>
@@ -177,7 +177,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// JSON using <paramref name="options"/>, without materializing a <typeparamref name="TResult"/> per
     /// row. The destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
@@ -196,7 +196,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
     /// destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">
@@ -223,7 +223,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <paramref name="params"/>, without materializing a <typeparamref name="TResult"/> per row. The
     /// destination is owned by the caller and is never closed. Supported on database providers only.
     /// </summary>
-    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">

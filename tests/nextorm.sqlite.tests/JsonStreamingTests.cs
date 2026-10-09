@@ -424,6 +424,53 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
             => throw new InvalidOperationException("destination failed");
     }
 
+    // Destination that accepts a successful prefix and then fails every later write, so a public-surface
+    // test can pin the partial-output contract across the row boundary: the already-written prefix stays
+    // (no rollback), no closing bracket / recovery tail is added, no `Stream.Flush` is called and the
+    // destination stays caller-owned/open. Each successful destination write is one full row frame.
+    private sealed class ThrowingAfterBytesStream : Stream
+    {
+        private readonly MemoryStream _inner = new();
+        private readonly int _writesBeforeThrow;
+        private int _writeCalls;
+
+        public ThrowingAfterBytesStream(int writesBeforeThrow) => _writesBeforeThrow = writesBeforeThrow;
+
+        public int FlushCalls { get; private set; }
+
+        public string Text => Encoding.UTF8.GetString(_inner.ToArray());
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => throw new NotSupportedException(); }
+
+        public override void Flush() => FlushCalls++;
+        public override Task FlushAsync(CancellationToken cancellationToken) { FlushCalls++; return Task.CompletedTask; }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            _writeCalls++;
+            if (_writeCalls > _writesBeforeThrow)
+                throw new InvalidOperationException("destination failed after prefix");
+            _inner.Write(buffer, offset, count);
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _writeCalls++;
+            if (_writeCalls > _writesBeforeThrow)
+                throw new InvalidOperationException("destination failed after prefix");
+            _inner.Write(buffer.Span);
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private readonly IDataContext _ctx;
     private readonly JsonStreamingFixture _fixture;
 
@@ -661,6 +708,22 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         async.ToArray().Should().Equal(sync.ToArray());
     }
 
+    // D179 V12 async NdJson success parity: the async terminal must emit the exact same NDJSON bytes as
+    // the sync mode (every row an independent JSON object, trailing newline included).
+    [Fact]
+    public async Task NdJson_Async_ShouldProduceIdenticalBytes()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var sync = new MemoryStream();
+        using var async = new MemoryStream();
+
+        command.WriteJson(sync, new JsonStreamOptions { Mode = JsonStreamMode.NdJson });
+        await command.WriteJsonAsync(async, new JsonStreamOptions { Mode = JsonStreamMode.NdJson }, TestContext.Current.CancellationToken);
+
+        async.ToArray().Should().Equal(sync.ToArray());
+        Utf8(async).Should().Be("{\"Id\":1,\"Name\":\"alpha\"}\n{\"Id\":2,\"Name\":null}\n{\"Id\":3,\"Name\":\"gamma\"}\n");
+    }
+
     [Fact]
     public async Task BufferRollover_ShouldStreamLargeResult()
     {
@@ -707,6 +770,132 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         stream.CanWrite.Should().BeTrue();
     }
 
+    // D179: the async sink-I/O cell of the array route (the throwing destination fails the awaited
+    // flush); the destination stays caller-owned and the context stays usable.
+    [Fact]
+    public async Task PartialOutputAsync_OnMidWriteFailure()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var stream = new ThrowingWriteStream();
+
+        var act = () => command.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("destination failed");
+        stream.CanWrite.Should().BeTrue();
+        _ctx.From<JsonEntity>().Select(x => x.Id).ToList().Should().HaveCount(3);
+    }
+
+    // D179: the NDJSON cells of the same matrix — NDJSON has no framing, so a mid-stream failure leaves
+    // the already-written lines in place and cancellation is never converted to success.
+    [Fact]
+    public void NdJson_PartialOutput_OnMidWriteFailure()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var stream = new ThrowingWriteStream();
+
+        var act = () => command.WriteJson(stream, new JsonStreamOptions { Mode = JsonStreamMode.NdJson });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("destination failed");
+        stream.CanWrite.Should().BeTrue();
+        _ctx.From<JsonEntity>().Select(x => x.Id).ToList().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task NdJson_Cancellation_DuringWrite_ShouldAbort()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var cts = new CancellationTokenSource();
+        using var stream = new CancellingWriteStream(cts);
+
+        var act = () => command.WriteJsonAsync(stream, new JsonStreamOptions { Mode = JsonStreamMode.NdJson }, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        stream.CanWrite.Should().BeTrue();
+    }
+
+    // D179 public-surface prefix retention: the first row is flushed as a successful prefix, then the
+    // destination fails. The exact prefix stays (no rollback), no closing bracket / recovery tail is
+    // appended, no `Stream.Flush` is added, and the destination stays caller-owned/open. Mirrors the
+    // managed-seam `JsonStreamWriterTests.WriteRow_SyncSinkFailure_ShouldKeepDestinationOpenAndPrefix`.
+    [Fact]
+    public void PartialPrefix_SyncSinkFailure_ShouldKeepPrefixAndDestinationOpen()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var stream = new ThrowingAfterBytesStream(writesBeforeThrow: 1);
+
+        var act = () => command.WriteJson(stream);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("destination failed after prefix");
+        stream.Text.Should().Be("[{\"Id\":1,\"Name\":\"alpha\"}");
+        stream.Text.Should().NotContain("]");
+        stream.FlushCalls.Should().Be(0);
+        stream.CanWrite.Should().BeTrue();
+        _ctx.From<JsonEntity>().Select(x => x.Id).ToList().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task PartialPrefix_AsyncSinkFailure_ShouldKeepPrefixAndDestinationOpen()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var stream = new ThrowingAfterBytesStream(writesBeforeThrow: 1);
+
+        var act = () => command.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("destination failed after prefix");
+        stream.Text.Should().Be("[{\"Id\":1,\"Name\":\"alpha\"}");
+        stream.Text.Should().NotContain("]");
+        stream.FlushCalls.Should().Be(0);
+        stream.CanWrite.Should().BeTrue();
+        _ctx.From<JsonEntity>().Select(x => x.Id).ToList().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void NdJson_PartialPrefix_SyncSinkFailure_ShouldKeepPrefixAndDestinationOpen()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var stream = new ThrowingAfterBytesStream(writesBeforeThrow: 1);
+
+        var act = () => command.WriteJson(stream, new JsonStreamOptions { Mode = JsonStreamMode.NdJson });
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("destination failed after prefix");
+        stream.Text.Should().Be("{\"Id\":1,\"Name\":\"alpha\"}\n");
+        stream.FlushCalls.Should().Be(0);
+        stream.CanWrite.Should().BeTrue();
+        _ctx.From<JsonEntity>().Select(x => x.Id).ToList().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task NdJson_PartialPrefix_AsyncSinkFailure_ShouldKeepPrefixAndDestinationOpen()
+    {
+        var command = _ctx.From<JsonEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Name });
+        using var stream = new ThrowingAfterBytesStream(writesBeforeThrow: 1);
+
+        var act = () => command.WriteJsonAsync(stream, new JsonStreamOptions { Mode = JsonStreamMode.NdJson }, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("destination failed after prefix");
+        stream.Text.Should().Be("{\"Id\":1,\"Name\":\"alpha\"}\n");
+        stream.FlushCalls.Should().Be(0);
+        stream.CanWrite.Should().BeTrue();
+        _ctx.From<JsonEntity>().Select(x => x.Id).ToList().Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void NdJson_UnsupportedShape_ShouldRejectBeforeOutputKeepingSentinel()
+    {
+        // The pre-output refusal is route- and mode-independent: NDJSON never touches a sentinel-preloaded
+        // destination when the projection is rejected while the shape is planned.
+        var command = _ctx.From<JsonEntity>().Where(x => x.Id == 1)
+            .Select(x => new { Empty = new JsonEmpty() });
+        var before = PreloadSentinel(out var stream);
+        using (stream)
+        {
+            var act = () => command.WriteJson(stream, new JsonStreamOptions { Mode = JsonStreamMode.NdJson });
+
+            act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [projection]*");
+            stream.ToArray().Should().Equal(before);
+        }
+    }
+
     [Fact]
     public void TempTableQuery_ShouldThrow()
     {
@@ -719,6 +908,24 @@ public class JsonStreamingTests : IClassFixture<JsonStreamingFixture>
         var act = () => command.WriteJson(stream);
 
         act.Should().Throw<NotSupportedException>().WithMessage("*JSON streaming validation [unsupported-execution-form]*");
+        stream.Position.Should().Be(position);
+        stream.Length.Should().Be(position);
+    }
+
+    // D179 V15 async twin: the temp-table refusal is execution-form based, so the async terminal must
+    // reject it identically and leave the sentinel-preloaded destination unchanged.
+    [Fact]
+    public async Task TempTableQueryAsync_ShouldThrow()
+    {
+        var source = _ctx.From<JsonEntity>().Select(x => new { x.Id, x.Name }).AsTempTable();
+        var command = _ctx.From(source).Select(t => new { Id = t.GetInt32("id"), Name = t.GetString("name") });
+        using var stream = new MemoryStream();
+        stream.WriteByte(1);
+        var position = stream.Position;
+
+        var act = () => command.WriteJsonAsync(stream, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*JSON streaming validation [unsupported-execution-form]*");
         stream.Position.Should().Be(position);
         stream.Length.Should().Be(position);
     }

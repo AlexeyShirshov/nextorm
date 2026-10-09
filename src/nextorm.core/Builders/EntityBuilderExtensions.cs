@@ -152,7 +152,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void WriteJson<TEntity>(this EntityBuilder<TEntity> builder, Stream destination)
@@ -165,7 +165,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider, the projection shape is not supported, or the option combination is invalid.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -179,7 +179,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
     /// <exception cref="NotSupportedException">The query runs on the in-memory provider.</exception>
@@ -194,7 +194,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="destination">The caller-owned output stream; it is never closed.</param>
+    /// <param name="destination">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
     /// <returns>A task that completes when the whole document has been written.</returns>
@@ -211,7 +211,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">
@@ -235,7 +235,7 @@ public static class EntityBuilderExtensions
     /// </summary>
     /// <typeparam name="TEntity">The entity type being queried.</typeparam>
     /// <param name="builder">The query builder being extended.</param>
-    /// <param name="stream">The caller-owned output stream; it is never closed.</param>
+    /// <param name="stream">The caller-owned output stream; it is never closed. On a read, serialization or destination error, or on cancellation, the operation stops and the original exception propagates; already-written bytes are left in place (no rollback and no recovery tail), the destination stays open, and the writer never adds a <c>Stream.Flush</c> call.</param>
     /// <param name="options">The JSON container and shaping options.</param>
     /// <param name="cancellationToken">A token observed while preparing, reading rows and writing to the stream.</param>
     /// <param name="params">
