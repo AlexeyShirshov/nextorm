@@ -1,26 +1,32 @@
 # rc2-190-reverify-1 — Fix whole-entity selection from JOIN projections (re-verification)
 
 - collection: rc2-reclaim (single lane; current worktree/branch 1.0.9-rc2)
-- selected_variant: pdca-dotnet; cycle N=1; plan_revision r=1; evidence contract rv=1
+- selected_variant: pdca-dotnet; cycle N=1; plan_revision r=2; evidence contract rv=2; iteration n=1
 - baseline: cf34f910; issue #190 (CLOSED 2026-10-08; stays closed; milestone 1.0.9-rc2 #20); follow-up #207
+- boundary B (reconciliation reference) = cf34f91045781faccdeb3b7163be2cc5f1dce0f2 (full hash of cf34f910)
+- final tip F (acceptance target) = ee42f183ffa1d769da76a0ccaa024ec53a7885c9 (full hash of current HEAD; predecessor accepted HEAD was 1ff47762)
+- pre-existing worktree delta: AGENTS.md has one pre-existing uncommitted content edit authored outside this cycle; it is OUT OF FOOTPRINT and is neither staged, reverted nor normalized.
 - predecessor: docs/specs/status/rc2-190-join-whole-entity-1.md (accepted at r1/rv1, HEAD 1ff47762; preserved unchanged; authoritative for its accept-PASS)
 - verdict: NO-OP RE-CERTIFICATION plan; no product change authorized; re-run existing evidence on the CURRENT tip
-- plan_state: ready (persisted at PLAN->DO boundary; DO not started in P-phase)
+- plan_state: ACT complete (CHECK PASS r=2/rv=2/n=1; no-op re-verification committed; #190 stays closed; #207 carried)
 
 ## Goal
-Re-certify R190 on the current tip (intervening core commits have landed since the accepted snapshot) and close a fresh rv=1 evidence ledger. The residuals recorded on D190 are accepted evidence limitations, not demonstrated defects. No speculative development; #190 is not reopened.
+Re-certify R190 on the current tip (intervening core commits have landed since the accepted snapshot) and close a fresh rv=2 evidence ledger. The residuals recorded on D190 are accepted evidence limitations, not demonstrated defects. No speculative development; #190 is not reopened.
 
 ## Acceptance criteria (each with negative)
 1. AC1 build: `dotnet build --no-restore` exit 0, 0W/0E (neg: any warning/error/nonzero).
-2. AC2 unit: 11 projects, 6246 passed + 1 skipped = 6247, 0 failed, exit 0; run the 13 recorded selectors separately, each selecting >=1 test (neg: missing projects/zero-selected selectors/unexpected skips/count mismatch).
-3. AC3 integration: Total 3555, Errors 0, Failed 0, Skipped 197, exit 0; provider-unavailable messages 0; evidence establishes all six providers incl. container-backed (neg: unavailable-provider skip passed off as success).
+2. AC2 unit: At the locked final-tip baseline F, execute the complete original 11-project unit scope with the contract's commands/counting. Require 0 failed and exactly the 1 approved skip (identity+reason preserved). Reconcile against boundary B: 6247 + R184(+16) + R175(0) + R177(+3) = 6266 (6265 passed + 1 skipped). Per-project results + predecessor->test mapping; no unexplained disappearance/duplicate/extra skip/omitted project. Evidence identifies F, commands, exit codes, artifacts. A different aggregate requires reconciliation+disposition, not restoring 6247. (neg: missing projects/zero-selected selectors/unexpected skips/omitted project/count mismatch).
+3. AC3 integration: At F, execute the complete original integration scope across all six required providers incl. ClickHouse. Require Errors=0, Failed=0, Unavailable=0, exactly the 197 approved capability skips (classifications preserved). Reconcile against B: 3555 + R184(0) + R175(0) + R177(+6) = 3561. Provider-level results + mapping of R177's six SQL Server integration cases. Missing/unavailable providers or infrastructure skips do not satisfy. (neg: unavailable-provider skip passed off as success).
 4. AC4 coverage: line>=85, branch>=75; record vs predecessor 86.8/79.4; disclose branch evidence + two unverified mutants (neg: below threshold or unverified mutants presented as killed).
 5. AC5 docfx: exit 0, 2 warnings/0 errors; existing EN/RU + registers consistent (neg: extra warnings/errors/broken refs/premature closure).
 6. R190 semantics: existing checks establish root/typed projection + first/middle/last slots; missing-vs-present outer (null vs non-null); SQL/in-memory parity; regression guards; compatible cache reuse (neg: scalar empty selections/refused-expansion silent emptiness/ambiguous mapping/incompatible reuse).
 7. Performance: exactly 7 acceptance cases, 0 fail, <=240s; record Mean/Allocated/cached-prepared ratio per predecessor definition (neg: timeout/missing/failed/missing metrics).
 8. Scope: no tracked product/test/public-doc changes; no commits; no replacement of predecessor status; tested tip unchanged during execution (neg: unexplained footprint changes).
-9. Completeness: every applicable rv=1 row has actual current evidence (neg: missing evidence prevents PASS but is not itself a product defect).
+9. Completeness: every applicable rv=2 row has actual current evidence (neg: missing evidence prevents PASS but is not itself a product defect).
 Count mismatches require measured evidence + CHECK->PLAN; no pre-authorized relaxation.
+
+### Amendment (r=2/rv=2)
+The EV190-* row IDs are preserved unchanged. The evidence revision is raised `rv=1`->`rv=2` solely because the acceptance totals are restated as baseline-relative (B = cf34f910 -> F = current tip) after predecessor R184/R177 moved the historical boundary; no row is dropped, renamed or newly invented. Historical boundary measurements (unit 9235 / 198 skipped; coverage 88.1% line / 80.1% branch; cached/prepared ratio 2.171) are **comparisons, not acceptance targets**. Coverage gates stay line>=85 / branch>=75. Perf keeps its accepted scenarios and reports the final-tip measurement against the 2.171 (predecessor) / 1.87 (documented baseline) historical comparison.
 
 ## DO task list (all fix now; sequential; NO product edits)
 - D190-V1 persist contract; record HEAD/worktree baseline; load integration skill + tool/container prerequisites; preserve predecessor status.
@@ -29,6 +35,7 @@ Count mismatches require measured evidence + CHECK->PLAN; no pre-authorized rela
 - D190-V4 full container-enabled integration; verify direct/regression results, six-provider participation, counts, infra log.
 - D190-V5 bounded acceptance benchmark + DocFX; compare/report baseline metrics + doc/register consistency.
 - D190-V6 complete actual-evidence ledger, branch/mutation disclosure, residual register, final footprint audit; hand off to CHECK.
+- P190-FINAL-TIP lock F = full hash of current HEAD; run scope/commands/artifacts against F; reconcile aggregates against B = cf34f910; confirm the pre-existing AGENTS.md delta is out of footprint.
 If DO finds a potential defect -> report observation; CHECK verifies before any corrective PLAN.
 
 ## Variant matrix (closure mode)
@@ -52,7 +59,7 @@ Sequential, one tree. Builds/coverage/provider infra/final logs share a footprin
 ## Design-checklist verdict
 PASS for a verification-only boundary: no API change, new abstraction, mapping redesign, cache mutation, test weakening, or provider workaround; existing shared-command/cache invariants remain mandatory.
 
-## Evidence contract (rv=1)
+## Evidence contract (rv=2)
 Artifact root planned E = artifacts/pdca/rc2-190-reverify-1/. Every row unconditionally applicable (no N/A); owner coder for ledger; scout for the indicated read-only audit `A(subject)`. For each shell run preserve command/tested HEAD/stdout/stderr/exit/result in the named log. Planned locations are not yet claims. Preserve EV190 IDs + historical RED subrecord.
 - EV190-PREFLIGHT -> Z,W,A(preflight+integration prereqs) -> HEAD 2ce46f5f, prerequisites ready.
 - EV190-SCOPE -> W,A(scope/predecessor) -> only allowed footprint, no unexplained changes.
@@ -102,3 +109,9 @@ rc2-190-join-whole-entity-1.md: r1/rv1; product fix; CHECK n1 product defect fix
 
 ## Progress log
 - PLAN persisted (r=1, rv=1) — collection P-phase boundary; plan_state=ready; DO not started.
+- 2026-10-09 14:50 UTC | PLAN | r=2 | n=1/3 | PLAN r=1->r=2 (stale absolute totals from predecessors R184/R177); contract recorded; no-op scope retained | docs/specs/status/rc2-190-reverify-1.md
+- 2026-10-09 14:54 UTC | DO | r=2 | n=1/3 | P190-FINAL-TIP locked F=ee42f183; build green 0W/0E exit 0; 13 selectors / 18 runs all exit 0 and >=1 selected; initial dirty state + AGENTS.md delta recorded out of footprint; ledger rows PREFLIGHT/SCOPE/RED/ROOT started | artifacts/pdca/rc2-190-reverify-1/
+- 2026-10-09 15:02 UTC | DO | r=2 | n=1/3 | R190 final-tip sweeps on F=ee42f183: build 0W/0E exit 0; unit aggregate 6266 = 6265 passed + 1 approved skip / 0 failed, all 11 rc=0 (reconcile B 6247 +16 R184 +0 R175 +3 R177 = 6266); full integration Total 3561 / Errors 0 / Failed 0 / Skipped 197 / Not Run 0 exit 0, six providers incl. ClickHouse, grep -c "is not available"=0 (grep rc 1) (reconcile B 3555 +6 R177); coverage line 86.8% / branch 79.4% (gates 85/75; historical 88.1/80.1); benchmark 7/7 cases 0 failed 50.27s (<240s) cached/prepared ratio 2.01 (historical 2.171 / 1.87); DocFX exit 0 2 warnings/0 errors | artifacts/pdca/rc2-190-reverify-1/logs/
+- 2026-10-09 15:02 UTC | DO | r=2 | n=1/3 | EV190 rv=2 ledger bound: 21 EV190-* rows + R190-01..09 + AC1..AC5 (historical EV190-* IDs + EV190-RED subrecord preserved; mutation kept as authorized no-tool disclosure of unverified mutants RowMaterializerBuilder.cs:182 / QueryCommand.QueryPreparer.cs:1035, no kill score); `validate_inner_loop.py report` exit 0 (audits/validate-report.out); scope guard PASS — only R190 status modified tracked, no product/test/public-doc change, pre-existing AGENTS.md diff sha256 unchanged 990cc12d; #190 CLOSED (milestone #20); #207 carried and DEFERRED (OPEN, milestone null, not inferred) | artifacts/pdca/rc2-190-reverify-1/evidence.json, artifacts/pdca/rc2-190-reverify-1/scope/scope-guard.md
+- 2026-10-09 15:11 UTC | CHECK | r=2 | n=1/3 | PASS (r=2, rv=2, n=1): build 0W/0E exit 0; unit aggregate 6266 (6265 passed + 1 approved skip) / 0 failed, reconciled B 6247 + R184(+16) + R175(0) + R177(+3) = 6266; full integration Total 3561 / Errors 0 / Failed 0 / Skipped 197 / Not Run 0 exit 0, six providers incl. ClickHouse, unavailable=0 and `grep -c "is not available"`=0; all 13 recorded selectors / 18 runs exit 0 with >=1 selected; coverage line 86.8% / branch 79.4% (gates 85/75); acceptance benchmark 7/7 cases 0 failed 50.27s (<240s), cached/prepared ratio 2.01; docfx exit 0 2 warnings / 0 errors; scope guard PASS (no R190 product/test/public-doc change; pre-existing AGENTS.md diff sha256 990cc12d unchanged); mutation kept as authorized no-tool disclosure (unverified mutants RowMaterializerBuilder.cs:182, QueryCommand.QueryPreparer.cs:1035; no kill score); `validate_inner_loop.py report` exit 0; #190 stays CLOSED (milestone #20); #207 carried (OPEN, milestone not inferred). | artifacts/pdca/rc2-190-reverify-1/ (evidence.json, logs/, audits/validate-report.out, scope/scope-guard.md)
+- 2026-10-09 15:11 UTC | ACT | r=2 | n=1/3 | ACT: no-op re-verification complete; #190 stays closed; #207 carried. | docs/specs/status/collection-rc2-reclaim.md

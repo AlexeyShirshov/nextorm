@@ -1,0 +1,11 @@
+ M AGENTS.md
+ M docs/specs/status/rc2-190-reverify-1.md
+?? docs/specs/status/rc2-151-evidence/
+?? docs/specs/status/rc2-170-evidence/
+?? docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md
+?? docs/specs/status/rc2-171-joininto-as-derived-1.md
+?? docs/specs/status/rc2-172-child-collection-projection-1.md
+?? docs/specs/status/rc2-180-json-stream-provider-conversion-1.md
+?? docs/specs/status/rc2-184-loadwith-eagerloadmode-1.md
+?? docs/specs/status/rc2-188-evidence/
+?? docs/specs/status/rc2-189-evidence/r4-ab/

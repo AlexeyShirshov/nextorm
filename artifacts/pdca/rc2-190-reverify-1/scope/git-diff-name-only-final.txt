@@ -1,0 +1,2 @@
+AGENTS.md
+docs/specs/status/rc2-190-reverify-1.md
