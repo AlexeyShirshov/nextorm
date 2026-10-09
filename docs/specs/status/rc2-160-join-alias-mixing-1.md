@@ -95,6 +95,21 @@ Normal runs require exit 0, nonzero relevant test counts, zero failures, no requ
 - Performance measurement required: generator work is largely compile-time, but builder/renderer/cache seams affect execution; `SqlBuilder.cs:185` is part of the rendering boundary. Reproduce all seven acceptance cases, record baseline ratio **1.87**, investigate **>2.244**; additionally measure positional baseline/revised and revised mixed-alias paths with identical workloads. M uses BenchmarkDotNet, separates SQL construction from execution, captures allocations/environment/raw reports; discover actual benchmark identities.
 - Bounded reconnaissance required: D160.2 is the controlled experiment proving the transfer boundary; observable criterion = H's exact green/red/green sequence from identified fresh sources. No further architecture spike or legacy-contract retrieval needed.
 
+## Frozen acceptance R160-01..R160-11 (verbatim, source 214c1323:docs/specs/status/rc2-160-join-alias-mixing-1.md:33-44)
+
+## Acceptance criteria (observable behavior + negative case)
+- R160-01: all mixing directions compile; JOIN/APPLY and SQL slots match chain order; `ItemK` and slot-K alias resolve to the same `tK`. Negative: reordering alias↔slot, repeated CLR type, `Buyer2` must not shift slots.
+- R160-02: alias-only semantics preserved; positional-only preserves existing API/SQL/execution path with no alias overhead. Negative: pure positional must not enter alias refusal/seam; unsupported provider op not silently supported.
+- R160-03: `.WithAlias` works on all listed root sources; `p.Order.X` → `t1.X`. Negative: repeated `.WithAlias`, applied to a join result, invalid/duplicate root alias → compile-time rejection, no wrong projection.
+- R160-04: dim-1 planned correctly; later Extend yields slots 1,2,…; arity 2–8 correct. Negative: 9th slot rejected by existing diagnostic contract; documented `As<T>` overflow path remains usable.
+- R160-05: alias members expression-only; positional members keep prior semantics. Negative: direct read of alias member throws, including root projection.
+- R160-06: any alias (root or join) fail-closed in-memory with `NotSupportedException`; pure positional chains work. Negative: root alias without join and alias after positional prefix also rejected, no partial result.
+- R160-07: repeated/alternating executions keep correct plans/params/cache; cached-path perf gate run. Negative: changing alias/slot/param does not reuse a wrong plan; shared command does not get sticky `Cache=false`.
+- R160-08: build exit 0, 0 warnings/0 errors; coverage line ≥85%, branch ≥75%. Negative: green build without coverage/mandatory evidence is not full acceptance.
+- R160-09: real execution on PostgreSQL, SQL Server, MySQL, MariaDB, SQLite, ClickHouse; expected SQL/result and positional/alias parity. Negative: skipped or missing provider is not passing evidence.
+- R160-10: EN/RU docs reflect mixing, root alias, expression-only, in-memory refusal, arity; obsolete generated names/alias-only wording removed. Negative: no new public links into `docs/specs/**`, no broken links, no EN/RU divergence.
+- R160-11: NORMGEN001–006 contracts preserved; root misuse gets stable diagnostics; incrementality and overload binding correct. Negative: same-name descriptors, invalid markers, wrong root usages do not produce malformed generated C# and do not bypass diagnostics.
+
 ## Versioned evidence contract — rv1
 Common slots apply to every row: owner=`CHECK` (coder supplies execution evidence); priority=P1; applicability=`true for this cycle`; `rv=1`. Sources are **planned**; artifacts under `artifacts/pdca/D160/rv1/<row-id>/`. Missing evidence means **open**, never PASS.
 | Row ID / requirement | Required scenario and exact invocation | Expected evidence / artifacts |
@@ -114,3 +129,18 @@ Missing exact new symbols/locations, generator inventories and MariaDB setup are
 Main risks: broad historical state copying, stale generated outputs, wrong slot/correlation rebinding, provider skips, cache leakage, performance cases missing the changed seam.
 References: #160/T160; legacy status `214c1323:…:19,33-44,60-91,150`; implementation tip `40b1a159`; baseline renderer `SqlBuilder.cs:185`; `ArrayJoinProjection.cs:39`; global `pdca-dotnet` evidence contract `:905-945`.
 **Handoff:** coder persists this complete plan, verbatim acceptance snapshot and rv1 contract before DO; port selectively, prove H, then close all sixteen rows; CHECK alone issues the verdict.
+
+## P160.close — terminal incomplete (2026-10-09)
+
+- status: terminal incomplete
+- plan_state: terminal
+- cycle: `N=1`; `plan_revision: r=2` closed without DO completion; no `r=3`.
+- Reason (fresh redo is not executable under the plan):
+  - (i) the ratified r=2 probe chain `From<T>().ArrayJoinElement(...).Join(pos)` cannot prepare a baseline command (`BuildSqlCommandException: Table name is not registered for type ArrayJoinProjection<...>` at `QueryPlanner.GetFrom`).
+  - (ii) `ApplyJoinStateTo` drops `Tag`/`CommandTimeout`/`BindArrayJoinElement` in BOTH `9a2a2871` and `40b1a159`, so `40b1a159` is not an over-preserving red arm.
+  - (iii) the only established over-preserving (R02) red lives in the rejected uncommitted candidate patch at `214c1323` (`CopySharedStateTo`), which the plan forbids applying wholesale.
+- Outcome: T160 preserves its historical terminal r=4 STOP outcome; this is not a new success and does not reset attempts.
+- Preserved evidence: patch `docs/specs/status/rc2-160-evidence/D160-STOP-incomplete.patch` (branch `wip/d160-incomplete`); branch `wip/d160-incomplete` (STOP doc `214c1323`, impl tip `40b1a159`); no product paths were broken by this attempt (product tree unchanged).
+- Evidence pointers produced this attempt: `artifacts/pdca/D160/rv1/{acceptance.md,identities.json,DO-START-report.json,payload/,payload.tar,payload.sha256,h/baseline-build.log,h/baseline-test.log}`; the baseline probe FAILED (exit 1) and is not passing evidence.
+- All `R160-01..R160-11` and `N160-01..N160-16` obligations/IDs/priorities are preserved and remain `incomplete`/open with the stated reason; none reclassified to passed/N-A/deferred/superseded.
+- Lane released to T206 (#206).
