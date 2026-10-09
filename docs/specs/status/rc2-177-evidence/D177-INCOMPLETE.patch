@@ -1,0 +1,1765 @@
+diff --git a/docs/advanced/api-reference.md b/docs/advanced/api-reference.md
+index 07d34b5f..83842d6b 100644
+--- a/docs/advanced/api-reference.md
++++ b/docs/advanced/api-reference.md
+@@ -86,7 +86,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
+ |---|---|
+ | [`QueryCommand`](xref:NextORM.Core.QueryCommand) | Non-generic query command holding the plan/state shared by all results. |
+ | [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | Typed query command with terminals ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])), [`WithTag`](xref:NextORM.Core.QueryCommand`1.WithTag(System.String)), [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])), [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), [`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[])), [`WithForXml`](xref:NextORM.Core.QueryCommand`1.WithForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)), [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), [`WithJoinTableHint`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])), [`WithIndex`](xref:NextORM.Core.FromOptions.WithIndex(System.String[])), [`WithJoinHint`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)), [`WithSubQueryHint`](xref:NextORM.Core.FromOptions.WithSubQueryHint(System.String)), [`WithTablesInScopeHint`](xref:NextORM.Core.EntityBuilder`1.WithTablesInScopeHint(System.String[])), [`WithKeywordCase`](xref:NextORM.Core.EntityBuilder`1.WithKeywordCase(NextORM.Core.KeywordCase)), [`WithCommandTimeout`](xref:NextORM.Core.QueryCommand`1.WithCommandTimeout(System.Int32)), [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)), …). |
+-| [`JsonStreamMode`](xref:NextORM.Core.JsonStreamMode) / [`JsonStreamOptions`](xref:NextORM.Core.JsonStreamOptions) | Container/shape options for the JSON streaming terminals [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream))/[`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream,NextORM.Core.JsonStreamOptions))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,NextORM.Core.JsonStreamOptions,System.Threading.CancellationToken)): `Mode` (`Array` default / `NdJson`), `Root` (an array wrapper object), `IgnoreNull`, `WriteIndented` (array only) and `PropertyNamingPolicy`. The terminals stream the query's `Select` projection to a caller-owned `Stream` with O(buffer) memory and no per-row `TResult`, never close the destination, fail fast on a shape outside the scalar whitelist (enums stream as their numeric value, or as a string for a stock `JsonStringEnumConverter`/`JsonStringEnumConverter<TEnum>` attribute; any other JSON converter attribute, on an enum or a non-enum scalar, is rejected before output), and are SQL-provider only (in-memory throws `NotSupportedException`). Each terminal also has a positional-SQL-parameter overload — `WriteJson(Stream, JsonStreamOptions, CancellationToken, params ReadOnlySpan<object?>)` and `WriteJsonAsync(Stream, JsonStreamOptions, CancellationToken, params object?[])` on both `QueryCommand<TResult>` and `EntityBuilder<TEntity>` — where `options` and the token are required (no defaults) and the trailing values bind in placeholder order (`null` → `DBNull`, an empty set binds nothing). Preflight validation throws `NotSupportedException` under the stable `JSON streaming validation [<token>]: <context>.` convention (`mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`, `unsupported-execution-form`), and an incompatible reader schema is rejected before any output. See [Streaming data to a Stream](../guide/28-streaming-data.md#json). |
++| [`JsonStreamMode`](xref:NextORM.Core.JsonStreamMode) / [`JsonStreamOptions`](xref:NextORM.Core.JsonStreamOptions) | Container/shape options for the JSON streaming terminals [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream))/[`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream,NextORM.Core.JsonStreamOptions))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,NextORM.Core.JsonStreamOptions,System.Threading.CancellationToken)): `Mode` (`Array` default / `NdJson`), `Root` (an array wrapper object), `IgnoreNull`, `WriteIndented` (array only) and `PropertyNamingPolicy`. The terminals stream the query's `Select` projection to a caller-owned `Stream` with O(buffer) memory and no per-row `TResult`, never close the destination, fail fast on a shape outside the scalar whitelist (enums stream as their numeric value, or as a string for a stock `JsonStringEnumConverter`/`JsonStringEnumConverter<TEnum>` attribute; any other JSON converter attribute, on an enum or a non-enum scalar, is rejected before output), and are SQL-provider only (in-memory throws `NotSupportedException`). Each terminal also has a positional-SQL-parameter overload — `WriteJson(Stream, JsonStreamOptions, CancellationToken, params ReadOnlySpan<object?>)` and `WriteJsonAsync(Stream, JsonStreamOptions, CancellationToken, params object?[])` on both `QueryCommand<TResult>` and `EntityBuilder<TEntity>` — where `options` and the token are required (no defaults) and the trailing values bind in placeholder order (`null` → `DBNull`, an empty set binds nothing). Preflight validation throws `NotSupportedException` under the stable `JSON streaming validation [<token>]: <context>.` convention (`mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`, `unsupported-execution-form`), and an incompatible reader schema is rejected before any output. On SQL Server an eligible flat projection is served natively through a trailing `FOR JSON PATH` (flat object, simple aliases, `string`/`bool`/`short`/`int`/`long` incl. nullable, `Array` mode, no root/indentation/naming policy); the output stays logically equivalent (SQL Server escaping may differ) and every other shape/provider uses the managed writer, with no API/signature change. See [Streaming data to a Stream](../guide/28-streaming-data.md#json). |
+ | [`QueryDefinition`](xref:NextORM.Core.QueryDefinition) | Immutable query shape (projection/entity source, condition, joins, paging, sorting, grouping, logger) taken by the command constructors and [`CreateCommand`](xref:NextORM.Core.DataContextExtensions.CreateCommand``1(NextORM.Core.IDataContext,NextORM.Core.QueryDefinition)). |
+ | [`QueryCommandExtensions`](xref:NextORM.Core.QueryCommandExtensions) | LOB terminals. The single-column [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/[`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object})) and their async forms open the reader with `CommandBehavior.SequentialAccess` and return a `Stream`/`TextReader` that owns the command until disposed; a projection other than exactly one `byte[]`/`string` column throws `InvalidOperationException`. The multi-column [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) and its async/cancellation/token/parameter overloads return a caller-owned [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) over the sequential-access command with no field-count guard, so the caller reads every column and row in ascending ordinal order and disposes the reader. A SQL dialect that does not opt in throws `NotSupportedException`. `ToDataReader` routes by dialect: a non-locator dialect with sequential access (PostgreSQL, SQL Server) returns the sequential-access reader, while a locator dialect (SQLite) is served by a buffered, locator-free reader (no `rowid`, `FieldCount` equals the projection, no chunked LOB). The in-memory provider has no dialect and no `DbDataReader`: its scalar terminals materialise the single projected value and return a caller-owned `MemoryStream`/`StringReader` (an empty result or a `NULL` first value yields `Stream.Null`/`TextReader.Null`), while `ToDataReader` stays `NotSupportedException`. The gate is [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess), a default interface member returning `false` that PostgreSQL, SQL Server and SQLite override. On the scalar streaming terminals in SQLite the query source must additionally expose `rowid` to keep the payload streaming: the dialect declares its trailing locator column through [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`string?`, default `null`; SQLite `"rowid"`), appended after the payload so the payload stays at ordinal `0`; a `view`/`WITHOUT ROWID` source fails with the raw `SqliteException: no such column: rowid`. The multi-column `ToDataReader` uses the locator-free buffered preparation instead, so it is not subject to that restriction. See [Streaming large objects](../guide/26-large-objects.md). The CSV terminals `WriteCsv`/`WriteCsvAsync` stream the projection to a caller-owned `Stream` (UTF-8 without a BOM, RFC 4180 escaping, CRLF terminators), reading rows straight from the provider reader without materialising the result set or constructing `TResult` per row; the destination stream is never closed, the in-memory provider throws `NotSupportedException`, and a projection that has no single scalar CSV form or whose storage type is unknown/cannot be converted — a nested entity/collection, a non-`byte[]` array, a tuple, a dictionary, an arbitrary object, or an object-converter/`GetValue` column — is rejected before any row is written, while every supported column, including SQL Server numerics, is read without boxing through the provider's storage-typed getter and a typed conversion (no `GetValue`). See [Streaming data to a Stream](../guide/28-streaming-data.md#csv). |
+ | [`CsvStreamOptions`](xref:NextORM.Core.CsvStreamOptions) | Dialect of the CSV written by `WriteCsv`/`WriteCsvAsync`: `IncludeHeader` (default `true`) emits the projection-derived header row, `Delimiter` (default `,`) sets the field separator, `NullMarker` (default `\N`) is the literal written for a SQL NULL (empty string stays an empty field; data equal to the marker is force-quoted; the marker is validated), `ExcelMode` (default `false`) prefixes `'` to a value starting with `=`/`+`/`-`/`@` after the transform and before escaping, and `ValueTransform` (default `null`) replaces the default non-NULL formatting (a `null` return writes the marker; the default path is box-free). The encoding (UTF-8 without a BOM), RFC 4180 escaping, CRLF terminators and invariant-culture value formats are fixed. See [Streaming data to a Stream](../guide/28-streaming-data.md#csv). |
+diff --git a/docs/guide/14-json.md b/docs/guide/14-json.md
+index 00bad484..d3a6ff02 100644
+--- a/docs/guide/14-json.md
++++ b/docs/guide/14-json.md
+@@ -40,6 +40,10 @@ feature:
+ * **Every SQL provider** shares one JSON *terminal*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
+   [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) stream the query's projection to a caller-owned `Stream` as a JSON array or
+   NDJSON, serialized client-side with `System.Text.Json` (see [Streaming data to a Stream](28-streaming-data.md#json)).
++  On SQL Server an eligible flat projection is instead served by the database through a trailing
++  `FOR JSON PATH`, whose single document column is copied to the stream in bounded chunks — an internal
++  optimization with the same output contract, not a change to the scalar `ForJson` below (see
++  [SQL Server native fast-path](28-streaming-data.md#sql-server-native-fast-path)).
+   Preflight validation uses a single exception contract — `NotSupportedException` with the message
+   convention `JSON streaming validation [<token>]: <context>.` and the fixed tokens `mode-options`,
+   `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory` and
+@@ -98,7 +102,10 @@ select id, somestring from complex_entity for json auto
+ 
+ The optional `root` wraps the document in `ROOT('name')` and `includeNullValues` adds
+ `INCLUDE_NULL_VALUES`. `ForJson` returns `null` when the query produces no rows (SQL Server returns SQL
+-NULL for an empty `FOR JSON` result). The clause is placed after `ORDER BY` and before a trailing
++NULL for an empty `FOR JSON` result). The same server-side `FOR JSON PATH` rendering also backs the
++`WriteJson` native fast-path for an eligible flat projection; that path is an internal optimization and
++does not change `ForJson` itself (see
++[SQL Server native fast-path](28-streaming-data.md#sql-server-native-fast-path)). The clause is placed after `ORDER BY` and before a trailing
+ `OPTION (...)`, so it composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (apply the hint first, then the
+ terminal): a `for json path option (recompile)` query is valid. Use
+ [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) to only attach the clause and keep the command composable. (Table hints,
+diff --git a/docs/guide/28-streaming-data.md b/docs/guide/28-streaming-data.md
+index ce27adfe..eb507c05 100644
+--- a/docs/guide/28-streaming-data.md
++++ b/docs/guide/28-streaming-data.md
+@@ -170,7 +170,8 @@ exclusions** that are deferred to their own issues rather than silently flattene
+   collection with no provider-native array source) — issue [#172](https://github.com/AlexeyShirshov/nextorm/issues/172);
+ * **new naming-policy / options behaviour** — issue [#177](https://github.com/AlexeyShirshov/nextorm/issues/177);
+ * **DB-side JSON generation** (SQL Server `FOR JSON`, PostgreSQL `json_agg`, …) stays a separate
+-  server-side path;
++  server-side path for *nested* shapes; `WriteJson` on SQL Server uses `FOR JSON` internally only for an
++  eligible flat shape (see [SQL Server native fast-path](#sql-server-native-fast-path));
+ * **multidimensional arrays** and rank-one arrays of unsupported element types (a `List<T>` member, a
+   dictionary element, a value-converted element) fail closed instead of using an arbitrary runtime
+   serialization path.
+@@ -183,6 +184,47 @@ A multi-column projection must have named members (an anonymous type or a named
+ without a name throws when the shape is planned. Nested object members are validated **per object
+ scope**.
+ 
++### SQL Server native fast-path
++
++On SQL Server an eligible request is served by the database itself: the query gets a trailing
++`FOR JSON PATH` clause and the reported single document column is copied straight to your `Stream` in
++bounded chunks, with no managed per-row serialization. This is an internal optimization — it changes
++neither the public API/signatures nor the JSON contract; only *where* the JSON is built changes
++(server side instead of `System.Text.Json`).
++
++A request is eligible for the native path only when **all** of these hold:
++
++* the projection is a **flat object** — one named member per projected column, with no nested object,
++  no `Projection<T1,T2>`/recursive shape and no scalar (single-column) projection;
++* every member name is a **simple identifier** (`[A-Za-z_][A-Za-z0-9_]*`); a dotted (`a.b`) or
++  otherwise special alias would become a `FOR JSON PATH` path or change the emitted property name;
++* every bound column is `string`, `bool`, `short`, `int` or `long`, or a nullable form of one of them —
++  `byte`, the floating-point types, `decimal`, `Guid`, `DateTime`, `byte[]` and every enum stay on the
++  managed path, as do provider value conversions and `*OrDefault` projections;
++* the options are the defaults `FOR JSON PATH` can reproduce: `Mode = Array`, `Root = null`,
++  `WriteIndented = false`, `PropertyNamingPolicy = null`. `IgnoreNull` is **not** a disqualifier:
++  `IgnoreNull = true` maps to `FOR JSON`'s default (null members omitted) and `IgnoreNull = false` to
++  `INCLUDE_NULL_VALUES`.
++
++Everything else — recursive nested/projection shapes, enums (numeric or string), provider conversions
++(`decimal`/`Guid`/`DateTime`/binary/…), special aliases and naming policies, a root or indentation,
++`NdJson`, `*OrDefault` substitution, and every other provider — automatically uses the managed
++`System.Text.Json` writer, decided **before execution**. There is no retry: a failure on the native path
++is not replayed through the managed path.
++
++The native document is **logically equivalent** to the managed output, not necessarily byte-for-byte
++identical: it is valid UTF-8 and parses to the same JSON values, but SQL Server's escaping differs from
++`System.Text.Json` — for example it leaves `<`, `>`, `&` and non-ASCII characters unescaped. A large
++document is split by the database across several reader rows and concatenated transparently. There is
++no public API or signature change. An empty result still writes `[]` in `Array` mode, and destination
++ownership is unchanged: the library never calls `Stream.Flush` and never disposes your `Stream`; on
++cancellation or error the operation stops and rethrows, leaving any already-written bytes in place (see
++[Ownership, flushing and errors](#ownership-flushing-and-errors)).
++
++The scalar [`ForJson`](14-json.md#return-the-whole-result-set-as-one-json-document) / `ForJsonAsync`
++terminals are a separate, unchanged surface: they still return one materialized `string`, and `null` for
++an empty result.
++
+ ### Names, null semantics and arrays
+ 
+ * **Scoped names.** JSON member names must be unique **within one object scope**. The same effective
+diff --git a/docs/ru/advanced/api-reference.md b/docs/ru/advanced/api-reference.md
+index 04288744..e9d7f3f5 100644
+--- a/docs/ru/advanced/api-reference.md
++++ b/docs/ru/advanced/api-reference.md
+@@ -86,7 +86,7 @@
+ |---|---|
+ | [`QueryCommand`](xref:NextORM.Core.QueryCommand) | Необобщённая команда запроса, хранящая план/состояние, общие для всех результатов. |
+ | [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | Типизированная команда запроса с терминалами ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])), [`WithTag`](xref:NextORM.Core.QueryCommand`1.WithTag(System.String)), [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])), [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), [`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[])), [`WithForXml`](xref:NextORM.Core.QueryCommand`1.WithForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)), [`WithTableHint`](xref:NextORM.Core.FromOptions.WithTableHint(System.String[])), [`WithJoinTableHint`](xref:NextORM.Core.JoinOptions.WithJoinTableHint(System.String[])), [`WithIndex`](xref:NextORM.Core.FromOptions.WithIndex(System.String[])), [`WithJoinHint`](xref:NextORM.Core.JoinOptions.WithJoinHint(System.String)), [`WithSubQueryHint`](xref:NextORM.Core.FromOptions.WithSubQueryHint(System.String)), [`WithTablesInScopeHint`](xref:NextORM.Core.EntityBuilder`1.WithTablesInScopeHint(System.String[])), [`WithKeywordCase`](xref:NextORM.Core.EntityBuilder`1.WithKeywordCase(NextORM.Core.KeywordCase)), [`WithCommandTimeout`](xref:NextORM.Core.QueryCommand`1.WithCommandTimeout(System.Int32)), [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)), …). |
+-| [`JsonStreamMode`](xref:NextORM.Core.JsonStreamMode) / [`JsonStreamOptions`](xref:NextORM.Core.JsonStreamOptions) | Опции контейнера/формы для терминалов потоковой записи JSON [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream))/[`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream,NextORM.Core.JsonStreamOptions))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,NextORM.Core.JsonStreamOptions,System.Threading.CancellationToken)): `Mode` (`Array` по умолчанию / `NdJson`), `Root` (объект-обёртка массива), `IgnoreNull`, `WriteIndented` (только Array) и `PropertyNamingPolicy`. Терминалы пишут проекцию `Select` запроса в принадлежащий вызывающему `Stream` с памятью O(buffer) и без `TResult` на строку, никогда не закрывают приёмник, падают fail-fast на форме вне скалярного белого списка (перечисления пишутся числовым значением или строкой при штатном атрибуте `JsonStringEnumConverter`/`JsonStringEnumConverter<TEnum>`; любой другой атрибут JSON-конвертера, на перечислении или на не-перечислении, отклоняется до вывода) и доступны только на SQL-провайдерах (in-memory бросает `NotSupportedException`). У каждого терминала есть также перегрузка с позиционными SQL-параметрами — `WriteJson(Stream, JsonStreamOptions, CancellationToken, params ReadOnlySpan<object?>)` и `WriteJsonAsync(Stream, JsonStreamOptions, CancellationToken, params object?[])` на `QueryCommand<TResult>` и `EntityBuilder<TEntity>` — где `options` и токен обязательны (без значений по умолчанию), а завершающие значения привязываются в порядке плейсхолдеров (`null` → `DBNull`, пустой набор ничего не привязывает). Предварительная валидация бросает `NotSupportedException` по стабильному соглашению `JSON streaming validation [<token>]: <context>.` (`mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`, `unsupported-execution-form`), а несовместимая схема reader'а отклоняется до любого вывода. См. [Потоковое сохранение данных](../guide/28-streaming-data.md#json). |
++| [`JsonStreamMode`](xref:NextORM.Core.JsonStreamMode) / [`JsonStreamOptions`](xref:NextORM.Core.JsonStreamOptions) | Опции контейнера/формы для терминалов потоковой записи JSON [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream))/[`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream,NextORM.Core.JsonStreamOptions))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken))/[`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,NextORM.Core.JsonStreamOptions,System.Threading.CancellationToken)): `Mode` (`Array` по умолчанию / `NdJson`), `Root` (объект-обёртка массива), `IgnoreNull`, `WriteIndented` (только Array) и `PropertyNamingPolicy`. Терминалы пишут проекцию `Select` запроса в принадлежащий вызывающему `Stream` с памятью O(buffer) и без `TResult` на строку, никогда не закрывают приёмник, падают fail-fast на форме вне скалярного белого списка (перечисления пишутся числовым значением или строкой при штатном атрибуте `JsonStringEnumConverter`/`JsonStringEnumConverter<TEnum>`; любой другой атрибут JSON-конвертера, на перечислении или на не-перечислении, отклоняется до вывода) и доступны только на SQL-провайдерах (in-memory бросает `NotSupportedException`). У каждого терминала есть также перегрузка с позиционными SQL-параметрами — `WriteJson(Stream, JsonStreamOptions, CancellationToken, params ReadOnlySpan<object?>)` и `WriteJsonAsync(Stream, JsonStreamOptions, CancellationToken, params object?[])` на `QueryCommand<TResult>` и `EntityBuilder<TEntity>` — где `options` и токен обязательны (без значений по умолчанию), а завершающие значения привязываются в порядке плейсхолдеров (`null` → `DBNull`, пустой набор ничего не привязывает). Предварительная валидация бросает `NotSupportedException` по стабильному соглашению `JSON streaming validation [<token>]: <context>.` (`mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory`, `unsupported-execution-form`), а несовместимая схема reader'а отклоняется до любого вывода. В SQL Server подходящая плоская проекция обслуживается нативно через завершающее `FOR JSON PATH` (плоский объект, простые псевдонимы, `string`/`bool`/`short`/`int`/`long`, включая nullable, режим `Array`, без корня/отступов/политики именования); вывод остаётся логически эквивалентным (экранирование SQL Server может отличаться), а любая другая форма/провайдер используют управляемый writer, без изменения API/сигнатур. См. [Потоковое сохранение данных](../guide/28-streaming-data.md#json). |
+ | [`QueryDefinition`](xref:NextORM.Core.QueryDefinition) | Неизменяемая форма запроса (проекция/тип-источник, условие, соединения, пагинация, сортировка, группировка, логгер), принимаемая конструкторами команд и [`CreateCommand`](xref:NextORM.Core.DataContextExtensions.CreateCommand``1(NextORM.Core.IDataContext,NextORM.Core.QueryDefinition)). |
+ | [`QueryCommandExtensions`](xref:NextORM.Core.QueryCommandExtensions) | LOB-терминалы. Одностолбцовые [`ToStream`](xref:NextORM.Core.QueryCommandExtensions.ToStream(NextORM.Core.QueryCommand{System.Byte[]},System.ReadOnlySpan{System.Object}))/[`ToTextReader`](xref:NextORM.Core.QueryCommandExtensions.ToTextReader(NextORM.Core.QueryCommand{System.String},System.ReadOnlySpan{System.Object})) и их асинхронные формы открывают reader с `CommandBehavior.SequentialAccess` и возвращают `Stream`/`TextReader`, владеющий командой до освобождения; проекция, отличная от ровно одной колонки `byte[]`/`string`, бросает `InvalidOperationException`. Многоколоночный [`ToDataReader`](xref:NextORM.Core.QueryCommandExtensions.ToDataReader``1(NextORM.Core.QueryCommand{``0},System.ReadOnlySpan{System.Object})) и его асинхронные/с токеном/параметрические перегрузки возвращают принадлежащий вызывающему [`DbDataReader`](https://learn.microsoft.com/dotnet/api/system.data.common.dbdatareader) поверх sequential-access команды без проверки числа полей, поэтому вызывающий читает все колонки и строки в порядке возрастания порядкового номера и освобождает reader. SQL-диалект, не включивший поддержку, бросает `NotSupportedException`. `ToDataReader` маршрутизируется по диалекту: не-locator-диалект с sequential access (PostgreSQL, SQL Server) возвращает sequential-access reader, а locator-диалект (SQLite) обслуживается буферизованным reader'ом без локатора (без `rowid`, `FieldCount` равен проекции, LOB не чанками). У провайдера in-memory нет ни диалекта, ни `DbDataReader`: его скалярные терминалы материализуют единственное спроецированное значение и возвращают принадлежащий вызывающему `MemoryStream`/`StringReader` (пустой результат или `NULL` в первом значении дают `Stream.Null`/`TextReader.Null`), а `ToDataReader` остаётся `NotSupportedException`. Гейт — [`SupportsSequentialAccess`](xref:NextORM.Core.ISqlDialect.SupportsSequentialAccess), default-член интерфейса, возвращающий `false`, который переопределяют PostgreSQL, SQL Server и SQLite. На скалярных потоковых терминалах в SQLite источник запроса дополнительно должен раскрывать `rowid`, чтобы payload оставался потоковым: диалект объявляет завершающий столбец-локатор через [`LobLocatorColumn`](xref:NextORM.Core.ISqlDialect.LobLocatorColumn) (`string?`, по умолчанию `null`; в SQLite `"rowid"`), добавляемый после payload, так что payload остаётся на позиции `0`; источник `view`/`WITHOUT ROWID` падает с сырым `SqliteException: no such column: rowid`. Многоколоночный `ToDataReader` вместо этого использует locator-free буферизованную подготовку, поэтому на него это ограничение не распространяется. См. [Потоковое чтение больших объектов](../guide/26-large-objects.md). Терминалы CSV `WriteCsv`/`WriteCsvAsync` отдают проекцию в принадлежащий вызывающему `Stream` (UTF-8 без BOM, экранирование по RFC 4180, терминаторы CRLF), читая строки прямо из провайдерского reader'а без материализации набора результатов и без создания `TResult` на строку; поток назначения никогда не закрывается, провайдер in-memory бросает `NotSupportedException`, а проекция, у которой нет единой скалярной CSV-формы либо чей storage-тип неизвестен и не поддаётся конвертации, — вложенная сущность/коллекция, массив, отличный от `byte[]`, кортеж, словарь, произвольный объект или колонка с объектным конвертером/фолбэком на `GetValue` — отклоняется до записи любой строки, а каждая поддерживаемая колонка, включая числовые колонки SQL Server, читается без боксинга через storage-типизированный getter провайдера и типизированную конверсию (без `GetValue`). См. [Потоковое сохранение данных](../guide/28-streaming-data.md#csv). |
+ | [`CsvStreamOptions`](xref:NextORM.Core.CsvStreamOptions) | Диалект CSV, который пишут `WriteCsv`/`WriteCsvAsync`: `IncludeHeader` (по умолчанию `true`) выводит строку заголовка из имён проекции, `Delimiter` (по умолчанию `,`) задаёт разделитель полей, `NullMarker` (по умолчанию `\N`) — литерал для SQL NULL (пустая строка остаётся пустым полем; данные, равные маркеру, принудительно квотируются; маркер валидируется), `ExcelMode` (по умолчанию `false`) добавляет префикс `'` значению, начинающемуся с `=`/`+`/`-`/`@`, после преобразования и до экранирования, а `ValueTransform` (по умолчанию `null`) заменяет форматирование не-`NULL` значений (возврат `null` пишет маркер; путь по умолчанию box-free). Кодировка (UTF-8 без BOM), экранирование по RFC 4180, терминаторы CRLF и invariant-форматы значений фиксированы. См. [Потоковое сохранение данных](../guide/28-streaming-data.md#csv). |
+diff --git a/docs/ru/guide/14-json.md b/docs/ru/guide/14-json.md
+index 2abd0ebf..8233fa1f 100644
+--- a/docs/ru/guide/14-json.md
++++ b/docs/ru/guide/14-json.md
+@@ -40,6 +40,10 @@
+ * **Каждый SQL-провайдер** использует один общий JSON-*терминал*: [`WriteJson`](xref:NextORM.Core.QueryCommand`1.WriteJson(System.IO.Stream)) /
+   [`WriteJsonAsync`](xref:NextORM.Core.QueryCommand`1.WriteJsonAsync(System.IO.Stream,System.Threading.CancellationToken)) записывают проекцию запроса в принадлежащий вызывающему `Stream` как JSON-массив или
+   NDJSON, сериализуя на клиенте через `System.Text.Json` (см. [Потоковое сохранение данных](28-streaming-data.md#json)).
++  В SQL Server подходящую плоскую проекцию вместо этого обслуживает сама СУБД через завершающее
++  `FOR JSON PATH`, а единственная колонка-документ копируется в поток ограниченными чанками — это
++  внутренняя оптимизация с тем же контрактом вывода, не меняющая скалярный `ForJson` ниже (см.
++  [Нативный быстрый путь SQL Server](28-streaming-data.md#нативный-быстрый-путь-sql-server)).
+   Предварительная валидация использует единый контракт исключений — `NotSupportedException` с
+   соглашением о сообщении `JSON streaming validation [<token>]: <context>.` и фиксированными токенами
+   `mode-options`, `projection`, `names`, `unsupported-column`, `reader-binding`, `in-memory` и
+@@ -98,7 +102,10 @@ select id, somestring from complex_entity for json auto
+ 
+ Необязательный `root` оборачивает документ в `ROOT('name')`, а `includeNullValues` добавляет
+ `INCLUDE_NULL_VALUES`. `ForJson` возвращает `null`, если запрос не вернул строк (SQL Server отдаёт SQL
+-NULL для пустого результата `FOR JSON`). Предложение размещается после `ORDER BY` и перед завершающим
++NULL для пустого результата `FOR JSON`). Тот же серверный рендеринг `FOR JSON PATH` лежит и в основе
++нативного быстрого пути `WriteJson` для подходящей плоской проекции; этот путь — внутренняя
++оптимизация и не меняет сам `ForJson` (см.
++[Нативный быстрый путь SQL Server](28-streaming-data.md#нативный-быстрый-путь-sql-server)). Предложение размещается после `ORDER BY` и перед завершающим
+ `OPTION (...)`, поэтому сочетается с [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (сначала хинт, затем
+ терминал): запрос `for json path option (recompile)` корректен. Используйте
+ [`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), чтобы только присоединить предложение и сохранить
+diff --git a/docs/ru/guide/28-streaming-data.md b/docs/ru/guide/28-streaming-data.md
+index 6ad9bd2d..5a7cd37a 100644
+--- a/docs/ru/guide/28-streaming-data.md
++++ b/docs/ru/guide/28-streaming-data.md
+@@ -171,7 +171,9 @@ value-конвертером (включая JSON-столбцы) и поток
+   коллекция без нативного источника-массива) — issue [#172](https://github.com/AlexeyShirshov/nextorm/issues/172);
+ * **новое поведение политики именования/опций** — issue [#177](https://github.com/AlexeyShirshov/nextorm/issues/177);
+ * **генерация JSON на стороне СУБД** (SQL Server `FOR JSON`, PostgreSQL `json_agg`, …) остаётся
+-  отдельным серверным путём;
++  отдельным серверным путём для *вложенных* форм; `WriteJson` в SQL Server использует `FOR JSON`
++  внутри только для подходящей плоской формы (см. [Нативный быстрый путь SQL
++  Server](#нативный-быстрый-путь-sql-server));
+ * **многомерные массивы** и массивы ранга один с неподдерживаемым типом элемента (член `List<T>`,
+   элемент-словарь, элемент с value-конвертером) падают fail-closed вместо произвольной рантайм-
+   сериализации.
+@@ -184,6 +186,48 @@ value-конвертером (включая JSON-столбцы) и поток
+ столбец без имени бросает исключение при построении формы. Имена членов вложенных объектов
+ проверяются **на область одного объекта**.
+ 
++### Нативный быстрый путь SQL Server
++
++В SQL Server подходящий запрос обслуживает сама СУБД: к запросу добавляется завершающее предложение
++`FOR JSON PATH`, а единственная колонка-документ копируется прямо в ваш `Stream` ограниченными
++чанками, без управляемой построчной сериализации. Это внутренняя оптимизация — она не меняет ни
++публичный API/сигнатуры, ни JSON-контракт; меняется только *место* построения JSON (на сервере вместо
++`System.Text.Json`).
++
++Запрос попадает на нативный путь, только когда выполнены **все** условия:
++
++* проекция — **плоский объект**: по одному именованному члену на колонку, без вложенного объекта, без
++  `Projection<T1,T2>`/рекурсивной формы и без скалярной (одностолбцовой) проекции;
++* имя каждого члена — **простой идентификатор** (`[A-Za-z_][A-Za-z0-9_]*`); имя с точкой (`a.b`) или
++  другим специальным символом стало бы путём `FOR JSON PATH` либо изменило бы имя свойства;
++* каждая привязанная колонка — `string`, `bool`, `short`, `int` или `long` (или nullable-форма одной
++  из них) — `byte`, типы с плавающей точкой, `decimal`, `Guid`, `DateTime`, `byte[]` и любое
++  перечисление остаются на управляемом пути, как и провайдерные конвертеры значений и проекции
++  `*OrDefault`;
++* опции — значения по умолчанию, которые воспроизводит `FOR JSON PATH`: `Mode = Array`, `Root = null`,
++  `WriteIndented = false`, `PropertyNamingPolicy = null`. `IgnoreNull` **не** исключает:
++  `IgnoreNull = true` соответствует поведению `FOR JSON` по умолчанию (члены со значением null
++  опускаются), а `IgnoreNull = false` — `INCLUDE_NULL_VALUES`.
++
++Всё остальное — рекурсивные вложенные формы/`Projection`, перечисления (числовые и строковые),
++провайдерные конвертеры (`decimal`/`Guid`/`DateTime`/бинарные/…), специальные псевдонимы и политики
++именования, корень или отступы, `NdJson`, подстановка `*OrDefault` и любой другой провайдер —
++автоматически использует управляемый writer `System.Text.Json`, причём решение принимается **до
++исполнения**. Повтора нет: сбой на нативном пути не переигрывается через управляемый.
++
++Нативный документ **логически эквивалентен** управляемому, но не обязан совпадать побайтово: это
++корректный UTF-8, разбирающийся в те же JSON-значения, однако экранирование SQL Server отличается от
++`System.Text.Json` — например, символы `<`, `>`, `&` и не-ASCII остаются неэкранированными. Большой
++документ СУБД разбивает на несколько строк reader'а, а библиотека прозрачно их конкатенирует. Публичный
++API и сигнатуры не меняются. Пустой результат по-прежнему пишет `[]` в режиме `Array`, а владение
++приёмником не меняется: библиотека никогда не вызывает `Stream.Flush` и не освобождает ваш `Stream`; при
++отмене или ошибке операция останавливается и пробрасывает исключение, оставляя уже записанные байты на
++месте (см. [Владение, сброс буфера и ошибки](#владение-сброс-буфера-и-ошибки)).
++
++Скалярные терминалы [`ForJson`](14-json.md#вернуть-весь-набор-строк-одним-json-документом) /
++`ForJsonAsync` — отдельная, не изменившаяся поверхность: они по-прежнему возвращают одну
++материализованную строку `string`, а для пустого результата — `null`.
++
+ ### Имена, семантика null и массивы
+ 
+ * **Имена по областям.** Имена JSON-членов должны быть уникальны **в пределах одной области
+diff --git a/src/nextorm.core/DataContext/DataContext.cs b/src/nextorm.core/DataContext/DataContext.cs
+index 341d37de..6f9d5007 100644
+--- a/src/nextorm.core/DataContext/DataContext.cs
++++ b/src/nextorm.core/DataContext/DataContext.cs
+@@ -343,8 +343,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
+     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+     internal void WriteJson<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
+     {
+-        var (prepared, rowWriter, plan) = PrepareJsonStream(queryCommand, options, cancellationToken);
+-        _executor.WriteJson(prepared, rowWriter, plan, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params);
++        var (prepared, rowWriter, plan, native) = PrepareJsonStream(queryCommand, options, cancellationToken);
++        _executor.WriteJson(prepared, rowWriter, plan, output, options, @params is null ? ReadOnlySpan<object?>.Empty : @params, native);
+     }
+ 
+     /// <summary>Asynchronously streams a query's projected rows as JSON to a caller-owned stream; see <see cref="WriteJson{TResult}"/>.</summary>
+@@ -357,15 +357,21 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
+     /// <returns>A task that completes when the whole document has been written.</returns>
+     internal Task WriteJsonAsync<TResult>(QueryCommand<TResult> queryCommand, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
+     {
+-        var (prepared, rowWriter, plan) = PrepareJsonStream(queryCommand, options, cancellationToken);
+-        return _executor.WriteJsonAsync(prepared, rowWriter, plan, output, options, @params, cancellationToken);
++        var (prepared, rowWriter, plan, native) = PrepareJsonStream(queryCommand, options, cancellationToken);
++        return _executor.WriteJsonAsync(prepared, rowWriter, plan, output, options, @params, cancellationToken, native);
+     }
+ 
+     // A JSON stream needs the SQL rendered and the command attached, but no Func<IDataRecord,TResult>:
+     // DocumentMode is the planner's existing no-mapper flag. It is set on a live clone so the caller's
+     // command is never mutated (DocumentMode is part of the plan key and the sticky-state hazard is the
+     // same as Cache). The clone's populated SelectList/OneColumn feed the shape plan.
+-    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter RowWriter, JsonShapePlan Plan) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
++    //
++    // When the dialect can serve the document natively (SQL Server FOR JSON) and the request is
++    // eligible, the returned command carries the trailing FOR JSON clause and RowWriter is null; the
++    // executor then copies the single native document column. The native clone is prepared first so the
++    // eligible fast path pays one preparation; an ineligible request falls back to the managed
++    // row-streaming clone before execution and is never retried through the managed path later.
++    private (DbPreparedQueryCommand<TResult> Prepared, JsonRowWriter? RowWriter, JsonShapePlan Plan, bool Native) PrepareJsonStream<TResult>(QueryCommand<TResult> queryCommand, JsonStreamOptions options, CancellationToken cancellationToken)
+     {
+         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
+         ArgumentNullException.ThrowIfNull(options);
+@@ -381,25 +387,51 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
+         // it explicitly; otherwise the temp marker is lost and the batch guard never fires.
+         var tempSource = queryCommand.From?.TempTable is not null ? queryCommand.From : null;
+ 
++        // A native document is only attempted for a dialect that renders FOR JSON and when the caller did
++        // not already attach a document clause (which the managed stream does not consume). Eligibility is
++        // decided from the validated shape plan below, before any execution.
++        var tryNative = Dialect.SupportsForJson
++            && queryCommand.ForJsonClause is null
++            && queryCommand.ForXmlClause is null;
++
++        if (tryNative)
++        {
++            var nativeCmd = CloneForJsonStream(queryCommand, tempSource);
++            // include_null_values is the inverse of IgnoreNull: FOR JSON omits null members by default,
++            // matching the managed IgnoreNull=true; INCLUDE_NULL_VALUES matches IgnoreNull=false.
++            nativeCmd.ForJsonClause = new ForJsonClause(ForJsonMode.Path, null, IncludeNullValues: !options.IgnoreNull);
++
++            var nativePrepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
++                nativeCmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
++
++            var nativePlan = JsonShapePlan.Build(nativeCmd.SelectList, nativeCmd.OneColumn, options, nativeCmd.JsonShape);
++            if (JsonNativeStream.IsEligible(nativePlan, options))
++                return (nativePrepared, null, nativePlan, true);
++        }
++
++        var cmd = CloneForJsonStream(queryCommand, tempSource);
++        var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
++            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
++
++        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
++        return (prepared, JsonRowWriterFactory.Build(plan), plan, false);
++    }
++
++    // Clones the caller's command into a JSON-stream preparation. DocumentMode is the planner's existing
++    // no-mapper flag; JsonShapeMode captures the recursive projection shape while preparing the clone
++    // only, so the caller's command and its shared select list/result shape are never mutated. A
++    // temporary-table source is preserved so the executor's batch guard still fires.
++    private static QueryCommand<TResult> CloneForJsonStream<TResult>(QueryCommand<TResult> queryCommand, FromExpression? tempSource)
++    {
+         var cmd = (QueryCommand<TResult>)queryCommand.Clone();
+         cmd.DocumentMode = true;
+         cmd.ResetPreparation();
+         if (tempSource is not null)
+             cmd.From = tempSource;
+ 
+-        // Capture the recursive JSON shape and lower its scalar descendants while preparing this clone
+-        // only; the caller's command and the shared select list/result shape are never mutated.
+         cmd.JsonShapeMode = true;
+         cmd.JsonShape = null;
+-
+-        // Route through the context's preparation wrapper (not the planner directly) so a lazy
+-        // temporary-table source is still detected; the executor then rejects that shape, since a
+-        // batch read cannot be streamed through a single reader.
+-        var prepared = (DbPreparedQueryCommand<TResult>)GetPreparedQueryCommand(
+-            cmd, createEnumerator: false, storeInCache: false, streamingRows: false, cancellationToken);
+-
+-        var plan = JsonShapePlan.Build(cmd.SelectList, cmd.OneColumn, options, cmd.JsonShape);
+-        return (prepared, JsonRowWriterFactory.Build(plan), plan);
++        return cmd;
+     }
+ 
+     // A query that reads a lazy temporary table is not a single statement: the table must be created on
+diff --git a/src/nextorm.core/DataContext/QueryExecutor.cs b/src/nextorm.core/DataContext/QueryExecutor.cs
+index 89a9908f..c2788486 100644
+--- a/src/nextorm.core/DataContext/QueryExecutor.cs
++++ b/src/nextorm.core/DataContext/QueryExecutor.cs
+@@ -1153,16 +1153,23 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
+     /// </summary>
+     /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+     /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
+-    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
++    /// <param name="rowWriter">The compiled per-row JSON writer, or <see langword="null"/> on the native document path.</param>
+     /// <param name="plan">The frozen shape plan used to reject an incompatible reader schema before writing.</param>
+     /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+     /// <param name="options">The validated container options.</param>
+     /// <param name="params">The positional parameter values bound to the query.</param>
+-    internal void WriteJson<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, ReadOnlySpan<object?> @params)
++    /// <param name="native">Whether the prepared command carries a native <c>FOR JSON</c> document column to copy instead of managed row serialization.</param>
++    internal void WriteJson<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter? rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, ReadOnlySpan<object?> @params, bool native)
+     {
+         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+         ThrowIfJsonBatch(compiledQuery);
+ 
++        if (native)
++        {
++            WriteJsonNative(compiledQuery, output, @params);
++            return;
++        }
++
+         var sqlCommand = GetDbCommand(compiledQuery, @params);
+         var reader = RunReader(sqlCommand, compiledQuery.Behavior);
+         try
+@@ -1175,7 +1182,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
+             var hasRow = reader.Read();
+             JsonRowWriterFactory.ValidateReaderBinding(plan, reader);
+ 
+-            using var stream = new JsonStreamWriter(output, rowWriter, options);
++            using var stream = new JsonStreamWriter(output, rowWriter!, options);
+             while (hasRow)
+             {
+                 stream.WriteRow(reader);
+@@ -1197,17 +1204,24 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
+     /// </summary>
+     /// <typeparam name="TResult">The projected result type; it is never materialized on this path.</typeparam>
+     /// <param name="compiledQuery">The prepared, mapper-less command to execute.</param>
+-    /// <param name="rowWriter">The compiled per-row JSON writer.</param>
++    /// <param name="rowWriter">The compiled per-row JSON writer, or <see langword="null"/> on the native document path.</param>
+     /// <param name="plan">The frozen shape plan used to reject an incompatible reader schema before writing.</param>
+     /// <param name="output">The caller-owned destination stream; it is never closed.</param>
+     /// <param name="options">The validated container options.</param>
+     /// <param name="params">The positional parameter values bound to the query, or <see langword="null"/>.</param>
+     /// <param name="cancellationToken">A token observed while reading rows and writing to the stream.</param>
+-    internal async Task WriteJsonAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken)
++    /// <param name="native">Whether the prepared command carries a native <c>FOR JSON</c> document column to copy instead of managed row serialization.</param>
++    internal async Task WriteJsonAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, JsonRowWriter? rowWriter, JsonShapePlan plan, Stream output, JsonStreamOptions options, object[]? @params, CancellationToken cancellationToken, bool native)
+     {
+         ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
+         ThrowIfJsonBatch(compiledQuery);
+ 
++        if (native)
++        {
++            await WriteJsonNativeAsync(compiledQuery, output, @params, cancellationToken).ConfigureAwait(false);
++            return;
++        }
++
+         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+         var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+         try
+@@ -1217,7 +1231,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
+             var hasRow = await reader.ReadAsync(cancellationToken).ConfigureAwait(false);
+             JsonRowWriterFactory.ValidateReaderBinding(plan, reader);
+ 
+-            using var stream = new JsonStreamWriter(output, rowWriter, options);
++            using var stream = new JsonStreamWriter(output, rowWriter!, options);
+             while (hasRow)
+             {
+                 await stream.WriteRowAsync(reader, cancellationToken).ConfigureAwait(false);
+@@ -1232,6 +1246,39 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
+         }
+     }
+ 
++    // The native path copies the single FOR JSON document column straight to the caller-owned
++    // destination. SequentialAccess lets the provider stream the document column in chunks instead of
++    // buffering the whole nvarchar(max); the reader is released in finally and the destination is never
++    // flushed or disposed. The transport has its own reader-binding validation (one string column),
++    // rather than the projected-column validation that only fits the managed path.
++    private void WriteJsonNative<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, Stream output, ReadOnlySpan<object?> @params)
++    {
++        var sqlCommand = GetDbCommand(compiledQuery, @params);
++        var reader = RunReader(sqlCommand, compiledQuery.Behavior | CommandBehavior.SequentialAccess);
++        try
++        {
++            JsonNativeStream.WriteDocument(reader, output);
++        }
++        finally
++        {
++            reader.Dispose();
++        }
++    }
++
++    private async Task WriteJsonNativeAsync<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, Stream output, object[]? @params, CancellationToken cancellationToken)
++    {
++        var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
++        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior | CommandBehavior.SequentialAccess, cancellationToken).ConfigureAwait(false);
++        try
++        {
++            await JsonNativeStream.WriteDocumentAsync(reader, output, cancellationToken).ConfigureAwait(false);
++        }
++        finally
++        {
++            await reader.DisposeAsync().ConfigureAwait(false);
++        }
++    }
++
+     private static void ThrowIfJsonBatch<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+     {
+         if (compiledQuery.PendingBatch is not null)
+diff --git a/src/nextorm.core/DataContext/QueryPlanner.cs b/src/nextorm.core/DataContext/QueryPlanner.cs
+index 5598191a..c53826ca 100644
+--- a/src/nextorm.core/DataContext/QueryPlanner.cs
++++ b/src/nextorm.core/DataContext/QueryPlanner.cs
+@@ -537,6 +537,11 @@ internal sealed class QueryPlanner : IQueryPlanner
+             NamingConvention = queryCommand.ResolvedNamingConvention,
+             KeywordCase = queryCommand.ResolvedKeywordCase,
+             SequentialAccess = sequentialAccess,
++            // The native FOR JSON streaming clone aliases every projected column to its JSON property
++            // name, so a mapped column that differs from the property only by case (id vs Id) still gets
++            // the exact alias FOR JSON PATH emits as the property name. Set only on that clone: a plain
++            // JSON-shape preparation (ForJsonClause null) and the scalar ForJson terminal are untouched.
++            ExactProjectionAliases = queryCommand.JsonShapeMode && queryCommand.ForJsonClause is not null,
+             RenderMutationBody = _renderMutationBody,
+         };
+         var sqlBuilder = new SqlBuilder(in ctx);
+diff --git a/src/nextorm.core/Query/Json/JsonNativeStream.cs b/src/nextorm.core/Query/Json/JsonNativeStream.cs
+new file mode 100644
+index 00000000..b6efdbf8
+--- /dev/null
++++ b/src/nextorm.core/Query/Json/JsonNativeStream.cs
+@@ -0,0 +1,283 @@
++using System.Buffers;
++using System.Data.Common;
++using System.Text;
++
++namespace NextORM.Core;
++
++/// <summary>
++/// SQL Server native JSON streaming: the eligibility predicate for the database-side <c>FOR JSON</c>
++/// fast-path and the bounded UTF-16 to UTF-8 pump that copies the single document column to a
++/// caller-owned destination.
++/// </summary>
++/// <remarks>
++/// This type is provider-neutral but only ever engaged when the dialect reports
++/// <see cref="ISqlDialect.SupportsForJson"/> and the request is otherwise eligible. The pump owns only
++/// fixed-size rented buffers, so its memory use is independent of the document size, and it never
++/// flushes or disposes the destination. Output is logically equivalent to the managed writer; the
++/// database and System.Text.Json differ only lexically (for example SQL Server leaves non-ASCII and
++/// HTML-sensitive characters unescaped), which the streaming documentation calls out.
++/// </remarks>
++internal static class JsonNativeStream
++{
++    // Fixed pump buffers: a document of any size is copied in these chunks, so app-owned memory does not
++    // grow with the document. Rented from the shared pool and always returned.
++    private const int CharBufferSize = 4096;
++    private const int ByteBufferSize = 4096;
++
++    private static readonly byte[] EmptyArray = "[]"u8.ToArray();
++
++    /// <summary>
++    /// Whether a validated shape plan may be served by the database-side <c>FOR JSON</c> document
++    /// transport instead of managed row-by-row serialization. The predicate is deliberately narrow: any
++    /// condition that could change null, type, alias or framing semantics returns <see langword="false"/>
++    /// so the caller falls back to the managed writer before execution (never a retry after a native
++    /// failure).
++    /// </summary>
++    /// <param name="plan">The frozen managed shape plan.</param>
++    /// <param name="options">The requested container options.</param>
++    /// <returns><see langword="true"/> only when every native condition holds.</returns>
++    internal static bool IsEligible(JsonShapePlan plan, JsonStreamOptions options)
++    {
++        // A scalar projection streams a bare JSON array of values, but FOR JSON always wraps columns in
++        // objects; a recursive shape is reconstructed by managed presence/alias logic.
++        if (plan.IsScalar || plan.Shape is not null)
++            return false;
++
++        // The native document is a bare array produced by FOR JSON PATH with no root wrapper, no
++        // indentation and alias-equal property names; every other option needs the managed writer.
++        if (options.Mode != JsonStreamMode.Array
++            || options.Root is not null
++            || options.WriteIndented
++            || options.PropertyNamingPolicy is not null)
++            return false;
++
++        var columns = plan.Columns;
++        if (columns.Length == 0)
++            return false;
++
++        for (var i = 0; i < columns.Length; i++)
++        {
++            var column = columns[i];
++
++            // *OrDefault projections substitute default(T) for SQL NULL in the managed writer, which the
++            // database cannot reproduce; keep them managed.
++            if (column.DefaultOnNull)
++                return false;
++
++            // FOR JSON PATH treats a dot in a column alias as a nested path, so only a plain identifier
++            // is a proven property name. Anything else stays managed.
++            if (!IsSimpleAlias(column.Name))
++                return false;
++
++            // A numeric enum is classified as a number over its underlying integral type; the declared
++            // type still exposes the enum, so it is excluded (D178 keeps every enum managed).
++            if (column.DeclaredType is { } declared && (Nullable.GetUnderlyingType(declared) ?? declared).IsEnum)
++                return false;
++
++            // Only a proven direct pass-through may be served natively: the managed writer reads the
++            // runtime provider field type and narrows/converts it, whereas FOR JSON emits the raw database
++            // value. A raw accessor or a wider provider binding would therefore diverge from managed.
++            if (!column.IsDirectPassThrough)
++                return false;
++
++            if (column.ProviderType is { } providerType && providerType != column.ValueType)
++                return false;
++
++            var admitted = column.Kind switch
++            {
++                JsonWriteKind.String => column.ValueType == typeof(string),
++                JsonWriteKind.Boolean => column.ValueType == typeof(bool),
++                JsonWriteKind.Number => column.ValueType == typeof(short) || column.ValueType == typeof(int) || column.ValueType == typeof(long),
++                _ => false,
++            };
++
++            if (!admitted)
++                return false;
++        }
++
++        return true;
++    }
++
++    /// <summary>
++    /// True when <paramref name="name"/> is a plain ASCII identifier that FOR JSON PATH emits verbatim
++    /// as a property name (no path separators or other special characters).
++    /// </summary>
++    private static bool IsSimpleAlias(string? name)
++    {
++        if (string.IsNullOrEmpty(name))
++            return false;
++
++        var first = name[0];
++        if (!(first == '_' || (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')))
++            return false;
++
++        for (var i = 1; i < name.Length; i++)
++        {
++            var c = name[i];
++            if (!(c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')))
++                return false;
++        }
++
++        return true;
++    }
++
++    /// <summary>
++    /// Copies the reader's single native <c>FOR JSON</c> document column to <paramref name="output"/> in
++    /// bounded character chunks, transcoding UTF-16 to UTF-8. An empty result set (SQL Server emits no
++    /// row) or a SQL NULL document becomes the empty array <c>[]</c>.
++    /// </summary>
++    /// <param name="reader">The open, positioned native document reader.</param>
++    /// <param name="output">The caller-owned destination; it is never flushed or disposed.</param>
++    internal static void WriteDocument(DbDataReader reader, Stream output)
++    {
++        ValidateReader(reader);
++
++        var charBuffer = ArrayPool<char>.Shared.Rent(CharBufferSize);
++        var byteBuffer = ArrayPool<byte>.Shared.Rent(ByteBufferSize);
++        try
++        {
++            var encoder = Encoding.UTF8.GetEncoder();
++            var wroteAny = false;
++            // SQL Server splits a large FOR JSON document across multiple result rows of chunk size
++            // (for example 2033 characters); every row is a contiguous part of the one document and
++            // must be concatenated in order. A surrogate pair may straddle a row boundary, so the
++            // encoder is never flushed between rows.
++            while (reader.Read())
++            {
++                if (reader.IsDBNull(0))
++                    continue;
++
++                long offset = 0;
++                while (true)
++                {
++                    var charsRead = reader.GetChars(0, offset, charBuffer, 0, charBuffer.Length);
++                    if (charsRead <= 0)
++                        break;
++
++                    offset += charsRead;
++                    wroteAny = true;
++                    Transcode(encoder, charBuffer.AsSpan(0, (int)charsRead), byteBuffer, output);
++                }
++            }
++
++            FlushEncoder(encoder, byteBuffer, output);
++            if (!wroteAny)
++                output.Write(EmptyArray);
++        }
++        finally
++        {
++            // Clear before returning: the rented buffers held document characters that must not leak to a
++            // later renter of the shared pool.
++            ArrayPool<char>.Shared.Return(charBuffer, clearArray: true);
++            ArrayPool<byte>.Shared.Return(byteBuffer, clearArray: true);
++        }
++    }
++
++    /// <summary>
++    /// Asynchronous counterpart of <see cref="WriteDocument"/>: writes each transcoded chunk with
++    /// <see cref="Stream.WriteAsync(ReadOnlyMemory{byte}, CancellationToken)"/> and observes the token
++    /// between chunks.
++    /// </summary>
++    /// <param name="reader">The open, positioned native document reader.</param>
++    /// <param name="output">The caller-owned destination; it is never flushed or disposed.</param>
++    /// <param name="cancellationToken">A token observed between chunks and while writing.</param>
++    /// <returns>A task that completes when the whole document has been copied.</returns>
++    internal static async Task WriteDocumentAsync(DbDataReader reader, Stream output, CancellationToken cancellationToken)
++    {
++        ValidateReader(reader);
++
++        var charBuffer = ArrayPool<char>.Shared.Rent(CharBufferSize);
++        var byteBuffer = ArrayPool<byte>.Shared.Rent(ByteBufferSize);
++        try
++        {
++            var encoder = Encoding.UTF8.GetEncoder();
++            var wroteAny = false;
++            // See WriteDocument: a large document is split across reader rows that form one document.
++            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
++            {
++                if (reader.IsDBNull(0))
++                    continue;
++
++                long offset = 0;
++                while (true)
++                {
++                    cancellationToken.ThrowIfCancellationRequested();
++
++                    var charsRead = reader.GetChars(0, offset, charBuffer, 0, charBuffer.Length);
++                    if (charsRead <= 0)
++                        break;
++
++                    offset += charsRead;
++                    wroteAny = true;
++                    var charPos = 0;
++                    while (charPos < charsRead)
++                    {
++                        encoder.Convert(charBuffer.AsSpan(charPos, (int)charsRead - charPos), byteBuffer, flush: false, out var charsUsed, out var bytesUsed, out var completed);
++                        if (bytesUsed > 0)
++                            await output.WriteAsync(byteBuffer.AsMemory(0, bytesUsed), cancellationToken).ConfigureAwait(false);
++
++                        charPos += charsUsed;
++                        if (completed)
++                            break;
++
++                        if (charsUsed == 0 && bytesUsed == 0)
++                            throw new InvalidOperationException("JSON streaming native transport could not make progress while transcoding UTF-16 to UTF-8.");
++                    }
++                }
++            }
++
++            encoder.Convert(ReadOnlySpan<char>.Empty, byteBuffer, flush: true, out _, out var remaining, out _);
++            if (remaining > 0)
++                await output.WriteAsync(byteBuffer.AsMemory(0, remaining), cancellationToken).ConfigureAwait(false);
++
++            if (!wroteAny)
++                await output.WriteAsync(EmptyArray, cancellationToken).ConfigureAwait(false);
++        }
++        finally
++        {
++            // Clear before returning: see WriteDocument.
++            ArrayPool<char>.Shared.Return(charBuffer, clearArray: true);
++            ArrayPool<byte>.Shared.Return(byteBuffer, clearArray: true);
++        }
++    }
++
++    private static void ValidateReader(DbDataReader reader)
++    {
++        if (reader.FieldCount != 1 || reader.GetFieldType(0) != typeof(string))
++        {
++            var fieldType = reader.FieldCount > 0 ? reader.GetFieldType(0).FullName : "none";
++            throw new NotSupportedException(
++                $"JSON streaming validation [reader-binding]: the native FOR JSON transport expected one string document column, but the reader reported {reader.FieldCount} column(s) with first field type '{fieldType}'.");
++        }
++    }
++
++    // Encoder.Convert with flush=false may leave a trailing high surrogate pending; a later chunk (or the
++    // final flush) completes it. An actual unpaired surrogate is replaced with U+FFFD exactly as
++    // System.Text.Json does, so the emitted UTF-8 is always valid.
++    private static void Transcode(Encoder encoder, ReadOnlySpan<char> chars, byte[] byteBuffer, Stream output)
++    {
++        Span<byte> bytes = byteBuffer;
++        while (true)
++        {
++            encoder.Convert(chars, bytes, flush: false, out var charsUsed, out var bytesUsed, out var completed);
++            if (bytesUsed > 0)
++                output.Write(byteBuffer, 0, bytesUsed);
++
++            chars = chars[charsUsed..];
++            if (completed)
++                return;
++
++            if (charsUsed == 0 && bytesUsed == 0)
++                throw new InvalidOperationException("JSON streaming native transport could not make progress while transcoding UTF-16 to UTF-8.");
++        }
++    }
++
++    private static void FlushEncoder(Encoder encoder, byte[] byteBuffer, Stream output)
++    {
++        Span<byte> bytes = byteBuffer;
++        encoder.Convert(ReadOnlySpan<char>.Empty, bytes, flush: true, out _, out var bytesUsed, out _);
++        if (bytesUsed > 0)
++            output.Write(byteBuffer, 0, bytesUsed);
++    }
++
++}
+diff --git a/src/nextorm.core/Query/Json/JsonShapePlan.cs b/src/nextorm.core/Query/Json/JsonShapePlan.cs
+index ced718e1..759a8956 100644
+--- a/src/nextorm.core/Query/Json/JsonShapePlan.cs
++++ b/src/nextorm.core/Query/Json/JsonShapePlan.cs
+@@ -45,7 +45,8 @@ internal readonly struct JsonShapeColumn
+ {
+     /// <summary>Initializes a planned column.</summary>
+     internal JsonShapeColumn(int ordinal, string name, Type valueType, JsonWriteKind kind, bool nullable, bool defaultOnNull,
+-        Type? enumUnderlyingType = null, JsonConverter? enumStringConverter = null)
++        Type? enumUnderlyingType = null, JsonConverter? enumStringConverter = null, Type? declaredType = null,
++        Type? providerType = null, bool isDirectPassThrough = false)
+     {
+         Ordinal = ordinal;
+         Name = name;
+@@ -55,6 +56,9 @@ internal readonly struct JsonShapeColumn
+         DefaultOnNull = defaultOnNull;
+         EnumUnderlyingType = enumUnderlyingType;
+         EnumStringConverter = enumStringConverter;
++        DeclaredType = declaredType;
++        ProviderType = providerType;
++        IsDirectPassThrough = isDirectPassThrough;
+     }
+ 
+     /// <summary>The zero-based result-set ordinal the value is read from.</summary>
+@@ -92,6 +96,31 @@ internal readonly struct JsonShapeColumn
+     /// once while the shape is planned, never resolved per row.
+     /// </summary>
+     public JsonConverter? EnumStringConverter { get; }
++
++    /// <summary>
++    /// The declared CLR type of the projection before <see cref="JsonWriteKind"/> classification (for a
++    /// numeric enum this is the enum type, while <see cref="ValueType"/> is its underlying integral type).
++    /// Used by the native JSON eligibility check to keep every enum on the managed path even though a
++    /// numeric enum is classified as <see cref="JsonWriteKind.Number"/>. <see langword="null"/> for a
++    /// column built by the recursive writer that does not carry provenance.
++    /// </summary>
++    public Type? DeclaredType { get; }
++
++    /// <summary>
++    /// The provider-side storage type a value converter reads and writes, or <see langword="null"/> when
++    /// the column is read as its CLR type. The managed writer reads this type and converts it to
++    /// <see cref="ValueType"/>; the native <c>FOR JSON</c> transport would emit the raw provider value, so
++    /// a non-<see langword="null"/> type other than <see cref="ValueType"/> keeps the column managed.
++    /// </summary>
++    public Type? ProviderType { get; }
++
++    /// <summary>
++    /// Whether the column is a proven direct pass-through: a mapped CLR member (or expanded entity
++    /// column) whose storage type is read as <see cref="ValueType"/> with no computed/raw accessor. The
++    /// managed numeric reader inspects the runtime provider field type and narrows/converts it; the
++    /// native transport cannot, so only a proven pass-through may be served from the database document.
++    /// </summary>
++    public bool IsDirectPassThrough { get; }
+ }
+ 
+ /// <summary>
+@@ -244,7 +273,7 @@ internal sealed class JsonShapePlan
+                         $"JSON streaming validation [names]: Duplicate JSON property name '{name}' after naming-policy conversion; JSON object members must be unique.");
+             }
+ 
+-            columns[i] = new JsonShapeColumn(column.Index, name, valueType, kind, column.Nullable, column.DefaultOnNull, enumUnderlying, enumConverter);
++            columns[i] = new JsonShapeColumn(column.Index, name, valueType, kind, column.Nullable, column.DefaultOnNull, enumUnderlying, enumConverter, column.PropertyType, column.ProviderType, IsDirectProjection(column));
+         }
+ 
+         return new JsonShapePlan(oneColumn, columns, options, shape: null);
+@@ -308,6 +337,36 @@ internal sealed class JsonShapePlan
+         return expression is MemberExpression member ? member.Member : null;
+     }
+ 
++    /// <summary>
++    /// Whether a flat column is a proven direct pass-through: a mapped CLR member (or an expanded
++    /// entity column that carries <see cref="SelectExpression.PropertyInfo"/>) rather than a raw
++    /// named-table accessor (<c>TableAlias.GetXxx</c> / <c>TableColumn.AsXxx</c>) or a computed
++    /// expression. A raw accessor's storage type is not part of the CLR projection, so the managed reader
++    /// infers it at read time; the database <c>FOR JSON</c> serializer cannot, and admitting the column
++    /// natively could emit a wider/different value than the managed writer.
++    /// </summary>
++    private static bool IsDirectProjection(SelectExpression column)
++    {
++        if (column.PropertyInfo is not null)
++            return true;
++
++        var expression = column.Expression;
++        if (expression is null)
++            return false;
++
++        if (expression is LambdaExpression lambda)
++            expression = lambda.Body;
++
++        expression = TypeFacts.UnwrapConvert(expression);
++        return expression switch
++        {
++            MemberExpression member => member.Member.DeclaringType != typeof(TableColumn),
++            MethodCallExpression call => call.Method.DeclaringType != typeof(TableAlias)
++                && call.Method.DeclaringType != typeof(TableColumn),
++            _ => false,
++        };
++    }
++
+     /// <summary>
+     /// Maps a declared CLR type to its typed write path, unwrapping <see cref="Nullable{T}"/>. An enum is
+     /// numeric by default (its underlying integral type is the write type); a property/type-level stock
+diff --git a/tests/nextorm.core.tests/JsonNativeStreamTests.cs b/tests/nextorm.core.tests/JsonNativeStreamTests.cs
+new file mode 100644
+index 00000000..0ba476d5
+--- /dev/null
++++ b/tests/nextorm.core.tests/JsonNativeStreamTests.cs
+@@ -0,0 +1,429 @@
++using System.Collections;
++using System.Data.Common;
++using System.Linq.Expressions;
++using System.Reflection;
++using System.Text;
++using System.Text.Json;
++using System.Text.Json.Serialization;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Core.Tests;
++
++/// <summary>
++/// D177 native JSON streaming: the eligibility predicate must admit only the narrow flat SQL Server
++/// shape whose null, type, alias and provider semantics match the managed writer, and the bounded pump
++/// must transcode a document across row / character / byte-buffer boundaries without managed row
++/// serialization. Live SQL Server behaviour is covered by the integration suite.
++/// </summary>
++public class JsonNativeStreamTests
++{
++    private enum SampleEnum
++    {
++        Zero = 0,
++        One = 1,
++    }
++
++    [JsonConverter(typeof(JsonStringEnumConverter))]
++    private enum StringSampleEnum
++    {
++        Zero = 0,
++        One = 1,
++    }
++
++    private sealed class DirectProbe
++    {
++        public long LongProp { get; set; }
++        public int IntProp { get; set; }
++        public short ShortProp { get; set; }
++        public bool BoolProp { get; set; }
++        public string? StringProp { get; set; }
++    }
++
++    private static JsonShapePlan Plan(bool scalar, JsonStreamOptions options, params SelectExpression[] columns)
++    {
++        for (var i = 0; i < columns.Length; i++)
++            columns[i].Index = i;
++
++        return JsonShapePlan.Build(columns, oneColumn: scalar, options);
++    }
++
++    // A direct pass-through column: a mapped member read (the predicate admits only these).
++    private static SelectExpression Column(Type type, string name, bool defaultOnNull = false, Type? providerType = null)
++        => new(type)
++        {
++            PropertyName = name,
++            DefaultOnNull = defaultOnNull,
++            ProviderType = providerType,
++            Expression = Expression.Property(Expression.Parameter(typeof(DirectProbe), "p"), nameof(DirectProbe.LongProp)),
++        };
++
++    // A raw named-table accessor (TableColumn.AsInt): the storage type is not part of the CLR projection.
++    private static SelectExpression RawColumn(Type type, string name)
++        => new(type)
++        {
++            PropertyName = name,
++            Expression = Expression.Property(Expression.Parameter(typeof(TableColumn), "c"), nameof(TableColumn.AsInt)),
++        };
++
++    [Fact]
++    public void FlatAdmittedTypes_ShouldBeEligible()
++    {
++        var plan = Plan(false, new JsonStreamOptions(),
++            Column(typeof(long), "Id"),
++            Column(typeof(int?), "Int"),
++            Column(typeof(short), "Small"),
++            Column(typeof(bool?), "Flag"),
++            Column(typeof(string), "Name"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeTrue();
++    }
++
++    [Fact]
++    public void IgnoreNull_ShouldNotChangeEligibility()
++    {
++        var plan = Plan(false, new JsonStreamOptions { IgnoreNull = true },
++            Column(typeof(int), "Id"),
++            Column(typeof(string), "Name"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeTrue();
++    }
++
++    [Theory]
++    [InlineData(typeof(byte))]
++    [InlineData(typeof(float))]
++    [InlineData(typeof(double))]
++    [InlineData(typeof(decimal))]
++    [InlineData(typeof(Guid))]
++    [InlineData(typeof(DateTime))]
++    [InlineData(typeof(byte[]))]
++    public void NonAdmittedScalarTypes_ShouldStayManaged(Type type)
++    {
++        var plan = Plan(false, new JsonStreamOptions(), Column(type, "Value"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void NumericEnum_ShouldStayManaged()
++    {
++        // A plain enum is classified as a number over its underlying integral type, so DeclaredType is
++        // the only signal that keeps it on the managed path.
++        var plan = Plan(false, new JsonStreamOptions(),
++            new SelectExpression(typeof(SampleEnum)) { PropertyName = "State", Expression = Expression.Property(Expression.Parameter(typeof(DirectProbe), "p"), nameof(DirectProbe.LongProp)) });
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void StringEnum_ShouldStayManaged()
++    {
++        // A [JsonStringEnumConverter] enum is classified as JsonWriteKind.EnumString (not Number), so it
++        // must be excluded by the write-kind switch, independently of the numeric-enum DeclaredType guard.
++        var plan = Plan(false, new JsonStreamOptions(),
++            new SelectExpression(typeof(StringSampleEnum)) { PropertyName = "State", Expression = Expression.Property(Expression.Parameter(typeof(DirectProbe), "p"), nameof(DirectProbe.LongProp)) });
++
++        plan.Columns[0].Kind.Should().Be(JsonWriteKind.EnumString);
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void DefaultOnNull_ShouldStayManaged()
++    {
++        var plan = Plan(false, new JsonStreamOptions(), Column(typeof(int), "Total", defaultOnNull: true));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void Scalar_ShouldStayManaged()
++    {
++        var plan = Plan(true, new JsonStreamOptions(), Column(typeof(int), "Value"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void NdJson_ShouldStayManaged()
++    {
++        var plan = Plan(false, new JsonStreamOptions { Mode = JsonStreamMode.NdJson }, Column(typeof(int), "Id"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void Root_ShouldStayManaged()
++    {
++        var plan = Plan(false, new JsonStreamOptions { Root = "items" }, Column(typeof(int), "Id"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void WriteIndented_ShouldStayManaged()
++    {
++        var plan = Plan(false, new JsonStreamOptions { WriteIndented = true }, Column(typeof(int), "Id"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void PropertyNamingPolicy_ShouldStayManaged()
++    {
++        var plan = Plan(false, new JsonStreamOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }, Column(typeof(int), "Id"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void DottedAlias_ShouldStayManaged()
++    {
++        // FOR JSON PATH treats a dot as a nested path, so it cannot be trusted as a property name.
++        var plan = Plan(false, new JsonStreamOptions(), Column(typeof(int), "a.b"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void SpecialCharacterAlias_ShouldStayManaged()
++    {
++        var plan = Plan(false, new JsonStreamOptions(), Column(typeof(int), "a-b"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    // P1 eligibility defect: keying on the projected CLR type alone admits a wider/different provider
++    // binding, whose raw FOR JSON value diverges from the managed narrowing/conversion.
++    [Fact]
++    public void WiderProviderType_ShouldStayManaged()
++    {
++        var plan = Plan(false, new JsonStreamOptions(), Column(typeof(int), "Narrow", providerType: typeof(long)));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void SameTypeAndNullProviderType_ShouldStayNative()
++    {
++        var same = Plan(false, new JsonStreamOptions(), Column(typeof(int), "Narrow", providerType: typeof(int)));
++        JsonNativeStream.IsEligible(same, same.Options).Should().BeTrue();
++
++        var none = Plan(false, new JsonStreamOptions(), Column(typeof(long), "Wide"));
++        JsonNativeStream.IsEligible(none, none.Options).Should().BeTrue();
++    }
++
++    [Fact]
++    public void RawTableAccessor_ShouldStayManaged()
++    {
++        // TableColumn.AsInt over an unknown storage column: the managed reader inspects the runtime field
++        // type; native FOR JSON would emit the raw (possibly wider) value.
++        var plan = Plan(false, new JsonStreamOptions(), RawColumn(typeof(int), "Narrow"));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    [Theory]
++    [InlineData("_")]
++    [InlineData("a")]
++    [InlineData("Z")]
++    [InlineData("a0")]
++    [InlineData("_9")]
++    [InlineData("A_1")]
++    public void SimpleAliasBoundary_ShouldStayNative(string name)
++    {
++        var plan = Plan(false, new JsonStreamOptions(), Column(typeof(int), name));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeTrue();
++    }
++
++    [Theory]
++    [InlineData("0a")]
++    [InlineData("@a")]
++    [InlineData("[a")]
++    [InlineData("`a")]
++    [InlineData("{a")]
++    [InlineData("a/b")]
++    [InlineData("a:b")]
++    [InlineData("a c")]
++    [InlineData("a\u00e9")]
++    public void NonSimpleAliasBoundary_ShouldStayManaged(string name)
++    {
++        var plan = Plan(false, new JsonStreamOptions(), Column(typeof(int), name));
++
++        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
++    }
++
++    // --- Bounded pump: a fake multi-row document reader exercises row / char / byte boundaries. ---
++
++    [Fact]
++    public void Pump_SurrogateSplitAcrossRows_ShouldBeReassembled()
++    {
++        // The high surrogate ends row 0, the low surrogate starts row 1; the encoder must not be flushed
++        // between rows.
++        var reader = new FakeDocumentReader(["[", "\uD83D", "\uDE00", "]"]);
++
++        Pump(reader, out var text);
++
++        text.Should().Be("[😀]");
++    }
++
++    [Fact]
++    public void Pump_SurrogateSplitAcrossCharBuffer_ShouldBeReassembled()
++    {
++        var highPrefix = new string('x', 4095) + "\uD83D";
++        var reader = new FakeDocumentReader([highPrefix, "\uDE00end"]);
++
++        Pump(reader, out var text);
++
++        text.Should().Be(new string('x', 4095) + "😀end");
++    }
++
++    [Fact]
++    public void Pump_DocumentLargerThanByteBuffer_ShouldBeChunked()
++    {
++        var value = new string('é', 9000);
++        var reader = new FakeDocumentReader(["\"", value, "\""]);
++
++        Pump(reader, out var text);
++
++        text.Should().Be("\"" + value + "\"");
++    }
++
++    [Fact]
++    public void Pump_NullRowAndEmpty_ShouldWriteEmptyArray()
++    {
++        var nullReader = new FakeDocumentReader([null]);
++        Pump(nullReader, out var nullText);
++        nullText.Should().Be("[]");
++
++        var emptyReader = new FakeDocumentReader([]);
++        Pump(emptyReader, out var emptyText);
++        emptyText.Should().Be("[]");
++    }
++
++    [Fact]
++    public void Pump_UnpairedSurrogate_ShouldWriteReplacement()
++    {
++        var reader = new FakeDocumentReader(["a\uD83Db"]);
++
++        Pump(reader, out var text);
++
++        text.Should().Be("a\uFFFDb");
++    }
++
++    [Fact]
++    public async Task Pump_Async_ShouldMatchSyncAndObserveCancellation()
++    {
++        var reader = new FakeDocumentReader(["\"", new string('x', 8192), "\""]);
++        using var sync = new MemoryStream();
++        JsonNativeStream.WriteDocument(reader, sync);
++
++        var asyncReader = new FakeDocumentReader(["\"", new string('x', 8192), "\""]);
++        using var async = new MemoryStream();
++        await JsonNativeStream.WriteDocumentAsync(asyncReader, async, TestContext.Current.CancellationToken);
++
++        async.ToArray().Should().Equal(sync.ToArray());
++        reader.ManagedReadCount.Should().Be(0, "the native pump must not call any managed row accessor");
++    }
++
++    private static void Pump(FakeDocumentReader reader, out string text)
++    {
++        using var stream = new MemoryStream();
++        JsonNativeStream.WriteDocument(reader, stream);
++        text = Encoding.UTF8.GetString(stream.ToArray());
++        // A native document copy uses only Read/IsDBNull/GetChars, never a managed typed accessor.
++        reader.ManagedReadCount.Should().Be(0);
++    }
++
++    /// <summary>
++    /// Minimal forward-only <see cref="DbDataReader"/> over a sequence of document chunks. Each chunk is
++    /// one reader row; a chunk may hold NULL (a NULL document row). Only the members the native pump
++    /// uses are implemented; every managed row accessor counts as a managed read and throws.
++    /// </summary>
++    private sealed class FakeDocumentReader : DbDataReader
++    {
++        private readonly IReadOnlyList<string?> _rows;
++        private int _index = -1;
++
++        internal FakeDocumentReader(IReadOnlyList<string?> rows) => _rows = rows;
++
++        internal int ManagedReadCount { get; private set; }
++
++        public override int FieldCount => 1;
++        public override bool HasRows => _rows.Count > 0;
++        public override bool IsClosed => false;
++        public override int RecordsAffected => 0;
++        public override int Depth => 0;
++
++        public override bool Read()
++        {
++            _index++;
++            return _index < _rows.Count;
++        }
++
++        public override Task<bool> ReadAsync(CancellationToken cancellationToken)
++        {
++            cancellationToken.ThrowIfCancellationRequested();
++            return Task.FromResult(Read());
++        }
++
++        public override bool IsDBNull(int ordinal)
++        {
++            EnsureOrdinal(ordinal);
++            return _rows[_index] is null;
++        }
++
++        public override Type GetFieldType(int ordinal)
++        {
++            EnsureOrdinal(ordinal);
++            return typeof(string);
++        }
++
++        public override string GetName(int ordinal) => "document";
++        public override int GetOrdinal(string name) => 0;
++        public override string GetDataTypeName(int ordinal) => "nvarchar";
++
++        public override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length)
++        {
++            EnsureOrdinal(ordinal);
++            var row = _rows[_index];
++            if (row is null || dataOffset >= row.Length || length <= 0)
++                return 0;
++
++            var offset = (int)dataOffset;
++            var count = Math.Min(length, row.Length - offset);
++            row.CopyTo(offset, buffer!, bufferOffset, count);
++            return count;
++        }
++
++        public override IEnumerator GetEnumerator() => _rows.GetEnumerator();
++        public override bool NextResult() => false;
++        public override int GetValues(object[] values) => 0;
++
++        public override object this[int ordinal] => GetValue(ordinal);
++        public override object this[string name] => GetValue(GetOrdinal(name));
++
++        private object ManagedRead() => throw new NotSupportedException("A managed row accessor was invoked on the native document reader.");
++
++        public override object GetValue(int ordinal) { ManagedReadCount++; return ManagedRead(); }
++        public override bool GetBoolean(int ordinal) { ManagedReadCount++; return (bool)ManagedRead(); }
++        public override byte GetByte(int ordinal) { ManagedReadCount++; return (byte)ManagedRead(); }
++        public override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length) { ManagedReadCount++; return (long)ManagedRead(); }
++        public override char GetChar(int ordinal) { ManagedReadCount++; return (char)ManagedRead(); }
++        public override DateTime GetDateTime(int ordinal) { ManagedReadCount++; return (DateTime)ManagedRead(); }
++        public override decimal GetDecimal(int ordinal) { ManagedReadCount++; return (decimal)ManagedRead(); }
++        public override double GetDouble(int ordinal) { ManagedReadCount++; return (double)ManagedRead(); }
++        public override float GetFloat(int ordinal) { ManagedReadCount++; return (float)ManagedRead(); }
++        public override Guid GetGuid(int ordinal) { ManagedReadCount++; return (Guid)ManagedRead(); }
++        public override short GetInt16(int ordinal) { ManagedReadCount++; return (short)ManagedRead(); }
++        public override int GetInt32(int ordinal) { ManagedReadCount++; return (int)ManagedRead(); }
++        public override long GetInt64(int ordinal) { ManagedReadCount++; return (long)ManagedRead(); }
++        public override string GetString(int ordinal) { ManagedReadCount++; return (string)ManagedRead(); }
++
++        private void EnsureOrdinal(int ordinal)
++        {
++            if (ordinal != 0)
++                throw new IndexOutOfRangeException();
++        }
++    }
++}
+diff --git a/tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs b/tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs
+new file mode 100644
+index 00000000..674c5d2e
+--- /dev/null
++++ b/tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs
+@@ -0,0 +1,397 @@
++using System.ComponentModel.DataAnnotations;
++using System.ComponentModel.DataAnnotations.Schema;
++using System.Text;
++using System.Text.Json;
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.Integration.Tests;
++
++/// <summary>
++/// D177 SQL Server native JSON streaming, end to end. The native path is proven observably: SQL Server
++/// leaves Unicode and HTML-sensitive characters unescaped, while the managed System.Text.Json writer
++/// escapes them, so raw <c>é</c>/<c>中</c>/<c>😀</c> and <c>&lt;</c> in the output can only come from the
++/// database document. The tests also cover the empty-result <c>[]</c>, async/sync parity, destination
++/// ownership and pre-cancellation, and the managed fallback for a non-admitted projection.
++/// </summary>
++[SqlTable("native_json_unicode")]
++public interface INativeJsonUnicodeEntity
++{
++    [Key]
++    [Column("id")]
++    int Id { get; set; }
++
++    [Column("name")]
++    string? Name { get; set; }
++
++    [Column("flag")]
++    bool Flag { get; set; }
++
++    [Column("num")]
++    long Num { get; set; }
++}
++
++[SqlTable("native_json_surrogate")]
++public interface INativeJsonSurrogateEntity
++{
++    [Key]
++    [Column("id")]
++    int Id { get; set; }
++
++    [Column("name")]
++    string? Name { get; set; }
++}
++
++public sealed class SqlServerNativeJsonStreamTests : ProviderTestSuite
++{
++    private static readonly object SeedGate = new();
++    private static bool _seeded;
++    private static bool _surrogateSeeded;
++
++    protected override ITestProvider Provider => SqlServerTestProvider.Instance;
++
++    private void EnsureNativeTable()
++    {
++        if (_seeded)
++            return;
++
++        lock (SeedGate)
++        {
++            if (_seeded)
++                return;
++
++            var context = (DataContext)_sut.DataProvider;
++            context.EnsureConnectionOpen();
++            using var command = context.CreateCommand(
++                "if object_id('native_json_unicode') is null " +
++                "create table native_json_unicode (id int not null primary key, name nvarchar(max) null, flag bit not null, num bigint not null); " +
++                "delete from native_json_unicode; " +
++                "insert into native_json_unicode (id, name, flag, num) values " +
++                "(1, N'plain', 1, 10), (2, N'é中😀<b>/slash', 0, 20), (3, null, 1, 30), " +
++                "(4, replicate(cast(N'x' as nvarchar(max)), 4095) + N'😀end', 0, 40);");
++            command.ExecuteNonQuery();
++            _seeded = true;
++        }
++    }
++
++    // SQL Server returns a FOR JSON document longer than 2033 characters as multiple reader rows. The
++    // 2022-'x' prefix puts the emoji's high surrogate at document index 2032, i.e. the last character of
++    // the first 2033-character reader row, so the surrogate pair straddles a real reader-row boundary.
++    private const int SurrogatePrefix = 2022;
++
++    private void EnsureSurrogateTable()
++    {
++        if (_surrogateSeeded)
++            return;
++
++        lock (SeedGate)
++        {
++            if (_surrogateSeeded)
++                return;
++
++            var context = (DataContext)_sut.DataProvider;
++            context.EnsureConnectionOpen();
++            using var command = context.CreateCommand(
++                "if object_id('native_json_surrogate') is null " +
++                "create table native_json_surrogate (id int not null primary key, name nvarchar(max) null); " +
++                "delete from native_json_surrogate; " +
++                $"insert into native_json_surrogate (id, name) values (1, replicate(cast(N'x' as nvarchar(max)), {SurrogatePrefix}) + N'😀end');");
++            command.ExecuteNonQuery();
++            _surrogateSeeded = true;
++        }
++    }
++
++    private byte[] StreamNative()
++    {
++        EnsureNativeTable();
++        using var buffer = new MemoryStream();
++        _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJson(buffer);
++        return buffer.ToArray();
++    }
++
++    [Fact]
++    public void Native_UnicodeAndHtml_ShouldBeRawAndLogicallyEquivalent()
++    {
++        var text = Encoding.UTF8.GetString(StreamNative());
++
++        // Raw characters (not System.Text.Json's \uXXXX escapes) prove the database document transport.
++        text.Should().Contain("é").And.Contain("中").And.Contain("😀");
++        text.Should().NotContain("\\u00e9").And.NotContain("\\u003C");
++
++        using var document = JsonDocument.Parse(text);
++        var rows = document.RootElement;
++        rows.GetArrayLength().Should().Be(4);
++        // Exact aliases: the physical id/name columns surface as the projected Id/Name properties.
++        rows[0].GetProperty("Id").GetInt32().Should().Be(1);
++        rows[1].GetProperty("Name").GetString().Should().Be("é中😀<b>/slash");
++        rows[2].GetProperty("Name").ValueKind.Should().Be(JsonValueKind.Null);
++        // The emoji's surrogate pair straddles the 4096-character pump buffer boundary (high surrogate
++        // is the 4096th character), proving the encoder is surrogate-safe across chunks.
++        rows[3].GetProperty("Name").GetString().Should().Be(new string('x', 4095) + "😀end");
++    }
++
++    [Fact]
++    public void Native_EmptyResult_ShouldBeEmptyArray()
++    {
++        EnsureNativeTable();
++        using var buffer = new MemoryStream();
++        _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .Where(x => x.Id < 0)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJson(buffer);
++
++        Encoding.UTF8.GetString(buffer.ToArray()).Should().Be("[]");
++    }
++
++    [Fact]
++    public async Task NativeAsync_ShouldMatchSyncAndObserveCancellation()
++    {
++        EnsureNativeTable();
++
++        var sync = StreamNative();
++
++        using var asyncBuffer = new MemoryStream();
++        await _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJsonAsync(asyncBuffer, cancellationToken: TestContext.Current.CancellationToken);
++
++        asyncBuffer.ToArray().Should().Equal(sync);
++
++        using var cancelled = new MemoryStream();
++        using var cts = new CancellationTokenSource();
++        cts.Cancel();
++
++        var act = async () => await _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJsonAsync(cancelled, cancellationToken: cts.Token);
++
++        await act.Should().ThrowAsync<OperationCanceledException>();
++        cancelled.Length.Should().Be(0);
++    }
++
++    [Fact]
++    public void Native_DestinationIsCallerOwned_ShouldNotFlushOrDispose()
++    {
++        EnsureNativeTable();
++
++        using var sink = new TrackingStream();
++        _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJson(sink);
++
++        sink.Length.Should().BeGreaterThan(0);
++        sink.FlushCount.Should().Be(0);
++        sink.Disposed.Should().BeFalse();
++    }
++
++    [Fact]
++    public void NonAdmittedProjection_ShouldFallBackToManagedBytes()
++    {
++        // A decimal member is outside the admitted native set, so the whole request must use the managed
++        // row writer and stay byte-identical to System.Text.Json.
++        var expected = JsonSerializer.Serialize(
++            _sut.ComplexEntity.OrderBy(x => x.Id)
++                .Select(x => new { x.Id, x.Numeric })
++                .ToList());
++
++        using var buffer = new MemoryStream();
++        _sut.ComplexEntity.OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Numeric })
++            .WriteJson(buffer);
++
++        buffer.ToArray().Should().Equal(Encoding.UTF8.GetBytes(expected));
++    }
++
++    [Fact]
++    public void Native_SurrogateAcrossReaderRow_ShouldRoundTrip()
++    {
++        EnsureSurrogateTable();
++        var expected = new string('x', SurrogatePrefix) + "😀end";
++
++        // Prove the transport really splits the pair: read the raw FOR JSON rows and assert the reader-row
++        // boundary falls between the high and low surrogate of the emoji.
++        var context = (DataContext)_sut.DataProvider;
++        context.EnsureConnectionOpen();
++        using (var command = context.CreateCommand(
++            "select [name] as [Name] from native_json_surrogate where id = 1 for json path"))
++        using (var reader = command.ExecuteReader())
++        {
++            var rows = new List<string>();
++            while (reader.Read())
++                rows.Add(reader.GetString(0));
++
++            rows.Count.Should().BeGreaterThan(1, "a >2033-character FOR JSON document is returned in multiple reader rows");
++            var document = string.Concat(rows);
++            var emoji = document.IndexOf("😀", StringComparison.Ordinal);
++            emoji.Should().BeGreaterThanOrEqualTo(0);
++            rows[0].Length.Should().Be(emoji + 1, "the reader-row boundary must fall inside the surrogate pair");
++        }
++
++        using var buffer = new MemoryStream();
++        _sut.DataProvider.From<INativeJsonSurrogateEntity>()
++            .Where(x => x.Id == 1)
++            .Select(x => new { x.Name })
++            .WriteJson(buffer);
++
++        var text = Encoding.UTF8.GetString(buffer.ToArray());
++        using var parsed = JsonDocument.Parse(text);
++        parsed.RootElement[0].GetProperty("Name").GetString().Should().Be(expected);
++    }
++
++    [Fact]
++    public async Task NativeAsync_DestinationIsCallerOwned_ShouldNotFlushOrDispose()
++    {
++        EnsureNativeTable();
++
++        using var sink = new TrackingStream();
++        await _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJsonAsync(sink, cancellationToken: TestContext.Current.CancellationToken);
++
++        sink.Length.Should().BeGreaterThan(0);
++        sink.FlushCount.Should().Be(0);
++        sink.Disposed.Should().BeFalse();
++        sink.ToArray().Should().Equal(StreamNative());
++    }
++
++    [Fact]
++    public async Task NativeAsync_MidStreamCancellation_ShouldKeepPartialOutputAndOwnership()
++    {
++        EnsureNativeTable();
++
++        using var cts = new CancellationTokenSource();
++        using var sink = new CancelAfterFirstWriteStream(cts);
++        var act = async () => await _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJsonAsync(sink, cancellationToken: cts.Token);
++
++        await act.Should().ThrowAsync<OperationCanceledException>();
++        sink.Length.Should().BeGreaterThan(0, "cancellation must observe the already-written partial document");
++        sink.Disposed.Should().BeFalse();
++
++        // The reader must have been released: the same context still serves a later query.
++        _sut.DataProvider.From<INativeJsonUnicodeEntity>().Count().Should().Be(4);
++    }
++
++    [Fact]
++    public void NativeSync_MidStreamWriteFailure_ShouldKeepPartialOutputAndOwnership()
++    {
++        EnsureNativeTable();
++
++        using var sink = new ThrowAfterFirstWriteStream();
++        var act = () => _sut.DataProvider.From<INativeJsonUnicodeEntity>()
++            .OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Name })
++            .WriteJson(sink);
++
++        act.Should().Throw<OperationCanceledException>();
++        sink.Length.Should().BeGreaterThan(0, "the write failure must keep the already-written partial document");
++        sink.Disposed.Should().BeFalse();
++
++        _sut.DataProvider.From<INativeJsonUnicodeEntity>().Count().Should().Be(4);
++    }
++
++    [Fact]
++    public void Native_EntityBuilderWholeEntity_ShouldStreamRawAndHonorIgnoreNull()
++    {
++        EnsureNativeTable();
++
++        // The whole-entity EntityBuilder surface (no Select) reaches native: raw Unicode proves the
++        // database document transport.
++        using var full = new MemoryStream();
++        _sut.DataProvider.From<INativeJsonUnicodeEntity>().OrderBy(x => x.Id).WriteJson(full);
++        var fullText = Encoding.UTF8.GetString(full.ToArray());
++        fullText.Should().Contain("😀").And.NotContain("\\u003C");
++        using (var document = JsonDocument.Parse(fullText))
++        {
++            document.RootElement.GetArrayLength().Should().Be(4);
++            document.RootElement[2].GetProperty("Name").ValueKind.Should().Be(JsonValueKind.Null);
++        }
++
++        // Native IgnoreNull=true maps to FOR JSON without INCLUDE_NULL_VALUES, so the SQL NULL Name member
++        // is omitted exactly as the managed writer omits it.
++        using var ignore = new MemoryStream();
++        _sut.DataProvider.From<INativeJsonUnicodeEntity>().OrderBy(x => x.Id)
++            .WriteJson(ignore, new JsonStreamOptions { IgnoreNull = true });
++        var ignoreText = Encoding.UTF8.GetString(ignore.ToArray());
++        using (var document = JsonDocument.Parse(ignoreText))
++        {
++            document.RootElement.GetArrayLength().Should().Be(4);
++            document.RootElement[2].TryGetProperty("Name", out _).Should().BeFalse();
++            document.RootElement[0].GetProperty("Name").GetString().Should().Be("plain");
++        }
++    }
++
++    private sealed class TrackingStream : MemoryStream
++    {
++        public int FlushCount { get; private set; }
++
++        public bool Disposed { get; private set; }
++
++        public override void Flush()
++        {
++            FlushCount++;
++            base.Flush();
++        }
++
++        public override Task FlushAsync(CancellationToken cancellationToken)
++        {
++            FlushCount++;
++            return base.FlushAsync(cancellationToken);
++        }
++
++        protected override void Dispose(bool disposing)
++        {
++            Disposed = true;
++            base.Dispose(disposing);
++        }
++    }
++
++    // Cancels the token right after the first async write, so the pump observes cancellation mid-document.
++    private sealed class CancelAfterFirstWriteStream(CancellationTokenSource cts) : MemoryStream
++    {
++        public bool Disposed { get; private set; }
++
++        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
++        {
++            await base.WriteAsync(buffer, cancellationToken).ConfigureAwait(false);
++            await cts.CancelAsync().ConfigureAwait(false);
++        }
++
++        protected override void Dispose(bool disposing)
++        {
++            Disposed = true;
++            base.Dispose(disposing);
++        }
++    }
++
++    // Throws on the second synchronous write (a mid-document destination failure).
++    private sealed class ThrowAfterFirstWriteStream : MemoryStream
++    {
++        private int _writes;
++
++        public bool Disposed { get; private set; }
++
++        public override void Write(byte[] buffer, int offset, int count)
++        {
++            if (_writes++ > 0)
++                throw new OperationCanceledException("destination write cancelled mid-document");
++
++            base.Write(buffer, offset, count);
++        }
++
++        protected override void Dispose(bool disposing)
++        {
++            Disposed = true;
++            base.Dispose(disposing);
++        }
++    }
++}
+diff --git a/tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs b/tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs
+new file mode 100644
+index 00000000..25853b28
+--- /dev/null
++++ b/tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs
+@@ -0,0 +1,90 @@
++using FluentAssertions;
++using NextORM.Core;
++
++namespace NextORM.SqlServer.Tests;
++
++/// <summary>
++/// D177.2 SQL-lowering for the native JSON fast-path: the native clone must render the trailing
++/// <c>FOR JSON PATH</c> clause and must alias every projected column to its exact JSON property name
++/// (case-sensitively), so a mapped physical column such as <c>id</c> still surfaces as <c>Id</c>.
++/// These tests never open a connection.
++/// </summary>
++public class SqlServerNativeJsonSqlTests
++{
++    internal static DbPreparedQueryCommand<T> PrepareNative<T>(IDataContext ctx, QueryCommand<T> command, bool includeNullValues = false)
++        => PrepareNative(ctx, command, out _, includeNullValues);
++
++    private static DbPreparedQueryCommand<T> PrepareNative<T>(IDataContext ctx, QueryCommand<T> command, out QueryCommand<T> clone, bool includeNullValues = false)
++    {
++        clone = (QueryCommand<T>)command.Clone();
++        clone.DocumentMode = true;
++        clone.ResetPreparation();
++        clone.JsonShapeMode = true;
++        clone.JsonShape = null;
++        clone.ForJsonClause = new ForJsonClause(ForJsonMode.Path, null, IncludeNullValues: includeNullValues);
++        return (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(clone, createEnumerator: false, storeInCache: false, CancellationToken.None);
++    }
++
++    [Fact]
++    public void NativeClone_ShouldRenderForJsonPathWithExactAliases()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        var sql = PrepareNative(ctx, ctx.From<IComplexEntity>().OrderBy(x => x.Id)
++            .Select(x => new { x.Id, x.Int, x.String })).DbCommand.CommandText;
++
++        sql.Should().EndWith("for json path");
++        // Exact, case-sensitive aliases: the physical id/column names differ from the JSON property
++        // names, so FOR JSON would otherwise emit "id"/"nullableint" instead of "Id"/"Int".
++        sql.Should().Contain("id as [Id]");
++        sql.Should().Contain("nullableint as [Int]");
++        sql.Should().Contain("somestring as [String]");
++    }
++
++    [Fact]
++    public void NativeClone_ShouldRenderIncludeNullValuesWhenRequested()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        var sql = PrepareNative(ctx, ctx.From<IComplexEntity>().OrderBy(x => x.Id).Select(x => new { x.Id }), includeNullValues: true)
++            .DbCommand.CommandText;
++
++        sql.Should().EndWith("for json path, include_null_values");
++    }
++
++    [Fact]
++    public void EligibleFlatPlan_ShouldBeNativeAndScalarOrTypedPlanManaged()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        PrepareNative(ctx, ctx.From<IComplexEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.Int, x.String }), out var flatCommand);
++        var flatPlan = JsonShapePlan.Build(flatCommand.SelectList, flatCommand.OneColumn, new JsonStreamOptions(), shape: null);
++        JsonNativeStream.IsEligible(flatPlan, flatPlan.Options).Should().BeTrue();
++
++        PrepareNative(ctx, ctx.From<IComplexEntity>().OrderBy(x => x.Id).Select(x => x.Id), out var scalarCommand);
++        var scalarPlan = JsonShapePlan.Build(scalarCommand.SelectList, scalarCommand.OneColumn, new JsonStreamOptions(), shape: null);
++        JsonNativeStream.IsEligible(scalarPlan, scalarPlan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void RawAccessorProjection_ShouldStayManaged()
++    {
++        // A raw named-table accessor has no mapped provider type: the managed reader inspects the runtime
++        // field type and narrows, while FOR JSON would emit the raw value. It must not be native.
++        using var ctx = SqlServerTestContext.Create();
++
++        PrepareNative(ctx, ctx.From("complex_entity").Select(x => new { Narrow = x["m"].AsInt }), out var rawCommand);
++        var rawPlan = JsonShapePlan.Build(rawCommand.SelectList, rawCommand.OneColumn, new JsonStreamOptions(), shape: null);
++        JsonNativeStream.IsEligible(rawPlan, rawPlan.Options).Should().BeFalse();
++    }
++
++    [Fact]
++    public void DirectMemberProjection_ShouldStayNative()
++    {
++        using var ctx = SqlServerTestContext.Create();
++
++        PrepareNative(ctx, ctx.From<IComplexEntity>().Select(x => new { x.Id }), out var directCommand);
++        var directPlan = JsonShapePlan.Build(directCommand.SelectList, directCommand.OneColumn, new JsonStreamOptions(), shape: null);
++        JsonNativeStream.IsEligible(directPlan, directPlan.Options).Should().BeTrue();
++    }
++}

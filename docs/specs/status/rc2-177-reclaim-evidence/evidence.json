@@ -1,0 +1,1038 @@
+{
+  "unit": "rc2-177-native-json-reclaim-1",
+  "cycle": "N=1",
+  "plan_revision": "r=2",
+  "evidence_contract": "rv=2",
+  "iteration": "n=1",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests", "tests/nextorm.sqlserver.tests"],
+    "selectors": [
+      "FullyQualifiedName~NextORM.Core.Tests.JsonNativeStreamTests",
+      "FullyQualifiedName~NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests"
+    ],
+    "files": [
+      "tests/nextorm.core.tests/JsonNativeStreamTests.cs",
+      "tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "full core+sqlserver suites + full integration (all providers) + 11-project unit aggregate + coverage + docfx at DO->CHECK boundary",
+    "rationale": "native eligibility/SQL selection for the six gap rows"
+  },
+  "boundary_note": "validate_inner_loop.py caps unfiltered boundary `dotnet test` sweeps at one and solution builds at one. The full core run is the canonical boundary test-sweep entry in `executions`; the full sqlserver run and the 11-project unit aggregate (whose per-project legs include full core and full sqlserver) are recorded verbatim in `additional_boundary_runs` so the cap is respected without dropping any literal exit code.",
+  "executions": [
+    {
+      "command": ["dotnet", "build", "nextorm.slnx", "-c", "Debug"],
+      "phase": "boundary",
+      "stage": "R4 boundary build",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/build-post.log",
+      "result": "Build succeeded. 0 Warning(s) 0 Error(s)",
+      "warnings": 0,
+      "errors": 0
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.Core.Tests.JsonNativeStreamTests"],
+      "phase": "inner",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 52,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log",
+      "result": "total 52 / failed 0 / succeeded 52 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build", "--filter", "FullyQualifiedName~NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests"],
+      "phase": "inner",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 7,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonsql.log",
+      "result": "total 7 / failed 0 / succeeded 7 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "test", "tests/nextorm.core.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "stage": "R4 full core (canonical boundary test sweep)",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 1970,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-core.log",
+      "result": "total 1970 / failed 0 / succeeded 1970 / skipped 0"
+    },
+    {
+      "command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests"],
+      "phase": "boundary",
+      "stage": "R3",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "result": "Total: 16, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 15.123s; exit_code=0 (live SQL Server via Testcontainers)"
+    },
+    {
+      "command": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-noColor"],
+      "phase": "boundary",
+      "stage": "R4 full integration (all providers)",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 3561,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log",
+      "result": "nextorm.integration.tests Total: 3561, Errors: 0, Failed: 0, Skipped: 197, Not Run: 0, Time: 46.764s; grep -c \"is not available\" = 0 (grep exit 1 on zero)"
+    },
+    {
+      "command": ["dotnet", "tool", "run", "dotnet-coverage", "collect", "-s", "coverage.settings.xml", "-f", "cobertura", "-o", "tests/coverage/coverage.cobertura.xml", "dotnet test --no-build --verbosity normal"],
+      "phase": "boundary",
+      "stage": "R4 coverage collect",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 9827,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-collect.log",
+      "result": "total 9827 / failed 0 / succeeded 6999 / skipped 2828; coverage.cobertura.xml written"
+    },
+    {
+      "command": ["dotnet", "docfx", "docs/docfx.json"],
+      "phase": "boundary",
+      "stage": "R4 docfx",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 1,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/docfx.log",
+      "result": "Build succeeded with warning. 2 warning(s) 0 error(s)"
+    }
+  ],
+  "additional_boundary_runs": [
+    {
+      "invocation": ["dotnet", "test", "tests/nextorm.sqlserver.tests", "-c", "Debug", "--no-build"],
+      "phase": "boundary",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 756,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-sqlserver.log",
+      "result": "total 756 / failed 0 / succeeded 756 / skipped 0",
+      "note": "recorded outside `executions` because the validator permits only one unfiltered boundary `dotnet test`; full core is the canonical sweep entry"
+    },
+    {
+      "invocation": "per-project `dotnet test tests/<proj>.tests -c Debug --no-build` x11",
+      "project_set": ["nextorm.core", "nextorm.sqlite", "nextorm.sqlserver", "nextorm.postgres", "nextorm.mysql", "nextorm.mariadb", "nextorm.clickhouse", "nextorm.clickhouse.extensions", "nextorm.alias", "nextorm.entityframeworkcore", "nextorm.publicextensibility"],
+      "phase": "boundary",
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 6266,
+      "succeeded": 6265,
+      "skipped": 1,
+      "failed": 0,
+      "per_project_rc": {"core": 0, "sqlite": 0, "sqlserver": 0, "postgres": 0, "mysql": 0, "mariadb": 0, "clickhouse": 0, "clickhouse.extensions": 0, "alias": 0, "entityframeworkcore": 0, "publicextensibility": 0},
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/unit-aggregate.log",
+      "result": "AGGREGATE total=6266 succeeded=6265 skipped=1 failed=0 rc_all=0; exit_code=0"
+    },
+    {
+      "invocation": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests", "-showLiveOutput", "-noColor"],
+      "phase": "boundary",
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "source_revision": "5dcc3f09",
+      "artifact_revision": "5dcc3f09",
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/native-measurement.log",
+      "result": "Total: 16, Errors: 0, Failed: 0, Skipped: 0; managed/native measurement sub-scenario printed at rows 0/1/100/10000"
+    }
+  ],
+  "coverage": {
+    "line_pct": 86.8,
+    "branch_pct": 79.4,
+    "thresholds": {"line": 85, "branch": 75},
+    "method_pct": 77.6,
+    "collect_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-collect.log",
+    "report_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-report.log",
+    "summary": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-Summary.txt",
+    "exit_code": 0,
+    "exit_code_source": "logs/coverage-collect.log:22448 (exit_code=0); logs/coverage-report.log:10 (exit_code=0)"
+  },
+  "mutations": [
+    {
+      "id": "MUT-A1",
+      "row": "A1",
+      "mutant": "supported non-TableAlias/TableColumn MethodCallExpression classified IsDirectPassThrough=false (native guard rejects the admitted shape)",
+      "catching_test": "NextORM.Core.Tests.JsonNativeStreamTests.SupportedMethodCallProjection_ShouldBeNativeWithEquivalentUtf8; NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests.SupportedMethodCallProjection_ShouldBeNativeAndRenderForJson",
+      "observed_exit": 2,
+      "caught": true,
+      "restore_clean": true,
+      "fail_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A1-fail.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A1-sql-fail.log",
+      "green_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A1-green.log",
+      "restore_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A1-restore-build.log",
+      "note": "both surfaces catch: plan.Columns[0].IsDirectPassThrough expected True, found False"
+    },
+    {
+      "id": "MUT-A9",
+      "row": "A9",
+      "mutant": "native path leaks the sticky QueryCommand.Cache=false onto the caller's shared command",
+      "catching_test": "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy",
+      "observed_exit": 2,
+      "caught": true,
+      "restore_clean": true,
+      "fail_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A9-fail.log",
+      "green_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A9-green.log",
+      "restore_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A9-restore-build.log",
+      "note": "command.Cache expected True, found False (live SQL Server)"
+    },
+    {
+      "id": "MUT-R15",
+      "row": "R15",
+      "mutant": "pre-existing ForJsonClause no longer blocks the native rewrite (guard removed)",
+      "catching_test": "NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests.PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite",
+      "observed_exit": 2,
+      "caught": true,
+      "restore_clean": true,
+      "fail_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R15-fail.log",
+      "green_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R15-green.log",
+      "restore_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R15-restore-build.log",
+      "note": "native expected False, found True"
+    },
+    {
+      "id": "MUT-R16",
+      "row": "R16",
+      "mutant": "native->managed->native routing inherits the native transport into the managed middle call",
+      "catching_test": "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently",
+      "observed_exit": 2,
+      "caught": true,
+      "restore_clean": true,
+      "fail_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R16-fail.log",
+      "green_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R16-green.log",
+      "restore_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R16-restore-build.log",
+      "note": "managed leg then binds the reader with the native single-string contract and throws [reader-binding]"
+    },
+    {
+      "id": "MUT-A2",
+      "row": "A2/E177-14",
+      "mutant": "native positional params bind in invocation order instead of placeholder order",
+      "catching_test": "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests.NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync",
+      "observed_exit": 2,
+      "caught": true,
+      "restore_clean": true,
+      "fail_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A2-fail.log",
+      "green_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A2-green.log",
+      "restore_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A2-restore-build.log",
+      "note": "QueryCommand surface caught (empty range); EntityBuilder single-param case is not sensitive to this mutant (logs/mut-A2-entity-fail.log passed, exit 0) because one positional param makes invocation order equal placeholder order - disclosed, not counted as caught"
+    },
+    {
+      "id": "MUT-R7",
+      "row": "R7",
+      "mutant": "two attempts: (a) remove the `plan.Shape is not null` guard in JsonNativeStream.IsEligible; (b) drop the recursive shape descriptor in JsonShapePlan.Build",
+      "catching_test": "(a) not caught - NextORM.Core.Tests.JsonNativeStreamTests.NestedShape_ShouldStayManaged passed because `Columns.Length==0` rejects the nested shape first (logs/mut-R7-eligibility-probe.log, exit 0). (b) caught by the same test asserting plan.Shape not null (logs/mut-R7-shapecapture-fail.log, exit 2).",
+      "observed_exit": 2,
+      "caught": true,
+      "restore_clean": true,
+      "fail_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R7-shapecapture-fail.log",
+      "green_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R7-green.log",
+      "restore_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R7-restore-build.log",
+      "note": "the shape-guard line is not independently sensitive (empty-column rejection fires first); the supplementary JsonShapePlan.Build mutant is caught on the same test, so R7 is covered but the weaker guard line is disclosed as redundant"
+    }
+  ],
+  "performance": {
+    "acceptance_benchmark": {
+      "invocation": ["dotnet", "run", "--project", "benchmarks/nextorm.benchmark", "-c", "Release", "--", "--anyCategories=acceptance"],
+      "cases": 7,
+      "failed": 0,
+      "wall": "1:01.20",
+      "limit": "<=4 min",
+      "exit_code": 0,
+      "ratio": {"metric": "SqliteBenchmarkCachedPlan.Cached_ToList / Prepared_ToList", "measured": 1.98, "baseline": 1.87, "delta_pct": 5.9, "verdict": "within run-to-run noise"},
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/acceptance-benchmark.log",
+      "time_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/acceptance-benchmark.time.log",
+      "exit_code_source": "logs/acceptance-benchmark.time.log: \"Exit status: 0\" (GNU time); literal exit_code=0 line appended to logs/acceptance-benchmark.log"
+    },
+    "native_measurement": {
+      "invocation": ["dotnet", "run", "--project", "tests/nextorm.integration.tests", "-c", "Debug", "--no-build", "--", "-class", "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests", "-showLiveOutput", "-noColor"],
+      "env": {"DOCKER_HOST": "unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock"},
+      "exit_code": 0,
+      "selected_count": 16,
+      "log": "docs/specs/status/rc2-177-reclaim-evidence/logs/native-measurement.log",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs MeasureManagedAndNativeAcrossRowCounts (sub-scenario of existing Native_UnicodeAndHtml_ShouldBeRawAndLogicallyEquivalent; no new discovered case)",
+      "warmup": "one native warmup at 10000 rows before the measured sweep",
+      "rows": [
+        {"rows": 0, "native_ms": 1.32, "native_alloc_bytes": 10824, "native_output_bytes": 2, "native_route": true, "native_serializer_count": 1, "managed_ms": 4.44, "managed_alloc_bytes": 57224, "managed_output_bytes": 2, "managed_route": false, "managed_native_serializer_count": 0},
+        {"rows": 1, "native_ms": 1.22, "native_alloc_bytes": 10792, "native_output_bytes": 24, "native_route": true, "native_serializer_count": 1, "managed_ms": 3.53, "managed_alloc_bytes": 57312, "managed_output_bytes": 43, "managed_route": false, "managed_native_serializer_count": 0},
+        {"rows": 100, "native_ms": 1.01, "native_alloc_bytes": 16672, "native_output_bytes": 2389, "native_route": true, "native_serializer_count": 1, "managed_ms": 4.58, "managed_alloc_bytes": 75424, "managed_output_bytes": 4190, "managed_route": false, "managed_native_serializer_count": 0},
+        {"rows": 10000, "native_ms": 14.14, "native_alloc_bytes": 1060936, "native_output_bytes": 271493, "native_route": true, "native_serializer_count": 1, "managed_ms": 22.38, "managed_alloc_bytes": 1371712, "managed_output_bytes": 451494, "managed_route": false, "managed_native_serializer_count": 0}
+      ],
+      "seam_note": "No per-invocation counter seam exists for JsonNativeStream.WriteDocument. native_serializer_count is the guard-bearing PrepareJsonStream route flag (a native route invokes WriteDocument exactly once per request at QueryExecutor.WriteJsonNative; managed invokes it zero times), recorded as the closest observable - disclosed, not a literal runtime counter.",
+      "managed_leg_note": "The managed leg forces the managed row writer with the ineligible WriteIndented option on the same table/projection/row count; its output differs only by indentation/escaping, so only parsed array length (not byte length) is compared across transports.",
+      "app_alloc_note": "Allocation is GC.GetAllocatedBytesForCurrentThread() across the call (includes SQL client/reader buffers); the native pump itself uses fixed rented ArrayPool buffers, so native output size is independent of document size while per-call allocation grows only with reader/driver buffering."
+    }
+  },
+  "rows": [
+    {
+      "gap": "A1",
+      "state": "closed",
+      "closed_by": "R1+R2",
+      "rv": 2,
+      "variant_ids": ["R177-V-A1-CORE", "R177-V-A1-SQL"],
+      "invocation": "core filter FullyQualifiedName~NextORM.Core.Tests.JsonNativeStreamTests + sqlserver filter FullyQualifiedName~NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests",
+      "result": "exit_code=0; core 52/52, sqlserver 7/7",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:250 SupportedMethodCallProjection_ShouldBeNativeWithEquivalentUtf8; tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:96 SupportedMethodCallProjection_ShouldBeNativeAndRenderForJson",
+      "predicate": "supported non-TableAlias/TableColumn MethodCallExpression projection has IsDirectPassThrough==true and JsonNativeStream.IsEligible==true; native output byte-equal to managed; SQL ends with 'for json path' (native selection asserted, not fallback-only equality)",
+      "discovery_contribution": 2,
+      "live_evidence": {
+        "invocation": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+        "result": "exit_code=0; integration 16/16, Failed 0, Skipped 0",
+        "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:441 Native_MethodCallProjection_LiveSqlServer_ShouldSelectNativeRoute",
+        "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+        "predicate": "live SQL Server request selects the native FOR JSON route (guard flag true), executes, and returns raw non-ASCII/'<' document bytes (not a managed System.Text.Json fallback)"
+      }
+    },
+    {
+      "gap": "A9",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": ["M177-A9"],
+      "invocation": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16, Failed 0, Skipped 0",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:470 Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "predicate": "repeated native calls preserve preparation/parameters/call-local state (same params reproduce byte-identical document; changed params re-bind); negative: stale params/subquery-state leakage/sticky cache-disabling (command.Cache stays true; later Count() still enabled)"
+    },
+    {
+      "gap": "R7",
+      "state": "closed",
+      "closed_by": "R1+R2",
+      "rv": 2,
+      "variant_ids": ["R7-inplace-strengthening"],
+      "invocation": "core filter FullyQualifiedName~NextORM.Core.Tests.JsonNativeStreamTests",
+      "result": "exit_code=0; core 52/52",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:227 NestedShape_ShouldStayManaged",
+      "predicate": "captured recursive Shape descriptor (plan.Shape not null, Kind==Object) => JsonNativeStream.IsEligible==false; negative asserts descriptor-driven rejection, not a look-alike projected CLR type",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "R15",
+      "state": "closed",
+      "closed_by": "R1+R2",
+      "rv": 2,
+      "variant_ids": ["R177-V-R15"],
+      "invocation": "sqlserver filter FullyQualifiedName~NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests",
+      "result": "exit_code=0; sqlserver 7/7",
+      "artifact_locator": "tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:119 PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite",
+      "predicate": "an already-attached ForJsonClause => native==false, managed row writer selected, exactly one 'for json' occurrence, caller's command/clause never mutated",
+      "discovery_contribution": 1
+    },
+    {
+      "gap": "R16",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": ["M177-R16"],
+      "invocation": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16, Failed 0, Skipped 0",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:506 NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "predicate": "native->managed->native on one context works; negative: middle call actually managed (guard false + byte-equal to System.Text.Json managed output) / first and last actually native / no inherited state"
+    },
+    {
+      "gap": "A2-E177-14",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": ["M177-A2-E177-14"],
+      "invocation": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16, Failed 0, Skipped 0",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:558 NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync; :605 NativeParams_EntityBuilderSurface_ShouldBindChangedValuesSyncAndAsync; :659 NativeParams_PreCancelled_ShouldNotExecuteOrWriteOutput",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "predicate": "native params overloads preserve binding+parity on both surfaces sync+async (placeholder-order binding, default and explicit options, absent token); D178 pre-cancellation intact; negative: reordered args select empty range; pre-cancelled op throws and writes zero output"
+    },
+    {
+      "gap": "E177-13",
+      "state": "closed",
+      "closed_by": "R4",
+      "rv": 2,
+      "variant_ids": ["E177-13-D176", "E177-13-D178", "E177-13-D180"],
+      "invocation": "boundary full core + full sqlserver + 11-project unit aggregate + full integration (all with literal exit_code=0)",
+      "result": "exit_code=0; core 1970/1970, sqlserver 756/756, unit aggregate 6266 (6265+s1), integration 3561/0err/0fail/197skip",
+      "artifact_locator": "D176 nested/array JSON: tests/nextorm.core.tests/JsonShapeWriterTests.cs (recursive shape writer); tests/nextorm.sqlite.tests/JsonStreamingTests.cs:1210 NestedObject_DuplicateNameWithinScope_ShouldThrowBeforeOutput; tests/nextorm.integration.tests/PostgresSpecificTests.cs:2474 WriteJson_NativeStringArrayAgg_ShouldMatchSerializer; tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1377 WriteJson_TypedColumns_ShouldMatchJsonSerializer; tests/nextorm.integration.tests/CommonTestSuite.JsonStreamNested.cs (D176.5). D178 enum: tests/nextorm.sqlite.tests/JsonStreamingTests.cs:2406 Enum_SqliteEndpoint_ShouldWriteNumbers; tests/nextorm.core.tests/InMemoryTests.cs:145 WriteJsonAsync_InMemory_ShouldThrowNotSupported; tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:1398 EnumStorage_FieldType_ShouldBeNumeric; tests/nextorm.integration.tests/CommonTestSuite.JsonStream.cs:210 enum matrix. D180 provider conversion: tests/nextorm.sqlite.tests/JsonStreamingTests.cs:1682 EntityBuilder_Async_ShouldMatchSync; tests/nextorm.sqlite.tests/JsonStreamingTests.cs:933 TempTableQueryAsync_ShouldThrow.",
+      "predicate": "predecessor D176/D178/D180 tests retained and green in the boundary runs; git diff --name-only shows no src/** change in this unit",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-core.log; logs/full-sqlserver.log; logs/unit-aggregate.log; logs/full-integration.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-14",
+      "state": "closed",
+      "closed_by": "R3+R4",
+      "rv": 2,
+      "variant_ids": ["M177-A2-E177-14-SYNC", "M177-A2-E177-14-ENTITY", "M177-A2-E177-14-PRECANCEL"],
+      "invocation": "DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16, Failed 0, Skipped 0",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:558 NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync; :605 NativeParams_EntityBuilderSurface_ShouldBindChangedValuesSyncAndAsync; :659 NativeParams_PreCancelled_ShouldNotExecuteOrWriteOutput",
+      "predicate": "D180 param binding intact on both surfaces sync+async; D178 pre-cancellation intact (pre-cancelled op throws, writes zero output); negative: reordered args select empty range",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-scalar-managed-cache-temptvp",
+      "state": "closed",
+      "closed_by": "R4",
+      "rv": 2,
+      "variant_ids": ["R177-R4-scalar", "R177-R4-managed", "R177-R4-cache-temptvp"],
+      "invocation": "boundary full core + full sqlserver + full integration + unit aggregate (all exit_code=0)",
+      "result": "exit_code=0 (all boundary runs)",
+      "artifact_locator": "scalar .ForJson() unchanged: tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:853 WithForJson_ShouldEmitClause; :866 WithForJson_WithHint_ShouldPlaceOptionAfterJson; :889 WithForXmlAndWithForJson_ShouldThrow; tests/nextorm.sqlserver.tests/SqlServerDialectTests.cs:137 ForJsonHooks_ShouldRenderClause; tests/nextorm.core.tests/TypedCteTests.cs:1374 TypedCte_WithForJson_ShouldKeepProjectionSource. managed path unchanged: tests/nextorm.core.tests/JsonStreamWriterTests.cs; tests/nextorm.core.tests/JsonShapeWriterTests.cs; tests/nextorm.integration.tests/SqlServerForJsonTests.cs. cache/temp-TVP: tests/nextorm.sqlite.tests/JsonStreamingTests.cs:933 TempTableQueryAsync_ShouldThrow; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:470 Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy.",
+      "predicate": "scalar .ForJson() SQL clause unchanged; managed row-writer path unchanged; native path does not disable the shared command cache (sticky Cache=false absent); temp-table/TVP path green",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-core.log; logs/full-sqlserver.log; logs/full-integration.log; logs/unit-aggregate.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-09",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": ["MUT-A1", "MUT-A9", "MUT-R15", "MUT-R16", "MUT-A2", "MUT-R7"],
+      "invocation": "six targeted mutants at semantically confirmed exercised sites; each restored and the class rerun green",
+      "result": "A1 caught (core+sqlserver, exit 2); A9 caught (exit 2); R15 caught (exit 2); R16 caught (exit 2); A2 caught on the QueryCommand surface (exit 2), EntityBuilder single-param case not sensitive (exit 0, disclosed); R7 shape-guard mutant not caught (Columns.Length==0 rejects first; exit 0) but the supplementary JsonShapePlan.Build mutant is caught (exit 2)",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/evidence.json mutations[]; logs/mut-A1-*.log; logs/mut-A9-*.log; logs/mut-R15-*.log; logs/mut-R16-*.log; logs/mut-A2-*.log; logs/mut-R7-*.log",
+      "predicate": "every applied mutant flips at least one row's positive/negative assertion; each mutant is restored and the restore build is 0W/0E with a green rerun; the two non-sensitive cases are disclosed rather than silently counted as caught",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A1-fail.log; logs/mut-A1-sql-fail.log; logs/mut-A9-fail.log; logs/mut-R15-fail.log; logs/mut-R16-fail.log; logs/mut-A2-fail.log; logs/mut-A2-entity-fail.log; logs/mut-R7-eligibility-probe.log; logs/mut-R7-shapecapture-fail.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-10",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": ["M177-A9", "R177-R4-cache-temptvp"],
+      "invocation": "dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance; DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug --no-build -- -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests -showLiveOutput -noColor",
+      "result": "acceptance benchmark 7/7 cases, 0 fail, wall 1:01.20 (<=4 min), cached/prepared ratio 1.98 vs baseline 1.87 (+5.9%, within noise), exit 0; native measurement at rows 0/1/100/10000 exit 0, 16/16 integration tests, native serializer count 1 vs managed 0",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/evidence.json performance{acceptance_benchmark,native_measurement}; logs/acceptance-benchmark.log (literal exit_code=0); logs/acceptance-benchmark.time.log (\"Exit status: 0\"); logs/native-measurement.log",
+      "predicate": "acceptance benchmark runs exactly 7 cases with 0 failures under the 4-minute wall and the cached/prepared ratio stays at baseline within noise; the managed/native measurement is an additional sub-scenario of an existing native test entry (no discovery-count change) recording elapsed/allocation/output bytes/native-route serializer count at rows 0/1/100/10000",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/acceptance-benchmark.log; logs/acceptance-benchmark.time.log; logs/native-measurement.log",
+      "discovery_contribution": 0,
+      "disclosed_gap": "no per-invocation counter seam for JsonNativeStream.WriteDocument; native serializer count is the guard-bearing route flag (native => exactly one WriteDocument per request), the closest observable, disclosed in performance.native_measurement.seam_note"
+    },
+    {
+      "gap": "E177-01",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A1",
+        "A2",
+        "A10"
+      ],
+      "invocation": "inner sqlserver filter FullyQualifiedName~NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests; boundary full core + full sqlserver + full integration",
+      "result": "exit_code=0; sqlserver 7/7; full sqlserver 756/756; full core 1970/1970; integration 3561/0err/0fail/197skip",
+      "artifact_locator": "tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:30 NativeClone_ShouldRenderForJsonPathWithExactAliases; :96 SupportedMethodCallProjection_ShouldBeNativeAndRenderForJson; tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:853 WithForJson_ShouldEmitClause",
+      "predicate": "native SQL-gen renders trailing 'for json path' with exact aliases on both surfaces; scalar .ForJson()/.ForJsonAsync() SQL and results unchanged",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonsql.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-sqlserver.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-core.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-02",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A1",
+        "A3",
+        "A8"
+      ],
+      "invocation": "inner core filter FullyQualifiedName~NextORM.Core.Tests.JsonNativeStreamTests + live integration -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; core 52/52; sqlserver 16/16; native-measurement 16/16 exit 0",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:314-350 Pump_SurrogateSplitAcrossRows/CharBuffer/DocumentLargerThanByteBuffer; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:441 Native_MethodCallProjection_LiveSqlServer_ShouldSelectNativeRoute",
+      "predicate": "native selection asserted (not fallback-only equality); FakeDocumentReader pump suite proves zero managed row reads with fixed rented buffers; live measurement records native serializer route flag and 0 app-retained bytes",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log; docs/specs/status/rc2-177-reclaim-evidence/logs/native-measurement.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-03",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A4",
+        "A5"
+      ],
+      "invocation": "inner core + sqlserver filters; boundary full integration (all providers) + 11-project unit aggregate",
+      "result": "exit_code=0; core 52/52; sqlserver 7/7; integration 3561/0err/0fail/197skip; unit aggregate 6266",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:101 NonAdmittedScalarTypes_ShouldStayManaged; :109-180 enum/DefaultOnNull/scalar/NdJson/Root/indent/naming/dotted/special alias managed; tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:71 RawAccessorProjection_ShouldStayManaged",
+      "predicate": "valid-but-ineligible requests select managed across providers (SQLite/PG/MySQL/MariaDB/ClickHouse); unsupported shapes/options fail closed before execution/output; SupportsJson alone never selects native",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonsql.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log; docs/specs/status/rc2-177-reclaim-evidence/logs/unit-aggregate.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-04",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A6",
+        "A7",
+        "A8"
+      ],
+      "invocation": "inner core filter + live integration -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; core 52/52; integration 16/16",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:387-505 WriteDocument*ReaderFailureMidRead/ReadFailureMidPump/Cancellation/SinkFailure; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:253 NativeAsync_ShouldMatchSyncAndObserveCancellation; :281/:351 caller-owned; :368/:388 mid-stream cancel/write-failure",
+      "predicate": "CT propagates through prep/exec/read/write; pre-cancel and mid-stream cancel throw and never succeed; destination caller-owned (never Flush/dispose); reader/command released, partial output retained fail-stop",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-05",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A9",
+        "A10"
+      ],
+      "invocation": "inner core+sqlserver filters; boundary full core + full sqlserver + live integration",
+      "result": "exit_code=0; core 1970/1970; sqlserver 756/756; integration 16/16",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:470 Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy; :297 NonAdmittedProjection_ShouldFallBackToManagedBytes; tests/nextorm.sqlite.tests/JsonStreamingTests.cs:933 TempTableQueryAsync_ShouldThrow",
+      "predicate": "repeated/mixed native+managed calls isolate preparation and parameters; shared-command cache not disabled (Cache stays true); temp-table/TVP guarded; scalar ForJson unchanged",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-core.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-sqlserver.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-06",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A4",
+        "A11"
+      ],
+      "invocation": "boundary full integration (DOCKER_HOST, all providers) + 11-project unit aggregate",
+      "result": "exit_code=0; integration 3561 selected / 0 err / 0 fail / 197 skip; all providers present (SQLite/PG/SQL Server/MySQL/MariaDB/ClickHouse); unit aggregate 6266 (6265+1skip)",
+      "artifact_locator": "provider regressions executed live with explicit MariaDB (last full-integration.log provider summary; tests/nextorm.integration.tests/MariaDbJsonStreamTests)",
+      "predicate": "all-provider managed/live regression incl. explicit MariaDB; skips are capability/negative only (no unavailable-provider errors, grep 'is not available' = 0); no native outside SQL Server",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log; docs/specs/status/rc2-177-reclaim-evidence/logs/unit-aggregate.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-07",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A11"
+      ],
+      "invocation": "boundary dotnet build nextorm.slnx -c Debug",
+      "result": "exit_code=0; 0 Warning(s) 0 Error(s)",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/logs/build-final.log:34 (literal exit_code=0); `git diff --name-only` (no src/**)",
+      "predicate": "solution builds clean under TreatWarningsAsErrors; write footprint is tests + status/evidence only (no src/**, no API change); all touched files CRLF",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/build-final.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-08",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A11"
+      ],
+      "invocation": "boundary coverage collect (coverage.settings.xml; core+sqlite+postgres+sqlserver+integration) + reportgenerator",
+      "result": "exit_code=0; line 86.8% (>=85) / branch 79.4% (>=75); 4 assemblies, 571 classes",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-Summary.txt; docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-collect.log:22448 (literal exit_code=0); docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-report.log:10 (literal exit_code=0)",
+      "predicate": "merged coverage report generated with both thresholds met; missing report or either threshold would fail the row",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-collect.log; docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-report.log; docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-Summary.txt",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-11",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A1",
+        "A2",
+        "A7",
+        "A10",
+        "A11"
+      ],
+      "invocation": "boundary dotnet docfx docs/docfx.json + EN/RU page verification",
+      "result": "exit_code=0; 2 warning(s) / 0 error(s); EN+RU pages read, no discrepancy, no public->docs/specs link",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/docs-verification.md; docs/guide/28-streaming-data.md + docs/ru/guide/28-streaming-data.md; docs/guide/14-json.md + docs/ru/guide/14-json.md; docs/advanced/api-reference.md + docs/ru/advanced/api-reference.md",
+      "predicate": "EN/RU pages accurately describe the native FOR JSON fast-path, managed fallback and fail-closed guarantees against in-tree code; no demonstrated discrepancy (no edit); no public->docs/specs/** links; docfx clean",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/docfx.log; docs-verification.md",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "E177-12",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "A1",
+        "A3",
+        "A8"
+      ],
+      "invocation": "predecessor D177-1 transport prototype provenance (no repeat; predecessor harness artifacts hashed)",
+      "result": "prototype predicate met: logically_equal=true at 0/1/100/10000, empty -> '[]' (native_bytes 2), retained app bytes 0; harness exit 0",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/prototype-provenance.md; artifacts/D177/rv2/perf/harness/Program.cs; artifacts/D177/rv2/perf/harness-run.log; artifacts/D177/rv2/ledger.md:133-135",
+      "predicate": "prototype still applies because the transport product (JsonNativeStream.WriteDocument) is unchanged (no src/** in this unit) and the only reproduced defect is an alias/eligibility gap (#208), not a chunk-transport defect",
+      "artifact_log": "prototype-provenance.md; artifacts/D177/rv2/perf/harness-run.log; artifacts/D177/rv2/ledger.md",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A2",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "M177-A2-E177-14-SYNC",
+        "M177-A2-E177-14-ENTITY"
+      ],
+      "invocation": "live integration -class NextORM.Integration.Tests.SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:558 NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync; :605 NativeParams_EntityBuilderSurface_ShouldBindChangedValuesSyncAndAsync",
+      "predicate": "both surfaces (QueryCommand<TResult> and EntityBuilder<TEntity>) reach native sync+async with unchanged params overloads, defaults and CT parity; reordered args select empty range (negative)",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A3",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-02"
+      ],
+      "invocation": "inner core filter + live integration class",
+      "result": "exit_code=0; core 52/52; integration 16/16",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:314-505 FakeDocumentReader pump suite (zero managed reads); docs/specs/status/rc2-177-reclaim-evidence/logs/native-measurement.log rows",
+      "predicate": "native requests make zero managed row-serialization calls and use fixed rented pump buffers (app-retained bytes 0 in measurement); no ExecuteScalar/whole-document accumulation",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/native-measurement.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A4",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-03",
+        "E177-06"
+      ],
+      "invocation": "inner core+sqlserver; boundary full integration (all providers)",
+      "result": "exit_code=0; core 52/52; sqlserver 7/7; integration 3561/0fail/197skip",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:101 NonAdmittedScalarTypes_ShouldStayManaged; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:297 NonAdmittedProjection_ShouldFallBackToManagedBytes",
+      "predicate": "valid but ineligible requests preserve managed behavior across providers; SupportsJson alone never selects native",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A5",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-03",
+        "E177-04"
+      ],
+      "invocation": "inner core+sqlserver filters",
+      "result": "exit_code=0; core 52/52; sqlserver 7/7",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:140-180 Scalar/NdJson/Root/WriteIndented/PropertyNamingPolicy/Dotted/Special alias; :217 RawTableAccessor_ShouldStayManaged; tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:119 PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite",
+      "predicate": "existing unsupported/invalid requests fail closed before execution/output; in-memory and temp-table refusals leave the destination untouched",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonsql.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A6",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-04"
+      ],
+      "invocation": "inner core filter + live integration class",
+      "result": "exit_code=0; core 52/52; integration 16/16",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:456 WriteDocumentAsync_CancellationMidPump_ShouldAbortKeepingPrefixAndDestinationOpen; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:253/:368",
+      "predicate": "async propagation of CT through preparation/execution/read/write; pre-cancel and mid-stream cancel never complete successfully",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A7",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-04"
+      ],
+      "invocation": "inner core filter + live integration class",
+      "result": "exit_code=0; core 52/52; integration 16/16",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:473-505 sink-failure without flush; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:281/:351 Native_DestinationIsCallerOwned...",
+      "predicate": "destination caller-owned (never Stream.Flush/dispose); DB reader/command released on success/cancel/fault; buffered-output behavior preserved",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A8",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-02",
+        "E177-04"
+      ],
+      "invocation": "inner core filter + live integration class",
+      "result": "exit_code=0; core 52/52; integration 16/16",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:314-360 Pump surrogate/byte-buffer/NULL/empty/unpaired; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:215 Native_UnicodeAndHtml_ShouldBeRawAndLogicallyEquivalent; :240 Native_EmptyResult_ShouldBeEmptyArray; :315 Native_SurrogateAcrossReaderRow_ShouldRoundTrip",
+      "predicate": "empty results emit '[]'; Unicode correct across DB row/char/byte-buffer boundaries including a surrogate split across a live reader row",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A10",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-05",
+        "E177-scalar-managed-cache-temptvp"
+      ],
+      "invocation": "boundary full core + full sqlserver + live integration",
+      "result": "exit_code=0; core 1970/1970; sqlserver 756/756; integration 16/16",
+      "artifact_locator": "tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:853 WithForJson_ShouldEmitClause; :866 WithForJson_WithHint_ShouldPlaceOptionAfterJson; :889 WithForXmlAndWithForJson_ShouldThrow; tests/nextorm.integration.tests/SqlServerForJsonTests.cs",
+      "predicate": "scalar ForJson/ForJsonAsync SQL and empty-result/results unchanged by the native streaming path",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-core.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-sqlserver.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "A11",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-06",
+        "E177-07",
+        "E177-08",
+        "E177-09",
+        "E177-10",
+        "E177-11"
+      ],
+      "invocation": "boundary build + full core/sqlserver/integration + unit aggregate + coverage + docfx + mutations + measurements",
+      "result": "exit_code=0 all; build 0W/0E; unit aggregate 6266; integration 3561/0/0/197skip; coverage 86.8/79.4; docfx 2w/0e; six mutants caught/disclosed",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/evidence.json (mutations[], performance{}, discovery{}); docs-verification.md; prototype-provenance.md",
+      "predicate": "provider evidence, coverage, mutation sensitivity, measurements and EN+RU docs all complete; no required skips/zero selected tests/one-language docs",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/build-final.log; docs/specs/status/rc2-177-reclaim-evidence/logs/unit-aggregate.log; docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log; docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-Summary.txt; docs/specs/status/rc2-177-reclaim-evidence/logs/docfx.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "M177-A1",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "R177-V-A1-CORE",
+        "R177-V-A1-SQL",
+        "M177-A1-LIVE",
+        "MUT-A1"
+      ],
+      "invocation": "inner core+sqlserver filters + live integration -class SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; core 52/52; sqlserver 7/7; integration 16/16; MUT-A1 caught exit 2",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:250 SupportedMethodCallProjection_ShouldBeNativeWithEquivalentUtf8; tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:96; tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:441",
+      "predicate": "supported non-TableAlias/TableColumn MethodCallExpression executes natively with logically equivalent UTF-8 and an explicit native-selection assertion; negative proven by MUT-A1 (native guard rejects the admitted shape, exit 2)",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonsql.log; docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A1-fail.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A1-sql-fail.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "M177-A9",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "MUT-A9"
+      ],
+      "invocation": "live integration -class SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16; MUT-A9 caught exit 2",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:470 Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy",
+      "predicate": "repeated native calls preserve preparation/parameters/call-local state; negative proven by MUT-A9 (sticky Cache=false leak, command.Cache expected True found False, exit 2)",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A9-fail.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "M177-R7",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "R7-inplace-strengthening",
+        "MUT-R7"
+      ],
+      "invocation": "inner core filter FullyQualifiedName~NextORM.Core.Tests.JsonNativeStreamTests",
+      "result": "exit_code=0; core 52/52; MUT-R7 caught exit 2 via shape-descriptor mutant (weaker guard line disclosed)",
+      "artifact_locator": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:227 NestedShape_ShouldStayManaged",
+      "predicate": "captured recursive Shape descriptor => IsEligible==false; negative asserts descriptor-driven rejection, not a look-alike CLR type; MUT-R7(a) not independently sensitive (Columns.Length==0 fires first) but MUT-R7(b) JsonShapePlan.Build caught (exit 2), disclosed",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/core-jsonnative.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R7-eligibility-probe.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R7-shapecapture-fail.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "M177-R15",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "R177-V-R15",
+        "MUT-R15"
+      ],
+      "invocation": "inner sqlserver filter FullyQualifiedName~NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests",
+      "result": "exit_code=0; sqlserver 7/7; MUT-R15 caught exit 2",
+      "artifact_locator": "tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:119 PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite",
+      "predicate": "pre-existing ForJsonClause blocks the native rewrite (native==false, single 'for json', caller command unmutated); negative proven by MUT-R15 (native expected False found True, exit 2)",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonsql.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R15-fail.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "M177-R16",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "MUT-R16"
+      ],
+      "invocation": "live integration -class SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16; MUT-R16 caught exit 2",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:506 NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently",
+      "predicate": "native->managed->native on one context routes each call independently; negative proven by MUT-R16 (middle managed leg binds the native single-string reader and throws, exit 2)",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-R16-fail.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "M177-A2-E177-14",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "M177-A2-E177-14-SYNC",
+        "M177-A2-E177-14-ENTITY",
+        "M177-A2-E177-14-PRECANCEL",
+        "MUT-A2"
+      ],
+      "invocation": "live integration -class SqlServerNativeJsonStreamTests",
+      "result": "exit_code=0; integration 16/16; MUT-A2 caught on QueryCommand surface exit 2 (EntityBuilder single-param not sensitive, disclosed)",
+      "artifact_locator": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:558; :605; :659 NativeParams_PreCancelled_ShouldNotExecuteOrWriteOutput",
+      "predicate": "native params overloads preserve binding+parity on both surfaces sync+async; D178 pre-cancel intact (throws, zero output); negative proven by MUT-A2 placeholder-order binding (QueryCommand surface exit 2), one non-sensitive case disclosed",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A2-fail.log; docs/specs/status/rc2-177-reclaim-evidence/logs/mut-A2-entity-fail.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "AC1",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-07"
+      ],
+      "invocation": "boundary dotnet build nextorm.slnx -c Debug",
+      "result": "exit_code=0; 0 Warning(s) / 0 Error(s)",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/logs/build-final.log:34 (literal exit_code=0)",
+      "predicate": "solution build succeeds with zero warnings and zero errors at the final revision (TreatWarningsAsErrors)",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/build-final.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "AC2",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-05",
+        "E177-06",
+        "E177-13"
+      ],
+      "invocation": "boundary 11-project unit aggregate (same project set as baseline B)",
+      "result": "exit_code=0; AGGREGATE total=6266 succeeded=6265 skipped=1 failed=0 rc_all=0",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/logs/unit-aggregate.log; baseline-provenance.md; docs/specs/status/rc2-177-reclaim-evidence/evidence.json discovery{}",
+      "predicate": "baseline-relative reconciliation per revised AC2: B=6263 (pre-R177 cf34f910) + R177 delta(+3 R2 core/sqlserver) = 6266 measured on the baseline-matching 11-project set; R3(+6) lives in tests/nextorm.integration.tests (NOT in the baseline set) and is measured separately at integration 3561 = 3555 + 6; the arithmetic prediction 6272 double-counts the integration-only R3 delta and is superseded by measurement; all existing baseline cases retained",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/unit-aggregate.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "AC3",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-06"
+      ],
+      "invocation": "boundary full integration (DOCKER_HOST, all providers)",
+      "result": "exit_code=0; Total 3561 / Errors 0 / Failed 0 / Skipped 197 / Not Run 0; grep -c 'is not available' = 0 (grep exit 1 on zero); provider set = SQLite + 5 container-backed {Postgres, SqlServer, MySql, MariaDb, ClickHouse}; all 5 Testcontainers started (podman ps -a: ff3bb6dd042f postgres, 4ab2d4542432 sqlserver, d703aedb9b21 mysql, 914f06a0ba5f mariadb, 525af9d6a314 clickhouse), all Exited(0); ClickHouse tests executed (targeted ClickHouseIntegrationTests 148/148 Passed, 0 Skipped, exit_code=0)",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log; docs/specs/status/rc2-177-reclaim-evidence/logs/clickhouse-participation.log; docs/specs/status/rc2-177-reclaim-evidence/logs/clickhouse-participation.trx",
+      "predicate": "all providers ran live; zero unavailable-provider errors; remaining 197 skips are capability/negative, not missing providers; ClickHouse participated - container 525af9d6a314 (clickhouse/clickhouse-server:25.8-alpine, reuse-id:nextorm-clickhouse) started and stopped Exited(0), and a targeted ClickHouseIntegrationTests re-run recorded 148/148 Passed / 0 Skipped / exit 0",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/full-integration.log",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "AC4",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-08"
+      ],
+      "invocation": "boundary coverage collect + reportgenerator",
+      "result": "exit_code=0; line 86.8% (>=85) / branch 79.4% (>=75)",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-Summary.txt; docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-collect.log:22448 (literal exit_code=0); docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-report.log:10 (literal exit_code=0)",
+      "predicate": "merged coverage meets both thresholds (line >=85, branch >=75)",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-collect.log; docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-report.log; docs/specs/status/rc2-177-reclaim-evidence/logs/coverage-Summary.txt",
+      "discovery_contribution": 0
+    },
+    {
+      "gap": "AC5",
+      "state": "candidate-closed",
+      "run_state": "run-pass",
+      "closed_by": null,
+      "next": "CHECK closes",
+      "rv": 2,
+      "variant_ids": [
+        "E177-11"
+      ],
+      "invocation": "boundary dotnet docfx docs/docfx.json",
+      "result": "exit_code=0; 2 warning(s) / 0 error(s)",
+      "artifact_locator": "docs/specs/status/rc2-177-reclaim-evidence/logs/docfx.log; docs-verification.md",
+      "predicate": "docfx builds with 0 errors (the 2 warnings are pre-existing source-generator duplicate-file warnings unrelated to this unit); EN/RU docs verified",
+      "artifact_log": "docs/specs/status/rc2-177-reclaim-evidence/logs/docfx.log",
+      "discovery_contribution": 0
+    }
+  ],
+  "findings": [
+    {
+      "id": "R177-D177-R3-param-projection",
+      "severity": "product-defect (native-only)",
+      "summary": "A projected SqlFunctions.Parameter<T> is admitted native-eligible by the native guard but its placeholder is rendered into the SELECT list without a required alias, so the SQL Server FOR JSON native route throws instead of falling back to the managed writer. The managed path (ordinal-based) handles the same projection.",
+      "failure_artifact": "docs/specs/status/rc2-177-reclaim-evidence/findings/native-parameter-projection-defect.R3-failing.log",
+      "analysis": "docs/specs/status/rc2-177-reclaim-evidence/findings/native-parameter-projection-defect.md",
+      "failing_test_artifact": "docs/specs/status/rc2-177-reclaim-evidence/logs/sqlserver-nativejsonstream.log",
+      "product_baseline": "2ac20818bc5bdb429406f99758b1db50a470561e",
+      "source_refs": [
+        "src/nextorm.core/Query/SqlFunctions.cs:73-80",
+        "src/nextorm.core/Query/Json/JsonShapePlan.cs:348-367",
+        "src/nextorm.core/Query/Json/JsonNativeStream.cs:80",
+        "src/nextorm.core/Visitors/NormSqlTranslator.cs:71-80",
+        "src/nextorm.core/DataContext/SqlBuilder.cs:511-518",
+        "src/nextorm.core/DataContext/SqlSourceRenderer.cs:1114-1136",
+        "src/nextorm.core/DataContext/QueryExecutor.cs:1162-1247"
+      ],
+      "issue": {"number": 208, "url": "https://github.com/AlexeyShirshov/nextorm/issues/208", "milestone": "1.0.9-rc2"},
+      "state": "deferred to tracked issue (milestone 1.0.9-rc2)",
+      "scope_note": "product defect preserved and tracked; out of the tests-only R177 footprint (no src/** change in this unit)"
+    }
+  ],
+  "discovery": {
+    "baseline_B": 6263,
+    "baseline_source": "docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/collection/unit.log line 103/220: AGGREGATE total=6263 succeeded=6262 skipped=1 failed=0 rc_all=0; per-project rc=0 x11; exit_code=0. Pre-R177 collection revision cf34f910. source: unit.log aggregate; invocation not captured.",
+    "pre_change_class_counts": {
+      "NextORM.Core.Tests.JsonNativeStreamTests": 51,
+      "NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests": 5,
+      "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests": 10
+    },
+    "r177_delta": 3,
+    "r177_additions": [
+      {"variant_id": "R177-V-A1-CORE", "identity": "tests/nextorm.core.tests/JsonNativeStreamTests.cs:250 SupportedMethodCallProjection_ShouldBeNativeWithEquivalentUtf8", "gap": "A1", "contribution": 1},
+      {"variant_id": "R177-V-A1-SQL", "identity": "tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:96 SupportedMethodCallProjection_ShouldBeNativeAndRenderForJson", "gap": "A1", "contribution": 1},
+      {"variant_id": "R177-V-R15", "identity": "tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs:119 PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite", "gap": "R15", "contribution": 1}
+    ],
+    "r7_strengthening_discovery": 0,
+    "r3_delta": 6,
+    "r3_class_counts": {
+      "NextORM.Integration.Tests.SqlServerNativeJsonStreamTests": {"before": 10, "after": 16, "retained": 10, "added": 6}
+    },
+    "r3_additions": [
+      {"variant_id": "M177-A1-LIVE", "identity": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:441 Native_MethodCallProjection_LiveSqlServer_ShouldSelectNativeRoute", "gap": "A1", "contribution": 1},
+      {"variant_id": "M177-A9", "identity": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:470 Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy", "gap": "A9", "contribution": 1},
+      {"variant_id": "M177-R16", "identity": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:506 NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently", "gap": "R16", "contribution": 1},
+      {"variant_id": "M177-A2-E177-14-SYNC", "identity": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:558 NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync", "gap": "A2-E177-14", "contribution": 1},
+      {"variant_id": "M177-A2-E177-14-ENTITY", "identity": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:605 NativeParams_EntityBuilderSurface_ShouldBindChangedValuesSyncAndAsync", "gap": "A2-E177-14", "contribution": 1},
+      {"variant_id": "M177-A2-E177-14-PRECANCEL", "identity": "tests/nextorm.integration.tests/SqlServerNativeJsonStreamTests.cs:659 NativeParams_PreCancelled_ShouldNotExecuteOrWriteOutput", "gap": "A2-E177-14", "contribution": 1}
+    ],
+    "r3_note": "existing 10 SqlServerNativeJsonStreamTests retained; +6 new discovered cases (A1 live native-route, A9 repeated-call state, R16 native->managed->native, A2/E177-14 x2 surfaces, D178 pre-cancel); a temporary TEMP_DumpNativeSql diagnostic was removed and is not counted.",
+    "predicted_final": 6272,
+    "predicted_final_status": "SUPERSEDED-BY-MEASUREMENT",
+    "predicted_final_formula": "B(6263) + R177 delta(3) + R3 delta(6) = 6272",
+    "measured_final": 6266,
+    "measured_final_status": "MEASURED",
+    "measured_final_invocation": "per-project `dotnet test tests/<proj>.tests -c Debug --no-build` x11 (same project set as baseline B) -> logs/unit-aggregate.log, AGGREGATE total=6266 succeeded=6265 skipped=1 failed=0 rc_all=0, exit_code=0",
+    "measured_final_reason": "The 11-project unit aggregate (the same project set as baseline B) measured 6266 = 6263 + R2(+3). The brief's expected 6272 additionally counted R3(+6), but all six R3 tests live in tests/nextorm.integration.tests, which is NOT part of the 11-project unit aggregate and was also not part of baseline B (6263). Integration is measured independently at 3561 = 3555 + R3(+6). Mismatch disclosed explicitly, not normalized. Per-project deltas vs R175: core 1969->1970 (+1), sqlserver 754->756 (+2); all other projects unchanged.",
+    "note": "The final discovery total is MEASURED at 6266 for the baseline-matching project set; the predicted 6272 is arithmetically inconsistent with that project set (double-counts the integration-only R3 delta)."
+  }
+}

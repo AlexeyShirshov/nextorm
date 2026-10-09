@@ -1,0 +1,24 @@
+xUnit.net v3 In-Process Runner v4.0.1+8ed8aa354c (64-bit .NET 10.0.12)
+[37m  Discovering: nextorm.integration.tests
+[0m[37m  Discovered:  nextorm.integration.tests
+[0m[37m  Starting:    nextorm.integration.tests
+[0m[testcontainers.org 00:00:00.37] Connected to Docker:
+  Host: unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock
+  Server Version: 5.8.6
+  Kernel Version: 6.18.33.2-microsoft-standard-WSL2
+  API Version: 1.44
+  Operating System: fedora
+  Total Memory: 11.68 GB
+[testcontainers.org 00:00:00.38] Reuse is an experimental feature. For more information, visit: https://dotnet.testcontainers.org/api/resource_reuse/
+[testcontainers.org 00:00:00.45] Reusable resource found
+[testcontainers.org 00:00:00.55] Start Docker container 4ab2d4542432
+[testcontainers.org 00:00:01.93] Wait for Docker container 4ab2d4542432 to complete readiness checks
+[testcontainers.org 00:00:01.94] Execute "/bin/sh -c find /opt/mssql-tools*/bin/sqlcmd -type f -print -quit" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:02.23] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:11.53] Execute "/opt/mssql-tools18/bin/sqlcmd -C -b -r 1 -d master -Q SELECT 1;" at Docker container 4ab2d4542432
+[testcontainers.org 00:00:11.93] Docker container 4ab2d4542432 ready
+[testcontainers.org 00:00:14.54] Stop Docker container 4ab2d4542432
+[37m  Finished:    nextorm.integration.tests (ID = 'b4ece81caced377475cbe4ebc5ceca7103a9595a1230fab7f41a6fb60ce4340a')
+[0m[37m=== TEST EXECUTION SUMMARY ===
+[0m[37m   nextorm.integration.tests  Total: 16, Errors: 0, Failed: 0, Skipped: 0, Not Run: 0, Time: 15.123s
+[0m[0mexit_code=0

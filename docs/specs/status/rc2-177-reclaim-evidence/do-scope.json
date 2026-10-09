@@ -1,0 +1,17 @@
+{
+  "unit": "R177-D177-R2",
+  "scope": {
+    "projects": ["tests/nextorm.core.tests", "tests/nextorm.sqlserver.tests"],
+    "selectors": [
+      "FullyQualifiedName~NextORM.Core.Tests.JsonNativeStreamTests",
+      "FullyQualifiedName~NextORM.SqlServer.Tests.SqlServerNativeJsonSqlTests"
+    ],
+    "files": [
+      "tests/nextorm.core.tests/JsonNativeStreamTests.cs",
+      "tests/nextorm.sqlserver.tests/SqlServerNativeJsonSqlTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "full core+sqlserver suites + SqlServerNativeJsonStreamTests integration at DO->CHECK boundary",
+    "rationale": "native eligibility/SQL selection for the six gap rows"
+  }
+}

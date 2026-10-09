@@ -31,7 +31,7 @@ DAG edges: R184->R190; R175->R190; R177->R190 (freshness / final-tip verificatio
 |---|---|---|---|---|---|---|---|---|---|---|
 | R184 | G1 | `1.0.9-rc2` | done | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-184-eagerloadmode-reclaim-1.md` | r=1 (rv=2) | cf34f910 | #184; ref patch `artifacts/pdca/rc2-184/D184-blocked.patch` |
 | R175 | G1 | `1.0.9-rc2` | done | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-175-joininto-quality-reclaim-1.md` | r=1 (rv=2) | cf34f910 | #175; `docs/specs/status/rc2-175-evidence/` |
-| R177 | G1 | `1.0.9-rc2` | pending | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-177-native-json-reclaim-1.md` | r=1 (rv=1) | cf34f910 | #177; product `2ac20818` |
+| R177 | G1 | `1.0.9-rc2` | done | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-177-native-json-reclaim-1.md` | r=2 (rv=2) | cf34f910 | #177; product `2ac20818`; evidence `docs/specs/status/rc2-177-reclaim-evidence/` |
 | R190 | G1 | `1.0.9-rc2` | pending | ready | pdca-dotnet | 1 | `docs/specs/status/rc2-190-reverify-1.md` | r=1 (rv=1) | cf34f910 | #190 (closed); follow-up #207 |
 
 ## Collection phase decisions
@@ -43,7 +43,7 @@ DAG edges: R184->R190; R175->R190; R177->R190 (freshness / final-tip verificatio
 
 ## Schedule binding / PLAN revision vector
 
-- vector: R184 r=1/rv=2; R175 r=1/rv=2; R177 r=1/rv=1; R190 r=1/rv=1 (all pdca-dotnet; baseline cf34f910)
+- vector: R184 r=1/rv=2; R175 r=1/rv=2; R177 r=2/rv=2; R190 r=1/rv=1 (all pdca-dotnet; baseline cf34f910)
 - group -> ref: `G1-query-loadwith-json-reclaim` -> current branch `1.0.9-rc2`
 - schedule: [R184, R175, R177, R190]
 - residual risks: R190 certification is tied to the FINAL verified tip (must follow R184/R175/R177); R184 apply-vs-port outcome to be recorded; R175 H01-H03 mapping and R177 prototype/discovery-count evidence preserved; accepted D190 residuals + #207 carried; R190 not a substitute for R177 perf/live-SQL evidence.
@@ -56,6 +56,6 @@ DAG edges: R184->R190; R175->R190; R177->R190 (freshness / final-tip verificatio
 
 ## Done / Verified / Incomplete
 
-- Done: bootstrap; 4 own PLANs; ALL-barrier; clustering + schedule binding; R184 done (#184); R175 done (#175, commit 0ee60012, CHECK PASS r=1/rv=2/n=2; evidence `docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/`; contract `docs/specs/status/collection-1.0.9-rc2-C-evidence.md`).
+- Done: bootstrap; 4 own PLANs; ALL-barrier; clustering + schedule binding; R184 done (#184); R175 done (#175, commit 0ee60012, CHECK PASS r=1/rv=2/n=2; evidence `docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/`; contract `docs/specs/status/collection-1.0.9-rc2-C-evidence.md`); R177 done (#177, commit R177-PENDING-SHA, CHECK PASS r=2/rv=2/n=1; evidence `docs/specs/status/rc2-177-reclaim-evidence/`; closed A1/A9/R7/R15/R16/A2-E177-14; product `2ac20818`; defect #208 separate OPEN).
 - Verified: —
 - Incomplete: —

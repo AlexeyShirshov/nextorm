@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -233,7 +234,47 @@ public class JsonNativeStreamTests
             JsonShapePresence.Always, slot: null, member: null);
         var plan = JsonShapePlan.Build(columns, oneColumn: false, new JsonStreamOptions(), shape);
 
-        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse();
+        // R7: the negative must be driven by the captured recursive descriptor, not merely by the
+        // projected CLR type looking eligible, so assert the shape was actually captured on the plan.
+        plan.Shape.Should().NotBeNull("the recursive shape descriptor must be captured on the plan");
+        plan.Shape!.Kind.Should().Be(JsonShapeNodeKind.Object);
+        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeFalse(
+            "a captured recursive shape (plan.Shape is not null) must be rejected by native eligibility");
+    }
+
+    // A1: a supported non-TableAlias/TableColumn method-call projection is classified as a direct
+    // pass-through by JsonShapePlan.IsDirectProjection and is an admitted string, so the native path is
+    // selected. The native pump copies the database document verbatim; for the logically equivalent
+    // document it must emit the exact bytes the managed writer produces for the same row.
+    [Fact]
+    public void SupportedMethodCallProjection_ShouldBeNativeWithEquivalentUtf8()
+    {
+        var call = Expression.Call(
+            Expression.Parameter(typeof(string), "value"),
+            typeof(string).GetMethod(nameof(string.ToUpper), Type.EmptyTypes)!);
+        var plan = Plan(false, new JsonStreamOptions(),
+            new SelectExpression(typeof(string)) { PropertyName = "Upper", Expression = call });
+
+        plan.Columns[0].IsDirectPassThrough.Should().BeTrue(
+            "a method call whose declaring type is not TableAlias/TableColumn is a direct pass-through");
+        JsonNativeStream.IsEligible(plan, plan.Options).Should().BeTrue(
+            "the admitted string method-call projection must be selected natively");
+
+        using var managed = new MemoryStream();
+        var rowWriter = JsonRowWriterFactory.Build(plan);
+        using (var writer = new JsonStreamWriter(managed, rowWriter, plan.Options))
+        {
+            writer.WriteRow(new SingleStringRecord("ABC"));
+            writer.Complete();
+        }
+
+        using var native = new MemoryStream();
+        JsonNativeStream.WriteDocument(new FakeDocumentReader(["[{\"Upper\":\"ABC\"}]"]), native);
+
+        // Native selection was proven above; this compares only the native transport output for the same
+        // logical document, so a fallback-only output-equality test could not satisfy the row.
+        Encoding.UTF8.GetString(native.ToArray()).Should().Be("[{\"Upper\":\"ABC\"}]");
+        native.ToArray().Should().Equal(managed.ToArray());
     }
 
     [Theory]
@@ -527,6 +568,38 @@ public class JsonNativeStreamTests
             IsDisposed = true;
             base.Dispose(disposing);
         }
+    }
+
+    // A minimal IDataRecord exposing one non-null UTF-16 string at ordinal 0, so the managed writer's
+    // string accessor can be driven without a database reader.
+    private sealed class SingleStringRecord(string value) : IDataRecord
+    {
+        public int FieldCount => 1;
+        public object this[int i] => value;
+        public object this[string name] => value;
+
+        public bool GetBoolean(int i) => throw new NotSupportedException();
+        public byte GetByte(int i) => throw new NotSupportedException();
+        public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+        public char GetChar(int i) => throw new NotSupportedException();
+        public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) => throw new NotSupportedException();
+        public IDataReader GetData(int i) => throw new NotSupportedException();
+        public string GetDataTypeName(int i) => "nvarchar";
+        public DateTime GetDateTime(int i) => throw new NotSupportedException();
+        public decimal GetDecimal(int i) => throw new NotSupportedException();
+        public double GetDouble(int i) => throw new NotSupportedException();
+        public Type GetFieldType(int i) => typeof(string);
+        public float GetFloat(int i) => throw new NotSupportedException();
+        public Guid GetGuid(int i) => throw new NotSupportedException();
+        public short GetInt16(int i) => throw new NotSupportedException();
+        public int GetInt32(int i) => throw new NotSupportedException();
+        public long GetInt64(int i) => throw new NotSupportedException();
+        public string GetName(int i) => "Upper";
+        public int GetOrdinal(string name) => 0;
+        public string GetString(int i) => value;
+        public object GetValue(int i) => value;
+        public int GetValues(object[] values) { values[0] = value; return 1; }
+        public bool IsDBNull(int i) => false;
     }
 
     private static void Pump(FakeDocumentReader reader, out string text)

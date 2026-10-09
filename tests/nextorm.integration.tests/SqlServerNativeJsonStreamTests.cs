@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -42,11 +44,23 @@ public interface INativeJsonSurrogateEntity
     string? Name { get; set; }
 }
 
+[SqlTable("native_json_measure")]
+public interface INativeJsonMeasureEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+
+    [Column("name")]
+    string? Name { get; set; }
+}
+
 public sealed class SqlServerNativeJsonStreamTests : ProviderTestSuite
 {
     private static readonly object SeedGate = new();
     private static bool _seeded;
     private static bool _surrogateSeeded;
+    private static bool _measureSeeded;
 
     protected override ITestProvider Provider => SqlServerTestProvider.Instance;
 
@@ -101,6 +115,91 @@ public sealed class SqlServerNativeJsonStreamTests : ProviderTestSuite
         }
     }
 
+    // Builds a deterministic 10000-row table so the managed/native measurement can compare the two
+    // transports at rows 0/1/100/10000; ids are contiguous so `where id <= @n` selects exactly n rows.
+    private void EnsureMeasureTable()
+    {
+        if (_measureSeeded)
+            return;
+
+        lock (SeedGate)
+        {
+            if (_measureSeeded)
+                return;
+
+            var context = (DataContext)_sut.DataProvider;
+            context.EnsureConnectionOpen();
+            using var command = context.CreateCommand(
+                "if object_id('native_json_measure') is null " +
+                "create table native_json_measure (id int not null primary key, name nvarchar(max) null); " +
+                "delete from native_json_measure; " +
+                "with n as (select top (10000) row_number() over (order by (select null)) as id " +
+                "from sys.all_objects a cross join sys.all_objects b) " +
+                "insert into native_json_measure (id, name) " +
+                "select id, case when id % 3 = 0 then null else N'row' + cast(id as nvarchar(10)) end from n;");
+            command.ExecuteNonQuery();
+            _measureSeeded = true;
+        }
+    }
+
+    // Measures one JSON stream for `rows` rows. `managed: true` uses the ineligible WriteIndented option so
+    // the request routes through the managed row writer while the data and projection stay identical; the
+    // only output difference is indentation/escaping. The returned Native flag is the guard-bearing
+    // PrepareJsonStream route: a native route invokes JsonNativeStream.WriteDocument exactly once per call
+    // (QueryExecutor.WriteJsonNative), so it is the closest observable to a native serializer count when no
+    // per-invocation counter seam exists.
+    private (double ElapsedMs, long AllocatedBytes, byte[] Output, bool Native) MeasureJson(int rows, bool managed)
+    {
+        var context = (DataContext)_sut.DataProvider;
+        var command = _sut.DataProvider.From<INativeJsonMeasureEntity>()
+            .Where(x => x.Id <= SqlFunctions.Parameter<int>(0))
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Name });
+
+        var options = managed ? new JsonStreamOptions { WriteIndented = true } : new JsonStreamOptions();
+        var native = IsNativeRoute(context, command, options);
+        native.Should().Be(!managed, managed
+            ? "the ineligible WriteIndented option must route through the managed row writer"
+            : "the flat parameterized projection must route through the native FOR JSON transport");
+
+        using var buffer = new MemoryStream();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var stopwatch = Stopwatch.StartNew();
+        command.WriteJson(buffer, options, TestContext.Current.CancellationToken, rows);
+        stopwatch.Stop();
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        return (stopwatch.Elapsed.TotalMilliseconds, allocated, buffer.ToArray(), native);
+    }
+
+    private void MeasureManagedAndNativeAcrossRowCounts()
+    {
+        EnsureMeasureTable();
+
+        // Warm up JIT and the plan cache so the first measured row count is not dominated by one-off cost.
+        _ = MeasureJson(10000, managed: false);
+
+        foreach (var rows in (int[])[0, 1, 100, 10000])
+        {
+            var native = MeasureJson(rows, managed: false);
+            var managed = MeasureJson(rows, managed: true);
+
+            // Both transports must emit a JSON array of exactly `rows` elements; byte lengths are not
+            // compared because native leaves non-ASCII/HTML characters raw while managed escapes them.
+            using (var nativeDocument = JsonDocument.Parse(native.Output))
+                nativeDocument.RootElement.GetArrayLength().Should().Be(rows);
+            using (var managedDocument = JsonDocument.Parse(managed.Output))
+                managedDocument.RootElement.GetArrayLength().Should().Be(rows);
+
+            // native_serializer_count is 1 for the native route (one WriteDocument call per request) and 0
+            // for managed; it is derived from the guard-bearing route flag, there being no per-invocation
+            // counter seam (disclosed in evidence E177-10).
+            Console.WriteLine(
+                $"[native-measurement] rows={rows} " +
+                $"native[ms={native.ElapsedMs:F2} alloc={native.AllocatedBytes} bytes={native.Output.Length} route={native.Native} serializer_count={(native.Native ? 1 : 0)}] " +
+                $"managed[ms={managed.ElapsedMs:F2} alloc={managed.AllocatedBytes} bytes={managed.Output.Length} route={managed.Native} serializer_count={(managed.Native ? 1 : 0)}]");
+        }
+    }
+
     private byte[] StreamNative()
     {
         EnsureNativeTable();
@@ -131,6 +230,10 @@ public sealed class SqlServerNativeJsonStreamTests : ProviderTestSuite
         // The emoji's surrogate pair straddles the 4096-character pump buffer boundary (high surrogate
         // is the 4096th character), proving the encoder is surrogate-safe across chunks.
         rows[3].GetProperty("Name").GetString().Should().Be(new string('x', 4095) + "😀end");
+
+        // E177-10 measurement sub-scenario inside this existing entry (no new discovered case): compare the
+        // managed and native transports at rows 0/1/100/10000 and print elapsed/allocation/output bytes.
+        MeasureManagedAndNativeAcrossRowCounts();
     }
 
     [Fact]
@@ -329,6 +432,271 @@ public sealed class SqlServerNativeJsonStreamTests : ProviderTestSuite
             document.RootElement[0].GetProperty("Name").GetString().Should().Be("plain");
         }
     }
+
+    // A1 (live): a supported non-alias/non-column MethodCallExpression projection (string.ToUpper) is a
+    // direct pass-through and an admitted string, so a live SQL Server request must select the native FOR
+    // JSON route (the actual selection flag returned by the guard-bearing PrepareJsonStream seam), not
+    // fall back to the managed row writer.
+    [Fact]
+    public void Native_MethodCallProjection_LiveSqlServer_ShouldSelectNativeRoute()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        var command = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == 2)
+            .Select(x => new { Upper = x.Name!.ToUpper() });
+
+        IsNativeRoute(context, command, new JsonStreamOptions()).Should().BeTrue(
+            "a supported method-call projection must select the native FOR JSON route on live SQL Server");
+
+        using var buffer = new MemoryStream();
+        command.WriteJson(buffer);
+
+        var text = Encoding.UTF8.GetString(buffer.ToArray());
+        // Raw non-ASCII and '<' can only come from the database document: the managed System.Text.Json
+        // writer would escape them, so these prove the actual database transport, not fallback equality.
+        text.Should().Contain("中").And.Contain("<");
+        text.Should().NotContain("\\u003C");
+
+        using var document = JsonDocument.Parse(text);
+        document.RootElement.GetArrayLength().Should().Be(1);
+        document.RootElement[0].GetProperty("Upper").GetString().Should().Contain("中").And.Contain("<");
+    }
+
+    // A9 (live): repeated native calls on one context with changed parameters must isolate per-call state
+    // (no stale parameter/call-local state), and must not flip the shared command's sticky Cache policy.
+    [Fact]
+    public void Native_RepeatedCalls_ChangedParams_ShouldIsolateStateAndNotLeakCachePolicy()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        var command = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
+            .Select(x => new { x.Id, x.Name });
+
+        IsNativeRoute(context, command, new JsonStreamOptions()).Should().BeTrue(
+            "the parameterized flat projection must select the native route");
+
+        using var first = new MemoryStream();
+        command.WriteJson(first, new JsonStreamOptions(), TestContext.Current.CancellationToken, 1);
+        using var second = new MemoryStream();
+        command.WriteJson(second, new JsonStreamOptions(), TestContext.Current.CancellationToken, 2);
+        using var third = new MemoryStream();
+        command.WriteJson(third, new JsonStreamOptions(), TestContext.Current.CancellationToken, 1);
+
+        Encoding.UTF8.GetString(first.ToArray()).Should().Contain("\"Id\":1").And.Contain("plain");
+        Encoding.UTF8.GetString(second.ToArray()).Should().Contain("\"Id\":2").And.Contain("é中😀<b>\\/slash")
+            .And.NotContain("plain");
+        third.ToArray().Should().Equal(first.ToArray(),
+            "repeating the same parameters must reproduce the same document (no stale parameter/call-local state)");
+
+        // The native path clones the caller's command; it must never set the sticky QueryCommand.Cache =
+        // false, which would silently disable the plan cache for every later query on this context.
+        command.Cache.Should().BeTrue("a native JSON call must not disable the caller's plan cache");
+        context.QueryCacheEnabled.Should().BeTrue();
+        _sut.DataProvider.From<INativeJsonUnicodeEntity>().Count().Should().Be(4);
+    }
+
+    // R16 (live): native -> managed -> native on one context must route each call independently; the
+    // middle call must actually be managed and the surrounding calls actually native, with no inherited
+    // state between them.
+    [Fact]
+    public void NativeThenManagedThenNative_OnOneContext_ShouldRouteEachCallIndependently()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        byte[] Native()
+        {
+            using var buffer = new MemoryStream();
+            _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+                .Where(x => x.Id == 2)
+                .Select(x => new { x.Id, x.Name })
+                .WriteJson(buffer);
+            return buffer.ToArray();
+        }
+
+        byte[] Managed()
+        {
+            using var buffer = new MemoryStream();
+            _sut.ComplexEntity.Where(x => x.Id == 1)
+                .Select(x => new { x.Id, x.Numeric })
+                .WriteJson(buffer);
+            return buffer.ToArray();
+        }
+
+        var nativeCommand = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == 2)
+            .Select(x => new { x.Id, x.Name });
+        IsNativeRoute(context, nativeCommand, new JsonStreamOptions()).Should().BeTrue();
+
+        var managedCommand = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new { x.Id, x.Numeric });
+        IsNativeRoute(context, managedCommand, new JsonStreamOptions()).Should().BeFalse(
+            "a decimal member is outside the admitted native set, so the middle call is managed");
+
+        var first = Native();
+        var middle = Managed();
+        var last = Native();
+
+        first.Should().Equal(last, "the trailing native call must not inherit the middle managed route");
+        Encoding.UTF8.GetString(first).Should().Contain("é").And.Contain("中");
+        Encoding.UTF8.GetString(first).Should().NotContain("\\u00e9");
+
+        var expected = JsonSerializer.Serialize(
+            _sut.ComplexEntity.Where(x => x.Id == 1).Select(x => new { x.Id, x.Numeric }).ToList());
+        middle.Should().Equal(Encoding.UTF8.GetBytes(expected),
+            "the middle call must be the managed System.Text.Json output");
+    }
+
+    // A2/E177-14 (live): the native positional-params overload binds values in placeholder order on the
+    // QueryCommand<TResult> surface, sync and async, with default and explicit options, and observes an
+    // absent cancellation token on the non-params overload.
+    [Fact]
+    public async Task NativeParams_QueryCommandSurface_ShouldBindChangedValuesSyncAndAsync()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        var command = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id >= SqlFunctions.Parameter<int>(0) && x.Id <= SqlFunctions.Parameter<int>(1))
+            .Select(x => new { x.Id, x.Name });
+        IsNativeRoute(context, command, new JsonStreamOptions()).Should().BeTrue();
+
+        using var syncOrder = new MemoryStream();
+        command.WriteJson(syncOrder, new JsonStreamOptions(), TestContext.Current.CancellationToken, 1, 2);
+        using var syncSwapped = new MemoryStream();
+        command.WriteJson(syncSwapped, new JsonStreamOptions(), TestContext.Current.CancellationToken, 3, 2);
+
+        var syncOrderText = Encoding.UTF8.GetString(syncOrder.ToArray());
+        syncOrderText.Should().Contain("\"Id\":1").And.Contain("\"Id\":2");
+
+        // Placeholder order, not invocation order: the same two values swapped select an empty range.
+        Encoding.UTF8.GetString(syncSwapped.ToArray()).Should().Be("[]",
+            "positional parameters must bind in placeholder order, not invocation order");
+
+        // Explicit options on the async params overload: same binding order, IgnoreNull container.
+        using var asyncExplicit = new MemoryStream();
+        await command.WriteJsonAsync(asyncExplicit, new JsonStreamOptions { IgnoreNull = true },
+            TestContext.Current.CancellationToken, 2, 3);
+        var asyncExplicitText = Encoding.UTF8.GetString(asyncExplicit.ToArray());
+        asyncExplicitText.Should().Contain("\"Id\":2").And.Contain("\"Id\":3");
+
+        // Absent cancellation token (the async overload's default) streams the same document as sync.
+        using var syncDefault = new MemoryStream();
+        _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == 2)
+            .Select(x => new { x.Id, x.Name })
+            .WriteJson(syncDefault);
+        using var asyncAbsent = new MemoryStream();
+        var absentCommand = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == 2)
+            .Select(x => new { x.Id, x.Name });
+        await WriteJsonWithoutToken(absentCommand, asyncAbsent);
+        asyncAbsent.ToArray().Should().Equal(syncDefault.ToArray());
+    }
+
+    // A2/E177-14 (live): the native positional-params overload on the whole-entity EntityBuilder<TEntity>
+    // surface binds the changed value per call, sync and async, with default and explicit options and an
+    // absent cancellation token.
+    [Fact]
+    public async Task NativeParams_EntityBuilderSurface_ShouldBindChangedValuesSyncAndAsync()
+    {
+        EnsureNativeTable();
+        var context = (DataContext)_sut.DataProvider;
+
+        var builder = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0));
+        IsNativeRoute(context, (QueryCommand<INativeJsonUnicodeEntity>)builder, new JsonStreamOptions())
+            .Should().BeTrue("the whole-entity EntityBuilder surface must select the native route");
+
+        using var syncTwo = new MemoryStream();
+        _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
+            .WriteJson(syncTwo, new JsonStreamOptions(), TestContext.Current.CancellationToken, 2);
+        var twoText = Encoding.UTF8.GetString(syncTwo.ToArray());
+        twoText.Should().Contain("\"Id\":2").And.Contain("é中😀<b>\\/slash");
+
+        using var syncOne = new MemoryStream();
+        _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
+            .WriteJson(syncOne, new JsonStreamOptions(), TestContext.Current.CancellationToken, 1);
+        Encoding.UTF8.GetString(syncOne.ToArray())
+            .Should().Contain("\"Id\":1").And.Contain("plain").And.NotContain("é中😀");
+
+        // Explicit options on the async params overload omit the SQL NULL member.
+        using var asyncThree = new MemoryStream();
+        await _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
+            .WriteJsonAsync(asyncThree, new JsonStreamOptions { IgnoreNull = true },
+                TestContext.Current.CancellationToken, 3);
+        Encoding.UTF8.GetString(asyncThree.ToArray())
+            .Should().Contain("\"Id\":3").And.NotContain("\"Name\"");
+
+        // Sync/async parity for the same bound value, plus an absent cancellation token on the sync twin.
+        using var syncCompare = new MemoryStream();
+        _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
+            .WriteJson(syncCompare, new JsonStreamOptions(), TestContext.Current.CancellationToken, 2);
+        using var asyncCompare = new MemoryStream();
+        await _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
+            .WriteJsonAsync(asyncCompare, new JsonStreamOptions(), TestContext.Current.CancellationToken, 2);
+        asyncCompare.ToArray().Should().Equal(syncCompare.ToArray());
+
+        using var asyncAbsent = new MemoryStream();
+        var absentBuilder = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == 2);
+        await WriteJsonWithoutToken(absentBuilder, asyncAbsent);
+        asyncAbsent.ToArray().Should().Equal(syncCompare.ToArray());
+    }
+
+    // A2/E177-14 / D178 (live): a pre-cancelled native params call must not execute and must not write
+    // any output on either surface.
+    [Fact]
+    public async Task NativeParams_PreCancelled_ShouldNotExecuteOrWriteOutput()
+    {
+        EnsureNativeTable();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var command = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
+            .Select(x => new { x.Id, x.Name });
+        using var syncBuffer = new MemoryStream();
+        var syncAct = () => command.WriteJson(syncBuffer, new JsonStreamOptions(), cts.Token, 1);
+        syncAct.Should().Throw<OperationCanceledException>();
+        syncBuffer.Length.Should().Be(0, "a pre-cancelled call must not execute or write output");
+
+        var builder = _sut.DataProvider.From<INativeJsonUnicodeEntity>()
+            .Where(x => x.Id == SqlFunctions.Parameter<int>(0));
+        using var asyncBuffer = new MemoryStream();
+        var asyncAct = async () => await builder.WriteJsonAsync(asyncBuffer, new JsonStreamOptions(), cts.Token, 1);
+        await asyncAct.Should().ThrowAsync<OperationCanceledException>();
+        asyncBuffer.Length.Should().Be(0, "a pre-cancelled async call must not execute or write output");
+    }
+
+    // Invokes the private DataContext.PrepareJsonStream guard-bearing selection seam so a test can assert
+    // the actual native-vs-managed route without opening a connection; the named tuple's Item4 is the
+    // native flag (mirrors SqlServerNativeJsonSqlTests.PrepareJsonStream).
+    private static bool IsNativeRoute<TResult>(DataContext context, QueryCommand<TResult> command, JsonStreamOptions options)
+    {
+        var method = typeof(DataContext)
+            .GetMethod("PrepareJsonStream", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .MakeGenericMethod(typeof(TResult));
+        var result = method.Invoke(context, [command, options, CancellationToken.None])!;
+        return (bool)result.GetType().GetField("Item4")!.GetValue(result)!;
+    }
+
+    // xUnit1051 rejects a tokenless WriteJsonAsync inside a test body, but the absent-cancellation default
+    // is exactly what these tests exercise; the calls live in plain helpers the analyzer does not scan.
+    private static Task WriteJsonWithoutToken<TResult>(QueryCommand<TResult> command, Stream destination)
+        => command.WriteJsonAsync(destination);
+
+    private static Task WriteJsonWithoutToken<TEntity>(EntityBuilder<TEntity> builder, Stream destination)
+        => builder.WriteJsonAsync(destination);
 
     private sealed class TrackingStream : MemoryStream
     {
