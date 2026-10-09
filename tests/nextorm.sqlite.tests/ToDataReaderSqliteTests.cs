@@ -270,6 +270,60 @@ public class ToDataReaderSqliteTests
     }
 
     [Fact]
+    public void ToDataReader_Sqlite_SingleBlobProjection_ShouldReadWholeBufferedValue()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            using var reader = ctx.From<ReaderProbeEntity>()
+                .OrderBy(x => x.Id)
+                .Select(x => x.Data!)
+                .ToDataReader();
+
+            reader.FieldCount.Should().Be(1, "the locator-free path must not append a rowid column");
+            reader.GetName(0).Should().Be("data");
+
+            reader.Read().Should().BeTrue();
+            ((byte[])reader.GetValue(0)).Should().Equal(new byte[] { 1, 2 }, "a SQLite blob is read whole (buffered, not chunked)");
+            reader.Read().Should().BeTrue();
+            reader.IsDBNull(0).Should().BeTrue("a null blob must round-trip as DBNull");
+            reader.Read().Should().BeFalse();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task ToDataReaderAsync_Sqlite_SingleBlobProjection_ShouldReadWholeBufferedValue()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            await using var reader = await ctx.From<ReaderProbeEntity>()
+                .OrderBy(x => x.Id)
+                .Select(x => x.Data!)
+                .ToDataReaderAsync(TestContext.Current.CancellationToken);
+
+            reader.FieldCount.Should().Be(1, "the locator-free path must not append a rowid column");
+            reader.GetName(0).Should().Be("data");
+
+            (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
+            ((byte[])reader.GetValue(0)).Should().Equal(new byte[] { 1, 2 }, "a SQLite blob is read whole (buffered, not chunked)");
+            (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeTrue();
+            reader.IsDBNull(0).Should().BeTrue("a null blob must round-trip as DBNull");
+            (await reader.ReadAsync(TestContext.Current.CancellationToken)).Should().BeFalse();
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task ToDataReaderAsync_Sqlite_DefaultToken_WithParameters_ShouldBindArrayValues()
     {
         var ctx = CreateDb(out var path);
