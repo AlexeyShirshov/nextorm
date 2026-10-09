@@ -59,7 +59,7 @@ Sequential, one tree, one lane. Tests share context/state contracts and the prod
 ## Design-checklist verdict
 Acceptable conditional on execution evidence: no public API/provider-capability/SQL-semantics/cache-policy redesign; existing native/managed/fail-closed boundaries retained; native-path assertions prevent green fallback-only tests; cancellation/ownership/cleanup explicit; predecessor guarantees active; CRLF/warnings-as-errors/coverage/live-providers/bilingual docs accounted.
 
-## Evidence contract (rv=1)
+## Evidence contract (rv=2)
 Artifact root (planned): docs/specs/status/rc2-177-reclaim-evidence/; row artifact <root><row-id>.md; logs <root>logs/<alias>.log. All rows unconditionally applicable (no N/A); owner coder records, check validates. Exact invocations include A1-A4-style audit/mutation/proto/doc coder Task briefs (footprint/CRLF/predecessor audit; prototype provenance; six mutation checks; doc verification).
 - E177-01 both surfaces native SQL + scalar -> C+S+F.
 - E177-02 native selection/zero serialization/bounded pump -> C+N.
@@ -111,3 +111,20 @@ rc2-177-native-json-1.md: r=2/rv=2; CHECK n=3 completeness/variant FAIL (no P1 p
 - 2026-10-09T14:39Z | DO provenance correction | r=2 | n=1/3 | Pre-CHECK evidence provenance corrected: (a) stale line pointers in evidence.json rows[]/discovery.r3_additions[]/r177_additions[] and the status R177 observed variants updated to Roslyn-verified locations (R2: JsonNativeStreamTests.cs:250 SupportedMethodCallProjection_ShouldBeNativeWithEquivalentUtf8, SqlServerNativeJsonSqlTests.cs:96 SupportedMethodCallProjection_ShouldBeNativeAndRenderForJson, :119 PreExistingForJsonClause_ShouldNotAttachSecondNativeRewrite; R7: JsonNativeStreamTests.cs:227 NestedShape_ShouldStayManaged; R3: SqlServerNativeJsonStreamTests.cs:441 Native_MethodCallProjection_LiveSqlServer, :470 Native_RepeatedCalls_ChangedParams, :506 NativeThenManagedThenNative, :558 NativeParams_QueryCommandSurface, :605 NativeParams_EntityBuilderSurface, :659 NativeParams_PreCancelled); (b) literal exit codes captured: build-final.log:34 exit_code=0 (re-run `dotnet build nextorm.slnx -c Debug`), acceptance-benchmark.log exit_code=0 citing acceptance-benchmark.time.log "Exit status: 0", coverage-collect.log:22448 exit_code=0, coverage-report.log:10 exit_code=0; AC1/AC4 + E177-07/E177-08/E177-10 + performance.acceptance_benchmark/coverage cite these literal sources; (c) ClickHouse participated: all 5 Testcontainers started and Exited(0) - ff3bb6dd042f postgres, 4ab2d4542432 sqlserver, d703aedb9b21 mysql, 914f06a0ba5f mariadb, 525af9d6a314 clickhouse (clickhouse/clickhouse-server:25.8-alpine, reuse-id:nextorm-clickhouse); targeted `ClickHouseIntegrationTests` re-run Total 148 / Passed 148 / Skipped 0 exit_code=0 (logs/clickhouse-participation.log + .trx); AC3 provider set recorded. `python3 scripts/validate_inner_loop.py report` exit 0. (Timestamp is true UTC; host TZ is +05, so prior entries labelled local time as Z.) | docs/specs/status/rc2-177-reclaim-evidence/ (evidence.json, logs/build-final.log, logs/acceptance-benchmark.log, logs/coverage-collect.log, logs/coverage-report.log, logs/clickhouse-participation.log, logs/clickhouse-participation.trx, audits/validate-report.out)
 - 2026-10-09T14:44Z | CHECK | r=2 | n=1/3 | PASS (r=2, rv=2, n=1): build 0W/0E exit 0; unit aggregate 6266 (=6263+3)/0 fail; integration 3561/0 err/0 fail/197 skip, `grep -c "is not available"`=0, 6 providers, ClickHouse 148/148; coverage line 86.8% / branch 79.4%; docfx 2 warnings / 0 errors; six mutations caught (A1 core+sqlserver, A9, R15, R16, A2 QueryCommand, R7 shape-descriptor) with the two disclosed gaps (A2 EntityBuilder single-param not sensitive; R7 eligibility guard masked by `Columns.Length==0`, supplementary `JsonShapePlan.Build` mutant caught); `python3 scripts/validate_inner_loop.py report` exit 0; deferred product defect tracked as issue #208 (OPEN). | docs/specs/status/rc2-177-reclaim-evidence/ (evidence.json, audits/validate-report.out, logs/, mutations[])
 - 2026-10-09T14:44Z | ACT | r=2 | n=1/3 | ACT: committed; issue #177 closed; #208 left OPEN (separate defect). | docs/specs/status/rc2-177-reclaim-evidence/
+
+## Priority matrix (completeness-repair addition, 2026-10-09; collection CHECK gap G4)
+
+Derived at the collection CHECK from the recorded variant dispositions (`:41-42`) and the rv=2
+amendment (`:81`); the source carried no explicit priority heading. No existing disposition is
+changed.
+
+- **P0 — unconditional correctness/gates:** A1 managed/native logical equivalence + explicit
+  native-selection assertion; A4 valid-but-ineligible -> managed; A5 unsupported fail-closed
+  pre-output; A6 cancellation; A7 ownership/cleanup; A9 mixed/repeated/cache/no sticky
+  `Cache=false`; A10 scalar `ForJson` unchanged; A11 live providers + coverage/mutations/EN+RU;
+  the AC1–AC5 rows (`:42,:78`).
+- **P1 — required breadth:** A2 both surfaces x sync/async; A3 zero-serializer + row counts +
+  fragmented pump; A8 empty/Unicode/fragmented IO; the six `M177-*` reclaim rows (`:42`).
+- **P2 — deferred, trigger recorded:** PostgreSQL `json_agg` / ClickHouse `JSONEachRow` new product
+  implementation (trigger: separately approved provider scope); the existing managed/provider
+  regression evidence is NOT deferred (`:42,:81`).

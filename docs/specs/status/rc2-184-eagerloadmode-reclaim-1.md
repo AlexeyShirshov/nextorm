@@ -98,3 +98,19 @@ rc2-184-loadwith-eagerloadmode-1.md: r=2, rv=1, blocked — evidence-contract ga
 - 2026-10-09T12:27Z | DO | r=1 | n=1/3 | D184-07 CHECK handoff: complete rv=2 ledger every E184-01..11/R184-01..09/AC1..AC5 + V01-V18 dispositions; audits api/perf-applicability/design/docs-review + case-map; every row maps to an existing current-rv=2 artifact | ledger.md, ledger.json, check-handoff.md, case-map.md, api.md, perf-applicability.md, design.md, docs-review.md
 - 2026-10-09T17:36Z | CHECK | r=1 | n=1/3 | re-gather round 1: 7 evidence gaps closed; explicit E/R/AC table + V01-V18 method-level crosswalk (6 fresh class runs, 114 selected, 0 fail); fresh doc scans (public AsSingleQuery 0, public->spec 0, src/tests 0); W3/S3/S4/S5/S7 covered, S6 raw-SQL-equality unproven (behavior covered); no product defect, no DO | A/regather-1.md, A/regather/*
 - 2026-10-09T17:41Z | ACT | r=1 | n=1/3 | ACT — CHECK PASS r=1 rv=2 n=1; W1 accepted (planner, no revision); AC2 reconciled (6263=6247+16 added; 0 failed); deferred: new key types, ClickHouse eager extension; next: task done | A/regather-1.md
+
+## Priority matrix (completeness-repair addition, 2026-10-09; collection CHECK gap G2)
+
+Derived at the collection CHECK from the recorded dispositions (`:34-35`) and acceptance criteria
+(`:13-22`); the source carried no explicit priority heading. No existing disposition is changed —
+this only promotes the existing variant/DO rows under explicit classes.
+
+- **P0 — unconditional completion/correctness gates:** D184-01..D184-07 preconditions/recovery/
+  gates+ledger/CHECK handoff (`:26-32`); V06 opposing explicit selections -> `NotSupportedException`
+  and V07 unknown enum -> `ArgumentOutOfRangeException`; V09 non-stitching terminals; V15 live
+  SQLite/PostgreSQL/SQL Server/MySQL; V17 XML/bench/tests/docs/inherited; the AC1 build / AC2 unit /
+  AC3 integration / AC4 coverage / AC5 DocFX rows (`:69-70`).
+- **P1 — required variant coverage:** V01–V05, V08, V10, V12, V13, V14, V18 (`:35`).
+- **P2 — deferred, trigger recorded:** V11 new key types (trigger: requested support / regression in
+  a supported type); V16 ClickHouse eager-specific extension (trigger: feature request / behavior
+  change) (`:32`).

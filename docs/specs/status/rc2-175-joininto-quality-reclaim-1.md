@@ -93,3 +93,17 @@ rc2-175-joininto-test-quality-1.md: r=1, terminal STOP, defect family "rv1 evide
 - 2026-10-09T13:36Z | CHECK | r=1 | n=2/3 | CHECK r2 re-gather: literal process exit codes captured for build/core/sqlite/unit/integration/coverage-collect/reportgenerator/docfx; no source/test change | evidence.json (12 executions cite exit_code_source), audits/validate-report.out exit 0, build/post.log, full/{core,sqlite}.log, collection/{unit,integration,coverage-collect,coverage-report,docfx}.log, focused/{core-post,sqlite-post}/
 - 2026-10-09T13:37Z | CHECK | r=1 | n=2/3 | CHECK PASS (r=1, rv=2, n=2): all gates green; build/post.log:101 0W/0E; full/core.log:21 1969/0/0; full/sqlite.log:27 1311/0; collection/unit.log:221 6263 (6262+1skip)/0; collection/integration.log:899 3555/0/0/197skip +0 unavailable; coverage 88.3/80.3; docfx 2w/0e; validate-report exit 0 | docs/specs/status/rc2-175-joininto-quality-reclaim-1-evidence/
 - 2026-10-09T13:37Z | ACT | r=1 | n=2/3 | ACT: committed; issue #175 closed; plan_revision r=1 unchanged | docs/specs/status/collection-rc2-reclaim.md
+
+## Priority matrix (completeness-repair addition, 2026-10-09; collection CHECK gap G3)
+
+Derived at the collection CHECK from the recorded H/C/X dispositions (`:29-31`) and acceptance
+criteria (`:12-21`); the source carried no explicit priority heading. No existing disposition is
+changed.
+
+- **P0 — unconditional correctness/gates:** H01–H08 semantic inequality via the correct comparer
+  (`:30`); C01–C05 keep `Equals` + hash-equality for equal plans (FS2); X01–X05 execution count /
+  reuse identity / miss (FS1); X03 integration guard; the AC1–AC5 rows (`:21`).
+- **P1 — required axes:** null/default guard; value/reference guard; providers test (SQLite
+  focused/full + all container providers in AC3) (`:31`).
+- **P2 — deferred, trigger recorded:** new synthetic collision scenarios (trigger: comparer/hash
+  change or explicit collision-robustness requirement) (`:31`).
