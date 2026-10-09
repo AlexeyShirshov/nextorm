@@ -115,8 +115,10 @@ public sealed class JoinOptions
 
     /// <summary>
     /// Configures the relationship for a one-to-one <c>JoinInto</c> call locally, without declaring it in
-    /// metadata: the parent-side key on <typeparamref name="TParent"/> and the unique foreign key on
-    /// <typeparamref name="TChild"/>. The configuration fully replaces the declared relationship for this
+    /// metadata: the parent-side key on <typeparamref name="TParent"/> and the (trusted, not validated)
+    /// unique foreign key on <typeparamref name="TChild"/>. The foreign-key uniqueness is not checked by
+    /// the core against the schema or the data; the only runtime guard rejects two distinct non-null
+    /// child identities for one parent. The configuration fully replaces the declared relationship for this
     /// call.
     /// </summary>
     /// <typeparam name="TParent">The parent entity type of the calling <c>JoinInto</c>.</typeparam>

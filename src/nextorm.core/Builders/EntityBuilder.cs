@@ -721,10 +721,14 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// list terminal. The returned builder is a copy; the current builder is unchanged.
     /// <para>
     /// The relationship must be declared as one-to-one (<c>HasOneToOne</c>) so the principal/foreign keys
-    /// are known. At most one child is assigned per parent; a <c>LEFT</c> join leaves the reference
-    /// <see langword="null"/> when no child matches, while an <c>INNER</c> join excludes the parent. A
-    /// parent that matches more than one distinct child throws <see cref="InvalidOperationException"/> at
-    /// materialization. Cartesian repeats of the same child caused by a neighbouring join are tolerated.
+    /// are known. The foreign-key uniqueness is a declaration-time trust: the core neither inspects the
+    /// schema or the data nor imposes a uniqueness constraint. At most one child is assigned per parent; a
+    /// <c>LEFT</c> join leaves the reference <see langword="null"/> when no child matches, while an
+    /// <c>INNER</c> join excludes the parent. A parent that matches more than one distinct non-null child
+    /// identity throws <see cref="InvalidOperationException"/> at materialization. Repeated rows of the
+    /// same child identity are tolerated (the first child wins), including cartesian repeats caused by a
+    /// neighbouring join and keyless/null-identity children, for which the core cannot distinguish a
+    /// repeat from a genuinely different child.
     /// </para>
     /// </summary>
     /// <typeparam name="TChild">The child entity type.</typeparam>

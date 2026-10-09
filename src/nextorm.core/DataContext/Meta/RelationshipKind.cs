@@ -23,8 +23,13 @@ public enum RelationshipKind
     ManyToOne,
 
     /// <summary>
-    /// A reference navigation whose foreign key is unique. Uniqueness is not validated by the core; the
-    /// declaration is trusted. Declarable through the fluent <c>HasOneToOne</c> or the model.
+    /// A reference navigation whose foreign key is unique. The uniqueness is a declaration-time trust:
+    /// the core neither inspects the schema or the data nor imposes a uniqueness constraint, and a
+    /// non-unique foreign key is accepted when the metadata is built. The only guard is per parent at
+    /// load time: two distinct non-null child identities for one parent throw
+    /// <see cref="InvalidOperationException"/> at materialization, while repeated identical rows and
+    /// keyless/null-identity repeats are tolerated (the first child wins). Declarable through the fluent
+    /// <c>HasOneToOne</c> or the model.
     /// </summary>
     OneToOne,
 

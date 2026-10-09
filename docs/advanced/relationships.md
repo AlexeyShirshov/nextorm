@@ -110,7 +110,7 @@ var orders = ctx.From<Order>()
 
 ### One-to-one reference
 
-A one-to-one relationship is declared with the principal key on the parent and the unique foreign key on the child; the foreign-key uniqueness is trusted, not validated by the core:
+A one-to-one relationship is declared with the principal key on the parent and the unique foreign key on the child; the foreign-key uniqueness is a **declaration-time trust** — the core neither inspects the schema or the data nor imposes a uniqueness constraint, so it is not validated at build time:
 
 ```csharp
 ctx.From<Order>(b => b.HasOneToOne(o => o.Invoice, o => o.Id, i => i.OrderId));
@@ -144,7 +144,7 @@ var orders = ctx.From<Order>()
     .ToList();
 ```
 
-The LEFT/INNER semantics mirror the collection loaders: with `Left` (the default) a parent without a matching child keeps the reference `null`, and with `Inner` a parent without a matching child is excluded. A parent that matches **more than one distinct child** throws [`InvalidOperationException`](xref:System.InvalidOperationException) at materialization, while cartesian repeats of the **same** child caused by a neighbouring join are tolerated and collapse to the single occurrence. The navigation member must be settable — a read-only reference throws [`NotSupportedException`](xref:System.NotSupportedException).
+The LEFT/INNER semantics mirror the collection loaders: with `Left` (the default) a parent without a matching child keeps the reference `null`, and with `Inner` a parent without a matching child is excluded. The build-time uniqueness **trust** above is backed only per parent at load time: a parent that matches **more than one distinct non-null child identity** throws [`InvalidOperationException`](xref:System.InvalidOperationException) at materialization, while repeated rows of the **same** child identity (including cartesian repeats caused by a neighbouring join) and keyless/null-identity repeats are tolerated and collapse to the first child. The foreign-key uniqueness itself is **never** validated against the schema or the data, so a non-unique foreign key is accepted when the relationship is declared. The navigation member must be settable — a read-only reference throws [`NotSupportedException`](xref:System.NotSupportedException).
 
 ### Many-to-many through a junction
 
