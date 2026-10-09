@@ -1,3 +1,86 @@
+## Collection rc2-final — own PLAN (2026-10-09, HEAD 9a2a2871)
+
+- task: T151 / #151; selected_variant: `pdca-dotnet`; cycle_id: N=1; plan_revision: r=1
+- baseline: `9a2a2871`; evidence contract: rv1 (planned, not pinned)
+- plan_state: **ready** (P phase; no DO yet)
+- P: replace narrative-based certification with a frozen raw-artifact bundle and reproducible, row-level CHECK verification.
+- CLASSIFICATION: evidence/tooling deliverable; no established product defect. Prior STOP remains closed-incomplete, not retroactively passed.
+
+---
+# T151 / #151 — PLAN: certify the native extreme-row mutation campaign
+Collection `rc2-final`; variant `pdca-dotnet`; cycle N=1; plan r=1; evidence rv=1.
+Status `docs/specs/status/rc2-151-stryker-mutation-1.md`; phase PLAN; DO not started.
+Revision lineage: this cycle's rv=1 is new, not a renaming of prior rv=2. Preserve prior rv=1→rv=2 supersession and all historical artifacts.
+
+## Goal and acceptance criteria
+- AC1 — Two independently executed, renderer-only campaigns use pinned Stryker 5.0.0, `perTest` + `mtp`, finish exit 0. Negative: timeout/124, coverage-capture failure, another mutation scope, or copied-as-B execution cannot count.
+- AC2 — Raw reports demonstrate valid coverage for executable mutants: nonempty `coveredBy`, preserved `killedBy`, no Survived or NoCoverage. Negative: historical invalid all-empty `coveredBy:[]` capture cannot pass, regardless of reported score or exit 0.
+- AC3 — A/B normalized mutant identities and dispositions match exactly; every report entry retained and individually classified. Negative: missing entries, A/B mismatch, or treating Timeout/CompileError/Ignored as Killed fails.
+- AC4 — Positive control removes `" desc"` and produces an attributable assertion failure; baseline passes and original source bytes are restored. Negative: compilation failure, timeout, no failure, or an un-restored source fails the control.
+- AC5 — CHECK opens raw evidence by frozen path, verifies SHA-256 hashes and all row-level predicates, and produces an independent exit-0 verification receipt. Negative: an aggregate brief, absent raw file, changed hash, or producer receipt alone is insufficient.
+- Historical baseline: denominator 97; Killed 56, Survived 0, NoCoverage 0, Timeout 3, CompileError 27, Ignored 11. Reconcile any difference explicitly; never silently redefine scope/acceptance.
+
+## Minimal solution
+Essential outcome: close #144 debt 7 with automatically verifiable coverage, control, reproducibility, individual disposition, retention. Hard constraints: no lasting product change; preserve raw bytes and prior evidence; no reduced mutant scope; no certification through `thresholds.break:0` alone. Optimum: reuse the pinned config + evidence helper; add a documented evidence interface, frozen inventory, and independent CHECK receipt.
+| Alternative | Benefit | Cost/risk | Decision |
+|---|---|---|---|
+| Another aggregate brief | Cheapest | Repeats the demonstrated certification failure | Reject |
+| Frozen raw bundle + semantic verifier + CHECK row ledger | Directly repairs the evidence gap | Bounded tooling changes and two campaigns | **Choose** |
+| Replace runner/framework or change renderer | Broader intervention | Unjustified scope and behavior risk | Deferred; trigger: reproducible failure of the pinned working mode |
+
+## What was not specified / predecessors
+- Four files reportedly committed in `e67aa5f8`, while STOP says uncommitted: verify HEAD, ancestry, tracked contents, working-tree status; do not reapply the preserved patch blindly.
+- Existing helper CLI/schema and raw report locations not supplied: D1 confirms; D2 supplies the planned interface.
+- No verified issue URLs supplied: scout obtains #151/#144 URLs before issue handoff.
+- Predecessors: #144 debt 7 and prior #151 campaigns are historical inputs, not passing CHECK evidence.
+- The old 50-mutant/900s experiment is historical; bound each fresh execution at 3600 s.
+- Evidence-root collision: archive existing material before publishing; never overwrite/delete historical evidence.
+
+## DO tasks — all active, ordered
+- D1 — provenance/CLI scout; inspect `.config/dotnet-tools.json:26-31`, `stryker-config.json:1-25`, helper modes, source/report identities, the four-file commit claim. Record immutable inputs and starting diff.
+- D2 — `tools/stryker/d151-evidence.py`; implement/document the planned interface, complete mutant ledger, strict validation, negative self-tests, atomic freeze.
+- D3 — run PostgreSQL tests and reversible control; reuse `ExtremeRowNativeSqlGenerationTests.cs:571`. No extra product tests unless an evidenced coverage gap requires PLAN review.
+- D4 — execute A/B sequentially; retain complete reports, commands, output, exit codes, timestamps, identities; generate comparison and individual dispositions.
+- D5 — freeze bundle, run independent verification, update status/debt disposition and handoff.
+- Deferred: renderer/API changes and expanded provider mutation campaigns.
+- Mode: sequential units, current worktree. No additional worktrees.
+- Footprint: existing four files reported tracked/committed; expected edits are helper, narrowly necessary config/test adjustments, status/docs, retained evidence. Product-source edit is temporary control only.
+- Design checklist: renderer-only scope; explicit exclusions; no shared-command/cache mutation; no public API changes; deterministic normalization; raw-byte preservation; fail-closed validation; restoration in cleanup; CRLF; no commit/push implied.
+
+## Test strategy and closed variant matrix
+Coverage source: full `tests/nextorm.postgres.tests` suite incl. renderer responsibility tests (9 methods/15 cases). Tooling self-tests exercise valid fixtures plus missing files, hash corruption, invalid coverage, survivors, A/B mismatch, false control, nonzero execution. Thresholds remain line 85% / branch 75%; mutation score is not a substitute.
+| Variant | Closure |
+|---|---|
+| Renderer campaign A | test: fresh independent execution, complete raw report, exit 0 |
+| Renderer campaign B | test: second fresh execution with identical inputs, exit 0 |
+| Control probe | test: baseline pass, deliberate assertion failure, byte-exact restoration |
+| Byte-identical A/B | guard: separate execution provenance mandatory, no reuse/copy-as-B |
+| Survivors = 0 | test: derive from raw entries; fabricated/nonzero survivor fixture must fail |
+| Non-zero exit | guard: any campaign nonzero/124 fails even if a report exists |
+| Coverage missing/empty | guard: executable mutants without valid coverage fail |
+| Timeout / CompileError / Ignored | test: separate per-mutant reasons and raw pointers; never relabel as Killed |
+| Legacy capture mode / `thresholds.break:0` | guard: neither establishes validity |
+| Other providers / runtime null-default-value-reference cases | guard: no production behavior change; expanded campaigns deferred |
+
+## Priority, docs, performance, reconnaissance, risks
+P1 rows by construction: scope/pin/provenance, valid coverage, A/B reproducibility, zero survivors, positive control/restoration, complete disposition, hashes/raw accessibility, independent verification. CHECK cannot downgrade.
+Docs: update this status, evidence README/interface, #144 debt cross-reference/#151 handoff; public EN/RU API docs untouched. No public links to internal specs.
+Performance measurement: no acceptance benchmark required — `stryker-config.json`, `.config/dotnet-tools.json`, tests concern offline tooling/tests, not cached execution/per-row production work. Record campaign durations only for the time budget.
+Reconnaissance: targeted D1 scout for commit-state contradiction, CLI compatibility, report schema and paths.
+Risks: Stryker 5.0.0/MTP quirks; stale binaries; nondeterministic IDs/paths; transient timeouts; exclusion-heavy score; control restoration; evidence retention size.
+Confidence high in the evidence-gap diagnosis and selected mode; commit state, helper interface, raw field completeness remain unverified prerequisites.
+
+## Versioned evidence contract — rv1
+Root E=`artifacts/pdca/D151/rv1`; anchor `$E/manifest.json`; sources PLANNED until produced. D2 implements these invocations; flags are planned API.
+`manifest --freeze` derives comparison/disposition, performs producer verification, writes its receipt, atomically hashes the inventory. Every mutant ledger entry carries report path/hash, JSON pointer, file-qualified mutant ID, location/mutation/status, original `coveredBy`/`killedBy`, disposition; absent required fields fail.
+Rows: R-PROV/E01 `git rev-parse HEAD`; `git status --porcelain`; `git show --name-status e67aa5f8`; `dotnet tool restore`; `dotnet tool run dotnet-stryker --version` → 5.0.0. R-TEST/E02 `dotnet test tests/nextorm.postgres.tests -c Debug` exit 0 nonempty. R-COV/E03 `timeout 3600 dotnet stryker --config-file stryker-config.json --output "$E/run-a"` exit 0 no capture failure, raw report retained. R-REPRO/E04 campaign B same. R-CONTROL/E05 `python3 tools/stryker/d151-evidence.py control-probe --evidence-root "$E"` exit 0 only on baseline=0/altered nonzero/restoration verified. R-COMPARE/E06 `... manifest --evidence-root "$E" --freeze` exact A/B match. R-DISPOSITION/E07 same invocation zero survivors/NoCoverage complete ledger. R-RETENTION/E08 same invocation manifest enumerates every artifact path/SHA-256/row + verifier receipt. R-NEGATIVE/E09 `python3 tools/stryker/d151-evidence.py self-test --evidence-root "$E"`. R-CHECK/E10 `python3 tools/stryker/d151-evidence.py verify --evidence-root "$E" --read-only --result artifacts/pdca/D151/check-rv1/verifier-result.json` independent receipt; CHECK opens raw reports, control, comparison, disposition, manifest and producer receipt.
+CHECK re-gather budget: at most 2 targeted passes. A justified contract revision explicitly supersedes rv=1, retains IDs/obligations, adds new-variant IDs.
+
+## Compact handoff
+Persist this complete PLAN first; no DO in this session. Resume D1→D5 later, then CHECK against the frozen bundle. Prior product-defect status stays "not established"; close debt only after raw row-level certification.
+Refs: #151; #144 debt 7; `docs/specs/status/native-extreme-row-144-1.md`; prior STOP/status history; `docs/specs/status/rc2-151-evidence/D151-STOP-incomplete.patch`; `e67aa5f8`.
+
+---
 # PDCA rc2 — Issue #151: Stryker mutation re-run (native extreme-row)
 
 - task_id: D151
