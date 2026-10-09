@@ -31,7 +31,7 @@ Excluded gaps (removed from the barrier; not planned to DO; no `ready` placehold
 
 | group | tasks (order) | mode | worktree | branch/ref | status |
 |---|---|---|---|---|---|
-| G1 | T160 → T206 → T208 → T170 → T151 | single lane, sequential | current worktree (no group worktree) | `1.0.9-rc2` @ `be2652af` | in-progress |
+| G1 | T160 → T206 → T208 → T170 → T151 | single lane, sequential | current worktree (no group worktree) | `1.0.9-rc2` @ `be2652af` | complete |
 
 ## Tasks
 
@@ -41,7 +41,7 @@ Excluded gaps (removed from the barrier; not planned to DO; no `ready` placehold
 | T206 | #206 | G1 | 2 | 1.0.9-rc2 | incomplete | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md | own PLAN persisted (commit `22f0171d`); NORMGEN007 guard red↔green; terminal incomplete — NORMGEN007 conflict unreachable (bodies determined by signatures); no product change; evidence artifacts/pdca/D206/rv1/ |
 | T208 | #208 | G1 | 3 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-208-sqlserver-native-json-param-alias-1.md | own PLAN persisted (commit `27da4fd6`); commit `09f772a7`; issue #208 closed |
 | T170 | #170 | G1 | 4 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-170-onetoone-fk-uniqueness-1.md | own PLAN persisted (commit `2f7836a6`); documented trust + closed runtime oracle; CHECK pass r=1/rv1; issue #170 closed |
-| T151 | #151 | G1 | 5 | 1.0.9-rc2 | pending | ready | pdca-dotnet | N=1 | r=1 | docs/specs/status/rc2-151-stryker-mutation-1.md | own PLAN persisted (commit `7a65a15e`); frozen raw-artifact evidence bundle |
+| T151 | #151 | G1 | 5 | 1.0.9-rc2 | done | ready | pdca-dotnet | N=1 | r=2 | docs/specs/status/rc2-151-stryker-mutation-1.md | own PLAN persisted (commit `7a65a15e`); frozen raw-artifact evidence bundle; task commit `57e02e66`; CHECK pass r=2/rv2 (15/15 rows); issue #151 closed |
 
 ## Phase decisions
 
@@ -54,8 +54,9 @@ Excluded gaps (removed from the barrier; not planned to DO; no `ready` placehold
 - **Merge:** not applicable (single lane); `push` never performed.
 - **Autocommit:** task/status files only, explicit paths; message prefix `#<issue>` for tasks; collection-status commits use the `rc2-final:` prefix.
 - **D lane — T170 done:** T170 completed its full cycle (DO → CHECK → ACT) with a CHECK **pass** at `r=1`/`rv1` (9/9 evidence rows met); task commit `9715f13f`. The single lane continues to **T151** (last task).
+- **D lane — T151 done; G1 complete:** T151 (last task) completed its full cycle (DO → CHECK → ACT) with a CHECK **pass** at `r=2`/`rv2` (15/15 evidence rows met); task commit `57e02e66`. The single lane **G1 is complete** (T160/T206 terminal `incomplete`, preserved; T208/T170/T151 `done`) → the collection proceeds to the **C-phase** (verification on the integrated tree).
 
 ## Общая верификация и восстановление
 
 - Verification state: `not-started` (collection C runs on the integrated tree after the D lane completes).
-- Next allowed step: **D lane G1** — continue each saved PLAN from DO in order (T160, T206, T208, T170, T151), full cycle per task (DO → CHECK → ACT), auto-commit after each, keep the branch green at every task boundary; a terminal `incomplete` stops the group and preserves its patch under `docs/specs/status/rc2-<n>-evidence/`. After the lane: collection C-phase on the integrated tree.
+- Next allowed step: **C-phase** — verification on the integrated tree (the D lane G1 is complete: T160/T206 terminal `incomplete` preserved under `docs/specs/status/rc2-<n>-evidence/`; T208/T170/T151 `done`).
