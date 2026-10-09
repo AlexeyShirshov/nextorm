@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text;
 using FluentAssertions;
@@ -588,6 +589,319 @@ public class CsvStreamTests
         {
             ctx.Dispose();
             File.Delete(path);
+        }
+    }
+
+    // --- D167 / issue #167: real-SQLite proof of the bounded chunked binary path and of the CSV-only
+    // locator suppression. The buffered path would write the whole Base64 row in one destination write;
+    // the chunked path streams bounded chunks, so the recorded maximum write discriminates the paths. ---
+
+    /// <summary>A table with a real BLOB column large enough to cross several 12 KiB binary chunks.</summary>
+    [SqlTable("csv_blob_row")]
+    private sealed class CsvBlobRow
+    {
+        [Column("id")]
+        public int Id { get; set; }
+
+        [Column("data")]
+        public byte[]? Data { get; set; }
+    }
+
+    private const int BlobSize = (1024 * 1024) + 1;
+
+    private static byte[] CreateBlob()
+    {
+        var payload = new byte[BlobSize];
+        for (var i = 0; i < payload.Length; i++)
+            payload[i] = (byte)((i * 31 + 7) & 0xFF);
+
+        return payload;
+    }
+
+    private static SqliteDataContext CreateBlobDb(out string path, byte[] payload)
+    {
+        path = Path.Combine(Path.GetTempPath(), $"nextorm-csvblob-{Guid.NewGuid():N}.db");
+        using (var connection = new SqliteConnection($"Data Source={path}"))
+        {
+            connection.Open();
+            using (var create = connection.CreateCommand())
+            {
+                create.CommandText = "create table csv_blob_row (id integer primary key, data blob);";
+                create.ExecuteNonQuery();
+            }
+
+            using var insert = connection.CreateCommand();
+            insert.CommandText = "insert into csv_blob_row (id, data) values ($id, $data);";
+            insert.Parameters.Add(new SqliteParameter("$id", 1));
+            insert.Parameters.Add(new SqliteParameter("$data", payload));
+            insert.ExecuteNonQuery();
+        }
+
+        return new SqliteDataContext($"Data Source={path}", new DataContextBuilder());
+    }
+
+    /// <summary>
+    /// Exports a real 1 MiB+1 SQLite BLOB through the public CSV terminal on both surfaces and asserts
+    /// byte-identical Base64 plus a bounded destination write, which only the chunked GetBytes path can
+    /// produce (a buffered path writes the whole Base64 row in a single write).
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WriteCsv_RealBlob_StreamsBoundedBase64_ByteIdentical(bool useAsync)
+    {
+        var payload = CreateBlob();
+        var ctx = CreateBlobDb(out var path, payload);
+        try
+        {
+            using var destination = new BoundedStream();
+            var query = ctx.From<CsvBlobRow>().OrderBy(r => r.Id);
+
+            if (useAsync)
+                await query.WriteCsvAsync(destination, null, TestContext.Current.CancellationToken);
+            else
+                query.WriteCsv(destination, null, TestContext.Current.CancellationToken);
+
+            var expected = "Id,Data\r\n1," + Convert.ToBase64String(payload) + "\r\n";
+            Encoding.UTF8.GetString(destination.ToArray()).Should().Be(expected);
+
+            var chunkLimit = Base64.GetMaxEncodedToUtf8Length(CsvBinaryFieldWriter.BinaryCapacity);
+            destination.MaxWriteLength.Should().BeLessThanOrEqualTo(
+                chunkLimit,
+                "a real 1 MiB BLOB must be streamed through the bounded chunked path, not buffered into one whole Base64 row");
+            ((long)destination.MaxWriteLength).Should().BeLessThan(
+                expected.Length / 2,
+                "no single destination write may approach the whole Base64 field");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// REQ-06: the two public CSV terminals — <see cref="EntityBuilder{TEntity}"/> and
+    /// <see cref="QueryCommand{TResult}"/> — accept the same direct-stored BLOB projection with
+    /// default and custom options, sync and async, and must produce byte-identical CSV. Each call also
+    /// passes a positional WHERE value, exercising the <c>params</c> overload of both surfaces; the
+    /// EntityBuilder overloads forward to the command terminal.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WriteCsv_EntityBuilderAndQueryCommandSurfaces_SyncAsync_DefaultAndCustomOptions_ByteIdentical(bool useAsync)
+    {
+        var payload = CreateBlob();
+        var ctx = CreateBlobDb(out var path, payload);
+        try
+        {
+            foreach (var options in new CsvStreamOptions?[] { null, new CsvStreamOptions { Delimiter = ';' } })
+            {
+                var builderCsv = await RenderAsync(options, commandSurface: false);
+                var commandCsv = await RenderAsync(options, commandSurface: true);
+
+                var expected = (options is null ? "Id,Data\r\n1," : "Id;Data\r\n1;")
+                    + Convert.ToBase64String(payload) + "\r\n";
+                Encoding.UTF8.GetString(builderCsv).Should().Be(expected);
+                Encoding.UTF8.GetString(commandCsv).Should().Be(
+                    expected, "the QueryCommand and EntityBuilder surfaces must be byte-identical");
+            }
+
+            async Task<byte[]> RenderAsync(CsvStreamOptions? options, bool commandSurface)
+            {
+                using var destination = new BoundedStream();
+                var builder = ctx.From<CsvBlobRow>()
+                    .Where(r => r.Id == SqlFunctions.Parameter<int>(0))
+                    .OrderBy(r => r.Id);
+
+                if (commandSurface)
+                {
+                    var command = builder.ToParentCommand();
+                    if (useAsync)
+                        await command.WriteCsvAsync(destination, options, TestContext.Current.CancellationToken, 1);
+                    else
+                        command.WriteCsv(destination, options, TestContext.Current.CancellationToken, 1);
+                }
+                else if (useAsync)
+                {
+                    await builder.WriteCsvAsync(destination, options, TestContext.Current.CancellationToken, 1);
+                }
+                else
+                {
+                    builder.WriteCsv(destination, options, TestContext.Current.CancellationToken, 1);
+                }
+
+                return destination.ToArray();
+            }
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// Regression for the D3b P1 defect on real SQLite: projecting a bound parameter
+    /// <c>SqlFunctions.Parameter&lt;byte[]&gt;</c> must not be admitted to the bounded <c>GetBytes</c>
+    /// path (that call aborts the SQLite provider natively). It stays buffered and writes the exact
+    /// Base64 bytes.
+    /// </summary>
+    [Fact]
+    public void WriteCsv_BoundParameterBlob_DoesNotCrashAndWritesBase64()
+    {
+        var ctx = CreateDb(out var path);
+        try
+        {
+            using var destination = new BoundedStream();
+            var payload = new byte[] { 1, 2, 3, 4 };
+
+            ctx.From<CsvRow>().Where(r => r.Id == 1)
+                .Select(r => new { Blob = SqlFunctions.Parameter<byte[]>(0) })
+                .WriteCsv(destination, null, TestContext.Current.CancellationToken, payload);
+
+            Encoding.UTF8.GetString(destination.ToArray()).Should().Be("Blob\r\nAQIDBA==\r\n");
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// Proves the CSV-local locator suppression at the SQL layer: the CSV preparation renders the SQLite
+    /// projection without the trailing <c>rowid</c>, while the sibling sequential LOB route (the one
+    /// <c>ToStream</c>/<c>ToTextReader</c> use) still appends it.
+    /// </summary>
+    [Fact]
+    public void CsvBinary_SqliteCsvOmitsLocator_ButSequentialLobKeepsIt()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var command = ctx.From<CsvBlobRow>().Select(r => r.Data!);
+        var planner = CreatePlanner(ctx, SqliteDialect.Instance);
+
+        var csv = (DbPreparedQueryCommand<byte[]>)planner.GetPreparedQueryCommand(
+            command,
+            createEnumerator: false,
+            storeInCache: false,
+            sequentialAccess: true,
+            streamingRowsRequested: false,
+            suppressLobLocator: true,
+            TestContext.Current.CancellationToken);
+        NormalizeCommand(csv).Should().Be("select data from csv_blob_row");
+        NormalizeCommand(csv).Should().NotContain("rowid");
+
+        var lob = (DbPreparedQueryCommand<byte[]>)planner.GetPreparedQueryCommand(
+            command,
+            createEnumerator: false,
+            storeInCache: false,
+            sequentialAccess: true,
+            streamingRowsRequested: false,
+            suppressLobLocator: false,
+            TestContext.Current.CancellationToken);
+        NormalizeCommand(lob).Should().Be("select data, rowid from csv_blob_row");
+    }
+
+    /// <summary>
+    /// REQ-10: on SQLite the CSV preparation requests a sequential reader, and the CSV-only locator
+    /// suppression must keep the generated SQL identical to the pre-D167 CSV render (sequential access
+    /// off). A DISTINCT, JOIN, aggregate or plain projection must not gain the trailing <c>rowid</c>,
+    /// which would change the SQL semantics (an aggregate would even become invalid). The plain binary
+    /// projection and its LOB sibling locator behavior are asserted by the neighbouring test.
+    /// </summary>
+    [Fact]
+    public void CsvLocatorSuppression_KeepsDistinctJoinAggregateAndPlainSqlUnchanged()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var planner = CreatePlanner(ctx, SqliteDialect.Instance);
+
+        AssertCsvSqlMatchesPreChange(planner, ctx.From<CsvBlobRow>().Select(r => r.Id));
+        AssertCsvSqlMatchesPreChange(planner, ctx.From<CsvBlobRow>().Distinct().Select(r => r.Id));
+        AssertCsvSqlMatchesPreChange(planner, ctx.From<CsvBlobRow>()
+            .Join(ctx.From<CsvBlobRow>(), (a, b) => a.Id == b.Id)
+            .Select(p => p.Item1.Id));
+        AssertCsvSqlMatchesPreChange(planner, ctx.From<CsvBlobRow>().Select(r => SqlFunctions.Sql.count()));
+    }
+
+    private static void AssertCsvSqlMatchesPreChange<TResult>(QueryPlanner planner, QueryCommand<TResult> command)
+    {
+        // The pre-D167 CSV behavior: no sequential reader, so no locator is ever appended.
+        var preChange = (DbPreparedQueryCommand<TResult>)planner.GetPreparedQueryCommand(
+            command,
+            createEnumerator: false,
+            storeInCache: false,
+            sequentialAccess: false,
+            streamingRowsRequested: false,
+            suppressLobLocator: false,
+            TestContext.Current.CancellationToken);
+
+        // The current CSV path: sequential reader with the locator explicitly suppressed.
+        var csv = (DbPreparedQueryCommand<TResult>)planner.GetPreparedQueryCommand(
+            command,
+            createEnumerator: false,
+            storeInCache: false,
+            sequentialAccess: true,
+            streamingRowsRequested: false,
+            suppressLobLocator: true,
+            TestContext.Current.CancellationToken);
+
+        var csvSql = NormalizeCommand(csv);
+        csvSql.Should().NotContain("rowid", "the CSV path must not gain the SQLite locator");
+        csvSql.Should().Be(
+            NormalizeCommand(preChange),
+            "locator suppression must keep the CSV SQL identical to the pre-change sequential-off render");
+    }
+
+    private static string NormalizeCommand<TResult>(DbPreparedQueryCommand<TResult> command)
+        => command.DbCommand.CommandText.Replace("\r\n", "\n");
+
+    private static QueryPlanner CreatePlanner(IDataContext ctx, ISqlDialect dialect)
+        => new(
+            ctx,
+            () => dialect,
+            ctx.GetType(),
+            new ProviderHooks(
+                (column, param) => param,
+                (_, name, value) => new SqliteParameter(name, value ?? DBNull.Value),
+                sql => new SqliteCommand(sql)),
+            new LoggingOptions(null),
+            new InterceptorHooks([], []));
+
+    /// <summary>A <see cref="MemoryStream"/> that records the largest single write, exposing bounded streaming.</summary>
+    private sealed class BoundedStream : MemoryStream
+    {
+        public int MaxWriteLength { get; private set; }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            Record(count);
+            base.Write(buffer, offset, count);
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            Record(buffer.Length);
+            base.Write(buffer);
+        }
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            Record(count);
+            return base.WriteAsync(buffer, offset, count, cancellationToken);
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            Record(buffer.Length);
+            return base.WriteAsync(buffer, cancellationToken);
+        }
+
+        private void Record(int count)
+        {
+            if (count > MaxWriteLength)
+                MaxWriteLength = count;
         }
     }
 

@@ -32,6 +32,14 @@ internal readonly record struct SqlBuildContext
     internal ISqlDialect Dialect { get; init; }
     internal bool ParamMode { get; init; }
     internal bool SequentialAccess { get; init; }
+    /// <summary>
+    /// When <see langword="true"/> the renderer must not append the dialect's LOB locator column
+    /// (SQLite's <c>rowid</c>) to a single-column projection even though <see cref="SequentialAccess"/>
+    /// is set. Requested only by the CSV terminal, whose bounded binary read does not need the locator
+    /// and whose SELECT must stay byte-identical to the buffered path; the streaming LOB terminals
+    /// (<c>ToStream</c>/<c>ToTextReader</c>) keep the default <see langword="false"/>.
+    /// </summary>
+    internal bool SuppressLobLocator { get; init; }
     internal List<Parameter> Params { get; init; }
     internal IColumnsProvider ColumnsProvider { get; init; }
     internal IQueryRegistry QueryProvider { get; init; }

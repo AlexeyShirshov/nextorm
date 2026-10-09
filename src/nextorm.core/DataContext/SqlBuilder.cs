@@ -524,7 +524,9 @@ internal readonly struct SqlBuilder
                 // A LOB-only projection may need a trailing locator (SQLite's rowid) to switch the
                 // driver to a seekable streaming blob; the payload keeps ordinal 0. The locator is
                 // appended with the loop's ", " separator so the trailing-trim below drops it again.
-                if (!_ctx.ParamMode && _ctx.SequentialAccess && _ctx.Dialect.LobLocatorColumn is { } lobLocator)
+                // The CSV terminal sets SuppressLobLocator so its bounded binary read keeps the SQL
+                // (and the reader's field set) identical to the buffered path.
+                if (!_ctx.ParamMode && !_ctx.SuppressLobLocator && _ctx.SequentialAccess && _ctx.Dialect.LobLocatorColumn is { } lobLocator)
                     selectBuilder!.Append(lobLocator).Append(", ");
             }
 

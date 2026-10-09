@@ -89,6 +89,39 @@ public class CsvTypedColumnMappingTests
             .WithMessage("*Boolean*");
     }
 
+    [Fact]
+    public void BinaryColumn_OnSequentialReader_AdmitsBoundedChunking()
+    {
+        // byte[] is not numeric, so the SQL Server typed hook delegates to the base direct
+        // GetFieldValue<byte[]> read. On a confirmed sequential reader the CSV plan must switch to the
+        // bounded chunked path (Write is null, BinaryOrdinal is set); a buffered reader must keep the
+        // whole-array getter compiled.
+        var hook = SqlServerTestContext.CreateCsvHook();
+        // FIX 2: the no-Expression mapper seam is admitted only on positive stored-column evidence, so the
+        // hand-built probe must carry the mapping-derived physical column name of a real entity column.
+        var column = new SelectExpression(typeof(byte[])) { Index = 0, PropertyName = "Data", PhysicalColumnName = "data" };
+        var schema = new NumericRecord(null, typeof(byte[]));
+        var options = new CsvStreamOptions();
+
+        var sequential = CsvStreamWriter.Build(
+            [column],
+            schema,
+            (c, r, storage) => hook.MapTypedColumnExpression(c, r, storage),
+            sequentialAccess: true,
+            options);
+        sequential.Columns[0].BinaryOrdinal.Should().Be(0);
+        sequential.Columns[0].Write.Should().BeNull("the chunked path must not compile a whole-field getter");
+
+        var buffered = CsvStreamWriter.Build(
+            [column],
+            schema,
+            (c, r, storage) => hook.MapTypedColumnExpression(c, r, storage),
+            sequentialAccess: false,
+            options);
+        buffered.Columns[0].BinaryOrdinal.Should().BeNull();
+        buffered.Columns[0].Write.Should().NotBeNull();
+    }
+
     private static object? Invoke(Expression body, object? value, Type storage)
     {
         var lambda = Expression.Lambda(body, Record).Compile();

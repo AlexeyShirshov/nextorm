@@ -8,26 +8,46 @@ namespace NextORM.Core;
 /// <summary>One projected CSV column: its header and the compiled delegate that appends its formatted value to a row buffer.</summary>
 internal sealed class CsvColumn
 {
-    public CsvColumn(string header, Action<IDataRecord, CsvRowBuffer> write)
+    public CsvColumn(string header, Action<IDataRecord, CsvRowBuffer>? write, int? binaryOrdinal = null)
     {
         Header = header;
         Write = write;
+        BinaryOrdinal = binaryOrdinal;
     }
 
     /// <summary>The header cell, derived from the projection's property name.</summary>
     public string Header { get; }
 
-    /// <summary>Appends this column's value for the current row.</summary>
-    public Action<IDataRecord, CsvRowBuffer> Write { get; }
+    /// <summary>Appends this column's value for the current row, or <see langword="null"/> for a bounded binary column.</summary>
+    public Action<IDataRecord, CsvRowBuffer>? Write { get; }
+
+    /// <summary>
+    /// The reader ordinal of a direct <c>byte[]</c> column that must be read through
+    /// <see cref="IDataRecord.GetBytes"/> and streamed in bounded chunks, or <see langword="null"/> when
+    /// the column uses the compiled buffered accessor. When set, <see cref="Write"/> is
+    /// <see langword="null"/> so no whole-array getter is ever compiled for the field.
+    /// </summary>
+    public int? BinaryOrdinal { get; }
 }
 
 /// <summary>The compiled column plan of one CSV terminal call.</summary>
 internal sealed class CsvPlan
 {
-    public CsvPlan(CsvColumn[] columns) => Columns = columns;
+    public CsvPlan(CsvColumn[] columns, bool sequentialAccess = false)
+    {
+        Columns = columns;
+        SequentialAccess = sequentialAccess;
+    }
 
     /// <summary>The projection columns, in reader-ordinal order.</summary>
     public CsvColumn[] Columns { get; }
+
+    /// <summary>
+    /// Whether the reader was opened with <see cref="System.Data.CommandBehavior.SequentialAccess"/>
+    /// (the mode the preparation actually applied). The writer admits its bounded binary path only when
+    /// this is <see langword="true"/>; it is never inferred from the reader type or from <c>GetBytes</c>.
+    /// </summary>
+    public bool SequentialAccess { get; }
 }
 
 /// <summary>
@@ -119,18 +139,20 @@ internal static class CsvStreamWriter
     /// </summary>
     /// <param name="selectList">The prepared projection, or <see langword="null"/> when none is available.</param>
     /// <param name="schema">The open reader, used to read each column's storage type, or <see langword="null"/> for a schema-less plan (tests).</param>
-    /// <param name="mapTypedColumn">The provider's typed column mapper (<see cref="DataContext.MapTypedColumnExpression"/>).</param>
+    /// <param name="mapTypedColumn">The provider's typed column mapper (<see cref="DataContext.MapTypedColumnExpression(SelectExpression, Expression, Type)"/>).</param>
+    /// <param name="sequentialAccess">The mode the preparation actually applied to the reader; carried on the plan for the binary path.</param>
+    /// <param name="options">The call's CSV options, needed to decide whether a binary column's framing is knowable before it is read; <see langword="null"/> keeps every column buffered.</param>
     /// <returns>The compiled column plan.</returns>
-    public static CsvPlan Build(SelectExpression[]? selectList, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn)
+    public static CsvPlan Build(SelectExpression[]? selectList, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn, bool sequentialAccess = false, CsvStreamOptions? options = null)
     {
         if (selectList is null || selectList.Length == 0)
             throw new InvalidOperationException("The query has no projected columns; there is nothing to write as CSV.");
 
         var columns = new CsvColumn[selectList.Length];
         for (var i = 0; i < selectList.Length; i++)
-            columns[i] = BuildColumn(selectList[i], schema, mapTypedColumn);
+            columns[i] = BuildColumn(selectList[i], schema, mapTypedColumn, sequentialAccess, options);
 
-        return new CsvPlan(columns);
+        return new CsvPlan(columns, sequentialAccess);
     }
 
     /// <summary>
@@ -217,7 +239,7 @@ internal static class CsvStreamWriter
         while (reader.Read())
         {
             cancellationToken.ThrowIfCancellationRequested();
-            WriteRow(plan, reader, buffer);
+            WriteRow(plan, reader, buffer, destination, cancellationToken);
             destination.Write(buffer.Written);
             buffer.Reset();
         }
@@ -237,13 +259,13 @@ internal static class CsvStreamWriter
 
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            WriteRow(plan, reader, buffer);
+            await WriteRowAsync(plan, reader, buffer, destination, cancellationToken).ConfigureAwait(false);
             await destination.WriteAsync(buffer.WrittenMemory, cancellationToken).ConfigureAwait(false);
             buffer.Reset();
         }
     }
 
-    private static CsvColumn BuildColumn(SelectExpression column, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn)
+    private static CsvColumn BuildColumn(SelectExpression column, IDataRecord? schema, Func<SelectExpression, Expression, Type, Expression> mapTypedColumn, bool sequentialAccess, CsvStreamOptions? options)
     {
         var propertyType = column.PropertyType;
         var underlyingType = Nullable.GetUnderlyingType(propertyType);
@@ -258,6 +280,12 @@ internal static class CsvStreamWriter
         var value = mapTypedColumn(column, record, storageType);
 
         EnsureBoxFree(column, value, header);
+
+        // A direct byte[] column on a confirmed sequential reader may be streamed with GetBytes instead of
+        // compiling a whole-array getter. Returning before the lambda is compiled is what keeps the
+        // whole-field getter out of the chunked path entirely.
+        if (IsBinaryChunkedColumn(column, storageType, value, sequentialAccess, options))
+            return new CsvColumn(header, write: null, column.Index);
 
         if (value.Type != propertyType)
             value = Expression.Convert(value, propertyType);
@@ -283,6 +311,91 @@ internal static class CsvStreamWriter
 
         var lambda = Expression.Lambda<Action<IDataRecord, CsvRowBuffer>>(body, record, buffer);
         return new CsvColumn(header, lambda.Compile());
+    }
+
+    /// <summary>
+    /// Decides whether a column may use the bounded GetBytes path: the reader must be a confirmed
+    /// sequential one, the column must be a direct <c>byte[]</c> storage read (no converter, typed
+    /// mapping or streaming LOB projection), and the call's field policy must make the framing knowable
+    /// before the whole Base64 is produced. Everything else keeps the buffered path byte-identical.
+    /// </summary>
+    private static bool IsBinaryChunkedColumn(SelectExpression column, Type storageType, Expression mappedValue, bool sequentialAccess, CsvStreamOptions? options)
+    {
+        if (!sequentialAccess || options is null)
+            return false;
+
+        if (column.PropertyType != typeof(byte[])
+            || column.Converter is not null
+            || (column.ProviderType is not null && column.ProviderType != typeof(byte[]))
+            || column.IsLobStreaming
+            || storageType != typeof(byte[])
+            || !IsDirectStoredColumn(column))
+            return false;
+
+        if (!IsDirectByteArrayRead(mappedValue))
+            return false;
+
+        return CsvBinaryFieldWriter.IsEligible(new CsvDialect(options.Delimiter), CreatePolicy(options));
+    }
+
+    /// <summary>
+    /// True when the projected column is a real stored entity column rather than a bound parameter, a
+    /// function/expression projection or a computed property. Only such a column is backed by a reader
+    /// ordinal whose payload can be read with <see cref="IDataRecord.GetBytes"/>; an ordinal that merely
+    /// carries a projected parameter/expression has a different provenance and <c>GetBytes</c> on it can
+    /// abort the provider natively. A stored column's producing expression is a member read over the
+    /// entity — a bare <see cref="MemberExpression"/> (an anonymous/DTO projection) or an entity-select
+    /// lambda whose body is one — and the member must be a mapped, non-computed property (the same
+    /// metadata test the native extreme-row renderer uses). A column with no producing expression (the
+    /// hand-built mapper seam) is admitted only on positive evidence that it is a genuinely mapped,
+    /// non-computed stored column: its mapped physical column name, plus the mapped property's metadata
+    /// when that property is available. Every other expression shape (a <c>SqlFunctions.Parameter&lt;T&gt;</c>
+    /// call, an array index, a SQL function, a conversion of one) is excluded, and an unknown-provenance
+    /// raw/computed ordinal keeps the buffered path.
+    /// </summary>
+    private static bool IsDirectStoredColumn(SelectExpression column)
+    {
+        var expression = column.Expression;
+        if (expression is null)
+        {
+            // No producing expression: require the mapping-derived physical column name (null for a
+            // computed/unknown ordinal) and, when the mapped property is known, its non-computed metadata.
+            if (column.PhysicalColumnName is null)
+                return false;
+
+            return column.PropertyInfo is not { } property || IsMappedNonComputedProperty(property);
+        }
+
+        if (expression is LambdaExpression lambda)
+            expression = lambda.Body;
+
+        expression = TypeFacts.UnwrapConvert(expression);
+        return expression is MemberExpression { Member: PropertyInfo memberProperty }
+            && IsMappedNonComputedProperty(memberProperty);
+    }
+
+    /// <summary>True when the property is registered in the entity metadata and is not a computed column.</summary>
+    private static bool IsMappedNonComputedProperty(PropertyInfo property)
+        => property.DeclaringType is { } declaringType
+            && DataContextCache.Metadata.TryGetValue(declaringType, property, out var metadata)
+            && !metadata!.IsComputed;
+
+    /// <summary>
+    /// True when the mapped accessor is the direct generic byte[] reader. A reference-type projection is
+    /// wrapped in a null guard (<c>IsDBNull(index) ? null : GetFieldValue&lt;byte[]&gt;(index)</c>), so the
+    /// guard is unwrapped before the getter shape is checked.
+    /// </summary>
+    private static bool IsDirectByteArrayRead(Expression mappedValue)
+    {
+        if (mappedValue is ConditionalExpression { IfTrue: ConstantExpression { Value: null } } condition)
+            mappedValue = condition.IfFalse;
+
+        return mappedValue is MethodCallExpression call
+            && call.Method.Name == nameof(DbDataReader.GetFieldValue)
+            && call.Method.DeclaringType == typeof(DbDataReader)
+            && call.Method.IsGenericMethod
+            && call.Method.GetGenericArguments() is [var readType]
+            && readType == typeof(byte[]);
     }
 
     private static string Header(SelectExpression column)
@@ -373,6 +486,10 @@ internal static class CsvStreamWriter
         buffer.WriteRowTerminator();
     }
 
+    /// <summary>
+    /// Writes one row into an in-memory buffer only. Kept for tests that drive the buffered path
+    /// directly; a bounded binary column cannot be accumulated here and is rejected.
+    /// </summary>
     internal static void WriteRow(CsvPlan plan, IDataRecord record, CsvRowBuffer buffer)
     {
         for (var i = 0; i < plan.Columns.Length; i++)
@@ -380,7 +497,59 @@ internal static class CsvStreamWriter
             if (i > 0)
                 buffer.WriteDelimiter();
 
-            plan.Columns[i].Write(record, buffer);
+            var column = plan.Columns[i];
+            if (column.BinaryOrdinal is not null)
+                throw new InvalidOperationException("A bounded binary CSV column cannot be written to a row buffer; use the destination-aware Write/WriteAsync path.");
+
+            column.Write!(record, buffer);
+        }
+
+        buffer.WriteRowTerminator();
+    }
+
+    private static void WriteRow(CsvPlan plan, IDataRecord record, CsvRowBuffer buffer, Stream destination, CancellationToken cancellationToken)
+    {
+        for (var i = 0; i < plan.Columns.Length; i++)
+        {
+            if (i > 0)
+                buffer.WriteDelimiter();
+
+            var column = plan.Columns[i];
+            if (column.BinaryOrdinal is int ordinal)
+            {
+                // Flush the already-accumulated row text (including the preceding delimiter) before the
+                // binary payload so the field is streamed to the destination and never buffered whole.
+                destination.Write(buffer.Written);
+                buffer.Reset();
+                CsvBinaryFieldWriter.Write(record, ordinal, buffer, destination, cancellationToken);
+            }
+            else
+            {
+                column.Write!(record, buffer);
+            }
+        }
+
+        buffer.WriteRowTerminator();
+    }
+
+    private static async Task WriteRowAsync(CsvPlan plan, IDataRecord record, CsvRowBuffer buffer, Stream destination, CancellationToken cancellationToken)
+    {
+        for (var i = 0; i < plan.Columns.Length; i++)
+        {
+            if (i > 0)
+                buffer.WriteDelimiter();
+
+            var column = plan.Columns[i];
+            if (column.BinaryOrdinal is int ordinal)
+            {
+                await destination.WriteAsync(buffer.WrittenMemory, cancellationToken).ConfigureAwait(false);
+                buffer.Reset();
+                await CsvBinaryFieldWriter.WriteAsync(record, ordinal, buffer, destination, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                column.Write!(record, buffer);
+            }
         }
 
         buffer.WriteRowTerminator();

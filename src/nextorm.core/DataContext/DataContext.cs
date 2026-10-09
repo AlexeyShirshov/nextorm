@@ -508,7 +508,48 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private const string CsvTerminalName = "WriteCsv/WriteCsvAsync";
 
-    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken, string terminalName)
+    // The CSV-local result reader seam. Unlike the general OpenResultReader it asks the planner for
+    // sequential access when the provider supports it (so a direct binary column can be read with
+    // IDataRecord.GetBytes in bounded chunks instead of materialising the whole array) and always
+    // suppresses the dialect's LOB locator column (SQLite's rowid), which only the single-column LOB
+    // terminals need and which would otherwise change the CSV SELECT. Both flags are local to this
+    // preparation: the plan is still storeInCache: false and the shared QueryCommand is never mutated.
+    // The actually applied mode travels back with the owner and is never re-derived by the writer.
+    internal CsvResultReader OpenCsvReader<TResult>(QueryCommand<TResult> queryCommand, ReadOnlySpan<object?> @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(
+            queryCommand,
+            cancellationToken,
+            CsvTerminalName,
+            sequentialAccess: Dialect.SupportsSequentialAccess,
+            suppressLobLocator: true);
+        var owner = _executor.OpenResultReader(prepared, @params);
+        return new CsvResultReader(owner, IsSequential(prepared));
+    }
+
+    internal async Task<CsvResultReader> OpenCsvReaderAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var prepared = PrepareResultCommand(
+            queryCommand,
+            cancellationToken,
+            CsvTerminalName,
+            sequentialAccess: Dialect.SupportsSequentialAccess,
+            suppressLobLocator: true);
+        var owner = await _executor.OpenResultReaderAsync(prepared, @params, cancellationToken).ConfigureAwait(false);
+        return new CsvResultReader(owner, IsSequential(prepared));
+    }
+
+    private static bool IsSequential<TResult>(DbPreparedQueryCommand<TResult> command)
+        => (command.Behavior & CommandBehavior.SequentialAccess) != 0;
+
+    private DbPreparedQueryCommand<TResult> PrepareResultCommand<TResult>(
+        QueryCommand<TResult> queryCommand,
+        CancellationToken cancellationToken,
+        string terminalName,
+        bool sequentialAccess = false,
+        bool suppressLobLocator = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, nameof(DataContext));
 
@@ -525,8 +566,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             queryCommand,
             createEnumerator: false,
             storeInCache: false,
-            sequentialAccess: false,
+            sequentialAccess: sequentialAccess,
             streamingRowsRequested: false,
+            suppressLobLocator: suppressLobLocator,
             cancellationToken);
     }
 
@@ -1696,4 +1738,25 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>Clears all cached query plans held by this context.</summary>
     public void PurgeQueryCache() => _queryCache.PurgeQueryCache();
+}
+
+/// <summary>
+/// The CSV terminal's open result reader together with the sequential-access mode the planner actually
+/// applied to it. Returning the real mode (rather than re-deriving it from the reader type or from
+/// <c>GetBytes</c> support) is what lets the CSV writer admit its bounded binary path only on a
+/// confirmed sequential reader.
+/// </summary>
+internal readonly struct CsvResultReader
+{
+    internal CsvResultReader(CommandReaderOwner owner, bool sequentialAccess)
+    {
+        Owner = owner;
+        SequentialAccess = sequentialAccess;
+    }
+
+    /// <summary>The open reader and its per-call command; the caller owns and disposes it.</summary>
+    internal CommandReaderOwner Owner { get; }
+
+    /// <summary>Whether the reader was opened with <see cref="CommandBehavior.SequentialAccess"/>.</summary>
+    internal bool SequentialAccess { get; }
 }

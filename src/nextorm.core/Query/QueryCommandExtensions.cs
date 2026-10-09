@@ -421,17 +421,19 @@ public static class QueryCommandExtensions
         // Reject unsupported projections from static information before any SQL is executed.
         CsvStreamWriter.ValidateProjection(command.SelectList, context.MapColumnExpression, context.SupportsTypedColumn);
 
-        var owner = context.OpenResultReader(command, parameters, cancellationToken);
+        var reader = context.OpenCsvReader(command, parameters, cancellationToken);
         try
         {
             // Binding happens after the reader is open so the provider can pick a typed getter from the
-            // storage type; the plan (and every guard) is still built before the header is written.
-            var plan = CsvStreamWriter.Build(command.SelectList, owner.Reader, context.MapTypedColumn);
-            CsvStreamWriter.Write(owner.Reader, destination, plan, dialectOptions, cancellationToken);
+            // storage type; the plan (and every guard) is still built before the header is written. The
+            // applied sequential mode travels with the reader so the binary path can be admitted only on
+            // a confirmed sequential reader.
+            var plan = CsvStreamWriter.Build(command.SelectList, reader.Owner.Reader, context.MapTypedColumn, reader.SequentialAccess, dialectOptions);
+            CsvStreamWriter.Write(reader.Owner.Reader, destination, plan, dialectOptions, cancellationToken);
         }
         finally
         {
-            owner.Dispose();
+            reader.Owner.Dispose();
         }
     }
 
@@ -463,17 +465,19 @@ public static class QueryCommandExtensions
         // Reject unsupported projections from static information before any SQL is executed.
         CsvStreamWriter.ValidateProjection(command.SelectList, context.MapColumnExpression, context.SupportsTypedColumn);
 
-        var owner = await context.OpenResultReaderAsync(command, (object[]?)parameters, cancellationToken).ConfigureAwait(false);
+        var reader = await context.OpenCsvReaderAsync(command, (object[]?)parameters, cancellationToken).ConfigureAwait(false);
         try
         {
             // Binding happens after the reader is open so the provider can pick a typed getter from the
-            // storage type; the plan (and every guard) is still built before the header is written.
-            var plan = CsvStreamWriter.Build(command.SelectList, owner.Reader, context.MapTypedColumn);
-            await CsvStreamWriter.WriteAsync(owner.Reader, destination, plan, dialectOptions, cancellationToken).ConfigureAwait(false);
+            // storage type; the plan (and every guard) is still built before the header is written. The
+            // applied sequential mode travels with the reader so the binary path can be admitted only on
+            // a confirmed sequential reader.
+            var plan = CsvStreamWriter.Build(command.SelectList, reader.Owner.Reader, context.MapTypedColumn, reader.SequentialAccess, dialectOptions);
+            await CsvStreamWriter.WriteAsync(reader.Owner.Reader, destination, plan, dialectOptions, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            await owner.DisposeAsync().ConfigureAwait(false);
+            await reader.Owner.DisposeAsync().ConfigureAwait(false);
         }
     }
 
