@@ -32,6 +32,9 @@ public class AliasGeneratedSurfaceTests
         // Buyer2 in slot 2 (P1_A2_Buyer2) cannot.
         // Phase 2: the root alias adds A1_Root (root only), A1_Root_A2_Buyer (alias join after it) and
         // A1_Root_P2 (a generated positional instance transition after the root alias).
+        // #206: Alias.Target is reused by two independent queries with different joined types
+        // (Person/Product); the last-step joined type is the method type parameter, so the two chains
+        // collapse into the single AliasJoin_P1_A2_Target pair added here.
         var names = typeof(Alias).Assembly.GetTypes()
             .Where(type => type.Namespace == GeneratedNamespace && !type.IsNested)
             .Where(type => type.Name == "Alias"
@@ -54,6 +57,7 @@ public class AliasGeneratedSurfaceTests
             "AliasJoin_P1_A2_Buyer`2",
             "AliasJoin_P1_A2_StoredBuyer_P3`3",
             "AliasJoin_P1_A2_StoredBuyer`2",
+            "AliasJoin_P1_A2_Target`2",
             "AliasJoin_P1_P2_A3_Approver`3",
             "AliasJoin_P1_P2_A3_Buyer2`3",
             "AliasProjection_A1_Root_A2_Buyer`2",
@@ -66,6 +70,7 @@ public class AliasGeneratedSurfaceTests
             "AliasProjection_P1_A2_Buyer`2",
             "AliasProjection_P1_A2_StoredBuyer_P3`3",
             "AliasProjection_P1_A2_StoredBuyer`2",
+            "AliasProjection_P1_A2_Target`2",
             "AliasProjection_P1_P2_A3_Approver`3",
             "AliasProjection_P1_P2_A3_Buyer2`3",
             "JoinAliasExtensions");

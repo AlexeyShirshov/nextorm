@@ -8,7 +8,8 @@
 - attempt: n=1/3
 - contract_rv: 3
 - milestone: `1.0.9-rc2`
-- overall_task_state: OPEN_GAP
+- overall_task_state: RESOLVED
+- resolution: resolved-by-verification (2026-10-10; see `## RESOLUTION` below)
 - baseline: `a60ecb84`
 - plan_state: ready
 - status file: `docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md`
@@ -255,3 +256,18 @@ After the scoped PASS (all six required rows `met`), ACT commits under `#206 ` (
 - **Issue:** #206 remains **OPEN** in milestone `1.0.9-rc2`.
 
 - **ACT commit:** `8f31c9a4`.
+
+---
+
+## RESOLUTION — resolved-by-verification (2026-10-10)
+
+- **Outcome:** the #206 `CS0111` collision does **not** reproduce on the current generator (post-#159/#160); the "different queries reuse one `Alias.X` with different joined types" scenario is **already supported** at compile time and at runtime. Closed by verification, not by a generator change.
+- **Mechanism (current tree):** the emitted alias-extension body/signature is a pure function of the non-last-step inputs; the last step's `JoinedType` is rendered as the method type parameter `TJoin`. Two independent chains that reuse one alias with different joined types therefore collapse into ONE generic `Join<TJoin>` extension. The historical `RenderExtension` references above (`:721-787`, `:692-697`, `:747-751`) are stale: the method is now `RenderAliasExtension` (`JoinAliasGenerator.cs:1125-1191`), and the collapse/diagnostic site is `:1049-1068` (`AliasExtensionCollision` = NORMGEN007 at `:126-133`). Historical records are left intact.
+- **Decisive evidence:**
+  - Compile: `JoinAliasGeneratorDiagnosticTests.R03_byte_identical_distinct_chains_collapse_to_one_method` — two `Alias.X` chains with different last-step joined types → exactly one `Join<TJoin>`, 0 NORMGEN007, 0 compiler errors (no `CS0111`).
+  - Runtime (new): `tests/nextorm.alias.tests/AliasSameAliasRuntimeTests.Same_alias_different_joined_types_across_two_queries` — two independent queries reuse `Alias.Target` with `Person` vs `Product`; SQLite returns `[10]`/`[100]`; SQL `person as 't2'` / `product as 't2'`.
+  - Alias suite: **105/105 passed**; solution build Debug + Release 0/0.
+- **R01/R02 disposition:** previously an explicit GAP (NORMGEN007 unreachable). With the confirmed reproduction of the *supported* scenario and the decision that "both projections must work" is achieved via the generic collapse, R01/R02 are **superseded by verification** — the intended user outcome is met; the NORMGEN007 same-signature/different-body branch remains a documented defensive no-op (kept, not removed — design decision D2).
+- **NORMGEN007:** kept as a defensive guard; EN/RU guides already describe it as structurally unreachable. No generator change.
+- **Surface:** `AliasGeneratedSurfaceTests.Generated_public_type_set_is_frozen` updated to include the intentional `AliasJoin/AliasProjection_P1_A2_Target\`2` pair (pre-release: no frozen surface).
+- **Issue:** #206 **closed** (milestone `1.0.9-rc2`) with an evidence comment.
