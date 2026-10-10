@@ -1,0 +1,114 @@
+{
+  "unit": "T206 rv2 (recon + DO-loop-back fix oracle decisiveness)",
+  "scope": {
+    "projects": [
+      "tests/nextorm.alias.tests"
+    ],
+    "selectors": [
+      "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"
+    ],
+    "files": [
+      "tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs"
+    ],
+    "rebuild": "affected",
+    "boundary": "full alias suite + solution build at DO->CHECK",
+    "rationale": "the generator-driver harness in this test class exercises generated text, diagnostics and compiler errors for the alias-join generator; it is the only project referencing the generator"
+  },
+  "executions": [
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.alias.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "inner",
+      "source_revision": "a60ecb84",
+      "artifact_revision": "a60ecb84",
+      "exit_code": 0,
+      "selected_count": 1,
+      "note": "affected-project rebuild before the first inner test; one build target (no test selection)"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.alias.tests",
+        "-c",
+        "Debug",
+        "--filter",
+        "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"
+      ],
+      "phase": "inner",
+      "source_revision": "a60ecb84",
+      "artifact_revision": "a60ecb84",
+      "exit_code": 0,
+      "selected_count": 21,
+      "note": "filtered inner loop: 21 selected (18 pre-existing + 3 new R03/R07 oracle tests), 0 failed, 0 skipped; log recon.log STEP 3b(2)"
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "nextorm.slnx",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "a60ecb84",
+      "artifact_revision": "a60ecb84",
+      "exit_code": 0,
+      "selected_count": 1,
+      "note": "single boundary solution build; log recon.log STEP 3d(boundary)"
+    },
+    {
+      "command": [
+        "dotnet",
+        "build",
+        "tests/nextorm.alias.tests",
+        "-c",
+        "Debug",
+        "--no-restore"
+      ],
+      "phase": "inner",
+      "source_revision": "a60ecb84",
+      "artifact_revision": "a60ecb84",
+      "exit_code": 0,
+      "selected_count": 1,
+      "note": "fix DO-loop-back affected rebuild; log fix.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.alias.tests",
+        "-c",
+        "Debug",
+        "--filter",
+        "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"
+      ],
+      "phase": "inner",
+      "source_revision": "a60ecb84",
+      "artifact_revision": "a60ecb84",
+      "exit_code": 0,
+      "selected_count": 22,
+      "note": "fix inner loop: 22 selected (21 + R03 control), 0 failed, 0 skipped; log fix.log"
+    },
+    {
+      "command": [
+        "dotnet",
+        "test",
+        "tests/nextorm.alias.tests",
+        "-c",
+        "Debug"
+      ],
+      "phase": "boundary",
+      "source_revision": "a60ecb84",
+      "artifact_revision": "a60ecb84",
+      "exit_code": 0,
+      "selected_count": 104,
+      "note": "fix boundary full alias suite: 104 passed, 0 failed, 0 skipped; supersedes the recon rv2 comprehensive sweep (recon.log). log fix.log"
+    }
+  ]
+}

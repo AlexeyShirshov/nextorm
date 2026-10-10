@@ -1,0 +1,6 @@
+Tool 'dotnet-coverage' (version '18.11.2') was restored. Available commands: dotnet-coverage
+Tool 'dotnet-reportgenerator-globaltool' (version '5.5.11') was restored. Available commands: reportgenerator
+Tool 'docfx' (version '2.78.5') was restored. Available commands: docfx
+Tool 'dotnet-stryker' (version '5.0.0') was restored. Available commands: dotnet-stryker
+
+Restore was successful.

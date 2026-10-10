@@ -1,0 +1,43 @@
+[38;5;15mLoading project /home/alex/sources/nextorm/src/nextorm.postgres/nextorm.postgres.csproj[0m
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+[38;5;11mwarning: [Warning] Duplicate source file '/home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/AnalyzerReleases.Shipped.md' in project '/home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj'[0m
+[38;5;11mwarning: [Warning] Duplicate source file '/home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/AnalyzerReleases.Unshipped.md' in project '/home/alex/sources/nextorm/src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj'[0m
+[38;5;15mLoading project /home/alex/sources/nextorm/src/nextorm.entityframeworkcore/nextorm.entityframeworkcore.csproj[0m
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+[38;5;15mLoading project /home/alex/sources/nextorm/src/nextorm.mariadb/nextorm.mariadb.csproj[0m
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+[38;5;15mLoading project /home/alex/sources/nextorm/src/nextorm.clickhouse/nextorm.clickhouse.csproj[0m
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+[38;5;15mProcessing nextorm.postgres[0m
+[38;5;15mProcessing nextorm.core[0m
+[38;5;15mProcessing nextorm.entityframeworkcore[0m
+[38;5;15mProcessing nextorm.sqlserver[0m
+[38;5;15mProcessing nextorm.mariadb[0m
+[38;5;15mProcessing nextorm.clickhouse[0m
+[38;5;15mProcessing nextorm.mysql[0m
+[38;5;15mProcessing nextorm.sqlite[0m
+[38;5;15mCreating output...[0m
+[38;5;15mSearching built-in plugins in directory /home/alex/.nuget/packages/docfx/2.78.5/tools/net10.0/any/...[0m
+[38;5;15mPost processor ExtractSearchIndex loaded.[0m
+[38;5;15mPost processor SitemapGenerator loaded.[0m
+[38;5;15m7 plug-in(s) loaded.[0m
+[38;5;15mExtractSearchIndex: UseMetadata = False, UseMetadataTitle = True[0m
+[38;5;15mBuilding 12 file(s) in TocDocumentProcessor(BuildTocDocument)...[0m
+[38;5;15mBuilding 50 file(s) in ResourceDocumentProcessor(ValidateResourceMetadata)...[0m
+[38;5;15mBuilding 165 file(s) in ConceptualDocumentProcessor(BuildConceptualDocument=>ValidateConceptualDocumentMetadata)...[0m
+[38;5;15mBuilding 317 file(s) in ManagedReferenceDocumentProcessor(BuildManagedReferenceDocument=>SplitClassPageToMemberLevel=>ValidateManagedReferenceDocumentMetadata=>ApplyOverwriteDocumentForMref=>FillReferenceInformation=>FillMetadata)...[0m
+[38;5;15mApplying templates to 544 model(s)...[0m
+[38;5;15mXRef map exported.[0m
+[38;5;15mExtracting index data from 482 html files[0m
+[38;5;15mSitemap file is successfully exported to /home/alex/sources/nextorm/docs/_site/sitemap.xml[0m
+
+
+[38;5;11mBuild succeeded with warning.[0m
+
+[38;5;11m    2 warning(s)[0m
+[38;5;15m    0 error(s)[0m
+

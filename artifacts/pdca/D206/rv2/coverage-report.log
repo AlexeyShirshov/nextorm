@@ -1,0 +1,7 @@
+2026-10-10T14:48:38: Arguments
+2026-10-10T14:48:38:  -reports:artifacts/pdca/D206/rv2/coverage.cobertura.xml
+2026-10-10T14:48:38:  -targetdir:artifacts/pdca/D206/rv2/coverage-report
+2026-10-10T14:48:38:  -reporttypes:JsonSummary;TextSummary
+2026-10-10T14:48:39: Writing report file 'artifacts/pdca/D206/rv2/coverage-report/Summary.json'
+2026-10-10T14:48:40: Writing report file 'artifacts/pdca/D206/rv2/coverage-report/Summary.txt'
+2026-10-10T14:48:40: Report generation took 2.3 seconds

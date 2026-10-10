@@ -4,8 +4,12 @@
 - intent: own PLAN (COLLECTION TASK PLAN); phase P (no DO yet)
 - selected_variant: `pdca-dotnet`
 - cycle_id: N=1
-- plan_revision: r=1
-- baseline: `9a2a2871`
+- plan_revision: r=3
+- attempt: n=1/3
+- contract_rv: 3
+- milestone: `1.0.9-rc2`
+- overall_task_state: OPEN_GAP
+- baseline: `a60ecb84`
 - plan_state: ready
 - status file: `docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md`
 - persisted: 2026-10-09
@@ -110,3 +114,142 @@ Refs: #206 owner clarification; #113; #159; `docs/specs/design/join-alias-varian
 - No product/test paths broken by this attempt; **D1/D2 recorded unfinished**; no fictitious supersession.
 - Preserved evidence: `artifacts/pdca/D206/rv1/{BLOCKER.md,D1-red.log,probe.log,D1D2-evidence.json,scope.json}`.
 - Lane released to **T208 (#208)**.
+
+---
+
+## PLAN r=2 (ready, 2026-10-10)
+
+**Durable state:** Current cycle **N=1**; Plan revision **r=2**; Attempt **n=1/3**; `plan_state=ready`; `contract_rv=2`; milestone `1.0.9-rc2`; baseline `a60ecb84`.
+**Defect history:** key `t206-unreachable-normgen007` -> observed r1 n1 + r2 n1, **0 applied fixes** (no generator change; the gap is retained, not fixed), evidence `artifacts/pdca/D206/rv1/*` and `artifacts/pdca/D206/rv2/*`, result **GAP-OPEN (not resolved)**.
+
+### Goal / minimum solution
+Verify supported duplicate collapse + deterministic generation + intermediate `IsCte`; document defensive NORMGEN007 accurately; **NO generator/public-signature redesign**.
+- Chosen = **option-3 reproducible work + option-4 explicit GAP**: keep the supported, provable behaviour (duplicate collapse, determinism, intermediate `IsCte`) as candidate-MET tests/docs, and retain R01/R02 as an explicit open gap with a reopen trigger.
+- **Rejected option 1** (make the last-step `JoinedType` participate in the emitted identity): changes the generated public surface, violates R04.
+- **Rejected option 2** (synthetic `AppendExtensions`/`ChainModel` seam): a synthetic seam cannot prove a supported-syntax collision.
+- **Rejected option 3-alone** (narrow to R03 only): silently dropping R01/R02 weakens acceptance; the gap must stay visible.
+
+### Acceptance criteria R01..R07
+- **R01 / P1 — GAP-OPEN.** A supported-syntax last-step collision fixture must demonstrate CS0111 in reconstructed unguarded output and no CS0111 in guarded output. Status: **unsatisfiable on the current generator**, retained as an open gap. Negative: zero generated candidates, unrelated compiler errors, or testing only the intermediate-step case cannot satisfy this.
+- **R02 / P1 — GAP-OPEN.** Same-signature/different-body groups must emit no arbitrarily selected overload and NORMGEN007 must identify every distinct affected invocation location with remediation. Status: **branch is structurally unreachable**, retained as an open gap. Negative: first-conflicting-body retention, silent drop, or order-dependent output fails.
+- **R03 / P1 — candidate-MET.** Byte-identical duplicates emit exactly one `Join<TJoin>` method, **0 NORMGEN007**, **0 compiler errors**; the intermediate `IsCte` case passes. Negative: NORMGEN007 for identical bodies, duplicate declarations, or lost intermediate methods fails.
+- **R04 / P1 — candidate-MET.** Valid generated public signatures and the existing frozen-surface/typed-CTE tests remain unchanged; alias suite **103 passed**. Negative: updating frozen expectations to accommodate an accidental API change fails.
+- **R05 — OPEN.** EN/RU joins guides must describe NORMGEN007 accurately, including that it is defensive and that diverging last-step projections are not independently supported. Negative: documenting only NORMGEN001–006, suggesting unsupported issue-body syntax, promising an unverified workaround, or claiming both conflicting projections now work fails.
+- **R06 / P1 — OPEN.** Builds, required suites, evidence provenance and repository hygiene pass. Negative: infra failure counted as red, skipped providers as passing, or missing artifacts fails.
+- **R07 / P1 — candidate-MET.** Forward, reversed and repeated generation are byte-identical and non-empty (`forward == reversed == repeat`). Negative: order-dependent or empty output fails.
+
+### Tasks
+- **D206-PREFLIGHT** — done.
+- **D206-RECON** — done; **+3 retained tests** in `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs`.
+- **D206-TEST** — keep the existing fixtures/`RunSource`; retain the frozen surface assertions as-is.
+- **D206-DOC** — EN `docs/guide/02-joins.md` + RU `docs/ru/guide/02-joins.md` (defensive NORMGEN007 wording).
+- **D206-EVIDENCE** — rv2 manifest + logs under `artifacts/pdca/D206/rv2/`.
+- **D206-GAP** — retain R01/R02 in #206 under the same milestone `1.0.9-rc2`; reopen trigger = a committed supported-syntax reproducer **or** an approved design that invalidates the purity proof.
+
+### Test strategy and variant matrix
+| Variant | Disposition |
+|---|---|
+| Duplicate + last-step projection | TEST |
+| Reversed / repeat | TEST |
+| Intermediate `IsCte` | TEST |
+| Different-body, same-signature collision | GAP |
+| Reference/value/nullable/default forms | GAP until fixture inventory |
+| Determinism / incrementality + frozen / typed-CTE | TEST |
+| SQLite end-to-end | alias-suite TEST |
+| Container providers | required integration TEST |
+
+### Docs plan
+EN `docs/guide/02-joins.md` + RU `docs/ru/guide/02-joins.md`; no generated pages; no links into `docs/specs`.
+
+### Perf decision
+**No benchmark** — the generator algorithm is unchanged and generation happens at build time (`JoinAliasGenerator.cs:145-157,763`), not per query or per row.
+
+### Unit mode
+Sequential, existing tree, no branches/worktrees, no commits.
+
+### Command registry C1..C9
+| ID | Command | Exit |
+|---|---|---|
+| C1 | `dotnet test tests/nextorm.alias.tests -c Debug --filter "FullyQualifiedName~JoinAliasGeneratorDiagnosticTests"` | observed 0 (21 passed) |
+| C2 | `dotnet test tests/nextorm.alias.tests -c Debug` | observed 0 (103 passed) |
+| C3 | `dotnet build nextorm.slnx -c Debug` | observed 0 |
+| C4 | `DOCKER_HOST=... dotnet-coverage collect "dotnet test nextorm.slnx -c Debug" -s coverage.settings.xml -f cobertura -o artifacts/pdca/D206/rv2/coverage.cobertura.xml` | planned, required 0 |
+| C5 | reportgenerator | planned, required 0 |
+| C6 | `DOCKER_HOST=... dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor` | planned, required 0 |
+| C7 | `dotnet docfx docs/docfx.json` | planned, required 0 |
+| C8 | `git diff --check` | planned, required 0 |
+| C9 | `python validate_inner_loop.py manifest` | planned, required 0 |
+
+### rv2 required_rows
+- **E206-01 / R01** — OPEN-GAP.
+- **E206-02 / R02** — OPEN-GAP.
+- **E206-03 / R03** — candidate-MET.
+- **E206-04 / R07** — candidate-MET.
+- **E206-05 / R04** — candidate-MET.
+- **E206-06 / R05** — RECONCILED in r=3: split into `E206-06D` (docs limitation = `met`) and GAP `E206-06/R05` (demonstrated workaround = `open`); rv2's `OPEN` here and the rv2 manifest's `met` are both historical — see `## PLAN r=3` below.
+- **E206-07 / R06** — RECONCILED in r=3: superseded by the rv3 `E206-07` row (`met` for builds/suites/provenance); rv2's `OPEN` here and the rv2 manifest's `met` are both historical — see `## PLAN r=3` below.
+- **E206-08 / R06** — OPEN (provenance/check audit).
+
+GAP rows stay `open` (never `na`/`met`).
+
+### ACT disposition
+#206 is **NOT closable**; it remains **OPEN** with R01/R02 GAP in milestone `1.0.9-rc2`.
+
+---
+
+| UTC time | phase | revision | iteration | event | evidence pointer |
+|---|---|---|---|---|---|
+| 2026-10-10 | DO | r2 | n1/3 | DO started | `artifacts/pdca/D206/rv2/` |
+| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-PREFLIGHT **done** | scope validated (`scripts/validate_inner_loop.py brief`) exit 0 |
+| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-RECON **done** | alias suite 103 passed; `artifacts/pdca/D206/rv2/recon.log` |
+| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-TEST **done** | R03/R07 oracle tests green; `tests/nextorm.alias.tests/JoinAliasGeneratorDiagnosticTests.cs` |
+| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-DOC **done** (limitation only) | `docs/guide/02-joins.md`, `docs/ru/guide/02-joins.md`; R05 workaround sub-obligation retained open |
+| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-EVIDENCE **done** | `artifacts/pdca/D206/rv2/manifest.json`; validator exit 0 |
+| 2026-10-10T14:53Z | DO | r2 | n1/3 | D206-GAP **retained/open** | R01/R02 + R05 workaround GAP; `artifacts/pdca/D206/rv2/GAP.md` |
+| 2026-10-10T14:53Z | DO->CHECK | r2 | n1/3 | DO to CHECK boundary: C1 0/21, C2 0/103, C3 0, C4 0, C5 0, C6 0, C7 0, C8 0, C9 0; coverage line 88.4% branch 80.4%; docs-build exit 0; integration 3635 total 0 failed | `artifacts/pdca/D206/rv2/{recon.log,build-release.log,coverage-report/Summary.json,integration.log,docs-build.log,hygiene.log,manifest.json}` |
+
+
+---
+
+## PLAN r=3 (ready, 2026-10-10) — contract supersession
+
+**Durable state:** Current cycle **N=1**; Plan revision **r=3**; Attempt **n=1/3**; `plan_state=ready`; `contract_rv=3`; milestone `1.0.9-rc2`; baseline `a60ecb84`.
+**Defect history:** key `t206-unreachable-normgen007` -> observed r1 n1 (STOP/blocker) + r2 n1 (CHECK FAIL) + r3 n1, **0 applied fixes** (generator unchanged throughout); evidence `artifacts/pdca/D206/rv1/*`, `rv2/*`, `rv3/*`; result **GAP-OPEN (not resolved)**.
+
+### Reason r=3 (genuine revision — tasks/dependencies changed)
+CHECK r2 **FAILED**: (a) the rv2 oracles were insufficient — the R03/R07 tests were not decisive (the `CountOccurrences == 1` assertion passed vacuously for a one-call-site generator) and the negative/positive controls were absent; (b) the rv2 `required_rows` representation was self-blocking — it listed E206-01/E206-02 (and R05's demonstrated-workaround) as `open` while those rows were also demanded for PASS, so no scoped PASS was reachable; (c) the rv2 plan table contradicted the rv2 manifest on E206-06/E206-07 (RECONCILED above). r=3 **changes the task set and dependencies**: it adds the two-candidate provenance control and the declaration-removal negative, splits the docs row from the workaround row (`E206-06D` vs `E206-06/R05`), and scopes PASS to rows that are all satisfiable on the current generator. A rejected candidate without a plan change would not be a new revision; this is a real replan, so `r` increments and `n` resets to 1.
+
+### Scoped PASS-blocking `required_rows` (all must be `met`)
+`E206-03` (R03), `E206-04` (R07), `E206-05` (R04), `E206-06D` (R05 docs limitation), `E206-07` (R06 builds/suites/provenance), `E206-08` (R06 provenance/check audit). Frozen in `artifacts/pdca/D206/rv3/manifest.json`.
+
+### GAP ledger (durable #206 obligations, milestone `1.0.9-rc2`; NOT PASS-blocking rows)
+- **E206-01 / R01** — `open`: a reachable supported-syntax last-step same-signature/different-body collision is **unreachable by construction** (emitted body is a pure function of the emitted signature; the last-step `JoinedType` is rendered as `TJoin`). Reopen trigger: a committed supported-syntax reproducer **or** an approved design that invalidates the purity proof.
+- **E206-02 / R02** — `open`: the reject-all / `NORMGEN007`-every-distinct-location branch cannot fire, for the same purity reason. Reopen trigger: same as E206-01.
+- **E206-06 / R05 (original demonstrated-workaround)** — `open`: no verified `NORMGEN007` workaround can be demonstrated while the diagnostic is unreachable; documenting one would violate the R05 negative. Reopen trigger: a reachable collision with an observable remediation.
+
+The GAP rows stay `open` (never `na`/`met`) and are recorded in `artifacts/pdca/D206/rv3/gap-ledger.json`.
+
+### Oracle-fix acceptance (R03/R07)
+- **R03** requires a **two-candidate provenance control** (`R03_control_distinct_aliases_process_both_call_sites`): the same two call sites with **distinct** aliases must yield exactly **two** overloads, so a generator that silently processes only one call site fails the control. The collapse test asserts exactly one `Join<TJoin>`, 0 `NORMGEN007`, 0 compiler errors, plus the intermediate-`IsCte` continuation.
+- **R07** requires the expected declarations asserted **before** the byte compare (non-vacuity), `forward == reversed == repeat`, and a **declaration-removal negative** demonstrated to fail (exit 2) and then restored green (exit 0).
+
+### ACT disposition
+After the scoped PASS (all six required rows `met`), ACT commits under `#206 ` (no push); **#206 stays OPEN** in milestone `1.0.9-rc2`; the report is **"scoped deliverable accepted; issue unresolved"** (R01/R02 and the R05 workaround remain the tracked GAP).
+
+---
+
+| UTC time | phase | revision | iteration | event | evidence pointer |
+|---|---|---|---|---|---|
+| 2026-10-10T10:03Z | PLAN | r3 | n1/3 | **PLAN r=3 ready** — CHECK r2 FAIL: insufficient oracles + self-blocking rv2 rows; genuine revision (tasks/dependencies changed) | `docs/specs/status/rc2-206-sourcegen-cs0111-alias-join-1.md` |
+| 2026-10-10T10:03Z | DO | r3 | n1/3 | DO started | `artifacts/pdca/D206/rv3/` |
+| 2026-10-10T10:03Z | DO->CHECK | r3 | n1/3 | DO -> CHECK boundary (r3): Debug 0/0, Release 0/0, alias-suite 0 (104/104), docfx 0, hygiene 0; coverage/integration reused from rv2 (`src/` unchanged since those runs) | `artifacts/pdca/D206/rv3/{build-debug.log,build-release.log,alias-suite.log,docs-build.log,hygiene.log}` |
+
+---
+
+## ACT (r=3, 2026-10-10)
+
+- **Verdict:** scoped deliverable **ACCEPTED** (CHECK **PASS**, r=3 n=1).
+- **Criterion dispositions:** R03 / R04 / R05-docs / R06 / R07 **met**; R01, R02 and the R05 demonstrated-workaround obligation remain **OPEN GAP** (durable, milestone `1.0.9-rc2`; not closed by this ACT). R01/R02 stay unreachable by construction (emitted body is a pure function of the emitted signature; NORMGEN007 unreachable); reopen trigger = a committed supported-syntax reproducer or an approved rendering/signature change that invalidates the purity proof.
+- **Evidence roots:** `artifacts/pdca/D206/rv2/**`, `artifacts/pdca/D206/rv3/**`.
+- **Hygiene:** no TODO plan file to delete; no public API / naming / registry change, so no `API-NAMING-REVIEW.md` or `code-smells-review.md` edit is required.
+- **Issue:** #206 remains **OPEN** in milestone `1.0.9-rc2`.

@@ -234,6 +234,16 @@ an assembly name that cannot be normalised to a namespace; a join-alias extensio
 and `.WithAlias` applied to a non-root source). See
 [Limitations](../advanced/limitations.md).
 
+`NORMGEN007` guards against alias-join overloads that would share a signature but have different bodies.
+On the current generator that situation is **structurally unreachable**, so the diagnostic is
+**defensive**: the emitted method body is a pure function of the emitted signature, and the last step's
+joined type is always rendered as the type parameter `TJoin`. Two alias joins that share `Alias.X` but
+project different last-step types are **both supported**: they share one generic `Join<TJoin>` overload
+rather than producing two conflicting overloads — only separate typed builders are not produced. Give
+each slot a distinct alias name (as with `Alias.Buyer` and `Alias.Approver` above) to get a separate
+typed builder per chain; that is a builder-granularity choice only, not a verified `NORMGEN007`
+remediation.
+
 ### Naming the root source (`.WithAlias`)
 
 The root source occupies slot 1, so it can be named with a chained `.WithAlias(Alias.X)` applied to
