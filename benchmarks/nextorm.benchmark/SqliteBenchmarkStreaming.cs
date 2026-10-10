@@ -45,6 +45,7 @@ public class SqliteBenchmarkStreaming
     private readonly BenchmarkRowSink _sink = new();
 
     private const string RawReaderSql = "select id, someString as Str from large_table";
+    private const string EmptyRawReaderSql = "select id, someString as Str from large_table where id < 0";
 
     public SqliteBenchmarkStreaming()
     {
@@ -113,6 +114,9 @@ public class SqliteBenchmarkStreaming
         VerifyRawReader("Streaming/linq2db-reader",
             () => { using var reader = LinqToDB.Data.DataContextExtensions.ExecuteReader(_linq2Db.Db, RawReaderSql); Scan(reader.Reader!); },
             baseline.Count, baseline.Checksum, readerBytes);
+        VerifyRawReader("Streaming/nextorm-regular-reader",
+            () => { using var reader = _ctx.LargeEntity.Select(e => new ProjectionDto { Id = e.Id, Str = e.Str }).ToDataReader(); Scan(reader); },
+            baseline.Count, baseline.Checksum, readerBytes);
 
         // Null-Str and empty-input probes: the shared scanner must fold the IsDBNull guard and return zero rows.
         _sink.Reset();
@@ -158,8 +162,12 @@ public class SqliteBenchmarkStreaming
     [IterationSetup(Targets = new[]
     {
         nameof(A_Nextorm_Prepared_ToDataReader),
+        nameof(B_Nextorm_ToDataReader),
         nameof(Dapper_ToDataReader),
         nameof(Linq2Db_ToDataReader),
+        nameof(B_Nextorm_ToDataReader_Empty),
+        nameof(Dapper_ToDataReader_Empty),
+        nameof(Linq2Db_ToDataReader_Empty),
     })]
     public void ResetReaderSink() => _sink.Reset();
 
@@ -179,6 +187,16 @@ public class SqliteBenchmarkStreaming
 
     [Benchmark]
     [BenchmarkCategory("B_RawReader")]
+    public void B_Nextorm_ToDataReader()
+    {
+        using var reader = _ctx.LargeEntity
+            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
+            .ToDataReader();
+        Scan(reader);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader")]
     public void Dapper_ToDataReader()
     {
         using var reader = _conn.ExecuteReader(RawReaderSql);
@@ -190,6 +208,33 @@ public class SqliteBenchmarkStreaming
     public void Linq2Db_ToDataReader()
     {
         using var reader = LinqToDB.Data.DataContextExtensions.ExecuteReader(_linq2Db.Db, RawReaderSql);
+        Scan(reader.Reader!);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader_Empty")]
+    public void B_Nextorm_ToDataReader_Empty()
+    {
+        using var reader = _ctx.LargeEntity
+            .Where(e => e.Id < 0)
+            .Select(e => new ProjectionDto { Id = e.Id, Str = e.Str })
+            .ToDataReader();
+        Scan(reader);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader_Empty")]
+    public void Dapper_ToDataReader_Empty()
+    {
+        using var reader = _conn.ExecuteReader(EmptyRawReaderSql);
+        Scan(reader);
+    }
+
+    [Benchmark]
+    [BenchmarkCategory("B_RawReader_Empty")]
+    public void Linq2Db_ToDataReader_Empty()
+    {
+        using var reader = LinqToDB.Data.DataContextExtensions.ExecuteReader(_linq2Db.Db, EmptyRawReaderSql);
         Scan(reader.Reader!);
     }
 

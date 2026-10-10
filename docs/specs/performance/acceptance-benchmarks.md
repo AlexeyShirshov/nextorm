@@ -669,3 +669,39 @@ the bare `JsonNode.Parse` call: 1.285 vs 1.298 us (128 B), 29.7 vs 27.0 us (4 Ki
 468 vs 485 us (64 KiB, `Error` 291 us) — the differences are inside `ShortRun` noise and have no
 consistent direction, confirming no per-row reflection and no extra allocation beyond the DOM itself.
 Raw log: `artifacts/pdca/D197/perf-jsonnode.log`; acceptance log: `artifacts/pdca/D197/perf-acceptance.log`.
+
+## Results 2026-10-10 — 1.0.9-rc2 milestone closure (baseline re-verification)
+
+Milestone `1.0.9-rc2` closed (all issues done); a full re-run of the seven-case acceptance suite on
+the baseline host/config/case set (AMD Ryzen 7 5800HS, Ubuntu 22.04.5 LTS, .NET SDK 10.0.401,
+.NET 10.0.12, BenchmarkDotNet 0.15.8, `Job.ShortRun`, `InProcessEmitToolchain`,
+`Categories=acceptance`). **7** cases selected, **0** failures, exit **0**. External shell wall clock
+**66 s** (includes a fresh `dotnet run -c Release` build); BDN `Global total time` **49.54 s**
+(`executed benchmarks: 7`) — both under the 4 min budget.
+
+Command: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --anyCategories=acceptance`.
+The only non-fatal log noise was `Failed to set up priority High ... Permission denied` (this host
+cannot raise process priority; appears in every run).
+
+| Case | Mean | Error | StdDev | Allocated | Gen0 | Delta Mean vs baseline | Delta Alloc |
+|------|------|-------|--------|-----------|------|------------------------|-------------|
+| `Nextorm_Count` | 2.383 ms | 0.5081 ms | 0.0278 ms | 375 KB | 42.9688 | -18.3% (high-variance row, not an assertion) | +11.9% |
+| `Nextorm_GroupByCount` | 58.92 ms | 4.518 ms | 0.248 ms | 50.1 MB | 6222.2222 | -3.3% | +0.2% |
+| `Nextorm_Cached` | 1.955 ms | 0.5433 ms | 0.0298 ms | 610.23 KB | 70.3125 | +10.3% | +14.2% |
+| `Prepared_ToList` | 892.2 us | 107.87 us | 5.91 us | 76.14 KB | 8.7891 | -3.4% | 0.0% |
+| `Cached_ToList` | 1,846.6 us | 353.68 us | 19.39 us | 583.97 KB | 70.3125 | +6.9% | +3.3% |
+| `Cached_PlanOnly_Param` | 558.5 us | 66.97 us | 3.67 us | 507.83 KB | 61.5234 | +7.8% | +3.8% |
+| `Nextorm_Cached_ToListAsync` | 1.929 ms | 0.1805 ms | 0.0099 ms | 608.46 KB | 74.2188 | -9.7% | -12.1% |
+
+Comparable cached-vs-prepared ratio (`Cached_ToList / Prepared_ToList`, same run) = **2.07** — vs
+documented baseline **1.87** (**+10.7%**), below the **20%** investigation threshold
+(**1.87 × 1.20 = 2.244 > 2.07**), so no investigation is required. The corresponding allocated ratio
+is **7.67** (baseline **7.42**, **+3.3%**). The prepared arm (the denominator) is unchanged in
+allocation at **76.14 KB** and its Mean is within noise (**-3.4%**), so the ratio movement is
+consistent with the cached arm's run-to-run variance rather than a prepared-path regression. Every
+individual Mean delta is within ±20% and no row shows a consistent, direction-consistent regression,
+so no row is reported as a regression.
+
+**Verdict: no regression.** Raw log:
+`benchmarks/BenchmarkDotNet.Artifacts/BenchmarkRun-20261010-191534.log`; per-class GitHub reports
+under `benchmarks/BenchmarkDotNet.Artifacts/results/` (regenerated each run, untracked).

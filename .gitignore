@@ -7,6 +7,12 @@ coverage
 artifacts/
 *.log
 
+# BenchmarkDotNet output when run from the repo root (canonical reports live under benchmarks/)
+/BenchmarkDotNet.Artifacts/
+
+# Stryker.NET mutation output
+/StrykerOutput/
+
 # DocFX output
 docs/_site/
 docs/api/

@@ -9,28 +9,33 @@ Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain
 IterationCount=3  LaunchCount=1  WarmupCount=3  
 
 ```
-| Method                             | InvocationCount | UnrollFactor | Categories                      | Mean     | Gen0     | Gen1     | Gen2    | Allocated  |
-|----------------------------------- |---------------- |------------- |-------------------------------- |---------:|---------:|---------:|--------:|-----------:|
-| A_Nextorm_Prepared_ToList_Dto      | Default         | 16           | A_BufferedDto                   | 3.743 ms | 160.1563 | 117.1875 |       - | 1328.84 KB |
-| Linq2Db_Compiled_ToList_Dto        | Default         | 16           | A_BufferedDto                   | 5.637 ms | 218.7500 | 210.9375 | 54.6875 | 1508.25 KB |
-| A_EFCore_Compiled_ToList_Dto       | Default         | 16           | A_BufferedDto                   | 8.012 ms | 515.6250 | 296.8750 | 78.1250 | 3701.54 KB |
-|                                    |                 |              |                                 |          |          |          |         |            |
-| Dapper_ToList_Dto                  | Default         | 16           | A_BufferedDto,B_BufferedDto     | 6.864 ms | 257.8125 | 250.0000 | 62.5000 | 1742.31 KB |
-|                                    |                 |              |                                 |          |          |          |         |            |
-| A_Nextorm_Prepared_AsyncStream_Dto | Default         | 16           | A_UnbufferedDto                 | 3.663 ms | 152.3438 |        - |       - | 1250.56 KB |
-| A_EFCore_Compiled_AsyncStream_Dto  | Default         | 16           | A_UnbufferedDto                 | 5.047 ms | 414.0625 |        - |       - | 3444.77 KB |
-|                                    |                 |              |                                 |          |          |          |         |            |
-| Dapper_AsyncStream_Dto             | Default         | 16           | A_UnbufferedDto,B_UnbufferedDto | 4.591 ms | 179.6875 |        - |       - | 1485.82 KB |
-|                                    |                 |              |                                 |          |          |          |         |            |
-| B_Nextorm_Cached_ToList_Dto        | Default         | 16           | B_BufferedDto                   | 3.786 ms | 160.1563 | 109.3750 |       - | 1332.39 KB |
-| B_Linq2Db_ToList_Dto               | Default         | 16           | B_BufferedDto                   | 8.148 ms | 218.7500 | 210.9375 | 54.6875 |  1511.3 KB |
-| B_EFCore_ToList_Dto                | Default         | 16           | B_BufferedDto                   | 8.594 ms | 500.0000 | 250.0000 | 62.5000 | 3705.59 KB |
-|                                    |                 |              |                                 |          |          |          |         |            |
-| B_Nextorm_Cached_AsyncStream_Dto   | Default         | 16           | B_UnbufferedDto                 | 4.019 ms | 148.4375 |        - |       - |  1254.3 KB |
-| B_Linq2Db_AsyncStream_Dto          | Default         | 16           | B_UnbufferedDto                 | 4.595 ms | 148.4375 |        - |       - | 1254.55 KB |
-| B_EFCore_AsyncStream_Dto           | Default         | 16           | B_UnbufferedDto                 | 5.105 ms | 421.8750 |   7.8125 |       - | 3448.89 KB |
-|                                    |                 |              |                                 |          |          |          |         |            |
-| A_Nextorm_Prepared_ToDataReader    | 1               | 1            | A_RawReader                     | 4.302 ms |        - |        - |       - |   944.8 KB |
-|                                    |                 |              |                                 |          |          |          |         |            |
-| Dapper_ToDataReader                | 1               | 1            | B_RawReader                     | 3.761 ms |        - |        - |       - |  942.77 KB |
-| Linq2Db_ToDataReader               | 1               | 1            | B_RawReader                     | 3.762 ms |        - |        - |       - |     943 KB |
+| Method                             | InvocationCount | UnrollFactor | Categories                      | Mean       | Gen0     | Gen1     | Gen2    | Allocated  |
+|----------------------------------- |---------------- |------------- |-------------------------------- |-----------:|---------:|---------:|--------:|-----------:|
+| A_Nextorm_Prepared_ToList_Dto      | Default         | 16           | A_BufferedDto                   | 3,861.9 μs | 156.2500 | 109.3750 |       - | 1328.84 KB |
+| Linq2Db_Compiled_ToList_Dto        | Default         | 16           | A_BufferedDto                   | 5,905.6 μs | 218.7500 | 210.9375 | 54.6875 | 1508.23 KB |
+| A_EFCore_Compiled_ToList_Dto       | Default         | 16           | A_BufferedDto                   | 8,623.7 μs | 515.6250 | 312.5000 | 78.1250 | 3701.68 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| Dapper_ToList_Dto                  | Default         | 16           | A_BufferedDto,B_BufferedDto     | 7,101.7 μs | 257.8125 | 250.0000 | 62.5000 |  1742.3 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| A_Nextorm_Prepared_AsyncStream_Dto | Default         | 16           | A_UnbufferedDto                 | 3,901.2 μs | 148.4375 |        - |       - | 1250.54 KB |
+| A_EFCore_Compiled_AsyncStream_Dto  | Default         | 16           | A_UnbufferedDto                 | 5,306.8 μs | 414.0625 |        - |       - | 3444.77 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| Dapper_AsyncStream_Dto             | Default         | 16           | A_UnbufferedDto,B_UnbufferedDto | 4,886.5 μs | 179.6875 |        - |       - | 1485.82 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| B_Nextorm_Cached_ToList_Dto        | Default         | 16           | B_BufferedDto                   | 4,043.8 μs | 156.2500 | 101.5625 |       - | 1332.49 KB |
+| B_Linq2Db_ToList_Dto               | Default         | 16           | B_BufferedDto                   | 6,053.1 μs | 218.7500 | 210.9375 | 54.6875 | 1511.28 KB |
+| B_EFCore_ToList_Dto                | Default         | 16           | B_BufferedDto                   | 8,837.9 μs | 500.0000 | 250.0000 | 62.5000 | 3705.77 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| B_Nextorm_Cached_AsyncStream_Dto   | Default         | 16           | B_UnbufferedDto                 | 4,058.7 μs | 148.4375 |        - |       - | 1254.38 KB |
+| B_Linq2Db_AsyncStream_Dto          | Default         | 16           | B_UnbufferedDto                 | 4,521.6 μs | 148.4375 |        - |       - | 1254.55 KB |
+| B_EFCore_AsyncStream_Dto           | Default         | 16           | B_UnbufferedDto                 | 5,166.1 μs | 421.8750 |   7.8125 |       - | 3448.93 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| A_Nextorm_Prepared_ToDataReader    | 1               | 1            | A_RawReader                     | 4,753.7 μs |        - |        - |       - |   944.8 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| Linq2Db_ToDataReader               | 1               | 1            | B_RawReader                     | 3,941.5 μs |        - |        - |       - |     943 KB |
+| Dapper_ToDataReader                | 1               | 1            | B_RawReader                     | 3,996.3 μs |        - |        - |       - |  942.77 KB |
+| B_Nextorm_ToDataReader             | 1               | 1            | B_RawReader                     | 4,676.8 μs |        - |        - |       - |  947.98 KB |
+|                                    |                 |              |                                 |            |          |          |         |            |
+| Linq2Db_ToDataReader_Empty         | 1               | 1            | B_RawReader_Empty               |   109.2 μs |        - |        - |       - |    5.52 KB |
+| Dapper_ToDataReader_Empty          | 1               | 1            | B_RawReader_Empty               |   126.7 μs |        - |        - |       - |    5.29 KB |
+| B_Nextorm_ToDataReader_Empty       | 1               | 1            | B_RawReader_Empty               |   237.7 μs |        - |        - |       - |   12.74 KB |
